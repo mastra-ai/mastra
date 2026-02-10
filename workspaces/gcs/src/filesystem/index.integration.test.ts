@@ -11,7 +11,8 @@
  * - GCS_ENDPOINT: Endpoint URL for fake-gcs emulator (optional)
  */
 
-import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import { createFilesystemTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
+import { type CompositeFilesystem, Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { GCSFilesystem } from './index';
@@ -141,6 +142,68 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
  * These tests verify GCSFilesystem conforms to the WorkspaceFilesystem interface.
  * They use the shared test suite from @internal/workspace-test-utils.
  */
+/**
+ * CompositeFilesystem Integration Tests
+ *
+ * These tests verify CompositeFilesystem behavior with two GCS mounts
+ * (same provider, different prefixes). No sandbox needed.
+ */
+if (canRunGCSTests) {
+  createWorkspaceIntegrationTests({
+    suiteName: 'GCS CompositeFilesystem Integration',
+    testTimeout: 30000,
+    testScenarios: {
+      // Sandbox scenarios off (no sandbox)
+      fileSync: false,
+      concurrentOperations: false,
+      largeFileHandling: false,
+      writeReadConsistency: false,
+      // Composite API scenarios on
+      mountRouting: true,
+      crossMountApi: true,
+      virtualDirectory: true,
+      mountIsolation: true,
+    },
+    createWorkspace: () => {
+      const testBucket = process.env.TEST_GCS_BUCKET!;
+      const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
+        ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+        : undefined;
+      const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new Workspace({
+        mounts: {
+          '/mount-a': new GCSFilesystem({
+            bucket: testBucket,
+            credentials,
+            prefix: `${prefix}-a`,
+            endpoint: process.env.GCS_ENDPOINT,
+          }),
+          '/mount-b': new GCSFilesystem({
+            bucket: testBucket,
+            credentials,
+            prefix: `${prefix}-b`,
+            endpoint: process.env.GCS_ENDPOINT,
+          }),
+        },
+      });
+    },
+    cleanupWorkspace: async workspace => {
+      const composite = workspace.filesystem as CompositeFilesystem;
+      for (const [, fs] of composite.mounts) {
+        try {
+          const files = await fs.readdir('/');
+          for (const f of files) {
+            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
+            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+  });
+}
+
 if (canRunGCSTests) {
   createFilesystemTestSuite({
     suiteName: 'GCSFilesystem Conformance',

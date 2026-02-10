@@ -9,7 +9,7 @@ import {
   SandboxNotAvailableError,
   SearchNotAvailableError,
 } from './errors';
-import { LocalFilesystem } from './filesystem';
+import { CompositeFilesystem, LocalFilesystem } from './filesystem';
 import { LocalSandbox } from './sandbox';
 import { Workspace } from './workspace';
 
@@ -867,6 +867,289 @@ Line 3 conclusion`;
 
       const info2 = await workspace.getInfo({ includeFileCount: false });
       expect(info2.filesystem?.totalFiles).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // Workspace with CompositeFilesystem
+  // ===========================================================================
+  describe('with CompositeFilesystem', () => {
+    let tempDirA: string;
+    let tempDirB: string;
+
+    beforeEach(async () => {
+      tempDirA = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-cfs-a-'));
+      tempDirB = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-cfs-b-'));
+    });
+
+    afterEach(async () => {
+      for (const dir of [tempDirA, tempDirB]) {
+        try {
+          await fs.rm(dir, { recursive: true, force: true });
+        } catch {
+          // Ignore
+        }
+      }
+    });
+
+    it('should initialize and reach ready status', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+
+      await workspace.init();
+      expect(workspace.status).toBe('ready');
+
+      await workspace.destroy();
+    });
+
+    it('should read and write files through workspace.filesystem', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+      await workspace.init();
+
+      await workspace.filesystem!.writeFile('/local/doc.txt', 'hello from workspace');
+      const content = await workspace.filesystem!.readFile('/local/doc.txt', { encoding: 'utf-8' });
+      expect(content).toBe('hello from workspace');
+
+      // Verify isolation — file shouldn't exist in the other mount
+      expect(await workspace.filesystem!.exists('/backup/doc.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should list mount points at root via workspace.filesystem', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+
+      const entries = await workspace.filesystem!.readdir('/');
+      const names = entries.map(e => e.name).sort();
+      expect(names).toEqual(['backup', 'local']);
+    });
+
+    it('should copy files across mounts through workspace', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+      await workspace.init();
+
+      await workspace.filesystem!.writeFile('/local/important.txt', 'critical data');
+      await workspace.filesystem!.copyFile('/local/important.txt', '/backup/important.txt');
+
+      const backupContent = await workspace.filesystem!.readFile('/backup/important.txt', { encoding: 'utf-8' });
+      expect(backupContent).toBe('critical data');
+
+      // Source still exists
+      expect(await workspace.filesystem!.exists('/local/important.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should support search with auto-indexing across mounts', async () => {
+      // Pre-create files in both mount dirs
+      await fs.mkdir(path.join(tempDirA, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDirA, 'docs', 'api.txt'), 'REST API reference');
+      await fs.writeFile(path.join(tempDirB, 'notes.txt'), 'Meeting notes about deployment');
+
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({
+        filesystem: cfs,
+        bm25: true,
+        autoIndexPaths: ['/local/docs', '/backup'],
+      });
+
+      await workspace.init();
+
+      const apiResults = await workspace.search('REST API');
+      expect(apiResults.some(r => r.id === '/local/docs/api.txt')).toBe(true);
+
+      const noteResults = await workspace.search('deployment');
+      expect(noteResults.some(r => r.id === '/backup/notes.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should return composite instructions in path context', () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+      const context = workspace.getPathContext();
+
+      expect(context.instructions).toContain('/local');
+      expect(context.instructions).toContain('/backup');
+      expect(context.instructions).toContain('(read-write)');
+    });
+
+    it('should count files across mounts via getInfo', async () => {
+      await fs.writeFile(path.join(tempDirA, 'a.txt'), 'a');
+      await fs.writeFile(path.join(tempDirA, 'b.txt'), 'b');
+      await fs.writeFile(path.join(tempDirB, 'c.txt'), 'c');
+
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+      await workspace.init();
+
+      const info = await workspace.getInfo({ includeFileCount: true });
+      expect(info.filesystem?.totalFiles).toBe(3);
+
+      await workspace.destroy();
+    });
+
+    it('should move files across mounts through workspace', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+          '/backup': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+      await workspace.init();
+
+      await workspace.filesystem!.writeFile('/local/moveme.txt', 'moving data');
+      await workspace.filesystem!.moveFile('/local/moveme.txt', '/backup/moveme.txt');
+
+      // Source should be gone
+      expect(await workspace.filesystem!.exists('/local/moveme.txt')).toBe(false);
+      // Dest should have the content
+      const content = await workspace.filesystem!.readFile('/backup/moveme.txt', { encoding: 'utf-8' });
+      expect(content).toBe('moving data');
+
+      await workspace.destroy();
+    });
+
+    it('should enforce read-only mount through workspace', async () => {
+      const tempDirRo = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-cfs-ro-'));
+      try {
+        await fs.writeFile(path.join(tempDirRo, 'protected.txt'), 'do not modify');
+
+        const cfs = new CompositeFilesystem({
+          mounts: {
+            '/ro': new LocalFilesystem({ basePath: tempDirRo, readOnly: true }),
+            '/rw': new LocalFilesystem({ basePath: tempDirA }),
+          },
+        });
+        const workspace = new Workspace({ filesystem: cfs });
+        await workspace.init();
+
+        // Reads work
+        const content = await workspace.filesystem!.readFile('/ro/protected.txt', { encoding: 'utf-8' });
+        expect(content).toBe('do not modify');
+
+        // Writes fail
+        await expect(workspace.filesystem!.writeFile('/ro/new.txt', 'fail')).rejects.toThrow();
+
+        // Can still write to the read-write mount
+        await workspace.filesystem!.writeFile('/rw/ok.txt', 'success');
+        expect(await workspace.filesystem!.readFile('/rw/ok.txt', { encoding: 'utf-8' })).toBe('success');
+
+        await workspace.destroy();
+      } finally {
+        await fs.rm(tempDirRo, { recursive: true, force: true });
+      }
+    });
+
+    it('should work with both composite filesystem and sandbox', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+        },
+      });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDirA, env: process.env });
+      const workspace = new Workspace({ filesystem: cfs, sandbox });
+
+      await workspace.init();
+      expect(workspace.status).toBe('ready');
+      expect(workspace.filesystem).toBe(cfs);
+      expect(workspace.sandbox).toBe(sandbox);
+
+      // Filesystem works
+      await workspace.filesystem!.writeFile('/local/test.txt', 'via composite');
+      expect(await workspace.filesystem!.readFile('/local/test.txt', { encoding: 'utf-8' })).toBe('via composite');
+
+      // Sandbox works — the file written via composite is on disk in tempDirA
+      const result = await workspace.sandbox!.executeCommand!('cat', ['test.txt']);
+      expect(result.success).toBe(true);
+      expect(result.stdout.trim()).toBe('via composite');
+
+      await workspace.destroy();
+    });
+
+    it('should report composite provider in getInfo', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/local': new LocalFilesystem({ basePath: tempDirA }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+
+      const info = await workspace.getInfo();
+      expect(info.filesystem?.provider).toBe('composite');
+    });
+
+    it('should handle nested directory operations across mounts', async () => {
+      const cfs = new CompositeFilesystem({
+        mounts: {
+          '/src': new LocalFilesystem({ basePath: tempDirA }),
+          '/dest': new LocalFilesystem({ basePath: tempDirB }),
+        },
+      });
+      const workspace = new Workspace({ filesystem: cfs });
+      await workspace.init();
+
+      // Create nested structure in source
+      await workspace.filesystem!.writeFile('/src/project/config.json', '{"key":"value"}');
+      await workspace.filesystem!.writeFile('/src/project/lib/utils.ts', 'export const x = 1;');
+
+      // Copy individual files across mounts into nested dest
+      await workspace.filesystem!.writeFile('/dest/project/config.json', '');
+      await workspace.filesystem!.copyFile('/src/project/config.json', '/dest/project/config.json');
+      await workspace.filesystem!.writeFile('/dest/project/lib/utils.ts', '');
+      await workspace.filesystem!.copyFile('/src/project/lib/utils.ts', '/dest/project/lib/utils.ts');
+
+      // Verify the nested structure was created correctly
+      const config = await workspace.filesystem!.readFile('/dest/project/config.json', { encoding: 'utf-8' });
+      expect(config).toBe('{"key":"value"}');
+
+      const utils = await workspace.filesystem!.readFile('/dest/project/lib/utils.ts', { encoding: 'utf-8' });
+      expect(utils).toBe('export const x = 1;');
+
+      // Verify source is untouched
+      expect(await workspace.filesystem!.exists('/src/project/config.json')).toBe(true);
+      expect(await workspace.filesystem!.exists('/src/project/lib/utils.ts')).toBe(true);
+
+      await workspace.destroy();
     });
   });
 

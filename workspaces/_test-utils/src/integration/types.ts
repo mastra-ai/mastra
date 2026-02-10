@@ -2,7 +2,7 @@
  * Types for integration test configuration.
  */
 
-import type { WorkspaceFilesystem, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { Workspace } from '@mastra/core/workspace';
 
 /**
  * Configuration for workspace integration tests.
@@ -11,11 +11,11 @@ export interface WorkspaceIntegrationTestConfig {
   /** Display name for test suite */
   suiteName: string;
 
-  /** Create a complete workspace setup for testing */
-  createWorkspace: () => Promise<WorkspaceSetup>;
+  /** Create a Workspace instance. The factory calls workspace.init() automatically. */
+  createWorkspace: () => Promise<Workspace> | Workspace;
 
-  /** Cleanup after tests */
-  cleanupWorkspace?: (setup: WorkspaceSetup) => Promise<void>;
+  /** Cleanup after tests (delete test files, etc.) */
+  cleanupWorkspace?: (workspace: Workspace) => Promise<void>;
 
   /** Test scenarios to run (default: all applicable) */
   testScenarios?: IntegrationTestScenarios;
@@ -55,20 +55,6 @@ export interface WorkspaceIntegrationTestConfig {
 }
 
 /**
- * Workspace setup returned by createWorkspace.
- */
-export interface WorkspaceSetup {
-  /** The filesystem (or CompositeFilesystem for multi-mount) */
-  filesystem: WorkspaceFilesystem;
-
-  /** The sandbox for command execution */
-  sandbox: WorkspaceSandbox;
-
-  /** Mount configuration (path -> filesystem) */
-  mounts?: Record<string, WorkspaceFilesystem>;
-}
-
-/**
  * Integration test scenarios to enable/disable.
  */
 export interface IntegrationTestScenarios {
@@ -92,4 +78,18 @@ export interface IntegrationTestScenarios {
 
   /** Write-read consistency (immediate read-after-write) */
   writeReadConsistency?: boolean;
+
+  // Composite-specific scenarios (API-only, no sandbox needed)
+
+  /** Route operations to correct mount based on path */
+  mountRouting?: boolean;
+
+  /** Cross-mount copy/move via filesystem API (not sandbox) */
+  crossMountApi?: boolean;
+
+  /** Virtual directory listing at root and mount points */
+  virtualDirectory?: boolean;
+
+  /** Mount isolation - operations on one mount don't affect another */
+  mountIsolation?: boolean;
 }

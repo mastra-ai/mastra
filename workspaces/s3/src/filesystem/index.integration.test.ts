@@ -12,7 +12,8 @@
  * - S3_ENDPOINT: Endpoint URL (optional, for R2/MinIO)
  */
 
-import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import { createFilesystemTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
+import { type CompositeFilesystem, Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { S3Filesystem } from './index';
@@ -160,6 +161,55 @@ describe.skipIf(!hasS3Credentials)('S3Filesystem Integration', () => {
  * These tests verify S3Filesystem conforms to the WorkspaceFilesystem interface.
  * They use the shared test suite from @internal/workspace-test-utils.
  */
+/**
+ * CompositeFilesystem Integration Tests
+ *
+ * These tests verify CompositeFilesystem behavior with two S3 mounts
+ * (same provider, different prefixes). No sandbox needed.
+ */
+if (hasS3Credentials) {
+  createWorkspaceIntegrationTests({
+    suiteName: 'S3 CompositeFilesystem Integration',
+    testTimeout: 30000,
+    testScenarios: {
+      // Sandbox scenarios off (no sandbox)
+      fileSync: false,
+      concurrentOperations: false,
+      largeFileHandling: false,
+      writeReadConsistency: false,
+      // Composite API scenarios on
+      mountRouting: true,
+      crossMountApi: true,
+      virtualDirectory: true,
+      mountIsolation: true,
+    },
+    createWorkspace: () => {
+      const config = getS3TestConfig();
+      const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      return new Workspace({
+        mounts: {
+          '/mount-a': new S3Filesystem({ ...config, prefix: `${prefix}-a` }),
+          '/mount-b': new S3Filesystem({ ...config, prefix: `${prefix}-b` }),
+        },
+      });
+    },
+    cleanupWorkspace: async workspace => {
+      const composite = workspace.filesystem as CompositeFilesystem;
+      for (const [, fs] of composite.mounts) {
+        try {
+          const files = await fs.readdir('/');
+          for (const f of files) {
+            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
+            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+  });
+}
+
 if (hasS3Credentials) {
   createFilesystemTestSuite({
     suiteName: 'S3Filesystem Conformance',
