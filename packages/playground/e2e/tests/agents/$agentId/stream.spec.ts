@@ -1,6 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
 import { selectFixture } from '../../__utils__/select-fixture';
-import { nanoid } from 'nanoid';
 import { resetStorage } from '../../__utils__/reset-storage';
 
 let page: Page;
@@ -18,7 +17,7 @@ test('text stream', async () => {
   const expectedResult = `I can help you get accurate weather forecasts by providing real-time data for your location. Just tell me your city or location, and I'll give you current conditions and detailed forecasts with temperature, humidity, and wind speed. Whether you're planning a trip or just checking today, I'm here to help! What is your current location?`;
 
   await selectFixture(page, 'text-stream');
-  await page.goto(`/agents/weatherAgent/chat/${nanoid()}`);
+  await page.goto(`/agents/weatherAgent/chat/new`);
   await page.click('text=Model settings');
   await page.click('text=Stream');
 
@@ -50,7 +49,7 @@ test('text stream', async () => {
 
 test('tool stream', async () => {
   await selectFixture(page, 'tool-stream');
-  await page.goto(`/agents/weatherAgent/chat/${nanoid()}`);
+  await page.goto(`/agents/weatherAgent/chat/new`);
   await page.click('text=Model settings');
   await page.click('text=Stream');
 
@@ -87,7 +86,7 @@ async function assertToolStream(page: Page) {
 
 test('workflow stream', async () => {
   await selectFixture(page, 'workflow-stream');
-  await page.goto(`/agents/weatherAgent/chat/${nanoid()}`);
+  await page.goto(`/agents/weatherAgent/chat/new`);
   await page.click('text=Model settings');
   await page.click('text=Stream');
 
