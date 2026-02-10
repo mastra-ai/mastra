@@ -27,7 +27,7 @@ export class CloudflareDeployer extends Deployer {
 
   constructor(
     userConfig: Omit<Unstable_RawConfig, 'main' | '$schema'> &
-      // TODO: Remove deprecated fields in next major version, and update type to just Omit<Unstable_RawConfig, 'main'>.
+      // TODO: Remove deprecated fields in next major version, and update type to just Omit<Unstable_RawConfig, 'main' | '$schema'>.
       {
         /** @deprecated Use `name` instead. */
         projectName?: string;
