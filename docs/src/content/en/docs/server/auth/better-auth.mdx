@@ -30,7 +30,11 @@ BETTER_AUTH_URL=http://localhost:3000
 DATABASE_URL=postgres://...
 ```
 
-> Better Auth recommends setting `baseURL` explicitly (or via `BETTER_AUTH_URL`) for security and stability.
+:::note
+
+Better Auth recommends setting `baseURL` explicitly (or via `BETTER_AUTH_URL`) for security and stability.
+
+:::
 
 If you haven't mounted Better Auth's handler yet (so your app can sign users in / create sessions), follow the [Better Auth installation guide](https://www.better-auth.com/docs/installation) to mount the `/api/auth/*` route (or your configured base path).
 
