@@ -1,0 +1,68 @@
+---
+title: "Deploy Mastra to Cloudflare | Deployment"
+description: "Learn how to deploy a Mastra application to Cloudflare"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Deploy Mastra to Cloudflare
+
+Use `@mastra/deployer-cloudflare` to deploy your Mastra server to Cloudflare Workers. The deployer bundles your code and generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/), ready to deploy with no additional configuration.
+
+:::info
+
+If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+
+:::
+
+## Before you begin
+
+You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Cloudflare](https://cloudflare.com/) account.
+
+Cloudflare Workers use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+
+## Installation
+
+Add the `@mastra/deployer-cloudflare` package to your project:
+
+```bash npm2yarn
+npm install @mastra/deployer-cloudflare@latest
+```
+
+Import [`CloudflareDeployer`](/reference/deployer/cloudflare) and set it as the deployer in your Mastra configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+// highlight-next-line
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  // highlight-start
+  deployer: new CloudflareDeployer({
+    name: "your-project-name",
+    vars: {
+      NODE_ENV: "production",
+    },
+  }),
+  // highlight-end
+});
+```
+
+## Manual deployment
+
+Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
+
+With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
+
+```bash
+npx wrangler login
+```
+
+Run the following to build and deploy your application to Cloudflare
+
+```bash
+npm run build && wrangler deploy --config .mastra/output/wrangler.json
+```
+
+> You can also run `wrangler dev --config .mastra/output/wrangler.json` from your project root to test your Mastra application locally.

@@ -116,7 +116,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/cloudflare-deployer',
+          id: 'deployment/cloudflare',
           label: 'Cloudflare',
         },
         {
