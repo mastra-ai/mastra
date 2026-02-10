@@ -368,6 +368,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/clerk',
               label: 'Clerk',
             },

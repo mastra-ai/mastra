@@ -62,7 +62,7 @@ import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
+import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
 import type { Workspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
@@ -150,7 +150,7 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
   #skillsFormat?: SkillFormat;
-  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
+  #workflows?: DynamicArgument<Record<string, AnyWorkflow>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>>;
@@ -190,7 +190,7 @@ export class Agent<
    * ```
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
-    super({ component: RegisteredLogger.AGENT });
+    super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
 
     this.name = config.name;
     this.id = config.id ?? config.name;
@@ -902,7 +902,7 @@ export class Agent<
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext } = {}): Promise<Record<string, AnyWorkflow>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
@@ -1656,7 +1656,7 @@ export class Agent<
       description: this.getDescription() || undefined,
       instructions: instructionsStr,
       model,
-      tools: toolKeys.length > 0 ? toolKeys : undefined,
+      tools: toolKeys.length > 0 ? Object.fromEntries(toolKeys.map(key => [key, {}])) : undefined,
       workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
       agents: agentKeys.length > 0 ? agentKeys : undefined,
       memory: memoryConfig,
@@ -1668,9 +1668,9 @@ export class Agent<
       authorId: options.authorId,
     };
 
-    await agentsStore.createAgent({ agent: createInput });
+    await agentsStore.create({ agent: createInput });
 
-    const resolved = await agentsStore.getAgentByIdResolved({ id: options.newId });
+    const resolved = await agentsStore.getByIdResolved(options.newId);
     if (!resolved) {
       const mastraError = new MastraError({
         id: 'AGENT_CLONE_FAILED_TO_RESOLVE',
@@ -1999,6 +1999,13 @@ export class Agent<
 
     // Get memory tools if available
     const memory = await this.getMemory({ requestContext });
+
+    // Skip memory tools if there's no usable context — thread-scoped needs threadId, resource-scoped needs resourceId
+    if (!threadId && !resourceId) {
+      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (no thread or resource context)`, { runId });
+      return convertedMemoryTools;
+    }
+
     const memoryTools = memory?.listTools?.(memoryConfig);
 
     if (memoryTools) {
@@ -2774,7 +2781,7 @@ export class Agent<
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
           // @ts-expect-error - zod types mismatch between v3 and v4
-          inputData: workflow.inputSchema,
+          inputData: workflow.inputSchema ?? z.object({}).passthrough(),
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
 

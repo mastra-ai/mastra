@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { z as zv4 } from 'zod/v4';
@@ -21568,6 +21569,189 @@ describe('Workflow', () => {
 
       expect(receivedState).toBeDefined();
       expect(receivedState?.counter).toBe(10);
+    });
+  });
+
+  describe('Workflow as agent tool', () => {
+    function createWorkflowToolMockModel({
+      toolName,
+      provider,
+      modelId,
+    }: {
+      toolName: string;
+      provider?: string;
+      modelId?: string;
+    }) {
+      return new MockLanguageModelV2({
+        ...(provider ? { provider: provider as any } : {}),
+        ...(modelId ? { modelId: modelId as any } : {}),
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call-1',
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: modelId ?? 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolCallType: 'function',
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+    }
+
+    async function streamAndCollectToolResults(agent: Agent) {
+      const stream = await agent.stream('Fetch task test-task-123');
+      for await (const _chunk of stream.fullStream) {
+        // consume stream to drive execution
+      }
+    }
+
+    it('should pass workflow input to the first step when called as agent tool via stream', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      const taskWorkflow = createWorkflow({
+        id: 'task-workflow',
+        description: 'A workflow that fetches a task',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
+    });
+
+    it('should pass workflow input to step when workflow has no inputSchema', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      // No inputSchema on the workflow - previously this caused a TypeError because
+      // z.object({ inputData: undefined }) was created
+      const taskWorkflow = createWorkflow({
+        id: 'task-workflow',
+        description: 'A workflow that fetches a task',
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
+    });
+
+    it('should pass workflow input to step when using OpenAI-compatible model', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      const taskWorkflow = createWorkflow({
+        id: 'wait-task-workflow',
+        description: 'A workflow that fetches a task',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({
+        toolName: 'workflow-waitTaskWorkflow',
+        provider: 'openai.chat',
+        modelId: 'gpt-4o',
+      });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { waitTaskWorkflow: taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
     });
   });
 });

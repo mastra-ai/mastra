@@ -114,7 +114,10 @@ const snapshotConfigSchema = z.object({
     })
     .passthrough()
     .describe('Model configuration (provider, name, and optional params)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
+  tools: z
+    .record(z.string(), z.object({ description: z.string().optional() }))
+    .optional()
+    .describe('Tool keys mapped to per-tool config (e.g., description overrides)'),
   defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
@@ -193,7 +196,10 @@ export const storedAgentSchema = z.object({
     })
     .passthrough()
     .describe('Model configuration (provider, name, and optional params)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
+  tools: z
+    .record(z.string(), z.object({ description: z.string().optional() }))
+    .optional()
+    .describe('Tool keys mapped to per-tool config (e.g., description overrides)'),
   defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
   workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
   agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
