@@ -72,7 +72,8 @@ type NetworkIdGenerator = (context?: IdGeneratorContext) => string;
  * - Routing agent decision JSON (has primitiveId/primitiveType/selectionReason)
  * - Completion feedback messages (metadata.mode === 'network' or metadata.completionResult)
  */
-function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage[] {
+/** @internal Exported for testing purposes */
+export function filterMessagesForSubAgent(messages: MastraDBMessage[]): MastraDBMessage[] {
   return messages.filter(msg => {
     // Include all user messages
     if (msg.role === 'user') return true;
@@ -281,7 +282,7 @@ export async function prepareMemoryStep({
               }),
               type: 'text',
               role: 'user',
-              content: { parts: [{ type: 'text', text: messages }], format: 2 },
+              content: { parts: [{ type: 'text', text: messages }], format: 2, metadata: { source: 'user' } },
               createdAt: new Date(),
               threadId: thread?.id,
               resourceId: thread?.resourceId,
@@ -437,6 +438,10 @@ async function saveFinalResultIfProvided({
           content: {
             parts: [{ type: 'text', text: finalResult }],
             format: 2,
+            metadata: {
+              mode: 'network',
+              source: 'agent-network',
+            },
           },
           createdAt: new Date(),
           threadId,
@@ -779,7 +784,31 @@ export async function createNetworkLoop({
       // 2. The routing agent's prompt (the specific task for this sub-agent)
       const messagesForSubAgent: MessageListInput = [
         ...conversationContext,
-        { role: 'user' as const, content: inputData.prompt },
+        {
+          id: generateId({
+            idType: 'message',
+            source: 'agent',
+            entityId: agentId,
+            threadId,
+            resourceId,
+            role: 'user',
+          }),
+          role: 'user' as const,
+          type: 'text',
+          content: {
+            parts: [{ type: 'text', text: inputData.prompt }],
+            format: 2,
+            metadata: {
+              source: 'routing-agent',
+              primitiveId: inputData.primitiveId,
+              primitiveType: inputData.primitiveType,
+              selectionReason: inputData.selectionReason,
+            },
+          },
+          createdAt: new Date(),
+          threadId,
+          resourceId,
+        } as MastraDBMessage,
       ];
 
       // We set lastMessages: 0 to prevent loading messages from the network's thread
@@ -915,14 +944,14 @@ export async function createNetworkLoop({
                 },
               ],
               format: 2,
-              ...(requireApprovalMetadata || suspendedTools
-                ? {
-                    metadata: {
-                      ...(requireApprovalMetadata ? { requireApprovalMetadata } : {}),
-                      ...(suspendedTools ? { suspendedTools } : {}),
-                    },
-                  }
-                : {}),
+              metadata: {
+                mode: 'network',
+                source: 'agent-network',
+                primitiveId: inputData.primitiveId,
+                primitiveType: inputData.primitiveType,
+                ...(requireApprovalMetadata ? { requireApprovalMetadata } : {}),
+                ...(suspendedTools ? { suspendedTools } : {}),
+              },
             },
             createdAt: new Date(),
             threadId: initData?.threadId || runId,
@@ -1252,9 +1281,13 @@ export async function createNetworkLoop({
             content: {
               parts: [{ type: 'text', text: finalResult }],
               format: 2,
-              ...(suspendPayload
-                ? {
-                    metadata: {
+              metadata: {
+                mode: 'network',
+                source: 'agent-network',
+                primitiveId: inputData.primitiveId,
+                primitiveType: 'workflow',
+                ...(suspendPayload
+                  ? {
                       suspendedTools: {
                         [inputData.primitiveId]: {
                           args: input,
@@ -1269,9 +1302,9 @@ export async function createNetworkLoop({
                           toolCallId: inputData.primitiveId,
                         },
                       },
-                    },
-                  }
-                : {}),
+                    }
+                  : {}),
+              },
             },
             createdAt: new Date(),
             threadId: initData?.threadId || runId,
@@ -1539,6 +1572,9 @@ export async function createNetworkLoop({
                   format: 2,
                   metadata: {
                     mode: 'network',
+                    source: 'agent-network',
+                    primitiveId: inputData.primitiveId,
+                    primitiveType: inputData.primitiveType,
                     requireApprovalMetadata: {
                       [inputData.primitiveId]: {
                         toolCallId,
@@ -1605,6 +1641,12 @@ export async function createNetworkLoop({
                       },
                     ],
                     format: 2,
+                    metadata: {
+                      mode: 'network',
+                      source: 'agent-network',
+                      primitiveId: inputData.primitiveId,
+                      primitiveType: inputData.primitiveType,
+                    },
                   },
                   createdAt: new Date(),
                   threadId: initData.threadId || runId,
@@ -1675,6 +1717,9 @@ export async function createNetworkLoop({
                       format: 2,
                       metadata: {
                         mode: 'network',
+                        source: 'agent-network',
+                        primitiveId: toolId,
+                        primitiveType: inputData.primitiveType,
                         suspendedTools: {
                           [inputData.primitiveId]: {
                             toolCallId,
@@ -1781,6 +1826,12 @@ export async function createNetworkLoop({
                   },
                 ],
                 format: 2,
+                metadata: {
+                  mode: 'network',
+                  source: 'agent-network',
+                  primitiveId: toolId,
+                  primitiveType: inputData.primitiveType,
+                },
               },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
@@ -1829,6 +1880,12 @@ export async function createNetworkLoop({
                 },
               ],
               format: 2,
+              metadata: {
+                mode: 'network',
+                source: 'agent-network',
+                primitiveId: toolId,
+                primitiveType: inputData.primitiveType,
+              },
             },
             createdAt: new Date(),
             threadId: initData.threadId || runId,
@@ -2417,6 +2474,7 @@ export async function networkLoop<OUTPUT = undefined>({
               format: 2,
               metadata: {
                 mode: 'network',
+                source: 'agent-network',
                 completionResult: {
                   passed: completionResult.complete,
                 },

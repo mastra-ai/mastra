@@ -1,11 +1,11 @@
 import { it, describe, expect, vi } from 'vitest';
 import { z } from 'zod';
-import type { MessageListInput } from '../../agent/message-list';
+import type { MessageListInput, MastraDBMessage } from '../../agent/message-list';
 import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../../workflows';
-import { getLastMessage, getRoutingAgent } from './index';
+import { getLastMessage, getRoutingAgent, filterMessagesForSubAgent } from './index';
 
 describe('getLastMessage', () => {
   it('returns string directly', () => {
@@ -355,5 +355,299 @@ describe('getRoutingAgent', () => {
     // listInputProcessors should NOT be called - only listConfiguredInputProcessors
     expect(mockAgent.listInputProcessors).not.toHaveBeenCalled();
     expect(mockAgent.listConfiguredInputProcessors).toHaveBeenCalled();
+  });
+});
+
+describe('filterMessagesForSubAgent', () => {
+  function makeDbMessage(overrides: Partial<MastraDBMessage> & { role: MastraDBMessage['role'] }): MastraDBMessage {
+    return {
+      id: 'msg-' + Math.random().toString(36).slice(2, 8),
+      role: overrides.role,
+      createdAt: new Date(),
+      content: overrides.content ?? {
+        format: 2,
+        parts: [{ type: 'text', text: 'test message' }],
+      },
+      ...(overrides.threadId ? { threadId: overrides.threadId } : {}),
+      ...(overrides.resourceId ? { resourceId: overrides.resourceId } : {}),
+    } as MastraDBMessage;
+  }
+
+  it('includes regular user messages', () => {
+    const userMsg = makeDbMessage({ role: 'user' });
+    const result = filterMessagesForSubAgent([userMsg]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(userMsg);
+  });
+
+  it('includes regular assistant messages', () => {
+    const assistantMsg = makeDbMessage({
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Hello, I can help with that.' }],
+      },
+    });
+    const result = filterMessagesForSubAgent([assistantMsg]);
+    expect(result).toHaveLength(1);
+  });
+
+  it('excludes assistant messages with isNetwork JSON', () => {
+    const networkMsg = makeDbMessage({
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              isNetwork: true,
+              primitiveId: 'agent-1',
+              primitiveType: 'agent',
+              input: 'do something',
+              finalResult: { text: 'done', messages: [] },
+            }),
+          },
+        ],
+      },
+    });
+    const result = filterMessagesForSubAgent([networkMsg]);
+    expect(result).toHaveLength(0);
+  });
+
+  it('excludes assistant messages with routing decision JSON', () => {
+    const routingMsg = makeDbMessage({
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              primitiveId: 'agent-1',
+              selectionReason: 'best fit for the task',
+            }),
+          },
+        ],
+      },
+    });
+    const result = filterMessagesForSubAgent([routingMsg]);
+    expect(result).toHaveLength(0);
+  });
+
+  it('excludes assistant messages with mode=network metadata', () => {
+    const networkMetaMsg = makeDbMessage({
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'network feedback' }],
+        metadata: { mode: 'network' },
+      },
+    });
+    const result = filterMessagesForSubAgent([networkMetaMsg]);
+    expect(result).toHaveLength(0);
+  });
+
+  it('excludes assistant messages with completionResult metadata', () => {
+    const completionMsg = makeDbMessage({
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'completion result' }],
+        metadata: { completionResult: true },
+      },
+    });
+    const result = filterMessagesForSubAgent([completionMsg]);
+    expect(result).toHaveLength(0);
+  });
+
+  // --- Tests verifying source metadata on network messages ---
+
+  it('routing-agent prompt message should include source metadata', () => {
+    // The routing agent now creates MastraDBMessage format with metadata
+    // identifying the message as coming from the routing agent
+    const routingAgentPromptMsg: MastraDBMessage = {
+      id: 'msg-routing-123',
+      role: 'user',
+      type: 'text',
+      content: {
+        parts: [{ type: 'text', text: 'Analyze the data using statistical methods' }],
+        format: 2,
+        metadata: {
+          source: 'routing-agent',
+          primitiveId: 'data-analyst',
+          primitiveType: 'agent',
+          selectionReason: 'best fit for data analysis',
+        },
+      },
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'network-1',
+    } as MastraDBMessage;
+
+    expect(routingAgentPromptMsg.content.metadata).toBeDefined();
+    expect(routingAgentPromptMsg.content.metadata!.source).toBe('routing-agent');
+    expect(routingAgentPromptMsg.content.metadata!.primitiveId).toBe('data-analyst');
+    expect(routingAgentPromptMsg.content.metadata!.primitiveType).toBe('agent');
+    expect(routingAgentPromptMsg.content.metadata!.selectionReason).toBe('best fit for data analysis');
+
+    // Should still pass through filterMessagesForSubAgent as a user message
+    const result = filterMessagesForSubAgent([routingAgentPromptMsg]);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.content.metadata!.source).toBe('routing-agent');
+  });
+
+  it('initial user message should include source=user metadata', () => {
+    // User input messages now include source metadata
+    const initialUserMsg: MastraDBMessage = {
+      id: 'msg-test-123',
+      type: 'text',
+      role: 'user',
+      content: {
+        parts: [{ type: 'text', text: 'Hello, what can you do?' }],
+        format: 2,
+        metadata: { source: 'user' },
+      },
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+    } as MastraDBMessage;
+
+    expect(initialUserMsg.content.metadata).toBeDefined();
+    expect(initialUserMsg.content.metadata!.source).toBe('user');
+  });
+
+  it('agent result message should always include primitiveId in metadata', () => {
+    // Agent result messages now always include primitiveId/primitiveType metadata
+    const agentResultMsg: MastraDBMessage = {
+      id: 'msg-result-456',
+      type: 'text',
+      role: 'assistant',
+      content: {
+        parts: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              isNetwork: true,
+              selectionReason: 'best fit for data analysis',
+              primitiveType: 'agent',
+              primitiveId: 'data-analyst',
+              input: 'Analyze the data',
+              finalResult: { text: 'Analysis complete', messages: [] },
+            }),
+          },
+        ],
+        format: 2,
+        metadata: {
+          mode: 'network',
+          source: 'agent-network',
+          primitiveId: 'data-analyst',
+          primitiveType: 'agent',
+        },
+      },
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'network-1',
+    } as MastraDBMessage;
+
+    expect(agentResultMsg.content.metadata).toBeDefined();
+    expect(agentResultMsg.content.metadata!.source).toBe('agent-network');
+    expect(agentResultMsg.content.metadata!.primitiveId).toBe('data-analyst');
+    expect(agentResultMsg.content.metadata!.primitiveType).toBe('agent');
+    expect(agentResultMsg.content.metadata!.mode).toBe('network');
+  });
+
+  it('can distinguish routing-agent messages from real user messages via metadata', () => {
+    const realUserMsg = makeDbMessage({
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Tell me about the weather' }],
+        metadata: { source: 'user' },
+      },
+    });
+
+    const routingAgentMsg = makeDbMessage({
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Analyze weather patterns for the user' }],
+        metadata: {
+          source: 'routing-agent',
+          primitiveId: 'weather-agent',
+          primitiveType: 'agent',
+        },
+      },
+    });
+
+    const result = filterMessagesForSubAgent([realUserMsg, routingAgentMsg]);
+    expect(result).toHaveLength(2);
+
+    const fromUser = result.filter(m => m.content.metadata?.source === 'user');
+    const fromRouting = result.filter(m => m.content.metadata?.source === 'routing-agent');
+
+    expect(fromUser).toHaveLength(1);
+    expect(fromRouting).toHaveLength(1);
+    expect(fromRouting[0]!.content.metadata!.primitiveId).toBe('weather-agent');
+  });
+
+  it('workflow result message should include primitiveId metadata', () => {
+    const workflowResultMsg: MastraDBMessage = {
+      id: 'msg-wf-789',
+      type: 'text',
+      role: 'assistant',
+      content: {
+        parts: [{ type: 'text', text: 'workflow completed' }],
+        format: 2,
+        metadata: {
+          mode: 'network',
+          source: 'agent-network',
+          primitiveId: 'data-pipeline',
+          primitiveType: 'workflow',
+        },
+      },
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'network-1',
+    } as MastraDBMessage;
+
+    expect(workflowResultMsg.content.metadata!.source).toBe('agent-network');
+    expect(workflowResultMsg.content.metadata!.primitiveId).toBe('data-pipeline');
+    expect(workflowResultMsg.content.metadata!.primitiveType).toBe('workflow');
+  });
+
+  it('tool result message should include primitiveId metadata', () => {
+    const toolResultMsg: MastraDBMessage = {
+      id: 'msg-tool-101',
+      type: 'text',
+      role: 'assistant',
+      content: {
+        parts: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              isNetwork: true,
+              primitiveType: 'tool',
+              primitiveId: 'search-tool',
+              finalResult: { result: 'search results', toolCallId: 'tc-1' },
+            }),
+          },
+        ],
+        format: 2,
+        metadata: {
+          mode: 'network',
+          source: 'agent-network',
+          primitiveId: 'search-tool',
+          primitiveType: 'tool',
+        },
+      },
+      createdAt: new Date(),
+      threadId: 'thread-1',
+      resourceId: 'network-1',
+    } as MastraDBMessage;
+
+    expect(toolResultMsg.content.metadata!.source).toBe('agent-network');
+    expect(toolResultMsg.content.metadata!.primitiveId).toBe('search-tool');
+    expect(toolResultMsg.content.metadata!.primitiveType).toBe('tool');
   });
 });
