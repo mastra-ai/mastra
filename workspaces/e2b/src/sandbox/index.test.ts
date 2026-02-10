@@ -1754,10 +1754,13 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
 
     await sandbox.start();
 
-    expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox', expect.objectContaining({
-      domain: 'custom.dev',
-      apiKey: 'test-key',
-    }));
+    expect(Sandbox.connect).toHaveBeenCalledWith(
+      'existing-sandbox',
+      expect.objectContaining({
+        domain: 'custom.dev',
+        apiKey: 'test-key',
+      }),
+    );
 
     // Reset mock
     (Sandbox.list as any).mockReturnValue({

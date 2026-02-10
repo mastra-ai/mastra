@@ -606,7 +606,7 @@ export class GCSFilesystem extends MastraFilesystem {
    * Initialize the GCS client.
    * Status management is handled by the base class.
    */
-  protected override async _doInit(): Promise<void> {
+  async init(): Promise<void> {
     // Verify we can access the bucket
     const bucket = this.getBucket();
     const [exists] = await bucket.exists();
@@ -619,7 +619,7 @@ export class GCSFilesystem extends MastraFilesystem {
    * Clean up the GCS client.
    * Status management is handled by the base class.
    */
-  protected override async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     this._storage = null;
     this._bucket = null;
   }

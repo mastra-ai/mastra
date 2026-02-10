@@ -395,7 +395,7 @@ export class S3Filesystem extends MastraFilesystem {
       // Skip signing for anonymous access (public buckets).
       // No-op signer passes the request through unsigned. Uses `any` because
       // the correct type (HttpRequest from @smithy/types) is not a direct dependency.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       ...(hasCredentials ? {} : { signer: { sign: async (request: any) => request } }),
     });
 
@@ -797,7 +797,7 @@ export class S3Filesystem extends MastraFilesystem {
    * Initialize the S3 client.
    * Status management is handled by the base class.
    */
-  protected override async _doInit(): Promise<void> {
+  async init(): Promise<void> {
     // Verify we can access the bucket
     const client = this.getClient();
     await client.send(new HeadBucketCommand({ Bucket: this.bucket }));
@@ -807,7 +807,7 @@ export class S3Filesystem extends MastraFilesystem {
    * Clean up the S3 client.
    * Status management is handled by the base class.
    */
-  protected override async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     this._client = null;
   }
 }

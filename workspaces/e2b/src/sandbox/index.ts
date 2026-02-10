@@ -589,7 +589,7 @@ export class E2BSandbox extends MastraSandbox {
    *
    * Status management and mount processing are handled by the base class.
    */
-  protected override async _doStart(): Promise<void> {
+  async start(): Promise<void> {
     // Already have a sandbox instance
     if (this._sandbox) {
       return;
@@ -607,7 +607,7 @@ export class E2BSandbox extends MastraSandbox {
       this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox for: ${this.id}`);
 
       // Clean up stale mounts from previous config
-      // (processPending is called by base class after _doStart completes)
+      // (processPending is called by base class after start completes)
       const expectedPaths = Array.from(this.mounts.entries.keys());
       this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
       await this.reconcileMounts(expectedPaths);
@@ -661,7 +661,7 @@ export class E2BSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.sandboxId} for logical ID: ${this.id}`);
     this._createdAt = new Date();
-    // Note: processPending is called by base class after _doStart completes
+    // Note: processPending is called by base class after start completes
   }
 
   /**
@@ -781,7 +781,7 @@ export class E2BSandbox extends MastraSandbox {
    * Unmounts all filesystems and releases the sandbox reference.
    * Status management is handled by the base class.
    */
-  protected override async _doStop(): Promise<void> {
+  async stop(): Promise<void> {
     // Unmount all filesystems before stopping
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
@@ -800,7 +800,7 @@ export class E2BSandbox extends MastraSandbox {
    * Unmounts filesystems, kills the sandbox, and clears mount state.
    * Status management is handled by the base class.
    */
-  protected override async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     // Unmount all filesystems
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
