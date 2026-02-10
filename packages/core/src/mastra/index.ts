@@ -40,7 +40,17 @@ import { createOnScorerHook } from './hooks';
  * object had getters or non-enumerable properties.
  */
 function createUndefinedPrimitiveError(
-  type: 'agent' | 'tool' | 'processor' | 'vector' | 'scorer' | 'workflow' | 'mcp-server' | 'gateway' | 'memory',
+  type:
+    | 'agent'
+    | 'tool'
+    | 'processor'
+    | 'vector'
+    | 'scorer'
+    | 'workflow'
+    | 'mcp-server'
+    | 'gateway'
+    | 'memory'
+    | 'workspace',
   value: null | undefined,
   key?: string,
 ): MastraError {
@@ -318,6 +328,7 @@ export class Mastra<
     new Map();
   #memory?: TMemory;
   #workspace?: Workspace;
+  #workspaces: Record<string, Workspace> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -604,6 +615,8 @@ export class Mastra<
 
     if (config?.workspace) {
       this.#workspace = config.workspace;
+      // Also register in the workspaces registry for direct lookup by ID
+      this.addWorkspace(config.workspace);
     }
 
     if (config?.scorers) {
@@ -865,6 +878,21 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
       });
+
+    // Register agent workspace in the workspaces registry for direct lookup.
+    // Dynamic workspace functions may return undefined without request context — that's fine,
+    // the if (workspace) guard below will skip registration and they'll register lazily later.
+    if (mastraAgent.hasOwnWorkspace?.()) {
+      Promise.resolve(mastraAgent.getWorkspace?.())
+        .then(workspace => {
+          if (workspace) {
+            this.addWorkspace(workspace);
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register workspace for agent ${agentKey}:`, err);
+        });
+    }
 
     // Register scorers from the agent to the Mastra instance
     // This makes agent-level scorers discoverable via mastra.getScorer()/getScorerById()
@@ -1141,6 +1169,82 @@ export class Mastra<
    */
   public getWorkspace(): Workspace | undefined {
     return this.#workspace;
+  }
+
+  /**
+   * Retrieves a registered workspace by its ID.
+   *
+   * @throws {MastraError} When the workspace with the specified ID is not found
+   *
+   * @example
+   * ```typescript
+   * const workspace = mastra.getWorkspaceById('workspace-123');
+   * const files = await workspace.filesystem.readdir('/');
+   * ```
+   */
+  public getWorkspaceById(id: string): Workspace {
+    const workspace = this.#workspaces[id];
+    if (!workspace) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workspace with id ${id} not found`,
+        details: {
+          status: 404,
+          workspaceId: id,
+          availableIds: Object.keys(this.#workspaces).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return workspace;
+  }
+
+  /**
+   * Returns all registered workspaces as a record keyed by their IDs.
+   *
+   * @example
+   * ```typescript
+   * const workspaces = mastra.listWorkspaces();
+   * for (const [id, workspace] of Object.entries(workspaces)) {
+   *   console.log(`Workspace ${id}: ${workspace.name}`);
+   * }
+   * ```
+   */
+  public listWorkspaces(): Record<string, Workspace> {
+    return { ...this.#workspaces };
+  }
+
+  /**
+   * Adds a new workspace to the Mastra instance.
+   *
+   * This method allows dynamic registration of workspaces after the Mastra instance
+   * has been created. Workspaces are keyed by their ID.
+   *
+   * @example
+   * ```typescript
+   * const workspace = new Workspace({
+   *   id: 'project-workspace',
+   *   name: 'Project Workspace',
+   *   filesystem: new LocalFilesystem({ rootPath: './workspace' })
+   * });
+   * mastra.addWorkspace(workspace);
+   * ```
+   */
+  public addWorkspace(workspace: Workspace, key?: string): void {
+    if (!workspace) {
+      throw createUndefinedPrimitiveError('workspace', workspace, key);
+    }
+    const workspaceKey = key || workspace.id;
+    if (this.#workspaces[workspaceKey]) {
+      const logger = this.getLogger();
+      logger.debug(`Workspace with key ${workspaceKey} already exists. Skipping addition.`);
+      return;
+    }
+
+    this.#workspaces[workspaceKey] = workspace;
   }
 
   /**

@@ -6,6 +6,7 @@ import type { MemoryConfig } from '../../../memory/types';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import { createStep } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
@@ -29,6 +30,7 @@ interface StreamStepOptions {
   memory?: MastraMemory;
   resourceId?: string;
   autoResumeSuspendedTools?: boolean;
+  workspace?: Workspace;
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -47,6 +49,7 @@ export function createStreamStep<OUTPUT = undefined>({
   memory,
   resourceId,
   autoResumeSuspendedTools,
+  workspace,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -93,6 +96,7 @@ export function createStreamStep<OUTPUT = undefined>({
         toolCallId,
         methodType: modelMethodType,
         autoResumeSuspendedTools,
+        workspace,
       });
 
       return streamResult;
