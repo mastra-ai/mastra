@@ -1,4 +1,4 @@
-import type { ConditionOperator, Rule } from '../types';
+import type { ConditionOperator, Rule, RuleGroup } from '../types';
 import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
 export type { JsonSchema, JsonSchemaProperty };
@@ -27,14 +27,32 @@ export type FieldOption = {
 export type RuleBuilderProps = {
   /** JSON Schema defining available fields */
   schema: JsonSchema;
-  /** Current rules */
-  rules: Rule[];
-  /** Callback when rules or group operator change */
-  onChange: (rules: Rule[], groupOperator: 'AND' | 'OR') => void;
-  /** Current group operator (AND or OR). Defaults to 'AND'. */
-  groupOperator?: 'AND' | 'OR';
+  /** Current rule group (recursive, supports nested groups) */
+  ruleGroup: RuleGroup | undefined;
+  /** Callback when rule group changes */
+  onChange: (ruleGroup: RuleGroup | undefined) => void;
+  /** Maximum nesting depth (default: 3) */
+  maxDepth?: number;
   /** Optional class name */
   className?: string;
+};
+
+/**
+ * Internal props for the recursive RuleGroupView component
+ */
+export type RuleGroupViewProps = {
+  /** JSON Schema defining available fields */
+  schema: JsonSchema;
+  /** The rule group to render */
+  group: RuleGroup;
+  /** Callback when this group changes */
+  onChange: (group: RuleGroup) => void;
+  /** Callback to remove this group (undefined for root) */
+  onRemove?: () => void;
+  /** Current nesting depth (0 = root) */
+  depth: number;
+  /** Maximum nesting depth */
+  maxDepth: number;
 };
 
 /**

@@ -4,8 +4,8 @@ import { ChevronRight, GripVertical, Ruler, Trash2 } from 'lucide-react';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 
 import { ContentBlock } from '@/ds/components/ContentBlocks';
-import type { JsonSchema, Rule, RuleGroup } from '@/lib/rule-engine';
-import { RuleBuilder } from '@/lib/rule-engine';
+import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
+import { RuleBuilder, countLeafRules } from '@/lib/rule-engine';
 import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
@@ -47,7 +47,7 @@ const AgentCMSBlockContent = ({
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
   const showRulesSection = schema && hasVariablesSet;
-  const ruleCount = block.rules?.conditions?.length ?? 0;
+  const ruleCount = countLeafRules(block.rules);
 
   const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
@@ -61,11 +61,8 @@ const AgentCMSBlockContent = ({
     onBlockChange({ ...block, content });
   };
 
-  const handleRulesChange = (rules: Rule[], groupOperator: 'AND' | 'OR') => {
-    onBlockChange({
-      ...block,
-      rules: rules.length > 0 ? { operator: groupOperator, conditions: rules } : undefined,
-    });
+  const handleRulesChange = (ruleGroup: RuleGroup | undefined) => {
+    onBlockChange({ ...block, rules: ruleGroup });
   };
 
   return (
@@ -129,9 +126,8 @@ const AgentCMSBlockContent = ({
             <CollapsibleContent>
               <RuleBuilder
                 schema={schema}
-                rules={block.rules?.conditions?.filter((c): c is Rule => 'field' in c) ?? []}
+                ruleGroup={block.rules}
                 onChange={handleRulesChange}
-                groupOperator={block.rules?.operator ?? 'AND'}
               />
             </CollapsibleContent>
           </Collapsible>
