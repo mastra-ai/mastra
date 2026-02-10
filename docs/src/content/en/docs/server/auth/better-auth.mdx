@@ -3,17 +3,12 @@ title: MastraAuthBetterAuth Class
 description: Authenticate your Mastra server using Better Auth (self-hosted, open-source auth).
 packages:
   - "@mastra/auth-better-auth"
-sidebar_label: Better Auth
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 The `MastraAuthBetterAuth` class provides authentication for Mastra using Better Auth. It verifies incoming requests using your Better Auth instance and integrates with the Mastra server via the `server.auth` option.
-
-## How it works
-
-`MastraAuthBetterAuth` authenticates requests by calling `auth.api.getSession({ headers })`. It forwards the incoming `Authorization` and `Cookie` headers, so you can use either bearer tokens or cookie-based sessions.
 
 ## Prerequisites
 
@@ -36,17 +31,6 @@ Better Auth recommends setting `baseURL` explicitly (or via `BETTER_AUTH_URL`) f
 
 If you haven't mounted Better Auth's handler yet (so your app can sign users in / create sessions), follow the [Better Auth installation guide](https://www.better-auth.com/docs/installation) to mount the `/api/auth/*` route (or your configured base path).
 
-### Mount the Better Auth handler
-
-Below is a minimal example using Next.js App Router. If you're using a different framework, follow the Better Auth installation guide for the equivalent handler setup.
-
-```ts title="app/api/auth/[...all]/route.ts"
-import { auth } from "@/lib/auth";
-import { toNextJsHandler } from "better-auth/next-js";
-
-export const { GET, POST } = toNextJsHandler(auth);
-```
-
 ## Installation
 
 Install the `@mastra/auth-better-auth` package:
@@ -57,13 +41,12 @@ npm install @mastra/auth-better-auth
 
 ## Usage example
 
-```ts
-import { betterAuth } from "better-auth";
-import { MastraAuthBetterAuth } from "@mastra/auth-better-auth";
-import { Mastra } from "@mastra/core";
+First, create your Better Auth instance:
 
-// 1) Create your Better Auth instance
-const auth = betterAuth({
+```ts title="lib/auth.ts"
+import { betterAuth } from "better-auth";
+
+export const auth = betterAuth({
   database: {
     provider: "postgresql",
     url: process.env.DATABASE_URL!,
@@ -74,14 +57,20 @@ const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
 });
+```
 
-// 2) Create the Mastra auth provider
+Then, use it with Mastra:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthBetterAuth } from "@mastra/auth-better-auth";
+import { auth } from "@/lib/auth";
+
 const mastraAuth = new MastraAuthBetterAuth({
   auth,
 });
 
-// 3) Use with Mastra
-const mastra = new Mastra({
+export const mastra = new Mastra({
   server: {
     auth: mastraAuth,
   },
@@ -91,18 +80,6 @@ const mastra = new Mastra({
 :::info
 
 Visit [MastraAuthBetterAuth](/reference/auth/better-auth) for all available configuration options.
-
-:::
-
-## Configuration options
-
-| Option          | Type | Required | Description |
-| --------------- | ---- | -------- | ----------- |
-| `auth` | `Auth` | Yes | Your Better Auth instance created via `betterAuth({ ... })` |
-| `name` | `string` | No | Custom provider name (default: `"better-auth"`) |
-| `authorizeUser` | `(user, request) => Promise<boolean>` | No | Custom authorization logic |
-| `public` | `Array<string \| RegExp \| [string, Methods \| Methods[]]>` | No | Public routes that don't require authentication |
-| `protected` | `Array<string \| RegExp \| [string, Methods \| Methods[]]>` | No | Protected routes that require authentication |
 
 ## Custom authorization
 
@@ -227,10 +204,3 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 * **Authorization header missing**: ensure the client attaches `Authorization: Bearer <token>` when using bearer tokens.
 * **Base URL issues**: set `baseURL` in `betterAuth({ ... })` or set `BETTER_AUTH_URL`.
 * **DB connection errors**: verify `DATABASE_URL` and database provider configuration.
-
-## Further reading
-
-* [Better Auth Installation](https://www.better-auth.com/docs/installation)
-* [Better Auth Options](https://www.better-auth.com/docs/options)
-* [Mastra Auth Overview](/docs/server/auth)
-* [MastraAuthBetterAuth Reference](/reference/auth/better-auth)
