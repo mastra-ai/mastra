@@ -1194,8 +1194,8 @@ describe('Tracing Integration Tests', () => {
             },
           });
 
-          // Simulate some processing
-          await new Promise(resolve => setTimeout(resolve, 10));
+          // Simulate some processing (use microtask to avoid fake timer interference from other test files)
+          await Promise.resolve();
 
           // Update and end child span
           childSpan?.update({
@@ -1288,12 +1288,10 @@ describe('Tracing Integration Tests', () => {
     // This test verifies that MODEL_STEP spans have correct startTime.
     // The span should start when the model API call begins, not when the response starts streaming.
 
-    const SIMULATED_MODEL_DELAY_MS = 100; // Simulate model processing time before first token
-
     const delayedMockModel = new MockLanguageModelV2({
       doStream: async () => {
-        // Simulate model processing delay before first token
-        await new Promise(resolve => setTimeout(resolve, SIMULATED_MODEL_DELAY_MS));
+        // Simulate model processing delay (use microtask to avoid fake timer interference from other test files)
+        await Promise.resolve();
 
         return {
           stream: convertArrayToReadableStream([
