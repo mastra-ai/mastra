@@ -20,6 +20,7 @@
  */
 
 import { PermissionError } from '../errors';
+import { callLifecycle } from '../lifecycle';
 import type { ProviderStatus } from '../lifecycle';
 import type {
   WorkspaceFilesystem,
@@ -67,12 +68,22 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     this._mounts = new Map();
 
     for (const [path, fs] of Object.entries(config.mounts)) {
-      const normalized = this.normalizeMountPath(path);
+      const normalized = this.normalizePath(path);
       this._mounts.set(normalized, fs);
     }
 
     if (this._mounts.size === 0) {
       throw new Error('CompositeFilesystem requires at least one mount');
+    }
+
+    // Validate no nested mount paths (e.g., /data and /data/sub)
+    const mountPaths = [...this._mounts.keys()];
+    for (const a of mountPaths) {
+      for (const b of mountPaths) {
+        if (a !== b && b.startsWith(a + '/')) {
+          throw new Error(`Nested mount paths are not supported: "${b}" is nested under "${a}"`);
+        }
+      }
     }
   }
 
@@ -106,12 +117,6 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
   getMountPathForPath(path: string): string | undefined {
     const resolved = this.resolveMount(path);
     return resolved?.mountPath;
-  }
-
-  private normalizeMountPath(path: string): string {
-    let n = path.startsWith('/') ? path : `/${path}`;
-    if (n.length > 1 && n.endsWith('/')) n = n.slice(0, -1);
-    return n;
   }
 
   private normalizePath(path: string): string {
@@ -204,7 +209,7 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     const errors: Error[] = [];
     for (const fs of this._mounts.values()) {
       try {
-        if (fs.init) await fs.init();
+        await callLifecycle(fs, 'init');
       } catch (e) {
         errors.push(e instanceof Error ? e : new Error(String(e)));
       }
@@ -221,7 +226,7 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     const errors: Error[] = [];
     for (const fs of this._mounts.values()) {
       try {
-        if (fs.destroy) await fs.destroy();
+        await callLifecycle(fs, 'destroy');
       } catch (e) {
         errors.push(e instanceof Error ? e : new Error(String(e)));
       }

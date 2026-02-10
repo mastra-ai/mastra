@@ -41,7 +41,7 @@ class TestFilesystem extends MastraFilesystem {
     super({ name: 'TestFilesystem' });
   }
 
-  protected async _doInit(): Promise<void> {
+  async init(): Promise<void> {
     // Initialization logic
   }
 
@@ -104,6 +104,7 @@ class TestFilesystem extends MastraFilesystem {
     const content = this.files.get(path);
     return {
       name: path.split('/').pop() || '',
+      path,
       type: 'file',
       size: content?.length || 0,
       createdAt: new Date(),
@@ -171,40 +172,40 @@ describe('MastraFilesystem Base Class', () => {
   });
 
   describe('Lifecycle Methods', () => {
-    it('init() sets status to ready', async () => {
+    it('_init() sets status to ready', async () => {
       const fs = new TestFilesystem();
 
       expect(fs.status).toBe('pending');
 
-      await fs.init();
+      await fs._init();
 
       expect(fs.status).toBe('ready');
     });
 
-    it('init() is idempotent', async () => {
+    it('_init() is idempotent', async () => {
       const fs = new TestFilesystem();
-      const initSpy = vi.spyOn(fs as any, '_doInit');
+      const initSpy = vi.spyOn(fs as any, 'init');
 
-      await fs.init();
-      await fs.init();
-      await fs.init();
+      await fs._init();
+      await fs._init();
+      await fs._init();
 
-      // _doInit should only be called once
+      // init should only be called once
       expect(initSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('concurrent init() calls return same promise', async () => {
+    it('concurrent _init() calls return same promise', async () => {
       const fs = new TestFilesystem();
       let initCount = 0;
 
-      // Override _doInit to count calls
-      (fs as any)._doInit = async () => {
+      // Override init to count calls
+      (fs as any).init = async () => {
         initCount++;
         await new Promise(resolve => setTimeout(resolve, 10));
       };
 
       // Start multiple concurrent init calls
-      const promises = [fs.init(), fs.init(), fs.init()];
+      const promises = [fs._init(), fs._init(), fs._init()];
 
       await Promise.all(promises);
 
@@ -212,29 +213,29 @@ describe('MastraFilesystem Base Class', () => {
       expect(initCount).toBe(1);
     });
 
-    it('destroy() sets status to destroyed', async () => {
+    it('_destroy() sets status to destroyed', async () => {
       const fs = new TestFilesystem();
-      await fs.init();
+      await fs._init();
 
-      await fs.destroy();
+      await fs._destroy();
 
       expect(fs.status).toBe('destroyed');
     });
 
-    it('concurrent destroy() calls return same promise', async () => {
+    it('concurrent _destroy() calls return same promise', async () => {
       const fs = new TestFilesystem();
       let destroyCount = 0;
 
-      // Override _doDestroy to count calls
-      (fs as any)._doDestroy = async () => {
+      // Override destroy to count calls
+      (fs as any).destroy = async () => {
         destroyCount++;
         await new Promise(resolve => setTimeout(resolve, 10));
       };
 
-      await fs.init();
+      await fs._init();
 
       // Start multiple concurrent destroy calls
-      const promises = [fs.destroy(), fs.destroy(), fs.destroy()];
+      const promises = [fs._destroy(), fs._destroy(), fs._destroy()];
 
       await Promise.all(promises);
 
@@ -243,28 +244,28 @@ describe('MastraFilesystem Base Class', () => {
       expect(fs.status).toBe('destroyed');
     });
 
-    it('init() sets status to error when _doInit throws', async () => {
+    it('_init() sets status to error when init() throws', async () => {
       const fs = new TestFilesystem();
 
-      // Override _doInit to throw
-      (fs as any)._doInit = async () => {
+      // Override init to throw
+      (fs as any).init = async () => {
         throw new Error('Init failed');
       };
 
-      await expect(fs.init()).rejects.toThrow('Init failed');
+      await expect(fs._init()).rejects.toThrow('Init failed');
 
       expect(fs.status).toBe('error');
     });
 
-    it('ensureReady() propagates init error when _doInit fails', async () => {
+    it('ensureReady() propagates init error when init() fails', async () => {
       const fs = new TestFilesystem();
 
-      // Override _doInit to throw
-      (fs as any)._doInit = async () => {
+      // Override init to throw
+      (fs as any).init = async () => {
         throw new Error('Init failed');
       };
 
-      // ensureReady checks status !== 'ready', calls init() which throws
+      // ensureReady checks status !== 'ready', calls _init() which throws
       await expect((fs as any).ensureReady()).rejects.toThrow('Init failed');
       expect(fs.status).toBe('error');
     });
@@ -273,44 +274,44 @@ describe('MastraFilesystem Base Class', () => {
       const fs = new TestFilesystem();
       let shouldFail = true;
 
-      (fs as any)._doInit = async () => {
+      (fs as any).init = async () => {
         if (shouldFail) throw new Error('Init failed');
       };
 
       // First init fails
-      await expect(fs.init()).rejects.toThrow('Init failed');
+      await expect(fs._init()).rejects.toThrow('Init failed');
       expect(fs.status).toBe('error');
 
       // Fix the issue and retry
       shouldFail = false;
-      await fs.init();
+      await fs._init();
       expect(fs.status).toBe('ready');
     });
 
-    it('destroy() sets status to error when _doDestroy throws', async () => {
+    it('_destroy() sets status to error when destroy() throws', async () => {
       const fs = new TestFilesystem();
-      await fs.init();
+      await fs._init();
 
-      (fs as any)._doDestroy = async () => {
+      (fs as any).destroy = async () => {
         throw new Error('Destroy failed');
       };
 
-      await expect(fs.destroy()).rejects.toThrow('Destroy failed');
+      await expect(fs._destroy()).rejects.toThrow('Destroy failed');
 
       expect(fs.status).toBe('error');
     });
 
-    it('init() after destroy() re-initializes', async () => {
+    it('_init() after _destroy() re-initializes', async () => {
       const fs = new TestFilesystem();
 
-      await fs.init();
+      await fs._init();
       expect(fs.status).toBe('ready');
 
-      await fs.destroy();
+      await fs._destroy();
       expect(fs.status).toBe('destroyed');
 
       // Re-init should work since _initPromise was cleared and status is not 'ready'
-      await fs.init();
+      await fs._init();
       expect(fs.status).toBe('ready');
     });
   });

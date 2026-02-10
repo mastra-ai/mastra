@@ -71,14 +71,18 @@ function getMountIcon(mount: FileEntry['mount']) {
       // S3 or S3-compatible storage
       return <AmazonIcon className="h-4 w-4 text-[#FF9900]" />;
     case 'google-cloud':
+    case 'google-cloud-storage':
     case 'gcs':
       return <GoogleIcon className="h-4 w-4" />;
     case 'azure-blob':
     case 'azure':
       return <AzureIcon className="h-4 w-4 text-[#0078D4]" />;
     case 'cloudflare':
+    case 'cloudflare-r2':
     case 'r2':
       return <Cloud className="h-4 w-4 text-[#F38020]" />;
+    case 'minio':
+      return <HardDrive className="h-4 w-4 text-red-400" />;
     case 'database':
       return <Database className="h-4 w-4 text-emerald-400" />;
     case 'local':
@@ -130,7 +134,8 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
 }
 
 function formatBytes(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '';
+  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return '';
+  if (bytes < 0) return '-' + formatBytes(-bytes);
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -344,7 +349,7 @@ export function FileBrowser({
                           (entry.mount.description ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
+                                <span tabIndex={0} className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
                                   {mountLabel}
                                 </span>
                               </TooltipTrigger>
@@ -389,10 +394,13 @@ export function FileBrowser({
             <AlertDialog.Action
               disabled={isDeleting}
               onClick={async () => {
-                if (deleteTarget && onDelete) {
-                  await onDelete(deleteTarget);
+                try {
+                  if (deleteTarget && onDelete) {
+                    await onDelete(deleteTarget);
+                  }
+                } finally {
+                  setDeleteTarget(null);
                 }
-                setDeleteTarget(null);
               }}
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

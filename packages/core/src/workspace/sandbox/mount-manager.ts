@@ -11,7 +11,11 @@ import type { IMastraLogger } from '../../logger';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import type { FilesystemMountConfig, MountResult } from '../filesystem/mount';
 
+import type { Workspace } from '../workspace';
+import type { WorkspaceSandbox } from './sandbox';
 import type { MountEntry, MountState } from './types';
+
+// Type-only import — erased at compile time, no circular dependency at runtime.
 
 /**
  * Mount function signature.
@@ -27,13 +31,45 @@ export type MountFn = (filesystem: WorkspaceFilesystem, mountPath: string) => Pr
 export type OnMountResult = false | { success: boolean; error?: string } | void;
 
 /**
- * onMount hook function.
+ * Arguments passed to the onMount hook.
  */
-export type OnMountHook = (args: {
+export interface OnMountArgs {
+  /** The filesystem being mounted */
   filesystem: WorkspaceFilesystem;
+  /** The mount path in the sandbox */
   mountPath: string;
+  /** The mount configuration from filesystem.getMountConfig() (undefined if not supported) */
   config: FilesystemMountConfig | undefined;
-}) => Promise<OnMountResult> | OnMountResult;
+  /** The sandbox instance for custom mount implementations */
+  sandbox: WorkspaceSandbox;
+  /** The workspace instance */
+  workspace: Workspace;
+}
+
+/**
+ * onMount hook function.
+ *
+ * Called for each filesystem before mounting into sandbox.
+ * Return value controls mounting behavior (see {@link OnMountResult}).
+ *
+ * @example Skip local filesystems
+ * ```typescript
+ * onMount: ({ filesystem }) => {
+ *   if (filesystem.provider === 'local') return false;
+ * }
+ * ```
+ *
+ * @example Custom mount implementation
+ * ```typescript
+ * onMount: async ({ filesystem, mountPath, sandbox }) => {
+ *   if (mountPath === '/custom') {
+ *     await sandbox.executeCommand?.('my-mount-script', [mountPath]);
+ *     return { success: true };
+ *   }
+ * }
+ * ```
+ */
+export type OnMountHook = (args: OnMountArgs) => Promise<OnMountResult> | OnMountResult;
 
 /**
  * MountManager configuration.
@@ -55,11 +91,22 @@ export class MountManager {
   private _entries: Map<string, MountEntry> = new Map();
   private _mountFn: MountFn;
   private _onMount?: OnMountHook;
+  private _sandbox?: WorkspaceSandbox;
+  private _workspace?: Workspace;
   private logger: IMastraLogger;
 
   constructor(config: MountManagerConfig) {
     this._mountFn = config.mount;
     this.logger = config.logger;
+  }
+
+  /**
+   * Set the sandbox and workspace references for onMount hook args.
+   * Called by Workspace during construction.
+   */
+  setContext(context: { sandbox: WorkspaceSandbox; workspace: Workspace }): void {
+    this._sandbox = context.sandbox;
+    this._workspace = context.workspace;
   }
 
   /**
@@ -145,7 +192,7 @@ export class MountManager {
         existing.config = updates.config;
         existing.configHash = this.hashConfig(updates.config);
       }
-      if (updates.error !== undefined) {
+      if ('error' in updates) {
         existing.error = updates.error;
       }
     } else if (updates.filesystem) {
@@ -209,6 +256,8 @@ export class MountManager {
             filesystem: entry.filesystem,
             mountPath: path,
             config,
+            sandbox: this._sandbox!,
+            workspace: this._workspace!,
           });
 
           // false = skip mount entirely

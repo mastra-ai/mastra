@@ -58,7 +58,7 @@ export type {
   SandboxLifecycleHook,
   MastraSandboxOptions,
 } from './sandbox';
-export type { MountManagerConfig, MountFn, OnMountHook, OnMountResult } from './sandbox';
+export type { MountManagerConfig, MountFn, OnMountHook, OnMountArgs, OnMountResult } from './sandbox';
 
 // Native Sandbox
 export type { IsolationBackend, NativeSandboxConfig, SandboxDetectionResult } from './sandbox';

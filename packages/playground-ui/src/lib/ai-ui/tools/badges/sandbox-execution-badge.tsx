@@ -146,6 +146,32 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
   );
 };
 
+// Extract error message from various possible locations
+// Priority: error.message > error (string) > message > stderr (for failed commands)
+const extractErrorMessage = (result: any): string | null => {
+  if (!result || Array.isArray(result)) return null;
+
+  // Direct error property
+  if (result.error?.message) return result.error.message;
+  if (typeof result.error === 'string') return result.error;
+  // Only treat result.message as an error when there's an explicit failure signal
+  if (result.message && (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))) {
+    return result.message;
+  }
+
+  // If command failed (non-zero exit, success=false) and has stderr but no stdout
+  if (result.success === false && result.stderr && !result.stdout) {
+    return result.stderr;
+  }
+
+  // If exitCode is non-zero/negative and no other output, indicate failure
+  if (typeof result.exitCode === 'number' && result.exitCode !== 0 && !result.stdout && !result.stderr) {
+    return `Command failed with exit code ${result.exitCode}`;
+  }
+
+  return null;
+};
+
 export const SandboxExecutionBadge = ({
   toolName,
   args,
@@ -196,36 +222,7 @@ export const SandboxExecutionBadge = ({
   const hasFinalResult = result && !Array.isArray(result) && typeof result.exitCode === 'number';
   const finalResult = hasFinalResult ? result : null;
 
-  // Extract error message from various possible locations
-  // Priority: error.message > error (string) > message > stderr (for failed commands)
-  const extractErrorMessage = (): string | null => {
-    if (!result || Array.isArray(result)) return null;
-
-    // Direct error property
-    if (result.error?.message) return result.error.message;
-    if (typeof result.error === 'string') return result.error;
-    // Only treat result.message as an error when there's an explicit failure signal
-    if (
-      result.message &&
-      (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))
-    ) {
-      return result.message;
-    }
-
-    // If command failed (non-zero exit, success=false) and has stderr but no stdout
-    if (result.success === false && result.stderr && !result.stdout) {
-      return result.stderr;
-    }
-
-    // If exitCode is non-zero/negative and no other output, indicate failure
-    if (typeof result.exitCode === 'number' && result.exitCode !== 0 && !result.stdout && !result.stderr) {
-      return `Command failed with exit code ${result.exitCode}`;
-    }
-
-    return null;
-  };
-
-  const errorMessage = extractErrorMessage();
+  const errorMessage = extractErrorMessage(result);
   const hasError = !!errorMessage;
 
   // Streaming is complete if we have exit chunk, final result, or error
@@ -241,13 +238,15 @@ export const SandboxExecutionBadge = ({
   // Get output content for display
   // Priority: error > final result > streaming output
   // Once we have a final result or error, prefer that over incomplete streaming
-  const outputContent = errorMessage
-    ? `Error: ${errorMessage}`
-    : finalResult
-      ? [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n')
-      : hasStreamingOutput
-        ? streamingContent
-        : '';
+  let outputContent = '';
+  if (errorMessage) {
+    const extra = [finalResult?.stdout, finalResult?.stderr].filter(Boolean).join('\n');
+    outputContent = `Error: ${errorMessage}${extra ? '\n\n' + extra : ''}`;
+  } else if (finalResult) {
+    outputContent = [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n');
+  } else if (hasStreamingOutput) {
+    outputContent = streamingContent;
+  }
 
   // Get exit info - treat errors as failures
   const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode ?? (hasError ? 1 : undefined);

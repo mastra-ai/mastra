@@ -583,7 +583,7 @@ export class LocalFilesystem extends MastraFilesystem {
    * Initialize the local filesystem by creating the base directory.
    * Status management is handled by the base class.
    */
-  protected override async _doInit(): Promise<void> {
+  async init(): Promise<void> {
     this.logger.debug('Initializing filesystem', { basePath: this._basePath });
     await fs.mkdir(this._basePath, { recursive: true });
     this.logger.debug('Filesystem initialized', { basePath: this._basePath });
@@ -594,7 +594,7 @@ export class LocalFilesystem extends MastraFilesystem {
    * LocalFilesystem doesn't delete files on destroy by default.
    * Status management is handled by the base class.
    */
-  protected override async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     // LocalFilesystem doesn't clean up files on destroy by default
   }
 

@@ -8,12 +8,13 @@
  *
  * ## Lifecycle Management
  *
- * The base class provides race-condition-safe lifecycle methods:
- * - `init()` - Handles concurrent calls, status management
- * - `destroy()` - Handles concurrent calls and status management
+ * The base class provides race-condition-safe lifecycle wrappers:
+ * - `_init()` - Handles concurrent calls, status management
+ * - `_destroy()` - Handles concurrent calls and status management
  *
- * Subclasses should override the protected `_doInit()` and `_doDestroy()`
- * methods instead of the public lifecycle methods.
+ * Subclasses override the plain `init()` and `destroy()` methods to provide
+ * their implementation. Callers use the `_`-prefixed wrappers (or `callLifecycle()`)
+ * which add status tracking and race-condition safety.
  *
  * External providers can extend this class to get logger support, or implement
  * the WorkspaceFilesystem interface directly if they don't need logging.
@@ -53,8 +54,8 @@ import type {
  *     super({ name: 'MyCustomFilesystem' });
  *   }
  *
- *   // Override _doInit instead of init()
- *   protected async _doInit(): Promise<void> {
+ *   // Override init() to provide initialization logic
+ *   async init(): Promise<void> {
  *     // Your initialization logic here
  *   }
  *
@@ -84,32 +85,42 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
 
-  /** Promise for init() to prevent race conditions from concurrent calls */
-  protected _initPromise?: Promise<void>;
+  /** Promise for _init() to prevent race conditions from concurrent calls */
+  private _initPromise?: Promise<void>;
 
-  /** Promise for destroy() to prevent race conditions from concurrent calls */
-  protected _destroyPromise?: Promise<void>;
+  /** Promise for _destroy() to prevent race conditions from concurrent calls */
+  private _destroyPromise?: Promise<void>;
 
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
   }
 
   // ---------------------------------------------------------------------------
-  // Lifecycle Methods (race-condition-safe wrappers)
+  // Lifecycle Wrappers (race-condition-safe)
   // ---------------------------------------------------------------------------
 
   /**
-   * Initialize the filesystem.
+   * Initialize the filesystem (wrapper with status management and race-condition safety).
    *
    * This method is race-condition-safe - concurrent calls will return the same promise.
    * Handles status management automatically.
    *
-   * Subclasses should override `_doInit()` instead of this method.
+   * Subclasses override `init()` to provide their initialization logic.
    */
-  async init(): Promise<void> {
+  async _init(): Promise<void> {
     // Already ready
+    // Note: intentionally allows re-init after destroy() for reconnect scenarios
     if (this.status === 'ready') {
       return;
+    }
+
+    // Wait for any in-progress destroy to complete before (re-)initializing
+    if (this._destroyPromise) {
+      try {
+        await this._destroyPromise;
+      } catch {
+        // Ignore destroy errors — we're re-initializing anyway
+      }
     }
 
     // Init already in progress - return existing promise
@@ -134,7 +145,7 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
     this.status = 'initializing';
 
     try {
-      await this._doInit();
+      await this.init();
       this.status = 'ready';
     } catch (error) {
       this.status = 'error';
@@ -146,25 +157,25 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   /**
    * Override this method to implement filesystem initialization logic.
    *
-   * Called by `init()` after status is set to 'initializing'.
+   * Called by `_init()` after status is set to 'initializing'.
    * Status will be set to 'ready' on success, 'error' on failure.
    *
    * @example
    * ```typescript
-   * protected async _doInit(): Promise<void> {
+   * async init(): Promise<void> {
    *   this._client = new StorageClient({ ... });
    *   await this._client.connect();
    * }
    * ```
    */
-  protected async _doInit(): Promise<void> {
+  async init(): Promise<void> {
     // Default no-op - subclasses override
   }
 
   /**
    * Ensure the filesystem is ready.
    *
-   * Calls `init()` if status is not 'ready'. Useful for lazy initialization
+   * Calls `_init()` if status is not 'ready'. Useful for lazy initialization
    * where operations should automatically initialize the filesystem if needed.
    *
    * @throws {FilesystemNotReadyError} if the filesystem fails to reach 'ready' status
@@ -179,7 +190,7 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
    */
   protected async ensureReady(): Promise<void> {
     if (this.status !== 'ready') {
-      await this.init();
+      await this._init();
     }
     if (this.status !== 'ready') {
       throw new FilesystemNotReadyError(this.id);
@@ -187,16 +198,22 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   }
 
   /**
-   * Destroy the filesystem and clean up all resources.
+   * Destroy the filesystem and clean up all resources (wrapper with status management).
    *
    * This method is race-condition-safe - concurrent calls will return the same promise.
    * Handles status management.
    *
-   * Subclasses should override `_doDestroy()` instead of this method.
+   * Subclasses override `destroy()` to provide their destroy logic.
    */
-  async destroy(): Promise<void> {
+  async _destroy(): Promise<void> {
     // Already destroyed
     if (this.status === 'destroyed') {
+      return;
+    }
+
+    // Never initialized — nothing to tear down
+    if (this.status === 'pending') {
+      this.status = 'destroyed';
       return;
     }
 
@@ -219,13 +236,22 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
    * Internal destroy execution - handles status.
    */
   private async _executeDestroy(): Promise<void> {
+    // Wait for any in-progress init to complete before destroying
+    if (this._initPromise) {
+      try {
+        await this._initPromise;
+      } catch {
+        // Ignore init errors — we're destroying anyway
+      }
+    }
     this.status = 'destroying';
 
     try {
-      await this._doDestroy();
+      await this.destroy();
       this.status = 'destroyed';
     } catch (error) {
       this.status = 'error';
+      this.logger.error('Failed to destroy filesystem', { error, id: this.id });
       throw error;
     }
   }
@@ -233,10 +259,10 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   /**
    * Override this method to implement filesystem destroy logic.
    *
-   * Called by `destroy()` after status is set to 'destroying'.
+   * Called by `_destroy()` after status is set to 'destroying'.
    * Status will be set to 'destroyed' on success, 'error' on failure.
    */
-  protected async _doDestroy(): Promise<void> {
+  async destroy(): Promise<void> {
     // Default no-op - subclasses override
   }
 

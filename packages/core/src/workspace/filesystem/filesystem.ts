@@ -56,7 +56,7 @@ export interface FileEntry {
   /** Mount point metadata (only set for CompositeFilesystem mount points) */
   mount?: {
     provider: string;
-    icon?: string;
+    icon?: FilesystemIcon;
     displayName?: string;
     description?: string;
   };
