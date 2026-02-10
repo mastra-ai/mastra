@@ -33,7 +33,7 @@ Start the development server in inspect mode and break at the beginning of the s
 
 #### `--custom-args`
 
-Comma-separated list of custom arguments to pass to the development server. You can pass arguments to the Node.js process, e.g. `--experimental-transform-types`.
+Comma-separated list of custom arguments to pass to the Node.js process, e.g. `--require=newrelic` or `--experimental-transform-types`.
 
 ### Configs
 
@@ -98,7 +98,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/guides/deployment) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/docs/deployment/cloud-providers) you need to install the correct deployer in order to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -146,9 +146,9 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 The path to your built Mastra output directory. Defaults to `.mastra/output`.
 
-#### `--no-telemetry`
+#### `--custom-args`
 
-Disable the [OTEL Tracing](/docs/observability/tracing/overview).
+Comma-separated list of custom arguments to pass to the Node.js process, e.g. `--require=newrelic` or `--experimental-transform-types`.
 
 ## `mastra studio`
 
