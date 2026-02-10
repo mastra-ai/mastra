@@ -604,6 +604,11 @@
       "source": "/reference/tools/client",
       "destination": "/reference/tools/mcp-client",
       "permanent": true
+    },
+    {
+      "source": "/showcase",
+      "destination": "/customers",
+      "permanent": true
     }
   ]
 }
