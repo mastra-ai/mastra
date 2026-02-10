@@ -315,6 +315,7 @@ describe('Mock OM Agent Integration', () => {
           observation: {
             model: createMockObserverModel() as any,
             messageTokens: 20, // Very low threshold to ensure observation triggers
+            bufferTokens: false, // Disable async buffering — test expects synchronous observation
           },
           reflection: {
             model: createMockReflectorModel() as any,

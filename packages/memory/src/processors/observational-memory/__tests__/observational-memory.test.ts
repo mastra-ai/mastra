@@ -2151,6 +2151,7 @@ describe('Thread Attribution Helpers', () => {
     storage = createInMemoryStorage();
     om = new ObservationalMemory({
       storage,
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 100 },
       reflection: { observationTokens: 1000 },
       scope: 'resource',
@@ -3486,7 +3487,152 @@ describe('Async Buffering Storage Operations', () => {
   });
 });
 
+describe('Model Requirement', () => {
+  it('should throw when no model is provided at all', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Observational Memory requires a model to be set');
+  });
+
+  it('should include docs link in model error', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('https://mastra.ai/docs/memory/observational-memory#models');
+  });
+
+  it('should accept a top-level model', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).not.toThrow();
+  });
+
+  it('should accept observation.model and use it for both', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          observation: {
+            messageTokens: 50000,
+            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).not.toThrow();
+  });
+
+  it('should accept reflection.model and use it for both', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          observation: { messageTokens: 50000 },
+          reflection: {
+            observationTokens: 20000,
+            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          },
+        }),
+    ).not.toThrow();
+  });
+
+  it('should accept model: "default" as gemini flash', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: 'default',
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).not.toThrow();
+  });
+
+  it('should not allow top-level model with observation.model', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Cannot set both');
+  });
+});
+
 describe('Async Buffering Config Validation', () => {
+  it('should throw if async buffering is explicitly enabled with shareTokenBudget', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          shareTokenBudget: true,
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.5,
+          },
+        }),
+    ).toThrow('Remove any other async buffering settings');
+  });
+
+  it('should throw if shareTokenBudget is true with default async buffering', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          shareTokenBudget: true,
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Async buffering is enabled by default');
+  });
+
+  it('should allow shareTokenBudget with bufferTokens: false', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      shareTokenBudget: true,
+      observation: { messageTokens: 50000, bufferTokens: false },
+      reflection: { observationTokens: 20000 },
+    });
+    expect(om.isAsyncObservationEnabled()).toBe(false);
+    expect(om.isAsyncReflectionEnabled()).toBe(false);
+  });
+
   it('should throw if bufferActivation is out of range', () => {
     expect(
       () =>
@@ -3527,7 +3673,8 @@ describe('Async Buffering Config Validation', () => {
     ).toThrow('bufferActivation must be in range (0, 1]');
   });
 
-  it('should throw if observation has bufferTokens but reflection has no bufferActivation', () => {
+  it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
+    // reflection.bufferActivation defaults to 0.5 so this should not throw
     expect(
       () =>
         new ObservationalMemory({
@@ -3541,10 +3688,10 @@ describe('Async Buffering Config Validation', () => {
           },
           reflection: {
             observationTokens: 20000,
-            // No bufferActivation
+            // No bufferActivation — defaults to 0.5
           },
         }),
-    ).toThrow('reflection.bufferActivation must also be set');
+    ).not.toThrow();
   });
 
   it('should throw if bufferTokens >= messageTokens', () => {
@@ -3625,6 +3772,143 @@ describe('Async Buffering Config Validation', () => {
           },
         }),
     ).not.toThrow();
+  });
+});
+
+// =============================================================================
+// Unit Tests: Async Buffering Defaults & Disabling
+// =============================================================================
+
+describe('Async Buffering Defaults & Disabling', () => {
+  it('should enable async buffering by default (no explicit config)', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).isAsyncObservationEnabled()).toBe(true);
+    expect((om as any).isAsyncReflectionEnabled()).toBe(true);
+  });
+
+  it('should apply correct default values for async buffering', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    const obsConfig = (om as any).observationConfig;
+    const reflConfig = (om as any).reflectionConfig;
+
+    // bufferTokens defaults to 0.2 * messageTokens = 10000
+    expect(obsConfig.bufferTokens).toBe(50000 * 0.2);
+    // bufferActivation defaults to 0.8
+    expect(obsConfig.bufferActivation).toBe(0.8);
+    // blockAfter defaults to 1.2 * messageTokens = 60000
+    expect(obsConfig.blockAfter).toBe(50000 * 1.2);
+    // reflection bufferActivation defaults to 0.5
+    expect(reflConfig.bufferActivation).toBe(0.5);
+    // reflection blockAfter defaults to 1.2 * observationTokens = 24000
+    expect(reflConfig.blockAfter).toBe(20000 * 1.2);
+  });
+
+  it('should disable all async buffering with bufferTokens: false', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 50000, bufferTokens: false },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).isAsyncObservationEnabled()).toBe(false);
+    expect((om as any).isAsyncReflectionEnabled()).toBe(false);
+
+    const obsConfig = (om as any).observationConfig;
+    const reflConfig = (om as any).reflectionConfig;
+
+    expect(obsConfig.bufferTokens).toBeUndefined();
+    expect(obsConfig.bufferActivation).toBeUndefined();
+    expect(obsConfig.blockAfter).toBeUndefined();
+    expect(reflConfig.bufferActivation).toBeUndefined();
+    expect(reflConfig.blockAfter).toBeUndefined();
+  });
+
+  it('should disable async buffering by default for resource scope', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'resource',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).isAsyncObservationEnabled()).toBe(false);
+    expect((om as any).isAsyncReflectionEnabled()).toBe(false);
+  });
+
+  it('should throw when resource scope has explicit async config', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'resource',
+          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+          },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow();
+  });
+
+  it('should allow overriding default bufferTokens with a custom value', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 50000, bufferTokens: 5000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    const obsConfig = (om as any).observationConfig;
+    expect(obsConfig.bufferTokens).toBe(5000);
+    expect(obsConfig.bufferActivation).toBe(0.8); // still uses default
+  });
+
+  it('should allow overriding default bufferActivation', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 50000, bufferActivation: 0.7 },
+      reflection: { observationTokens: 20000, bufferActivation: 0.3 },
+    });
+
+    const obsConfig = (om as any).observationConfig;
+    const reflConfig = (om as any).reflectionConfig;
+
+    expect(obsConfig.bufferActivation).toBe(0.7);
+    expect(reflConfig.bufferActivation).toBe(0.3);
+  });
+
+  it('should use fractional bufferTokens as a ratio of messageTokens', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      observation: { messageTokens: 100000, bufferTokens: 0.1 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    // 0.1 * 100000 = 10000
+    expect((om as any).observationConfig.bufferTokens).toBe(10000);
   });
 });
 
@@ -3899,12 +4183,12 @@ describe('Async Buffering Processor Logic', () => {
   describe('shouldTriggerAsyncObservation', () => {
     const mockRecord = { isBufferingObservation: false, lastBufferedAtTokens: 0 } as any;
 
-    it('should return false when async buffering is not enabled', () => {
+    it('should return false when async buffering is explicitly disabled', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 }, // No bufferTokens
+        observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
 
@@ -4010,13 +4294,13 @@ describe('Async Buffering Processor Logic', () => {
   describe('shouldTriggerAsyncReflection', () => {
     const mockRecord = { bufferedReflection: undefined, isBufferingReflection: false } as any;
 
-    it('should return false when async reflection is not enabled', () => {
+    it('should return false when async reflection is explicitly disabled', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
         model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 }, // No bufferActivation
+        observation: { messageTokens: 50000, bufferTokens: false },
+        reflection: { observationTokens: 20000 },
       });
 
       expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', mockRecord)).toBe(false);
@@ -4981,8 +5265,8 @@ describe('Full Async Buffering Flow', () => {
     expect(lastCall.input.length).toBeGreaterThan(0);
   });
 
-  it('should enforce paired async config: observation.bufferTokens requires reflection.bufferActivation', () => {
-    // When observation has bufferTokens, reflection must have bufferActivation
+  it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
+    // reflection.bufferActivation defaults to 0.5 so this should not throw
     expect(() => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
@@ -4995,10 +5279,10 @@ describe('Full Async Buffering Flow', () => {
         },
         reflection: {
           observationTokens: 5000,
-          // No bufferActivation — should throw
+          // No bufferActivation — defaults to 0.5
         },
       });
-    }).toThrow();
+    }).not.toThrow();
   });
 
   it('should validate bufferActivation must be in (0, 1] range', () => {
