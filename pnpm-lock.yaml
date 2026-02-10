@@ -32,6 +32,7 @@ overrides:
   better-auth: ^1.4.5
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
+  body-parser@<=2.2.1: 2.2.1
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
@@ -5654,7 +5655,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/_types-builder
       '@koa/router':
-        specifier: ^13.0.0
+        specifier: ^13.1.1
         version: 13.1.1
       '@mastra/core':
         specifier: workspace:*
@@ -14262,12 +14263,8 @@ packages:
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
-  body-parser@1.20.3:
-    resolution: {integrity: sha512-7rAxByjUMqQ3/bHJy7D6OGXvx/MMc4IqBn/X0fcM1QUcAItpZrBEYhWGem+tzXH90c+G01ypMcYJBO9Y30203g==}
-    engines: {node: '>= 0.8', npm: 1.2.8000 || >= 1.4.16}
-
-  body-parser@2.2.0:
-    resolution: {integrity: sha512-02qvAaxv8tp7fBa/mw1ga98OGm+eCbqzJOKoRt70sLmfEEi+jyBYVTDGfCL/k06/4EMk/z01gCe7HoCH/f2LTg==}
+  body-parser@2.2.1:
+    resolution: {integrity: sha512-nfDwkulwiZYQIGwxdy0RUmowMhKcFVcYXUU7m4QlKYim1rUtg83xm2yjZ40QjDuc291AJjjeSc9b++AWHSgSHw==}
     engines: {node: '>=18'}
 
   bonjour-service@1.3.0:
@@ -19673,10 +19670,6 @@ packages:
     resolution: {integrity: sha512-pMpnA0qRdFp32b1sJl1wOJNxZLQ2cbQx+k6tjNtZ8CpvVhNqEPRgivZ2WOUev2YMajecdH7ctUPDvEe87nariQ==}
     engines: {node: '>=6.0.0'}
 
-  qs@6.13.0:
-    resolution: {integrity: sha512-+38qI9SOr8tfZ4QmJNplMUxqjbe7LKvvZgWdExBOmd+egZTtjLB67Gu0HRX3u/XOq7UU2Nx6nsjvS16Z9uwfpg==}
-    engines: {node: '>=0.6'}
-
   qs@6.14.0:
     resolution: {integrity: sha512-YWWTjgABSKcvs/nWBi9PycY/JiPJqOD4JA6o9Sej2AtvSGarXxKC3OQSk4pAarbdQlKAh5D4FCQkJNkW+GAn3w==}
     engines: {node: '>=0.6'}
@@ -22215,7 +22208,7 @@ snapshots:
     dependencies:
       '@types/cors': 2.8.19
       '@types/express': 4.17.25
-      body-parser: 2.2.0
+      body-parser: 2.2.1
       cors: 2.8.5
       express: 4.22.1
       uuid: 11.1.0
@@ -33438,30 +33431,13 @@ snapshots:
 
   blake3-wasm@2.1.5: {}
 
-  body-parser@1.20.3:
-    dependencies:
-      bytes: 3.1.2
-      content-type: 1.0.5
-      debug: 2.6.9
-      depd: 2.0.0
-      destroy: 1.2.0
-      http-errors: 2.0.0
-      iconv-lite: 0.4.24
-      on-finished: 2.4.1
-      qs: 6.13.0
-      raw-body: 2.5.2
-      type-is: 1.6.18
-      unpipe: 1.0.0
-    transitivePeerDependencies:
-      - supports-color
-
-  body-parser@2.2.0:
+  body-parser@2.2.1:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
       debug: 4.4.3
       http-errors: 2.0.0
-      iconv-lite: 0.6.3
+      iconv-lite: 0.7.0
       on-finished: 2.4.1
       qs: 6.14.0
       raw-body: 3.0.1
@@ -35380,7 +35356,7 @@ snapshots:
     dependencies:
       accepts: 1.3.8
       array-flatten: 1.1.1
-      body-parser: 1.20.3
+      body-parser: 2.2.1
       content-disposition: 0.5.4
       content-type: 1.0.5
       cookie: 1.1.1
@@ -35415,7 +35391,7 @@ snapshots:
   express@5.1.0:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.2.0
+      body-parser: 2.2.1
       content-disposition: 1.0.1
       content-type: 1.0.5
       cookie: 1.1.1
@@ -40007,10 +39983,6 @@ snapshots:
       tslib: 2.8.1
 
   pvutils@1.1.3: {}
-
-  qs@6.13.0:
-    dependencies:
-      side-channel: 1.1.0
 
   qs@6.14.0:
     dependencies:
