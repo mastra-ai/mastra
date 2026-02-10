@@ -1654,11 +1654,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Persist a data-om-* marker part on the last assistant message in messageList.
-   * This ensures the marker survives page reload (data-* parts are filtered out
-   * before sending to the LLM, so they don't affect model calls).
+   * Persist a data-om-* marker part on the last assistant message in messageList
+   * AND save the updated message to the DB so it survives page reload.
+   * (data-* parts are filtered out before sending to the LLM, so they don't affect model calls.)
    */
-  private persistMarkerToMessage(marker: { type: string; data: unknown }, messageList?: MessageList): void {
+  private async persistMarkerToMessage(
+    marker: { type: string; data: unknown },
+    messageList: MessageList | undefined,
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
     if (!messageList) return;
     const allMsgs = messageList.get.all.db();
     // Find the last assistant message to attach the marker to
@@ -1666,6 +1671,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       const msg = allMsgs[i];
       if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
         msg.content.parts.push(marker as any);
+        // Upsert the modified message to DB so the marker part is persisted.
+        // Non-critical — if this fails, the marker is still in the stream,
+        // it just won't survive page reload.
+        try {
+          await this.messageHistory.persistMessages({
+            messages: [msg],
+            threadId,
+            resourceId,
+          });
+        } catch (e) {
+          omDebug(`[OM:persistMarker] failed to save marker to DB: ${e}`);
+        }
         return;
       }
     }
@@ -4348,7 +4365,12 @@ ${formattedMessages}
           observations: chunkData?.observations ?? activationResult.observations,
         });
         void writer.custom(activationMarker).catch(() => {});
-        this.persistMarkerToMessage(activationMarker, messageList);
+        await this.persistMarkerToMessage(
+          activationMarker,
+          messageList,
+          record.threadId ?? '',
+          record.resourceId ?? undefined,
+        );
       }
     }
 
@@ -4628,7 +4650,12 @@ ${formattedMessages}
         observations: afterRecord?.activeObservations,
       });
       void writer.custom(activationMarker).catch(() => {});
-      this.persistMarkerToMessage(activationMarker, messageList);
+      await this.persistMarkerToMessage(
+        activationMarker,
+        messageList,
+        freshRecord.threadId ?? '',
+        freshRecord.resourceId ?? undefined,
+      );
     }
 
     // Clean up the stored cycleId
