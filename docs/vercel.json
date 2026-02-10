@@ -580,6 +580,7 @@
       "destination": "/guides/deployment/vercel",
       "permanent": true
     },
+    {
       "source": "/docs/tools-mcp/advanced-usage",
       "destination": "/docs/agents/using-tools",
       "permanent": true
