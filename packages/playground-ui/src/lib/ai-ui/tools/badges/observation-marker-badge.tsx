@@ -328,9 +328,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
-        <div
-          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium my-1 border border-dashed border-purple-400/40"
-        >
+        <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium my-1 border border-dashed border-purple-400/40">
           <Loader2 className="w-3 h-3 animate-spin" />
           <CloudCog className="w-3 h-3" />
           <span>
@@ -348,9 +346,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const { observations } = omData;
     const bufferedLabel = isReflection ? 'Buffered reflection' : 'Buffered observations';
     const compressionRatio =
-      tokensBuffered && bufferedTokens && bufferedTokens > 0
-        ? Math.round(tokensBuffered / bufferedTokens)
-        : null;
+      tokensBuffered && bufferedTokens && bufferedTokens > 0 ? Math.round(tokensBuffered / bufferedTokens) : null;
 
     const handleToggle = (e: React.MouseEvent) => {
       const scrollContainer = e.currentTarget.closest('[data-radix-scroll-area-viewport]') || document.documentElement;

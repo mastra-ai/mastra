@@ -53,7 +53,6 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
       const state = (badge.getAttribute('data-om-state') || 'complete') as HighlightPosition['state'];
       const omType = (badge.getAttribute('data-om-type') || 'observation') as OmType;
 
-
       const badgeRect = badge.getBoundingClientRect();
 
       // Find the anchor point (top of the highlight).
@@ -194,7 +193,15 @@ function findPreviousBadge(badges: HTMLElement[], currentIndex: number, omType: 
 interface HighlightPosition {
   cycleId: string;
   omType: OmType;
-  state: 'loading' | 'complete' | 'failed' | 'disconnected' | 'buffering' | 'buffering-complete' | 'buffering-failed' | 'activated';
+  state:
+    | 'loading'
+    | 'complete'
+    | 'failed'
+    | 'disconnected'
+    | 'buffering'
+    | 'buffering-complete'
+    | 'buffering-failed'
+    | 'activated';
   /** Top position relative to the container (in px) */
   top: number;
   /** Height of the highlight block (in px) */
