@@ -334,9 +334,7 @@ export function FileBrowser({
               )}
               {sortedEntries.map(entry => {
                 const mountLabel = entry.mount?.displayName || entry.mount?.provider;
-                const mountStatus = entry.mount?.status;
-                const isError = mountStatus === 'error';
-                const isPending = mountStatus === 'pending' || mountStatus === 'initializing';
+                const isError = entry.mount?.status === 'error';
 
                 return (
                   <li key={entry.name} className="group">
@@ -347,7 +345,7 @@ export function FileBrowser({
                       >
                         {getFileIcon(entry)}
                         <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
-                        {/* Mount status indicator */}
+                        {/* Mount error indicator */}
                         {entry.mount && isError && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -359,16 +357,6 @@ export function FileBrowser({
                               <span className="text-red-400">Error:</span>{' '}
                               {entry.mount.error || 'Failed to connect to this filesystem'}
                             </TooltipContent>
-                          </Tooltip>
-                        )}
-                        {entry.mount && isPending && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span tabIndex={0} className="flex items-center">
-                                <span className="h-2 w-2 rounded-full bg-icon3" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>Not initialized</TooltipContent>
                           </Tooltip>
                         )}
                         {entry.mount &&
