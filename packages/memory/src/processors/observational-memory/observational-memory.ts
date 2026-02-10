@@ -1654,6 +1654,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Persist a data-om-* marker part on the last assistant message in messageList.
+   * This ensures the marker survives page reload (data-* parts are filtered out
+   * before sending to the LLM, so they don't affect model calls).
+   */
+  private persistMarkerToMessage(marker: { type: string; data: unknown }, messageList?: MessageList): void {
+    if (!messageList) return;
+    const allMsgs = messageList.get.all.db();
+    // Find the last assistant message to attach the marker to
+    for (let i = allMsgs.length - 1; i >= 0; i--) {
+      const msg = allMsgs[i];
+      if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
+        msg.content.parts.push(marker as any);
+        return;
+      }
+    }
+  }
+
+  /**
    * Find the last completed observation boundary in a message's parts.
    * A completed observation is a start marker followed by an end marker.
    *
@@ -2620,7 +2638,13 @@ ${suggestedResponse}
           `[OM:threshold] tryActivation: chunksAvailable=${chunksAfterWait.length}, isBufferingObs=${recordAfterWait.isBufferingObservation}`,
         );
 
-        activationResult = await this.tryActivateBufferedObservations(recordAfterWait, lockKey, freshTotal, writer);
+        activationResult = await this.tryActivateBufferedObservations(
+          recordAfterWait,
+          lockKey,
+          freshTotal,
+          writer,
+          messageList,
+        );
         omDebug(`[OM:threshold] activationResult: success=${activationResult.success}`);
         if (activationResult.success) {
           // Activation succeeded - the buffered observations are now active.
@@ -2640,7 +2664,7 @@ ${suggestedResponse}
           // Check if async reflection should be triggered or activated.
           // This only does async work (background buffering or instant activation) —
           // never blocking sync reflection that could overwrite freshly activated observations.
-          await this.maybeAsyncReflect(updatedRecord, updatedRecord.observationTokenCount ?? 0, writer);
+          await this.maybeAsyncReflect(updatedRecord, updatedRecord.observationTokenCount ?? 0, writer, messageList);
           return;
         }
 
@@ -3090,6 +3114,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
             lockKey,
             step0PendingTokens,
             writer,
+            messageList,
           );
 
           if (activationResult.success && activationResult.updatedRecord) {
@@ -3125,7 +3150,14 @@ NOTE: Any messages following this system reminder are newer than your memories.
             this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
 
             // Check if reflection should be triggered or activated
-            await this.maybeReflect(record, record.observationTokenCount ?? 0, threadId, writer);
+            await this.maybeReflect(
+              record,
+              record.observationTokenCount ?? 0,
+              threadId,
+              writer,
+              undefined,
+              messageList,
+            );
             // Re-fetch record — reflection may have created a new generation with lower obsTokens
             record = await this.getOrCreateRecord(threadId, resourceId);
           }
@@ -3146,7 +3178,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
       const obsTokens = record.observationTokenCount ?? 0;
       if (this.shouldReflect(obsTokens)) {
         omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} over reflectThreshold, triggering reflection`);
-        await this.maybeReflect(record, obsTokens, threadId, writer);
+        await this.maybeReflect(record, obsTokens, threadId, writer, undefined, messageList);
         // Re-fetch record after reflection may have created a new generation
         record = await this.getOrCreateRecord(threadId, resourceId);
       } else if (this.isAsyncReflectionEnabled()) {
@@ -3154,7 +3186,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
         const lockKey = this.getLockKey(threadId, resourceId);
         if (this.shouldTriggerAsyncReflection(obsTokens, lockKey, record)) {
           omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} above activation point, triggering async reflection`);
-          await this.maybeAsyncReflect(record, obsTokens, writer);
+          await this.maybeAsyncReflect(record, obsTokens, writer, messageList);
           record = await this.getOrCreateRecord(threadId, resourceId);
         }
       }
@@ -4230,6 +4262,7 @@ ${formattedMessages}
     lockKey: string,
     currentPendingTokens: number,
     writer?: ProcessInputStepArgs['writer'],
+    messageList?: MessageList,
   ): Promise<{
     success: boolean;
     updatedRecord?: ObservationalMemoryRecord;
@@ -4315,6 +4348,7 @@ ${formattedMessages}
           observations: chunkData?.observations ?? activationResult.observations,
         });
         void writer.custom(activationMarker).catch(() => {});
+        this.persistMarkerToMessage(activationMarker, messageList);
       }
     }
 
@@ -4508,6 +4542,7 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     lockKey: string,
     writer?: ProcessorStreamWriter,
+    messageList?: MessageList,
   ): Promise<boolean> {
     const bufferKey = this.getReflectionBufferKey(lockKey);
 
@@ -4593,6 +4628,7 @@ ${formattedMessages}
         observations: afterRecord?.activeObservations,
       });
       void writer.custom(activationMarker).catch(() => {});
+      this.persistMarkerToMessage(activationMarker, messageList);
     }
 
     // Clean up the stored cycleId
@@ -5105,6 +5141,7 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     observationTokens: number,
     writer?: ProcessorStreamWriter,
+    messageList?: MessageList,
   ): Promise<void> {
     if (!this.isAsyncReflectionEnabled()) return;
 
@@ -5136,7 +5173,7 @@ ${formattedMessages}
     }
 
     omDebug(`[OM:reflect] at/above threshold, trying activation...`);
-    const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer);
+    const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer, messageList);
     omDebug(`[OM:reflect] activationSuccess=${activationSuccess}`);
     if (activationSuccess) return;
 
@@ -5159,6 +5196,7 @@ ${formattedMessages}
     _threadId?: string,
     writer?: ProcessorStreamWriter,
     abortSignal?: AbortSignal,
+    messageList?: MessageList,
   ): Promise<void> {
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
@@ -5200,7 +5238,7 @@ ${formattedMessages}
     // This provides instant activation without blocking on new reflection.
     // ════════════════════════════════════════════════════════════════════════
     if (this.isAsyncReflectionEnabled()) {
-      const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer);
+      const activationSuccess = await this.tryActivateBufferedReflection(record, lockKey, writer, messageList);
       if (activationSuccess) {
         // Buffered reflection was activated - we're done
         return;
