@@ -835,11 +835,16 @@ export const CLONE_AGENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ agentId, mastra, newId, newName, metadata, authorId, requestContext }) => {
     try {
+      const editor = mastra.getEditor();
+      if (!editor) {
+        return handleError(new Error('Editor is not configured on the Mastra instance'), 'Error cloning agent');
+      }
+
       const agent = await getAgentFromSystem({ mastra, agentId });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
 
-      const result = await agent.cloneAgent({
+      const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,

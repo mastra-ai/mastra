@@ -45,13 +45,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
-import type {
-  StorageCreateAgentInput,
-  StorageDefaultOptions,
-  StorageModelConfig,
-  StorageResolvedAgentType,
-  StorageScorerConfig,
-} from '../storage/types';
+
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -691,6 +685,37 @@ export class Agent<
         : this.#outputProcessors;
 
     return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-output-processor`);
+  }
+
+  /**
+   * Returns the IDs of the raw configured input and output processors,
+   * without combining them into workflows. Used by the editor to clone
+   * agent processor configuration to storage.
+   */
+  public async getConfiguredProcessorIds(
+    requestContext?: RequestContext,
+  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[] }> {
+    const ctx = requestContext || new RequestContext();
+
+    let inputProcessorIds: string[] = [];
+    if (this.#inputProcessors) {
+      const processors =
+        typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ requestContext: ctx })
+          : this.#inputProcessors;
+      inputProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    let outputProcessorIds: string[] = [];
+    if (this.#outputProcessors) {
+      const processors =
+        typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext: ctx })
+          : this.#outputProcessors;
+      outputProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    return { inputProcessorIds, outputProcessorIds };
   }
 
   /**
@@ -1461,233 +1486,6 @@ export class Agent<
   __resetToOriginalModel() {
     this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
-  }
-
-  /**
-   * Clones this agent's configuration to storage, creating a stored agent that behaves identically.
-   * The cloned agent will have source='stored' when loaded from storage.
-   *
-   * @param options - Options for the clone operation
-   * @param options.newId - The ID for the cloned stored agent. Required.
-   * @param options.newName - Optional new name. Defaults to "{originalName} (Clone)".
-   * @param options.metadata - Optional metadata for the stored agent.
-   * @param options.authorId - Optional author ID for the stored agent.
-   * @returns The StorageResolvedAgentType of the created stored agent.
-   *
-   * @example
-   * ```typescript
-   * const cloned = await agent.cloneAgent({
-   *   newId: 'my-agent-clone',
-   *   newName: 'My Agent Clone',
-   * });
-   * console.log(cloned.id); // 'my-agent-clone'
-   * ```
-   */
-  public async cloneAgent(options: {
-    newId: string;
-    newName?: string;
-    metadata?: Record<string, unknown>;
-    authorId?: string;
-    requestContext?: RequestContext;
-  }): Promise<StorageResolvedAgentType> {
-    const requestContext = options.requestContext ?? new RequestContext();
-
-    // 1. Get the mastra instance
-    const mastra = this.getMastraInstance();
-    if (!mastra) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_MISSING_MASTRA',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: `[Agent:${this.name}] - Cannot clone agent without a registered Mastra instance.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    // 2. Get storage and agents store
-    const storage = mastra.getStorage();
-    if (!storage) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_MISSING_STORAGE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: `[Agent:${this.name}] - Cannot clone agent without storage configured on the Mastra instance.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    const agentsStore = await storage.getStore('agents');
-    if (!agentsStore) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_MISSING_AGENTS_STORE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: `[Agent:${this.name}] - Cannot clone agent: agents storage domain is not available.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    // 3. Extract model config via getLLM (resolve dynamic model with requestContext)
-    const llm = await this.getLLM({ requestContext });
-    const provider = llm.getProvider();
-    const modelId = llm.getModelId();
-
-    // Extract model settings from default options (resolve dynamic defaultOptions with requestContext)
-    const defaultOptions = await this.getDefaultOptions({ requestContext });
-    const modelSettings = (defaultOptions as Record<string, any>)?.modelSettings;
-
-    const model: StorageModelConfig = {
-      provider,
-      name: modelId,
-      ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
-      ...(modelSettings?.topP !== undefined && { topP: modelSettings.topP }),
-      ...(modelSettings?.frequencyPenalty !== undefined && { frequencyPenalty: modelSettings.frequencyPenalty }),
-      ...(modelSettings?.presencePenalty !== undefined && { presencePenalty: modelSettings.presencePenalty }),
-      ...(modelSettings?.maxOutputTokens !== undefined && { maxCompletionTokens: modelSettings.maxOutputTokens }),
-    };
-
-    // 4. Extract instructions as string (resolve dynamic instructions with requestContext)
-    const instructions = await this.getInstructions({ requestContext });
-    let instructionsStr: string;
-    if (typeof instructions === 'string') {
-      instructionsStr = instructions;
-    } else if (Array.isArray(instructions)) {
-      instructionsStr = instructions
-        .map(msg => {
-          if (typeof msg === 'string') {
-            return msg;
-          }
-          return typeof msg.content === 'string' ? msg.content : '';
-        })
-        .filter(Boolean)
-        .join('\n\n');
-    } else if (instructions && typeof instructions === 'object' && 'content' in instructions) {
-      instructionsStr = typeof instructions.content === 'string' ? instructions.content : '';
-    } else {
-      instructionsStr = '';
-    }
-
-    // 5. Extract tool keys (resolve dynamic tools with requestContext)
-    const tools = await this.listTools({ requestContext });
-    const toolKeys = Object.keys(tools || {});
-
-    // 6. Extract workflow keys (resolve dynamic workflows with requestContext)
-    const workflows = await this.listWorkflows({ requestContext });
-    const workflowKeys = Object.keys(workflows || {});
-
-    // 7. Extract sub-agent keys (resolve dynamic agents with requestContext)
-    const agents = await this.listAgents({ requestContext });
-    const agentKeys = Object.keys(agents || {});
-
-    // 8. Extract memory config (resolve dynamic memory with requestContext)
-    const memory = await this.getMemory({ requestContext });
-    const memoryConfig = memory?.getConfig();
-
-    // 9. Extract input/output processor keys (resolve dynamic processors with requestContext)
-    let inputProcessorKeys: string[] | undefined;
-    if (this.#inputProcessors) {
-      const configuredInputProcessors =
-        typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext })
-          : this.#inputProcessors;
-      const ids = configuredInputProcessors.map(p => p.id).filter(Boolean);
-      if (ids.length > 0) inputProcessorKeys = ids;
-    }
-
-    let outputProcessorKeys: string[] | undefined;
-    if (this.#outputProcessors) {
-      const configuredOutputProcessors =
-        typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext })
-          : this.#outputProcessors;
-      const ids = configuredOutputProcessors.map(p => p.id).filter(Boolean);
-      if (ids.length > 0) outputProcessorKeys = ids;
-    }
-
-    // 10. Extract scorer keys with sampling config (resolve dynamic scorers with requestContext)
-    let storedScorers: Record<string, StorageScorerConfig> | undefined;
-    const resolvedScorers = await this.listScorers({ requestContext });
-    if (resolvedScorers && Object.keys(resolvedScorers).length > 0) {
-      storedScorers = {};
-      for (const [key, entry] of Object.entries(resolvedScorers)) {
-        storedScorers[key] = {
-          ...(entry.sampling && { sampling: entry.sampling }),
-        };
-      }
-    }
-
-    // 11. Extract default options (serializable parts only)
-    const storageDefaultOptions: StorageDefaultOptions | undefined = defaultOptions
-      ? {
-          maxSteps: (defaultOptions as Record<string, any>)?.maxSteps,
-          runId: (defaultOptions as Record<string, any>)?.runId,
-          savePerStep: (defaultOptions as Record<string, any>)?.savePerStep,
-          activeTools: (defaultOptions as Record<string, any>)?.activeTools,
-          toolChoice: (defaultOptions as Record<string, any>)?.toolChoice,
-          modelSettings: (defaultOptions as Record<string, any>)?.modelSettings,
-          returnScorerData: (defaultOptions as Record<string, any>)?.returnScorerData,
-          requireToolApproval: (defaultOptions as Record<string, any>)?.requireToolApproval,
-          autoResumeSuspendedTools: (defaultOptions as Record<string, any>)?.autoResumeSuspendedTools,
-          toolCallConcurrency: (defaultOptions as Record<string, any>)?.toolCallConcurrency,
-          maxProcessorRetries: (defaultOptions as Record<string, any>)?.maxProcessorRetries,
-          includeRawChunks: (defaultOptions as Record<string, any>)?.includeRawChunks,
-        }
-      : undefined;
-
-    // 12. Create the stored agent
-    const createInput: StorageCreateAgentInput = {
-      id: options.newId,
-      name: options.newName || `${this.name} (Clone)`,
-      description: this.getDescription() || undefined,
-      instructions: instructionsStr,
-      model,
-      tools: toolKeys.length > 0 ? Object.fromEntries(toolKeys.map(key => [key, {}])) : undefined,
-      workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
-      agents: agentKeys.length > 0 ? agentKeys : undefined,
-      memory: memoryConfig,
-      inputProcessors: inputProcessorKeys,
-      outputProcessors: outputProcessorKeys,
-      scorers: storedScorers,
-      defaultOptions: storageDefaultOptions,
-      metadata: options.metadata,
-      authorId: options.authorId,
-    };
-
-    await agentsStore.create({ agent: createInput });
-
-    const resolved = await agentsStore.getByIdResolved(options.newId);
-    if (!resolved) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_FAILED_TO_RESOLVE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-          cloneId: options.newId,
-        },
-        text: `[Agent:${this.name}] - Failed to resolve cloned agent '${options.newId}' after creation.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    return resolved;
   }
 
   reorderModels(modelIds: string[]) {
