@@ -11,6 +11,7 @@ npm install @mastra/s3
 ## Usage
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';
 import { S3Filesystem } from '@mastra/s3';
 
@@ -27,11 +28,11 @@ const workspace = new Workspace({
   }),
 });
 
-await workspace.init();
-
-// Read and write files
-await workspace.writeFile('/data.json', JSON.stringify({ hello: 'world' }));
-const content = await workspace.readFile('/data.json', { encoding: 'utf-8' });
+const agent = new Agent({
+  name: 'my-agent',
+  model: openai('gpt-4o'),
+  workspace,
+});
 ```
 
 ### Cloudflare R2
@@ -50,7 +51,7 @@ const workspace = new Workspace({
 });
 ```
 
-### With E2B Sandbox Mounting
+### With E2B Sandbox
 
 When used with `@mastra/e2b`, S3 filesystems can be mounted into E2B sandboxes via s3fs-fuse:
 
@@ -60,17 +61,14 @@ import { S3Filesystem } from '@mastra/s3';
 import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-  }),
+  mounts: {
+    '/my-bucket': new S3Filesystem({
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+    }),
+  },
   sandbox: new E2BSandbox(),
 });
-
-await workspace.init();
-
-// Mount the S3 bucket into the sandbox at /mnt/data
-await workspace.sandbox.mount(workspace.filesystem, '/mnt/data');
 ```
 
 ## Documentation

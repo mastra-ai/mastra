@@ -11,6 +11,7 @@ npm install @mastra/gcs
 ## Usage
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';
 import { GCSFilesystem } from '@mastra/gcs';
 
@@ -23,14 +24,14 @@ const workspace = new Workspace({
   }),
 });
 
-await workspace.init();
-
-// Read and write files
-await workspace.writeFile('/data.json', JSON.stringify({ hello: 'world' }));
-const content = await workspace.readFile('/data.json', { encoding: 'utf-8' });
+const agent = new Agent({
+  name: 'my-agent',
+  model: openai('gpt-4o'),
+  workspace,
+});
 ```
 
-### With E2B Sandbox Mounting
+### With E2B Sandbox
 
 When used with `@mastra/e2b`, GCS filesystems can be mounted into E2B sandboxes via gcsfuse:
 
@@ -40,16 +41,13 @@ import { GCSFilesystem } from '@mastra/gcs';
 import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
-  filesystem: new GCSFilesystem({
-    bucket: 'my-gcs-bucket',
-  }),
+  mounts: {
+    '/my-bucket': new GCSFilesystem({
+      bucket: 'my-gcs-bucket',
+    }),
+  },
   sandbox: new E2BSandbox(),
 });
-
-await workspace.init();
-
-// Mount the GCS bucket into the sandbox at /mnt/data
-await workspace.sandbox.mount(workspace.filesystem, '/mnt/data');
 ```
 
 ## Documentation

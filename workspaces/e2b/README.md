@@ -11,6 +11,7 @@ npm install @mastra/e2b
 ## Usage
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';
 import { E2BSandbox } from '@mastra/e2b';
 
@@ -21,15 +22,11 @@ const workspace = new Workspace({
   }),
 });
 
-await workspace.init();
-
-// Execute code in the sandbox
-const result = await workspace.sandbox.exec('echo "Hello from E2B!"');
-console.log(result.stdout);
-
-// Run Python code
-const pythonResult = await workspace.sandbox.exec('python3 -c "print(2 + 2)"');
-console.log(pythonResult.stdout); // "4"
+const agent = new Agent({
+  name: 'my-agent',
+  model: openai('gpt-4o'),
+  workspace,
+});
 ```
 
 ### Mounting Cloud Storage
@@ -42,21 +39,14 @@ import { S3Filesystem } from '@mastra/s3';
 import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-  }),
+  mounts: {
+    '/data': new S3Filesystem({
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+    }),
+  },
   sandbox: new E2BSandbox(),
 });
-
-await workspace.init();
-
-// Mount S3 bucket into the sandbox
-await workspace.sandbox.mount(workspace.filesystem, '/mnt/data');
-
-// Now code running in the sandbox can access S3 files at /mnt/data
-await workspace.sandbox.exec('ls /mnt/data');
-await workspace.sandbox.exec('cat /mnt/data/my-file.txt');
 ```
 
 ### Custom Templates
