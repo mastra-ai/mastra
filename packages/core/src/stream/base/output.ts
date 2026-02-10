@@ -828,6 +828,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     ...baseFinishStep.response,
                     messages: messageList.get.response.aiV5.model(),
                   },
+                  providerMetadata: await self.providerMetadata,
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
                   toolCalls: await self.toolCalls,
