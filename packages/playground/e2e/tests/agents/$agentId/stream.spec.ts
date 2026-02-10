@@ -1,15 +1,18 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, BrowserContext } from '@playwright/test';
 import { selectFixture } from '../../__utils__/select-fixture';
 import { resetStorage } from '../../__utils__/reset-storage';
 
 let page: Page;
+let context: BrowserContext;
 
 test.beforeEach(async ({ browser }) => {
-  const context = await browser.newContext();
+  await resetStorage();
+  context = await browser.newContext();
   page = await context.newPage();
 });
 
 test.afterEach(async () => {
+  await context.close();
   await resetStorage();
 });
 
