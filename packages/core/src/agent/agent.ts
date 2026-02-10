@@ -190,7 +190,7 @@ export class Agent<
    * ```
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
-    super({ component: RegisteredLogger.AGENT });
+    super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
 
     this.name = config.name;
     this.id = config.id ?? config.name;
@@ -1668,9 +1668,9 @@ export class Agent<
       authorId: options.authorId,
     };
 
-    await agentsStore.createAgent({ agent: createInput });
+    await agentsStore.create({ agent: createInput });
 
-    const resolved = await agentsStore.getAgentByIdResolved({ id: options.newId });
+    const resolved = await agentsStore.getByIdResolved(options.newId);
     if (!resolved) {
       const mastraError = new MastraError({
         id: 'AGENT_CLONE_FAILED_TO_RESOLVE',
