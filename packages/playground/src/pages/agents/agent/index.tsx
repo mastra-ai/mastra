@@ -120,7 +120,7 @@ function Agent() {
                           />
                         )
                       }
-                      rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
+                      rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
                     >
                       <AgentChat
                         agentId={agentId!}
