@@ -16,6 +16,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  StoredMCPClient,
   StoredScorer,
   Workspace,
 } from './resources';
@@ -60,6 +61,10 @@ import type {
   ListStoredScorersResponse,
   CreateStoredScorerParams,
   StoredScorerResponse,
+  ListStoredMCPClientsParams,
+  ListStoredMCPClientsResponse,
+  CreateStoredMCPClientParams,
+  StoredMCPClientResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
@@ -904,6 +909,64 @@ export class MastraClient extends BaseResource {
    */
   public getStoredScorer(storedScorerId: string): StoredScorer {
     return new StoredScorer(this.options, storedScorerId);
+  }
+
+  // ============================================================================
+  // Stored MCP Clients
+  // ============================================================================
+
+  /**
+   * Lists all stored MCP clients with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored MCP clients
+   */
+  public listStoredMCPClients(params?: ListStoredMCPClientsParams): Promise<ListStoredMCPClientsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/mcp-clients${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored MCP client
+   * @param params - MCP client configuration
+   * @returns Promise containing the created stored MCP client
+   */
+  public createStoredMCPClient(params: CreateStoredMCPClientParams): Promise<StoredMCPClientResponse> {
+    return this.request('/stored/mcp-clients', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored MCP client instance by ID for further operations (details, update, delete)
+   * @param storedMCPClientId - ID of the stored MCP client
+   * @returns StoredMCPClient instance
+   */
+  public getStoredMCPClient(storedMCPClientId: string): StoredMCPClient {
+    return new StoredMCPClient(this.options, storedMCPClientId);
   }
 
   // ============================================================================

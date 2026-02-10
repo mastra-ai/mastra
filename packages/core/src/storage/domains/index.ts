@@ -3,6 +3,7 @@ export * from './versioned';
 export * from './agents';
 export * from './prompt-blocks';
 export * from './scorer-definitions';
+export * from './mcp-clients';
 export * from './scores';
 export * from './observability';
 export * from './operations';

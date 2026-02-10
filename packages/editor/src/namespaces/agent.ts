@@ -13,6 +13,7 @@ import type {
   SerializedMemoryConfig,
   SharedMemoryConfig,
   StorageToolConfig,
+  StorageMCPClientToolsConfig,
 } from '@mastra/core';
 
 import type {
@@ -30,6 +31,7 @@ import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } f
 import { resolveInstructionBlocks } from '../instruction-builder';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
+import { EditorMCPNamespace } from './mcp';
 
 export class EditorAgentNamespace extends CrudEditorNamespace<
   StorageCreateAgentInput,
@@ -112,7 +114,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     this.logger?.debug(`[createAgentFromStoredConfig] Creating agent from stored config "${storedAgent.id}"`);
 
-    const tools = this.resolveStoredTools(storedAgent.tools);
+    const registryTools = this.resolveStoredTools(storedAgent.tools);
+    const mcpTools = await this.resolveStoredMCPTools(storedAgent.mcpClients);
+    const tools = { ...registryTools, ...mcpTools };
     const workflows = this.resolveStoredWorkflows(storedAgent.workflows);
     const agents = this.resolveStoredAgents(storedAgent.agents);
     const memory = this.resolveStoredMemory(storedAgent.memory);
@@ -224,6 +228,87 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     return resolvedTools;
+  }
+
+  /**
+   * Resolve MCP client/server references to tools.
+   *
+   * For each entry in `mcpClients`, resolution checks two sources in order:
+   * 1. Stored MCP clients (from DB) — creates an MCPClient to fetch remote tools
+   * 2. Code-defined MCP servers on the Mastra instance — uses `server.tools()` directly
+   *
+   * When `clientToolsConfig.tools` is omitted, all tools from the source are included.
+   * When specified, only listed tools are included with optional description overrides.
+   */
+  private async resolveStoredMCPTools(
+    mcpClients?: Record<string, StorageMCPClientToolsConfig>,
+  ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
+    if (!mcpClients || Object.keys(mcpClients).length === 0) return {};
+    if (!this.mastra) return {};
+
+    const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    // Lazily loaded — only needed when stored MCP clients are found
+    let MCPClient: any;
+
+    for (const [clientId, clientToolsConfig] of Object.entries(mcpClients)) {
+      try {
+        let tools: Record<string, any> | undefined;
+
+        // 1. Check stored MCP clients (remote servers from DB)
+        const storedClient = await this.editor.mcp.getById(clientId);
+        if (storedClient) {
+          if (!MCPClient) {
+            try {
+              // @ts-expect-error — @mastra/mcp is an optional peer dependency
+              const mcpModule = await import('@mastra/mcp');
+              MCPClient = mcpModule.MCPClient;
+            } catch {
+              this.logger?.warn(
+                'Stored MCP client references found but @mastra/mcp is not installed. ' +
+                  'Install @mastra/mcp to use remote MCP tools.',
+              );
+              continue;
+            }
+          }
+          const clientOptions = EditorMCPNamespace.toMCPClientOptions(storedClient);
+          const client = new MCPClient(clientOptions);
+          tools = await client.listTools();
+          this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from stored MCP client "${clientId}"`);
+        } else {
+          // 2. Fallback to code-defined MCP server on the Mastra instance
+          //    Check by registration key first, then by server ID
+          const mcpServer = this.mastra.getMCPServer(clientId) ?? this.mastra.getMCPServerById(clientId);
+          if (mcpServer) {
+            tools = mcpServer.tools() as Record<string, any>;
+            this.logger?.debug(`[resolveStoredMCPTools] Loaded tools from code-defined MCP server "${clientId}"`);
+          }
+        }
+
+        if (!tools) {
+          this.logger?.warn(`MCP client/server "${clientId}" referenced in stored agent but not found`);
+          continue;
+        }
+
+        // Apply filtering and description overrides
+        const allowedTools = clientToolsConfig.tools;
+        for (const [toolName, tool] of Object.entries(tools)) {
+          // When allowedTools is undefined, include all tools
+          if (allowedTools && !(toolName in allowedTools)) continue;
+
+          const toolConfig = allowedTools?.[toolName];
+          if (toolConfig?.description) {
+            allTools[toolName] = { ...(tool as ToolAction<any, any, any, any, any, any>), description: toolConfig.description };
+          } else {
+            allTools[toolName] = tool as ToolAction<any, any, any, any, any, any>;
+          }
+        }
+      } catch (error) {
+        this.logger?.warn(`Failed to resolve MCP tools from "${clientId}"`, { error });
+      }
+    }
+
+    return allTools;
   }
 
   private resolveStoredWorkflows(

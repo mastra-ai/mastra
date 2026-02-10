@@ -985,6 +985,94 @@ export interface DeleteStoredScorerResponse {
 }
 
 // ============================================================================
+// Stored MCP Client Types
+// ============================================================================
+
+/**
+ * MCP server transport configuration
+ */
+export interface StoredMCPServerConfig {
+  type: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  timeout?: number;
+}
+
+/**
+ * Stored MCP client data returned from API
+ */
+export interface StoredMCPClientResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsResponse {
+  mcpClients: StoredMCPClientResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored MCP client
+ */
+export interface CreateStoredMCPClientParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for updating a stored MCP client
+ */
+export interface UpdateStoredMCPClientParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  servers?: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Response for deleting a stored MCP client
+ */
+export interface DeleteStoredMCPClientResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // Agent Version Types
 // ============================================================================
 
