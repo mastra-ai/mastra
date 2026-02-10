@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Component } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { Rule, RuleGroup } from '../types';
@@ -19,51 +19,41 @@ const DEFAULT_MAX_DEPTH = 3;
 const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, onRemove, depth, maxDepth }) => {
   const isRoot = depth === 0;
 
-  const handleToggleOperator = React.useCallback(() => {
+  const handleToggleOperator = () => {
     onChange({ ...group, operator: group.operator === 'AND' ? 'OR' : 'AND' });
-  }, [group, onChange]);
+  };
 
-  const handleConditionChange = React.useCallback(
-    (index: number, condition: Rule | RuleGroup) => {
-      const newConditions = [...group.conditions];
-      newConditions[index] = condition;
+  const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
+    const newConditions = [...group.conditions];
+    newConditions[index] = condition;
+    onChange({ ...group, conditions: newConditions });
+  };
+
+  const handleRemoveCondition = (index: number) => {
+    const newConditions = group.conditions.filter((_, i) => i !== index);
+    if (newConditions.length === 0 && onRemove) {
+      onRemove();
+    } else {
       onChange({ ...group, conditions: newConditions });
-    },
-    [group, onChange],
-  );
+    }
+  };
 
-  const handleRemoveCondition = React.useCallback(
-    (index: number) => {
-      const newConditions = group.conditions.filter((_, i) => i !== index);
-      if (newConditions.length === 0 && onRemove) {
-        onRemove();
-      } else {
-        onChange({ ...group, conditions: newConditions });
-      }
-    },
-    [group, onChange, onRemove],
-  );
-
-  const handleAddRule = React.useCallback(() => {
+  const handleAddRule = () => {
     onChange({ ...group, conditions: [...group.conditions, createDefaultRule()] });
-  }, [group, onChange]);
+  };
 
-  const handleAddGroup = React.useCallback(() => {
+  const handleAddGroup = () => {
     onChange({
       ...group,
       conditions: [...group.conditions, createDefaultRuleGroup(group.operator === 'AND' ? 'OR' : 'AND')],
     });
-  }, [group, onChange]);
+  };
 
   return (
-    <div
-      className={cn(
-        isRoot ? 'border-t border-border1 bg-surface3 overflow-hidden' : 'ml-6 border border-dashed border-border1 rounded-md bg-surface2 overflow-hidden',
-      )}
-    >
+    <div className={cn(isRoot ? 'bg-surface2' : 'pl-6 bg-surface3')}>
       {/* Non-root group header */}
       {!isRoot && (
-        <div className="flex items-center justify-between px-3 py-1.5 bg-surface3 border-b border-border1 border-dashed">
+        <div className="flex items-center justify-between pl-3 pr-4 py-1.5 border-b border-border1 border-dashed">
           <span className="text-ui-xs text-neutral3">Group</span>
           {onRemove && (
             <IconButton type="button" onClick={onRemove} tooltip="Remove group" size="sm" variant="ghost">
@@ -81,8 +71,10 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                 type="button"
                 onClick={handleToggleOperator}
                 className={cn(
-                  'absolute left-1/2 -translate-x-1/2 z-10 -translate-y-1/2 top-0 text-ui-xs px-1.5 rounded-md cursor-pointer',
-                  group.operator === 'OR' ? 'bg-accent6Dark text-accent6' : 'bg-accent3Dark text-accent3',
+                  'absolute left-1/2 -translate-x-1/2 z-10 -translate-y-1/2 top-0 text-ui-xs px-3 py-0.5 rounded-full cursor-pointer',
+                  group.operator === 'OR'
+                    ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
+                    : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
                 )}
               >
                 {group.operator.toLowerCase()}
@@ -120,7 +112,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
         {depth < maxDepth - 1 && (
           <Button type="button" onClick={handleAddGroup} variant="ghost" size="sm">
             <Icon>
-              <Plus />
+              <Component />
             </Icon>
             Add group
           </Button>
@@ -136,7 +128,13 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
  *
  * Supports nested rule groups with AND/OR operators at each level.
  */
-export const RuleBuilder: React.FC<RuleBuilderProps> = ({ schema, ruleGroup, onChange, maxDepth = DEFAULT_MAX_DEPTH, className }) => {
+export const RuleBuilder: React.FC<RuleBuilderProps> = ({
+  schema,
+  ruleGroup,
+  onChange,
+  maxDepth = DEFAULT_MAX_DEPTH,
+  className,
+}) => {
   const handleGroupChange = React.useCallback(
     (group: RuleGroup) => {
       onChange(group);
