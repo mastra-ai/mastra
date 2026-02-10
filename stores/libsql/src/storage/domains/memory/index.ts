@@ -2108,10 +2108,15 @@ export class MemoryLibSQL extends MemoryStorage {
       // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
       // New content after lastObservedAt will be picked up in subsequent observations.
 
+      // Decrement pending message tokens (clamped to zero)
+      const existingPending = Number(row.pendingMessageTokens || 0);
+      const newPending = Math.max(0, existingPending - activatedMessageTokens);
+
       await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
           "activeObservations" = ?,
           "observationTokenCount" = ?,
+          "pendingMessageTokens" = ?,
           "bufferedObservationChunks" = ?,
           "lastObservedAt" = ?,
           "updatedAt" = ?
@@ -2119,6 +2124,7 @@ export class MemoryLibSQL extends MemoryStorage {
         args: [
           newActive,
           newTokenCount,
+          newPending,
           remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
           lastObservedAtStr,
           nowStr,
@@ -2164,13 +2170,18 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const result = await this.#client.execute({
         sql: `UPDATE "${OM_TABLE}" SET
-          "bufferedReflection" = ?,
-          "bufferedReflectionTokens" = ?,
-          "bufferedReflectionInputTokens" = ?,
+          "bufferedReflection" = CASE
+            WHEN "bufferedReflection" IS NOT NULL AND "bufferedReflection" != ''
+            THEN "bufferedReflection" || char(10) || char(10) || ?
+            ELSE ?
+          END,
+          "bufferedReflectionTokens" = COALESCE("bufferedReflectionTokens", 0) + ?,
+          "bufferedReflectionInputTokens" = COALESCE("bufferedReflectionInputTokens", 0) + ?,
           "reflectedObservationLineCount" = ?,
           "updatedAt" = ?
         WHERE id = ?`,
         args: [
+          input.reflection,
           input.reflection,
           input.tokenCount,
           input.inputTokenCount,

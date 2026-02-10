@@ -2323,15 +2323,17 @@ export class MemoryPG extends MemoryStorage {
             ELSE $1
           END,
           "observationTokenCount" = COALESCE("observationTokenCount", 0) + $2,
-          "bufferedObservationChunks" = $3,
-          "lastObservedAt" = $4,
-          "lastObservedAtZ" = $5,
-          "updatedAt" = $6,
-          "updatedAtZ" = $7
-        WHERE id = $8`,
+          "pendingMessageTokens" = GREATEST(0, COALESCE("pendingMessageTokens", 0) - $3),
+          "bufferedObservationChunks" = $4,
+          "lastObservedAt" = $5,
+          "lastObservedAtZ" = $6,
+          "updatedAt" = $7,
+          "updatedAtZ" = $8
+        WHERE id = $9`,
         [
           activatedContent,
           activatedTokens,
+          activatedMessageTokens,
           remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
           lastObservedAtStr,
           lastObservedAtStr,
@@ -2390,11 +2392,20 @@ export class MemoryPG extends MemoryStorage {
             ELSE $1
           END,
           "bufferedReflectionTokens" = COALESCE("bufferedReflectionTokens", 0) + $2,
-          "bufferedReflectionInputTokens" = $3,
-          "updatedAt" = $4,
-          "updatedAtZ" = $5
-        WHERE id = $6`,
-        [input.reflection, input.tokenCount, input.inputTokenCount, nowStr, nowStr, input.id],
+          "bufferedReflectionInputTokens" = COALESCE("bufferedReflectionInputTokens", 0) + $3,
+          "reflectedObservationLineCount" = $4,
+          "updatedAt" = $5,
+          "updatedAtZ" = $6
+        WHERE id = $7`,
+        [
+          input.reflection,
+          input.tokenCount,
+          input.inputTokenCount,
+          input.reflectedObservationLineCount,
+          nowStr,
+          nowStr,
+          input.id,
+        ],
       );
 
       if (result.rowCount === 0) {

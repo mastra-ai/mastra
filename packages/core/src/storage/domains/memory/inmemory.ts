@@ -1001,6 +1001,9 @@ export class InMemoryMemory extends MemoryStorage {
     // Update observation token count
     record.observationTokenCount = (record.observationTokenCount ?? 0) + activatedTokens;
 
+    // Decrement pending message tokens (clamped to zero)
+    record.pendingMessageTokens = Math.max(0, (record.pendingMessageTokens ?? 0) - activatedMessageTokens);
+
     // NOTE: We intentionally do NOT add activatedMessageIds to record.observedMessageIds.
     // observedMessageIds is used by getUnobservedMessages to filter future messages.
     // Since AI SDK may reuse message IDs for new content, adding them here would
@@ -1079,9 +1082,10 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
-    record.bufferedReflection = reflection;
-    record.bufferedReflectionTokens = tokenCount;
-    record.bufferedReflectionInputTokens = inputTokenCount;
+    const existing = record.bufferedReflection || '';
+    record.bufferedReflection = existing ? `${existing}\n\n${reflection}` : reflection;
+    record.bufferedReflectionTokens = (record.bufferedReflectionTokens || 0) + tokenCount;
+    record.bufferedReflectionInputTokens = (record.bufferedReflectionInputTokens || 0) + inputTokenCount;
     record.reflectedObservationLineCount = reflectedObservationLineCount;
     record.updatedAt = new Date();
   }
@@ -1122,6 +1126,7 @@ export class InMemoryMemory extends MemoryStorage {
     // Clear buffered state on old record
     record.bufferedReflection = undefined;
     record.bufferedReflectionTokens = undefined;
+    record.bufferedReflectionInputTokens = undefined;
     record.reflectedObservationLineCount = undefined;
 
     return newRecord;

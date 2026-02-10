@@ -1772,12 +1772,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
       // New content after lastObservedAt will be picked up in subsequent observations.
 
+      // Decrement pending message tokens (clamped to zero)
+      const existingPending = Number(doc.pendingMessageTokens || 0);
+      const newPending = Math.max(0, existingPending - activatedMessageTokens);
+
       await collection.updateOne(
         { id: input.id },
         {
           $set: {
             activeObservations: newActive,
             observationTokenCount: newTokenCount,
+            pendingMessageTokens: newPending,
             bufferedObservationChunks: remainingChunks.length > 0 ? remainingChunks : null,
             lastObservedAt,
             updatedAt: new Date(),
@@ -1835,10 +1840,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       const existingContent = (doc.bufferedReflection as string) || '';
       const existingTokens = Number(doc.bufferedReflectionTokens || 0);
+      const existingInputTokens = Number(doc.bufferedReflectionInputTokens || 0);
 
       // Merge content
       const newContent = existingContent ? `${existingContent}\n\n${input.reflection}` : input.reflection;
       const newTokens = existingTokens + input.tokenCount;
+      const newInputTokens = existingInputTokens + input.inputTokenCount;
 
       const result = await collection.updateOne(
         { id: input.id },
@@ -1846,7 +1853,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             bufferedReflection: newContent,
             bufferedReflectionTokens: newTokens,
-            bufferedReflectionInputTokens: input.inputTokenCount,
+            bufferedReflectionInputTokens: newInputTokens,
+            reflectedObservationLineCount: input.reflectedObservationLineCount,
             updatedAt: new Date(),
           },
         },
@@ -1934,6 +1942,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             bufferedReflection: null,
             bufferedReflectionTokens: null,
+            bufferedReflectionInputTokens: null,
             reflectedObservationLineCount: null,
             updatedAt: new Date(),
           },
