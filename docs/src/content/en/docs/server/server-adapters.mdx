@@ -1,9 +1,10 @@
 ---
 title: "Server Adapters | Server"
-description: "Manually configure a Mastra server using Hono or Express adapters."
+description: "Manually configure a Mastra server using Express, Hono, Fastify, Koa, or NestJS adapters."
 packages:
   - "@mastra/express"
   - "@mastra/hono"
+  - "@mastra/nestjs"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -35,6 +36,7 @@ Mastra currently provides these official server adapters:
 - [@mastra/hono](/reference/server/hono-adapter)
 - [@mastra/fastify](/reference/server/fastify-adapter)
 - [@mastra/koa](/reference/server/koa-adapter)
+- [@mastra/nestjs](/reference/server/nestjs-adapter)
 
 You can build your own adapter, read [custom adapters](/docs/server/custom-adapters) for details.
 
@@ -65,6 +67,12 @@ npm install @mastra/fastify@latest
 
 ```bash npm2yarn
 npm install @mastra/koa@latest
+```
+  </TabItem>
+  <TabItem value="nestjs" label="NestJS">
+
+```bash npm2yarn
+npm install @mastra/nestjs@latest
 ```
   </TabItem>
 </Tabs>
@@ -195,6 +203,42 @@ app.listen(port, () => {
 :::info
 
 See the [Koa Adapter](/reference/server/koa-adapter) documentation for full configuration options.
+
+:::
+
+  </TabItem>
+  <TabItem value="nestjs" label="NestJS">
+
+```typescript title="src/app.module.ts"
+import { Module } from "@nestjs/common";
+import { MastraModule } from "@mastra/nestjs";
+import { mastra } from "./mastra";
+
+@Module({
+  imports: [
+    MastraModule.register({
+      mastra,
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+```typescript title="src/main.ts"
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module";
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  await app.listen(3000);
+}
+
+bootstrap();
+```
+
+:::info
+
+See the [NestJS Adapter](/reference/server/nestjs-adapter) documentation for full configuration options.
 
 :::
 
@@ -420,6 +464,7 @@ See [MCP](/docs/mcp/overview) for configuration details and how to set up MCP se
 
 - [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
 - [Express Adapter](/reference/server/express-adapter) - Express-specific setup
+- [NestJS Adapter](/reference/server/nestjs-adapter) - NestJS-specific setup
 - [Custom Adapters](/docs/server/custom-adapters) - Building adapters for other frameworks
 - [Server Configuration](/docs/server/mastra-server) - Using `mastra build` instead
 - [Authentication](/docs/server/auth) - Configuring auth for your server
