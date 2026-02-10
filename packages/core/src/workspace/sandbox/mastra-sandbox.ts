@@ -204,8 +204,9 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
     // shouldn't mark the sandbox itself as errored
     try {
       await this.mounts?.processPending();
-    } catch {
-      // Unexpected errors in mount processing shouldn't affect sandbox status
+    } catch (error) {
+      // Mount failures are tracked in MountManager — log but don't affect sandbox status
+      this.logger.warn('Unexpected error processing pending mounts', { error });
     }
   }
 

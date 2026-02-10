@@ -134,7 +134,7 @@ function getFileIcon(entry: FileEntry, isOpen = false) {
 }
 
 function formatBytes(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '';
+  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return '';
   if (bytes < 0) return '-' + formatBytes(-bytes);
   if (bytes === 0) return '0 B';
   const k = 1024;

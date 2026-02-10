@@ -85,10 +85,10 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   // ---------------------------------------------------------------------------
 
   /** Promise for init() to prevent race conditions from concurrent calls */
-  protected _initPromise?: Promise<void>;
+  private _initPromise?: Promise<void>;
 
   /** Promise for destroy() to prevent race conditions from concurrent calls */
-  protected _destroyPromise?: Promise<void>;
+  private _destroyPromise?: Promise<void>;
 
   constructor(options: { name: string }) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
@@ -111,6 +111,15 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
     // Note: intentionally allows re-init after destroy() for reconnect scenarios
     if (this.status === 'ready') {
       return;
+    }
+
+    // Wait for any in-progress destroy to complete before (re-)initializing
+    if (this._destroyPromise) {
+      try {
+        await this._destroyPromise;
+      } catch {
+        // Ignore destroy errors — we're re-initializing anyway
+      }
     }
 
     // Init already in progress - return existing promise
