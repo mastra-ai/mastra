@@ -2374,6 +2374,12 @@ export class Mastra<
       this.#workspace.__setLogger(this.#logger);
     }
 
+    if (this.#memory) {
+      Object.keys(this.#memory).forEach(key => {
+        this.#memory?.[key]?.__setLogger(this.#logger);
+      });
+    }
+
     this.#observability.setLogger({ logger: this.#logger });
   }
 
