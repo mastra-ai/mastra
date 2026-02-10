@@ -66,7 +66,7 @@ const paths: LinkComponentProviderProps['paths'] = {
       ? `/workspaces/${workspaceId}/skills/${skillName}?agentId=${encodeURIComponent(agentId)}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
     messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
   workflowsLink: () => `/workflows`,
