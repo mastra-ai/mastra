@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent, Mastra } from '@mastra/core';
 import { createScorer } from '@mastra/core/evals';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -905,7 +906,6 @@ describe('Stored Agents via MastraEditor', () => {
       expect(agent).toBeInstanceOf(Agent);
 
       // With premium tier context → should accumulate both tool-a (matched) and tool-b (unconditional)
-      const { RequestContext } = await import('@mastra/core/request-context');
       const premiumCtx = new RequestContext([['tier', 'premium']]);
       const premiumTools = await agent!.listTools({ requestContext: premiumCtx });
       expect(premiumTools['tool-a']).toBeDefined();
@@ -951,8 +951,6 @@ describe('Stored Agents via MastraEditor', () => {
 
       const agent = await editor.agent.getById('conditional-model-agent');
       expect(agent).toBeInstanceOf(Agent);
-
-      const { RequestContext } = await import('@mastra/core/request-context');
 
       // Premium context: base {openai/gpt-4o-mini} merged with {anthropic/claude-3-opus} → anthropic wins
       const premiumCtx = new RequestContext([['tier', 'premium']]);
