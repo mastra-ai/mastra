@@ -35,10 +35,10 @@ import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
-import type { WorkspaceFilesystem, FilesystemMountConfig, FilesystemIcon } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemIcon } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { callLifecycle } from './lifecycle';
-import type { WorkspaceSandbox } from './sandbox';
+import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
@@ -46,61 +46,6 @@ import type { WorkspaceSkills, SkillsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
-
-// =============================================================================
-// Mount Hook Types
-// =============================================================================
-
-/**
- * Arguments passed to the onMount hook.
- */
-export interface OnMountArgs {
-  /** The filesystem being mounted */
-  filesystem: WorkspaceFilesystem;
-  /** The mount path in the sandbox */
-  mountPath: string;
-  /** The mount configuration from filesystem.getMountConfig() (undefined if not supported) */
-  config: FilesystemMountConfig | undefined;
-  /** The sandbox instance for custom mount implementations */
-  sandbox: WorkspaceSandbox;
-  /** The workspace instance */
-  workspace: Workspace;
-}
-
-/**
- * Result returned from onMount hook.
- *
- * - `false` - Skip mount entirely (don't mount this filesystem)
- * - `{ success: true }` - Hook handled the mount successfully
- * - `{ success: false, error?: string }` - Hook attempted mount but failed
- * - `undefined` / no return - Use provider's default mount behavior
- */
-export type OnMountResult = false | { success: boolean; error?: string } | void;
-
-/**
- * Mount hook function type.
- *
- * Called for each filesystem before mounting into sandbox.
- * Return value controls mounting behavior.
- *
- * @example Skip local filesystems
- * ```typescript
- * onMount: ({ filesystem }) => {
- *   if (filesystem.provider === 'local') return false;
- * }
- * ```
- *
- * @example Custom mount implementation
- * ```typescript
- * onMount: async ({ filesystem, mountPath, sandbox }) => {
- *   if (mountPath === '/custom') {
- *     await sandbox.executeCommand?.('my-mount-script', [mountPath]);
- *     return { success: true };
- *   }
- * }
- * ```
- */
-export type OnMountHook = (args: OnMountArgs) => Promise<OnMountResult> | OnMountResult;
 
 // =============================================================================
 // Workspace Configuration
@@ -424,16 +369,10 @@ export class Workspace {
       this._fs = new CompositeFilesystem({ mounts: config.mounts });
       if (this._sandbox?.mounts) {
         // Inform sandbox about mounts so it can process them on start()
+        this._sandbox.mounts.setContext({ sandbox: this._sandbox, workspace: this });
         this._sandbox.mounts.add(config.mounts);
-        // Set onMount hook if configured (wrap to add workspace context)
         if (config.onMount) {
-          this._sandbox.mounts.setOnMount(args =>
-            config.onMount!({
-              ...args,
-              sandbox: this._sandbox!,
-              workspace: this,
-            }),
-          );
+          this._sandbox.mounts.setOnMount(config.onMount);
         }
       }
     } else {
