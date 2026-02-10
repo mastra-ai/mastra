@@ -1,6 +1,7 @@
 import type { Mastra } from '../../mastra';
+import type { DatasetItem } from '../../storage/types';
 import { executeTarget } from './executor';
-import type { Target } from './executor';
+import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -57,17 +58,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     experimentId: providedRunId,
   } = config;
 
-  // Validate required fields for registry-based execution (no inline task/data)
-  if (!datasetId) {
-    throw new Error('datasetId is required when not using inline data');
-  }
-  if (!targetType) {
-    throw new Error('targetType is required when not using inline task');
-  }
-  if (!targetId) {
-    throw new Error('targetId is required when not using inline task');
-  }
-
   const startedAt = new Date();
   // Use provided experimentId (async trigger) or generate new one
   const runId = providedRunId ?? crypto.randomUUID();
@@ -77,33 +67,82 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const datasetsStore = await storage?.getStore('datasets');
   const runsStore = await storage?.getStore('runs');
 
-  if (!datasetsStore) {
-    throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
+  // Phase A — Resolve items
+  let items: DatasetItem[];
+  let datasetVersion: Date;
+
+  if (config.data) {
+    // Inline data path — array or factory function
+    const rawData = typeof config.data === 'function' ? await config.data() : config.data;
+    const now = new Date();
+    items = rawData.map(dataItem => ({
+      id: dataItem.id ?? crypto.randomUUID(),
+      datasetId: config.datasetId ?? 'inline',
+      version: now,
+      input: dataItem.input,
+      groundTruth: dataItem.groundTruth,
+      metadata: dataItem.metadata,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    datasetVersion = now;
+  } else if (datasetId) {
+    // Storage-backed data path (existing)
+    if (!datasetsStore) {
+      throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
+    }
+
+    const dataset = await datasetsStore.getDatasetById({ id: datasetId });
+    if (!dataset) {
+      throw new Error(`Dataset not found: ${datasetId}`);
+    }
+
+    datasetVersion = version ?? dataset.version;
+    items = await datasetsStore.getItemsByVersion({
+      datasetId,
+      version: datasetVersion,
+    });
+
+    if (items.length === 0) {
+      throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`);
+    }
+  } else {
+    throw new Error('No data source: provide datasetId or data');
   }
 
-  // 2. Load dataset and items
-  const dataset = await datasetsStore.getDatasetById({ id: datasetId });
-  if (!dataset) {
-    throw new Error(`Dataset not found: ${datasetId}`);
+  // Phase B — Resolve task function
+  let execFn: (item: DatasetItem, signal?: AbortSignal) => Promise<ExecutionResult>;
+
+  if (config.task) {
+    // Inline task path
+    const taskFn = config.task;
+    execFn = async (item, itemSignal) => {
+      try {
+        const result = await taskFn({
+          input: item.input,
+          mastra,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
+          signal: itemSignal,
+        });
+        return { output: result, error: null, traceId: null };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { output: null, error: message, traceId: null };
+      }
+    };
+  } else if (targetType && targetId) {
+    // Registry-based target path (existing)
+    const target = resolveTarget(mastra, targetType, targetId);
+    if (!target) {
+      throw new Error(`Target not found: ${targetType}/${targetId}`);
+    }
+    execFn = (item, itemSignal) => executeTarget(target, targetType, item, { signal: itemSignal });
+  } else {
+    throw new Error('No task: provide targetType+targetId or task');
   }
 
-  const datasetVersion = version ?? dataset.version;
-  const items = await datasetsStore.getItemsByVersion({
-    datasetId,
-    version: datasetVersion,
-  });
-
-  if (items.length === 0) {
-    throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`);
-  }
-
-  // 3. Resolve target
-  const target = resolveTarget(mastra, targetType, targetId);
-  if (!target) {
-    throw new Error(`Target not found: ${targetType}/${targetId}`);
-  }
-
-  // 4. Resolve scorers
+  // Resolve scorers
   const scorers = resolveScorers(mastra, scorerInput);
 
   // 5. Create run record (if storage available and not pre-created)
@@ -112,10 +151,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       // Create new run record (sync trigger path)
       await runsStore.createRun({
         id: runId,
-        datasetId,
+        datasetId: datasetId ?? 'inline',
         datasetVersion,
-        targetType,
-        targetId,
+        targetType: targetType ?? 'agent',
+        targetId: targetId ?? 'inline',
         totalItems: items.length,
       });
     }
@@ -160,7 +199,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
         // Retry loop
         let retryCount = 0;
-        let execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+        let execResult = await execFn(item, itemSignal);
 
         while (execResult.error && retryCount < maxRetries) {
           // Don't retry abort errors
@@ -176,7 +215,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             throw new DOMException('Aborted', 'AbortError');
           }
 
-          execResult = await executeTarget(target, targetType, item, { signal: itemSignal });
+          execResult = await execFn(item, itemSignal);
         }
 
         const latency = performance.now() - perfStart;
@@ -210,8 +249,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           execResult.output,
           storage ?? null,
           runId,
-          targetType,
-          targetId,
+          targetType ?? 'agent',
+          targetId ?? 'inline',
           execResult.scorerInput,
           execResult.scorerOutput,
         );
