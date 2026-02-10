@@ -63,7 +63,7 @@ import type {
   ListWorkspacesResponse,
   ListVectorsResponse,
   ListEmbeddersResponse,
-  Dataset,
+  DatasetRecord,
   DatasetItem,
   DatasetExperiment,
   DatasetExperimentResult,
@@ -915,7 +915,7 @@ export class MastraClient extends BaseResource {
   public listDatasets(pagination?: {
     page?: number;
     perPage?: number;
-  }): Promise<{ datasets: Dataset[]; pagination: PaginationInfo }> {
+  }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
     if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
     if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
@@ -926,21 +926,21 @@ export class MastraClient extends BaseResource {
   /**
    * Gets a single dataset by ID
    */
-  public getDataset(datasetId: string): Promise<Dataset> {
+  public getDataset(datasetId: string): Promise<DatasetRecord> {
     return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
   }
 
   /**
    * Creates a new dataset
    */
-  public createDataset(params: CreateDatasetParams): Promise<Dataset> {
+  public createDataset(params: CreateDatasetParams): Promise<DatasetRecord> {
     return this.request('/datasets', { method: 'POST', body: params });
   }
 
   /**
    * Updates a dataset
    */
-  public updateDataset(params: UpdateDatasetParams): Promise<Dataset> {
+  public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
     const { datasetId, ...body } = params;
     return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
       method: 'PATCH',
@@ -1152,7 +1152,7 @@ export class MastraClient extends BaseResource {
       itemVersion: string | Date;
       input: unknown;
       output: unknown | null;
-      expectedOutput: unknown | null;
+      groundTruth: unknown | null;
       latency: number;
       error: string | null;
       startedAt: string | Date;

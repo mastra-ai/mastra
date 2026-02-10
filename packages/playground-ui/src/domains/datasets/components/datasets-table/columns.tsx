@@ -1,13 +1,13 @@
 import { Cell, EntryCell } from '@/ds/components/Table';
 import { ColumnDef } from '@tanstack/react-table';
-import type { Dataset } from '@mastra/client-js';
+import type { DatasetRecord } from '@mastra/client-js';
 
 import { useLinkComponent } from '@/lib/framework';
 
 // Column type includes id for row identification
 export type DatasetTableColumn = {
   id: string;
-} & Dataset;
+} & DatasetRecord;
 
 const NameCell = ({ row }: { row: { original: DatasetTableColumn } }) => {
   const { Link, paths } = useLinkComponent();

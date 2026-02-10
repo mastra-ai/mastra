@@ -91,12 +91,12 @@ export const CREATE_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
     try {
-      const { name, description, metadata, inputSchema, outputSchema } = params as {
+      const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
         name: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
-        outputSchema?: Record<string, unknown> | null;
+        groundTruthSchema?: Record<string, unknown> | null;
       };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
@@ -109,7 +109,7 @@ export const CREATE_DATASET_ROUTE = createRoute({
         description,
         metadata,
         inputSchema: inputSchema as any,
-        outputSchema: outputSchema as any,
+        groundTruthSchema: groundTruthSchema as any,
       });
       // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
       return dataset as any;
@@ -162,12 +162,12 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { name, description, metadata, inputSchema, outputSchema } = params as {
+      const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
         name?: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
-        outputSchema?: Record<string, unknown> | null;
+        groundTruthSchema?: Record<string, unknown> | null;
       };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
@@ -187,7 +187,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         description,
         metadata,
         inputSchema: inputSchema as any,
-        outputSchema: outputSchema as any,
+        groundTruthSchema: groundTruthSchema as any,
       });
       // Cast JSONSchema7 to Record<string, unknown> for response schema compatibility
       return dataset as any;
@@ -303,10 +303,10 @@ export const ADD_ITEM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { input, expectedOutput, context } = params as {
+      const { input, groundTruth, metadata } = params as {
         input: unknown;
-        expectedOutput?: unknown;
-        context?: Record<string, unknown>;
+        groundTruth?: unknown;
+        metadata?: Record<string, unknown>;
       };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
@@ -320,7 +320,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Dataset not found: ${datasetId}` });
       }
 
-      const item = await datasetsStore.addItem({ datasetId, input, expectedOutput, context });
+      const item = await datasetsStore.addItem({ datasetId, input, groundTruth, metadata });
       return item;
     } catch (error) {
       if (error instanceof SchemaValidationError) {
@@ -382,10 +382,10 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     try {
-      const { input, expectedOutput, context } = params as {
+      const { input, groundTruth, metadata } = params as {
         input?: unknown;
-        expectedOutput?: unknown;
-        context?: Record<string, unknown>;
+        groundTruth?: unknown;
+        metadata?: Record<string, unknown>;
       };
 
       const datasetsStore = await mastra.getStorage()?.getStore('datasets');
@@ -405,7 +405,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
 
-      const item = await datasetsStore.updateItem({ id: itemId, datasetId, input, expectedOutput, context });
+      const item = await datasetsStore.updateItem({ id: itemId, datasetId, input, groundTruth, metadata });
       return item;
     } catch (error) {
       if (error instanceof SchemaValidationError) {
@@ -595,7 +595,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
             // Only pass version for historical runs - latest uses current items
             version: version instanceof Date ? version : undefined,
             maxConcurrency,
-            runId, // Pass pre-created runId to avoid duplicate creation
+            experimentId: runId, // Pass pre-created experimentId to avoid duplicate creation
           });
         } catch (err) {
           // Log error and update run status to failed
@@ -942,8 +942,8 @@ export const BULK_ADD_ITEMS_ROUTE = createRoute({
       const { items } = params as {
         items: Array<{
           input: unknown;
-          expectedOutput?: unknown;
-          context?: Record<string, unknown>;
+          groundTruth?: unknown;
+          metadata?: Record<string, unknown>;
         }>;
       };
 

@@ -17,7 +17,7 @@ type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add
 
 const itemsListColumns = [
   { name: 'input', label: 'Input', size: '1fr' },
-  { name: 'expectedOutput', label: 'Expected Output', size: '1fr' },
+  { name: 'groundTruth', label: 'Expected Output', size: '1fr' },
   { name: 'metadata', label: 'Metadata', size: '8rem' },
   { name: 'date', label: 'Created', size: '5rem' },
 ];
@@ -226,8 +226,8 @@ export function DatasetItemList({
                   const entry = {
                     id: item.id,
                     input: truncateValue(item.input, 60),
-                    expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
-                    metadata: item.context ? Object.keys(item.context).length + ' keys' : '-',
+                    groundTruth: item.groundTruth ? truncateValue(item.groundTruth, 40) : '-',
+                    metadata: item.metadata ? Object.keys(item.metadata as Record<string, unknown>).length + ' keys' : '-',
                     date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   };
 
@@ -253,7 +253,7 @@ export function DatasetItemList({
                           </div>
                         )}
                         <ItemList.ItemText>{entry.input}</ItemList.ItemText>
-                        <ItemList.ItemText>{entry.expectedOutput}</ItemList.ItemText>
+                        <ItemList.ItemText>{entry.groundTruth}</ItemList.ItemText>
                         <ItemList.ItemText>{entry.metadata}</ItemList.ItemText>
                         <ItemList.ItemText>{entry.date}</ItemList.ItemText>
                       </ItemList.RowButton>

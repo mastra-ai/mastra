@@ -59,7 +59,7 @@ async function setupDataset(itemCount: number) {
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: `item-${i}` },
-      expectedOutput: null,
+      groundTruth: null,
     });
   }
 
@@ -140,7 +140,7 @@ describe('P0 Regression', () => {
         id: 'item-1',
         datasetId: 'ds-1',
         input: 'test input',
-        expectedOutput: null,
+        groundTruth: null,
         version: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),

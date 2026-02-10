@@ -116,19 +116,19 @@ describe('DatasetsLibSQL', () => {
 
   // ------------- Item CRUD -------------
   describe('Item CRUD', () => {
-    it('addItem creates item with input, expectedOutput, context', async () => {
+    it('addItem creates item with input, groundTruth, context', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: { prompt: 'hello' },
-        expectedOutput: { response: 'world' },
+        groundTruth: { response: 'world' },
         context: { user: 'test' },
       });
 
       expect(item.id).toBeDefined();
       expect(item.datasetId).toBe(dataset.id);
       expect(item.input).toEqual({ prompt: 'hello' });
-      expect(item.expectedOutput).toEqual({ response: 'world' });
+      expect(item.groundTruth).toEqual({ response: 'world' });
       expect(item.context).toEqual({ user: 'test' });
       expect(item.version).toBeInstanceOf(Date);
       expect(item.createdAt).toBeInstanceOf(Date);
@@ -159,11 +159,11 @@ describe('DatasetsLibSQL', () => {
         id: item.id,
         datasetId: dataset.id,
         input: { a: 2 },
-        expectedOutput: { b: 3 },
+        groundTruth: { b: 3 },
       });
 
       expect(updated.input).toEqual({ a: 2 });
-      expect(updated.expectedOutput).toEqual({ b: 3 });
+      expect(updated.groundTruth).toEqual({ b: 3 });
     });
 
     it('updateItem throws for non-existent item', async () => {
@@ -400,17 +400,17 @@ describe('DatasetsLibSQL', () => {
       expect(fetched?.input).toEqual(inputWithNulls);
     });
 
-    it('expectedOutput with complex JSON roundtrips correctly', async () => {
+    it('groundTruth with complex JSON roundtrips correctly', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const expected = { scores: [0.5, 0.7, 0.9], labels: ['a', 'b', 'c'] };
 
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: {},
-        expectedOutput: expected,
+        groundTruth: expected,
       });
       const fetched = await storage.getItemById({ id: item.id });
-      expect(fetched?.expectedOutput).toEqual(expected);
+      expect(fetched?.groundTruth).toEqual(expected);
     });
 
     it('context with complex JSON roundtrips correctly', async () => {

@@ -44,7 +44,7 @@ export function ItemDetailDialog({
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const [expectedOutputValue, setExpectedOutputValue] = useState('');
+  const [groundTruthValue, setExpectedOutputValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
 
   // Delete confirmation state
@@ -54,8 +54,8 @@ export function ItemDetailDialog({
   useEffect(() => {
     if (item) {
       setInputValue(JSON.stringify(item.input, null, 2));
-      setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-      setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
+      setExpectedOutputValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
     }
@@ -91,11 +91,11 @@ export function ItemDetailDialog({
       return;
     }
 
-    // Parse expectedOutput if provided
+    // Parse groundTruth if provided
     let parsedExpectedOutput: unknown | undefined;
-    if (expectedOutputValue.trim()) {
+    if (groundTruthValue.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(expectedOutputValue);
+        parsedExpectedOutput = JSON.parse(groundTruthValue);
       } catch {
         toast.error('Expected Output must be valid JSON');
         return;
@@ -118,8 +118,8 @@ export function ItemDetailDialog({
         datasetId,
         itemId: item.id,
         input: parsedInput,
-        expectedOutput: parsedExpectedOutput,
-        context: parsedMetadata,
+        groundTruth: parsedExpectedOutput,
+        metadata: parsedMetadata,
       });
 
       toast.success('Item updated successfully');
@@ -132,8 +132,8 @@ export function ItemDetailDialog({
   const handleCancel = () => {
     // Reset to original values
     setInputValue(JSON.stringify(item.input, null, 2));
-    setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-    setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
+    setExpectedOutputValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+    setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setIsEditing(false);
   };
 
@@ -193,7 +193,7 @@ export function ItemDetailDialog({
           <EditModeContent
             inputValue={inputValue}
             setInputValue={setInputValue}
-            expectedOutputValue={expectedOutputValue}
+            groundTruthValue={groundTruthValue}
             setExpectedOutputValue={setExpectedOutputValue}
             metadataValue={metadataValue}
             setMetadataValue={setMetadataValue}
@@ -231,7 +231,7 @@ export function ItemDetailDialog({
  * Read-only view of the dataset item details
  */
 function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
-  const metadataDisplay = item.context ? JSON.stringify(item.context, null, 2) : null;
+  const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
 
   return (
     <>
@@ -267,11 +267,11 @@ function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<t
 
         <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
 
-        {item.expectedOutput !== null && item.expectedOutput !== undefined && (
+        {item.groundTruth !== null && item.groundTruth !== undefined && (
           <SideDialog.CodeSection
             title="Expected Output"
             icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(item.expectedOutput, null, 2)}
+            codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
         )}
 
@@ -287,7 +287,7 @@ function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<t
 interface EditModeContentProps {
   inputValue: string;
   setInputValue: (value: string) => void;
-  expectedOutputValue: string;
+  groundTruthValue: string;
   setExpectedOutputValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
@@ -299,7 +299,7 @@ interface EditModeContentProps {
 function EditModeContent({
   inputValue,
   setInputValue,
-  expectedOutputValue,
+  groundTruthValue,
   setExpectedOutputValue,
   metadataValue,
   setMetadataValue,
@@ -324,7 +324,7 @@ function EditModeContent({
         <div className="space-y-2">
           <Label>Expected Output (JSON, optional)</Label>
           <CodeEditor
-            value={expectedOutputValue}
+            value={groundTruthValue}
             onChange={setExpectedOutputValue}
             showCopyButton={false}
             className="min-h-[100px]"

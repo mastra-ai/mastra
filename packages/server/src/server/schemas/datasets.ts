@@ -2,7 +2,7 @@ import z from 'zod';
 import { paginationInfoSchema } from './common';
 
 // ============================================================================
-// JSON Schema Types (for inputSchema/outputSchema fields)
+// JSON Schema Types (for inputSchema/groundTruthSchema fields)
 // ============================================================================
 
 // JSON Schema type (simplified for storage - full spec too complex)
@@ -50,7 +50,7 @@ export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),
   version: z.coerce.date().optional(), // Optional version filter for snapshot semantics
-  search: z.string().optional(), // Optional search term for input/expectedOutput
+  search: z.string().optional(), // Optional search term for input/groundTruth
 });
 
 // ============================================================================
@@ -62,7 +62,7 @@ export const createDatasetBodySchema = z.object({
   description: z.string().optional().describe('Description of the dataset'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
-  outputSchema: jsonSchemaField.describe('JSON Schema for validating item expectedOutput'),
+  groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
 });
 
 export const updateDatasetBodySchema = z.object({
@@ -70,19 +70,19 @@ export const updateDatasetBodySchema = z.object({
   description: z.string().optional().describe('Description of the dataset'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
-  outputSchema: jsonSchemaField.describe('JSON Schema for validating item expectedOutput'),
+  groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
 });
 
 export const addItemBodySchema = z.object({
   input: z.unknown().describe('Input data for the dataset item'),
-  expectedOutput: z.unknown().optional().describe('Expected output for comparison'),
-  context: z.record(z.string(), z.unknown()).optional().describe('Additional context'),
+  groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
 });
 
 export const updateItemBodySchema = z.object({
   input: z.unknown().optional().describe('Input data for the dataset item'),
-  expectedOutput: z.unknown().optional().describe('Expected output for comparison'),
-  context: z.record(z.string(), z.unknown()).optional().describe('Additional context'),
+  groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
 });
 
 export const triggerExperimentBodySchema = z.object({
@@ -119,7 +119,7 @@ export const datasetResponseSchema = z.object({
   description: z.string().optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   inputSchema: z.record(z.unknown()).optional().nullable(),
-  outputSchema: z.record(z.unknown()).optional().nullable(),
+  groundTruthSchema: z.record(z.unknown()).optional().nullable(),
   version: z.coerce.date(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -131,8 +131,8 @@ export const datasetItemResponseSchema = z.object({
   datasetId: z.string(),
   version: z.coerce.date(),
   input: z.unknown(),
-  expectedOutput: z.unknown().optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
+  groundTruth: z.unknown().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -171,7 +171,7 @@ export const experimentResultResponseSchema = z.object({
   itemVersion: z.coerce.date(),
   input: z.unknown(),
   output: z.unknown().nullable(),
-  expectedOutput: z.unknown().nullable(),
+  groundTruth: z.unknown().nullable(),
   latency: z.number(),
   error: z.string().nullable(),
   startedAt: z.coerce.date(),
@@ -243,7 +243,7 @@ export const experimentSummaryResponseSchema = z.object({
       itemVersion: z.coerce.date(),
       input: z.unknown(),
       output: z.unknown().nullable(),
-      expectedOutput: z.unknown().nullable(),
+      groundTruth: z.unknown().nullable(),
       latency: z.number(),
       error: z.string().nullable(),
       startedAt: z.coerce.date(),
@@ -306,8 +306,8 @@ export const itemVersionResponseSchema = z.object({
   datasetVersion: z.coerce.date(),
   snapshot: z.object({
     input: z.unknown(),
-    expectedOutput: z.unknown().optional(),
-    context: z.record(z.unknown()).optional(),
+    groundTruth: z.unknown().optional(),
+    metadata: z.record(z.unknown()).optional(),
   }),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),
@@ -339,8 +339,8 @@ export const bulkAddItemsBodySchema = z.object({
   items: z.array(
     z.object({
       input: z.unknown(),
-      expectedOutput: z.unknown().optional(),
-      context: z.record(z.unknown()).optional(),
+      groundTruth: z.unknown().optional(),
+      metadata: z.record(z.unknown()).optional(),
     }),
   ),
 });

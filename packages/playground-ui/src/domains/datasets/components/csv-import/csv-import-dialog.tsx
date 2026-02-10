@@ -138,12 +138,12 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
           }, {});
 
     // Get expected output value(s)
-    const expectedOutputColumns = headers.filter(h => mapping[h] === 'expectedOutput');
-    let expectedOutput: unknown | undefined;
-    if (expectedOutputColumns.length === 1) {
-      expectedOutput = row[expectedOutputColumns[0]];
-    } else if (expectedOutputColumns.length > 1) {
-      expectedOutput = expectedOutputColumns.reduce<Record<string, unknown>>((acc, col) => {
+    const groundTruthColumns = headers.filter(h => mapping[h] === 'groundTruth');
+    let groundTruth: unknown | undefined;
+    if (groundTruthColumns.length === 1) {
+      groundTruth = row[groundTruthColumns[0]];
+    } else if (groundTruthColumns.length > 1) {
+      groundTruth = groundTruthColumns.reduce<Record<string, unknown>>((acc, col) => {
         acc[col] = row[col];
         return acc;
       }, {});
@@ -159,7 +159,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       }, {});
     }
 
-    return { input, expectedOutput, metadata };
+    return { input, groundTruth, metadata };
   }, []);
 
   // Handle validate mapping and proceed to schema validation
@@ -180,13 +180,13 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
     const mappedRows = data.map((row: Record<string, unknown>) => buildItemFromRow(row, mapping, headers));
 
     // Perform schema validation if dataset has schemas
-    const hasSchemas = dataset?.inputSchema || dataset?.outputSchema;
+    const hasSchemas = dataset?.inputSchema || dataset?.groundTruthSchema;
 
     if (hasSchemas) {
       const result = validateCsvRows(
         mappedRows,
         dataset?.inputSchema as Record<string, unknown> | null | undefined,
-        dataset?.outputSchema as Record<string, unknown> | null | undefined,
+        dataset?.groundTruthSchema as Record<string, unknown> | null | undefined,
         10,
       );
       setSchemaValidation(result);
@@ -210,7 +210,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setSchemaValidation({
         validCount: mappedRows.length,
         invalidCount: 0,
-        validRows: mappedRows.map((row: { input: unknown; expectedOutput?: unknown; metadata?: Record<string, unknown> }, i: number) => ({ rowNumber: i + 2, ...row })),
+        validRows: mappedRows.map((row: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }, i: number) => ({ rowNumber: i + 2, ...row })),
         invalidRows: [],
         totalRows: mappedRows.length,
       });
@@ -238,7 +238,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
         break;
       }
 
-      const { input, expectedOutput } = rowsToImport[i];
+      const { input, groundTruth } = rowsToImport[i];
 
       // Get metadata from original row data
       // Note: validRows contains mapped data, metadata is extracted separately
@@ -263,8 +263,8 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
         await addItem.mutateAsync({
           datasetId,
           input,
-          expectedOutput,
-          context: metadata,
+          groundTruth,
+          metadata: metadata,
         });
         successCount++;
       } catch {
@@ -383,7 +383,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
         return schemaValidation ? (
           <div className="flex flex-col gap-4">
             <div className="text-sm text-neutral4">
-              {dataset?.inputSchema || dataset?.outputSchema
+              {dataset?.inputSchema || dataset?.groundTruthSchema
                 ? 'Rows have been validated against the dataset schema.'
                 : 'Ready to import. No schema validation required.'}
             </div>
@@ -486,7 +486,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
               Back
             </Button>
             <Button variant="primary" onClick={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
-              {dataset?.inputSchema || dataset?.outputSchema ? 'Validate' : 'Next'}
+              {dataset?.inputSchema || dataset?.groundTruthSchema ? 'Validate' : 'Next'}
             </Button>
           </>
         );

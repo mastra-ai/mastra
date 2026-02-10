@@ -3,11 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 /**
  * Field types for column mapping in CSV import.
  * - input: Data passed to the target (agent/workflow/scorer)
- * - expectedOutput: Ground truth for comparison
+ * - groundTruth: Ground truth for comparison
  * - metadata: Additional context stored with items
  * - ignore: Columns not imported
  */
-export type FieldType = 'input' | 'expectedOutput' | 'metadata' | 'ignore';
+export type FieldType = 'input' | 'groundTruth' | 'metadata' | 'ignore';
 
 /**
  * Mapping of column names to their target field type.

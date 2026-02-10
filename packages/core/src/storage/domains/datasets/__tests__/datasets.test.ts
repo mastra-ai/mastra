@@ -107,20 +107,20 @@ describe('DatasetsInMemory', () => {
 
   // ------------- Item CRUD -------------
   describe('Item CRUD', () => {
-    it('addItem creates item with input, expectedOutput, context', async () => {
+    it('addItem creates item with input, groundTruth, metadata', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: { prompt: 'hello' },
-        expectedOutput: { response: 'world' },
-        context: { user: 'test' },
+        groundTruth: { response: 'world' },
+        metadata: { user: 'test' },
       });
 
       expect(item.id).toBeDefined();
       expect(item.datasetId).toBe(dataset.id);
       expect(item.input).toEqual({ prompt: 'hello' });
-      expect(item.expectedOutput).toEqual({ response: 'world' });
-      expect(item.context).toEqual({ user: 'test' });
+      expect(item.groundTruth).toEqual({ response: 'world' });
+      expect(item.metadata).toEqual({ user: 'test' });
       expect(item.version).toBeInstanceOf(Date);
       expect(item.createdAt).toBeInstanceOf(Date);
       expect(item.updatedAt).toBeInstanceOf(Date);
@@ -150,11 +150,11 @@ describe('DatasetsInMemory', () => {
         id: item.id,
         datasetId: dataset.id,
         input: { a: 2 },
-        expectedOutput: { b: 3 },
+        groundTruth: { b: 3 },
       });
 
       expect(updated.input).toEqual({ a: 2 });
-      expect(updated.expectedOutput).toEqual({ b: 3 });
+      expect(updated.groundTruth).toEqual({ b: 3 });
     });
 
     it('updateItem throws for non-existent item', async () => {
@@ -383,10 +383,10 @@ describe('DatasetsInMemory', () => {
       ).rejects.toThrow('Validation failed for input');
     });
 
-    it('validates expectedOutput against outputSchema on addItem', async () => {
+    it('validates groundTruth against groundTruthSchema on addItem', async () => {
       const dataset = await storage.createDataset({
         name: 'test',
-        outputSchema: {
+        groundTruthSchema: {
           type: 'object',
           properties: { score: { type: 'number' } },
           required: ['score'],
@@ -397,18 +397,18 @@ describe('DatasetsInMemory', () => {
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: 'prompt',
-        expectedOutput: { score: 0.9 },
+        groundTruth: { score: 0.9 },
       });
-      expect(item.expectedOutput).toEqual({ score: 0.9 });
+      expect(item.groundTruth).toEqual({ score: 0.9 });
 
       // Invalid item throws
       await expect(
         storage.addItem({
           datasetId: dataset.id,
           input: 'prompt',
-          expectedOutput: { score: 'high' }, // wrong type
+          groundTruth: { score: 'high' }, // wrong type
         }),
-      ).rejects.toThrow('Validation failed for expectedOutput');
+      ).rejects.toThrow('Validation failed for groundTruth');
     });
 
     it('validates input on updateItem', async () => {
@@ -497,21 +497,21 @@ describe('DatasetsInMemory', () => {
       expect(updated.inputSchema).toBeDefined();
     });
 
-    it('skips validation when expectedOutput is undefined', async () => {
+    it('skips validation when groundTruth is undefined', async () => {
       const dataset = await storage.createDataset({
         name: 'test',
-        outputSchema: {
+        groundTruthSchema: {
           type: 'object',
           properties: { score: { type: 'number' } },
           required: ['score'],
         },
       });
 
-      // Item without expectedOutput should succeed
+      // Item without groundTruth should succeed
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: 'prompt',
-        // no expectedOutput
+        // no groundTruth
       });
       expect(item.id).toBeDefined();
     });
@@ -562,30 +562,30 @@ describe('DatasetsInMemory', () => {
       expect(fetched?.input).toEqual(inputWithNulls);
     });
 
-    it('expectedOutput with complex JSON roundtrips correctly', async () => {
+    it('groundTruth with complex JSON roundtrips correctly', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const expected = { scores: [0.5, 0.7, 0.9], labels: ['a', 'b', 'c'] };
 
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: {},
-        expectedOutput: expected,
+        groundTruth: expected,
       });
       const fetched = await storage.getItemById({ id: item.id });
-      expect(fetched?.expectedOutput).toEqual(expected);
+      expect(fetched?.groundTruth).toEqual(expected);
     });
 
-    it('context with complex JSON roundtrips correctly', async () => {
+    it('metadata with complex JSON roundtrips correctly', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const context = { user: { id: '123', role: 'admin' }, session: { active: true } };
+      const metadata = { user: { id: '123', role: 'admin' }, session: { active: true } };
 
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: {},
-        context,
+        metadata,
       });
       const fetched = await storage.getItemById({ id: item.id });
-      expect(fetched?.context).toEqual(context);
+      expect(fetched?.metadata).toEqual(metadata);
     });
 
     it('dangerouslyClearAll removes all data', async () => {

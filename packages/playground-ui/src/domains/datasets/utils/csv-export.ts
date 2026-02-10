@@ -3,13 +3,13 @@ import type { DatasetItem } from '@mastra/client-js';
 
 /**
  * Export dataset items to CSV and trigger download
- * Columns: input, expectedOutput, createdAt
+ * Columns: input, groundTruth, createdAt
  */
 export function exportItemsToCSV(items: DatasetItem[], filename: string): void {
   // Map items to CSV rows
   const rows = items.map(item => ({
     input: formatValue(item.input),
-    expectedOutput: formatValue(item.expectedOutput),
+    groundTruth: formatValue(item.groundTruth),
     createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : String(item.createdAt ?? ''),
   }));
 

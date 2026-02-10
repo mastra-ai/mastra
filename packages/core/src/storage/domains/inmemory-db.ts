@@ -7,7 +7,7 @@ import type {
   StorageResourceType,
   StorageWorkflowRun,
   ObservationalMemoryRecord,
-  Dataset,
+  DatasetRecord,
   DatasetItem,
   DatasetItemVersion,
   DatasetVersion,
@@ -40,7 +40,7 @@ export class InMemoryDB {
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
   // Dataset domain maps
-  readonly datasets = new Map<string, Dataset>();
+  readonly datasets = new Map<string, DatasetRecord>();
   readonly datasetItems = new Map<string, DatasetItem>();
   readonly itemVersions = new Map<string, DatasetItemVersion>();
   readonly datasetVersions = new Map<string, DatasetVersion>();

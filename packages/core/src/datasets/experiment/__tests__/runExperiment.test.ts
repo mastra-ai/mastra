@@ -56,12 +56,12 @@ describe('runExperiment', () => {
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: 'Hello' },
-      expectedOutput: { text: 'Hi' },
+      groundTruth: { text: 'Hi' },
     });
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: 'Goodbye' },
-      expectedOutput: { text: 'Bye' },
+      groundTruth: { text: 'Bye' },
     });
 
     // Create mock storage that returns the stores
@@ -98,7 +98,7 @@ describe('runExperiment', () => {
         targetId: 'test-agent',
       });
 
-      expect(result.runId).toBeDefined();
+      expect(result.experimentId).toBeDefined();
       expect(result.status).toBe('completed');
       expect(result.totalItems).toBe(2);
       expect(result.succeededCount).toBe(2);
@@ -136,7 +136,7 @@ describe('runExperiment', () => {
       expect(result.status).toBe('completed');
 
       // Verify run was persisted
-      const storedRun = await runsStorage.getRunById({ id: result.runId });
+      const storedRun = await runsStorage.getRunById({ id: result.experimentId });
       expect(storedRun?.status).toBe('completed');
       expect(storedRun?.succeededCount).toBe(2);
       expect(storedRun?.failedCount).toBe(0);
@@ -392,7 +392,7 @@ describe('runExperiment', () => {
           groundTruth: { label: 'good' },
         },
         // Human label for alignment analysis (Phase 5 analytics)
-        expectedOutput: { humanScore: 1.0 },
+        groundTruth: { humanScore: 1.0 },
       });
 
       // Mock scorer as target (the scorer being calibrated)

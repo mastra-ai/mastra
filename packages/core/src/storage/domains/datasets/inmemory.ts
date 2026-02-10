@@ -1,6 +1,6 @@
 import { calculatePagination, normalizePerPage } from '../../base';
 import type {
-  Dataset,
+  DatasetRecord,
   DatasetItem,
   DatasetItemVersion,
   DatasetVersion,
@@ -39,16 +39,16 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   // Dataset CRUD
-  async createDataset(input: CreateDatasetInput): Promise<Dataset> {
+  async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     const id = crypto.randomUUID();
     const now = new Date();
-    const dataset: Dataset = {
+    const dataset: DatasetRecord = {
       id,
       name: input.name,
       description: input.description,
       metadata: input.metadata,
       inputSchema: input.inputSchema,
-      outputSchema: input.outputSchema,
+      groundTruthSchema: input.groundTruthSchema,
       version: now, // Timestamp-based versioning
       createdAt: now,
       updatedAt: now,
@@ -57,23 +57,23 @@ export class DatasetsInMemory extends DatasetsStorage {
     return dataset;
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<Dataset | null> {
+  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
     return this.db.datasets.get(id) ?? null;
   }
 
-  protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<Dataset> {
+  protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     const existing = this.db.datasets.get(args.id);
     if (!existing) {
       throw new Error(`Dataset not found: ${args.id}`);
     }
 
-    const updated: Dataset = {
+    const updated: DatasetRecord = {
       ...existing,
       name: args.name ?? existing.name,
       description: args.description ?? existing.description,
       metadata: args.metadata ?? existing.metadata,
       inputSchema: args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema,
-      outputSchema: args.outputSchema !== undefined ? args.outputSchema : existing.outputSchema,
+      groundTruthSchema: args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema,
       updatedAt: new Date(),
     };
     this.db.datasets.set(args.id, updated);
@@ -132,8 +132,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       datasetId: args.datasetId,
       version: now, // Item stores the version timestamp when added
       input: args.input,
-      expectedOutput: args.expectedOutput,
-      context: args.context,
+      groundTruth: args.groundTruth,
+      metadata: args.metadata,
       createdAt: now,
       updatedAt: now,
     };
@@ -167,8 +167,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       ...existing,
       version: now, // Update item's version timestamp
       input: args.input ?? existing.input,
-      expectedOutput: args.expectedOutput ?? existing.expectedOutput,
-      context: args.context ?? existing.context,
+      groundTruth: args.groundTruth ?? existing.groundTruth,
+      metadata: args.metadata ?? existing.metadata,
       updatedAt: now,
     };
     this.db.datasetItems.set(args.id, updated);
@@ -237,8 +237,8 @@ export class DatasetsInMemory extends DatasetsStorage {
             datasetId: v.datasetId,
             version: new Date(v.datasetVersion),
             input: snapshot.input ?? originalItem?.input,
-            expectedOutput: snapshot.expectedOutput ?? originalItem?.expectedOutput,
-            context: snapshot.context ?? originalItem?.context,
+            groundTruth: snapshot.groundTruth ?? originalItem?.groundTruth,
+            metadata: snapshot.metadata ?? originalItem?.metadata,
             createdAt: originalItem?.createdAt ?? new Date(v.createdAt),
             updatedAt: new Date(v.datasetVersion),
           });
@@ -249,15 +249,15 @@ export class DatasetsInMemory extends DatasetsStorage {
       items = Array.from(this.db.datasetItems.values()).filter(item => item.datasetId === args.datasetId);
     }
 
-    // Filter by search term if specified (case-insensitive partial match on input/expectedOutput)
+    // Filter by search term if specified (case-insensitive partial match on input/groundTruth)
     if (args.search) {
       const searchLower = args.search.toLowerCase();
       items = items.filter(item => {
         const inputStr = typeof item.input === 'string' ? item.input : JSON.stringify(item.input);
-        const outputStr = item.expectedOutput
-          ? typeof item.expectedOutput === 'string'
-            ? item.expectedOutput
-            : JSON.stringify(item.expectedOutput)
+        const outputStr = item.groundTruth
+          ? typeof item.groundTruth === 'string'
+            ? item.groundTruth
+            : JSON.stringify(item.groundTruth)
           : '';
         return inputStr.toLowerCase().includes(searchLower) || outputStr.toLowerCase().includes(searchLower);
       });
@@ -311,8 +311,8 @@ export class DatasetsInMemory extends DatasetsStorage {
           datasetId: v.datasetId,
           version: new Date(v.datasetVersion),
           input: snapshot.input ?? originalItem?.input,
-          expectedOutput: snapshot.expectedOutput ?? originalItem?.expectedOutput,
-          context: snapshot.context ?? originalItem?.context,
+          groundTruth: snapshot.groundTruth ?? originalItem?.groundTruth,
+          metadata: snapshot.metadata ?? originalItem?.metadata,
           createdAt: originalItem?.createdAt ?? new Date(v.createdAt),
           updatedAt: new Date(v.datasetVersion),
         });
@@ -444,8 +444,8 @@ export class DatasetsInMemory extends DatasetsStorage {
         datasetId: input.datasetId,
         version: now,
         input: itemInput.input,
-        expectedOutput: itemInput.expectedOutput,
-        context: itemInput.context,
+        groundTruth: itemInput.groundTruth,
+        metadata: itemInput.metadata,
         createdAt: now,
         updatedAt: now,
       };
@@ -460,8 +460,8 @@ export class DatasetsInMemory extends DatasetsStorage {
         datasetVersion: now,
         snapshot: {
           input: item.input,
-          expectedOutput: item.expectedOutput,
-          context: item.context,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
         },
         isDeleted: false,
       });
@@ -504,8 +504,8 @@ export class DatasetsInMemory extends DatasetsStorage {
         datasetVersion: now,
         snapshot: {
           input: item.input,
-          expectedOutput: item.expectedOutput,
-          context: item.context,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
         },
         isDeleted: true,
       });

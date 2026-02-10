@@ -71,7 +71,7 @@ async function setupDataset(itemCount: number) {
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: `item-${i}` },
-      expectedOutput: null,
+      groundTruth: null,
     });
   }
 

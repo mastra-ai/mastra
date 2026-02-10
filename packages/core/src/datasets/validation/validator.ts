@@ -34,7 +34,7 @@ export class SchemaValidator {
   }
 
   /** Validate data against schema */
-  validate(data: unknown, schema: JSONSchema7, field: 'input' | 'expectedOutput', cacheKey: string): void {
+  validate(data: unknown, schema: JSONSchema7, field: 'input' | 'groundTruth', cacheKey: string): void {
     const zodSchema = this.getValidator(schema, cacheKey);
     const result = zodSchema.safeParse(data);
     if (!result.success) {
@@ -44,7 +44,7 @@ export class SchemaValidator {
 
   /** Validate multiple items, returning valid/invalid split */
   validateBatch(
-    items: Array<{ input: unknown; expectedOutput?: unknown }>,
+    items: Array<{ input: unknown; groundTruth?: unknown }>,
     inputSchema: JSONSchema7 | null | undefined,
     outputSchema: JSONSchema7 | null | undefined,
     cacheKeyPrefix: string,
@@ -74,14 +74,14 @@ export class SchemaValidator {
         }
       }
 
-      // Validate expectedOutput if schema enabled and value provided
-      if (!hasError && outputValidator && item.expectedOutput !== undefined) {
-        const outputResult = outputValidator.safeParse(item.expectedOutput);
+      // Validate groundTruth if schema enabled and value provided
+      if (!hasError && outputValidator && item.groundTruth !== undefined) {
+        const outputResult = outputValidator.safeParse(item.groundTruth);
         if (!outputResult.success) {
           result.invalid.push({
             index: i,
             data: item,
-            field: 'expectedOutput',
+            field: 'groundTruth',
             errors: this.formatErrors(outputResult.error),
           });
           hasError = true;

@@ -19,7 +19,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
-  const [outputSchema, setOutputSchema] = useState<Record<string, unknown> | null>(null);
+  const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
   const { createDataset } = useDatasetMutations();
 
   const handleSchemaChange = (schemas: {
@@ -27,7 +27,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
     outputSchema: Record<string, unknown> | null;
   }) => {
     setInputSchema(schemas.inputSchema);
-    setOutputSchema(schemas.outputSchema);
+    setGroundTruthSchema(schemas.outputSchema);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,7 +43,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
         name: name.trim(),
         description: description.trim() || undefined,
         inputSchema,
-        outputSchema,
+        groundTruthSchema,
       })) as { id: string };
 
       toast.success('Dataset created successfully');
@@ -52,7 +52,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
       setName('');
       setDescription('');
       setInputSchema(null);
-      setOutputSchema(null);
+      setGroundTruthSchema(null);
       onOpenChange(false);
 
       // Navigate to new dataset
@@ -66,7 +66,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
     setName('');
     setDescription('');
     setInputSchema(null);
-    setOutputSchema(null);
+    setGroundTruthSchema(null);
     onOpenChange(false);
   };
 
@@ -101,7 +101,7 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
 
             <SchemaConfigSection
               inputSchema={inputSchema}
-              outputSchema={outputSchema}
+              outputSchema={groundTruthSchema}
               onChange={handleSchemaChange}
               disabled={createDataset.isPending}
             />

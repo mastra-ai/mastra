@@ -40,7 +40,7 @@ export function JSONPreviewTable({ items, maxRows = 5 }: JSONPreviewTableProps) 
             <tr key={index} className="border-b border-border1 last:border-b-0">
               <td className="px-3 py-2 text-neutral4">{index + 1}</td>
               <td className="px-3 py-2 text-neutral1 font-mono text-xs">{truncateValue(item.input)}</td>
-              <td className="px-3 py-2 text-neutral2 font-mono text-xs">{truncateValue(item.expectedOutput)}</td>
+              <td className="px-3 py-2 text-neutral2 font-mono text-xs">{truncateValue(item.groundTruth)}</td>
               <td className="px-3 py-2 text-neutral3 text-xs">
                 {item.metadata ? `${Object.keys(item.metadata).length} keys` : '-'}
               </td>

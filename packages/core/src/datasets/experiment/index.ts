@@ -5,7 +5,15 @@ import { resolveScorers, runScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 // Re-export types and helpers
-export type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult, ScorerResult } from './types';
+export type {
+  DataItem,
+  ExperimentConfig,
+  ExperimentSummary,
+  ItemWithScores,
+  ItemResult,
+  ScorerResult,
+  StartExperimentConfig,
+} from './types';
 export { executeTarget, type Target, type ExecutionResult } from './executor';
 export { resolveScorers, runScorersForItem } from './scorer';
 
@@ -46,11 +54,22 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     signal,
     itemTimeout,
     maxRetries = 0,
-    runId: providedRunId,
+    experimentId: providedRunId,
   } = config;
 
+  // Validate required fields for registry-based execution (no inline task/data)
+  if (!datasetId) {
+    throw new Error('datasetId is required when not using inline data');
+  }
+  if (!targetType) {
+    throw new Error('targetType is required when not using inline task');
+  }
+  if (!targetId) {
+    throw new Error('targetId is required when not using inline task');
+  }
+
   const startedAt = new Date();
-  // Use provided runId (async trigger) or generate new one
+  // Use provided experimentId (async trigger) or generate new one
   const runId = providedRunId ?? crypto.randomUUID();
 
   // 1. Get storage and resolve components
@@ -176,7 +195,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           itemVersion: item.version,
           input: item.input,
           output: execResult.output,
-          expectedOutput: item.expectedOutput ?? null,
+          groundTruth: item.groundTruth ?? null,
           latency,
           error: execResult.error,
           startedAt: itemStartedAt,
@@ -206,7 +225,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               itemVersion: item.version,
               input: item.input,
               output: execResult.output,
-              expectedOutput: item.expectedOutput ?? null,
+              groundTruth: item.groundTruth ?? null,
               latency,
               error: execResult.error,
               startedAt: itemStartedAt,
@@ -259,7 +278,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     }
 
     return {
-      runId,
+      experimentId: runId,
       status: 'failed' as const,
       totalItems: items.length,
       succeededCount,
@@ -288,7 +307,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   }
 
   return {
-    runId,
+    experimentId: runId,
     status,
     totalItems: items.length,
     succeededCount,

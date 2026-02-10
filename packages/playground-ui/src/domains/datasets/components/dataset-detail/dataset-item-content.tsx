@@ -16,13 +16,13 @@ export interface DatasetItemContentProps {
 
 export function DatasetItemContent({ item }: DatasetItemContentProps) {
   const inputDisplay = item?.input ? JSON.stringify(item.input, null, 2) : 'null';
-  const expectedOutputDisplay = item?.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : 'null';
-  const metadataDisplay = item?.context ? JSON.stringify(item.context, null, 2) : 'null';
+  const groundTruthDisplay = item?.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : 'null';
+  const metadataDisplay = item?.metadata ? JSON.stringify(item.metadata, null, 2) : 'null';
 
   return (
     <Sections>
       <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={inputDisplay} />
-      <SideDialog.CodeSection title="Expected Output" icon={<FileOutputIcon />} codeStr={expectedOutputDisplay} />
+      <SideDialog.CodeSection title="Expected Output" icon={<FileOutputIcon />} codeStr={groundTruthDisplay} />
       <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />
     </Sections>
   );

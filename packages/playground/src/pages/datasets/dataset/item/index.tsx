@@ -56,11 +56,11 @@ function DatasetItemPage() {
 
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
-    if (!latestVersion || isDeleted) return { input: '', expectedOutput: '', metadata: '' };
+    if (!latestVersion || isDeleted) return { input: '', groundTruth: '', metadata: '' };
     return {
       input: JSON.stringify(latestVersion.snapshot.input, null, 2),
-      expectedOutput: latestVersion.snapshot.expectedOutput
-        ? JSON.stringify(latestVersion.snapshot.expectedOutput, null, 2)
+      groundTruth: latestVersion.snapshot.groundTruth
+        ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2)
         : '',
       metadata: latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '',
     };
@@ -72,7 +72,7 @@ function DatasetItemPage() {
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState(formDefaults.input);
-  const [expectedOutputValue, setExpectedOutputValue] = useState(formDefaults.expectedOutput);
+  const [groundTruthValue, setExpectedOutputValue] = useState(formDefaults.groundTruth);
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
 
   // Reset form values when version changes (key-based reset pattern)
@@ -80,7 +80,7 @@ function DatasetItemPage() {
   if (versionKey !== prevVersionKey) {
     setPrevVersionKey(versionKey);
     setInputValue(formDefaults.input);
-    setExpectedOutputValue(formDefaults.expectedOutput);
+    setExpectedOutputValue(formDefaults.groundTruth);
     setMetadataValue(formDefaults.metadata);
   }
 
@@ -128,11 +128,11 @@ function DatasetItemPage() {
       return;
     }
 
-    // Parse expectedOutput if provided
+    // Parse groundTruth if provided
     let parsedExpectedOutput: unknown | undefined;
-    if (expectedOutputValue.trim()) {
+    if (groundTruthValue.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(expectedOutputValue);
+        parsedExpectedOutput = JSON.parse(groundTruthValue);
       } catch {
         toast.error('Expected Output must be valid JSON');
         return;
@@ -155,7 +155,7 @@ function DatasetItemPage() {
         datasetId,
         itemId,
         input: parsedInput,
-        expectedOutput: parsedExpectedOutput,
+        groundTruth: parsedExpectedOutput,
         metadata: parsedMetadata,
       });
       toast.success('Item updated successfully');
@@ -170,7 +170,7 @@ function DatasetItemPage() {
     if (latestVersion) {
       setInputValue(JSON.stringify(latestVersion.snapshot.input, null, 2));
       setExpectedOutputValue(
-        latestVersion.snapshot.expectedOutput ? JSON.stringify(latestVersion.snapshot.expectedOutput, null, 2) : '',
+        latestVersion.snapshot.groundTruth ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2) : '',
       );
       setMetadataValue(latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '');
     }
@@ -198,7 +198,7 @@ function DatasetItemPage() {
         id: itemId ?? '',
         datasetId: datasetId ?? '',
         input: versionToDisplay.snapshot.input,
-        expectedOutput: versionToDisplay.snapshot.expectedOutput,
+        groundTruth: versionToDisplay.snapshot.groundTruth,
         metadata: versionToDisplay.snapshot.context,
         createdAt: versionToDisplay.createdAt,
         version: versionToDisplay.datasetVersion,
@@ -320,7 +320,7 @@ function DatasetItemPage() {
                   <EditModeContent
                     inputValue={inputValue}
                     setInputValue={setInputValue}
-                    expectedOutputValue={expectedOutputValue}
+                    groundTruthValue={groundTruthValue}
                     setExpectedOutputValue={setExpectedOutputValue}
                     metadataValue={metadataValue}
                     setMetadataValue={setMetadataValue}

@@ -6,7 +6,7 @@
 /** Expected structure of an imported item */
 export interface ImportableItem {
   input: unknown;
-  expectedOutput?: unknown;
+  groundTruth?: unknown;
   metadata?: Record<string, unknown>;
 }
 
@@ -96,7 +96,7 @@ export function validateJSONData(data: unknown): JSONValidationResult {
     // Item is valid, add to items array
     items.push({
       input: item.input,
-      expectedOutput: 'expectedOutput' in item ? item.expectedOutput : undefined,
+      groundTruth: 'groundTruth' in item ? item.groundTruth : undefined,
       metadata: 'metadata' in item ? (item.metadata as Record<string, unknown>) : undefined,
     });
   }

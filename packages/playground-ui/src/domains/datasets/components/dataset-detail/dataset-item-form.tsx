@@ -7,7 +7,7 @@ import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
-  field: 'input' | 'expectedOutput';
+  field: 'input' | 'groundTruth';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -36,7 +36,7 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
 export interface EditModeContentProps {
   inputValue: string;
   setInputValue: (value: string) => void;
-  expectedOutputValue: string;
+  groundTruthValue: string;
   setExpectedOutputValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
@@ -49,7 +49,7 @@ export interface EditModeContentProps {
 export function EditModeContent({
   inputValue,
   setInputValue,
-  expectedOutputValue,
+  groundTruthValue,
   setExpectedOutputValue,
   metadataValue,
   setMetadataValue,
@@ -76,13 +76,13 @@ export function EditModeContent({
         <div className="space-y-2">
           <Label>Expected Output (JSON, optional)</Label>
           <CodeEditor
-            value={expectedOutputValue}
+            value={groundTruthValue}
             onChange={setExpectedOutputValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />
-          {validationErrors?.field === 'expectedOutput' && (
-            <ValidationErrors field="expectedOutput" errors={validationErrors.errors} />
+          {validationErrors?.field === 'groundTruth' && (
+            <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
           )}
         </div>
 

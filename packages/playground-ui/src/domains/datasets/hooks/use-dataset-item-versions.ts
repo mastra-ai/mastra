@@ -11,8 +11,8 @@ export interface DatasetItemVersion {
   datasetVersion: Date | string;
   snapshot: {
     input: unknown;
-    expectedOutput?: unknown;
-    context?: Record<string, unknown>;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
   };
   isDeleted: boolean;
   createdAt: Date | string;

@@ -117,7 +117,7 @@ export class RunsInMemory extends RunsStorage {
       itemVersion: input.itemVersion,
       input: input.input,
       output: input.output,
-      expectedOutput: input.expectedOutput,
+      groundTruth: input.groundTruth,
       latency: input.latency,
       error: input.error,
       startedAt: input.startedAt,
