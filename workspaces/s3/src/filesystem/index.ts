@@ -284,13 +284,13 @@ export class S3Filesystem extends MastraFilesystem {
       name: this.name,
       provider: this.provider,
       status: this.status,
+      error: this.error,
       icon: this.icon,
       metadata: {
         bucket: this.bucket,
         region: this.region,
         ...(this.endpoint && { endpoint: this.endpoint }),
         ...(this.prefix && { prefix: this.prefix }),
-        ...(this.error && { error: this.error }),
       },
     };
   }

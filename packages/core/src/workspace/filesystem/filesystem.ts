@@ -117,6 +117,8 @@ export interface FilesystemInfo {
   provider: string;
   /** Current status (for stateful providers) */
   status?: ProviderStatus;
+  /** Error message when status is 'error' */
+  error?: string;
   /** Whether filesystem is read-only */
   readOnly?: boolean;
   /** Base path (for local filesystems) */
