@@ -192,8 +192,13 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
       await this._doStart();
       this.status = 'running';
 
-      // Fire onStart callback after sandbox is running
-      await this._onStart?.({ sandbox: this });
+      // Fire onStart callback after sandbox is running — treat failure as non-fatal
+      // so that a bad callback doesn't kill an otherwise healthy sandbox
+      try {
+        await this._onStart?.({ sandbox: this });
+      } catch (error) {
+        this.logger.warn('onStart callback failed', { error });
+      }
     } catch (error) {
       this.status = 'error';
       throw error;

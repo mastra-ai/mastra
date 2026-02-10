@@ -349,7 +349,7 @@ export function FileBrowser({
                           (entry.mount.description ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
+                                <span tabIndex={0} className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
                                   {mountLabel}
                                 </span>
                               </TooltipTrigger>

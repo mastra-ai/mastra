@@ -210,6 +210,12 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
       return;
     }
 
+    // Never initialized — nothing to tear down
+    if (this.status === 'pending') {
+      this.status = 'destroyed';
+      return;
+    }
+
     // Destroy already in progress - return existing promise
     if (this._destroyPromise) {
       return this._destroyPromise;
@@ -244,6 +250,7 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
       this.status = 'destroyed';
     } catch (error) {
       this.status = 'error';
+      this.logger.error('Failed to destroy filesystem', { error, id: this.id });
       throw error;
     }
   }
