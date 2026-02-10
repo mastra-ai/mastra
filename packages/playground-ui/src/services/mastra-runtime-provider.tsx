@@ -6,7 +6,7 @@ import {
 } from '@assistant-ui/react';
 import { useState, ReactNode, useRef, useEffect } from 'react';
 import { RequestContext } from '@mastra/core/di';
-import { ChatProps, Message } from '@/types';
+import { ChatProps } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
 import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
@@ -440,9 +440,11 @@ export function MastraRuntimeProvider({
   const { prompt: instructions } = useAgentPromptExperiment();
   const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
-  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() => {
-    return memory ? initializeMessageState(initialLegacyMessages || []) : [];
-  });
+  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>([]);
+
+  useEffect(() => {
+    setLegacyMessages(initializeMessageState(initialLegacyMessages || []));
+  }, [initialLegacyMessages]);
 
   const {
     messages,
@@ -460,7 +462,7 @@ export function MastraRuntimeProvider({
     networkToolCallApprovals,
   } = useChat({
     agentId,
-    initializeMessages: () => initialMessages || [],
+    initialMessages,
   });
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();

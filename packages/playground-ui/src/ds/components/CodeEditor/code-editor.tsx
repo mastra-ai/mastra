@@ -4,8 +4,8 @@ import { languages } from '@codemirror/language-data';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
-import CodeMirror from '@uiw/react-codemirror';
-import { HTMLAttributes, useMemo } from 'react';
+import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { forwardRef, type HTMLAttributes, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 import type { Extension } from '@codemirror/state';
@@ -111,64 +111,73 @@ export type CodeEditorProps = {
   wordWrap?: boolean;
   /** JSON Schema to enable variable autocomplete for {{variable}} placeholders (markdown only) */
   schema?: JsonSchema;
+  autoFocus?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
-export const CodeEditor = ({
-  data,
-  value,
-  onChange,
-  showCopyButton = true,
-  className,
-  language = 'json',
-  highlightVariables = false,
-  placeholder,
-  wordWrap = false,
-  schema,
-  ...props
-}: CodeEditorProps) => {
-  const theme = useCodemirrorTheme();
-  const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
+export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
+  (
+    {
+      data,
+      value,
+      onChange,
+      showCopyButton = true,
+      className,
+      language = 'json',
+      highlightVariables = false,
+      placeholder,
+      wordWrap = false,
+      schema,
+      autoFocus,
+      ...props
+    },
+    ref,
+  ) => {
+    const theme = useCodemirrorTheme();
+    const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
-  const extensions = useMemo(() => {
-    const exts: Extension[] = [];
+    const extensions = useMemo(() => {
+      const exts: Extension[] = [];
 
-    if (language === 'json') {
-      exts.push(jsonLanguage);
-    } else if (language === 'markdown') {
-      exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }));
-      exts.push(EditorView.lineWrapping);
-    }
+      if (language === 'json') {
+        exts.push(jsonLanguage);
+      } else if (language === 'markdown') {
+        exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }));
+        exts.push(EditorView.lineWrapping);
+      }
 
-    if (highlightVariables && language === 'markdown') {
-      exts.push(variableHighlight);
-    }
+      if (highlightVariables && language === 'markdown') {
+        exts.push(variableHighlight);
+      }
 
-    if (schema && language === 'markdown') {
-      exts.push(createVariableAutocomplete(schema));
-    }
+      if (schema && language === 'markdown') {
+        exts.push(createVariableAutocomplete(schema));
+      }
 
-    return exts;
-  }, [language, highlightVariables, schema]);
+      return exts;
+    }, [language, highlightVariables, schema]);
 
-  return (
-    <div
-      className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1 overflow-hidden', className)}
-      {...props}
-    >
-      {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
-      <CodeMirror
-        value={formattedCode}
-        theme={theme}
-        extensions={extensions}
-        onChange={onChange}
-        aria-label="Code editor"
-        placeholder={placeholder}
-        height="100%"
-        style={{ height: '100%' }}
-      />
-    </div>
-  );
-};
+    return (
+      <div
+        className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1 overflow-hidden', className)}
+        {...props}
+      >
+        {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
+        <CodeMirror
+          ref={ref}
+          value={formattedCode}
+          theme={theme}
+          extensions={extensions}
+          onChange={onChange}
+          aria-label="Code editor"
+          placeholder={placeholder}
+          height="100%"
+          style={{ height: '100%' }}
+          autoFocus={autoFocus}
+        />
+      </div>
+    );
+  },
+);
 
 export async function highlight(code: string, language: string) {
   const { codeToTokens, bundledLanguages } = await import('shiki');

@@ -7,8 +7,8 @@ import {
   AgentEditSidebar,
   AgentEditLayout,
   useAgentEditForm,
-  AgentEditMain,
   MainContentLayout,
+  AgentEditMain,
   Header,
   HeaderTitle,
   Icon,
@@ -30,17 +30,15 @@ function CmsAgentsCreatePage() {
     }
 
     const values = form.getValues();
-    const agentId = crypto.randomUUID();
     setIsSubmitting(true);
 
     try {
       const createParams = {
-        id: agentId,
         name: values.name,
         description: values.description || undefined,
         instructions: values.instructions,
         model: values.model as Record<string, unknown>,
-        tools: values.tools && Object.keys(values.tools).length > 0 ? Object.keys(values.tools) : undefined,
+        tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         workflows:
           values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
@@ -56,9 +54,9 @@ function CmsAgentsCreatePage() {
           : undefined,
       };
 
-      await createStoredAgent.mutateAsync(createParams);
+      const created = await createStoredAgent.mutateAsync(createParams);
       toast.success('Agent created successfully');
-      navigate(`${paths.agentLink(agentId)}/chat`);
+      navigate(`${paths.agentLink(created.id)}/chat`);
     } catch (error) {
       toast.error(`Failed to create agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -80,7 +78,6 @@ function CmsAgentsCreatePage() {
         leftSlot={
           <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
         }
-        rightSlot={<div />}
       >
         <form ref={formRef} className="h-full">
           <AgentEditMain form={form} />

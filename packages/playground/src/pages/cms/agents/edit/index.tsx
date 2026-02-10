@@ -9,11 +9,11 @@ import {
   useStoredAgentMutations,
   AgentEditMain,
   AgentEditSidebar,
-  AgentVersionsPanel,
   AgentEditLayout,
   useAgentEditForm,
   Header,
   HeaderTitle,
+  HeaderAction,
   Icon,
   AgentIcon,
   Spinner,
@@ -24,6 +24,7 @@ import {
   Alert,
   Button,
   AlertTitle,
+  AgentVersionCombobox,
 } from '@mastra/playground-ui';
 
 // Type for the agent data (inferred from useStoredAgent)
@@ -38,12 +39,20 @@ const arrayToRecord = (arr: string[]): Record<string, { description?: string }> 
   return record;
 };
 
+// Helper to normalize tools from either string[] (legacy) or Record format
+const normalizeToolsToRecord = (
+  tools: string[] | Record<string, { description?: string }> | undefined,
+): Record<string, { description?: string }> => {
+  if (!tools) return {};
+  if (Array.isArray(tools)) return arrayToRecord(tools);
+  return { ...tools };
+};
+
 interface CmsAgentsEditFormProps {
   agent: StoredAgent;
   agentId: string;
   selectedVersionId: string | null;
   versionData?: AgentVersionResponse;
-  onVersionSelect: (versionId: string) => void;
   readOnly?: boolean;
 }
 
@@ -53,7 +62,6 @@ function CmsAgentsEditForm({
   agentId,
   selectedVersionId,
   versionData,
-  onVersionSelect,
   readOnly = false,
 }: CmsAgentsEditFormProps) {
   const { navigate, paths } = useLinkComponent();
@@ -70,12 +78,13 @@ function CmsAgentsEditForm({
     const dataSource = isViewingVersion ? versionData : agent;
 
     // Merge code-defined tools and integration tools
-    const allTools: string[] = [];
-    if (dataSource.tools && Array.isArray(dataSource.tools)) {
-      allTools.push(...dataSource.tools);
-    }
+    const toolsRecord = normalizeToolsToRecord(dataSource.tools);
     if (dataSource.integrationTools && Array.isArray(dataSource.integrationTools)) {
-      allTools.push(...dataSource.integrationTools);
+      for (const id of dataSource.integrationTools) {
+        if (!toolsRecord[id]) {
+          toolsRecord[id] = { description: undefined };
+        }
+      }
     }
 
     // Transform memory data from API format to form format
@@ -95,7 +104,7 @@ function CmsAgentsEditForm({
         provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
         name: (dataSource.model as { provider?: string; name?: string })?.name || '',
       },
-      tools: arrayToRecord(allTools),
+      tools: toolsRecord,
       workflows: arrayToRecord((dataSource.workflows as string[]) || []),
       agents: arrayToRecord((dataSource.agents as string[]) || []),
       scorers: dataSource.scorers || {},
@@ -133,7 +142,7 @@ function CmsAgentsEditForm({
     try {
       // Separate code-defined tools from integration tools
       // Integration tools are identified by checking if they exist in the agent's integrationTools array
-      const codeDefinedTools: string[] = [];
+      const codeDefinedTools: Record<string, { description?: string }> = {};
       const integrationToolIds: string[] = [];
 
       const existingIntegrationTools = new Set(agent.integrationTools || []);
@@ -143,7 +152,7 @@ function CmsAgentsEditForm({
           if (existingIntegrationTools.has(toolId)) {
             integrationToolIds.push(toolId);
           } else {
-            codeDefinedTools.push(toolId);
+            codeDefinedTools[toolId] = values.tools[toolId]!;
           }
         }
       }
@@ -152,8 +161,8 @@ function CmsAgentsEditForm({
         name: values.name,
         description: values.description,
         instructions: values.instructions,
-        model: values.model as Record<string, unknown>,
-        tools: codeDefinedTools,
+        model: values.model,
+        tools: Object.keys(codeDefinedTools).length > 0 ? codeDefinedTools : undefined,
         integrationTools: integrationToolIds,
         workflows: Object.keys(values.workflows || {}),
         agents: Object.keys(values.agents || {}),
@@ -191,13 +200,6 @@ function CmsAgentsEditForm({
           formRef={formRef}
           mode="edit"
           readOnly={readOnly || isViewingVersion}
-        />
-      }
-      rightSlot={
-        <AgentVersionsPanel
-          agentId={agentId}
-          selectedVersionId={selectedVersionId ?? undefined}
-          onVersionSelect={onVersionSelect}
         />
       }
     >
@@ -261,11 +263,6 @@ function CmsAgentsEditPage() {
               <Spinner className="h-8 w-8" />
             </div>
           }
-          rightSlot={
-            <div className="flex items-center justify-center h-full">
-              <Spinner className="h-8 w-8" />
-            </div>
-          }
         >
           <div className="flex items-center justify-center h-full">
             <Spinner className="h-8 w-8" />
@@ -289,7 +286,6 @@ function CmsAgentsEditPage() {
         </Header>
         <AgentEditLayout
           leftSlot={<div className="flex items-center justify-center h-full text-icon3">Agent not found</div>}
-          rightSlot={<div className="flex items-center justify-center h-full text-icon3">No versions</div>}
         >
           <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
         </AgentEditLayout>
@@ -307,6 +303,14 @@ function CmsAgentsEditPage() {
           </Icon>
           Edit agent: {agent.name}
         </HeaderTitle>
+        <HeaderAction>
+          <AgentVersionCombobox
+            agentId={agentId}
+            value={selectedVersionId ?? ''}
+            onValueChange={handleVersionSelect}
+            variant="outline"
+          />
+        </HeaderAction>
       </Header>
 
       <CmsAgentsEditForm
@@ -314,7 +318,6 @@ function CmsAgentsEditPage() {
         agentId={agentId}
         selectedVersionId={selectedVersionId}
         versionData={versionData}
-        onVersionSelect={handleVersionSelect}
         readOnly={isLoadingVersion}
       />
     </MainContentLayout>

@@ -12,6 +12,10 @@ export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
 export const TABLE_AGENT_VERSIONS = 'mastra_agent_versions';
 export const TABLE_OBSERVATIONAL_MEMORY = 'mastra_observational_memory';
+export const TABLE_PROMPT_BLOCKS = 'mastra_prompt_blocks';
+export const TABLE_PROMPT_BLOCK_VERSIONS = 'mastra_prompt_block_versions';
+export const TABLE_SCORER_DEFINITIONS = 'mastra_scorer_definitions';
+export const TABLE_SCORER_DEFINITION_VERSIONS = 'mastra_scorer_definition_versions';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -22,7 +26,11 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
   | typeof TABLE_AGENTS
-  | typeof TABLE_AGENT_VERSIONS;
+  | typeof TABLE_AGENT_VERSIONS
+  | typeof TABLE_PROMPT_BLOCKS
+  | typeof TABLE_PROMPT_BLOCK_VERSIONS
+  | typeof TABLE_SCORER_DEFINITIONS
+  | typeof TABLE_SCORER_DEFINITION_VERSIONS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -119,6 +127,56 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   scorers: { type: 'jsonb', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const PROMPT_BLOCKS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
+  activeVersionId: { type: 'text', nullable: true }, // FK to prompt_block_versions.id
+  authorId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const PROMPT_BLOCK_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  blockId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  content: { type: 'text', nullable: false },
+  rules: { type: 'jsonb', nullable: true },
+  changedFields: { type: 'jsonb', nullable: true },
+  changeMessage: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+};
+
+export const SCORER_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
+  activeVersionId: { type: 'text', nullable: true }, // FK to scorer_definition_versions.id
+  authorId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const SCORER_DEFINITION_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  scorerDefinitionId: { type: 'text', nullable: false },
+  versionNumber: { type: 'integer', nullable: false },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  type: { type: 'text', nullable: false }, // 'llm-judge', 'bias', 'toxicity', etc.
+  model: { type: 'jsonb', nullable: true },
+  instructions: { type: 'text', nullable: true },
+  scoreRange: { type: 'jsonb', nullable: true },
+  presetConfig: { type: 'jsonb', nullable: true },
+  defaultSampling: { type: 'jsonb', nullable: true },
+  changedFields: { type: 'jsonb', nullable: true },
   changeMessage: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
@@ -226,6 +284,10 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
   [TABLE_AGENT_VERSIONS]: AGENT_VERSIONS_SCHEMA,
+  [TABLE_PROMPT_BLOCKS]: PROMPT_BLOCKS_SCHEMA,
+  [TABLE_PROMPT_BLOCK_VERSIONS]: PROMPT_BLOCK_VERSIONS_SCHEMA,
+  [TABLE_SCORER_DEFINITIONS]: SCORER_DEFINITIONS_SCHEMA,
+  [TABLE_SCORER_DEFINITION_VERSIONS]: SCORER_DEFINITION_VERSIONS_SCHEMA,
 };
 
 /**

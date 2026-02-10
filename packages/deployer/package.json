@@ -84,7 +84,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
@@ -122,7 +122,7 @@
   "devDependencies": {
     "@hono/node-server": "^1.19.9",
     "@hono/standard-validator": "^0.2.2",
-    "@hono/swagger-ui": "^0.5.2",
+    "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

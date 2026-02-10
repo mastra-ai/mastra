@@ -454,6 +454,16 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
+  // Mock getEditor to return an object with namespaced methods for stored agents routes
+  vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    prompt: {
+      preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+    },
+    agent: {
+      clearCache: vi.fn(),
+    },
+  } as any);
+
   await mockWorkflowRun(workflow);
   await setupWorkflowRegistryMocks(
     {
@@ -484,8 +494,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored agent for stored agents routes
     const agents = await storage.getStore('agents');
     if (agents) {
-      // createAgent automatically creates version 1 with the initial config
-      const storedAgent = await agents.createAgent({
+      // create automatically creates version 1 with the initial config
+      const storedAgent = await agents.create({
         agent: {
           id: 'test-stored-agent',
           name: 'Test Stored Agent',
@@ -495,7 +505,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         },
       });
 
-      // Version 1 was auto-created by createAgent; its ID is the activeVersionId
+      // Version 1 was auto-created by create; its ID is the activeVersionId
       const version1Id = storedAgent.activeVersionId!;
 
       // Version 2: Non-active version that can be deleted or used in comparisons
@@ -512,9 +522,25 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
 
       // Ensure version 1 stays active, leaving version 2 (test-version-id) as non-active and deletable
-      await agents.updateAgent({
+      await agents.update({
         id: 'test-stored-agent',
         activeVersionId: version1Id,
+      });
+    }
+
+    // Add test stored scorer for stored scorers routes
+    const scorers = await storage.getStore('scorerDefinitions');
+    if (scorers) {
+      await scorers.create({
+        scorerDefinition: {
+          id: 'test-stored-scorer',
+          name: 'Test Stored Scorer',
+          description: 'A test stored scorer for integration tests',
+          type: 'llm-judge',
+          instructions: 'Evaluate the response for accuracy.',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          scoreRange: { min: 0, max: 1 },
+        },
       });
     }
 
