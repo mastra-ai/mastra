@@ -378,10 +378,11 @@ export async function createHonoServer(
         serverOptions?.https?.cert ??
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
-      // Public-facing host/protocol for Studio URL injection — allows bind address
+      // Public-facing host/protocol/port for Studio URL injection — allows bind address
       // (e.g. 0.0.0.0) to differ from the domain browsers should connect to
       const publicHost = serverOptions?.publicHost ?? host;
       const publicProtocol = serverOptions?.publicProtocol ?? protocol;
+      const publicPort = serverOptions?.publicPort ?? port;
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
@@ -401,7 +402,7 @@ export async function createHonoServer(
       };
 
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${publicHost}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
+      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${publicPort}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_API_PREFIX%%'`, `'${serverOptions?.apiPrefix ?? '/api'}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${publicProtocol}'`);
@@ -461,6 +462,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const protocol = isHttpsEnabled ? 'https' : 'http';
   const publicHost = serverOptions?.publicHost ?? host;
   const publicProtocol = serverOptions?.publicProtocol ?? protocol;
+  const publicPort = serverOptions?.publicPort ?? port;
 
   const server = serve(
     {
@@ -482,7 +484,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
       if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
-        const studioUrl = `${publicProtocol}://${publicHost}:${port}${studioBasePath}`;
+        const studioUrl = `${publicProtocol}://${publicHost}:${publicPort}${studioBasePath}`;
         logger.info(`👨‍💻 Studio available at ${studioUrl}`);
       }
 

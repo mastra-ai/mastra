@@ -297,6 +297,38 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).toContain("window.MASTRA_SERVER_PROTOCOL = 'http'");
     });
 
+    it('should use publicPort for MASTRA_SERVER_PORT when set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 8080,
+        host: '0.0.0.0',
+        publicHost: 'my-app.run.app',
+        publicProtocol: 'https',
+        publicPort: 443,
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      expect(html).toContain("window.MASTRA_SERVER_PORT = '443'");
+      expect(html).not.toContain("window.MASTRA_SERVER_PORT = '8080'");
+    });
+
+    it('should fall back to port when publicPort is not set', async () => {
+      vi.mocked(mockMastra.getServer).mockReturnValue({
+        studioBase: '/',
+        port: 5000,
+        host: 'localhost',
+      });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+      const response = await app.request('/');
+      const html = await response.text();
+
+      expect(html).toContain("window.MASTRA_SERVER_PORT = '5000'");
+    });
+
     it('should replace hideCloudCta placeholder based on environment variable', async () => {
       const originalEnv = process.env.MASTRA_HIDE_CLOUD_CTA;
       try {

@@ -104,6 +104,12 @@ export type ServerConfig = {
    */
   publicProtocol?: 'http' | 'https';
   /**
+   * Public-facing port for Studio API URL. Use this when the external port differs
+   * from the server's local port (e.g., server listens on 8080 but is exposed on 443).
+   * When not set, falls back to `port`.
+   */
+  publicPort?: number;
+  /**
    * Base path for Mastra Studio UI
    * @default '/'
    * @example '/my-mastra-studio'
