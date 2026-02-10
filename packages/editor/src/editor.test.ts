@@ -975,13 +975,31 @@ describe('Stored Agents via MastraEditor', () => {
         id: 'workflow-a',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-      }).then(createStep({ id: 'step-a', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) })).commit();
+      })
+        .then(
+          createStep({
+            id: 'step-a',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }),
+        )
+        .commit();
 
       const workflowB = createWorkflow({
         id: 'workflow-b',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-      }).then(createStep({ id: 'step-b', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) })).commit();
+      })
+        .then(
+          createStep({
+            id: 'step-b',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }),
+        )
+        .commit();
 
       await agentsStore?.create({
         agent: {

@@ -116,7 +116,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * (as opposed to the plain static value T).
    */
   private isConditionalVariants<T>(field: StorageConditionalField<T>): field is StorageConditionalVariant<T>[] {
-    return Array.isArray(field) && field.length > 0 && typeof field[0] === 'object' && field[0] !== null && 'value' in field[0];
+    return (
+      Array.isArray(field) &&
+      field.length > 0 &&
+      typeof field[0] === 'object' &&
+      field[0] !== null &&
+      'value' in field[0]
+    );
   }
 
   /**
@@ -171,9 +177,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
     const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
     const hasConditionalScorers = storedAgent.scorers != null && this.isConditionalVariants(storedAgent.scorers);
-    const hasConditionalInputProcessors = storedAgent.inputProcessors != null && this.isConditionalVariants(storedAgent.inputProcessors);
-    const hasConditionalOutputProcessors = storedAgent.outputProcessors != null && this.isConditionalVariants(storedAgent.outputProcessors);
-    const hasConditionalDefaultOptions = storedAgent.defaultOptions != null && this.isConditionalVariants(storedAgent.defaultOptions);
+    const hasConditionalInputProcessors =
+      storedAgent.inputProcessors != null && this.isConditionalVariants(storedAgent.inputProcessors);
+    const hasConditionalOutputProcessors =
+      storedAgent.outputProcessors != null && this.isConditionalVariants(storedAgent.outputProcessors);
+    const hasConditionalDefaultOptions =
+      storedAgent.defaultOptions != null && this.isConditionalVariants(storedAgent.defaultOptions);
     const hasConditionalModel = this.isConditionalVariants(storedAgent.model);
 
     // --- Resolve fields: conditional fields accumulate all matching variants ---
@@ -182,7 +191,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const tools = hasConditionalTools
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(storedAgent.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[], ctx);
+          const resolved = this.accumulateObjectVariants(
+            storedAgent.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+            ctx,
+          );
           return this.resolveStoredTools(resolved);
         }
       : this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
@@ -191,7 +203,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const workflows = hasConditionalWorkflows
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(storedAgent.workflows as StorageConditionalVariant<string[]>[], ctx);
+          const resolved = this.accumulateArrayVariants(
+            storedAgent.workflows as StorageConditionalVariant<string[]>[],
+            ctx,
+          );
           return this.resolveStoredWorkflows(resolved);
         }
       : this.resolveStoredWorkflows(storedAgent.workflows as string[] | undefined);
@@ -200,7 +215,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const agents = hasConditionalAgents
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(storedAgent.agents as StorageConditionalVariant<string[]>[], ctx);
+          const resolved = this.accumulateArrayVariants(
+            storedAgent.agents as StorageConditionalVariant<string[]>[],
+            ctx,
+          );
           return this.resolveStoredAgents(resolved);
         }
       : this.resolveStoredAgents(storedAgent.agents as string[] | undefined);
@@ -209,7 +227,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const memory = hasConditionalMemory
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(storedAgent.memory as StorageConditionalVariant<SerializedMemoryConfig>[], ctx);
+          const resolved = this.accumulateObjectVariants(
+            storedAgent.memory as StorageConditionalVariant<SerializedMemoryConfig>[],
+            ctx,
+          );
           return this.resolveStoredMemory(resolved as SerializedMemoryConfig | undefined);
         }
       : this.resolveStoredMemory(storedAgent.memory as SerializedMemoryConfig | undefined);
@@ -218,7 +239,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const scorers = hasConditionalScorers
       ? async ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(storedAgent.scorers as StorageConditionalVariant<Record<string, StorageScorerConfig>>[], ctx);
+          const resolved = this.accumulateObjectVariants(
+            storedAgent.scorers as StorageConditionalVariant<Record<string, StorageScorerConfig>>[],
+            ctx,
+          );
           return this.resolveStoredScorers(resolved);
         }
       : await this.resolveStoredScorers(storedAgent.scorers as Record<string, StorageScorerConfig> | undefined);
@@ -227,7 +251,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const inputProcessors = hasConditionalInputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(storedAgent.inputProcessors as StorageConditionalVariant<string[]>[], ctx);
+          const resolved = this.accumulateArrayVariants(
+            storedAgent.inputProcessors as StorageConditionalVariant<string[]>[],
+            ctx,
+          );
           return this.resolveStoredInputProcessors(resolved);
         }
       : this.resolveStoredInputProcessors(storedAgent.inputProcessors as string[] | undefined);
@@ -236,7 +263,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const outputProcessors = hasConditionalOutputProcessors
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(storedAgent.outputProcessors as StorageConditionalVariant<string[]>[], ctx);
+          const resolved = this.accumulateArrayVariants(
+            storedAgent.outputProcessors as StorageConditionalVariant<string[]>[],
+            ctx,
+          );
           return this.resolveStoredOutputProcessors(resolved);
         }
       : this.resolveStoredOutputProcessors(storedAgent.outputProcessors as string[] | undefined);
@@ -248,7 +278,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     if (hasConditionalModel) {
       model = ({ requestContext }: { requestContext: RequestContext }) => {
         const ctx = requestContext.toJSON();
-        const resolved = this.accumulateObjectVariants(storedAgent.model as StorageConditionalVariant<StorageModelConfig>[], ctx);
+        const resolved = this.accumulateObjectVariants(
+          storedAgent.model as StorageConditionalVariant<StorageModelConfig>[],
+          ctx,
+        );
         if (!resolved || !resolved.provider || !resolved.name) {
           throw new Error(
             `Stored agent "${storedAgent.id}" conditional model resolved to invalid configuration. Both provider and name are required.`,
@@ -274,20 +307,25 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const defaultOptions = hasConditionalDefaultOptions
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(storedAgent.defaultOptions as StorageConditionalVariant<StorageDefaultOptions>[], ctx);
+          const resolved = this.accumulateObjectVariants(
+            storedAgent.defaultOptions as StorageConditionalVariant<StorageDefaultOptions>[],
+            ctx,
+          );
           return {
             maxSteps: resolved?.maxSteps,
           };
         }
       : {
           maxSteps: staticDefaultOptions?.maxSteps,
-          modelSettings: staticModelConfig ? {
-            temperature: staticModelConfig.temperature,
-            topP: staticModelConfig.topP,
-            frequencyPenalty: staticModelConfig.frequencyPenalty,
-            presencePenalty: staticModelConfig.presencePenalty,
-            maxOutputTokens: staticModelConfig.maxCompletionTokens,
-          } : undefined,
+          modelSettings: staticModelConfig
+            ? {
+                temperature: staticModelConfig.temperature,
+                topP: staticModelConfig.topP,
+                frequencyPenalty: staticModelConfig.frequencyPenalty,
+                presencePenalty: staticModelConfig.presencePenalty,
+                maxOutputTokens: staticModelConfig.maxCompletionTokens,
+              }
+            : undefined,
         };
 
     // Convert requestContextSchema from JSON Schema to ZodSchema if present
