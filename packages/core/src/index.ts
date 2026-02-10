@@ -6,7 +6,13 @@ export type { SharedMemoryConfig, MemoryConfig, MastraMemory, SerializedMemoryCo
 export type { MastraVector as MastraVectorProvider } from './vector';
 export type { IMastraLogger as Logger } from './logger';
 export type { ToolAction } from './tools';
-export type { Workflow } from './workflows';
+export type { AnyWorkflow, Workflow } from './workflows';
 export type { MastraScorers, ScoringSamplingConfig } from './evals';
-export type { StorageResolvedAgentType, StorageScorerConfig } from './storage';
-export type { IMastraEditor, MastraEditorConfig } from './editor';
+export type { StorageResolvedAgentType, StorageScorerConfig, StorageToolConfig } from './storage';
+export type {
+  IMastraEditor,
+  MastraEditorConfig,
+  IEditorAgentNamespace,
+  IEditorPromptNamespace,
+  IEditorScorerNamespace,
+} from './editor';

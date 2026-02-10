@@ -317,6 +317,7 @@ describe('OM Error State', () => {
           observation: {
             model: createFailingObserverModel() as any,
             messageTokens: 20,
+            bufferTokens: false, // Disable async buffering — test expects synchronous observation
           },
           reflection: {
             model: createMockReflectorModel() as any,
@@ -444,6 +445,7 @@ describe('OM Persistence', () => {
           observation: {
             model: createMockObserverModel() as any,
             messageTokens: 20,
+            bufferTokens: false, // Disable async buffering — test expects synchronous observation
           },
           reflection: {
             model: createMockReflectorModel() as any,
