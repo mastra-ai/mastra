@@ -123,8 +123,8 @@ describe('E2BSandbox', () => {
       const sandbox = new E2BSandbox();
 
       // Start two concurrent calls
-      const promise1 = sandbox.start();
-      const promise2 = sandbox.start();
+      const promise1 = sandbox._start();
+      const promise2 = sandbox._start();
 
       const [result1, result2] = await Promise.all([promise1, promise2]);
 
@@ -139,11 +139,11 @@ describe('E2BSandbox', () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox();
 
-      await sandbox.start();
+      await sandbox._start();
       expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
 
       // Second start should not create another sandbox
-      await sandbox.start();
+      await sandbox._start();
       expect(Sandbox.betaCreate).toHaveBeenCalledTimes(1);
     });
 
@@ -152,7 +152,7 @@ describe('E2BSandbox', () => {
 
       expect(sandbox.status).toBe('pending');
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(sandbox.status).toBe('running');
     });
@@ -163,7 +163,7 @@ describe('E2BSandbox', () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox();
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(Sandbox.betaCreate).toHaveBeenCalled();
     });
@@ -172,7 +172,7 @@ describe('E2BSandbox', () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox();
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(Sandbox.betaCreate).toHaveBeenCalledWith(
         expect.any(String),
@@ -186,7 +186,7 @@ describe('E2BSandbox', () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox({ id: 'test-id' });
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(Sandbox.betaCreate).toHaveBeenCalledWith(
         expect.any(String),
@@ -207,7 +207,7 @@ describe('E2BSandbox', () => {
       });
 
       const sandbox = new E2BSandbox({ id: 'existing-id' });
-      await sandbox.start();
+      await sandbox._start();
 
       expect(Sandbox.connect).toHaveBeenCalledWith('existing-sandbox');
 
@@ -226,7 +226,7 @@ describe('E2BSandbox', () => {
       (Template.exists as any).mockResolvedValueOnce(true);
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       // Template.build should NOT be called when template already exists
       expect(Template.build).not.toHaveBeenCalled();
@@ -240,7 +240,7 @@ describe('E2BSandbox', () => {
       (Template.exists as any).mockResolvedValue(false);
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       // Template.build should be called to create the template
       expect(Template.build).toHaveBeenCalled();
@@ -250,7 +250,7 @@ describe('E2BSandbox', () => {
       const { Sandbox } = await import('e2b');
 
       const sandbox = new E2BSandbox({ template: 'my-custom-template' });
-      await sandbox.start();
+      await sandbox._start();
 
       // betaCreate should be called with the custom template ID
       expect(Sandbox.betaCreate).toHaveBeenCalledWith('my-custom-template', expect.any(Object));
@@ -274,7 +274,7 @@ describe('E2BSandbox', () => {
 
       expect(sandbox.mounts.get('/data')?.state).toBe('pending');
 
-      await sandbox.start();
+      await sandbox._start();
 
       // After start, mount should be processed and state should be 'mounted' or 'error'
       const entry = sandbox.mounts.get('/data');
@@ -289,7 +289,7 @@ describe('E2BSandbox', () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox({ env: { KEY: 'value' } });
 
-      await sandbox.start();
+      await sandbox._start();
 
       // betaCreate should NOT have envs option
       expect(Sandbox.betaCreate).toHaveBeenCalledWith(
@@ -302,7 +302,7 @@ describe('E2BSandbox', () => {
 
     it('env vars merged and passed per-command', async () => {
       const sandbox = new E2BSandbox({ env: { A: '1', B: '2' } });
-      await sandbox.start();
+      await sandbox._start();
 
       await sandbox.executeCommand('echo', ['test'], { env: { B: '3', C: '4' } });
 
@@ -318,9 +318,9 @@ describe('E2BSandbox', () => {
   describe('Stop/Destroy', () => {
     it('destroy kills sandbox', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
-      await sandbox.destroy();
+      await sandbox._destroy();
 
       expect(mockSandbox.kill).toHaveBeenCalled();
       expect(sandbox.status).toBe('destroyed');
@@ -330,7 +330,7 @@ describe('E2BSandbox', () => {
   describe('getInfo()', () => {
     it('returns SandboxInfo with all fields', async () => {
       const sandbox = new E2BSandbox({ id: 'test-id' });
-      await sandbox.start();
+      await sandbox._start();
 
       const info = await sandbox.getInfo();
 
@@ -346,7 +346,7 @@ describe('E2BSandbox', () => {
   describe('getInstructions()', () => {
     it('returns description of sandbox environment', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const instructions = sandbox.getInstructions();
 
@@ -358,8 +358,8 @@ describe('E2BSandbox', () => {
   describe('isReady()', () => {
     it('returns false when stopped', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
-      await sandbox.stop();
+      await sandbox._start();
+      await sandbox._stop();
 
       const ready = await sandbox.isReady();
 
@@ -376,7 +376,7 @@ describe('E2BSandbox', () => {
 
     it('returns E2B Sandbox instance when started', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const instance = sandbox.instance;
 
@@ -393,7 +393,7 @@ describe('E2BSandbox', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const result = await sandbox.executeCommand('echo', ['hello']);
 
@@ -410,7 +410,7 @@ describe('E2BSandbox', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const result = await sandbox.executeCommand('sh', ['-c', 'echo error >&2']);
 
@@ -425,7 +425,7 @@ describe('E2BSandbox', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const result = await sandbox.executeCommand('exit', ['1']);
 
@@ -435,7 +435,7 @@ describe('E2BSandbox', () => {
 
     it('respects cwd option', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       await sandbox.executeCommand('pwd', [], { cwd: '/tmp' });
 
@@ -449,7 +449,7 @@ describe('E2BSandbox', () => {
 
     it('respects timeout option', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       await sandbox.executeCommand('sleep', ['10'], { timeout: 1000 });
 
@@ -508,7 +508,7 @@ describe('E2BSandbox Race Conditions', () => {
     const sandbox = new E2BSandbox();
 
     // Start and complete
-    await sandbox.start();
+    await sandbox._start();
 
     // Access private _startPromise via any
     const sandboxAny = sandbox as any;
@@ -521,7 +521,7 @@ describe('E2BSandbox Race Conditions', () => {
 
     const sandbox = new E2BSandbox();
 
-    await expect(sandbox.start()).rejects.toThrow('Creation failed');
+    await expect(sandbox._start()).rejects.toThrow('Creation failed');
 
     // _startPromise should be cleared even on error
     const sandboxAny = sandbox as any;
@@ -555,7 +555,7 @@ describe('E2BSandbox Template Handling', () => {
     });
 
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Template.build should be called to rebuild after 404
     expect(Template.build).toHaveBeenCalled();
@@ -573,7 +573,7 @@ describe('E2BSandbox Template Handling', () => {
     };
 
     const sandbox = new E2BSandbox({ template: mockBuilder as any });
-    await sandbox.start();
+    await sandbox._start();
 
     // Template.build should be called with the builder, a name, and connection opts
     expect(Template.build).toHaveBeenCalledWith(
@@ -596,7 +596,7 @@ describe('E2BSandbox Template Handling', () => {
     };
 
     const sandbox = new E2BSandbox({ template: templateFn });
-    await sandbox.start();
+    await sandbox._start();
 
     // Template.build should be called (function creates customized builder)
     expect(Template.build).toHaveBeenCalled();
@@ -626,7 +626,7 @@ describe('E2BSandbox Mount Configuration', () => {
 
   it('S3 endpoint mount includes url, path style, and sigv4 options', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Mock filesystem with endpoint (S3-compatible like R2/MinIO)
     const mockFilesystem = {
@@ -666,7 +666,7 @@ describe('E2BSandbox Mount Configuration', () => {
 
   it('S3 readOnly includes ro option in mount command', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     const mockFilesystem = {
       id: 'test-s3-ro',
@@ -717,7 +717,7 @@ describe('E2BSandbox S3 Public Bucket Mount', () => {
 
   it('S3 public bucket includes public_bucket=1 in mount command', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Mock filesystem without credentials (public bucket)
     const mockFilesystem = {
@@ -766,7 +766,7 @@ describe('E2BSandbox GCS Mount Configuration', () => {
 
   it('GCS with credentials includes --key-file in gcsfuse command', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     const mockFilesystem = {
       id: 'test-gcs-auth',
@@ -795,7 +795,7 @@ describe('E2BSandbox GCS Mount Configuration', () => {
 
   it('GCS without credentials includes --anonymous-access in gcsfuse command', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     const mockFilesystem = {
       id: 'test-gcs-anon',
@@ -850,7 +850,7 @@ describe('E2BSandbox Error Handling', () => {
 
   it('clear error for S3-compatible without credentials', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Spy on the logger to verify error is logged
     const loggerErrorSpy = vi.spyOn((sandbox as any).logger, 'error');
@@ -911,7 +911,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
       callOrder.push('processPending');
     });
 
-    await sandbox.start();
+    await sandbox._start();
 
     // reconcileMounts should be called during reconnect
     expect(reconcileSpy).toHaveBeenCalled();
@@ -929,7 +929,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('unmounts stale managed FUSE mounts but keeps expected ones', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Both mounts have marker files (we created both), but only /data/keep is expected
     const keepMarker = sandbox.mounts.markerFilename('/data/keep');
@@ -961,7 +961,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('never unmounts non-FUSE mounts or unmanaged FUSE mounts', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // grep for fuse mounts returns only FUSE mounts (ext4 etc are filtered by grep).
     // /data/fuse-stale is a FUSE mount but has no marker file — it's external.
@@ -985,7 +985,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('leaves all mounts alone when all are expected', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
       if (cmd.includes('/proc/mounts')) {
@@ -1006,7 +1006,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('cleans up orphaned marker files and directories', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Generate the marker filename for /data/orphaned to match what reconcileMounts expects
     const orphanMarker = sandbox.mounts.markerFilename('/data/orphaned');
@@ -1041,7 +1041,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('deletes malformed marker files without error', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
       if (cmd.includes('/proc/mounts')) {
@@ -1069,7 +1069,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('does not unmount external FUSE mounts (no marker file)', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // The sandbox has two FUSE mounts: one managed by us (has marker), one external (no marker)
     const managedMarker = sandbox.mounts.markerFilename('/data/managed');
@@ -1102,7 +1102,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('treats mount as external when marker file read fails', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // A FUSE mount exists, and a marker file exists, but reading the marker fails
     mockSandbox.commands.run.mockImplementation(async (cmd: string) => {
@@ -1128,7 +1128,7 @@ describe('E2BSandbox Reconcile Mounts', () => {
 
   it('does not clean up marker files for expected mounts', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     const expectedMarker = sandbox.mounts.markerFilename('/data/expected');
 
@@ -1163,7 +1163,7 @@ describe('E2BSandbox stop/destroy only unmount managed mounts', () => {
 
   it('stop() only unmounts mounts in the manager, not all FUSE mounts', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Mount one filesystem through the manager
     const mockFs = {
@@ -1179,7 +1179,7 @@ describe('E2BSandbox stop/destroy only unmount managed mounts', () => {
     // Clear to track only stop() calls
     mockSandbox.commands.run.mockClear();
 
-    await sandbox.stop();
+    await sandbox._stop();
 
     // Should only unmount /data/managed — no query of /proc/mounts
     const procMountsCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('/proc/mounts'));
@@ -1193,7 +1193,7 @@ describe('E2BSandbox stop/destroy only unmount managed mounts', () => {
 
   it('destroy() only unmounts mounts in the manager, not all FUSE mounts', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     const mockFs = {
       id: 'fs1',
@@ -1207,7 +1207,7 @@ describe('E2BSandbox stop/destroy only unmount managed mounts', () => {
 
     mockSandbox.commands.run.mockClear();
 
-    await sandbox.destroy();
+    await sandbox._destroy();
 
     // Should not query /proc/mounts during destroy
     const procMountsCalls = mockSandbox.commands.run.mock.calls.filter((c: any[]) => c[0].includes('/proc/mounts'));
@@ -1226,7 +1226,7 @@ describe('E2BSandbox Stop Behavior', () => {
 
   it('stop() unmounts all filesystems', async () => {
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // Add mock mounts to the manager
     const mockFilesystem1 = {
@@ -1251,7 +1251,7 @@ describe('E2BSandbox Stop Behavior', () => {
     // Reset mock to track stop calls
     mockSandbox.commands.run.mockClear();
 
-    await sandbox.stop();
+    await sandbox._stop();
 
     // fusermount -u should be called for each mount
     const fusermountCalls = mockSandbox.commands.run.mock.calls.filter((call: any[]) => call[0].includes('fusermount'));
@@ -1302,7 +1302,7 @@ describe('E2BSandbox Runtime Installation', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       // Spy on logger to verify startup warning
       const loggerWarnSpy = vi.spyOn((sandbox as any).logger, 'warn');
@@ -1357,7 +1357,7 @@ describe('E2BSandbox Runtime Installation', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const mockFilesystem = {
         id: 'test-s3',
@@ -1401,7 +1401,7 @@ describe('E2BSandbox Runtime Installation', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const mockFilesystem = {
         id: 'test-s3',
@@ -1454,7 +1454,7 @@ describe('E2BSandbox Runtime Installation', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const mockFilesystem = {
         id: 'test-gcs',
@@ -1498,7 +1498,7 @@ describe('E2BSandbox Runtime Installation', () => {
       });
 
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const mockFilesystem = {
         id: 'test-gcs',
@@ -1570,7 +1570,7 @@ describe('E2BSandbox Internal Methods', () => {
   describe('handleSandboxTimeout()', () => {
     it('clears sandbox instance and sets status to stopped', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       expect(sandbox.status).toBe('running');
       expect((sandbox as any)._sandbox).not.toBeNull();
@@ -1586,7 +1586,7 @@ describe('E2BSandbox Internal Methods', () => {
     it('retries once when sandbox is dead', async () => {
       const { Sandbox } = await import('e2b');
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       let callCount = 0;
       mockSandbox.commands.run.mockImplementation(() => {
@@ -1607,7 +1607,7 @@ describe('E2BSandbox Internal Methods', () => {
 
     it('does not retry infinitely (only once)', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       // Always throw dead sandbox error
       mockSandbox.commands.run.mockImplementation(() => {
@@ -1623,7 +1623,7 @@ describe('E2BSandbox Internal Methods', () => {
 
     it('extracts result from E2B error object', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       // Simulate E2B error with embedded result
       const e2bError = Object.assign(new Error('Command failed'), {
@@ -1642,7 +1642,7 @@ describe('E2BSandbox Internal Methods', () => {
   describe('mount() unsupported type', () => {
     it('returns failure for unsupported mount config type', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       const mockFilesystem = {
         id: 'test-unknown',
@@ -1665,7 +1665,7 @@ describe('E2BSandbox Internal Methods', () => {
   describe('mount() non-empty directory safety check', () => {
     it('rejects mounting to non-empty directory', async () => {
       const sandbox = new E2BSandbox();
-      await sandbox.start();
+      await sandbox._start();
 
       mockSandbox.commands.run.mockImplementation((cmd: string) => {
         // Safety check: directory exists and is non-empty
@@ -1708,7 +1708,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
       accessToken: 'test-token',
     });
 
-    await sandbox.start();
+    await sandbox._start();
 
     expect(Sandbox.betaCreate).toHaveBeenCalledWith(
       expect.any(String),
@@ -1728,7 +1728,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
       apiKey: 'test-key',
     });
 
-    await sandbox.start();
+    await sandbox._start();
 
     expect(Sandbox.list).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1752,7 +1752,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
       apiKey: 'test-key',
     });
 
-    await sandbox.start();
+    await sandbox._start();
 
     expect(Sandbox.connect).toHaveBeenCalledWith(
       'existing-sandbox',
@@ -1779,7 +1779,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
       apiKey: 'test-key',
     });
 
-    await sandbox.start();
+    await sandbox._start();
 
     expect(Template.exists).toHaveBeenCalledWith(
       expect.any(String),
@@ -1805,7 +1805,7 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
     (Template.exists as any).mockResolvedValue(false);
 
     const sandbox = new E2BSandbox();
-    await sandbox.start();
+    await sandbox._start();
 
     // betaCreate should not contain domain/apiUrl/apiKey/accessToken
     const betaCreateOpts = (Sandbox.betaCreate as any).mock.calls[0][1];
@@ -1832,11 +1832,11 @@ describe('E2BSandbox Shared Conformance', () => {
 
   beforeAll(async () => {
     sandbox = new E2BSandbox({ id: `conformance-${Date.now()}` });
-    await sandbox.start();
+    await sandbox._start();
   });
 
   afterAll(async () => {
-    if (sandbox?.destroy) await sandbox.destroy();
+    if (sandbox?.destroy) await sandbox._destroy();
   });
 
   const getContext = () => ({

@@ -5,6 +5,7 @@
  */
 
 import type { WorkspaceFilesystem } from '@mastra/core/workspace';
+import { callLifecycle } from '@mastra/core/workspace';
 import { describe, beforeAll, afterAll, beforeEach } from 'vitest';
 
 import { generateTestPath, cleanupTestPath } from '../test-helpers';
@@ -79,18 +80,14 @@ export function createFilesystemTestSuite(config: FilesystemTestConfig): void {
 
     beforeAll(async () => {
       fs = await createFilesystem();
-      if (fs.init) {
-        await fs.init();
-      }
+      await callLifecycle(fs, 'init');
     });
 
     afterAll(async () => {
       if (cleanupFilesystem) {
         await cleanupFilesystem(fs);
       }
-      if (fs.destroy) {
-        await fs.destroy();
-      }
+      await callLifecycle(fs, 'destroy');
     });
 
     beforeEach(() => {

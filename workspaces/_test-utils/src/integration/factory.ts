@@ -4,6 +4,7 @@
  * Creates tests that verify filesystem and sandbox work together.
  */
 
+import { callLifecycle } from '@mastra/core/workspace';
 import { describe, beforeAll, beforeEach, afterAll, it, expect } from 'vitest';
 
 import { generateTestPath } from '../test-helpers';
@@ -52,14 +53,10 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
       setup = await createWorkspace();
 
       // Initialize filesystem if needed
-      if (setup.filesystem.init) {
-        await setup.filesystem.init();
-      }
+      await callLifecycle(setup.filesystem, 'init');
 
       // Start sandbox if it has a start method
-      if (setup.sandbox.start) {
-        await setup.sandbox.start();
-      }
+      await callLifecycle(setup.sandbox, 'start');
     }, 180000); // Allow 3 minutes for setup
 
     afterAll(async () => {
@@ -68,12 +65,8 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
         await cleanupWorkspace(setup);
       } else {
         // Default cleanup
-        if (setup.sandbox.destroy) {
-          await setup.sandbox.destroy();
-        }
-        if (setup.filesystem.destroy) {
-          await setup.filesystem.destroy();
-        }
+        await callLifecycle(setup.sandbox, 'destroy');
+        await callLifecycle(setup.filesystem, 'destroy');
       }
     }, 60000);
 

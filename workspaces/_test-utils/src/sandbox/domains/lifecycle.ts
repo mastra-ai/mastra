@@ -4,6 +4,7 @@
  */
 
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { callLifecycle } from '@mastra/core/workspace';
 import { describe, it, expect } from 'vitest';
 
 import type { SandboxCapabilities } from '../types';
@@ -46,9 +47,7 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
             expect(sandbox.id).not.toBe(sandbox2.id);
           } finally {
             // Clean up the second sandbox
-            if (sandbox2.destroy) {
-              await sandbox2.destroy();
-            }
+            await callLifecycle(sandbox2, 'destroy');
           }
         },
         getContext().testTimeout * 2,
@@ -69,9 +68,7 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
             // Before start(), status should be pending or stopped
             expect(['pending', 'stopped']).toContain(freshSandbox.status);
           } finally {
-            if (freshSandbox.destroy) {
-              await freshSandbox.destroy();
-            }
+            await callLifecycle(freshSandbox, 'destroy');
           }
         },
         getContext().testTimeout * 2,
@@ -93,7 +90,7 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
 
           // Sandbox is already running from beforeAll
           // Calling start() again should not throw
-          await expect(sandbox.start()).resolves.not.toThrow();
+          await expect(callLifecycle(sandbox, 'start')).resolves.not.toThrow();
 
           // Status should still be running
           expect(sandbox.status).toBe('running');
@@ -112,20 +109,16 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
           const freshSandbox = await createSandbox();
           try {
             // Start the sandbox
-            if (freshSandbox.start) {
-              await freshSandbox.start();
-            }
+            await callLifecycle(freshSandbox, 'start');
             expect(freshSandbox.status).toBe('running');
 
             // Stop it
             if (freshSandbox.stop) {
-              await freshSandbox.stop();
+              await callLifecycle(freshSandbox, 'stop');
               expect(freshSandbox.status).toBe('stopped');
             }
           } finally {
-            if (freshSandbox.destroy) {
-              await freshSandbox.destroy();
-            }
+            await callLifecycle(freshSandbox, 'destroy');
           }
         },
         getContext().testTimeout * 3,
@@ -162,9 +155,7 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
               expect(ready).toBe(false);
             }
           } finally {
-            if (freshSandbox.destroy) {
-              await freshSandbox.destroy();
-            }
+            await callLifecycle(freshSandbox, 'destroy');
           }
         },
         getContext().testTimeout * 2,

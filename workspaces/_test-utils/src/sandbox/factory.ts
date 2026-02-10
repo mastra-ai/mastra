@@ -5,6 +5,7 @@
  */
 
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { callLifecycle } from '@mastra/core/workspace';
 import { describe, beforeAll, afterAll } from 'vitest';
 
 import { createCommandExecutionTests } from './domains/command-execution';
@@ -71,17 +72,15 @@ export function createSandboxTestSuite(config: SandboxTestConfig): void {
 
     beforeAll(async () => {
       sandbox = await createSandbox();
-      if (sandbox.start) {
-        await sandbox.start();
-      }
+      await callLifecycle(sandbox, 'start');
     }, 120000); // Allow 2 minutes for sandbox startup
 
     afterAll(async () => {
       if (!sandbox) return;
       if (cleanupSandbox) {
         await cleanupSandbox(sandbox);
-      } else if (sandbox.destroy) {
-        await sandbox.destroy();
+      } else {
+        await callLifecycle(sandbox, 'destroy');
       }
     }, 60000);
 

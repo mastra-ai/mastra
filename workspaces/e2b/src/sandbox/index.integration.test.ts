@@ -54,7 +54,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Integration', () => {
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -62,7 +62,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Integration', () => {
   });
 
   it('can start and execute commands', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const result = await sandbox.executeCommand('echo', ['Hello E2B']);
 
@@ -71,17 +71,17 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Integration', () => {
   }, 120000);
 
   it('can reconnect to existing sandbox', async () => {
-    await sandbox.start();
+    await sandbox._start();
     const originalId = sandbox.id;
 
     // Create new sandbox instance with same ID
     const sandbox2 = new E2BSandbox({ id: originalId });
-    await sandbox2.start();
+    await sandbox2._start();
 
     // Should reconnect to existing
     expect(sandbox2.status).toBe('running');
 
-    await sandbox2.destroy();
+    await sandbox2._destroy();
   }, 120000);
 });
 
@@ -101,7 +101,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -109,7 +109,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
   });
 
   it('S3 with credentials mounts successfully', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -129,7 +129,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
   }, 180000);
 
   it('S3 public bucket mounts with public_bucket=1', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const mockFilesystem = {
       id: 'test-s3-public',
@@ -148,7 +148,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
   }, 180000);
 
   it('S3-compatible without credentials warns and fails', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const mockFilesystem = {
       id: 'test-s3-compat',
@@ -170,7 +170,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
   }, 180000);
 
   it('S3 with readOnly mounts with -o ro', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -196,7 +196,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
   }, 180000);
 
   it('S3 mount sets uid/gid for file ownership', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -233,7 +233,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !process.env.GCS_SERVICE_ACCOUNT_KEY
     afterEach(async () => {
       if (sandbox) {
         try {
-          await sandbox.destroy();
+          await sandbox._destroy();
         } catch {
           // Ignore cleanup errors
         }
@@ -241,7 +241,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !process.env.GCS_SERVICE_ACCOUNT_KEY
     });
 
     it('GCS with service account mounts successfully', async () => {
-      await sandbox.start();
+      await sandbox._start();
 
       const bucket = process.env.TEST_GCS_BUCKET!;
       const mockFilesystem = {
@@ -276,7 +276,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !process.env.GCS_SERVICE_ACCOUNT_KEY
 
     it('full workflow: mount GCS and verify FUSE mount', async () => {
       // 1. Start sandbox
-      await sandbox.start();
+      await sandbox._start();
       expect(sandbox.status).toBe('running');
 
       // 2. Mount GCS filesystem
@@ -322,7 +322,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !process.env.GCS_SERVICE_ACCOUNT_KEY
     }, 240000);
 
     it('GCS public bucket mounts with anonymous access', async () => {
-      await sandbox.start();
+      await sandbox._start();
 
       const mockFilesystem = {
         id: 'test-gcs-public',
@@ -357,7 +357,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -365,7 +365,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
   });
 
   it('mount errors if directory exists and is non-empty', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     // Use home directory instead of /data to avoid sudo complexity
     const testDir = '/home/user/test-non-empty';
@@ -395,7 +395,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
   }, 120000);
 
   it('mount succeeds if directory exists but is empty', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     // Use home directory to avoid sudo
     const testDir = '/home/user/test-empty-dir';
@@ -424,7 +424,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
   it.skipIf(!hasS3Credentials)(
     'mount creates directory with sudo for paths outside home',
     async () => {
-      await sandbox.start();
+      await sandbox._start();
 
       // Use real S3 config so mount succeeds and directory persists
       const s3Config = getS3TestConfig();
@@ -469,7 +469,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Reconciliation', () 
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -477,7 +477,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Reconciliation', () 
   });
 
   it('reconcileMounts unmounts stale FUSE mounts', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     // Create a fake stale mount marker so reconcile has something to clean
     await sandbox.executeCommand('mkdir', ['-p', '/tmp/.mastra-mounts']);
@@ -491,7 +491,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Reconciliation', () 
   }, 120000);
 
   it('reconcileMounts cleans up orphaned marker files', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     // Create orphaned marker file
     await sandbox.executeCommand('mkdir', ['-p', '/tmp/.mastra-mounts']);
@@ -505,7 +505,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Reconciliation', () 
   }, 120000);
 
   it('reconcileMounts handles malformed marker files', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     // Create malformed marker file (no pipe separator = invalid format)
     await sandbox.executeCommand('mkdir', ['-p', '/tmp/.mastra-mounts']);
@@ -535,7 +535,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Marke
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -543,7 +543,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Marke
   });
 
   it('successful mount creates marker file', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -568,7 +568,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Marke
   }, 180000);
 
   it('unmount removes marker file', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -592,7 +592,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Marke
   }, 180000);
 
   it('unmount removes empty mount directory', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -629,7 +629,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -637,7 +637,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
   });
 
   it('mount skips if already mounted with matching config', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -673,7 +673,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
   }, 180000);
 
   it('mount unmounts and remounts if config changed', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const createFilesystem = (readOnly: boolean) =>
@@ -714,7 +714,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Exist
   }, 240000);
 
   it('readOnly change triggers remount with ro flag', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mountPath = '/data/readonly-remount';
@@ -782,7 +782,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Full 
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -791,7 +791,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Full 
 
   it('full workflow: create sandbox, mount S3, read/write files', async () => {
     // 1. Start sandbox
-    await sandbox.start();
+    await sandbox._start();
     expect(sandbox.status).toBe('running');
 
     // 2. Mount S3 filesystem
@@ -855,7 +855,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Full 
 
     // 3. Create new E2BSandbox instance with same id
     const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
-    await sandbox2.start();
+    await sandbox2._start();
 
     // 4. Verify sandbox reconnected
     expect(sandbox2.status).toBe('running');
@@ -874,7 +874,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Full 
 
     // Cleanup
     await sandbox2.executeCommand('rm', [testFile]);
-    await sandbox2.destroy();
+    await sandbox2._destroy();
   }, 300000);
 
   it('config change triggers remount on reconnect', async () => {
@@ -912,7 +912,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Full 
 
     // 3. Reconnect with readOnly: true
     const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 120000 });
-    await sandbox2.start();
+    await sandbox2._start();
 
     // 4. Mount with readOnly: true - should trigger remount
     await sandbox2.mount(createFilesystem(true), mountPath);
@@ -924,7 +924,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Full 
     ]);
     expect(writeResult2.stdout).toMatch(/Read-only|write failed/);
 
-    await sandbox2.destroy();
+    await sandbox2._destroy();
   }, 300000);
 });
 
@@ -937,7 +937,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Stop/
       id: `test-stop-unmount-${Date.now()}`,
       timeout: 120000,
     });
-    await sandbox.start();
+    await sandbox._start();
 
     // Mount multiple filesystems
     const s3Config = getS3TestConfig();
@@ -963,7 +963,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Stop/
 
     // Reconnect to verify mounts are gone
     const sandbox2 = new E2BSandbox({ id: sandbox.id, timeout: 60000 });
-    await sandbox2.start();
+    await sandbox2._start();
 
     const mountsAfter = await sandbox2.executeCommand('mount');
     // FUSE mounts should be gone (fusermount -u was called)
@@ -974,7 +974,7 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Stop/
     expect(hasFuseMount1).toBe(false);
     expect(hasFuseMount2).toBe(false);
 
-    await sandbox2.destroy();
+    await sandbox2._destroy();
   }, 300000);
 });
 
@@ -987,7 +987,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', ()
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -1001,7 +1001,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', ()
       timeout: 60000,
       env: { MY_VAR: 'initial' },
     });
-    await sandbox.start();
+    await sandbox._start();
 
     // Check initial value
     const result1 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR']);
@@ -1024,7 +1024,7 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', ()
       timeout: 60000,
       env: { VAR_A: '1', VAR_B: '2' },
     });
-    await sandbox.start();
+    await sandbox._start();
 
     // Command with additional env var - should merge
     const result = await sandbox.executeCommand('sh', ['-c', 'echo $VAR_A $VAR_B $VAR_C'], {
@@ -1053,7 +1053,7 @@ if (process.env.E2B_API_KEY) {
     },
     cleanupSandbox: async sandbox => {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -1109,7 +1109,7 @@ if (canRunSharedIntegration) {
         timeout: 180000,
       });
 
-      await sandbox.start();
+      await sandbox._start();
       await sandbox.mount(filesystem, mountPoint);
 
       return { filesystem, sandbox };
@@ -1131,7 +1131,7 @@ if (canRunSharedIntegration) {
 
       // Destroy sandbox
       try {
-        await setup.sandbox.destroy();
+        await setup.sandbox._destroy();
       } catch (e) {
         console.warn('Cleanup: failed to destroy sandbox', e);
       }
@@ -1177,7 +1177,7 @@ if (canRunSharedIntegration && hasGCSCredentials) {
         id: `multi-s3gcs-${Date.now()}`,
         timeout: 240000,
       });
-      await sandbox.start();
+      await sandbox._start();
       await sandbox.mount(s3Fs, s3Mount);
       await sandbox.mount(gcsFs, gcsMount);
 
@@ -1200,7 +1200,7 @@ if (canRunSharedIntegration && hasGCSCredentials) {
         }
       }
       try {
-        await setup.sandbox.destroy();
+        await setup.sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -1240,7 +1240,7 @@ if (canRunSharedIntegration) {
         id: `multi-s3s3-${Date.now()}`,
         timeout: 240000,
       });
-      await sandbox.start();
+      await sandbox._start();
       await sandbox.mount(s3Fs1, s3Mount1);
       await sandbox.mount(s3Fs2, s3Mount2);
 
@@ -1263,7 +1263,7 @@ if (canRunSharedIntegration) {
         }
       }
       try {
-        await setup.sandbox.destroy();
+        await setup.sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -1304,7 +1304,7 @@ if (canRunSharedIntegration) {
         timeout: 180000,
       });
 
-      await sandbox.start();
+      await sandbox._start();
       await sandbox.mount(filesystem, roMountPath);
 
       return {
@@ -1317,7 +1317,7 @@ if (canRunSharedIntegration) {
     },
     cleanupWorkspace: async setup => {
       try {
-        await setup.sandbox.destroy();
+        await setup.sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -1344,7 +1344,7 @@ describe.skipIf(!canRunSharedIntegration)('E2BSandbox Stale Mount Recovery', () 
   afterEach(async () => {
     if (sandbox) {
       try {
-        await sandbox.destroy();
+        await sandbox._destroy();
       } catch {
         // Ignore cleanup errors
       }
@@ -1352,7 +1352,7 @@ describe.skipIf(!canRunSharedIntegration)('E2BSandbox Stale Mount Recovery', () 
   });
 
   it('detects when FUSE mount has died', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -1384,7 +1384,7 @@ describe.skipIf(!canRunSharedIntegration)('E2BSandbox Stale Mount Recovery', () 
   }, 240000);
 
   it('remount recovers after FUSE mount killed', async () => {
-    await sandbox.start();
+    await sandbox._start();
 
     const s3Config = getS3TestConfig();
     const mockFilesystem = {
@@ -1420,7 +1420,7 @@ describe.skipIf(!canRunSharedIntegration)('E2BSandbox Stale Mount Recovery', () 
   }, 300000);
 
   it('reconnect after stale mount re-mounts successfully', async () => {
-    await sandbox.start();
+    await sandbox._start();
     const sandboxId = sandbox.id;
 
     const s3Config = getS3TestConfig();
@@ -1448,7 +1448,7 @@ describe.skipIf(!canRunSharedIntegration)('E2BSandbox Stale Mount Recovery', () 
 
     // Create a new sandbox instance with the same ID and reconnect
     const sandbox2 = new E2BSandbox({ id: sandboxId, timeout: 180000 });
-    await sandbox2.start();
+    await sandbox2._start();
 
     // Re-mount at the same path
     const remountResult = await sandbox2.mount(mockFilesystem, mountPath);
@@ -1461,7 +1461,7 @@ describe.skipIf(!canRunSharedIntegration)('E2BSandbox Stale Mount Recovery', () 
 
     // Cleanup
     await sandbox2.executeCommand('rm', [testFile]);
-    await sandbox2.destroy();
+    await sandbox2._destroy();
 
     // Prevent afterEach from double-destroying
     sandbox = undefined as any;

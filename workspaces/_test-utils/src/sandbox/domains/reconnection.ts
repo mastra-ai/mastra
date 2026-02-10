@@ -4,6 +4,7 @@
  */
 
 import type { WorkspaceSandbox, WorkspaceFilesystem } from '@mastra/core/workspace';
+import { callLifecycle } from '@mastra/core/workspace';
 import { describe, it, expect } from 'vitest';
 
 import type { SandboxCapabilities } from '../types';
@@ -47,8 +48,8 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           const originalId = sandbox.id;
 
           // Stop and restart
-          await sandbox.stop();
-          await sandbox.start();
+          await callLifecycle(sandbox, 'stop');
+          await callLifecycle(sandbox, 'start');
 
           // ID should remain the same
           expect(sandbox.id).toBe(originalId);
@@ -77,8 +78,8 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           expect(beforeResult.stdout.trim()).toBe(testContent);
 
           // Stop and restart
-          await sandbox.stop();
-          await sandbox.start();
+          await callLifecycle(sandbox, 'stop');
+          await callLifecycle(sandbox, 'start');
 
           // File should still exist
           const afterResult = await sandbox.executeCommand('cat', [testFile]);
@@ -99,8 +100,8 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           if (!sandbox.executeCommand) return;
 
           // Stop and restart
-          await sandbox.stop();
-          await sandbox.start();
+          await callLifecycle(sandbox, 'stop');
+          await callLifecycle(sandbox, 'start');
 
           // Basic environment should work
           const result = await sandbox.executeCommand('pwd', []);
@@ -132,8 +133,8 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           expect(sandbox.mounts.has(mountPath)).toBe(true);
 
           // Stop and restart
-          await sandbox.stop();
-          await sandbox.start();
+          await callLifecycle(sandbox, 'stop');
+          await callLifecycle(sandbox, 'start');
 
           // Mount state should be tracked (may need re-mounting depending on provider)
           // At minimum, the sandbox should be operational
