@@ -844,6 +844,140 @@ export interface DeleteStoredAgentResponse {
 }
 
 // ============================================================================
+// Stored Scorer Definition Types
+// ============================================================================
+
+/**
+ * Sampling configuration for scorers
+ */
+export type ScorerSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+
+/**
+ * Scorer type discriminator
+ */
+export type StoredScorerType =
+  | 'llm-judge'
+  | 'answer-relevancy'
+  | 'answer-similarity'
+  | 'bias'
+  | 'context-precision'
+  | 'context-relevance'
+  | 'faithfulness'
+  | 'hallucination'
+  | 'noise-sensitivity'
+  | 'prompt-alignment'
+  | 'tool-call-accuracy'
+  | 'toxicity';
+
+/**
+ * Stored scorer definition data returned from API
+ */
+export interface StoredScorerResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for listing stored scorer definitions
+ */
+export interface ListStoredScorersParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored scorer definitions
+ */
+export interface ListStoredScorersResponse {
+  scorerDefinitions: StoredScorerResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored scorer definition
+ */
+export interface CreateStoredScorerParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for updating a stored scorer definition
+ */
+export interface UpdateStoredScorerParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  type?: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Response for deleting a stored scorer definition
+ */
+export interface DeleteStoredScorerResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // Agent Version Types
 // ============================================================================
 
