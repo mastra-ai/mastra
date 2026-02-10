@@ -41,7 +41,7 @@ describe('ProcessorRunner', () => {
     runner = new ProcessorRunner({
       inputProcessors: [],
       outputProcessors: [],
-      logger: mockLogger,
+      mastraLogger: mockLogger,
       agentName: 'test-agent',
     });
   });
@@ -73,7 +73,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -116,7 +116,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -150,7 +150,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -175,7 +175,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -211,7 +211,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -252,7 +252,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -307,7 +307,7 @@ describe('ProcessorRunner', () => {
         runner = new ProcessorRunner({
           inputProcessors,
           outputProcessors: [],
-          logger: mockLogger,
+          mastraLogger: mockLogger,
           agentName: 'test-agent',
         });
 
@@ -363,7 +363,7 @@ describe('ProcessorRunner', () => {
         runner = new ProcessorRunner({
           inputProcessors,
           outputProcessors: [],
-          logger: mockLogger,
+          mastraLogger: mockLogger,
           agentName: 'test-agent',
         });
 
@@ -411,7 +411,7 @@ describe('ProcessorRunner', () => {
         runner = new ProcessorRunner({
           inputProcessors,
           outputProcessors: [],
-          logger: mockLogger,
+          mastraLogger: mockLogger,
           agentName: 'test-agent',
         });
 
@@ -455,7 +455,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -491,7 +491,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -529,7 +529,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -574,7 +574,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -603,7 +603,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -631,7 +631,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -688,7 +688,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -705,7 +705,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -745,7 +745,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -786,7 +786,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -846,7 +846,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -894,7 +894,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -939,7 +939,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -991,7 +991,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1051,7 +1051,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1130,7 +1130,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1220,7 +1220,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1259,7 +1259,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1301,7 +1301,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1347,7 +1347,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1385,7 +1385,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors,
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1426,7 +1426,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1468,7 +1468,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1529,7 +1529,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1571,7 +1571,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1625,7 +1625,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1671,7 +1671,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1714,7 +1714,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1760,7 +1760,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1792,7 +1792,7 @@ describe('ProcessorRunner', () => {
       runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors,
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 

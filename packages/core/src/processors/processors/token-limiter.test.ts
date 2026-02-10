@@ -831,7 +831,7 @@ describe('TokenLimiterProcessor', () => {
 
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -952,7 +952,7 @@ describe('TokenLimiterProcessor', () => {
 
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1032,7 +1032,7 @@ describe('TokenLimiterProcessor', () => {
 
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 

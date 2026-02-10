@@ -46,7 +46,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
     request: any;
     rawResponse: any;
   };
-  logger?: IMastraLogger;
+  mastraLogger?: IMastraLogger;
 };
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -59,7 +59,7 @@ async function processOutputStream<OUTPUT = undefined>({
   controller,
   responseFromModel,
   includeRawChunks,
-  logger,
+  mastraLogger,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
@@ -200,7 +200,7 @@ async function processOutputStream<OUTPUT = undefined>({
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            logger?.error('Error calling onInputStart', error);
+            mastraLogger?.error('Error calling onInputStart', error);
           }
         }
 
@@ -225,7 +225,7 @@ async function processOutputStream<OUTPUT = undefined>({
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            logger?.error('Error calling onInputDelta', error);
+            mastraLogger?.error('Error calling onInputDelta', error);
           }
         }
         if (isControllerOpen(controller)) {
@@ -441,7 +441,7 @@ async function processOutputStream<OUTPUT = undefined>({
 
 function executeStreamWithFallbackModels<T>(
   models: ModelManagerModelConfig[],
-  logger?: IMastraLogger,
+  mastraLogger?: IMastraLogger,
 ): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = 0;
@@ -473,7 +473,7 @@ function executeStreamWithFallbackModels<T>(
 
           attempt++;
 
-          logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
+          mastraLogger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
 
           // If we've exhausted all retries for this model, break and try the next model
           if (attempt > maxRetries) {
@@ -488,7 +488,7 @@ function executeStreamWithFallbackModels<T>(
       }
     }
     if (typeof finalResult === 'undefined') {
-      logger?.error('Exhausted all fallback models and reached the maximum number of retries.');
+      mastraLogger?.error('Exhausted all fallback models and reached the maximum number of retries.');
       throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
     }
     return finalResult;
@@ -594,7 +594,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const processorRunner = new ProcessorRunner({
             inputProcessors: inputStepProcessors,
             outputProcessors: [],
-            logger: mastraLogger || new ConsoleLogger({ level: 'error' }),
+            mastraLogger: mastraLogger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
             processorStates,
           });
@@ -859,7 +859,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               request,
               rawResponse,
             },
-            logger: mastraLogger,
+            mastraLogger,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -1016,7 +1016,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const processorRunner = new ProcessorRunner({
           inputProcessors: [],
           outputProcessors,
-          logger: mastraLogger || new ConsoleLogger({ level: 'error' }),
+          mastraLogger: mastraLogger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
           processorStates,
         });

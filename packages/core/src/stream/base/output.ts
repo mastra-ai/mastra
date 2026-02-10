@@ -281,7 +281,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       this.processorRunner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors: options.outputProcessors,
-        logger: this.logger,
+        mastraLogger: this.logger,
         agentName: 'MastraModelOutput',
         processorStates: options.processorStates,
       });

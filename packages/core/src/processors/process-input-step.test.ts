@@ -69,7 +69,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [countingProcessor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -99,7 +99,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [stepProcessor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -132,7 +132,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [stepProcessor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -157,7 +157,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [stepProcessor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -252,7 +252,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [typeTransformProcessor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -331,7 +331,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -407,7 +407,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2, processor3],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -470,7 +470,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -527,7 +527,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -573,7 +573,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -604,7 +604,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -650,7 +650,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -686,7 +686,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -729,7 +729,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -801,7 +801,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2, processor3],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -848,7 +848,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -882,7 +882,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -915,7 +915,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -951,7 +951,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1009,7 +1009,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1048,7 +1048,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1107,7 +1107,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1147,7 +1147,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1188,7 +1188,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1219,7 +1219,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1249,7 +1249,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1279,7 +1279,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1309,7 +1309,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1345,7 +1345,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1388,7 +1388,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [dualProcessor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1471,7 +1471,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [inputOnlyProcessor, stepOnlyProcessor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1514,7 +1514,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1573,7 +1573,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1610,7 +1610,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1665,7 +1665,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1708,7 +1708,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1748,7 +1748,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1784,7 +1784,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1814,7 +1814,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1842,7 +1842,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1878,7 +1878,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1919,7 +1919,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor1, processor2],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -1969,7 +1969,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 
@@ -2014,7 +2014,7 @@ describe('processInputStep', () => {
       const runner = new ProcessorRunner({
         inputProcessors: [processor],
         outputProcessors: [],
-        logger: mockLogger,
+        mastraLogger: mockLogger,
         agentName: 'test-agent',
       });
 

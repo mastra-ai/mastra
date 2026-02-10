@@ -35,7 +35,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       ? new ProcessorRunner({
           inputProcessors: [],
           outputProcessors: rest.outputProcessors,
-          logger: rest.mastraLogger,
+          mastraLogger: rest.mastraLogger,
           agentName: 'LLMMappingStep',
           processorStates: rest.processorStates,
         })

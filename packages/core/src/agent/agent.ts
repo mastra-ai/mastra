@@ -431,7 +431,7 @@ export class Agent<
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
-      logger: this.logger,
+      mastraLogger: this.logger,
       agentName: this.name,
       processorStates,
     });
