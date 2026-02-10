@@ -378,6 +378,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       description,
     });
 
+    // Set the servers field so Swagger UI knows routes are served under the prefix
+    if (prefix) {
+      openApiSpec.servers = [{ url: prefix }];
+    }
+
     // Merge custom API routes into the OpenAPI spec
     if (this.customApiRoutes && this.customApiRoutes.length > 0) {
       const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);

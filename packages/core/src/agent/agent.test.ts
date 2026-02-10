@@ -1,3 +1,6 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
@@ -8,7 +11,7 @@ import { APICallError, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { config } from 'dotenv';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { ModelRouterLanguageModel } from '../llm';
@@ -21,6 +24,7 @@ import { RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
+import { Workspace, LocalFilesystem } from '../workspace';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
@@ -7440,6 +7444,202 @@ describe('Agent Tests', () => {
       // ModelSettings are spread into the options passed to doGenerate
       expect((capturedOptions as any)?.maxTokens).toBe(500);
       expect((capturedOptions as any)?.temperature).toBe(0.7);
+    });
+  });
+
+  describe('prepareStep workspace', () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'preparestep-workspace-test-'));
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    const createWorkspace = (id: string) => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      return new Workspace({
+        id,
+        name: `Test Workspace ${id}`,
+        filesystem,
+      });
+    };
+
+    it('should pass workspace returned from prepareStep to tool execution', async () => {
+      const workspace = createWorkspace('preparestep-workspace');
+      let capturedWorkspace: Workspace | undefined;
+
+      const workspaceCaptureTool = createTool({
+        id: 'capture_workspace',
+        description: 'Captures the workspace from execution context',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          capturedWorkspace = context.workspace;
+          return { captured: true };
+        },
+      });
+
+      let callCount = 0;
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallType: 'function' as const,
+                  toolCallId: 'call_1',
+                  toolName: 'capture_workspace',
+                  input: '{}',
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_1',
+              toolName: 'capture_workspace',
+              input: '{}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'workspace-preparestep-agent',
+        instructions: 'test',
+        model: mockModel,
+        tools: { capture_workspace: workspaceCaptureTool },
+      });
+
+      await agent.generate('Test workspace from prepareStep', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            return { workspace };
+          }
+        },
+      });
+
+      expect(capturedWorkspace).toBe(workspace);
+      expect(capturedWorkspace?.id).toBe('preparestep-workspace');
+    });
+
+    it('should allow prepareStep to override agent workspace dynamically', async () => {
+      const agentWorkspace = createWorkspace('agent-workspace');
+      const stepWorkspace = createWorkspace('step-workspace');
+      let capturedWorkspaceId: string | undefined;
+
+      const workspaceCaptureTool = createTool({
+        id: 'capture_workspace',
+        description: 'Captures the workspace from execution context',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          capturedWorkspaceId = context.workspace?.id;
+          return { captured: true };
+        },
+      });
+
+      let callCount = 0;
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallType: 'function' as const,
+                  toolCallId: 'call_1',
+                  toolName: 'capture_workspace',
+                  input: '{}',
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_1',
+              toolName: 'capture_workspace',
+              input: '{}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'workspace-override-agent',
+        instructions: 'test',
+        model: mockModel,
+        tools: { capture_workspace: workspaceCaptureTool },
+        workspace: agentWorkspace,
+      });
+
+      await agent.generate('Test workspace override', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            // Override the agent's workspace with a different one
+            return { workspace: stepWorkspace };
+          }
+        },
+      });
+
+      // prepareStep workspace should override agent workspace
+      expect(capturedWorkspaceId).toBe('step-workspace');
     });
   });
 
