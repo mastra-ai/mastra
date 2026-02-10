@@ -109,7 +109,8 @@
       "client-js-e2e-tests-zod-v4>zod": "^4.3.5",
       "better-auth": "^1.4.5",
       "js-yaml": "^3.14.2",
-      "glob@<=10.5.0": "10.5.0"
+      "glob@<=10.5.0": "10.5.0",
+      "body-parser@<=2.2.1": "2.2.1"
     }
   },
   "license": "Apache-2.0",
