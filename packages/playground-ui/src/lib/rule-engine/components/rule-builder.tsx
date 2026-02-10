@@ -22,7 +22,13 @@ const createDefaultRule = (): Rule => ({
  * Rule builder component for creating and managing a set of rules
  * based on a JSON Schema defining available fields
  */
-export const RuleBuilder: React.FC<RuleBuilderProps> = ({ schema, rules, onChange, groupOperator = 'AND', className }) => {
+export const RuleBuilder: React.FC<RuleBuilderProps> = ({
+  schema,
+  rules,
+  onChange,
+  groupOperator = 'AND',
+  className,
+}) => {
   const handleAddRule = React.useCallback(() => {
     onChange([...rules, createDefaultRule()], groupOperator);
   }, [rules, onChange, groupOperator]);
