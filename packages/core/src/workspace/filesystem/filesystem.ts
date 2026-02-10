@@ -59,6 +59,8 @@ export interface FileEntry {
     icon?: FilesystemIcon;
     displayName?: string;
     description?: string;
+    status?: ProviderStatus;
+    error?: string;
   };
 }
 

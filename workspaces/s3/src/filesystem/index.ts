@@ -103,6 +103,13 @@ function isNotFoundError(error: unknown): boolean {
   return name === 'NotFound' || name === 'NoSuchKey' || name === '404';
 }
 
+/** Check if an error is an access denied error from the S3 SDK. */
+function isAccessDeniedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+  return err.name === 'AccessDenied' || err.$metadata?.httpStatusCode === 403;
+}
+
 /**
  * S3 filesystem provider configuration.
  */
@@ -207,6 +214,8 @@ export class S3Filesystem extends MastraFilesystem {
   readonly readOnly?: boolean;
 
   status: ProviderStatus = 'pending';
+  /** Error message when status is 'error' */
+  error?: string;
 
   // Display metadata for UI
   readonly displayName?: string;
@@ -281,8 +290,21 @@ export class S3Filesystem extends MastraFilesystem {
         region: this.region,
         ...(this.endpoint && { endpoint: this.endpoint }),
         ...(this.prefix && { prefix: this.prefix }),
+        ...(this.error && { error: this.error }),
       },
     };
+  }
+
+  /**
+   * Handle an error, checking for access denied and updating status accordingly.
+   * Returns the error for re-throwing.
+   */
+  private handleError(error: unknown): unknown {
+    if (isAccessDeniedError(error)) {
+      this.status = 'error';
+      this.error = 'Access denied - check credentials and bucket permissions';
+    }
+    return error;
   }
 
   /**
@@ -444,7 +466,7 @@ export class S3Filesystem extends MastraFilesystem {
       if (isNotFoundError(error)) {
         throw new FileNotFoundError(path);
       }
-      throw error;
+      throw this.handleError(error);
     }
   }
 
@@ -503,7 +525,7 @@ export class S3Filesystem extends MastraFilesystem {
       if (isNotFoundError(error)) {
         throw new FileNotFoundError(path);
       }
-      throw error;
+      throw this.handleError(error);
     }
   }
 
@@ -522,7 +544,7 @@ export class S3Filesystem extends MastraFilesystem {
       if (isNotFoundError(error)) {
         throw new FileNotFoundError(src);
       }
-      throw error;
+      throw this.handleError(error);
     }
   }
 
@@ -683,7 +705,7 @@ export class S3Filesystem extends MastraFilesystem {
       );
       return true;
     } catch (error: unknown) {
-      if (!isNotFoundError(error)) throw error;
+      if (!isNotFoundError(error)) throw this.handleError(error);
       // Not a file, check if it's a "directory" (has objects with this prefix)
     }
 
@@ -734,7 +756,7 @@ export class S3Filesystem extends MastraFilesystem {
         modifiedAt: response.LastModified ?? new Date(),
       };
     } catch (error: unknown) {
-      if (!isNotFoundError(error)) throw error;
+      if (!isNotFoundError(error)) throw this.handleError(error);
       // Check if it's a directory
       const isDir = await this.isDirectory(path);
       if (isDir) {
@@ -767,7 +789,7 @@ export class S3Filesystem extends MastraFilesystem {
       );
       return true;
     } catch (error: unknown) {
-      if (!isNotFoundError(error)) throw error;
+      if (!isNotFoundError(error)) throw this.handleError(error);
       return false;
     }
   }

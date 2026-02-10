@@ -165,11 +165,14 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
           // If it's a direct mount point, include filesystem metadata
           if (isDirectMount) {
+            const fsWithError = fs as { error?: string };
             entry.mount = {
               provider: fs.provider,
               icon: fs.icon,
               displayName: fs.displayName,
               description: fs.description,
+              status: fs.status,
+              error: fsWithError.error,
             };
           }
 
