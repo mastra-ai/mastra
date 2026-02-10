@@ -6,12 +6,5 @@ export type ColumnsProps = {
 };
 
 export function Columns({ children, className }: ColumnsProps) {
-  return (
-    <div
-      className={cn(`grid w-full h-full grid-cols-1`, className)}
-      // style={{ border: '2px solid white' }}
-    >
-      {children}
-    </div>
-  );
+  return <div className={cn(`grid w-full h-full grid-cols-1 overflow-y-auto`, className)}>{children}</div>;
 }

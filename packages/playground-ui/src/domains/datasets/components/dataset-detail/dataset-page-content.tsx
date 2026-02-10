@@ -6,8 +6,8 @@ import { useDatasetItems } from '../../hooks/use-dataset-items';
 import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
-import { ItemsMasterDetail } from './items-master-detail';
-import { ExperimentHistory } from './experiment-history';
+import { DatasetItems } from '../items/dataset-items';
+import { DatasetExperiments } from '../experiments/dataset-experiments';
 import { DatasetHeader } from './dataset-header';
 import { CSVImportDialog } from '../csv-import';
 import { JSONImportDialog } from '../json-import';
@@ -184,11 +184,11 @@ export function DatasetPageContent({
               >
                 <TabList>
                   <Tab value="items">Items ({items.length})</Tab>
-                  <Tab value="experiments">Experiment History ({experiments.length})</Tab>
+                  <Tab value="experiments">Experiments ({experiments.length})</Tab>
                 </TabList>
 
-                <TabContent value="items" className="grid overflow-auto mt-4">
-                  <ItemsMasterDetail
+                <TabContent value="items" className="grid overflow-auto mt-8">
+                  <DatasetItems
                     datasetId={datasetId}
                     items={items}
                     isLoading={isItemsLoading}
@@ -214,8 +214,12 @@ export function DatasetPageContent({
                   />
                 </TabContent>
 
-                <TabContent value="experiments" className="grid overflow-auto">
-                  <ExperimentHistory experiments={experiments} isLoading={isExperimentsLoading} datasetId={datasetId} />
+                <TabContent value="experiments" className="grid overflow-auto mt-8">
+                  <DatasetExperiments
+                    experiments={experiments}
+                    isLoading={isExperimentsLoading}
+                    datasetId={datasetId}
+                  />
                 </TabContent>
               </Tabs>
             </div>

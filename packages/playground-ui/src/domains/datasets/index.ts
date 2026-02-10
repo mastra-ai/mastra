@@ -35,8 +35,8 @@ export { EmptyDatasetsTable } from './components/empty-datasets-table';
 
 // Dataset detail components
 export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
-export { DatasetItemsList } from './components/dataset-detail/dataset-items-list';
-export { ExperimentHistory } from './components/dataset-detail/experiment-history';
+export { DatasetItemsList } from './components/items/dataset-items-list';
+export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
 export { EditItemDialog } from './components/edit-item-dialog';
@@ -86,4 +86,5 @@ export { ComparisonView } from './components/comparison/comparison-view';
 export { ScoreDelta } from './components/comparison/score-delta';
 
 // Versions components
-export { DatasetVersionsPanel, DatasetItemVersionsPanel } from './components/versions';
+export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';
+export { DatasetItemVersionsPanel } from './components/versions';

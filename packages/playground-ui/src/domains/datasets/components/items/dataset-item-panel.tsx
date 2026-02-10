@@ -6,10 +6,10 @@ import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { ItemDetailToolbar } from './item-detail-toolbar';
-import { DatasetItemHeader } from './dataset-item-header';
-import { DatasetItemContent } from './dataset-item-content';
-import { EditModeContent } from './dataset-item-form';
+import { ItemDetailToolbar } from '../dataset-detail/item-detail-toolbar';
+import { DatasetItemHeader } from '../dataset-detail/dataset-item-header';
+import { DatasetItemContent } from '../dataset-detail/dataset-item-content';
+import { EditModeContent } from '../dataset-detail/dataset-item-form';
 import { Column } from '@/ds/components/Columns';
 
 /** Schema validation error from API */
@@ -56,7 +56,7 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   );
 }
 
-export interface ItemDetailPanelProps {
+export interface DatasetItemPanelProps {
   datasetId: string;
   item: DatasetItem;
   items: DatasetItem[];
@@ -68,7 +68,7 @@ export interface ItemDetailPanelProps {
  * Inline panel showing full details of a single dataset item.
  * Includes navigation to next/previous items and sections for Input, Expected Output, and Metadata.
  */
-export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose }: ItemDetailPanelProps) {
+export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelProps) {
   const { Link } = useLinkComponent();
   const { updateItem, deleteItem } = useDatasetMutations();
 

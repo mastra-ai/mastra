@@ -7,8 +7,8 @@ import { Alert, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
 import { DatasetItemsList } from './dataset-items-list';
 import { DatasetItemsToolbar } from './dataset-items-toolbar';
-import { ItemDetailPanel } from './item-detail-panel';
-import { DatasetVersionsPanel } from '../versions';
+import { DatasetItemPanel } from './dataset-item-panel';
+import { DatasetVersionsPanel } from './dataset-versions-panel';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ArrowRightToLineIcon } from 'lucide-react';
 import { useItemSelection } from '../../hooks/use-item-selection';
@@ -20,7 +20,7 @@ import { Columns, Column } from '@/ds/components/Columns';
 
 type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
 
-export interface ItemsMasterDetailProps {
+export interface DatasetItemsProps {
   datasetId: string;
   items: DatasetItem[];
   isLoading: boolean;
@@ -53,7 +53,7 @@ export interface ItemsMasterDetailProps {
  * Shows item list on left, item detail panel on right when an item is selected.
  * Can also show versions panel instead of item detail when versions is toggled.
  */
-export function ItemsMasterDetail({
+export function DatasetItems({
   datasetId,
   items,
   isLoading,
@@ -76,7 +76,7 @@ export function ItemsMasterDetail({
   activeDatasetVersion,
   currentDatasetVersion,
   onVersionSelect,
-}: ItemsMasterDetailProps) {
+}: DatasetItemsProps) {
   const [isVersionsPanelOpen, setIsVersionsPanelOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const selection = useItemSelection();
@@ -229,7 +229,7 @@ export function ItemsMasterDetail({
       </Column>
 
       {!!featuredItem && (
-        <ItemDetailPanel
+        <DatasetItemPanel
           datasetId={datasetId}
           item={featuredItem}
           items={items}

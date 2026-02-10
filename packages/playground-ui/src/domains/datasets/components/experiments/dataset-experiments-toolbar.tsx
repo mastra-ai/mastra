@@ -5,7 +5,7 @@ import { Badge } from '@/ds/components/Badge';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { GitCompare, MoveRightIcon } from 'lucide-react';
 
-export type ExperimentsToolbarProps = {
+export type DatasetExperimentsToolbarProps = {
   hasExperiments: boolean;
   onCompareClick: () => void;
   isSelectionActive: boolean;
@@ -14,14 +14,14 @@ export type ExperimentsToolbarProps = {
   onCancelSelection: () => void;
 };
 
-export function ExperimentsToolbar({
+export function DatasetExperimentsToolbar({
   hasExperiments,
   onCompareClick,
   isSelectionActive,
   selectedCount,
   onExecuteCompare,
   onCancelSelection,
-}: ExperimentsToolbarProps) {
+}: DatasetExperimentsToolbarProps) {
   if (isSelectionActive) {
     return (
       <div className="flex items-center justify-end gap-4 w-full">
