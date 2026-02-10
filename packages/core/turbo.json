@@ -3,17 +3,12 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"],
+      "dependsOn": ["build:patch-commonjs", "build:lib"],
       "inputs": ["package.json"]
     },
     "build:patch-commonjs": {
       "dependsOn": ["build:lib"],
       "outputs": ["./**/*.d.ts"],
-      "inputs": ["src/**", "package.json", "!**/*.md"]
-    },
-    "build:docs": {
-      "dependsOn": ["build:lib", "mastra-docs#build"],
-      "outputs": ["dist/docs/**"],
       "inputs": ["src/**", "package.json", "!**/*.md"]
     },
     "build:lib": {

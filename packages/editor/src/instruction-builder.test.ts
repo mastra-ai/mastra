@@ -49,14 +49,14 @@ describe('resolveInstructionBlocks', () => {
   });
 
   it('should resolve a prompt_block_ref from storage', async () => {
-    await storage.createPromptBlock({
+    await storage.create({
       promptBlock: {
         id: 'block-1',
         name: 'Greeting',
         content: 'Welcome to our service.',
-        status: 'published',
       },
     });
+    await storage.update({ id: 'block-1', status: 'published' });
 
     const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'block-1' }];
     const result = await resolveInstructionBlocks(blocks, {}, { promptBlocksStorage: storage });
@@ -64,14 +64,14 @@ describe('resolveInstructionBlocks', () => {
   });
 
   it('should apply template rendering to prompt_block_ref content', async () => {
-    await storage.createPromptBlock({
+    await storage.create({
       promptBlock: {
         id: 'block-tmpl',
         name: 'Personalized greeting',
         content: 'Hello {{user.name}}, you have {{user.credits}} credits.',
-        status: 'published',
       },
     });
+    await storage.update({ id: 'block-tmpl', status: 'published' });
 
     const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'block-tmpl' }];
     const context = { user: { name: 'Bob', credits: 100 } };
@@ -90,12 +90,11 @@ describe('resolveInstructionBlocks', () => {
   });
 
   it('should skip a prompt_block_ref with status other than published', async () => {
-    await storage.createPromptBlock({
+    await storage.create({
       promptBlock: {
         id: 'draft-block',
         name: 'Draft',
         content: 'Draft content.',
-        status: 'draft',
       },
     });
 
@@ -105,18 +104,18 @@ describe('resolveInstructionBlocks', () => {
   });
 
   it('should include a prompt_block_ref when rules pass', async () => {
-    await storage.createPromptBlock({
+    await storage.create({
       promptBlock: {
         id: 'admin-block',
         name: 'Admin instructions',
         content: 'You have admin privileges.',
-        status: 'published',
         rules: {
           operator: 'AND',
           conditions: [{ field: 'user.role', operator: 'equals', value: 'admin' }],
         },
       },
     });
+    await storage.update({ id: 'admin-block', status: 'published' });
 
     const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'admin-block' }];
     const result = await resolveInstructionBlocks(
@@ -128,18 +127,18 @@ describe('resolveInstructionBlocks', () => {
   });
 
   it('should exclude a prompt_block_ref when rules fail', async () => {
-    await storage.createPromptBlock({
+    await storage.create({
       promptBlock: {
         id: 'admin-block',
         name: 'Admin instructions',
         content: 'You have admin privileges.',
-        status: 'published',
         rules: {
           operator: 'AND',
           conditions: [{ field: 'user.role', operator: 'equals', value: 'admin' }],
         },
       },
     });
+    await storage.update({ id: 'admin-block', status: 'published' });
 
     const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'admin-block' }];
     const result = await resolveInstructionBlocks(
@@ -151,14 +150,14 @@ describe('resolveInstructionBlocks', () => {
   });
 
   it('should mix text and prompt_block_ref references', async () => {
-    await storage.createPromptBlock({
+    await storage.create({
       promptBlock: {
         id: 'personality',
         name: 'Personality',
         content: 'Be friendly and concise.',
-        status: 'published',
       },
     });
+    await storage.update({ id: 'personality', status: 'published' });
 
     const blocks: AgentInstructionBlock[] = [
       { type: 'text', content: 'You are an AI assistant.' },
@@ -230,14 +229,14 @@ describe('resolveInstructionBlocks', () => {
   });
 
   it('should mix text, prompt_block_ref, and inline prompt_block', async () => {
-    await storage.createPromptBlock({
+    await storage.create({
       promptBlock: {
         id: 'stored-block',
         name: 'Stored personality',
         content: 'Be concise and helpful.',
-        status: 'published',
       },
     });
+    await storage.update({ id: 'stored-block', status: 'published' });
 
     const blocks: AgentInstructionBlock[] = [
       { type: 'text', content: 'You are an AI assistant.' },
