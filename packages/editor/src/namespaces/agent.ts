@@ -29,7 +29,7 @@ import type {
   AgentInstructionBlock,
 } from '@mastra/core/storage';
 
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { Processor, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
@@ -633,5 +633,145 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       }
     }
     return resolved.length > 0 ? resolved : undefined;
+  }
+
+  // ============================================================================
+  // Clone
+  // ============================================================================
+
+  /**
+   * Clone a runtime Agent instance into storage, creating a new stored agent
+   * with the resolved configuration of the source agent.
+   */
+  async clone(
+    agent: Agent,
+    options: {
+      newId: string;
+      newName?: string;
+      metadata?: Record<string, unknown>;
+      authorId?: string;
+      requestContext?: RequestContext;
+    },
+  ): Promise<StorageResolvedAgentType> {
+    const requestContext = options.requestContext ?? new RequestContext();
+
+    // 1. Extract model config
+    const llm = await agent.getLLM({ requestContext });
+    const provider = llm.getProvider();
+    const modelId = llm.getModelId();
+
+    const defaultOptions = await agent.getDefaultOptions({ requestContext });
+    const modelSettings = (defaultOptions as Record<string, any>)?.modelSettings;
+
+    const model: StorageModelConfig = {
+      provider,
+      name: modelId,
+      ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
+      ...(modelSettings?.topP !== undefined && { topP: modelSettings.topP }),
+      ...(modelSettings?.frequencyPenalty !== undefined && { frequencyPenalty: modelSettings.frequencyPenalty }),
+      ...(modelSettings?.presencePenalty !== undefined && { presencePenalty: modelSettings.presencePenalty }),
+      ...(modelSettings?.maxOutputTokens !== undefined && { maxCompletionTokens: modelSettings.maxOutputTokens }),
+    };
+
+    // 2. Extract instructions
+    const instructions = await agent.getInstructions({ requestContext });
+    let instructionsStr: string;
+    if (typeof instructions === 'string') {
+      instructionsStr = instructions;
+    } else if (Array.isArray(instructions)) {
+      instructionsStr = instructions
+        .map(msg => {
+          if (typeof msg === 'string') {
+            return msg;
+          }
+          return typeof msg.content === 'string' ? msg.content : '';
+        })
+        .filter(Boolean)
+        .join('\n\n');
+    } else if (instructions && typeof instructions === 'object' && 'content' in instructions) {
+      instructionsStr = typeof instructions.content === 'string' ? instructions.content : '';
+    } else {
+      instructionsStr = '';
+    }
+
+    // 3. Extract tool keys
+    const tools = await agent.listTools({ requestContext });
+    const toolKeys = Object.keys(tools || {});
+
+    // 4. Extract workflow keys
+    const workflows = await agent.listWorkflows({ requestContext });
+    const workflowKeys = Object.keys(workflows || {});
+
+    // 5. Extract sub-agent keys
+    const agents = await agent.listAgents({ requestContext });
+    const agentKeys = Object.keys(agents || {});
+
+    // 6. Extract memory config
+    const memory = await agent.getMemory({ requestContext });
+    const memoryConfig = memory?.getConfig();
+
+    // 7. Extract input/output processor IDs
+    const { inputProcessorIds, outputProcessorIds } = await agent.getConfiguredProcessorIds(requestContext);
+    const inputProcessorKeys = inputProcessorIds.length > 0 ? inputProcessorIds : undefined;
+    const outputProcessorKeys = outputProcessorIds.length > 0 ? outputProcessorIds : undefined;
+
+    // 8. Extract scorer keys with sampling config
+    let storedScorers: Record<string, StorageScorerConfig> | undefined;
+    const resolvedScorers = await agent.listScorers({ requestContext });
+    if (resolvedScorers && Object.keys(resolvedScorers).length > 0) {
+      storedScorers = {};
+      for (const [key, entry] of Object.entries(resolvedScorers)) {
+        storedScorers[key] = {
+          ...(entry.sampling && { sampling: entry.sampling }),
+        };
+      }
+    }
+
+    // 9. Extract default options (serializable parts only)
+    const storageDefaultOptions: StorageDefaultOptions | undefined = defaultOptions
+      ? {
+          maxSteps: (defaultOptions as Record<string, any>)?.maxSteps,
+          runId: (defaultOptions as Record<string, any>)?.runId,
+          savePerStep: (defaultOptions as Record<string, any>)?.savePerStep,
+          activeTools: (defaultOptions as Record<string, any>)?.activeTools,
+          toolChoice: (defaultOptions as Record<string, any>)?.toolChoice,
+          modelSettings: (defaultOptions as Record<string, any>)?.modelSettings,
+          returnScorerData: (defaultOptions as Record<string, any>)?.returnScorerData,
+          requireToolApproval: (defaultOptions as Record<string, any>)?.requireToolApproval,
+          autoResumeSuspendedTools: (defaultOptions as Record<string, any>)?.autoResumeSuspendedTools,
+          toolCallConcurrency: (defaultOptions as Record<string, any>)?.toolCallConcurrency,
+          maxProcessorRetries: (defaultOptions as Record<string, any>)?.maxProcessorRetries,
+          includeRawChunks: (defaultOptions as Record<string, any>)?.includeRawChunks,
+        }
+      : undefined;
+
+    // 10. Create the stored agent
+    const createInput: StorageCreateAgentInput = {
+      id: options.newId,
+      name: options.newName || `${agent.name} (Clone)`,
+      description: agent.getDescription() || undefined,
+      instructions: instructionsStr,
+      model,
+      tools: toolKeys.length > 0 ? Object.fromEntries(toolKeys.map(key => [key, {}])) : undefined,
+      workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
+      agents: agentKeys.length > 0 ? agentKeys : undefined,
+      memory: memoryConfig,
+      inputProcessors: inputProcessorKeys,
+      outputProcessors: outputProcessorKeys,
+      scorers: storedScorers,
+      defaultOptions: storageDefaultOptions,
+      metadata: options.metadata,
+      authorId: options.authorId,
+    };
+
+    const adapter = await this.getStorageAdapter();
+    await adapter.create(createInput);
+
+    const resolved = await adapter.getByIdResolved(options.newId);
+    if (!resolved) {
+      throw new Error(`Failed to resolve cloned agent '${options.newId}' after creation.`);
+    }
+
+    return resolved;
   }
 }
