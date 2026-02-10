@@ -793,7 +793,7 @@ describe('Stored Agents via MastraEditor', () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'agent-with-tool-override',
           name: 'Tool Override Agent',
@@ -812,7 +812,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('agent-with-tool-override');
+      const agent = await editor.agent.getById('agent-with-tool-override');
       expect(agent).toBeInstanceOf(Agent);
 
       const tools = await agent!.listTools();
@@ -824,7 +824,7 @@ describe('Stored Agents via MastraEditor', () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');
 
-      await agentsStore?.createAgent({
+      await agentsStore?.create({
         agent: {
           id: 'agent-without-tool-override',
           name: 'No Override Agent',
@@ -843,7 +843,7 @@ describe('Stored Agents via MastraEditor', () => {
         editor,
       });
 
-      const agent = await editor.getStoredAgentById('agent-without-tool-override');
+      const agent = await editor.agent.getById('agent-without-tool-override');
       expect(agent).toBeInstanceOf(Agent);
 
       const tools = await agent!.listTools();
