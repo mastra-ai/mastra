@@ -400,20 +400,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
    * Deep copy a version to prevent external mutation of stored data
    */
   private deepCopyVersion(version: AgentVersion): AgentVersion {
-    return {
-      ...version,
-      model: { ...version.model },
-      tools: version.tools ? [...version.tools] : version.tools,
-      defaultOptions: version.defaultOptions ? { ...version.defaultOptions } : version.defaultOptions,
-      workflows: version.workflows ? [...version.workflows] : version.workflows,
-      agents: version.agents ? [...version.agents] : version.agents,
-      integrationTools: version.integrationTools ? [...version.integrationTools] : version.integrationTools,
-      inputProcessors: version.inputProcessors ? [...version.inputProcessors] : version.inputProcessors,
-      outputProcessors: version.outputProcessors ? [...version.outputProcessors] : version.outputProcessors,
-      memory: version.memory ? { ...version.memory } : version.memory,
-      scorers: version.scorers ? { ...version.scorers } : version.scorers,
-      changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
-    };
+    return structuredClone(version);
   }
 
   private sortAgents(

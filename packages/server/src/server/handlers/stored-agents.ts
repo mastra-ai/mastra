@@ -1,3 +1,5 @@
+import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
+
 import { HTTPException } from '../http-exception';
 import {
   storedAgentIdPathParams,
@@ -135,6 +137,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    requestContextSchema,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -163,11 +166,11 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
-      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      // Only include integrationTools if they're actually arrays from the body (not {} from adapter)
       const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       // Create agent with flat StorageCreateAgentInput
+      // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
       await agentsStore.create({
         agent: {
           id,
@@ -177,7 +180,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           description,
           instructions,
           model,
-          tools: toolsFromBody,
+          tools,
           defaultOptions,
           workflows,
           agents,
@@ -186,7 +189,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           outputProcessors,
           memory,
           scorers,
-        },
+          requestContextSchema,
+        } as StorageCreateAgentInput,
       });
 
       // Return the resolved agent (thin record + version config)
@@ -239,6 +243,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     outputProcessors,
     memory,
     scorers,
+    requestContextSchema,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -258,13 +263,12 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
-      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
+      // Only include integrationTools if they're actually arrays from the body (not {} from adapter)
       const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
 
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
-
+      // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
       const updatedAgent = await agentsStore.update({
         id: storedAgentId,
         authorId,
@@ -273,7 +277,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         description,
         instructions,
         model,
-        tools: toolsFromBody,
+        tools,
         defaultOptions,
         workflows,
         agents,
@@ -282,7 +286,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         outputProcessors,
         memory,
         scorers,
-      });
+        requestContextSchema,
+      } as StorageUpdateAgentInput);
 
       // Build the snapshot config for auto-versioning comparison
       const configFields = {
@@ -290,7 +295,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         description,
         instructions,
         model,
-        tools: toolsFromBody,
+        tools,
         defaultOptions,
         workflows,
         agents,
@@ -299,6 +304,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         outputProcessors,
         memory,
         scorers,
+        requestContextSchema,
       };
 
       // Filter out undefined values to get only the config fields that were provided
