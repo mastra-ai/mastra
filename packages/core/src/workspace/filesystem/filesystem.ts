@@ -20,6 +20,7 @@
  */
 
 import type { Lifecycle, ProviderStatus } from '../lifecycle';
+import type { FilesystemMountConfig, FilesystemIcon } from './mount';
 
 // =============================================================================
 // Core Types
@@ -52,6 +53,13 @@ export interface FileEntry {
   isSymlink?: boolean;
   /** Target path of the symlink (only set if isSymlink is true) */
   symlinkTarget?: string;
+  /** Mount point metadata (only set for CompositeFilesystem mount points) */
+  mount?: {
+    provider: string;
+    icon?: FilesystemIcon;
+    displayName?: string;
+    description?: string;
+  };
 }
 
 export interface ReadOptions {
@@ -111,6 +119,8 @@ export interface FilesystemInfo {
   readOnly?: boolean;
   /** Base path (for local filesystems) */
   basePath?: string;
+  /** Icon identifier for UI display */
+  icon?: FilesystemIcon;
   /** Storage usage (if available) */
   storage?: {
     totalBytes?: number;
@@ -167,12 +177,37 @@ export interface WorkspaceFilesystem extends Lifecycle<FilesystemInfo> {
   readonly basePath?: string;
 
   /**
+   * Icon identifier for UI display.
+   * Used by CompositeFilesystem to show different icons for mount points.
+   */
+  readonly icon?: FilesystemIcon;
+
+  /**
+   * Human-friendly display name for the UI.
+   * Shown instead of provider name when available.
+   */
+  readonly displayName?: string;
+
+  /**
+   * Description shown in tooltips or help text.
+   */
+  readonly description?: string;
+
+  /**
    * Get instructions describing how this filesystem works.
    * Used in tool descriptions to help agents understand path semantics.
    *
    * @returns A string describing how to use this filesystem
    */
   getInstructions?(): string;
+
+  /**
+   * Get mount configuration for this filesystem.
+   * Used by sandboxes that support FUSE mounting (e.g., E2B with s3fs).
+   *
+   * @returns Mount configuration for the filesystem
+   */
+  getMountConfig?(): FilesystemMountConfig;
 
   // ---------------------------------------------------------------------------
   // File Operations

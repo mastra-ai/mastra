@@ -388,7 +388,7 @@ export interface StorageAgentType {
   /** Unique, immutable identifier */
   id: string;
   /** Agent status: 'draft' on creation, 'published' when a version is activated */
-  status: string;
+  status: 'draft' | 'published' | 'archived';
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
@@ -433,7 +433,7 @@ export type StorageUpdateAgentInput = {
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
-  status?: string;
+  status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
     /** Memory configuration object, or null to disable memory */
     memory?: SerializedMemoryConfig | null;
@@ -566,7 +566,7 @@ export type StorageUpdatePromptBlockInput = {
   /** FK to prompt_block_versions.id — the currently active version */
   activeVersionId?: string;
   /** Block status */
-  status?: string;
+  status?: 'draft' | 'published' | 'archived';
 } & Partial<StoragePromptBlockSnapshotType>;
 
 export type StorageListPromptBlocksInput = {
@@ -600,6 +600,144 @@ export type StorageListPromptBlocksOutput = PaginationInfo & {
 /** Paginated list output for resolved prompt blocks */
 export type StorageListPromptBlocksResolvedOutput = PaginationInfo & {
   promptBlocks: StorageResolvedPromptBlockType[];
+};
+
+// ============================================
+// Stored Scorer Types
+// ============================================
+
+/**
+ * Scorer type discriminator.
+ * - 'llm-judge': Custom LLM-as-judge scorer with user-provided instructions
+ * - Preset types: Built-in scorers from @mastra/evals (e.g., 'bias', 'toxicity', 'faithfulness')
+ */
+export type StoredScorerType =
+  | 'llm-judge'
+  | 'answer-relevancy'
+  | 'answer-similarity'
+  | 'bias'
+  | 'context-precision'
+  | 'context-relevance'
+  | 'faithfulness'
+  | 'hallucination'
+  | 'noise-sensitivity'
+  | 'prompt-alignment'
+  | 'tool-call-accuracy'
+  | 'toxicity';
+
+/**
+ * Stored scorer version snapshot containing ALL scorer configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the scorer record.
+ */
+export interface StorageScorerDefinitionSnapshotType {
+  /** Display name of the scorer */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** Scorer type — determines how the scorer is instantiated at runtime */
+  type: StoredScorerType;
+  /** Model configuration — used for LLM judge; for presets, overrides the default model */
+  model?: StorageModelConfig;
+  /** System instructions for the judge LLM (used when type === 'llm-judge') */
+  instructions?: string;
+  /** Score range configuration (used when type === 'llm-judge') */
+  scoreRange?: {
+    /** Minimum score value (default: 0) */
+    min?: number;
+    /** Maximum score value (default: 1) */
+    max?: number;
+  };
+  /** Serializable config options for preset scorers (e.g., { scale: 10, context: [...] }) */
+  presetConfig?: Record<string, unknown>;
+  /** Default sampling configuration */
+  defaultSampling?: ScoringSamplingConfig;
+}
+
+/**
+ * Thin stored scorer record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageScorerDefinitionSnapshotType).
+ */
+export interface StorageScorerDefinitionType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Scorer status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to scorer_definition_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved stored scorer type that combines the thin record with version snapshot config.
+ * Returned by getScorerDefinitionByIdResolved and listScorerDefinitionsResolved.
+ */
+export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType & StorageScorerDefinitionSnapshotType;
+
+/**
+ * Input for creating a new stored scorer. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateScorerDefinitionInput = {
+  /** Unique identifier for the scorer */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+} & StorageScorerDefinitionSnapshotType;
+
+/**
+ * Input for updating a stored scorer. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateScorerDefinitionInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+  /** FK to scorer_definition_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Scorer status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageScorerDefinitionSnapshotType>;
+
+export type StorageListScorerDefinitionsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter scorers by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter scorers by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin stored scorer records */
+export type StorageListScorerDefinitionsOutput = PaginationInfo & {
+  scorerDefinitions: StorageScorerDefinitionType[];
+};
+
+/** Paginated list output for resolved stored scorers */
+export type StorageListScorerDefinitionsResolvedOutput = PaginationInfo & {
+  scorerDefinitions: StorageResolvedScorerDefinitionType[];
 };
 
 // Basic Index Management Types
