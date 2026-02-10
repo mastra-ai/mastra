@@ -1,5 +1,6 @@
 import { ArrowUpIcon, ArrowDownIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { ButtonsGroup } from '../ButtonsGroup';
 
 export type ListAndDetailsNextPrevNavigationProps = {
   onPrevious?: () => void;
@@ -15,7 +16,7 @@ export function ListAndDetailsNextPrevNavigation({
   nextAriaLabel = 'Next',
 }: ListAndDetailsNextPrevNavigationProps): React.JSX.Element {
   return (
-    <div className="flex items-center gap-[2px]">
+    <ButtonsGroup spacing="close">
       <Button
         variant="secondary"
         size="default"
@@ -37,7 +38,7 @@ export function ListAndDetailsNextPrevNavigation({
         Next
         <ArrowDownIcon />
       </Button>
-    </div>
+    </ButtonsGroup>
   );
 }
 
