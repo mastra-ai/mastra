@@ -861,9 +861,14 @@ export class AgentLegacyHandler {
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions as any, 'generate');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-      this.capabilities.logger.error('V2 models are not supported for generateLegacy. Please use generate instead.', {
-        modelId: llm.getModel().modelId,
-      });
+      const specVersion = llm.getModel().specificationVersion;
+      this.capabilities.logger.error(
+        `Models with specificationVersion "${specVersion}" are not supported for generateLegacy. Please use generate() instead.`,
+        {
+          modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
+        },
+      );
 
       throw new MastraError({
         id: 'AGENT_GENERATE_V2_MODEL_NOT_SUPPORTED',
@@ -871,8 +876,9 @@ export class AgentLegacyHandler {
         category: ErrorCategory.USER,
         details: {
           modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
         },
-        text: 'V2 models are not supported for generateLegacy. Please use generate instead.',
+        text: `Models with specificationVersion "${specVersion}" are not supported for generateLegacy(). Please use generate() instead.`,
       });
     }
 
@@ -1151,9 +1157,14 @@ export class AgentLegacyHandler {
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions as any, 'stream');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-      this.capabilities.logger.error('V2 models are not supported for streamLegacy. Please use stream instead.', {
-        modelId: llm.getModel().modelId,
-      });
+      const specVersion = llm.getModel().specificationVersion;
+      this.capabilities.logger.error(
+        `Models with specificationVersion "${specVersion}" are not supported for streamLegacy. Please use stream() instead.`,
+        {
+          modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
+        },
+      );
 
       throw new MastraError({
         id: 'AGENT_STREAM_V2_MODEL_NOT_SUPPORTED',
@@ -1161,8 +1172,9 @@ export class AgentLegacyHandler {
         category: ErrorCategory.USER,
         details: {
           modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
         },
-        text: 'V2 models are not supported for streamLegacy. Please use stream instead.',
+        text: `Models with specificationVersion "${specVersion}" are not supported for streamLegacy(). Please use stream() instead.`,
       });
     }
 
