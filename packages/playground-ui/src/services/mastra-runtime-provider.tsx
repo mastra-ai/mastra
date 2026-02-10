@@ -158,112 +158,112 @@ const convertOmPartsInMastraMessage = (
     return message;
   }
 
-  // Build new parts array, replacing the first OM part for each cycleId with a merged tool call
-  // and skipping subsequent parts for the same cycleId (they're merged into the first position).
-  // Uses the global map to look up the full cycle state even when parts span multiple messages.
+  // Build new parts array. Badges are ONLY rendered at start marker positions
+  // (data-om-observation-start, data-om-buffering-start). All other OM parts
+  // (end, failed, activation, status) are silently dropped — their data is already
+  // captured in globalOmParts and merged into the badge at the start position.
+  // This ensures badges stay in their original position even after reload.
   const convertedParts: any[] = [];
-  const processedCycleIds = new Set<string>();
 
   for (const part of message.parts) {
-    // Skip ephemeral status parts — they're useful during streaming but shouldn't render on reload
-    if (part.type === 'data-om-status') continue;
-
     const cycleId = (part as any).data?.cycleId;
+    const partType = part.type as string;
 
-    // Skip OM parts for cycles we've already rendered a badge for in this message
-    if (cycleId && processedCycleIds.has(cycleId)) {
-      // Still let non-OM parts through (they won't have a cycleId match in the type check below)
-      const isOmPart = part.type?.startsWith('data-om-');
-      if (isOmPart) continue;
-    }
-
-    const isOmPartWithCycleId = cycleId && part.type?.startsWith('data-om-');
-
-    if (isOmPartWithCycleId) {
-      // Look up full cycle state from the global map (spans all messages)
+    // Only render badges at start marker positions
+    if (partType === 'data-om-observation-start' && cycleId) {
       const cycle = globalOmParts.get(cycleId);
-      if (!cycle) {
-        // Unknown cycle, keep part as-is
-        convertedParts.push(part);
-        continue;
+      if (!cycle) continue;
+
+      const startData = cycle.start?.data || {};
+      const endData = cycle.end?.data || {};
+      const failedData = cycle.failed?.data || {};
+
+      const isFailed = !!cycle.failed;
+      const isComplete = !!cycle.end;
+      const isDisconnected = !!startData.disconnectedAt || (isComplete && !!endData.disconnectedAt);
+      const isLoading = !isFailed && !isComplete && !isDisconnected;
+
+      const mergedData = {
+        ...startData,
+        ...(isComplete ? endData : {}),
+        ...(isFailed ? failedData : {}),
+        _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
+      };
+
+      convertedParts.push({
+        type: 'dynamic-tool',
+        toolCallId: `om-observation-${cycleId}`,
+        toolName: OM_TOOL_NAME,
+        input: mergedData,
+        output: isLoading
+          ? undefined
+          : {
+              status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
+              omData: mergedData,
+            },
+        state: isLoading ? 'input-available' : 'output-available',
+      });
+    } else if (partType === 'data-om-buffering-start' && cycleId) {
+      const cycle = globalOmParts.get(cycleId);
+      if (!cycle) continue;
+
+      const startData = cycle.bufferingStart?.data || {};
+      const endData = cycle.bufferingEnd?.data || {};
+      const failedData = cycle.bufferingFailed?.data || {};
+      const activationData = cycle.activation?.data || {};
+
+      const isFailed = !!cycle.bufferingFailed;
+      const isActivated = !!cycle.activation;
+      const isComplete = !!cycle.bufferingEnd;
+      const isDisconnected = !!startData.disconnectedAt;
+      const isLoading = !isFailed && !isActivated && !isComplete && !isDisconnected;
+
+      const mergedData: Record<string, unknown> = {
+        ...startData,
+        ...(isComplete ? endData : {}),
+        ...(isFailed ? failedData : {}),
+        ...(isActivated ? activationData : {}),
+        _state: isFailed
+          ? 'buffering-failed'
+          : isActivated
+            ? 'activated'
+            : isDisconnected
+              ? 'disconnected'
+              : isComplete
+                ? 'buffering-complete'
+                : 'buffering',
+      };
+      // Map activation fields to badge fields so they display correctly on reload
+      // (activation markers use tokensActivated, but the badge reads tokensObserved)
+      if (!mergedData.tokensObserved && mergedData.tokensActivated) {
+        mergedData.tokensObserved = mergedData.tokensActivated;
       }
 
-      // Determine the cycle category and render accordingly
-      const isBlocking = !!cycle.start || !!cycle.end || !!cycle.failed;
-      const isBuffering = !!cycle.bufferingStart || !!cycle.bufferingEnd || !!cycle.bufferingFailed || !!cycle.activation;
+      const bufferingStatus = isFailed
+        ? 'buffering-failed'
+        : isActivated
+          ? 'activated'
+          : isDisconnected
+            ? 'disconnected'
+            : 'buffering-complete';
 
-      if (isBlocking) {
-        // Blocking observation/reflection markers
-        const startData = cycle.start?.data || {};
-        const endData = cycle.end?.data || {};
-        const failedData = cycle.failed?.data || {};
-
-        const isFailed = !!cycle.failed;
-        const isComplete = !!cycle.end;
-        const isDisconnected = isComplete && !!endData.disconnectedAt;
-        const isLoading = !isFailed && !isComplete;
-
-        const mergedData = {
-          ...startData,
-          ...(isComplete ? endData : {}),
-          ...(isFailed ? failedData : {}),
-          _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
-        };
-
-        convertedParts.push({
-          type: 'dynamic-tool',
-          toolCallId: `om-observation-${cycleId}`,
-          toolName: OM_TOOL_NAME,
-          input: mergedData,
-          output: isLoading
-            ? undefined
-            : {
-                status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
-                omData: mergedData,
-              },
-          state: isLoading ? 'input-available' : 'output-available',
-        });
-      } else if (isBuffering) {
-        // Async buffering markers
-        const startData = cycle.bufferingStart?.data || {};
-        const endData = cycle.bufferingEnd?.data || {};
-        const failedData = cycle.bufferingFailed?.data || {};
-        const activationData = cycle.activation?.data || {};
-
-        const isFailed = !!cycle.bufferingFailed;
-        const isActivated = !!cycle.activation;
-        const isComplete = !!cycle.bufferingEnd;
-        const isLoading = !isFailed && !isActivated && !isComplete;
-
-        const mergedData: Record<string, unknown> = {
-          ...startData,
-          ...(isComplete ? endData : {}),
-          ...(isFailed ? failedData : {}),
-          ...(isActivated ? activationData : {}),
-          _state: isFailed ? 'buffering-failed' : isActivated ? 'activated' : isComplete ? 'buffering-complete' : 'buffering',
-        };
-        // Map activation fields to badge fields so they display correctly on reload
-        // (activation markers use tokensActivated, but the badge reads tokensObserved)
-        if (!mergedData.tokensObserved && mergedData.tokensActivated) {
-          mergedData.tokensObserved = mergedData.tokensActivated;
-        }
-
-        convertedParts.push({
-          type: 'dynamic-tool',
-          toolCallId: `om-buffering-${cycleId}`,
-          toolName: OM_TOOL_NAME,
-          input: mergedData,
-          output: isLoading
-            ? undefined
-            : {
-                status: isFailed ? 'buffering-failed' : isActivated ? 'activated' : 'buffering-complete',
-                omData: mergedData,
-              },
-          state: isLoading ? 'input-available' : 'output-available',
-        });
-      }
-
-      processedCycleIds.add(cycleId);
+      convertedParts.push({
+        type: 'dynamic-tool',
+        toolCallId: `om-buffering-${cycleId}`,
+        toolName: OM_TOOL_NAME,
+        input: mergedData,
+        output: isLoading
+          ? undefined
+          : {
+              status: bufferingStatus,
+              omData: mergedData,
+            },
+        state: isLoading ? 'input-available' : 'output-available',
+      });
+    } else if (partType?.startsWith('data-om-')) {
+      // Silently skip all other OM parts (end, failed, activation, status).
+      // Their data is already in globalOmParts and merged into the start-position badge.
+      continue;
     } else {
       // Keep non-OM parts as-is
       convertedParts.push(part);
@@ -468,7 +468,10 @@ export function MastraRuntimeProvider({
     }
   };
 
-  // Helper to mark in-progress OM markers as disconnected in messages
+  // Helper to mark in-progress OM markers as disconnected in messages.
+  // Preserves the original part type (keeps start markers as start markers)
+  // so the badge stays anchored at the correct position. Only adds disconnection
+  // metadata to the data payload.
   const markOmMarkersAsDisconnected = (msgs: any[]) => {
     return msgs.map(msg => {
       if (msg.role !== 'assistant') return msg;
@@ -478,21 +481,10 @@ export function MastraRuntimeProvider({
       if (!partsKey || !Array.isArray(msg[partsKey])) return msg;
 
       const updatedParts = msg[partsKey].map((part: any) => {
-        // Check for raw data-om-observation-start parts (before conversion to tool-call)
-        if (part.type === 'data-om-observation-start') {
+        // Mark raw start markers as disconnected (keep original type for badge anchoring)
+        if (part.type === 'data-om-observation-start' || part.type === 'data-om-buffering-start') {
           return {
-            type: 'data-om-observation-end',
-            data: {
-              ...part.data,
-              disconnectedAt: new Date().toISOString(),
-              _state: 'disconnected',
-            },
-          };
-        }
-        // Check for raw data-om-buffering-start parts
-        if (part.type === 'data-om-buffering-start') {
-          return {
-            type: 'data-om-buffering-end',
+            ...part,
             data: {
               ...part.data,
               disconnectedAt: new Date().toISOString(),
