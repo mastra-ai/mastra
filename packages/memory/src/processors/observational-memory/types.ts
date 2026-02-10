@@ -98,14 +98,17 @@ export interface ObservationConfig {
    * Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens`
    * (e.g. `0.25` = buffer every 25% of threshold).
    *
-   * When set, observations run asynchronously in the background at this interval,
+   * Observations run asynchronously in the background at this interval,
    * storing results in a buffer. When the main `messageTokens` threshold is reached,
    * buffered observations are activated instantly (no blocking LLM call).
    *
+   * Set to `false` to explicitly disable async buffering.
+   *
    * Must resolve to less than `messageTokens`.
-   * If not set, async buffering is disabled and observations run synchronously.
+   *
+   * @default 0.2 (buffer every 20% of messageTokens)
    */
-  bufferTokens?: number;
+  bufferTokens?: number | false;
 
   /**
    * Ratio (0-1) of buffered observations to activate when threshold is reached.

@@ -24,7 +24,7 @@ import type {
 function normalizeObservationalMemoryConfig(
   config: boolean | ObservationalMemoryOptions | undefined,
 ): ObservationalMemoryOptions | undefined {
-  if (config === true) return {};
+  if (config === true) return { model: 'google/gemini-2.5-flash' };
   if (config === false || config === undefined) return undefined;
   if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
   return config as ObservationalMemoryOptions;
@@ -1658,6 +1658,17 @@ Notes:
           `Otherwise, use one of those adapters or disable observational memory.`,
       );
     }
+
+    // Async buffering is on by default. Check that core + storage support it
+    // unless the user explicitly disabled it with bufferTokens: false.
+    if (omConfig.observation?.bufferTokens !== false && !coreFeatures.has('asyncBuffering')) {
+      throw new Error(
+        'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
+          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
+          'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
+      );
+    }
+
     // Dynamic import to avoid loading OM code when not needed and to prevent
     // import errors when paired with an older @mastra/core version
     const { ObservationalMemory } = await import('./processors/observational-memory');

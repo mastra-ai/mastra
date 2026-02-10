@@ -500,9 +500,9 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
       },
     },
     maxTokensPerBatch: 10_000,
-    // Async buffering defaults (undefined = disabled, preserves current sync behavior)
-    bufferTokens: undefined as number | undefined,
-    bufferActivation: undefined as number | undefined, // Ratio of buffered content to activate (0-1)
+    // Async buffering defaults (enabled by default)
+    bufferTokens: 0.2 as number | undefined, // Buffer every 20% of messageTokens
+    bufferActivation: 0.8 as number | undefined, // Activate to retain 20% of threshold
   },
   reflection: {
     model: 'google/gemini-2.5-flash',
@@ -518,8 +518,8 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
         },
       },
     },
-    // Async reflection buffering (undefined = disabled, preserves current sync behavior)
-    bufferActivation: undefined as number | undefined, // Ratio: start buffering at threshold * bufferActivation
+    // Async reflection buffering (enabled by default)
+    bufferActivation: 0.5 as number | undefined, // Start buffering at 50% of observationTokens
   },
 } as const;
 
@@ -932,10 +932,26 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
 
-    // Resolve model: top-level model takes precedence, then sub-config, then default
+    // Resolve "default" to the default model
+    const resolveModel = (m: typeof config.model) =>
+      m === 'default' ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model : m;
+
+    // Require an explicit model — no silent default.
+    // Resolution order: top-level model → sub-config model → the other sub-config model → error
     const observationModel =
-      config.model ?? config.observation?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
-    const reflectionModel = config.model ?? config.reflection?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
+      resolveModel(config.model) ?? resolveModel(config.observation?.model) ?? resolveModel(config.reflection?.model);
+    const reflectionModel =
+      resolveModel(config.model) ?? resolveModel(config.reflection?.model) ?? resolveModel(config.observation?.model);
+
+    if (!observationModel || !reflectionModel) {
+      throw new Error(
+        `Observational Memory requires a model to be set. Use \`observationalMemory: true\` for the default (google/gemini-2.5-flash), or set a model explicitly:\n\n` +
+          `  observationalMemory: {\n` +
+          `    model: "$provider/$model",\n` +
+          `  }\n\n` +
+          `See https://mastra.ai/docs/memory/observational-memory#models for model recommendations and alternatives.`,
+      );
+    }
 
     // Get base thresholds first (needed for shared budget calculation)
     const messageTokens = config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens;
@@ -945,6 +961,38 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Total context budget when shared budget is enabled
     const totalBudget = messageTokens + observationTokens;
+
+    // Async buffering is disabled when:
+    // - bufferTokens: false is explicitly set
+    // - scope is 'resource' and the user did NOT explicitly configure async buffering
+    //   (if they did, validateBufferConfig will throw a helpful error)
+    const userExplicitlyConfiguredAsync =
+      config.observation?.bufferTokens !== undefined ||
+      config.observation?.bufferActivation !== undefined ||
+      config.reflection?.bufferActivation !== undefined;
+    const asyncBufferingDisabled =
+      config.observation?.bufferTokens === false || (config.scope === 'resource' && !userExplicitlyConfiguredAsync);
+
+    // shareTokenBudget is not yet compatible with async buffering (temporary limitation).
+    // To use shareTokenBudget, users must explicitly disable buffering.
+    if (isSharedBudget && !asyncBufferingDisabled) {
+      const common =
+        `shareTokenBudget requires async buffering to be disabled (this is a temporary limitation). ` +
+        `Add observation: { bufferTokens: false } to your config:\n\n` +
+        `  observationalMemory: {\n` +
+        `    shareTokenBudget: true,\n` +
+        `    observation: { bufferTokens: false },\n` +
+        `  }\n`;
+      if (userExplicitlyConfiguredAsync) {
+        throw new Error(
+          common + `\nRemove any other async buffering settings (bufferTokens, bufferActivation, blockAfter).`,
+        );
+      } else {
+        throw new Error(
+          common + `\nAsync buffering is enabled by default — this opt-out is only needed when using shareTokenBudget.`,
+        );
+      }
+    }
 
     // Resolve observation config with defaults
     this.observationConfig = {
@@ -964,16 +1012,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       providerOptions: config.observation?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
       maxTokensPerBatch:
         config.observation?.maxTokensPerBatch ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch,
-      bufferTokens: this.resolveBufferTokens(
-        config.observation?.bufferTokens,
-        config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
-      ),
-      bufferActivation:
-        config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation,
-      blockAfter: this.resolveBlockAfter(
-        config.observation?.blockAfter ?? (config.observation?.bufferTokens ? 1.2 : undefined),
-        config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
-      ),
+      bufferTokens: asyncBufferingDisabled
+        ? undefined
+        : this.resolveBufferTokens(
+            config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens,
+            config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+          ),
+      bufferActivation: asyncBufferingDisabled
+        ? undefined
+        : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
+      blockAfter: asyncBufferingDisabled
+        ? undefined
+        : this.resolveBlockAfter(
+            config.observation?.blockAfter ??
+              ((config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens)
+                ? 1.2
+                : undefined),
+            config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
+          ),
     };
 
     // Resolve reflection config with defaults
@@ -990,12 +1046,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens,
       },
       providerOptions: config.reflection?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.providerOptions,
-      bufferActivation:
-        config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation,
-      blockAfter: this.resolveBlockAfter(
-        config.reflection?.blockAfter ?? (config.reflection?.bufferActivation ? 1.2 : undefined),
-        config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
-      ),
+      bufferActivation: asyncBufferingDisabled
+        ? undefined
+        : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
+      blockAfter: asyncBufferingDisabled
+        ? undefined
+        : this.resolveBlockAfter(
+            config.reflection?.blockAfter ??
+              ((config.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation)
+                ? 1.2
+                : undefined),
+            config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
+          ),
     };
 
     this.tokenCounter = new TokenCounter();
@@ -1056,7 +1118,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Helper to get the model config to resolve (handles ModelWithRetries[] by taking first)
     const getModelToResolve = (model: AgentConfig['model']) => {
       if (Array.isArray(model)) {
-        return model[0]?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+        return model[0]?.model ?? 'unknown';
       }
       return model;
     };
@@ -1120,7 +1182,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       this.reflectionConfig.bufferActivation !== undefined;
     if (hasAsyncBuffering && this.scope === 'resource') {
       throw new Error(
-        `Async buffering is not yet supported with scope: 'resource'. Use scope: 'thread' or remove bufferTokens/bufferActivation settings.`,
+        `Async buffering is not yet supported with scope: 'resource'. ` +
+          `Use scope: 'thread', or set observation: { bufferTokens: false } to disable async buffering.`,
       );
     }
 
@@ -1183,17 +1246,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         );
       }
     }
-
-    // Enforce: if observation has async buffering, reflection must have bufferActivation too
-    const obsHasAsync = this.observationConfig.bufferTokens !== undefined;
-    const refHasAsync =
-      this.reflectionConfig.bufferActivation !== undefined && this.reflectionConfig.bufferActivation > 0;
-    if (obsHasAsync && !refHasAsync) {
-      throw new Error(
-        `When observation.bufferTokens is set, reflection.bufferActivation must also be set. ` +
-          `Got observation.bufferTokens=${this.observationConfig.bufferTokens}, reflection.bufferActivation=${this.reflectionConfig.bufferActivation}.`,
-      );
-    }
   }
 
   /**
@@ -1201,9 +1253,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Otherwise return the absolute token count.
    */
   private resolveBufferTokens(
-    bufferTokens: number | undefined,
+    bufferTokens: number | false | undefined,
     messageTokens: number | ThresholdRange,
   ): number | undefined {
+    if (bufferTokens === false) return undefined;
     if (bufferTokens === undefined) return undefined;
     if (bufferTokens > 0 && bufferTokens < 1) {
       const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;

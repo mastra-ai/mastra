@@ -435,16 +435,18 @@ export interface ObservationalMemoryObservationConfig {
 
   /**
    * Token interval for async background observation buffering.
-   * When set, observations run asynchronously in the background at this interval,
+   * Observations run asynchronously in the background at this interval,
    * storing results in a buffer. When the main `messageTokens` threshold is reached,
    * buffered observations are activated instantly (no blocking LLM call).
    *
    * Can be an absolute token count (e.g. `5_000`) or a fraction of `messageTokens`
    * (e.g. `0.25` means buffer every 25% of the threshold).
    *
-   * Must resolve to less than `messageTokens`.
-   * If not set, async buffering is disabled and observations run synchronously.
+   * Set to `false` to explicitly disable async buffering.
    *
+   * Must resolve to less than `messageTokens`.
+   *
+   * @default 0.2 (buffer every 20% of messageTokens)
    * @example
    * ```ts
    * // Buffer every 5k tokens, activate at 20k
@@ -457,9 +459,13 @@ export interface ObservationalMemoryObservationConfig {
    *   messageTokens: 20_000,
    *   bufferTokens: 0.25,
    * }
+   * // Disable async buffering (use synchronous observation)
+   * observation: {
+   *   bufferTokens: false,
+   * }
    * ```
    */
-  bufferTokens?: number;
+  bufferTokens?: number | false;
 
   /**
    * Ratio (0-1) of buffered observations to activate when threshold is reached.
