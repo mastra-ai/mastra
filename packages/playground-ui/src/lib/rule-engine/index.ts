@@ -1,5 +1,4 @@
-export { isEligible } from './utils';
-export type { Rule, RuleGroup, RuleContext, ConditionOperator } from './types';
+export type { Rule, RuleGroup, ConditionOperator } from './types';
 
 // Re-export JSON Schema types from shared location for backward compatibility
 export type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';

@@ -22,27 +22,31 @@ const createDefaultRule = (): Rule => ({
  * Rule builder component for creating and managing a set of rules
  * based on a JSON Schema defining available fields
  */
-export const RuleBuilder: React.FC<RuleBuilderProps> = ({ schema, rules, onChange, className }) => {
+export const RuleBuilder: React.FC<RuleBuilderProps> = ({ schema, rules, onChange, groupOperator = 'AND', className }) => {
   const handleAddRule = React.useCallback(() => {
-    onChange([...rules, createDefaultRule()]);
-  }, [rules, onChange]);
+    onChange([...rules, createDefaultRule()], groupOperator);
+  }, [rules, onChange, groupOperator]);
 
   const handleRuleChange = React.useCallback(
     (index: number, updatedRule: Rule) => {
       const newRules = [...rules];
       newRules[index] = updatedRule;
-      onChange(newRules);
+      onChange(newRules, groupOperator);
     },
-    [rules, onChange],
+    [rules, onChange, groupOperator],
   );
 
   const handleRemoveRule = React.useCallback(
     (index: number) => {
       const newRules = rules.filter((_, i) => i !== index);
-      onChange(newRules);
+      onChange(newRules, groupOperator);
     },
-    [rules, onChange],
+    [rules, onChange, groupOperator],
   );
+
+  const handleToggleOperator = React.useCallback(() => {
+    onChange(rules, groupOperator === 'AND' ? 'OR' : 'AND');
+  }, [rules, onChange, groupOperator]);
 
   return (
     <div className={cn('border-t border-border1 bg-surface3 overflow-hidden', className)}>
@@ -50,9 +54,16 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({ schema, rules, onChang
         <div key={index} className="border-b border-border1 border-dashed">
           <div className="p-4 relative border-l-4 border-border1">
             {index > 0 && (
-              <div className="absolute left-1/2 -translate-x-1/2 z-10 -translate-y-1/2 bg-surface3 top-0 text-ui-xs px-1.5 rounded-md text-neutral2">
-                and
-              </div>
+              <button
+                type="button"
+                onClick={handleToggleOperator}
+                className={cn(
+                  'absolute left-1/2 -translate-x-1/2 z-10 -translate-y-1/2 top-0 text-ui-xs px-1.5 rounded-md cursor-pointer',
+                  groupOperator === 'OR' ? 'bg-accent2 text-accent6' : 'bg-surface3 text-neutral2',
+                )}
+              >
+                {groupOperator.toLowerCase()}
+              </button>
             )}
 
             <RuleRow

@@ -29,8 +29,10 @@ export type RuleBuilderProps = {
   schema: JsonSchema;
   /** Current rules */
   rules: Rule[];
-  /** Callback when rules change */
-  onChange: (rules: Rule[]) => void;
+  /** Callback when rules or group operator change */
+  onChange: (rules: Rule[], groupOperator: 'AND' | 'OR') => void;
+  /** Current group operator (AND or OR). Defaults to 'AND'. */
+  groupOperator?: 'AND' | 'OR';
   /** Optional class name */
   className?: string;
 };

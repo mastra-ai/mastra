@@ -61,10 +61,10 @@ const AgentCMSBlockContent = ({
     onBlockChange({ ...block, content });
   };
 
-  const handleRulesChange = (rules: Rule[]) => {
+  const handleRulesChange = (rules: Rule[], groupOperator: 'AND' | 'OR') => {
     onBlockChange({
       ...block,
-      rules: rules.length > 0 ? { operator: 'AND' as const, conditions: rules } : undefined,
+      rules: rules.length > 0 ? { operator: groupOperator, conditions: rules } : undefined,
     });
   };
 
@@ -131,6 +131,7 @@ const AgentCMSBlockContent = ({
                 schema={schema}
                 rules={block.rules?.conditions?.filter((c): c is Rule => 'field' in c) ?? []}
                 onChange={handleRulesChange}
+                groupOperator={block.rules?.operator ?? 'AND'}
               />
             </CollapsibleContent>
           </Collapsible>
