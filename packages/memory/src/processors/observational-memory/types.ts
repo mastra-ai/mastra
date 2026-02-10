@@ -116,7 +116,7 @@ export interface ObservationConfig {
    *
    * Requires `bufferTokens` to also be set.
    *
-   * @default 1 (activate all buffered observations)
+   * @default 0.8 (activate 80% of buffered observations, keeping 20% in reserve)
    */
   bufferActivation?: number;
 
