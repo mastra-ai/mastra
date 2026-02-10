@@ -365,10 +365,10 @@ export function FileBrowser({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span tabIndex={0} className="flex items-center">
-                                <Loader2 className="h-4 w-4 text-icon3 animate-spin" />
+                                <span className="h-2 w-2 rounded-full bg-icon3" />
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent>Connecting...</TooltipContent>
+                            <TooltipContent>Not initialized</TooltipContent>
                           </Tooltip>
                         )}
                         {entry.mount &&
