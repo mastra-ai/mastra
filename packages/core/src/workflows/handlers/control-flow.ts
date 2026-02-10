@@ -1022,6 +1022,12 @@ export async function executeForeach(
       output: errorAny.output,
     };
 
+    await engine.errorChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.error`,
+      errorOptions: { error: errorAny.error },
+    });
+
     await pubsub.publish(`workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
@@ -1053,6 +1059,13 @@ export async function executeForeach(
   if (Object.keys(foreachIndexObj).length > 0) {
     const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
     const foreachIndex = suspendedIndices[0]!;
+
+    await engine.endChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end`,
+      endOptions: { output: foreachIndexObj[foreachIndex] },
+    });
+
     await pubsub.publish(`workflow.events.v2.${runId}`, {
       type: 'watch',
       runId,
