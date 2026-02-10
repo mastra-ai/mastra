@@ -21573,50 +21573,28 @@ describe('Workflow', () => {
   });
 
   describe('Workflow as agent tool', () => {
-    it('should pass workflow input to the first step when called as agent tool via stream', async () => {
-      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
-        return { result: `processed-${inputData.taskId}` };
-      });
-
-      const fetchTaskStep = createStep({
-        id: 'fetch-task',
-        description: 'Fetches a task by ID',
-        inputSchema: z.object({
-          taskId: z.string(),
-        }),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
-        execute: executeAction,
-      });
-
-      const taskWorkflow = createWorkflow({
-        id: 'task-workflow',
-        description: 'A workflow that fetches a task',
-        inputSchema: z.object({
-          taskId: z.string(),
-        }),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
-        options: { validateInputs: true },
-      })
-        .then(fetchTaskStep)
-        .commit();
-
-      const mockModel = new MockLanguageModelV2({
+    function createWorkflowToolMockModel({
+      toolName,
+      provider,
+      modelId,
+    }: {
+      toolName: string;
+      provider?: string;
+      modelId?: string;
+    }) {
+      return new MockLanguageModelV2({
+        ...(provider ? { provider: provider as any } : {}),
+        ...(modelId ? { modelId: modelId as any } : {}),
         doGenerate: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls',
+          finishReason: 'tool-calls' as const,
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           content: [
             {
-              type: 'tool-call',
+              type: 'tool-call' as const,
               toolCallId: 'call-1',
-              toolName: 'workflow-taskWorkflow',
-              input: JSON.stringify({
-                inputData: { taskId: 'test-task-123' },
-              }),
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
             },
           ],
           warnings: [],
@@ -21625,24 +21603,14 @@ describe('Workflow', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
           stream: convertArrayToReadableStream([
-            {
-              type: 'stream-start',
-              warnings: [],
-            },
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: modelId ?? 'mock-model-id', timestamp: new Date(0) },
             {
               type: 'tool-call',
               toolCallId: 'call-1',
               toolCallType: 'function',
-              toolName: 'workflow-taskWorkflow',
-              input: JSON.stringify({
-                inputData: { taskId: 'test-task-123' },
-              }),
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
             },
             {
               type: 'finish',
@@ -21652,6 +21620,39 @@ describe('Workflow', () => {
           ]),
         }),
       });
+    }
+
+    async function streamAndCollectToolResults(agent: Agent) {
+      const stream = await agent.stream('Fetch task test-task-123');
+      for await (const _chunk of stream.fullStream) {
+        // consume stream to drive execution
+      }
+    }
+
+    it('should pass workflow input to the first step when called as agent tool via stream', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      const taskWorkflow = createWorkflow({
+        id: 'task-workflow',
+        description: 'A workflow that fetches a task',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
 
       const agent = new Agent({
         id: 'task-agent',
@@ -21661,24 +21662,11 @@ describe('Workflow', () => {
         workflows: { taskWorkflow },
       });
 
-      new Mastra({
-        agents: { taskAgent: agent },
-        logger: false,
-        storage: testStorage,
-      });
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
 
-      const stream = await agent.stream('Fetch task test-task-123');
-      const toolResults: any[] = [];
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'tool-result') {
-          toolResults.push(chunk);
-        }
-      }
-
-      // The workflow step should have been called with the correct input
       expect(executeAction).toHaveBeenCalled();
-      const callArgs = executeAction.mock.calls[0]![0];
-      expect(callArgs.inputData).toEqual({ taskId: 'test-task-123' });
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
     });
 
     it('should pass workflow input to step when workflow has no inputSchema', async () => {
@@ -21689,12 +21677,8 @@ describe('Workflow', () => {
       const fetchTaskStep = createStep({
         id: 'fetch-task',
         description: 'Fetches a task by ID',
-        inputSchema: z.object({
-          taskId: z.string(),
-        }),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
         execute: executeAction,
       });
 
@@ -21703,62 +21687,13 @@ describe('Workflow', () => {
       const taskWorkflow = createWorkflow({
         id: 'task-workflow',
         description: 'A workflow that fetches a task',
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        outputSchema: z.object({ result: z.string() }),
         options: { validateInputs: true },
       })
         .then(fetchTaskStep)
         .commit();
 
-      const mockModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'workflow-taskWorkflow',
-              input: JSON.stringify({
-                inputData: { taskId: 'test-task-123' },
-              }),
-            },
-          ],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            {
-              type: 'stream-start',
-              warnings: [],
-            },
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolCallType: 'function',
-              toolName: 'workflow-taskWorkflow',
-              input: JSON.stringify({
-                inputData: { taskId: 'test-task-123' },
-              }),
-            },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        }),
-      });
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
 
       const agent = new Agent({
         id: 'task-agent',
@@ -21768,25 +21703,11 @@ describe('Workflow', () => {
         workflows: { taskWorkflow },
       });
 
-      new Mastra({
-        agents: { taskAgent: agent },
-        logger: false,
-        storage: testStorage,
-      });
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
 
-      const stream = await agent.stream('Fetch task test-task-123');
-      const toolResults: any[] = [];
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'tool-result') {
-          toolResults.push(chunk);
-        }
-      }
-
-      // The workflow step should have been called with the correct input
-      // even though the workflow has no inputSchema
       expect(executeAction).toHaveBeenCalled();
-      const callArgs = executeAction.mock.calls[0]![0];
-      expect(callArgs.inputData).toEqual({ taskId: 'test-task-123' });
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
     });
 
     it('should pass workflow input to step when using OpenAI-compatible model', async () => {
@@ -21797,78 +21718,25 @@ describe('Workflow', () => {
       const fetchTaskStep = createStep({
         id: 'fetch-task',
         description: 'Fetches a task by ID',
-        inputSchema: z.object({
-          taskId: z.string(),
-        }),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
         execute: executeAction,
       });
 
       const taskWorkflow = createWorkflow({
         id: 'wait-task-workflow',
         description: 'A workflow that fetches a task',
-        inputSchema: z.object({
-          taskId: z.string(),
-        }),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
         options: { validateInputs: true },
       })
         .then(fetchTaskStep)
         .commit();
 
-      const mockModel = new MockLanguageModelV2({
-        provider: 'openai.chat' as any,
-        modelId: 'gpt-4o' as any,
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'tool-calls',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'workflow-waitTaskWorkflow',
-              input: JSON.stringify({
-                inputData: { taskId: 'test-task-123' },
-              }),
-            },
-          ],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            {
-              type: 'stream-start',
-              warnings: [],
-            },
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'gpt-4o',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolCallType: 'function',
-              toolName: 'workflow-waitTaskWorkflow',
-              input: JSON.stringify({
-                inputData: { taskId: 'test-task-123' },
-              }),
-            },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            },
-          ]),
-        }),
+      const mockModel = createWorkflowToolMockModel({
+        toolName: 'workflow-waitTaskWorkflow',
+        provider: 'openai.chat',
+        modelId: 'gpt-4o',
       });
 
       const agent = new Agent({
@@ -21879,24 +21747,11 @@ describe('Workflow', () => {
         workflows: { waitTaskWorkflow: taskWorkflow },
       });
 
-      new Mastra({
-        agents: { taskAgent: agent },
-        logger: false,
-        storage: testStorage,
-      });
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
 
-      const stream = await agent.stream('Fetch task test-task-123');
-      const toolResults: any[] = [];
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'tool-result') {
-          toolResults.push(chunk);
-        }
-      }
-
-      // The workflow step should have been called with the correct input
       expect(executeAction).toHaveBeenCalled();
-      const callArgs = executeAction.mock.calls[0]![0];
-      expect(callArgs.inputData).toEqual({ taskId: 'test-task-123' });
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
     });
   });
 });
