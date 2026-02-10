@@ -94,11 +94,15 @@ export class WorkflowsConvex extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     const now = new Date();
     // Check if a record already exists to preserve createdAt
@@ -114,8 +118,8 @@ export class WorkflowsConvex extends WorkflowsStorage {
         run_id: runId,
         resourceId,
         snapshot,
-        createdAt: existing?.createdAt ?? now.toISOString(),
-        updatedAt: now.toISOString(),
+        createdAt: existing?.createdAt ?? (createdAt ? new Date(createdAt).toISOString() : now.toISOString()),
+        updatedAt: updatedAt ? new Date(updatedAt).toISOString() : now.toISOString(),
       },
     });
   }

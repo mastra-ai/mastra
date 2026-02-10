@@ -304,8 +304,8 @@ if (!deploymentUrl || !adminKey) {
     it('should handle query for single workflow with many runs', async () => {
       const testWorkflowName = `heavy-workflow-${Date.now()}`;
 
-      // Create 50 runs for a single workflow (smaller than 1000 for faster tests)
-      for (let i = 0; i < 50; i++) {
+      // Create 150 runs for a single workflow (smaller than 1000 for faster tests)
+      for (let i = 0; i < 150; i++) {
         await workflowsDomain.persistWorkflowSnapshot({
           workflowName: testWorkflowName,
           runId: `run-${i}`,
@@ -319,11 +319,11 @@ if (!deploymentUrl || !adminKey) {
         status: 'running',
       });
 
-      expect(result.runs.length).toBe(10); // 10 running runs
-      expect(result.total).toBe(10);
+      expect(result.runs.length).toBe(30); // 30 running runs
+      expect(result.total).toBe(30);
 
       // Cleanup
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < 150; i++) {
         await workflowsDomain.deleteWorkflowRunById({ runId: `run-${i}`, workflowName: testWorkflowName });
       }
     });
