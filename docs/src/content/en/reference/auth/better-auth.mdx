@@ -65,6 +65,20 @@ export const mastra = new Mastra({
         "Custom authorization function to determine if a user should be granted access. Called after session verification. By default, allows all authenticated users with valid sessions.",
       isOptional: true,
     },
+    {
+      name: "public",
+      type: "Array<string | RegExp | [string, Methods | Methods[]]>",
+      description:
+        "Public routes that do not require authentication. Supports exact paths, wildcards, and path params.",
+      isOptional: true,
+    },
+    {
+      name: "protected",
+      type: "Array<string | RegExp | [string, Methods | Methods[]]>",
+      description:
+        "Protected routes that require authentication. Supports exact paths, wildcards, and path params.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -81,6 +95,15 @@ interface BetterAuthUser {
 
 - `session`: The Better Auth session object containing session metadata
 - `user`: The authenticated user object with user details
+
+The `Session` and `User` types are exported by the Better Auth package.
+
+## Matching rules
+
+- `public` and `protected` accept exact paths, wildcard patterns (like `/api/*`), and path params (like `/users/:id`).
+- For method-specific rules, use tuples like `["/api/agents", ["GET", "POST"]]`.
+- If a route matches both `public` and `protected`, `public` wins and no auth is required.
+- If neither matches, routes are treated as protected by default (unless a route is explicitly marked `requiresAuth: false`).
 
 ## Related
 
