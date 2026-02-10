@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
+import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
@@ -66,6 +66,10 @@ export class DevBundler extends Bundler {
     const envFiles = await this.getEnvFiles();
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
     const sourcemapEnabled = !!bundlerOptions?.sourcemap;
+    // Default to externals: true for dev mode (same as BuildBundler) when no
+    // user config is present. This externalizes all non-workspace deps so the
+    // dev server starts fast and avoids CJS/ESM interop bundling issues.
+    const effectiveExternals = bundlerOptions?.[IS_DEFAULT] ? true : (bundlerOptions?.externals ?? true);
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
@@ -73,7 +77,14 @@ export class DevBundler extends Bundler {
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
-      { sourcemap: sourcemapEnabled },
+      {
+        sourcemap: sourcemapEnabled,
+        bundlerOptions: {
+          enableSourcemap: sourcemapEnabled,
+          enableEsmShim: true,
+          externals: effectiveExternals,
+        },
+      },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 

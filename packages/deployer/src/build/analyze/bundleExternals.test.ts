@@ -6,6 +6,7 @@ import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import type * as UtilsModule from '../utils';
 import { createVirtualDependencies, bundleExternals } from './bundleExternals';
+import { GLOBAL_EXTERNALS } from './constants';
 
 // Mock the utilities that bundleExternals depends on
 vi.mock('../utils', async importOriginal => {
@@ -34,6 +35,18 @@ vi.mock('../plugins/esbuild', () => ({
 vi.mock('../plugins/hono-alias', () => ({
   aliasHono: vi.fn(() => ({ name: 'hono-alias-mock' })),
 }));
+
+describe('GLOBAL_EXTERNALS', () => {
+  it('should include @prisma/client to prevent CJS/ESM interop issues', () => {
+    expect(GLOBAL_EXTERNALS).toContain('@prisma/client');
+  });
+
+  it('should include commonly problematic native/CJS packages', () => {
+    expect(GLOBAL_EXTERNALS).toContain('pg');
+    expect(GLOBAL_EXTERNALS).toContain('pino');
+    expect(GLOBAL_EXTERNALS).toContain('@libsql/client');
+  });
+});
 
 describe('createVirtualDependencies', () => {
   it('should handle named exports only', () => {
