@@ -14,7 +14,7 @@ Added source metadata to all messages in agent networks, so UIs can identify the
   - `'agent-network'` — results, feedback, and bookkeeping from network execution
 - Routing-agent messages include `primitiveId`, `primitiveType`, and `selectionReason`
 - Agent/workflow/tool result messages always include `primitiveId` and `primitiveType` (previously only set when approval/suspension was involved)
-- Exported `filterMessagesForSubAgent` for testing
+- Non-string user messages now also receive `metadata.source = 'user'` when saved
 
 ```ts
 // Example: distinguish message sources in a UI
