@@ -14,8 +14,6 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-  StorageListAgentsResolvedOutput,
-  StorageResolvedAgentType,
   CreateIndexOptions,
   AgentInstructionBlock,
 } from '@mastra/core/storage';
@@ -248,6 +246,7 @@ export class AgentsPG extends AgentsStorage {
     try {
       return JSON.parse(value);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       const details: Record<string, string> = {
         value: value.length > 100 ? value.substring(0, 100) + '...' : value,
       };
@@ -271,7 +270,7 @@ export class AgentsPG extends AgentsStorage {
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
-      status: row.status as string,
+      status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
@@ -280,7 +279,7 @@ export class AgentsPG extends AgentsStorage {
     };
   }
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getById(id: string): Promise<StorageAgentType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
@@ -292,6 +291,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_AGENT_BY_ID', 'FAILED'),
@@ -304,7 +304,8 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
     try {
       const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -355,6 +356,7 @@ export class AgentsPG extends AgentsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       // Best-effort cleanup to prevent orphaned draft records
       try {
         const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
@@ -378,12 +380,13 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // First, get the existing agent
-      const existingAgent = await this.getAgentById({ id });
+      const existingAgent = await this.getById(id);
       if (!existingAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND'),
@@ -456,7 +459,8 @@ export class AgentsPG extends AgentsStorage {
         const changedFields = configFieldNames.filter(
           field =>
             field in configFields &&
-            configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
+            JSON.stringify(configFields[field as keyof typeof configFields]) !==
+              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
         );
 
         // Create new version only if fields changed
@@ -516,7 +520,7 @@ export class AgentsPG extends AgentsStorage {
       }
 
       // Return the updated agent
-      const updatedAgent = await this.getAgentById({ id });
+      const updatedAgent = await this.getById(id);
       if (!updatedAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
@@ -544,16 +548,17 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // Delete all versions for this agent first
-      await this.deleteVersionsByAgentId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the agent
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_AGENT', 'FAILED'),
@@ -566,7 +571,7 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     const { page = 0, perPage: perPageInput, orderBy } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -619,144 +624,10 @@ export class AgentsPG extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_AGENTS', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
-    const { field, direction } = this.parseOrderBy(orderBy);
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'LIST_AGENTS_RESOLVED', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
-    try {
-      const agentsTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-      const versionsTableName = getTableName({
-        indexName: TABLE_AGENT_VERSIONS,
-        schemaName: getSchemaName(this.#schema),
-      });
-
-      // Get total count
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${agentsTableName}`);
-      const total = parseInt(countResult.count, 10);
-
-      if (total === 0) {
-        return {
-          agents: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      // Get paginated results with a JOIN to get active version or latest version
-      const limitValue = perPageInput === false ? total : perPage;
-      const query = `
-        WITH latest_versions AS (
-          SELECT v.*
-          FROM ${versionsTableName} v
-          INNER JOIN (
-            SELECT "agentId", MAX("versionNumber") as max_version
-            FROM ${versionsTableName}
-            GROUP BY "agentId"
-          ) lv ON v."agentId" = lv."agentId" AND v."versionNumber" = lv.max_version
-        )
-        SELECT 
-          a.*,
-          COALESCE(av.id, lv.id) as version_id,
-          COALESCE(av."versionNumber", lv."versionNumber") as version_number,
-          COALESCE(av.name, lv.name) as version_name,
-          COALESCE(av.description, lv.description) as version_description,
-          COALESCE(av.instructions, lv.instructions) as version_instructions,
-          COALESCE(av.model, lv.model) as version_model,
-          COALESCE(av.tools, lv.tools) as version_tools,
-          COALESCE(av."defaultOptions", lv."defaultOptions") as version_defaultOptions,
-          COALESCE(av.workflows, lv.workflows) as version_workflows,
-          COALESCE(av.agents, lv.agents) as version_agents,
-          COALESCE(av."integrationTools", lv."integrationTools") as version_integrationTools,
-          COALESCE(av."inputProcessors", lv."inputProcessors") as version_inputProcessors,
-          COALESCE(av."outputProcessors", lv."outputProcessors") as version_outputProcessors,
-          COALESCE(av.memory, lv.memory) as version_memory,
-          COALESCE(av.scorers, lv.scorers) as version_scorers
-        FROM ${agentsTableName} a
-        LEFT JOIN ${versionsTableName} av ON a."activeVersionId" = av.id
-        LEFT JOIN latest_versions lv ON a.id = lv."agentId"
-        ORDER BY a."${field}" ${direction}
-        LIMIT $1 OFFSET $2
-      `;
-
-      const dataResult = await this.#db.client.manyOrNone(query, [limitValue, offset]);
-
-      const resolvedAgents = (dataResult || []).map(row => {
-        // Parse the agent record
-        const agent = this.parseRow({
-          id: row.id,
-          status: row.status,
-          activeVersionId: row.activeVersionId,
-          authorId: row.authorId,
-          metadata: row.metadata,
-          createdAt: row.createdAt,
-          createdAtZ: row.createdAtZ,
-          updatedAt: row.updatedAt,
-          updatedAtZ: row.updatedAtZ,
-        });
-
-        // If we have version data, merge it with agent
-        if (row.version_id) {
-          return {
-            ...agent,
-            name: row.version_name,
-            description: row.version_description,
-            instructions: this.deserializeInstructions(row.version_instructions as string),
-            model: this.parseJson(row.version_model, 'model'),
-            tools: this.parseJson(row.version_tools, 'tools'),
-            defaultOptions: this.parseJson(row.version_defaultOptions, 'defaultOptions'),
-            workflows: this.parseJson(row.version_workflows, 'workflows'),
-            agents: this.parseJson(row.version_agents, 'agents'),
-            integrationTools: this.parseJson(row.version_integrationTools, 'integrationTools'),
-            inputProcessors: this.parseJson(row.version_inputProcessors, 'inputProcessors'),
-            outputProcessors: this.parseJson(row.version_outputProcessors, 'outputProcessors'),
-            memory: this.parseJson(row.version_memory, 'memory'),
-            scorers: this.parseJson(row.version_scorers, 'scorers'),
-          } as StorageResolvedAgentType;
-        }
-
-        // No versions exist - return thin record cast as resolved
-        return agent as StorageResolvedAgentType;
-      });
-
-      return {
-        agents: resolvedAgents,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'LIST_AGENTS_RESOLVED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -813,6 +684,7 @@ export class AgentsPG extends AgentsStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_VERSION', 'FAILED'),
@@ -836,6 +708,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_VERSION', 'FAILED'),
@@ -862,6 +735,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_VERSION_BY_NUMBER', 'FAILED'),
@@ -888,6 +762,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_LATEST_VERSION', 'FAILED'),
@@ -955,6 +830,7 @@ export class AgentsPG extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_VERSIONS', 'FAILED'),
@@ -972,6 +848,7 @@ export class AgentsPG extends AgentsStorage {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_VERSION', 'FAILED'),
@@ -984,17 +861,18 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [agentId]);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [entityId]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { agentId },
+          details: { agentId: entityId },
         },
         error,
       );
@@ -1009,6 +887,7 @@ export class AgentsPG extends AgentsStorage {
       ]);
       return parseInt(result.count, 10);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'COUNT_VERSIONS', 'FAILED'),

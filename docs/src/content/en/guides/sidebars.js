@@ -126,12 +126,12 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/netlify-deployer',
+          id: 'deployment/netlify',
           label: 'Netlify',
         },
         {
           type: 'doc',
-          id: 'deployment/vercel-deployer',
+          id: 'deployment/vercel',
           label: 'Vercel',
         },
         {
