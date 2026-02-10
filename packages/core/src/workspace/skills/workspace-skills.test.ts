@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import type { SearchResult, IndexDocument } from '../search';
-import type { SkillSource, SkillSourceEntry } from './skill-source';
+import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 import { WorkspaceSkillsImpl } from './workspace-skills';
 
 /**
@@ -12,7 +12,6 @@ type MockSkillSource = SkillSource & {
   mkdir(path: string): Promise<void>;
   rmdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   deleteFile(path: string, options?: { force?: boolean }): Promise<void>;
-  stat(path: string): Promise<{ modifiedAt: Date; path?: string; type?: 'file' | 'directory' }>;
 };
 
 // =============================================================================
@@ -107,13 +106,26 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Mock
       }
       directories.delete(path);
     }),
-    stat: vi.fn(async (path: string) => {
+    stat: vi.fn(async (path: string): Promise<SkillSourceStat> => {
+      const name = path.split('/').pop() || path;
       const content = fileSystem.get(path);
       if (content) {
-        return { modifiedAt: new Date() };
+        return {
+          name,
+          type: 'file',
+          size: typeof content === 'string' ? content.length : content.length,
+          createdAt: new Date(),
+          modifiedAt: new Date(),
+        };
       }
       if (directories.has(path)) {
-        return { modifiedAt: new Date() };
+        return {
+          name,
+          type: 'directory',
+          size: 0,
+          createdAt: new Date(),
+          modifiedAt: new Date(),
+        };
       }
       throw new Error(`Path not found: ${path}`);
     }),
@@ -739,11 +751,15 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       // Override stat to return old modification time
-      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
-        path,
-        type: path.includes('.') ? ('file' as const) : ('directory' as const),
-        modifiedAt: pastTime,
-      }));
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => ({
+          name: path.split('/').pop() || path,
+          type: path.includes('.') ? ('file' as const) : ('directory' as const),
+          size: 0,
+          createdAt: pastTime,
+          modifiedAt: pastTime,
+        }),
+      );
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
@@ -770,11 +786,15 @@ describe('WorkspaceSkillsImpl', () => {
       });
 
       // Dynamic stat that returns current modifiedAt
-      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
-        path,
-        type: path.includes('.') ? ('file' as const) : ('directory' as const),
-        modifiedAt,
-      }));
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => ({
+          name: path.split('/').pop() || path,
+          type: path.includes('.') ? ('file' as const) : ('directory' as const),
+          size: 0,
+          createdAt: modifiedAt,
+          modifiedAt,
+        }),
+      );
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
@@ -804,11 +824,15 @@ describe('WorkspaceSkillsImpl', () => {
 
       const filesystem = createMockFilesystem(filesMap);
 
-      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
-        path,
-        type: path.includes('.') ? ('file' as const) : ('directory' as const),
-        modifiedAt,
-      }));
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => ({
+          name: path.split('/').pop() || path,
+          type: path.includes('.') ? ('file' as const) : ('directory' as const),
+          size: 0,
+          createdAt: modifiedAt,
+          modifiedAt,
+        }),
+      );
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
@@ -907,13 +931,26 @@ Instructions for the new skill.`;
 
           return entries;
         }),
-        stat: vi.fn(async (path: string) => {
+        stat: vi.fn(async (path: string): Promise<SkillSourceStat> => {
+          const name = path.split('/').pop() || path;
           const content = fileSystem.get(path);
           if (content) {
-            return { modifiedAt: new Date() };
+            return {
+              name,
+              type: 'file',
+              size: typeof content === 'string' ? content.length : content.length,
+              createdAt: new Date(),
+              modifiedAt: new Date(),
+            };
           }
           if (directories.has(path)) {
-            return { modifiedAt: new Date() };
+            return {
+              name,
+              type: 'directory',
+              size: 0,
+              createdAt: new Date(),
+              modifiedAt: new Date(),
+            };
           }
           throw new Error(`Path not found: ${path}`);
         }),
@@ -1130,11 +1167,15 @@ Premium instructions.
       });
 
       // Override stat to return old modification time
-      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
-        path,
-        type: path.includes('.') ? ('file' as const) : ('directory' as const),
-        modifiedAt: pastTime,
-      }));
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => ({
+          name: path.split('/').pop() || path,
+          type: path.includes('.') ? ('file' as const) : ('directory' as const),
+          size: 0,
+          createdAt: pastTime,
+          modifiedAt: pastTime,
+        }),
+      );
 
       const pathsResolver = vi.fn(() => ['/skills']);
 
@@ -1195,11 +1236,15 @@ Premium instructions.
 
       // Call maybeRefresh - paths are same (just different order)
       const pastTime = new Date(Date.now() - 10000);
-      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => ({
-        path,
-        type: path.includes('.') ? ('file' as const) : ('directory' as const),
-        modifiedAt: pastTime,
-      }));
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => ({
+          name: path.split('/').pop() || path,
+          type: path.includes('.') ? ('file' as const) : ('directory' as const),
+          size: 0,
+          createdAt: pastTime,
+          modifiedAt: pastTime,
+        }),
+      );
 
       await skills.maybeRefresh();
 
