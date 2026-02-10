@@ -131,7 +131,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/vercel-deployer',
+          id: 'deployment/vercel',
           label: 'Vercel',
         },
         {
