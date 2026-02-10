@@ -939,9 +939,10 @@ export async function executeForeach(
       // Surface unexpected errors (e.g. from applyMutableContext or Object.assign)
       // so the queue drains with a visible failure instead of silently swallowing.
       if (!errorResult) {
+        const errorObj = err instanceof Error ? err : new Error(String(err));
         errorResult = {
           status: 'failed',
-          error: err instanceof Error ? err.message : String(err),
+          error: errorObj,
           payload: undefined,
           startedAt: Date.now(),
           endedAt: Date.now(),
