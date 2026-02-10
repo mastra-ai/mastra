@@ -297,7 +297,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
       context.requestContext.set('user', user);
     } catch (err) {
-      console.error(err);
+      this.mastra.getLogger()?.error('Authentication error', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       return { status: 401, error: 'Invalid or expired token' };
     }
 
@@ -312,7 +314,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }
         return null; // Authorization passed
       } catch (err) {
-        console.error(err);
+        this.mastra.getLogger()?.error('Authorization error in authorizeUser', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        });
         return { status: 500, error: 'Authorization error' };
       }
     }
@@ -326,7 +330,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }
         return null; // Authorization passed
       } catch (err) {
-        console.error(err);
+        this.mastra.getLogger()?.error('Authorization error in authorize', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          path: context.path,
+          method: context.method,
+        });
         return { status: 500, error: 'Authorization error' };
       }
     }
