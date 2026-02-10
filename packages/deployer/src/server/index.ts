@@ -390,7 +390,7 @@ export async function createHonoServer(
         serverOptions?.https?.cert ??
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
-      // Public-facing host/protocol for Studio URL injection — allows bind address
+      // Public-facing host/protocol/port for Studio URL injection — allows bind address
       // (e.g. 0.0.0.0) to differ from the domain browsers should connect to
       const publicHost = serverOptions?.publicHost ?? host;
       const publicProtocol = serverOptions?.publicProtocol ?? protocol;
