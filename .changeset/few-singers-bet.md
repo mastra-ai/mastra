@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Fixed pg_constraint queries to filter by schema namespace, preventing false matches across schemas in multi-schema setups. Single-schema (default) setups are unaffected.
+Fixed cross-schema constraint checks in multi-schema PostgreSQL setups so tables and indexes are created in the intended schema. Single-schema (default) setups are unaffected.
