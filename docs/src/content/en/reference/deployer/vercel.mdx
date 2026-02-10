@@ -1,29 +1,40 @@
 ---
 title: "Reference: VercelDeployer | Deployer"
-description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
+description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel Functions."
 packages:
-  - "@mastra/core"
   - "@mastra/deployer-vercel"
 ---
 
 # VercelDeployer
 
-The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Vercel specific functionality.
+The `VercelDeployer` bundles your Mastra server and generates output conforming to Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3). Vercel deploys this output directly as serverless functions.
+
+## Installation
+
+To use `VercelDeployer`, install the `@mastra/deployer-vercel` package:
+
+```bash npm2yarn
+npm install @mastra/deployer-vercel@latest
+```
 
 ## Usage example
 
+Import `VercelDeployer` and set it as the deployer in your Mastra configuration:
+
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+// highlight-next-line
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
+  // highlight-next-line
   deployer: new VercelDeployer(),
 });
 ```
 
 ## Constructor options
 
-The deployer supports a small set of high‑value overrides that are written to the Vercel Output API function config (`.vc-config.json`):
+The deployer accepts overrides that are written to the Vercel Output API function config (`.vc-config.json`):
 
 - `maxDuration?: number` — Function execution timeout (in seconds)
 - `memory?: number` — Function memory (in MB)
@@ -45,3 +56,25 @@ export const mastra = new Mastra({
   }),
 });
 ```
+
+## Build output
+
+After running `mastra build`, the deployer generates a `.vercel/output` directory conforming to Vercel's [Build Output API (v3)](https://vercel.com/docs/build-output-api/v3). This directory contains routing configuration and serverless function bundles that Vercel deploys directly, bypassing framework detection.
+
+The output contains:
+
+- **config.json** — Routing configuration that directs all requests to your function
+- **functions/** — Your Mastra server bundled as a serverless function
+
+```bash
+.vercel/
+└── output/
+    ├── config.json
+    └── functions/
+        └── index.func/
+            ├── .vc-config.json
+            ├── index.mjs
+            └── node_modules/
+```
+
+This folder is generated during build and should not be committed to version control.
