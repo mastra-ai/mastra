@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",

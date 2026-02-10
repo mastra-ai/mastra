@@ -7,10 +7,6 @@
       "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts"]
     },
-    "build:docs": {
-      "dependsOn": ["build:lib", "mastra-docs#build"],
-      "outputs": ["dist/docs/**"]
-    },
     "build": {
       "dependsOn": ["^build", "build:lib", "@internal/playground#build"],
       "outputs": ["dist/**", "!dist/docs/**"]
