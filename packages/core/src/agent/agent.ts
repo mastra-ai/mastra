@@ -848,6 +848,9 @@ export class Agent<
         return undefined;
       }
 
+      // Propagate logger to factory-resolved workspace
+      resolvedWorkspace.__setLogger(this.logger);
+
       // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
       if (this.#mastra) {
         this.#mastra.addWorkspace(resolvedWorkspace);
@@ -1760,6 +1763,11 @@ export class Agent<
    */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+
+    // Propagate logger to workspace if it's a direct instance (not a factory function)
+    if (this.#workspace && typeof this.#workspace !== 'function') {
+      this.#workspace.__setLogger(this.logger);
+    }
     // Mastra will be passed to the LLM when it's created in getLLM()
 
     // Auto-register tools with the Mastra instance

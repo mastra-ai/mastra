@@ -129,3 +129,49 @@ export type ProviderStatus =
   | 'destroying' // Running destroy()
   | 'destroyed' // Fully cleaned up
   | 'error'; // Something went wrong
+
+// =============================================================================
+// Lifecycle Helper
+// =============================================================================
+
+/**
+ * Provider that may have lifecycle methods.
+ * Used by `callLifecycle` to dispatch to the correct method.
+ */
+interface LifecycleProvider {
+  _init?(): void | Promise<void>;
+  _start?(): void | Promise<void>;
+  _stop?(): void | Promise<void>;
+  _destroy?(): void | Promise<void>;
+  init?(): void | Promise<void>;
+  start?(): void | Promise<void>;
+  stop?(): void | Promise<void>;
+  destroy?(): void | Promise<void>;
+}
+
+/**
+ * Call a lifecycle method on a provider, preferring the `_`-prefixed wrapper
+ * (which adds status tracking & race-condition safety) when available,
+ * falling back to the plain method for interface-only implementations.
+ *
+ * @example
+ * ```typescript
+ * await callLifecycle(sandbox, 'start');   // calls sandbox._start() ?? sandbox.start()
+ * await callLifecycle(filesystem, 'init'); // calls filesystem._init() ?? filesystem.init()
+ * ```
+ */
+export async function callLifecycle(
+  provider: LifecycleProvider,
+  method: 'init' | 'start' | 'stop' | 'destroy',
+): Promise<void> {
+  const wrapped = `_${method}` as const;
+  const wrappedFn = provider[wrapped];
+  if (typeof wrappedFn === 'function') {
+    await wrappedFn.call(provider);
+  } else {
+    const plainFn = provider[method];
+    if (typeof plainFn === 'function') {
+      await plainFn.call(provider);
+    }
+  }
+}
