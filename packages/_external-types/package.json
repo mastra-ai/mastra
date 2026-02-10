@@ -35,7 +35,7 @@
     "@ai-sdk/provider-utils": "^3.0.12",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@microsoft/api-extractor": "^7.55.2",
+    "@microsoft/api-extractor": "^7.56.0",
     "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
