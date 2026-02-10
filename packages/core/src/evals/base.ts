@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';

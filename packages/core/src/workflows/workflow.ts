@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from '../agent';

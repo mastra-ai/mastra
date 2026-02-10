@@ -4,6 +4,6 @@ export type {
   InferPublicSchema,
   StandardSchemaWithJSON,
   InferStandardSchemaOutput,
-} from '@mastra/schema-compat';
+} from '@mastra/schema-compat/schema';
 
-export { toStandardSchema, isStandardSchemaWithJSON } from '@mastra/schema-compat';
+export { toStandardSchema, isStandardSchemaWithJSON } from '@mastra/schema-compat/schema';

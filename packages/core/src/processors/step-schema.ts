@@ -1,6 +1,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
@@ -235,9 +235,7 @@ export type MessagePart = z.infer<typeof MessagePartSchema>;
  * MessageList instance for managing message sources.
  * Required for processors that need to mutate the message list.
  */
-const messageListSchema = z
-  .custom<MessageList>()
-  .describe('MessageList instance for managing message sources');
+const messageListSchema = z.custom<MessageList>().describe('MessageList instance for managing message sources');
 
 /**
  * The messages to be processed.
@@ -467,7 +465,10 @@ export const ProcessorStepOutputSchema = z.object({
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Tool choice setting'),
   activeTools: z.array(z.string()).optional().describe('Active tool names'),
   providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
-  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional().describe('Model settings (temperature, etc.)'),
+  modelSettings: z
+    .custom<Omit<CallSettings, 'abortSignal'>>()
+    .optional()
+    .describe('Model settings (temperature, etc.)'),
   structuredOutput: z
     .custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>()
     .optional()

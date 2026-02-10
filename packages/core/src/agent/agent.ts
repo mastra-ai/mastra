@@ -3,7 +3,7 @@ import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { ZodSchema, z as z3 } from 'zod/v3';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';

@@ -1,5 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import { supportedLanguageModelSpecifications } from '../../../agent/utils';
 import type { MastraDBMessage } from '../../../memory';
 import type { ProcessorState } from '../../../processors';

@@ -1,7 +1,7 @@
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema/standard-schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodTypeAny, ZodObject } from 'zod';
-import z from 'zod';
+import type { ZodTypeAny, ZodObject } from 'zod/v4';
+import z from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type {
@@ -69,7 +69,12 @@ export class MockMemory extends MastraMemory {
     return memoryStorage.getThreadById({ threadId });
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfigInternal }): Promise<StorageThreadType> {
+  async saveThread({
+    thread,
+  }: {
+    thread: StorageThreadType;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.saveThread({ thread });
   }
@@ -89,7 +94,9 @@ export class MockMemory extends MastraMemory {
     return memoryStorage.listThreads(args);
   }
 
-  async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfigInternal; vectorSearchString?: string }): Promise<{
+  async recall(
+    args: StorageListMessagesInput & { threadConfig?: MemoryConfigInternal; vectorSearchString?: string },
+  ): Promise<{
     messages: MastraDBMessage[];
   }> {
     const memoryStorage = await this.getMemoryStore();
@@ -220,7 +227,6 @@ export class MockMemory extends MastraMemory {
       try {
         const schema = workingMemoryConfig.schema;
         let convertedSchema: JSONSchema7;
-
 
         // Convert any schema type to JSON Schema using the standard schema interface
         convertedSchema = standardSchemaToJSONSchema(toStandardSchema(schema as any));

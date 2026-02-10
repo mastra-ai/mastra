@@ -5,7 +5,7 @@
  * These tools provide filesystem and sandbox capabilities.
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';

@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 
 type ZodTypeAny = z.ZodType<any, any>;
 type ZodObjectAny = z.ZodObject<any>;

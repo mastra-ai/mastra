@@ -10,7 +10,7 @@ import {
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';

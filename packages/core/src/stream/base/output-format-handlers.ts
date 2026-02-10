@@ -2,7 +2,7 @@ import { TransformStream } from 'node:stream/web';
 import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
-import type z4 from 'zod';
+import type z4 from 'zod/v4';
 import type z3 from 'zod/v3';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';

@@ -2,8 +2,9 @@
 export type {
   StandardSchemaWithJSON,
   StandardSchemaWithJSONProps,
-  InferInput,
-  InferOutput,
+  InferStandardSchemaInput,
+  InferStandardSchemaOutput,
+  InferStandardSchemaInput as InferInput,
+  InferStandardSchemaOutput as InferOutput,
   StandardSchemaIssue,
-  ZodToJsonSchemaTarget,
-} from '@mastra/schema-compat';
+} from '@mastra/schema-compat/schema';

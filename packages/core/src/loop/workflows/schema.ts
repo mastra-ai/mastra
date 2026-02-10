@@ -19,7 +19,7 @@ import type {
   DynamicToolResult,
   GeneratedFile,
 } from '@internal/ai-sdk-v5';
-import z from 'zod';
+import z from 'zod/v4';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {

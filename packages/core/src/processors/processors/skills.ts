@@ -22,7 +22,7 @@
  * ```
  */
 
-import z from 'zod';
+import z from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { extractLines } from '../../workspace/line-utils';

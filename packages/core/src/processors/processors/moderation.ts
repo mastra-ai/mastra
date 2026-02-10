@@ -1,6 +1,6 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { GenerateObjectResult } from '@internal/ai-sdk-v4';
-import z from 'zod';
+import z from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { toStandardSchema, type PublicSchema } from '../../schema';
 import { standardSchemaToJSONSchema } from '../../schema/standard-schema';

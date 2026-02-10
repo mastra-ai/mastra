@@ -121,7 +121,7 @@ export type NetworkOptions<OUTPUT = undefined> = {
    *
    * @example
    * ```typescript
-   * import { z } from 'zod';
+   * import { z } from 'zod/v4';
    *
    * const resultSchema = z.object({
    *   summary: z.string(),

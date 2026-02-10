@@ -1,5 +1,5 @@
 import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
-import type z4 from 'zod';
+import type z4 from 'zod/v4';
 import type z3 from 'zod/v3';
 import { isStandardSchemaWithJSON } from '../../schema/schema';
 import type { StandardSchemaWithJSON } from '../../schema/schema';

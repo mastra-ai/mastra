@@ -9,7 +9,7 @@ import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@i
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
-import z from 'zod';
+import z from 'zod/v4';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';

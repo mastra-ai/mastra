@@ -1,5 +1,5 @@
 import deepEqual from 'fast-deep-equal';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';

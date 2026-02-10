@@ -17,7 +17,7 @@ import type {
   AiMessageType,
   MastraMessageV1,
   MastraDBMessage,
-  MemoryConfigInternal,
+  MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
 import type { TracingOptions } from '@mastra/core/observability';
@@ -38,6 +38,7 @@ import type {
   WorkflowRunStatus,
   WorkflowState,
 } from '@mastra/core/workflows';
+import type { PublicSchema } from '@mastra/schema-compat';
 
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod/v3';
@@ -147,6 +148,12 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
+export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
+  SerializableStructuredOutputOptions<OUTPUT>,
+  'schema'
+> & {
+  schema: PublicSchema<OUTPUT>;
+};
 export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
@@ -157,9 +164,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
   messages: MessageListInput;
-} & (OUTPUT extends undefined
-    ? { structuredOutput?: never }
-    : { structuredOutput: SerializableStructuredOutputOptions<OUTPUT> });
+} & (OUTPUT extends undefined ? { structuredOutput?: never } : { structuredOutput: StructuredOutputOptions<OUTPUT> });
 
 export type UpdateModelParams = {
   modelId: string;
@@ -330,7 +335,7 @@ export interface GetMemoryConfigParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type GetMemoryConfigResponse = { config: MemoryConfigInternal };
+export type GetMemoryConfigResponse = { config: MemoryConfig };
 
 export interface UpdateMemoryThreadParams {
   title: string;

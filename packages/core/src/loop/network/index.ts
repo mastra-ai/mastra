@@ -1,5 +1,5 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
