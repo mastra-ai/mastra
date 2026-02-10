@@ -55,7 +55,7 @@ const workspace = new Workspace({
 
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspaces).
+For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
 
 ## License
 

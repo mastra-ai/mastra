@@ -17,7 +17,7 @@ import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
   sandbox: new E2BSandbox({
-    // apiKey falls back to E2B_API_KEY env var
+    apiKey: 'my-api-key', // falls back to E2B_API_KEY env var
     timeout: 60_000, // 60 second timeout (default: 5 minutes)
   }),
 });
@@ -65,7 +65,7 @@ const workspace = new Workspace({
 
 ## Documentation
 
-For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspaces).
+For more information, see the [Mastra Workspaces documentation](https://mastra.ai/docs/workspace/overview).
 
 ## License
 
