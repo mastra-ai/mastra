@@ -32,9 +32,7 @@ export const agent = new Agent({
 
 ## Configuration
 
-The `observationalMemory` option accepts `true`, `false`, or a configuration object.
-
-Setting `observationalMemory: true` enables it with all defaults. Setting `observationalMemory: false` or omitting it disables it.
+The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `google/gemini-2.5-flash` as the default model. When passing a config object, a `model` must be explicitly set — either at the top level, or on `observation.model` and/or `reflection.model`.
 
 <PropertiesTable
   content={[
@@ -50,9 +48,9 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       name: "model",
       type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
       description:
-        "Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set.",
+        "Model for both the Observer and Reflector agents. Sets the model for both at once. Cannot be used together with `observation.model` or `reflection.model` — an error will be thrown if both are set. When using `observationalMemory: true`, defaults to `google/gemini-2.5-flash`. When passing a config object, this or `observation.model`/`reflection.model` must be set. Use `\"default\"` to explicitly use the default model (`google/gemini-2.5-flash`).",
       isOptional: true,
-      defaultValue: "'google/gemini-2.5-flash'",
+      defaultValue: "'google/gemini-2.5-flash' (when using observationalMemory: true)",
     },
     {
       name: "scope",
@@ -66,7 +64,7 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       name: "shareTokenBudget",
       type: "boolean",
       description:
-        "Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation.",
+        "Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. **Note:** `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).",
       isOptional: true,
       defaultValue: "false",
     },
@@ -95,9 +93,8 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       name: "model",
       type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
       description:
-        "Model for the Observer agent. Cannot be set if a top-level `model` is also provided.",
+        "Model for the Observer agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `reflection.model`.",
       isOptional: true,
-      defaultValue: "'google/gemini-2.5-flash'",
     },
     {
       name: "messageTokens",
@@ -125,18 +122,19 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
     },
     {
       name: "bufferTokens",
-      type: "number",
+      type: "number | false",
       description:
-        "Token interval for async background observation buffering. Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens` (e.g. `0.25` = buffer every 25% of threshold). When set, observations run in the background at this interval, storing results in a buffer. When the main `messageTokens` threshold is reached, buffered observations activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. If not set, async buffering is disabled and observations run synchronously.",
+        "Token interval for async background observation buffering. Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens` (e.g. `0.25` = buffer every 25% of threshold). When set, observations run in the background at this interval, storing results in a buffer. When the main `messageTokens` threshold is reached, buffered observations activate instantly without a blocking LLM call. Must resolve to less than `messageTokens`. Set to `false` to explicitly disable all async buffering (both observation and reflection).",
       isOptional: true,
+      defaultValue: "0.2",
     },
     {
       name: "bufferActivation",
       type: "number",
       description:
-        "Ratio (0-1) of buffered observations to activate when threshold is reached. Setting this below 1 keeps some observations in reserve for continuity. Requires `bufferTokens` to also be set.",
+        "Ratio (0-1) controlling how much of the message window to retain after activation. For example, `0.8` means activate enough to keep only 20% of `messageTokens` remaining. Higher values remove more message history per activation.",
       isOptional: true,
-      defaultValue: "1",
+      defaultValue: "0.8",
     },
     {
       name: "blockAfter",
@@ -157,9 +155,8 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       name: "model",
       type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
       description:
-        "Model for the Reflector agent. Cannot be set if a top-level `model` is also provided.",
+        "Model for the Reflector agent. Cannot be set if a top-level `model` is also provided. If neither this nor the top-level `model` is set, falls back to `observation.model`.",
       isOptional: true,
-      defaultValue: "'google/gemini-2.5-flash'",
     },
     {
       name: "observationTokens",
@@ -181,8 +178,9 @@ Setting `observationalMemory: true` enables it with all defaults. Setting `obser
       name: "bufferActivation",
       type: "number",
       description:
-        "Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range. Requires `observation.bufferTokens` to also be set.",
+        "Ratio (0-1) controlling when async reflection buffering starts. When observation tokens reach `observationTokens * bufferActivation`, reflection runs in the background. On activation at the full threshold, the buffered reflection replaces the observations it covers, preserving any new observations appended after that range.",
       isOptional: true,
+      defaultValue: "0.5",
     },
     {
       name: "blockAfter",
@@ -233,6 +231,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
+        model: "google/gemini-2.5-flash",
         scope: "resource",
         observation: {
           messageTokens: 20_000,
@@ -262,6 +261,7 @@ export const agent = new Agent({
         shareTokenBudget: true,
         observation: {
           messageTokens: 20_000,
+          bufferTokens: false, // required when using shareTokenBudget (temporary limitation)
         },
         reflection: {
           observationTokens: 80_000,
@@ -321,7 +321,16 @@ export const agent = new Agent({
 
 ### Async buffering
 
-Async buffering pre-computes observations in the background before the main threshold is reached, enabling instant activation with no blocking LLM call. The `bufferTokens` option triggers background observations at regular token intervals, and `bufferActivation` controls what fraction of buffered content is activated at threshold.
+Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows — when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
+
+The lifecycle is: **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. The `blockAfter` threshold forces a synchronous fallback if buffering can't keep up.
+
+Default settings:
+- `observation.bufferTokens: 0.2` — buffer every 20% of `messageTokens` (e.g. every ~6k tokens with a 30k threshold)
+- `observation.bufferActivation: 0.8` — on activation, remove enough messages to keep only 20% of the threshold remaining
+- `reflection.bufferActivation: 0.5` — start background reflection at 50% of observation threshold
+
+To customize:
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from "@mastra/memory";
@@ -334,11 +343,12 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
+        model: "google/gemini-2.5-flash",
         observation: {
           messageTokens: 30_000,
           // Buffer every 5k tokens (runs in background)
           bufferTokens: 5_000,
-          // Activate 70% of buffered chunks at threshold
+          // Activate to retain 30% of threshold
           bufferActivation: 0.7,
           // Force synchronous observation at 1.5x threshold
           blockAfter: 1.5,
@@ -356,9 +366,24 @@ export const agent = new Agent({
 });
 ```
 
-When `bufferTokens` is set, observation buffering begins at that token interval. At 30k tokens (the `messageTokens` threshold), 70% of the buffered chunks activate instantly. If tokens exceed 45k (`blockAfter: 1.5 × 30k`), a synchronous observation runs as a fallback.
+To disable async buffering entirely:
 
-For reflection, `bufferActivation: 0.5` begins background reflection when observation tokens reach 30k (50% of the 60k threshold). At 60k, the buffered reflection activates. Above 72k (`blockAfter: 1.2 × 60k`), synchronous reflection runs.
+```typescript
+observationalMemory: {
+  model: "google/gemini-2.5-flash",
+  observation: {
+    bufferTokens: false,
+  },
+}
+```
+
+Setting `bufferTokens: false` disables both observation and reflection async buffering. Observations and reflections will run synchronously when their thresholds are reached.
+
+:::note
+
+Async buffering is not supported with `scope: 'resource'` and is automatically disabled in resource scope.
+
+:::
 
 ## Streaming data parts
 
