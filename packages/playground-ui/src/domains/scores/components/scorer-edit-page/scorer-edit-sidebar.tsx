@@ -99,6 +99,7 @@ export function ScorerEditSidebar({
                   value={field.value}
                   onValueChange={field.onChange}
                   placeholder="Select scorer type..."
+                  variant="light"
                 />
               )}
             />
