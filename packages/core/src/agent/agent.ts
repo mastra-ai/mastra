@@ -62,7 +62,7 @@ import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
+import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
 import type { Workspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
@@ -150,7 +150,7 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
   #skillsFormat?: SkillFormat;
-  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
+  #workflows?: DynamicArgument<Record<string, AnyWorkflow>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>>;
@@ -902,7 +902,7 @@ export class Agent<
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext } = {}): Promise<Record<string, AnyWorkflow>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
