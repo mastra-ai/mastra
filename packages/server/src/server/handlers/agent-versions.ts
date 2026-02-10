@@ -39,6 +39,7 @@ const SNAPSHOT_CONFIG_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'requestContextSchema',
 ] as const;
 
 // ============================================================================

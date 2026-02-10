@@ -345,6 +345,24 @@ export type StorageDefaultOptions = Omit<
 >;
 
 /**
+ * A conditional variant: a value paired with an optional RuleGroup.
+ * When rules are present, the value is only used if rules evaluate to true against the request context.
+ * When rules are absent, the variant acts as the default/fallback.
+ */
+export interface StorageConditionalVariant<T> {
+  value: T;
+  rules?: RuleGroup;
+}
+
+/**
+ * A field that can be either a static value or an array of conditional variants.
+ * When an array of variants, all matching variants accumulate:
+ * arrays are concatenated and objects are shallow-merged.
+ * A variant with no rules always matches (acts as the default/base).
+ */
+export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
+
+/**
  * Agent version snapshot type containing ALL agent configuration fields.
  * These fields live exclusively in version snapshot rows, not on the agent record.
  */
@@ -355,29 +373,31 @@ export interface StorageAgentSnapshotType {
   description?: string;
   /** System instructions/prompt — plain string for backward compatibility, or array of instruction blocks */
   instructions: string | AgentInstructionBlock[];
-  /** Model configuration (provider, name, etc.) */
-  model: StorageModelConfig;
-  /** Tool keys with optional per-tool config (e.g., description overrides) to resolve from Mastra's tool registry */
-  tools?: Record<string, StorageToolConfig>;
-  /** Default options for generate/stream calls */
-  defaultOptions?: StorageDefaultOptions;
-  /** Array of workflow keys to resolve from Mastra's workflow registry */
-  workflows?: string[];
-  /** Array of agent keys to resolve from Mastra's agent registry */
-  agents?: string[];
+  /** Model configuration (provider, name, etc.) — static or conditional on request context */
+  model: StorageConditionalField<StorageModelConfig>;
+  /** Tool keys with optional per-tool config — static or conditional on request context */
+  tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
+  /** Default options for generate/stream calls — static or conditional on request context */
+  defaultOptions?: StorageConditionalField<StorageDefaultOptions>;
+  /** Array of workflow keys to resolve from Mastra's workflow registry — static or conditional on request context */
+  workflows?: StorageConditionalField<string[]>;
+  /** Array of agent keys to resolve from Mastra's agent registry — static or conditional on request context */
+  agents?: StorageConditionalField<string[]>;
   /**
    * Array of specific integration tool IDs selected for this agent.
    * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
    */
   integrationTools?: string[];
-  /** Array of processor keys to resolve from Mastra's processor registry */
-  inputProcessors?: string[];
-  /** Array of processor keys to resolve from Mastra's processor registry */
-  outputProcessors?: string[];
-  /** Memory configuration object */
-  memory?: SerializedMemoryConfig;
-  /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
-  scorers?: Record<string, StorageScorerConfig>;
+  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
+  inputProcessors?: StorageConditionalField<string[]>;
+  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
+  outputProcessors?: StorageConditionalField<string[]>;
+  /** Memory configuration object — static or conditional on request context */
+  memory?: StorageConditionalField<SerializedMemoryConfig>;
+  /** Scorer keys with optional sampling config — static or conditional on request context */
+  scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
+  /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -435,8 +455,8 @@ export type StorageUpdateAgentInput = {
   /** Agent status: 'draft' or 'published' */
   status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
-    /** Memory configuration object, or null to disable memory */
-    memory?: SerializedMemoryConfig | null;
+    /** Memory configuration object (static or conditional), or null to disable memory */
+    memory?: StorageConditionalField<SerializedMemoryConfig> | null;
   };
 
 export type StorageListAgentsInput = {
@@ -503,10 +523,28 @@ export interface Rule {
   value?: unknown;
 }
 
-/** Recursive rule group for AND/OR logic */
+/**
+ * Rule group with a fixed nesting depth of 3 levels.
+ * Depth is capped to keep TypeScript and Zod/JSON-Schema types aligned
+ * (recursive types cause infinite-depth issues in JSON Schema generation).
+ *
+ * Innermost groups (depth 2) may only contain leaf Rules.
+ * Mid-level groups (depth 1) may contain Rules or depth-2 groups.
+ * Top-level groups (depth 0, exported as `RuleGroup`) may contain Rules or depth-1 groups.
+ */
+interface RuleGroupDepth2 {
+  operator: 'AND' | 'OR';
+  conditions: Rule[];
+}
+
+interface RuleGroupDepth1 {
+  operator: 'AND' | 'OR';
+  conditions: (Rule | RuleGroupDepth2)[];
+}
+
 export interface RuleGroup {
   operator: 'AND' | 'OR';
-  conditions: (Rule | RuleGroup)[];
+  conditions: (Rule | RuleGroupDepth1)[];
 }
 
 /**
