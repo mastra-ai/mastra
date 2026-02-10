@@ -30,7 +30,7 @@ import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
-import type { Workflow } from '../workflows';
+import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
@@ -99,10 +99,7 @@ function createUndefinedPrimitiveError(
  */
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
-    string,
-    Workflow<any, any, any, any, any, any, any>
-  >,
+  TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -293,10 +290,7 @@ export interface Config<
  */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
-    string,
-    Workflow<any, any, any, any, any, any, any>
-  >,
+  TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -2254,12 +2248,12 @@ export class Mastra<
    * mastra.addWorkflow(newWorkflow, 'customKey'); // Uses custom key
    * ```
    */
-  public addWorkflow(workflow: Workflow<any, any, any, any, any, any, any>, key?: string): void {
+  public addWorkflow(workflow: AnyWorkflow, key?: string): void {
     if (!workflow) {
       throw createUndefinedPrimitiveError('workflow', workflow, key);
     }
     const workflowKey = key || workflow.id;
-    const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any, any>>;
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
     if (workflows[workflowKey]) {
       const logger = this.getLogger();
       logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);

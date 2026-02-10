@@ -267,6 +267,15 @@ export type ThreadSortDirection = 'ASC' | 'DESC';
 // Agent Storage Types
 
 /**
+ * Per-tool configuration stored in agent snapshots.
+ * Allows overriding the tool description for this specific agent.
+ */
+export interface StorageToolConfig {
+  /** Custom description override for this tool in this agent context */
+  description?: string;
+}
+
+/**
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
@@ -348,8 +357,8 @@ export interface StorageAgentSnapshotType {
   instructions: string | AgentInstructionBlock[];
   /** Model configuration (provider, name, etc.) */
   model: StorageModelConfig;
-  /** Array of tool keys to resolve from Mastra's tool registry */
-  tools?: string[];
+  /** Tool keys with optional per-tool config (e.g., description overrides) to resolve from Mastra's tool registry */
+  tools?: Record<string, StorageToolConfig>;
   /** Default options for generate/stream calls */
   defaultOptions?: StorageDefaultOptions;
   /** Array of workflow keys to resolve from Mastra's workflow registry */

@@ -703,6 +703,13 @@ export interface DefaultOptions {
 }
 
 /**
+ * Per-tool config for stored agents (e.g., description overrides)
+ */
+export interface StoredAgentToolConfig {
+  description?: string;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -730,7 +737,7 @@ export interface StoredAgentResponse {
     name: string;
     [key: string]: unknown;
   };
-  tools?: string[];
+  tools?: Record<string, StoredAgentToolConfig>;
   defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
@@ -799,7 +806,7 @@ export interface CreateStoredAgentParams {
     name: string;
     [key: string]: unknown;
   };
-  tools?: string[];
+  tools?: Record<string, StoredAgentToolConfig>;
   defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
@@ -824,7 +831,7 @@ export interface UpdateStoredAgentParams {
     name: string;
     [key: string]: unknown;
   };
-  tools?: string[];
+  tools?: Record<string, StoredAgentToolConfig>;
   defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];
@@ -993,7 +1000,7 @@ export interface AgentVersionResponse {
     name: string;
     [key: string]: unknown;
   };
-  tools?: string[];
+  tools?: Record<string, StoredAgentToolConfig>;
   defaultOptions?: DefaultOptions;
   workflows?: string[];
   agents?: string[];

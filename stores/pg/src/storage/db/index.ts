@@ -20,6 +20,7 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import type { DbClient } from '../client';
 import { PoolAdapter } from '../client';
+import { buildConstraintName } from './constraint-utils';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
@@ -193,7 +194,18 @@ function generateTableSQL({
   const finalColumns = [...columns, ...timeZColumns].join(',\n');
   // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
   const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
-  const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
+  // Use the original (long) base name so existing databases that already have
+  // the constraint under this name are detected by the IF NOT EXISTS check.
+  // buildConstraintName will truncate only when a schema prefix pushes the
+  // combined name past the 63-byte Postgres limit.
+  const workflowSnapshotConstraint = buildConstraintName({
+    baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+    schemaName: parsedSchemaName || undefined,
+  });
+  const spansPrimaryKeyConstraint = buildConstraintName({
+    baseName: 'mastra_ai_spans_traceid_spanid_pk',
+    schemaName: parsedSchemaName || undefined,
+  });
   const quotedSchemaName = getSchemaName(schemaName);
   const schemaFilter = parsedSchemaName || 'public';
 
@@ -206,12 +218,12 @@ function generateTableSQL({
                 ? `
             DO $$ BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = lower('${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key') AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaFilter}')
+                SELECT 1 FROM pg_constraint WHERE conname = lower('${workflowSnapshotConstraint}') AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaFilter}')
               ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE indexname = lower('${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key') AND schemaname = '${schemaFilter}'
+                SELECT 1 FROM pg_indexes WHERE indexname = lower('${workflowSnapshotConstraint}') AND schemaname = '${schemaFilter}'
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
-                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
+                ADD CONSTRAINT ${workflowSnapshotConstraint}
                 UNIQUE (workflow_name, run_id);
               END IF;
             END $$;
@@ -224,10 +236,10 @@ function generateTableSQL({
               ? `
             DO $$ BEGIN
               IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = lower('${constraintPrefix}mastra_ai_spans_traceid_spanid_pk') AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaFilter}')
+                SELECT 1 FROM pg_constraint WHERE conname = lower('${spansPrimaryKeyConstraint}') AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = '${schemaFilter}')
               ) THEN
                 ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
-                ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
+                ADD CONSTRAINT ${spansPrimaryKeyConstraint}
                 PRIMARY KEY ("traceId", "spanId");
               END IF;
             END $$;
@@ -840,12 +852,14 @@ export class PgDB extends MastraBase {
    */
   private async spansPrimaryKeyExists(): Promise<boolean> {
     const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
-    const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
-    const constraintName = `${constraintPrefix}mastra_ai_spans_traceid_spanid_pk`;
+    const constraintName = buildConstraintName({
+      baseName: 'mastra_ai_spans_traceid_spanid_pk',
+      schemaName: parsedSchemaName || undefined,
+    });
     const schemaFilter = this.schemaName || 'public';
 
     const result = await this.client.oneOrNone<{ exists: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1 AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)) as exists`,
+      `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)) as exists`,
       [constraintName, schemaFilter],
     );
 
@@ -859,8 +873,10 @@ export class PgDB extends MastraBase {
   private async addSpansPrimaryKey(): Promise<void> {
     const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
     const parsedSchemaName = this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : '';
-    const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
-    const constraintName = `${constraintPrefix}mastra_ai_spans_traceid_spanid_pk`;
+    const constraintName = buildConstraintName({
+      baseName: 'mastra_ai_spans_traceid_spanid_pk',
+      schemaName: parsedSchemaName || undefined,
+    });
     const schemaFilter = this.schemaName || 'public';
 
     try {
@@ -868,7 +884,7 @@ export class PgDB extends MastraBase {
       const constraintExists = await this.client.oneOrNone<{ exists: boolean }>(
         `
         SELECT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = $1 AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)
+          SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)
         ) as exists
       `,
         [constraintName, schemaFilter],

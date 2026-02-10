@@ -403,7 +403,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     return {
       ...version,
       model: { ...version.model },
-      tools: version.tools ? [...version.tools] : version.tools,
+      tools: version.tools ? { ...version.tools } : version.tools,
       defaultOptions: version.defaultOptions ? { ...version.defaultOptions } : version.defaultOptions,
       workflows: version.workflows ? [...version.workflows] : version.workflows,
       agents: version.agents ? [...version.agents] : version.agents,
