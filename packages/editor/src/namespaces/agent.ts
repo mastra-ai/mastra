@@ -275,6 +275,15 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     let model: string | (({ requestContext }: { requestContext: RequestContext }) => string);
     let staticModelConfig: StorageModelConfig | undefined;
 
+    /** Extract model-level settings into the shape expected by defaultOptions.modelSettings */
+    const modelSettingsFrom = (cfg: StorageModelConfig) => ({
+      temperature: cfg.temperature,
+      topP: cfg.topP,
+      frequencyPenalty: cfg.frequencyPenalty,
+      presencePenalty: cfg.presencePenalty,
+      maxOutputTokens: cfg.maxCompletionTokens,
+    });
+
     if (hasConditionalModel) {
       model = ({ requestContext }: { requestContext: RequestContext }) => {
         const ctx = requestContext.toJSON();
@@ -299,35 +308,57 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       model = `${staticModelConfig.provider}/${staticModelConfig.name}`;
     }
 
-    // Default options (object): accumulate by merging from all matching variants
-    const staticDefaultOptions = hasConditionalDefaultOptions
-      ? undefined
-      : (storedAgent.defaultOptions as StorageDefaultOptions | undefined);
+    // Default options (object): accumulate by merging from all matching variants.
+    // When the model is conditional, defaultOptions must also be dynamic so that
+    // model-level settings (temperature, topP, etc.) are forwarded at request time.
+    const staticDefaultOptions =
+      hasConditionalDefaultOptions || hasConditionalModel
+        ? undefined
+        : (storedAgent.defaultOptions as StorageDefaultOptions | undefined);
 
-    const defaultOptions = hasConditionalDefaultOptions
-      ? ({ requestContext }: { requestContext: RequestContext }) => {
-          const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.defaultOptions as StorageConditionalVariant<StorageDefaultOptions>[],
-            ctx,
-          );
-          return resolved ?? {};
-        }
-      : {
-          ...staticDefaultOptions,
+    const resolveModelSettings = (ctx: Record<string, unknown>) => {
+      const resolved = this.accumulateObjectVariants(
+        storedAgent.model as StorageConditionalVariant<StorageModelConfig>[],
+        ctx,
+      );
+      return resolved ? modelSettingsFrom(resolved) : {};
+    };
+
+    let defaultOptions;
+    if (hasConditionalDefaultOptions || hasConditionalModel) {
+      defaultOptions = ({ requestContext }: { requestContext: RequestContext }) => {
+        const ctx = requestContext.toJSON();
+
+        const baseOptions = hasConditionalDefaultOptions
+          ? (this.accumulateObjectVariants(
+              storedAgent.defaultOptions as StorageConditionalVariant<StorageDefaultOptions>[],
+              ctx,
+            ) ?? {})
+          : ((storedAgent.defaultOptions as StorageDefaultOptions | undefined) ?? {});
+
+        const mSettings = hasConditionalModel
+          ? resolveModelSettings(ctx)
+          : staticModelConfig
+            ? modelSettingsFrom(staticModelConfig)
+            : {};
+
+        return {
+          ...baseOptions,
           modelSettings: {
-            ...staticDefaultOptions?.modelSettings,
-            ...(staticModelConfig
-              ? {
-                  temperature: staticModelConfig.temperature,
-                  topP: staticModelConfig.topP,
-                  frequencyPenalty: staticModelConfig.frequencyPenalty,
-                  presencePenalty: staticModelConfig.presencePenalty,
-                  maxOutputTokens: staticModelConfig.maxCompletionTokens,
-                }
-              : undefined),
+            ...((baseOptions as Record<string, unknown>).modelSettings as Record<string, unknown> | undefined),
+            ...mSettings,
           },
         };
+      };
+    } else {
+      defaultOptions = {
+        ...staticDefaultOptions,
+        modelSettings: {
+          ...staticDefaultOptions?.modelSettings,
+          ...(staticModelConfig ? modelSettingsFrom(staticModelConfig) : undefined),
+        },
+      };
+    }
 
     // Convert requestContextSchema from JSON Schema to ZodSchema if present
     const requestContextSchema = storedAgent.requestContextSchema

@@ -932,11 +932,11 @@ describe('Stored Agents via MastraEditor', () => {
           model: [
             {
               // Base/default model — always included (no rules)
-              value: { provider: 'openai', name: 'gpt-4o-mini' },
+              value: { provider: 'openai', name: 'gpt-4o-mini', temperature: 0.5 },
             },
             {
               // Premium override — merges on top when matched
-              value: { provider: 'anthropic', name: 'claude-3-opus' },
+              value: { provider: 'anthropic', name: 'claude-3-opus', temperature: 0.9, topP: 0.95 },
               rules: {
                 operator: 'AND' as const,
                 conditions: [{ field: 'tier', operator: 'equals' as const, value: 'premium' }],
@@ -958,11 +958,20 @@ describe('Stored Agents via MastraEditor', () => {
       expect(premiumModel.modelId).toBe('claude-3-opus');
       expect(premiumModel.provider).toBe('anthropic');
 
+      // Model-level settings should be forwarded into defaultOptions.modelSettings
+      const premiumOpts = await agent!.getDefaultOptions({ requestContext: premiumCtx });
+      expect(premiumOpts.modelSettings?.temperature).toBe(0.9);
+      expect(premiumOpts.modelSettings?.topP).toBe(0.95);
+
       // Default context: only base applies → openai/gpt-4o-mini
       const defaultCtx = new RequestContext();
       const defaultModel = await agent!.getModel({ requestContext: defaultCtx });
       expect(defaultModel.modelId).toBe('gpt-4o-mini');
       expect(defaultModel.provider).toBe('openai');
+
+      // Default context model settings
+      const defaultOpts = await agent!.getDefaultOptions({ requestContext: defaultCtx });
+      expect(defaultOpts.modelSettings?.temperature).toBe(0.5);
     });
 
     it('should resolve conditional workflows based on request context', async () => {
