@@ -49,20 +49,50 @@ export const mastra = new Mastra({
 });
 ```
 
-## Manual deployment
+In order to test your Cloudflare Worker locally, also install the [`wrangler` CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/):
 
-Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
-
-With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
-
-```bash
-npx wrangler login
+```bash npm2yarn
+npm install -D wrangler
 ```
 
-Run the following to build and deploy your application to Cloudflare
+## Usage
 
-```bash
-npm run build && wrangler deploy --config .mastra/output/wrangler.json
-```
+After setting up your project, push it to your remote Git provider of choice (e.g. GitHub).
 
-> You can also run `wrangler dev --config .mastra/output/wrangler.json` from your project root to test your Mastra application locally.
+<Steps>
+<StepItem>
+
+Connect your repository to Cloudflare. On the "Workers & Pages" dashboard, select **Create application** and choose your Git provider in the next step. Continue with the setup process and select the repository you want to deploy.
+
+:::note
+
+Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
+
+:::
+
+</StepItem>
+<StepItem>
+
+Once you're ready, click the **Deploy** button and wait for the first deployment to complete.
+
+</StepItem>
+<StepItem>
+
+Try out your newly deployed function by going to `https://<your-project-name>.<slug>.workers.dev/api/agents`. You should get a JSON response listing all available agents.
+
+Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
+
+</StepItem>
+<StepItem>
+
+You can now call your Mastra endpoints over HTTP.
+
+:::note
+
+Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+
+:::
+
+</StepItem>
+
+</Steps>

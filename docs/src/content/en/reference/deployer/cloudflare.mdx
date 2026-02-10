@@ -63,4 +63,4 @@ The `CloudflareDeployer` constructor accepts the same configuration options as `
 
 ## Build output
 
-After running `mastra build`, the deployer generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/).
+After running `mastra build`, the deployer generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/). It points to files inside `.mastra/output` so you need to run `mastra build` before deploying with Wrangler.
