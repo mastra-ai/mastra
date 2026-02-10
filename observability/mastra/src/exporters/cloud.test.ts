@@ -51,6 +51,10 @@ describe('CloudExporter', () => {
     });
   });
 
+  afterEach(async () => {
+    await exporter.shutdown();
+  });
+
   describe('Core Event Filtering', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
@@ -302,6 +306,7 @@ describe('CloudExporter', () => {
 
       expect(shouldFlushSpy).toHaveReturnedWith(true);
       expect(flushSpy).toHaveBeenCalled();
+      await smallBatchExporter.shutdown();
     });
 
     it('should schedule flush for first event in empty buffer', async () => {
@@ -378,11 +383,6 @@ describe('CloudExporter', () => {
       traceId: 'trace-456',
       input: { prompt: 'test' },
       output: { response: 'result' },
-    });
-
-    afterEach(async () => {
-      await exporter.shutdown();
-      vi.restoreAllMocks();
     });
 
     it('should set timer when scheduling flush', async () => {
@@ -627,6 +627,7 @@ describe('CloudExporter', () => {
       const headers = requestOptions.headers as Record<string, string>;
 
       expect(headers.Authorization).toBe(`Bearer ${testJWT}`);
+      await authExporter.shutdown();
     });
 
     it('should handle multiple spans in batch', async () => {
@@ -716,6 +717,7 @@ describe('CloudExporter', () => {
         expect.any(Object),
         3, // maxRetries passed to fetchWithRetry
       );
+      await retryExporter.shutdown();
     });
 
     it('should pass maxRetries to fetchWithRetry correctly', async () => {
@@ -739,6 +741,7 @@ describe('CloudExporter', () => {
         expect.any(Object),
         5, // Custom maxRetries value
       );
+      await customRetryExporter.shutdown();
     });
 
     it('should drop batch after fetchWithRetry exhausts all retries', async () => {
@@ -765,6 +768,7 @@ describe('CloudExporter', () => {
         'Batch upload failed after all retries, dropping batch',
         expect.any(Object),
       );
+      await retryExporter.shutdown();
     });
 
     it('should handle flush errors gracefully in background', async () => {
@@ -874,10 +878,6 @@ describe('CloudExporter', () => {
       traceId: 'trace-456',
       input: { prompt: 'test' },
       output: { response: 'result' },
-    });
-
-    afterEach(() => {
-      vi.restoreAllMocks();
     });
 
     it('should clear timer on shutdown', async () => {
