@@ -364,14 +364,21 @@ export function FileBrowser({
                           (entry.mount.description ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span tabIndex={0} className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-icon3 bg-surface4'}`}>
+                                <span
+                                  tabIndex={0}
+                                  className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-icon3 bg-surface4'}`}
+                                >
                                   {mountLabel}
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>{entry.mount.description}</TooltipContent>
                             </Tooltip>
                           ) : (
-                            <span className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-icon3 bg-surface4'}`}>{mountLabel}</span>
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-icon3 bg-surface4'}`}
+                            >
+                              {mountLabel}
+                            </span>
                           ))}
                         {entry.type === 'file' && entry.size !== undefined && (
                           <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
