@@ -6,7 +6,6 @@ import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/worksp
 import { E2BSandbox } from '@mastra/e2b';
 import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
-import { ConsoleLogger } from '@mastra/core/logger';
 
 /**
  * Developer agent - inherits globalWorkspace from Mastra instance.
@@ -20,12 +19,6 @@ export const developerAgent = new Agent({
   description: 'An agent that helps with code reviews and API design.',
   instructions: `You are a helpful developer assistant.`,
   model: 'anthropic/claude-opus-4-5',
-  defaultOptions: {
-    modelSettings: {
-      temperature: 1,
-      topP: undefined,
-    },
-  },
   memory: new Memory({
     vector: new LibSQLVector({
       id: 'developer-agent-vector',
@@ -74,7 +67,6 @@ export const developerAgent = new Agent({
     },
     sandbox: new E2BSandbox({
       id: 'developer-e2b-sandbox',
-      logger: new ConsoleLogger({ level: 'debug' }),
     }),
     skills: ['/.agents/skills', '/local/skills', '/r2/skills'],
     tools: {
