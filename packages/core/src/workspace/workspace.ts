@@ -34,9 +34,11 @@ import type { IMastraLogger } from '../logger';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
-import type { WorkspaceFilesystem } from './filesystem';
+import { CompositeFilesystem } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemIcon } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
-import type { WorkspaceSandbox } from './sandbox';
+import { callLifecycle } from './lifecycle';
+import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
@@ -73,6 +75,74 @@ export interface WorkspaceConfig {
    * Extend MastraSandbox for automatic logger integration.
    */
   sandbox?: WorkspaceSandbox;
+
+  /**
+   * Mount multiple filesystems at different paths.
+   * Creates a CompositeFilesystem that routes operations based on path.
+   *
+   * When a sandbox is configured, filesystems are automatically mounted
+   * into the sandbox at their respective paths during init().
+   *
+   * Use the `onMount` hook to skip or customize mounting for specific filesystems.
+   *
+   * @example
+   * ```typescript
+   * const workspace = new Workspace({
+   *   sandbox: new E2BSandbox({ timeout: 60000 }),
+   *   mounts: {
+   *     '/data': new S3Filesystem({ bucket: 'my-data', ... }),
+   *     '/skills': new S3Filesystem({ bucket: 'skills', readOnly: true, ... }),
+   *   },
+   * });
+   *
+   * await workspace.init();
+   * // Both filesystems mounted in sandbox at /data and /skills
+   * ```
+   */
+  mounts?: Record<string, WorkspaceFilesystem>;
+
+  /**
+   * Hook called before mounting each filesystem into the sandbox.
+   *
+   * Return values:
+   * - `false` - Skip mount entirely (don't mount this filesystem)
+   * - `{ success: true }` - Hook handled the mount successfully
+   * - `{ success: false, error?: string }` - Hook attempted mount but failed
+   * - `undefined` / no return - Use provider's default mount behavior
+   *
+   * This is useful for:
+   * - Skipping specific filesystems (e.g., local filesystems in remote sandbox)
+   * - Custom mount implementations
+   * - Syncing files instead of FUSE mounting
+   *
+   * Note: If your hook handles the mount, you're responsible for the entire
+   * implementation. The sandbox provider won't do any additional tracking.
+   *
+   * @example Skip local filesystems
+   * ```typescript
+   * const workspace = new Workspace({
+   *   sandbox: new E2BSandbox(),
+   *   mounts: {
+   *     '/data': new S3Filesystem({ bucket: 'data', ... }),
+   *     '/local': new LocalFilesystem({ basePath: './data' }),
+   *   },
+   *   onMount: ({ filesystem }) => {
+   *     if (filesystem.provider === 'local') return false;
+   *   },
+   * });
+   * ```
+   *
+   * @example Custom mount implementation
+   * ```typescript
+   * onMount: async ({ filesystem, mountPath, config, sandbox }) => {
+   *   if (config?.type === 's3') {
+   *     await sandbox.executeCommand?.('my-s3-mount', [mountPath]);
+   *     return { success: true };
+   *   }
+   * }
+   * ```
+   */
+  onMount?: OnMountHook;
 
   // ---------------------------------------------------------------------------
   // Search Configuration
@@ -226,6 +296,10 @@ export interface WorkspaceInfo {
   /** Filesystem info (if available) */
   filesystem?: {
     provider: string;
+    /** Human-readable name */
+    name?: string;
+    /** Icon identifier for UI display */
+    icon?: FilesystemIcon;
     basePath?: string;
     readOnly?: boolean;
     status?: string;
@@ -283,8 +357,27 @@ export class Workspace {
     this.lastAccessedAt = new Date();
 
     this._config = config;
-    this._fs = config.filesystem;
     this._sandbox = config.sandbox;
+
+    // Setup mounts - creates CompositeFilesystem and informs sandbox
+    if (config.mounts && Object.keys(config.mounts).length > 0) {
+      // Validate: can't use both filesystem and mounts
+      if (config.filesystem) {
+        throw new WorkspaceError('Cannot use both "filesystem" and "mounts"', 'INVALID_CONFIG');
+      }
+
+      this._fs = new CompositeFilesystem({ mounts: config.mounts });
+      if (this._sandbox?.mounts) {
+        // Inform sandbox about mounts so it can process them on start()
+        this._sandbox.mounts.setContext({ sandbox: this._sandbox, workspace: this });
+        this._sandbox.mounts.add(config.mounts);
+        if (config.onMount) {
+          this._sandbox.mounts.setOnMount(config.onMount);
+        }
+      }
+    } else {
+      this._fs = config.filesystem;
+    }
 
     // Validate vector search config - embedder is required with vectorStore
     if (config.vectorStore && !config.embedder) {
@@ -552,18 +645,18 @@ export class Workspace {
 
   /**
    * Initialize the workspace.
-   * Starts the sandbox and initializes the filesystem.
+   * Starts the sandbox, initializes the filesystem, and auto-mounts filesystems.
    */
   async init(): Promise<void> {
     this._status = 'initializing';
 
     try {
-      if (this._fs?.init) {
-        await this._fs.init();
+      if (this._fs) {
+        await callLifecycle(this._fs, 'init');
       }
 
-      if (this._sandbox?.start) {
-        await this._sandbox.start();
+      if (this._sandbox) {
+        await callLifecycle(this._sandbox, 'start');
       }
 
       // Auto-index files if autoIndexPaths is configured
@@ -585,12 +678,12 @@ export class Workspace {
     this._status = 'destroying';
 
     try {
-      if (this._sandbox?.destroy) {
-        await this._sandbox.destroy();
+      if (this._sandbox) {
+        await callLifecycle(this._sandbox, 'destroy');
       }
 
-      if (this._fs?.destroy) {
-        await this._fs.destroy();
+      if (this._fs) {
+        await callLifecycle(this._fs, 'destroy');
       }
 
       this._status = 'destroyed';
@@ -617,6 +710,8 @@ export class Workspace {
       const fsInfo = await this._fs.getInfo?.();
       info.filesystem = {
         provider: this._fs.provider,
+        name: fsInfo?.name ?? this._fs.name,
+        icon: fsInfo?.icon,
         basePath: fsInfo?.basePath ?? this._fs.basePath,
         readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
         status: fsInfo?.status,
