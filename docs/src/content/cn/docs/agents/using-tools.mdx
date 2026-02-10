@@ -1,0 +1,224 @@
+---
+title: "使用工具 | 智能体"
+description: 了解如何创建工具并将其添加到智能体，以扩展超越文本生成的能力。
+packages:
+  - "@mastra/core"
+---
+
+# 使用工具
+
+智能体使用工具从您的代码库调用 API、查询数据库或运行自定义函数。工具通过提供对数据的结构化访问和执行明确定义的操作，为智能体提供超越语言生成的能力。您还可以从远程 [MCP 服务器](/docs/cn/mcp/overview) 加载工具，以扩展智能体的能力。
+
+## 何时使用工具
+
+当智能体需要来自远程资源的额外上下文或信息时，或当它需要运行执行特定操作的代码时使用工具。这包括模型无法可靠地自行处理的任务，例如获取实时数据或返回一致的、定义良好的输出。
+
+## 创建工具
+
+创建工具时，保持描述简单，专注于工具的功能，强调其主要用例。描述性的模式名称也可以帮助指导智能体了解如何使用工具。
+
+此示例展示如何创建从 API 获取天气数据的工具。当智能体调用工具时，它会根据工具的 `inputSchema` 提供所需的输入。工具通过其 `inputData` 参数访问这些数据，在此示例中包括天气 API 查询中使用的 `location`。
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  description: "获取某个地点的天气",
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    weather: z.string(),
+  }),
+  execute: async (inputData) => {
+    const { location } = inputData;
+
+    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  },
+});
+```
+
+## 向智能体添加工具
+
+要使工具对智能体可用，将其添加到 `tools`。在智能体的系统提示中提及可用的工具及其一般用途，有助于智能体决定何时调用工具以及何时不调用。
+
+智能体可以使用多个工具来处理更复杂的任务，将特定部分委托给各个工具。智能体根据用户消息、智能体的指令以及工具的描述和模式来决定使用哪些工具。
+
+```typescript {11} title="src/mastra/agents/weather-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather-tool";
+
+export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "天气智能体",
+  instructions: `
+      您是一位乐于助人的天气助手。
+      使用 weatherTool 获取当前的天气数据。`,
+  model: "openai/gpt-5.1",
+  tools: { weatherTool },
+});
+```
+
+## 使用多个工具
+
+当有多个工具可用时，智能体可能会根据回答查询所需的内容选择使用一个、几个或不使用。
+
+```typescript {7} title="src/mastra/agents/weather-agent.ts"
+import { weatherTool } from "../tools/weather-tool";
+import { activitiesTool } from "../tools/activities-tool";
+
+export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "天气智能体",
+  tools: { weatherTool, activitiesTool },
+});
+```
+
+## 将智能体作为工具使用
+
+智能体可以通过 `agents` 配置添加到其他智能体。当您添加子智能体时，Mastra 会自动将其转换为父智能体可以调用的工具。生成的工具命名为 `agent-<agentName>`。
+
+```typescript title="src/mastra/agents/parent-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const parentAgent = new Agent({
+  id: "parent-agent",
+  name: "父智能体",
+  description: "在此处仔细撰写好的描述",
+  instructions: `指令`,
+  model: "openai/gpt-5.1",
+  agents: {
+    // highlight-next-line
+    subAgent,
+  },
+});
+
+// highlight-start
+const subAgent = new Agent({
+  id: "sub-agent",
+  name: "子智能体",
+  description: "在此处仔细撰写好的描述",
+  instructions: `指令`,
+  model: "openai/gpt-5.1",
+})
+// highlight-end
+```
+
+子智能体应包含 `description`，以帮助父智能体了解何时使用它。请参阅 [`toolName` 文档](#subagents-and-workflows-as-tools) 了解有关工具命名方案的更多信息。
+
+## 将工作流作为工具使用
+
+工作流可以通过 `workflows` 配置添加到智能体。当您添加工作流时，Mastra 会自动将其转换为智能体可以调用的工具。生成的工具命名为 `workflow-<workflowName>`，并使用工作流的 `inputSchema` 和 `outputSchema`。
+
+```typescript {14-16} title="src/mastra/agents/research-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { researchWorkflow } from "../workflows/research-workflow";
+
+export const researchAgent = new Agent({
+  id: "research-agent",
+  name: "研究智能体",
+  instructions: `
+      您是一位研究助手。
+      使用研究工作流来收集和汇编有关主题的信息。`,
+  model: "openai/gpt-5.1",
+  tools: {
+    weatherTool,
+  },
+  workflows: {
+    researchWorkflow,
+  },
+});
+```
+
+工作流应包含 `description`，以帮助智能体了解何时使用它：
+
+```typescript title="src/mastra/workflows/research-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const researchWorkflow = createWorkflow({
+  id: "research-workflow",
+  // highlight-next-line
+  description: "收集有关主题的信息并汇编摘要报告。",
+  // 工作流的其余部分...
+})
+  .commit();
+```
+
+当智能体调用工作流工具时，它会收到包含工作流结果和可用于跟踪执行的 `runId` 的响应：
+
+```typescript
+{
+  result: { summary: "...", sources: ["..."] },
+  runId: "abc-123"
+}
+```
+
+请参阅 [`toolName` 文档](#subagents-and-workflows-as-tools) 了解有关工具命名方案的更多信息。
+
+## 在流响应中控制 `toolName`
+
+流响应中的 `toolName` 由您使用的**对象键**决定，而不是工具、智能体或工作流的 `id` 属性。
+
+```typescript
+// 使用 id: "weather-tool" 定义的工具
+export const weatherTool = createTool({
+  id: "weather-tool",
+  // ...
+});
+
+// 使用变量名作为键
+tools: { weatherTool }
+// 流返回：toolName: "weatherTool"
+
+// 使用工具的 id 作为键
+tools: { [weatherTool.id]: weatherTool }
+// 流返回：toolName: "weather-tool"
+
+// 使用自定义键
+tools: { "my-custom-name": weatherTool }
+// 流返回：toolName: "my-custom-name"
+```
+
+这使您可以指定工具在流中的标识方式。如果您希望 `toolName` 与工具的 `id` 匹配，请使用工具的 `id` 作为对象键。
+
+### 子智能体和工作流作为工具
+
+子智能体和工作流遵循相同的模式。它们被转换为带有前缀和您的对象键的工具：
+
+| 属性 | 前缀 | 示例键 | `toolName` |
+|------|------|--------|------------|
+| `agents` | `agent-` | `weather` | `agent-weather` |
+| `workflows` | `workflow-` | `research` | `workflow-research` |
+
+```typescript
+const orchestrator = new Agent({
+  agents: {
+    weather: weatherAgent,  // toolName: "agent-weather"
+  },
+  workflows: {
+    research: researchWorkflow,  // toolName: "workflow-research"
+  },
+});
+```
+
+请注意，对于子智能体，您将在流响应中看到两个不同的标识符：
+- `toolName: "agent-weather"` 在工具调用事件中 — 生成的工具包装器名称
+- `id: "weather-agent"` 在 `data-tool-agent` 块中 — 子智能体的实际 `id` 属性
+
+## 带结构化输出的工具
+
+当将工具与[结构化输出](/docs/cn/agents/structured-output)一起使用时，某些模型不支持在同一个 API 调用中组合这两个功能。如果在启用结构化输出时您的工具没有被调用，或者收到关于不兼容选项的错误，请参阅[组合工具和结构化输出](/docs/cn/agents/structured-output#combining-tools-and-structured-output) 了解模型兼容性信息和解决方法。
+
+## 相关内容
+
+- [MCP 概述](/docs/cn/mcp/overview)
+- [动态工具搜索](/reference/processors/tool-search-processor) - 为具有大型工具库的智能体按需加载工具
+- [结构化输出](/docs/cn/agents/structured-output)
+- [智能体内存](/docs/cn/agents/agent-memory)
+- [请求上下文](/docs/cn/server/request-context)

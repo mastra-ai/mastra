@@ -1,0 +1,77 @@
+---
+title: "参考文档：Mastra.getMemory() | 核心"
+description: "Mastra 中 `Mastra.getMemory()` 方法的文档，用于通过注册表键检索注册的内存实例。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# Mastra.getMemory()
+
+`.getMemory()` 方法通过键从 Mastra 注册表中检索内存实例。内存实例在 Mastra 构造函数中注册，可由存储的智能体引用。
+
+## 使用示例
+
+```typescript
+const memory = mastra.getMemory("conversationMemory");
+
+// 使用内存实例
+const thread = await memory.createThread({
+  resourceId: "user-123",
+  title: "New Conversation",
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "key",
+      type: "TMemoryKey extends keyof TMemory",
+      description:
+        "要检索的内存实例的注册表键。必须与在 Mastra 构造函数中注册内存时使用的键匹配。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "TMemory[TMemoryKey]",
+      description:
+        "具有指定键的内存实例。如果找不到内存，则抛出错误。",
+    },
+  ]}
+/>
+
+## 示例：注册和检索内存
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+const conversationMemory = new Memory({
+  storage: new LibSQLStore({ id: 'conversation-store', url: ":memory:" }),
+});
+
+const mastra = new Mastra({
+  memory: {
+    conversationMemory,
+  },
+});
+
+// 稍后检索内存实例
+const memory = mastra.getMemory("conversationMemory");
+```
+
+## 相关内容
+
+- [Mastra.listMemory()](/reference/core/listMemory)
+- [内存概述](/docs/cn/docs/memory/overview)
+- [智能体内存](/docs/cn/docs/agents/agent-memory)

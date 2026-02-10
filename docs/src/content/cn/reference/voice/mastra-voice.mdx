@@ -1,0 +1,415 @@
+---
+title: "参考：MastraVoice | 语音"
+description: "MastraVoice 抽象基类的文档，该类定义了 Mastra 中所有语音服务的核心接口，包括语音到语音能力。"
+packages:
+  - "@mastra/core"
+---
+
+# MastraVoice
+
+MastraVoice 类是一个抽象基类，用于定义 Mastra 中语音服务的核心接口。所有语音提供商的实现（如 OpenAI、Deepgram、PlayAI、Speechify）都继承自该类以提供其特定功能。该类现在通过 WebSocket 连接支持实时语音到语音能力。
+
+## 使用示例
+
+```typescript
+import { MastraVoice } from "@mastra/core/voice";
+
+// 创建语音提供商实现
+class MyVoiceProvider extends MastraVoice {
+  constructor(config: {
+    speechModel?: BuiltInModelConfig;
+    listeningModel?: BuiltInModelConfig;
+    speaker?: string;
+    realtimeConfig?: {
+      model?: string;
+      apiKey?: string;
+      options?: unknown;
+    };
+  }) {
+    super({
+      speechModel: config.speechModel,
+      listeningModel: config.listeningModel,
+      speaker: config.speaker,
+      realtimeConfig: config.realtimeConfig,
+    });
+  }
+
+  // 实现必需的抽象方法
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: { speaker?: string },
+  ): Promise<NodeJS.ReadableStream | void> {
+    // 实现语音合成
+  }
+
+  async listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: unknown,
+  ): Promise<string | NodeJS.ReadableStream | void> {
+    // 实现语音识别
+  }
+
+  async getSpeakers(): Promise<
+    Array<{ voiceId: string; [key: string]: unknown }>
+  > {
+    // 返回可用语音列表
+  }
+
+  // 可选的语音到语音方法
+  async connect(): Promise<void> {
+    // 建立 WebSocket 连接用于语音到语音通信
+  }
+
+  async send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
+    // 在语音到语音中流式传输音频数据
+  }
+
+  async answer(): Promise<void> {
+    // 触发语音提供商响应
+  }
+
+  addTools(tools: Array<unknown>): void {
+    // 为语音提供商添加工具
+  }
+
+  close(): void {
+    // 关闭 WebSocket 连接
+  }
+
+  on(event: string, callback: (data: unknown) => void): void {
+    // 注册事件监听器
+  }
+
+  off(event: string, callback: (data: unknown) => void): void {
+    // 移除事件监听器
+  }
+}
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "VoiceConfig",
+      description: "语音服务的配置对象",
+      isOptional: true,
+    },
+    {
+      name: "config.speechModel",
+      type: "BuiltInModelConfig",
+      description: "语音合成模型的配置",
+      isOptional: true,
+    },
+    {
+      name: "config.listeningModel",
+      type: "BuiltInModelConfig",
+      description: "语音识别模型的配置",
+      isOptional: true,
+    },
+    {
+      name: "config.speaker",
+      type: "string",
+      description: "默认使用的语音 ID",
+      isOptional: true,
+    },
+    {
+      name: "config.name",
+      type: "string",
+      description: "语音提供商实例的名称",
+      isOptional: true,
+    },
+    {
+      name: "config.realtimeConfig",
+      type: "object",
+      description: "实时语音到语音能力的配置",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### BuiltInModelConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "要使用的模型名称",
+      isOptional: false,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "模型服务的 API 密钥",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### RealtimeConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "string",
+      description: "用于实时语音到语音能力的模型",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "实时服务的 API 密钥",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "unknown",
+      description: "提供商特定的实时能力选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 抽象方法
+
+这些方法必须由继承 MastraVoice 的类实现。
+
+### speak()
+
+使用配置的语音模型将文本转换为语音。
+
+```typescript
+abstract speak(
+  input: string | NodeJS.ReadableStream,
+  options?: {
+    speaker?: string;
+    [key: string]: unknown;
+  }
+): Promise<NodeJS.ReadableStream | void>
+```
+
+用途：
+
+- 接收文本输入并使用提供商的语音合成服务将其转换为语音
+- 支持字符串和流输入，灵活处理各种输入方式
+- 允许通过选项覆盖默认语音
+- 返回可播放或保存的音频数据流
+- 如果音频通过 'speaking' 事件处理，可能返回 void
+
+### listen()
+
+使用配置的聆听模型将语音转换为文本。
+
+```typescript
+abstract listen(
+  audioStream: NodeJS.ReadableStream,
+  options?: {
+    [key: string]: unknown;
+  }
+): Promise<string | NodeJS.ReadableStream | void>
+```
+
+用途：
+
+- 接收音频流并使用提供商的语音识别服务将其转换为文本
+- 支持提供商特定的转录配置选项
+- 可以返回完整的文本转录或流式转录文本
+- 并非所有提供商都支持此功能（例如 PlayAI、Speechify）
+- 如果转录通过 'writing' 事件处理，可能返回 void
+
+### getSpeakers()
+
+返回提供商支持的可用语音列表。
+
+```typescript
+abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>>
+```
+
+用途：
+
+- 从提供商检索可用的语音列表
+- 每个语音至少具有 voiceId 属性
+- 提供商可以包含每个语音的附加元数据
+- 用于发现可用于语音合成的语音
+
+## 可选方法
+
+这些方法具有默认实现，但可以由支持语音到语音能力的语音提供商覆盖。
+
+### connect()
+
+建立用于通信的 WebSocket 或 WebRTC 连接。
+
+```typescript
+connect(config?: unknown): Promise<void>
+```
+
+用途：
+
+- 初始化与语音服务的连接以进行通信
+- 在使用 send() 或 answer() 等功能之前必须调用
+- 返回一个 Promise，在连接建立时解析
+- 配置是提供商特定的
+
+### send()
+
+将音频数据实时流式传输到语音提供商。
+
+```typescript
+send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void>
+```
+
+用途：
+
+- 将音频数据发送到语音提供商进行实时处理
+- 用于连续音频流场景，如实时麦克风输入
+- 支持 ReadableStream 和 Int16Array 音频格式
+- 调用此方法前必须处于连接状态
+
+### answer()
+
+触发语音提供商生成响应。
+
+```typescript
+answer(): Promise<void>
+```
+
+用途：
+
+- 向语音提供商发送信号以生成响应
+- 在实时对话中用于提示 AI 响应
+- 响应将通过事件系统发出（例如 'speaking' 事件）
+
+### addTools()
+
+为语音提供商配备可在对话中使用的工具。
+
+```typescript
+addTools(tools: Array<Tool>): void
+```
+
+用途：
+
+- 添加语音提供商可在对话中使用的工具
+- 工具可以扩展语音提供商的能力
+- 实现是提供商特定的
+
+### close()
+
+断开 WebSocket 或 WebRTC 连接。
+
+```typescript
+close(): void
+```
+
+用途：
+
+- 关闭与语音服务的连接
+- 清理资源并停止任何正在进行的实时处理
+- 使用完语音实例后应调用此方法
+
+### on()
+
+为语音事件注册事件监听器。
+
+```typescript
+on<E extends VoiceEventType>(
+  event: E,
+  callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,
+): void
+```
+
+用途：
+
+- 注册在指定事件发生时调用的回调函数
+- 标准事件包括 'speaking'、'writing' 和 'error'
+- 提供商也可以发出自定义事件
+- 事件数据结构取决于事件类型
+
+### off()
+
+移除事件监听器。
+
+```typescript
+off<E extends VoiceEventType>(
+  event: E,
+  callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,
+): void
+```
+
+用途：
+
+- 移除之前注册的事件监听器
+- 用于在不再需要事件处理程序时进行清理
+
+## 事件系统
+
+MastraVoice 类包含用于实时通信的事件系统。标准事件类型包括：
+
+<PropertiesTable
+  content={[
+    {
+      name: "speaking",
+      type: "{ text: string; audioStream?: NodeJS.ReadableStream; audio?: Int16Array }",
+      description:
+        "当语音提供商正在说话时发出，包含音频数据",
+    },
+    {
+      name: "writing",
+      type: "{ text: string, role: string }",
+      description: "当从语音转录出文本时发出",
+    },
+    {
+      name: "error",
+      type: "{ message: string; code?: string; details?: unknown }",
+      description: "当发生错误时发出",
+    },
+  ]}
+/>
+
+## 受保护属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "listeningModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "语音识别模型的配置",
+      isOptional: true,
+    },
+    {
+      name: "speechModel",
+      type: "BuiltInModelConfig | undefined",
+      description: "语音合成模型的配置",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string | undefined",
+      description: "默认语音 ID",
+      isOptional: true,
+    },
+    {
+      name: "realtimeConfig",
+      type: "{ model?: string; apiKey?: string; options?: unknown } | undefined",
+      description: "实时语音到语音能力的配置",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 遥测支持
+
+MastraVoice 通过 `traced` 方法包含内置的遥测支持，该方法用性能跟踪和错误监控包装方法调用。
+
+## 注意事项
+
+- MastraVoice 是一个抽象类，不能直接实例化
+- 实现必须为所有抽象方法提供具体实现
+- 该类在不同语音服务提供商之间提供一致的接口
+- 语音到语音能力是可选的且提供商特定
+- 事件系统支持实时交互的异步通信
+- 遥测会自动处理所有方法调用

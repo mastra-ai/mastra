@@ -1,0 +1,241 @@
+---
+title: "OVHcloud AI Endpoints | 模型 | Mastra"
+description: "在 Mastra 中使用 OVHcloud AI Endpoints 模型。共 13 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/ovhcloud.svg" alt="OVHcloud AI Endpoints logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OVHcloud AI Endpoints
+
+通过 Mastra 的模型路由器访问 13 个 OVHcloud AI Endpoints 模型。身份验证使用 `OVHCLOUD_API_KEY` 环境变量自动处理。
+
+在 [OVHcloud AI Endpoints 文档](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog//) 中了解更多信息。
+
+```bash title=".env"
+OVHCLOUD_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "ovhcloud/deepseek-r1-distill-llama-70b"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [OVHcloud AI Endpoints 文档](https://www.ovhcloud.com/en/public-cloud/ai-endpoints/catalog//) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "ovhcloud/deepseek-r1-distill-llama-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.74,
+    "outputCost": 0.74
+  },
+  {
+    "model": "ovhcloud/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.09,
+    "outputCost": 0.47
+  },
+  {
+    "model": "ovhcloud/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.05,
+    "outputCost": 0.18
+  },
+  {
+    "model": "ovhcloud/llama-3.1-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.11,
+    "outputCost": 0.11
+  },
+  {
+    "model": "ovhcloud/meta-llama-3_3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.74,
+    "outputCost": 0.74
+  },
+  {
+    "model": "ovhcloud/mistral-7b-instruct-v0.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.11,
+    "outputCost": 0.11
+  },
+  {
+    "model": "ovhcloud/mistral-nemo-instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.14,
+    "outputCost": 0.14
+  },
+  {
+    "model": "ovhcloud/mistral-small-3.2-24b-instruct-2506",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.31
+  },
+  {
+    "model": "ovhcloud/mixtral-8x7b-instruct-v0.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.7,
+    "outputCost": 0.7
+  },
+  {
+    "model": "ovhcloud/qwen2.5-coder-32b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.96,
+    "outputCost": 0.96
+  },
+  {
+    "model": "ovhcloud/qwen2.5-vl-72b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 1.01,
+    "outputCost": 1.01
+  },
+  {
+    "model": "ovhcloud/qwen3-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.09,
+    "outputCost": 0.25
+  },
+  {
+    "model": "ovhcloud/qwen3-coder-30b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.07,
+    "outputCost": 0.26
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+    id: "ovhcloud/deepseek-r1-distill-llama-70b",
+    apiKey: process.env.OVHCLOUD_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "ovhcloud/qwen3-coder-30b-a3b-instruct"
+      : "ovhcloud/deepseek-r1-distill-llama-70b";
+  }
+});
+```
+
+

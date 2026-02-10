@@ -1,0 +1,308 @@
+---
+title: "参考：ExtractParams | RAG"
+description: "Mastra 中元数据提取配置的文档。"
+packages:
+  - "@mastra/rag"
+---
+
+# ExtractParams
+
+ExtractParams 配置使用 LLM 分析从文档块中提取元数据。
+
+## 示例
+
+```typescript
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText(text);
+const chunks = await doc.chunk({
+  extract: {
+    title: true, // 使用默认设置提取标题
+    summary: true, // 使用默认设置生成摘要
+    keywords: true, // 使用默认设置提取关键词
+  },
+});
+
+// 示例输出：
+// chunks[0].metadata = {
+//   documentTitle: "AI 系统概述",
+//   sectionSummary: "人工智能概念和应用概述",
+//   excerptKeywords: "关键词：AI、机器学习、算法"
+// }
+```
+
+## 参数
+
+`extract` 参数接受以下字段：
+
+<PropertiesTable
+  content={[
+    {
+      name: "title",
+      type: "boolean | TitleExtractorsArgs",
+      isOptional: true,
+      description:
+        "启用标题提取。设置为 true 使用默认配置，或提供自定义配置。",
+    },
+    {
+      name: "summary",
+      type: "boolean | SummaryExtractArgs",
+      isOptional: true,
+      description:
+        "启用摘要提取。设置为 true 使用默认配置，或提供自定义配置。",
+    },
+    {
+      name: "questions",
+      type: "boolean | QuestionAnswerExtractArgs",
+      isOptional: true,
+      description:
+        "启用问题生成。设置为 true 使用默认配置，或提供自定义配置。",
+    },
+    {
+      name: "keywords",
+      type: "boolean | KeywordExtractArgs",
+      isOptional: true,
+      description:
+        "启用关键词提取。设置为 true 使用默认配置，或提供自定义配置。",
+    },
+    {
+      name: "schema",
+      type: "SchemaExtractArgs",
+      isOptional: true,
+      description:
+        "使用 Zod 模式启用结构化元数据提取。",
+    },
+  ]}
+/>
+
+## 提取器参数
+
+### TitleExtractorsArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "用于标题提取的 AI SDK 语言模型",
+    },
+    {
+      name: "nodes",
+      type: "number",
+      isOptional: true,
+      description: "要提取的标题节点数量",
+    },
+    {
+      name: "nodeTemplate",
+      type: "string",
+      isOptional: true,
+      description:
+        "标题节点提取的自定义提示模板。必须包含 {context} 占位符",
+    },
+    {
+      name: "combineTemplate",
+      type: "string",
+      isOptional: true,
+      description:
+        "合并标题的自定义提示模板。必须包含 {context} 占位符",
+    },
+  ]}
+/>
+
+### SummaryExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "用于摘要提取的 AI SDK 语言模型",
+    },
+    {
+      name: "summaries",
+      type: "('self' | 'prev' | 'next')[]",
+      isOptional: true,
+      description:
+        "要生成的摘要类型列表。只能包含 'self'（当前块）、'prev'（前一个块）或 'next'（下一个块）",
+    },
+    {
+      name: "promptTemplate",
+      type: "string",
+      isOptional: true,
+      description:
+        "摘要生成的自定义提示模板。必须包含 {context} 占位符",
+    },
+  ]}
+/>
+
+### QuestionAnswerExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "用于问题生成的 AI SDK 语言模型",
+    },
+    {
+      name: "questions",
+      type: "number",
+      isOptional: true,
+      description: "要生成的问题数量",
+    },
+    {
+      name: "promptTemplate",
+      type: "string",
+      isOptional: true,
+      description:
+        "问题生成的自定义提示模板。必须同时包含 {context} 和 {numQuestions} 占位符",
+    },
+    {
+      name: "embeddingOnly",
+      type: "boolean",
+      isOptional: true,
+      description: "如果为 true，则仅生成嵌入而不生成实际问题",
+    },
+  ]}
+/>
+
+### KeywordExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "用于关键词提取的 AI SDK 语言模型",
+    },
+    {
+      name: "keywords",
+      type: "number",
+      isOptional: true,
+      description: "要提取的关键词数量",
+    },
+    {
+      name: "promptTemplate",
+      type: "string",
+      isOptional: true,
+      description:
+        "关键词提取的自定义提示模板。必须同时包含 {context} 和 {maxKeywords} 占位符",
+    },
+  ]}
+/>
+
+### SchemaExtractArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "schema",
+      type: "ZodType",
+      isOptional: false,
+      description: "定义要提取的数据结构的 Zod 模式。",
+    },
+    {
+      name: "llm",
+      type: "MastraLanguageModel",
+      isOptional: true,
+      description: "用于提取的 AI SDK 语言模型。",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description: "关于要提取什么的 LLM 指令。",
+    },
+    {
+      name: "metadataKey",
+      type: "string",
+      isOptional: true,
+      description: "用于嵌套提取结果的键。如果省略，结果将展开到元数据对象中。",
+    },
+  ]}
+/>
+
+## 高级示例
+
+```typescript
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromText(text);
+const chunks = await doc.chunk({
+  extract: {
+    // 使用自定义设置进行标题提取
+    title: {
+      nodes: 2, // 提取 2 个标题节点
+      nodeTemplate: "为此生成标题：{context}",
+      combineTemplate: "合并这些标题：{context}",
+    },
+
+    // 使用自定义设置进行摘要提取
+    summary: {
+      summaries: ["self"], // 为当前块生成摘要
+      promptTemplate: "总结这个：{context}",
+    },
+
+    // 使用自定义设置进行问题生成
+    questions: {
+      questions: 3, // 生成 3 个问题
+      promptTemplate: "生成关于以下内容的问题：{numQuestions}：{context}",
+      embeddingOnly: false,
+    },
+
+    // 使用自定义设置进行关键词提取
+    keywords: {
+      keywords: 5, // 提取 5 个关键词
+      promptTemplate: "从中提取{maxKeywords}个关键词：{context}",
+    },
+
+    // 使用 Zod 进行模式提取
+    schema: {
+        schema: z.object({
+            productName: z.string(),
+            category: z.enum(["electronics", "clothing"]),
+        }),
+        instructions: "提取产品信息。",
+        metadataKey: "product",
+    },
+  },
+});
+
+// 示例输出：
+// chunks[0].metadata = {
+//   documentTitle: "现代计算中的 AI",
+//   sectionSummary: "AI 概念及其在计算中的应用概述",
+//   questionsThisExcerptCanAnswer: "1. 什么是机器学习？\n2. 神经网络如何工作？",
+//   excerptKeywords: "1. 机器学习\n2. 神经网络\n3. 训练数据",
+//   product: {
+//     productName: "神经网络 2000",
+//     category: "electronics"
+//   }
+// }
+```
+
+## 用于标题提取的文档分组
+
+使用 `TitleExtractor` 时，您可以通过在每个块的 `metadata` 字段中指定共享的 `docId` 来将多个块分组以进行标题提取。具有相同 `docId` 的所有块将获得相同的提取标题。如果未设置 `docId`，则每个块将被视为自己的文档进行标题提取。
+
+**示例：**
+
+```ts
+import { MDocument } from "@mastra/rag";
+
+const doc = new MDocument({
+  docs: [
+    { text: "块 1", metadata: { docId: "docA" } },
+    { text: "块 2", metadata: { docId: "docA" } },
+    { text: "块 3", metadata: { docId: "docB" } },
+  ],
+  type: "text",
+});
+
+await doc.extractMetadata({ title: true });
+// 前两个块将共享一个标题，而第三个块将被分配一个单独的标题。
+```

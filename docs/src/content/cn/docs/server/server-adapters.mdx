@@ -1,0 +1,430 @@
+---
+title: "服务器适配器 | 服务器"
+description: "使用 Hono 或 Express 适配器手动配置 Mastra 服务器。"
+packages:
+  - "@mastra/express"
+  - "@mastra/hono"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 服务器适配器
+
+服务器适配器允许您使用自己的 HTTP 服务器运行 Mastra，而不是 `mastra build` 生成的 Hono 服务器。它们提供对服务器设置的更多控制，包括自定义中间件顺序、身份验证、日志和部署配置。您仍然可以将 Mastra 集成到任何 Node.js 应用程序中，而无需更改代理或工作流的执行方式。
+
+## 何时使用服务器适配器
+
+- 您希望将 Mastra 的端点自动添加到现有应用程序
+- 您需要直接访问服务器实例以进行自定义配置
+- 您的团队更喜欢使用另一个服务器框架，而不是 `mastra build` 创建的 Hono 服务器
+
+:::tip
+
+对于没有自定义服务器要求的部署，请改用 `mastra build`。它根据您的项目配置配置服务器设置、注册中间件并应用部署设置。请参阅[服务器配置](/docs/cn/server/mastra-server)。
+
+如果您想将[工作室](/docs/cn/getting-started/studio)与服务器适配器一起使用，请使用 [`mastra studio`](/reference/cli/mastra#mastra-studio) 仅启动工作室 UI。
+
+:::
+
+## 可用的适配器
+
+Mastra 目前提供这些官方服务器适配器：
+
+- [@mastra/express](/reference/server/express-adapter)
+- [@mastra/hono](/reference/server/hono-adapter)
+- [@mastra/fastify](/reference/server/fastify-adapter)
+- [@mastra/koa](/reference/server/koa-adapter)
+
+您可以构建自己的适配器，请阅读[自定义适配器](/docs/cn/server/custom-adapters)了解详情。
+
+## 安装
+
+安装您选择的框架的适配器。
+
+<Tabs>
+  <TabItem value="express" label="Express">
+
+```bash npm2yarn
+npm install @mastra/express@latest
+```
+  </TabItem>
+  <TabItem value="hono" label="Hono">
+
+```bash npm2yarn
+npm install @mastra/hono@latest
+```
+  </TabItem>
+  <TabItem value="fastify" label="Fastify">
+
+```bash npm2yarn
+npm install @mastra/fastify@latest
+```
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```bash npm2yarn
+npm install @mastra/koa@latest
+```
+  </TabItem>
+</Tabs>
+
+## 配置
+
+照常初始化您的应用程序，然后通过传入 `app` 和来自 `src/mastra/index.ts` 的主 `mastra` 实例来创建 `MastraServer`。调用 `init()` 会自动注册 Mastra 中间件和所有可用的端点。您可以像平常一样继续添加自己的路由，可以在 `init()` 之前或之后添加，它们将与 Mastra 的端点一起运行。
+
+<Tabs>
+  <TabItem value="express" label="Express">
+
+```typescript {8} title="src/express-server.ts"
+import express from "express";
+import { MastraServer } from "@mastra/express";
+import { mastra } from "./mastra";
+
+const app = express();
+app.use(express.json());
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.listen(4111, () => {
+  console.log('Server running on port 4111');
+});
+```
+
+:::info
+
+有关完整的配置选项，请参阅 [Express 适配器](/reference/server/express-adapter) 文档。
+
+:::
+
+  </TabItem>
+  <TabItem value="hono" label="Hono">
+
+```typescript {8} title="src/hono-server.ts"
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { HonoBindings, HonoVariables, MastraServer } from "@mastra/hono";
+import { mastra } from "./mastra";
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+serve({ fetch: app.fetch, port: 4111 }, () => {
+  console.log('Server running on port 4111');
+});
+```
+
+:::info
+
+有关完整的配置选项，请参阅 [Hono 适配器](/reference/server/hono-adapter) 文档。
+
+:::
+
+  </TabItem>
+  <TabItem value="fastify" label="Fastify">
+
+```typescript {6} title="src/fastify-server.ts"
+import Fastify from 'fastify';
+import { MastraServer } from '@mastra/fastify';
+import { mastra } from './mastra';
+
+const app = Fastify();
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.get('/health', async request => {
+  const mastraInstance = request.mastra;
+  const agents = Object.keys(mastraInstance.listAgents());
+  return { status: 'ok', agents };
+});
+
+const port = 4111;
+
+app.listen({ port }, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
+
+:::info
+
+有关完整的配置选项，请参阅 [Fastify 适配器](/reference/server/fastify-adapter) 文档。
+
+:::
+
+  </TabItem>
+  <TabItem value="koa" label="Koa">
+
+```typescript {9} title="src/koa-server.ts"
+import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
+import { MastraServer } from '@mastra/koa';
+import { mastra } from './mastra';
+
+const app = new Koa();
+app.use(bodyParser()); // 需要 body 解析
+
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.use(async (ctx, next) => {
+  if (ctx.path === '/health' && ctx.method === 'GET') {
+    const mastraInstance = ctx.state.mastra;
+    const agents = Object.keys(mastraInstance.listAgents());
+    ctx.body = { status: 'ok', agents };
+    return;
+  }
+  await next();
+});
+
+const port = 4111;
+
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Try: curl http://localhost:${port}/api/agents`);
+});
+```
+
+:::info
+
+有关完整的配置选项，请参阅 [Koa 适配器](/reference/server/koa-adapter) 文档。
+
+:::
+
+  </TabItem>
+</Tabs>
+
+## 初始化流程
+
+调用 `init()` 按顺序运行三个步骤。了解此流程有助于在特定点插入您自己的中间件。
+
+1. `registerContextMiddleware()`：将 Mastra 实例、请求上下文、工具和中止信号附加到每个请求。这使 Mastra 对所有后续中间件和路由处理程序可用。
+2. `registerAuthMiddleware()`：添加身份验证和授权中间件，但仅当您的 Mastra 实例中配置了 `server.auth` 时。如果没有配置身份验证，则完全跳过。
+3. `registerRoutes()`：注册所有 Mastra API 路由（代理、工作流和其他功能）。如果配置了 MCP 服务器，还会注册 MCP 路由。
+
+### 手动初始化
+
+对于自定义中间件顺序，请单独调用每个方法而不是 `init()`。当您需要 Mastra 上下文设置之前运行的中间件，或在初始化步骤之间插入逻辑时，这很有用。
+
+```typescript title="server.ts"
+const server = new MastraServer({ app, mastra });
+
+// 您的中间件首先
+app.use(loggingMiddleware);
+
+server.registerContextMiddleware();
+
+// 需要 Mastra 上下文的中间件
+app.use(customMiddleware);
+
+server.registerAuthMiddleware();
+await server.registerRoutes();
+
+// Mastra 之后的路由
+app.get('/health', ...);
+```
+
+:::tip
+
+当您需要 Mastra 上下文可用之前运行的中间件，或在上下文和身份验证步骤之间插入中间件时，使用手动初始化。
+
+:::
+
+## 添加自定义路由
+
+您可以将自己的路由添加到应用程序中，与 Mastra 的路由一起。
+
+- 在 `init()` **之前**添加的路由将无法使用 Mastra 上下文。
+- 在 `init()` **之后**添加的路由可以访问 Mastra 上下文（Mastra 实例、请求上下文、已身份验证的用户等）。
+
+:::info
+
+有关更多信息，请访问 Express 和 Hono 的"添加自定义路由"部分。
+
+- [Express](/reference/server/express-adapter#adding-custom-routes)
+- [Hono](/reference/server/hono-adapter#adding-custom-routes)
+
+:::
+
+## 路由前缀
+
+默认情况下，Mastra 路由注册在 `/api/agents`、`/api/workflows` 等位置。使用 `prefix` 选项更改此设置。这对于 API 版本控制或与具有自己的 `/api` 路由的现有应用程序集成很有用。
+
+```typescript
+const server = new MastraServer({
+  app,
+  mastra,
+  prefix: '/api/v2',
+});
+```
+
+使用此前缀，Mastra 路由变为 `/api/v2/agents`、`/api/v2/workflows` 等。您直接添加到应用程序的自定义路由不受此前缀影响。
+
+## OpenAPI 规范
+
+Mastra 可以为所有注册的路由生成 OpenAPI 规范。这对于文档、客户端生成或与 API 工具集成很有用。通过设置 `openapiPath` 选项启用它：
+
+```typescript
+const server = new MastraServer({
+  app,
+  mastra,
+  openapiPath: '/openapi.json',
+});
+```
+
+规范从每个路由上定义的 Zod 模式生成，并在指定路径提供。它包括所有 Mastra 路由以及使用 `createRoute()` 创建的任何自定义路由。
+
+## 流数据编辑
+
+当通过 HTTP 流式传输代理响应时，HTTP 流层会在将流块发送给客户端之前从流块中编辑敏感信息。这可以防止意外暴露：
+
+- 系统提示和代理指令
+- 工具定义及其参数
+- 请求体中的 API 密钥和其他凭据
+- 内部配置数据
+
+此编辑发生在 HTTP 边界，因此内部回调（如 `onStepFinish`）仍可访问完整的请求数据以进行调试和可观测性目的。
+
+默认情况下，编辑已启用。通过 `streamOptions` 配置此行为。仅对于内部服务或需要访问流响应中完整请求数据的调试场景，才设置 `redact: false`。
+
+```typescript
+const server = new MastraServer({
+  app,
+  mastra,
+  streamOptions: {
+    redact: true, // 默认
+  },
+});
+```
+
+:::info
+
+有关完整的配置选项，请参阅 [MastraServer](/reference/server/mastra-server)。
+
+:::
+
+## 每路由身份验证覆盖
+
+当 Mastra 实例上配置了身份验证时，所有路由默认都需要身份验证。有时您需要例外：公共健康检查端点、webhook 接收器，或需要更严格控制的 admin 路由。
+
+使用 `customRouteAuthConfig` 覆盖特定路由的身份验证行为。键遵循格式 `METHOD:PATH`，其中方法是 `GET`、`POST`、`PUT`、`DELETE` 或 `ALL`。路径支持通配符 (`*`) 以匹配多个路由。将值设置为 `false` 使路由公共，而 `true` 需要身份验证。
+
+```typescript
+const server = new MastraServer({
+  app,
+  mastra,
+  customRouteAuthConfig: new Map([
+    // 公共健康检查
+    ['GET:/api/health', false],
+    // 公共 API 规范
+    ['GET:/api/openapi.json', false],
+    // 公共 webhook 端点
+    ['POST:/api/webhooks/*', false],
+    // 即使全局禁用也需要身份验证
+    ['POST:/api/admin/reset', true],
+    // 保护内部路由上的所有方法
+    ['ALL:/api/internal/*', true],
+  ]),
+});
+```
+
+:::info
+
+有关完整的配置选项，请参阅 [MastraServer](/reference/server/mastra-server)。
+
+:::
+
+## 访问应用程序
+
+创建适配器后，您可能仍然需要访问底层框架应用程序。这在将其传递给平台的 `serve` 函数或从另一个模块添加路由时很有用。
+
+```typescript
+// 通过 MastraServer 实例
+const app = server.getApp();
+
+// 通过 Mastra 实例（适配器构建后可用）
+const app = mastra.getServerApp();
+```
+
+两种方法返回相同的应用程序实例。根据作用域中的内容，使用更方便的那个。
+
+## 服务器配置与适配器选项
+
+使用服务器适配器时，配置来自两个地方：Mastra `server` 配置（传递给 `Mastra` 构造函数）和适配器构造函数选项。了解哪些选项来自哪里有助于避免设置似乎不起作用时的混淆。
+
+### 适配器使用的
+
+适配器从 `mastra.getServer()` 读取这些设置：
+
+| 选项 | 描述 |
+|--------|-------------|
+| `auth` | 身份验证配置，由 `registerAuthMiddleware()` 使用。 |
+| `bodySizeLimit` | 默认 body 大小限制（字节）。可通过 `bodyLimitOptions` 每适配器覆盖。 |
+
+### 仅适配器构造函数
+
+这些选项直接传递给适配器构造函数，不从 Mastra 配置读取：
+
+| 选项 | 描述 |
+|--------|-------------|
+| `prefix` | 路由路径前缀 |
+| `openapiPath` | OpenAPI 规范端点 |
+| `bodyLimitOptions` | 具有自定义错误处理程序的 body 大小限制 |
+| `streamOptions` | 流编辑设置 |
+| `customRouteAuthConfig` | 每路由身份验证覆盖 |
+| `mcpOptions` | MCP 传输选项（例如，`serverless: true` 用于无状态环境）|
+
+### 适配器不使用
+
+这些 `server` 配置选项仅由 `mastra build` 使用，直接使用适配器时无效：
+
+| 选项 | 使用者 |
+|--------|---------|
+| `port`, `host` | `mastra dev`, `mastra build` |
+| `cors` | `mastra build` 添加 CORS 中间件 |
+| `timeout` | `mastra build` |
+| `apiRoutes` | `mastra build` 的 `registerApiRoute()` |
+| `middleware` | `mastra build` 的中间件配置 |
+
+使用适配器时，直接使用框架配置这些功能。例如，使用 Hono 或 Express 的内置 CORS 包添加 CORS 中间件，并在调用框架的 listen 函数时设置端口。
+
+## MCP 支持
+
+服务器适配器在 `registerRoutes()` 期间注册 MCP（模型上下文协议）路由，前提是您的 Mastra 实例中配置了 MCP 服务器。MCP 允许外部工具和服务连接到您的 Mastra 服务器并与您的代理交互。
+
+适配器为 HTTP 和 SSE（服务器发送事件）传输注册路由，启用不同的客户端连接模式。
+
+### 无服务器模式
+
+对于 Cloudflare Workers 或 Vercel Edge 等无服务器环境，通过 `mcpOptions` 启用无状态模式：
+
+```typescript
+const server = new MastraServer({
+  app,
+  mastra,
+  mcpOptions: {
+    serverless: true,
+  },
+});
+```
+
+当 `serverless: true` 时，MCP HTTP 请求在没有会话管理的情况下运行，使它们与无状态执行环境兼容。
+
+有关配置详情和如何设置 MCP 服务器，请参阅 [MCP](/docs/cn/mcp/overview)。
+
+## 相关内容
+
+- [Hono 适配器](/reference/server/hono-adapter) - Hono 特定设置
+- [Express 适配器](/reference/server/express-adapter) - Express 特定设置
+- [自定义适配器](/docs/cn/server/custom-adapters) - 为其他框架构建适配器
+- [服务器配置](/docs/cn/server/mastra-server) - 使用 `mastra build`
+- [身份验证](/docs/cn/server/auth) - 为服务器配置身份验证
+- [MastraServer 参考](/reference/server/mastra-server) - 完整 API 参考
+- [createRoute() 参考](/reference/server/create-route) - 创建类型安全的自定义路由

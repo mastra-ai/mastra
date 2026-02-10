@@ -1,0 +1,203 @@
+---
+title: "参考：LLM 提供商 API 密钥（选择一个或多个）| 模板"
+description: "创建、使用和贡献 Mastra 模板的完整指南"
+packages:
+  - "@mastra/core"
+---
+
+# 概述
+
+本参考提供了关于 Mastra 模板的全面信息，包括如何使用现有模板、创建自己的模板以及为社区生态做出贡献。
+
+Mastra 模板是预构建的项目结构，用于演示特定的用例和模式。它们提供：
+
+- **工作示例** - 完整的、可运行的 Mastra 应用程序
+- **最佳实践** - 正确的项目结构和编码规范
+- **教育资源** - 通过真实实现学习 Mastra 模式
+- **快速启动** - 比从头构建更快的项目启动方式
+
+## 使用模板
+
+### 安装
+
+使用 `create-mastra` 命令安装模板：
+
+```bash
+npx create-mastra@latest --template template-name
+```
+
+这将创建一个包含所有必要代码和配置的完整项目。
+
+### 设置过程
+
+安装后：
+
+1. **导航到项目目录**：
+
+   ```bash
+   cd your-project-name
+   ```
+
+2. **配置环境变量**：
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   根据模板 README 中的文档，编辑 `.env` 并填写所需的 API 密钥。
+
+3. **安装依赖**（如果未自动完成）：
+
+   ```bash
+   npm install
+   ```
+
+4. **启动开发服务器**：
+
+   ```bash
+   npm run dev
+   ```
+
+### 模板结构
+
+所有模板都遵循以下标准化结构：
+
+## 创建模板
+
+### 要求
+
+模板必须满足以下技术要求：
+
+#### 项目结构
+
+- **Mastra 代码位置**：所有 Mastra 代码必须位于 `src/mastra/` 目录
+- **组件组织**：
+  - 代理：`src/mastra/agents/`
+  - 工具：`src/mastra/tools/`
+  - 工作流：`src/mastra/workflows/`
+  - 主配置：`src/mastra/index.ts`
+
+#### TypeScript 配置
+
+使用标准的 Mastra TypeScript 配置：
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
+}
+```
+
+#### 环境配置
+
+包含一个包含所有必需环境变量的 `.env.example` 文件：
+
+```bash title=".env.example"
+# LLM 提供商 API 密钥（选择一个或多个）
+OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
+
+# 其他服务 API 密钥（如需要）
+OTHER_SERVICE_API_KEY=your_api_key_here
+```
+
+### 代码标准
+
+#### LLM 提供商
+
+我们建议在模板中使用 OpenAI、Anthropic 或 Google 模型提供商。选择最适合您用例的提供商：
+
+```typescript title="src/mastra/agents/example-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  name: "example-agent",
+  model: "openai/gpt-5.1", // 或其他提供商字符串
+  instructions: "您的代理指令在这里",
+});
+```
+
+#### 兼容性要求
+
+模板必须：
+
+- **单项目** - 不是包含多个应用程序的单体仓库
+- **无框架** - 不包含 Next.js、Express 或其他 Web 框架样板代码
+- **专注于 Mastra** - 演示 Mastra 功能而不添加额外层
+- **可合并** - 构建易于集成到现有项目的代码
+- **兼容 Node.js** - 支持 Node.js v22.13.0 及更高版本
+- **ESM 模块** - 使用 ES 模块（package.json 中的 `"type": "module"`）
+
+### 文档要求
+
+#### README 结构
+
+每个模板必须包含一个全面的 README：
+
+```markdown title="README.md"
+# 模板名称
+
+模板演示内容的简要描述。
+
+## 概述
+
+模板功能和使用案例的详细说明。
+
+## 设置
+
+1. 将 `.env.example` 复制到 `.env` 并填写您的 API 密钥
+2. 安装依赖：`npm install`
+3. 运行项目：`npm run dev`
+
+## 环境变量
+
+- `OPENAI_API_KEY`：您的 OpenAI API 密钥。在 [OpenAI 平台](https://platform.openai.com/api-keys) 获取
+- `ANTHROPIC_API_KEY`：您的 Anthropic API 密钥。在 [Anthropic 控制台](https://console.anthropic.com/settings/keys) 获取
+- `GOOGLE_GENERATIVE_AI_API_KEY`：您的 Google AI API 密钥。在 [Google AI Studio](https://makersuite.google.com/app/apikey) 获取
+- `OTHER_API_KEY`：此密钥的用途说明
+
+## 使用
+
+使用模板的说明和预期行为示例。
+
+## 自定义
+
+修改模板以适应不同用例的指南。
+```
+
+#### 代码注释
+
+包含清晰的注释说明：
+
+- 复杂逻辑或算法
+- API 集成及其用途
+- 配置选项及其效果
+- 示例使用模式
+
+### 质量标准
+
+模板必须展示：
+
+- **代码质量** - 干净、有注释、可维护的代码
+- **错误处理** - 正确处理外部 API 和用户输入
+- **类型安全** - 完整的 TypeScript 类型和 Zod 验证
+- **测试** - 通过全新安装验证功能
+
+有关为 Mastra 生态贡献您自己的模板的信息，请参阅社区部分的[贡献模板](/docs/cn/community/contributing-templates)指南。
+
+:::info
+
+模板是学习 Mastra 模式和加速开发的绝佳方式。贡献模板有助于整个社区构建更好的 AI 应用程序。
+
+:::

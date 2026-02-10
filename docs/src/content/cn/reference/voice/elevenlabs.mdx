@@ -1,0 +1,220 @@
+---
+title: "参考文档: ElevenLabs | 语音"
+description: "ElevenLabs 语音实现的文档，提供使用多个语音模型的高质量文本转语音功能和自然 sounding 合成。"
+packages:
+  - "@mastra/voice-elevenlabs"
+---
+
+# ElevenLabs
+
+Mastra 中的 ElevenLabs 语音实现使用 ElevenLabs API 提供高质量的文本转语音（TTS）和语音转文本（STT）功能。
+
+## 使用示例
+
+```typescript
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+
+// 使用默认配置初始化（使用 ELEVENLABS_API_KEY 环境变量）
+const voice = new ElevenLabsVoice();
+
+// 使用自定义配置初始化
+const voice = new ElevenLabsVoice({
+  speechModel: {
+    name: "eleven_multilingual_v2",
+    apiKey: "your-api-key",
+  },
+  speaker: "custom-speaker-id",
+});
+
+// 文本转语音
+const audioStream = await voice.speak("Hello, world!");
+
+// 获取可用的说话者
+const speakers = await voice.getSpeakers();
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "ElevenLabsVoiceConfig",
+      description: "文本转语音功能的配置。",
+      isOptional: true,
+      defaultValue: "{ name: 'eleven_multilingual_v2' }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "用于文本转语音的说话者 ID",
+      isOptional: true,
+      defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria 语音)",
+    },
+  ]}
+/>
+
+### ElevenLabsVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "ElevenLabsModel",
+      description: "要使用的 ElevenLabs 模型",
+      isOptional: true,
+      defaultValue: "'eleven_multilingual_v2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "ElevenLabs API 密钥。回退到 ELEVENLABS_API_KEY 环境变量",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用配置的语音模型和语音将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "要转换为语音的文本。如果提供了流，会先转换为文本。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "语音合成的附加选项",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "覆盖此请求的默认说话者 ID",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+返回可用语音选项数组，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "语音的显示名称",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "语音的语言代码",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "语音的性别",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### listen()
+
+使用 ElevenLabs 语音转文本 API 将音频输入转换为文本。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "NodeJS.ReadableStream",
+      description: "包含要转录音频数据的可读流",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "转录的配置选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+options 对象支持以下属性：
+
+<PropertiesTable
+  content={[
+    {
+      name: "language_code",
+      type: "string",
+      description: "ISO 语言代码（例如：'en'、'fr'、'es'）",
+      isOptional: true,
+    },
+    {
+      name: "tag_audio_events",
+      type: "boolean",
+      description: "是否标记音频事件如 [MUSIC]、[LAUGHTER] 等。",
+      isOptional: true,
+    },
+    {
+      name: "num_speakers",
+      type: "number",
+      description: "要检测的音频说话者数量",
+      isOptional: true,
+    },
+    {
+      name: "filetype",
+      type: "string",
+      description: "音频文件格式（例如：'mp3'、'wav'、'ogg'）",
+      isOptional: true,
+    },
+    {
+      name: "timeoutInSeconds",
+      type: "number",
+      description: "请求超时时间（秒）",
+      isOptional: true,
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      description: "最大重试次数",
+      isOptional: true,
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      description: "用于中止请求的信号",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`Promise<string>` - 解析为转录文本的 Promise
+
+## 重要说明
+
+1. 需要 ElevenLabs API 密钥。通过 `ELEVENLABS_API_KEY` 环境变量或在构造函数中设置。
+2. 默认说话者设置为 Aria（ID：'9BWtsMINqrJLrRacOk9x'）。
+3. ElevenLabs 不支持语音转文本功能。
+4. 可以使用 `getSpeakers()` 方法获取可用的说话者，该方法返回每个语音的详细信息，包括语言和性别。

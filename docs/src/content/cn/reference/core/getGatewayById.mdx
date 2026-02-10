@@ -1,0 +1,64 @@
+---
+title: "参考文档：Mastra.getGatewayById() | 核心"
+description: "通过唯一 ID 检索已注册的网关"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getGatewayById()
+
+通过其唯一 ID（网关实例的 `id` 属性）检索网关。当您需要通过其固有标识符而非注册表键查找网关时，这很有用。
+
+## 使用示例
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra({
+  gateways: {
+    customKey: new MyCustomGateway(), // id = 'my-custom-gateway'
+  },
+});
+
+// 按 ID 检索（非注册表键）
+const gateway = mastra.getGatewayById('my-custom-gateway');
+console.log(gateway.name); // 'My Custom Gateway'
+```
+
+## 使用场景
+
+- 网关版本控制：具有唯一 ID 的不同版本（`'gateway-v1'`、`'gateway-v2'`）
+- 当注册表键未知时查找网关
+- 跨不同 Mastra 实例识别网关
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: 'id',
+      type: 'string',
+      description: '网关的唯一 ID（gateway.id 属性）',
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: 'gateway',
+      type: 'MastraModelGateway | undefined',
+      description: '网关实例，如果未找到则为 undefined',
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [Mastra.getGateway()](/reference/core/getGateway) - 按注册表键获取网关
+- [Mastra.listGateways()](/reference/core/listGateways) - 列出所有网关
+- [Mastra.addGateway()](/reference/core/addGateway) - 添加网关
+- [MastraModelGateway](/reference/core/mastra-model-gateway) - 网关基类
+- [自定义网关指南](/models/gateways/custom-gateways) - 创建自定义网关

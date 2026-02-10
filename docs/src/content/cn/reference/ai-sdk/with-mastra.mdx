@@ -1,0 +1,122 @@
+---
+title: "参考文档：withMastra() | AI SDK"
+description: "withMastra() 的 API 参考，这是一个用于在 AI SDK 中使用 Mastra 功能的函数。"
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# withMastra()
+
+使用 Mastra 处理器和/或内存包装 AI SDK 模型。
+
+## 使用示例
+
+```typescript title="src/example.ts"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { Processor } from '@mastra/core/processors';
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages');
+    return messages;
+  },
+};
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [loggingProcessor],
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2",
+      description: "任何 AI SDK 语言模型（例如 `openai('gpt-4o')`、`anthropic('claude-3-opus')`）。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "WithMastraOptions",
+      description: "处理器和内存的配置对象。",
+      isOptional: true,
+    },
+    {
+      name: "options.inputProcessors",
+      type: "InputProcessor[]",
+      description: "在 LLM 调用之前运行的输入处理器。",
+      isOptional: true,
+    },
+    {
+      name: "options.outputProcessors",
+      type: "OutputProcessor[]",
+      description: "对 LLM 响应运行的输出处理器。",
+      isOptional: true,
+    },
+    {
+      name: "options.memory",
+      type: "WithMastraMemoryOptions",
+      description: "内存配置 - 启用自动消息历史持久化。",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.storage",
+      type: "MemoryStorage",
+      description: "用于消息持久化的存储适配器（例如 LibSQLStore、PostgresStore）。",
+      isOptional: false,
+    },
+    {
+      name: "options.memory.threadId",
+      type: "string",
+      description: "用于对话持久化的线程 ID。",
+      isOptional: false,
+    },
+    {
+      name: "options.memory.resourceId",
+      type: "string",
+      description: "资源 ID（用户/会话标识符）。",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.lastMessages",
+      type: "number | false",
+      description: "要检索的最近消息数量，或 false 以禁用。",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.semanticRecall",
+      type: "WithMastraSemanticRecallOptions",
+      description: "语义回忆配置（基于 RAG 的内存检索）。",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.workingMemory",
+      type: "MemoryConfig['workingMemory']",
+      description: "工作内存配置（持久化用户数据）。",
+      isOptional: true,
+    },
+    {
+      name: "options.memory.readOnly",
+      type: "boolean",
+      description: "只读模式 - 阻止保存新消息。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+一个包装的模型，与 `generateText`、`streamText`、`generateObject` 和 `streamObject` 兼容。

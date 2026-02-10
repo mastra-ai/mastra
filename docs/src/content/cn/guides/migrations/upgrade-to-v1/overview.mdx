@@ -1,0 +1,120 @@
+---
+title: "概述 | v1 迁移指南"
+description: "升级到 Mastra v1 时的重大更改概述。"
+---
+
+# 升级到 Mastra v1
+
+:::info[更新到最新的 0.x 版本]
+在升级到 v1 之前，请确保您已更新到最新版本的 Mastra 0.x。首先遵循[升级到最新 0.x 指南](https://mastra.ai/guides/v0/migrations/upgrade-to-latest-0x)，然后返回此处完成 v1 迁移。
+:::
+
+Mastra v1 于 2026 年 1 月发布。我们建议使用 Mastra v1 开始新项目，或升级您的现有项目以继续接收更新和支持。
+
+本指南提供了从 Mastra 0.x 升级到 v1.0 时重大更改的全面概述。迁移按包和功能区域组织，以帮助您系统地更新代码库。
+
+:::tip[需要帮助？]
+需要迁移帮助？请加入我们的 [Discord 社区](https://discord.gg/BTYqqHKUrf) 提问。
+:::
+
+## 迁移策略
+
+### 将所有 Mastra 包更新到 `latest` 标签
+
+使用您的包管理器更新项目的版本。请务必同时更新**所有** Mastra 包以确保兼容性（所有 `@mastra/*` 包和 `mastra`）。
+
+以下是更新最常用包的方法：
+
+```bash npm2yarn
+npm install @mastra/core@latest @mastra/loggers@latest @mastra/memory@latest mastra@latest
+```
+
+使用 `@latest` 标签安装任何其他 Mastra 包，您将获得最新的 v1 版本。请务必更新所有 Mastra 包（特别是在 monorepo 中）以避免版本不匹配。
+
+### 更新 Node.js 版本
+
+Mastra v1 需要 Node.js **22.13.0** 或更高版本。请相应地更新您的开发和生产环境。
+
+### 完成迁移清单
+
+完成下面的[迁移清单](#迁移清单)以更新您的代码库。每个项目都链接到该特定更改的详细指南。
+
+:::info[Codemods]
+
+我们为您准备了自动化的 [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod)。如果愿意，您可以一次性运行所有 v1 codemods：
+
+```bash
+npx @mastra/codemod@latest v1
+```
+
+:::
+
+:::note[需要数据库迁移]
+
+如果您使用 PostgreSQL 或 LibSQL 存储，您需要运行数据库迁移。详情请参阅[存储迁移指南](/cn/guides/migrations/upgrade-to-v1/storage#数据库迁移)。
+
+:::
+
+## 按区域划分的重大更改
+
+- **[Mastra 类](/cn/guides/migrations/upgrade-to-v1/mastra)** - 导入重构和属性访问更改
+- **[Agent 类](/cn/guides/migrations/upgrade-to-v1/agent)** - 语音方法移至命名空间和流式 API 更新
+- **[工具](/cn/guides/migrations/upgrade-to-v1/tools)** - CreateTool 执行签名更改为分离的输入和上下文
+- **[工作流](/cn/guides/migrations/upgrade-to-v1/workflows)** - 函数名更改和旧功能移除
+- **[内存](/cn/guides/migrations/upgrade-to-v1/memory)** - 配置现在需要显式参数和更改的默认值
+- **[存储](/cn/guides/migrations/upgrade-to-v1/storage)** - 分页标准化和方法重命名为列表模式
+- **[向量](/cn/guides/migrations/upgrade-to-v1/vectors)** - 向量存储方法重命名为列表模式
+- **[RAG](/cn/guides/migrations/upgrade-to-v1/rag)** - 参数命名更新以提高清晰度
+- **[MCP](/cn/guides/migrations/upgrade-to-v1/mcp)** - 工具上下文重新组织和已弃用的客户端类移除
+- **[跟踪](/cn/guides/migrations/upgrade-to-v1/tracing)** - OTEL 遥测替换为专用的可观测性包和导出器
+- **[评估和评分器](/cn/guides/migrations/upgrade-to-v1/evals)** - 评分器 API 与新命名约定整合
+- **[CLI](/cn/guides/migrations/upgrade-to-v1/cli)** - 为简化界面移除命令和标志
+- **[部署](/cn/guides/migrations/upgrade-to-v1/deployment)** - CloudflareDeployer 配置更新为使用标准的 wrangler.json 属性名称
+- **[客户端 SDK](/cn/guides/migrations/upgrade-to-v1/client)** - 类型和实用程序重命名以保持一致
+- **[语音包](/cn/guides/migrations/upgrade-to-v1/voice)** - 包从 speech 重命名为 voice
+
+## 迁移清单
+
+按顺序完成此清单，从影响大多数应用程序的高影响更改开始。
+
+:::info[Codemods]
+
+我们为您准备了自动化的 [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod)。在整个迁移指南中，您将找到有关如何对特定更改使用它们的说明。
+
+如果愿意，您可以一次性运行所有 v1 codemods：
+
+```bash
+npx @mastra/codemod@latest v1
+```
+
+:::
+
+### 高影响更改
+
+- 将 `createTool` 工具签名更新为 `(inputData, context)` 格式 - [工具](/cn/guides/migrations/upgrade-to-v1/tools)
+- 重构 `@mastra/core` 导入以使用子路径导入 - [Mastra 类](/cn/guides/migrations/upgrade-to-v1/mastra)
+- 将分页从 `offset/limit` 更新为 `page/perPage` - [存储](/cn/guides/migrations/upgrade-to-v1/storage)
+- 安装 `@mastra/observability` 并用 `new Observability()` 包装配置 - [跟踪](/cn/guides/migrations/upgrade-to-v1/tracing)
+- 从 `telemetry:` 迁移到 `observability:` 配置（如果从 0.x OTEL 升级） - [跟踪](/cn/guides/migrations/upgrade-to-v1/tracing)
+
+### 中等影响更改
+
+- 在整个代码库中将 `RuntimeContext` 重命名为 `RequestContext` - [Agent 类](/cn/guides/migrations/upgrade-to-v1/agent)、[工具](/cn/guides/migrations/upgrade-to-v1/tools)、[工作流](/cn/guides/migrations/upgrade-to-v1/workflows)
+- 将存储方法从 `get*` 更新为 `list*` 模式 - [存储](/cn/guides/migrations/upgrade-to-v1/storage)
+- 用 getter 方法替换直接属性访问 - [Mastra 类](/cn/guides/migrations/upgrade-to-v1/mastra)、[Agent 类](/cn/guides/migrations/upgrade-to-v1/agent)
+- 如果依赖默认的 `thread` 范围，更新内存范围 - [内存](/cn/guides/migrations/upgrade-to-v1/memory)
+- 更新向量存储调用以使用命名参数 - [存储](/cn/guides/migrations/upgrade-to-v1/storage)
+- 从代理方法中移除 `format` 参数 - [Agent 类](/cn/guides/migrations/upgrade-to-v1/agent)
+- 更新语音方法以使用 `agent.voice` 命名空间 - [Agent 类](/cn/guides/migrations/upgrade-to-v1/agent)
+- 将配置属性 `processors` 重命名为 `spanOutputProcessors`（如果使用自定义处理器） - [跟踪](/cn/guides/migrations/upgrade-to-v1/tracing)
+
+### 低影响更改
+
+- 在分块选项中将 `keepSeparator` 重命名为 `separatorPosition` - [RAG](/cn/guides/migrations/upgrade-to-v1/rag)
+- 将 `createRunAsync` 重命名为 `createRun` - [工作流](/cn/guides/migrations/upgrade-to-v1/workflows)
+- 将语音包名称从 `@mastra/speech-*` 更新为 `@mastra/voice-*` - [语音包](/cn/guides/migrations/upgrade-to-v1/voice)
+- 更新评分器方法：`runExperiment` → `runEvals`，`getScorerByName` → `getScorerById` - [评估和评分器](/cn/guides/migrations/upgrade-to-v1/evals)
+- 移除已弃用的 CLI 标志 - [CLI](/cn/guides/migrations/upgrade-to-v1/cli)
+- 将客户端 SDK 类型从 `Get*` 更新为 `List*` - [客户端 SDK](/cn/guides/migrations/upgrade-to-v1/client)
+- 将 `runCount` 替换为 `retryCount` - [工作流](/cn/guides/migrations/upgrade-to-v1/workflows)
+- 将自定义导出器方法 `exportEvent` 更新为 `exportTracingEvent`（如果使用自定义导出器） - [跟踪](/cn/guides/migrations/upgrade-to-v1/tracing)

@@ -1,0 +1,379 @@
+---
+title: "工作流 | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移工作流相关的更改。"
+---
+
+# 工作流
+
+旧版工作流功能已被移除。
+
+## 变更
+
+### `getWorkflows` 改为 `listWorkflows`
+
+`mastra.getWorkflows()` 方法已重命名为 `mastra.listWorkflows()`。此更改符合 API 中的命名约定，复数形式的 getter 方法使用 `list` 前缀。
+
+要迁移，请将所有对 `mastra.getWorkflows()` 的调用替换为 `mastra.listWorkflows()`。
+
+```diff
+- const workflows = mastra.getWorkflows();
++ const workflows = mastra.listWorkflows();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新您的导入：
+
+```bash
+npx @mastra/codemod@latest v1/mastra-plural-apis .
+```
+
+:::
+
+### 步骤上下文中的 `RuntimeContext` 改为 `RequestContext`
+
+参数名称 `runtimeContext` 在工作流步骤执行上下文中已更改为 `requestContext`。此更改与全局重命名保持一致以提高清晰度。
+
+要迁移，在步骤执行函数中将引用从 `runtimeContext` 更新为 `requestContext`。
+
+```diff
+  createStep({
+-   execute: async ({ runtimeContext } ) => {
+-     const userTier = context.runtimeContext.get('userTier');
++   execute: async ({ requestContext } ) => {
++     const userTier = requestContext.get('userTier');
+      return { result: userTier };
+    },
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新您的导入：
+
+```bash
+npx @mastra/codemod@latest v1/runtime-context .
+```
+
+:::
+
+### `createRunAsync` 改为 `createRun`
+
+`createRunAsync()` 方法已重命名为 `createRun()`。此更改通过删除冗余的"Async"后缀来简化 API，因为所有运行创建都是异步的。
+
+要迁移，将方法调用从 `createRunAsync` 重命名为 `createRun`。
+
+```diff
+- await workflow.createRunAsync({ input: { ... } });
++ await workflow.createRun({ input: { ... } });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/workflow-create-run-async .
+```
+
+:::
+
+### `runCount` 改为 `retryCount`（已弃用）
+
+`runCount` 参数已被弃用，在工作流步骤执行中优先使用 `retryCount`。此更改提供了更清晰的命名，更好地描述了重试行为。旧的 `runCount` 仍然有效，但会显示弃用警告。
+
+要迁移，在步骤执行函数中将 `runCount` 重命名为 `retryCount`。
+
+```diff
+  createStep({
+    execute: async (inputData, context) => {
+-     console.log(`Step run ${context.runCount} times`);
++     console.log(`Step retry count: ${context.retryCount}`);
+    },
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/workflow-run-count .
+```
+
+:::
+
+### `getInitData` 返回 unknown
+
+执行函数中的 `getInitData` 函数现在返回 unknown 而不是 any。您需要自己对其进行类型化。
+要简单迁移，将 `getInitData()` 改为 `getInitData<any>()`
+
+```diff
+  createStep({
+    execute: async ({ getInitData }) => {
+-     const initData = getInitData();
+-     if (initData.key === 'value') {}
++     const initData = getInitData<any>();
++     if (initData.key === 'value') {}
+    },
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/workflow-get-init-data .
+```
+
+:::
+
+### `getWorkflowRuns` 改为 `listWorkflowRuns`
+
+`getWorkflowRuns()` 方法已重命名为 `listWorkflowRuns()`。此更改符合 `list*` 方法返回集合的约定。
+
+要迁移，将方法调用从 `getWorkflowRuns` 重命名为 `listWorkflowRuns`。
+
+```diff
+- const runs = await workflow.getWorkflowRuns({ fromDate, toDate });
++ const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/workflow-list-runs .
+```
+
+:::
+
+### 输入默认会被验证
+
+以前，输入默认不会被验证。[`validateInputs`](/reference/cn/workflows/workflow#workflowoptions) 标志决定是否验证工作流输入。此布尔值已翻转为 `true`。如果您想要旧行为或工作流的模式不需要验证，请设置 `validateInputs: false`。
+
+```diff
+createWorkflow({
++  options: {
++    validateInputs: false
++  }
+})
+```
+
+### 步骤 `suspendPayload` 验证
+
+对于定义了 `suspendSchema` 的步骤，现在会验证步骤的 `suspendPayload`。这也使用 `validateInputs` 标志来决定是否验证 `suspendPayload`。
+
+```diff
+  createStep({
+    id: "suspend-resume-step",
+    // ... 其他步骤属性
+    suspendSchema: z.object({
+      reason: z.string(),
+      otherReason: z.string()
+    }),
+    execute: async ({ suspend, resumeData}) => {
+      if (!resumeData) {
+-       return suspend({ reason: "Suspension reason" }); // 缺少 otherReason
++       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
+      }
+    },
+  });
+```
+
+### 分支结果字段现在变为可选
+
+`.branch()` 方法现在返回一个模式，其中所有分支输出字段都是可选的。这反映了运行时行为，其中每个分支仅在其条件为真时执行，因此任何分支的输出可能都是未定义的。
+
+要迁移，更新任何使用分支输出的代码以处理可选值。
+
+```diff
+  const workflow = createWorkflow({...})
+    .branch([
+      [condition1, stepA],  // outputSchema: { result: z.string() }
+      [condition2, stepB],  // outputSchema: { data: z.number() }
+    ])
+-   // 以前：stepA.result 类型为 string，stepB.data 类型为 number
++   // 现在：stepA.result 类型为 string | undefined，stepB.data 类型为 number | undefined
+    .then(nextStep);
+```
+
+如果您的代码依赖于非可选类型，在访问分支输出时添加运行时检查或提供默认值。
+
+### `Run.start()` 和 `Run.timeTravel()` 中的 `writableStream` 改为 `outputWriter`
+
+`Run.start()` 和 `Run.timeTravel()` 中的 `writableStream` 参数已替换为 `outputWriter`。现在不是传递 `WritableStream`，而是传递一个异步回调函数，该函数直接接收每个工作流事件块。
+
+此更改简化了 API - 而不是创建 `WritableStream` 包装器，您直接在回调中处理块。
+
+**示例：** 将工作流事件流式传输到 HTTP 响应（SSE）：
+
+```diff
+  const run = await workflow.createRun();
+
+- const stream = new WritableStream({
+-   write(chunk) {
+-     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+-   }
+- });
+- await run.start({ inputData, writableStream: stream });
+
++ await run.start({
++   inputData,
++   outputWriter: async (chunk) => {
++     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
++   },
++ });
+```
+
+:::note
+
+传递给步骤 `execute` 函数的 `writer` 参数不受此更改影响。它仍然是一个 `ToolStream`，扩展了 `WritableStream<unknown>` 并提供了 `.write()` 和 `.custom()` 方法：
+
+```ts
+createStep({
+  id: 'my-step',
+  execute: async ({ writer }) => {
+    // 此 API 未更改
+    await writer.write({ data: 'some output' });
+    await writer.custom({ type: 'custom-event', payload: {} });
+  },
+});
+```
+
+:::
+
+### `setState()` 现在是异步的，传递的数据会被验证
+
+`setState()` 函数现在是异步的。传递的数据现在会根据步骤中定义的 `stateSchema` 进行验证。状态数据验证也使用 `validateInputs` 标志来决定是否验证状态数据。此外，调用 `setState()` 时，您现在可以只传递正在更新的状态数据，而不是添加之前的状态展开 `(...state)`。
+
+要迁移，将 `setState()` 函数更新为异步。
+
+```diff
+- setState({ ...state, sharedCounter: state.sharedCounter + 1 });
++ await setState({ sharedCounter: state.sharedCounter + 1 });
++ // await setState({ ...state, sharedCounter: state.sharedCounter + 1 });
++ // 这也可以，因为之前的状态展开仍然支持
+```
+
+## 移除
+
+### `streamVNext`、`resumeStreamVNext` 和 `observeStreamVNext` 方法
+
+实验性的 `streamVNext()`、`resumeStreamVNext()` 和 `observeStreamVNext()` 方法已被移除。这些方法现在是具有更新事件结构和返回类型的标准实现。
+
+要迁移，使用标准的 `stream()`、`resumeStream()` 和 `observeStream()` 方法。将事件类型检查更新为使用带有工作流前缀的名称，并直接访问流属性。
+
+详细信息请参阅 [`Run.stream()`](/reference/cn/streaming/workflows/stream)、[`Run.resumeStream()`](/reference/cn/streaming/workflows/resumeStream) 和 [`Run.observeStream()`](/reference/cn/streaming/workflows/observeStream)。
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/workflow-stream-vnext .
+```
+
+:::
+
+### `suspend` 和 `setState` 在步骤条件函数参数中不可用
+
+`suspend` 和 `setState` 函数在步骤条件函数参数中不可用。
+
+要迁移，在步骤执行函数中使用 `suspend` 函数。
+
+```diff
+.dowhile(step, async ({ suspend, state, setState }) => {
+- setState({...state, updatedState: "updated state"})
+- await suspend({ reason: "Suspension reason" });
++ // 改而在步骤执行函数中使用 suspend/setState
+});
+```
+
+`dountil` 和 `branch` 条件函数参数也是如此。
+
+### 旧版工作流导出
+
+`@mastra/core` 中的 `./workflows/legacy` 导出路径已被移除。不再支持旧版工作流。
+
+要迁移，使用新的工作流 API。没有从旧版工作流的直接迁移路径。
+
+```diff
+- import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
++ // 旧版工作流不再支持
++ // 迁移到新的工作流 API
+```
+
+### WorkflowRunOutput 中的 `pipeThrough` 和 `pipeTo` 方法
+
+`WorkflowRunOutput` 上的 `pipeThrough()` 和 `pipeTo()` 方法已被弃用。这些方法仍然有效，但会显示控制台警告。
+
+要迁移，使用 `fullStream` 属性而不是直接在运行输出上调用方法。
+
+```diff
+  const run = await workflow.createRun({ input: { ... } });
+- await run.pipeTo(writableStream);
+- const transformed = run.pipeThrough(transformStream);
++ await run.fullStream.pipeTo(writableStream);
++ const transformed = run.fullStream.pipeThrough(transformStream);
+```
+
+### Watch 事件 API
+
+旧版 watch 事件已被移除，并合并到 v2 事件 API。`watch()` 方法和相关的 watch 端点不再可用。
+
+要迁移，使用工作流事件 API 或流式传输而不是 watch 事件。
+
+```diff
+- const workflow = mastraClient.getWorkflow('my-workflow');
+- const run = await workflow.createRun();
+- await run.watch((event) => {
+-   console.log('Step completed:', event);
+- });
+
++ const workflow = mastraClient.getWorkflow('my-workflow');
++ const run = await workflow.createRun();
++ const stream = await run.stream({ inputData: { ... } });
++ for await (const chunk of stream) {
++   console.log('Step completed:', chunk);
++ }
+```
+
+### `waitForEvent` API
+
+`waitForEvent` API 已从工作流中移除。请改用 suspend/resume API。
+
+要迁移，使用 suspend/resume API 来等待工作流执行里程碑。
+
+```diff
+- workflow.waitForEvent('step-complete', step1).commit();
++ workflow.then(step1).commit();
++ // 改而在 step1 执行函数中使用 suspend/resume API
+createStep({
+- execute: async (inputData, context) => {
+-  // ... 执行逻辑
+- }
++ execute: async (inputData, context) => {
++   if (!context.resumeData) {
++     return context.suspend({})
++   }
++ }
+});
++
++ // 工作流暂停后，您可以恢复它
++ const result = await run.start({ inputData: { ... } });
++ if (result.status === 'suspended') {
++   const resumedResult = await run.resume({
++     resumeData: {
++       event: 'step-complete',
++     },
++     step: 'step1',
++   });
++ }
+```
+
+### `sendEvent` API
+
+`sendEvent` API 已从工作流中移除。请改用 suspend/resume API。

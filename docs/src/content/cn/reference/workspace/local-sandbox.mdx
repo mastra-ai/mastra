@@ -1,0 +1,411 @@
+---
+title: "参考：LocalSandbox | 工作区"
+description: "本地命令执行的 LocalSandbox 提供程序文档。"
+packages:
+  - "@mastra/core"
+---
+
+# LocalSandbox
+
+**添加于：** `@mastra/core@1.1.0`
+
+在本地系统上执行命令。
+
+:::info
+
+有关接口详情，请参阅 [WorkspaceSandbox 接口](/reference/workspace/sandbox)。
+
+:::
+
+## 用法
+
+将 `LocalSandbox` 添加到工作区并将其分配给代理。代理可以在其任务中执行 shell 命令：
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+    env: {
+      NODE_ENV: 'development',
+    },
+  }),
+});
+
+const agent = new Agent({
+  id: 'dev-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+});
+
+// 代理现在可以使用 execute_command 工具
+const response = await agent.generate('Run npm install');
+```
+
+### 自动启动行为
+
+如果尚未运行，`LocalSandbox` 在第一次命令执行时自动启动。您也可以通过在应用程序启动时调用 `workspace.init()` 来显式启动沙箱，以避免首次命令延迟。
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此沙箱实例的唯一标识符",
+      isOptional: true,
+      defaultValue: "自动生成",
+    },
+    {
+      name: "workingDirectory",
+      type: "string",
+      description: "命令执行的目录。默认为 process.cwd() 中的 .sandbox/，以与 seatbelt 配置文件隔离。",
+      isOptional: true,
+      defaultValue: "process.cwd()/.sandbox/",
+    },
+    {
+      name: "env",
+      type: "NodeJS.ProcessEnv",
+      description: "要设置的环境变量。PATH 默认包含，除非被覆盖。",
+      isOptional: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "操作的默认超时时间（毫秒）",
+      isOptional: true,
+      defaultValue: "30000",
+    },
+    {
+      name: "isolation",
+      type: "'none' | 'seatbelt' | 'bwrap'",
+      description: "原生 OS 沙箱后端。macOS 使用 'seatbelt'，Linux 使用 'bwrap'。",
+      isOptional: true,
+      defaultValue: "'none'",
+    },
+    {
+      name: "nativeSandbox",
+      type: "NativeSandboxConfig",
+      description: "原生沙箱配置（见下文 NativeSandboxConfig）。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## NativeSandboxConfig
+
+用于原生 OS 沙箱的配置选项（与 `isolation: 'seatbelt'` 或 `'bwrap'` 一起使用）。
+
+<PropertiesTable
+  content={[
+    {
+      name: "allowNetwork",
+      type: "boolean",
+      description: "允许沙箱命令的网络访问。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "readOnlyPaths",
+      type: "string[]",
+      description: "允许只读访问的附加路径（系统路径始终可读）。",
+      isOptional: true,
+    },
+    {
+      name: "readWritePaths",
+      type: "string[]",
+      description: "除了工作区目录外，允许读写访问的附加路径。",
+      isOptional: true,
+    },
+    {
+      name: "seatbeltProfilePath",
+      type: "string",
+      description: "自定义 seatbelt 配置文件路径（仅限 macOS）。如果文件存在，则使用它；否则生成默认配置文件并写入此路径。",
+      isOptional: true,
+    },
+    {
+      name: "bwrapArgs",
+      type: "string[]",
+      description: "传递给 bwrap 的附加参数（仅限 Linux）。",
+      isOptional: true,
+    },
+    {
+      name: "allowSystemBinaries",
+      type: "boolean",
+      description: "允许读取标准系统二进制路径（/bin、/usr/bin 等）。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+## 属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "沙箱实例标识符",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "提供程序名称（'LocalSandbox'）",
+    },
+    {
+      name: "provider",
+      type: "string",
+      description: "提供程序标识符（'local'）",
+    },
+    {
+      name: "status",
+      type: "ProviderStatus",
+      description: "'starting' | 'running' | 'stopped' | 'error'",
+    },
+    {
+      name: "workingDirectory",
+      type: "string",
+      description: "配置的工作目录",
+    },
+  ]}
+/>
+
+## 方法
+
+### `start()`
+
+初始化并启动沙箱。创建工作目录，如果使用原生隔离则设置 seatbelt 配置文件。
+
+```typescript
+await sandbox.start();
+```
+
+由 `workspace.init()` 或第一次 `executeCommand()` 调用自动调用。
+
+### `stop()`
+
+停止沙箱。
+
+```typescript
+await sandbox.stop();
+```
+
+### `destroy()`
+
+清理沙箱资源。如果自动生成了 seatbelt 配置文件，则将其删除。
+
+```typescript
+await sandbox.destroy();
+```
+
+由 `workspace.destroy()` 调用。
+
+### `isReady()`
+
+检查沙箱是否已准备好执行操作。
+
+```typescript
+const ready = await sandbox.isReady();
+// 如果状态为 'running' 则为 true
+```
+
+### `executeCommand(command, args?, options?)`
+
+在沙箱中执行 shell 命令。
+
+```typescript
+const listResult = await sandbox.executeCommand('ls', ['-la']);
+const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
+  timeout: 60000,
+  env: { NODE_ENV: 'development' },
+});
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      description: "要执行的命令",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      description: "命令参数",
+      isOptional: true,
+    },
+    {
+      name: "options.timeout",
+      type: "number",
+      description: "执行超时时间（毫秒）",
+      isOptional: true,
+    },
+    {
+      name: "options.cwd",
+      type: "string",
+      description: "命令的工作目录",
+      isOptional: true,
+    },
+    {
+      name: "options.env",
+      type: "Record<string, string>",
+      description: "附加环境变量",
+      isOptional: true,
+    },
+    {
+      name: "options.onStdout",
+      type: "(data: string) => void",
+      description: "stdout 流式传输的回调",
+      isOptional: true,
+    },
+    {
+      name: "options.onStderr",
+      type: "(data: string) => void",
+      description: "stderr 流式传输的回调",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### `getInfo()`
+
+获取沙箱状态和资源信息。
+
+```typescript
+const info = await sandbox.getInfo();
+// { status: 'running', resources: { ... } }
+```
+
+### `getInstructions()`
+
+返回此沙箱工作原理的描述。用于工具描述。
+
+```typescript
+const instructions = sandbox.getInstructions();
+// 'Local command execution. Working directory: "/workspace".'
+```
+
+## 路径解析
+
+### 相对路径和执行上下文
+
+当您对 `workingDirectory` 使用相对路径时，它从 `process.cwd()` 解析。在 Mastra 项目中，cwd 取决于您运行代码的方式：
+
+| 上下文 | 工作目录 | `./workspace` 解析为 |
+|---------|------------------|---------------------------|
+| `mastra dev` | `./src/mastra/public/` | `./src/mastra/public/workspace` |
+| `mastra start` | `./.mastra/output/` | `./.mastra/output/workspace` |
+| 直接脚本 | 运行命令的位置 | 相对于该位置 |
+
+当相同的相对路径解析到不同位置时，可能会引起混淆。
+
+### 推荐：使用绝对路径
+
+为了在所有执行上下文中保持一致的路径，请使用带有绝对路径的环境变量：
+
+```typescript
+import { LocalSandbox } from '@mastra/core/workspace';
+
+const sandbox = new LocalSandbox({
+  workingDirectory: process.env.WORKSPACE_PATH!,
+});
+```
+
+在您的环境中将 `WORKSPACE_PATH` 设置为绝对路径，例如 `/home/user/my-project/workspace`。这确保了无论您如何运行代码，命令都从一致的目录执行。
+
+## 静态方法
+
+### `detectIsolation()`
+
+检测当前平台可用的最佳隔离后端。
+
+```typescript
+const detection = LocalSandbox.detectIsolation();
+// { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
+```
+
+## 环境隔离
+
+默认情况下，`LocalSandbox` 仅在环境中包含 `PATH`。这允许命令运行，同时防止意外暴露 API 密钥和密钥。
+
+```typescript
+// 默认：只有 PATH 可用（命令工作，密钥受保护）
+const secureSandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+});
+
+// 显式：传递特定变量
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  env: {
+    NODE_ENV: 'development',
+    API_URL: 'https://api.example.com',
+  },
+});
+
+// 完全访问（谨慎使用）
+const devSandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  env: process.env,
+});
+```
+
+## 原生 OS 沙箱
+
+`LocalSandbox` 支持原生 OS 级沙箱以增强安全性：
+
+- **macOS**：使用 Seatbelt（`sandbox-exec`）进行文件系统和网络隔离
+- **Linux**：使用 Bubblewrap（`bwrap`）进行命名空间隔离
+
+```typescript
+// 检测此平台可用的最佳后端
+const detection = LocalSandbox.detectIsolation();
+console.log(detection);
+// { backend: 'seatbelt', available: true, message: '...' }
+
+// 启用原生沙箱
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',
+  isolation: 'seatbelt', // 或 Linux 上的 'bwrap'
+  nativeSandbox: {
+    allowNetwork: false, // 阻止网络访问（默认）
+    readWritePaths: ['/tmp/extra'], // 附加可写路径
+  },
+});
+```
+
+启用隔离时：
+- 文件写入限制在工作区目录（和配置的路径）
+- 文件读取允许在任何位置（需要系统二进制文件）
+- 网络访问默认被阻止
+- 进程隔离防止影响主机系统
+
+### 沙箱配置文件位置
+
+在 macOS 上使用 seatbelt 隔离时，`LocalSandbox` 在 `process.cwd()` 中的 `.sandbox-profiles/` 文件夹中生成配置文件，与工作目录分开：
+
+```
+project/
+├── .sandbox/                      # 默认工作目录（沙箱化）
+│   └── ... 沙箱创建的文件
+├── .sandbox-profiles/             # Seatbelt 配置文件（在沙箱外）
+│   └── seatbelt-a1b2c3d4.sb       # 基于工作区 + 配置的哈希
+└── ... 您的项目文件
+```
+
+配置文件名是工作区路径和配置的哈希值，因此具有相同设置的沙箱共享同一配置文件，而不同的配置获得单独的文件。这可以防止同时运行多个沙箱时发生冲突。
+
+这种分离防止沙箱化进程读取或修改其自己的安全配置文件。配置文件在沙箱启动时创建，在销毁时清理。
+
+## 相关内容
+
+- [WorkspaceSandbox 接口](/reference/workspace/sandbox)
+- [工作区类](/reference/workspace/workspace-class)
+- [工作区概述](/docs/cn/docs/workspace/overview)

@@ -1,0 +1,69 @@
+---
+title: "部署概述 | 部署"
+description: "了解 Mastra 应用程序的不同部署选项"
+packages:
+  - "@mastra/deployer"
+---
+
+# 部署概述
+
+Mastra 应用程序可以部署到任何与 Node.js 兼容的环境。您可以部署 Mastra 服务器、与现有的 Web 框架集成、部署到云提供商，或使用 Mastra Cloud 进行托管。
+
+## 运行时支持
+
+Mastra 可以在以下任何运行时环境中运行：
+
+- Node.js `v22.13.0` 或更高版本
+- Bun
+- Deno
+- Cloudflare
+
+## 部署选项
+
+### Mastra 服务器
+
+Mastra 提供由 Hono 支持的[服务器](/docs/cn/server/mastra-server)，可以独立部署。使用 `mastra build` 命令构建您的应用程序并将输出部署到您首选的 VM、容器或 PaaS 平台。
+
+当您需要完全控制基础设施、长时间运行的进程或 WebSocket 连接时使用此选项。[Mastra 服务器部署指南](/docs/cn/deployment/mastra-server) 提供更多详细信息。
+
+### Monorepo
+
+作为 monorepo 设置的一部分部署 Mastra 服务器，遵循与独立部署相同的方法。
+
+阅读[monorepo 部署](/docs/cn/deployment/monorepo)。
+
+### 云提供商
+
+Mastra 应用程序可以部署到云提供商和无服务器平台。Mastra 包含可选的内置部署器，用于 Vercel、Netlify 和 Cloudflare，以自动化构建和部署过程。
+
+当您需要自动扩展、最少的基础设施管理或您已经在使用这些平台之一时使用此选项。
+
+- [Amazon EC2](/guides/deployment/amazon-ec2)
+- [AWS Lambda](/guides/deployment/aws-lambda)
+- [Azure App Services](/guides/deployment/azure-app-services)
+- [Cloudflare](/guides/deployment/cloudflare-deployer)
+- [Digital Ocean](/guides/deployment/digital-ocean)
+- [Netlify](/guides/deployment/netlify-deployer)
+- [Vercel](/guides/deployment/vercel-deployer)
+
+### Web 框架
+
+当 Mastra 与 Web 框架集成时，它使用框架的标准部署流程与您的应用程序一起部署。以下指南涵盖部署的框架特定配置要求。
+
+当向现有的 Next.js 或 Astro 应用程序添加 Mastra 时使用这些指南。
+
+- [在 Vercel 上使用 Next.js](/docs/cn/deployment/web-framework#with-nextjs-on-vercel)
+- [在 Vercel 上使用 Astro](/docs/cn/deployment/web-framework#with-astro-on-vercel)
+- [在 Netlify 上使用 Astro](/docs/cn/deployment/web-framework#with-astro-on-netlify)
+
+### Mastra Cloud
+
+我们正在构建 Mastra Cloud，使其成为部署和观察 Mastra 智能体最简单的地方。它目前处于测试阶段。
+
+在 [Mastra Cloud 文档](/docs/cn/mastra-cloud/overview)中了解更多。
+
+## 工作流运行器
+
+Mastra 工作流默认使用内置执行引擎运行。对于需要托管基础设施的生产环境，工作流也可以部署到专门的平台，如 [Inngest](https://www.inngest.com)，这些平台提供步骤记忆化、自动重试和实时监控。
+
+访问[工作流运行器指南](/docs/cn/deployment/workflow-runners)了解执行选项，以及 [Inngest 部署指南](/guides/deployment/inngest)了解设置说明。

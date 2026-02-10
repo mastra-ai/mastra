@@ -1,0 +1,376 @@
+---
+title: "参考：OtelExporter | 可观测性"
+description: "用于追踪的 OpenTelemetry 导出器"
+packages:
+  - "@mastra/otel-exporter"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# OtelExporter
+
+使用标准化的 GenAI 语义约定将追踪数据发送到任何 OpenTelemetry 兼容的可观测性平台。
+
+## 构造函数
+
+```typescript
+new OtelExporter(config: OtelExporterConfig)
+```
+
+## OtelExporterConfig
+
+```typescript
+interface OtelExporterConfig {
+  provider?: ProviderConfig;
+  timeout?: number;
+  batchSize?: number;
+  logLevel?: "debug" | "info" | "warn" | "error";
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "provider",
+      type: "ProviderConfig",
+      description: "提供者特定配置（见下文）",
+      required: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "导出超时时间（毫秒）（默认：30000）",
+      required: false,
+    },
+    {
+      name: "batchSize",
+      type: "number",
+      description: "每批的跨度数（默认：100）",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "日志记录器级别（默认：'warn'）",
+      required: false,
+    },
+    {
+      name: "resourceAttributes",
+      type: "DetectedResourceAttributes",
+      description:
+        "可选的 OpenTelemetry 资源属性（此处的值覆盖任何默认值）",
+      required: false,
+    },
+  ]}
+/>
+
+## 提供者配置
+
+### Dash0Config
+
+```typescript
+interface Dash0Config {
+  apiKey?: string;
+  endpoint?: string;
+  dataset?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Dash0 API 密钥。回退到 DASH0_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "Dash0 入口端点。回退到 DASH0_ENDPOINT 环境变量。",
+      required: false,
+    },
+    {
+      name: "dataset",
+      type: "string",
+      description: "数据集名称。回退到 DASH0_DATASET 环境变量。",
+      required: false,
+    },
+  ]}
+/>
+
+### SignozConfig
+
+```typescript
+interface SignozConfig {
+  apiKey?: string;
+  region?: "us" | "eu" | "in";
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "SigNoz 摄入密钥。回退到 SIGNOZ_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "region",
+      type: "'us' | 'eu' | 'in'",
+      description: "SigNoz 云区域。回退到 SIGNOZ_REGION 环境变量。（默认：'us'）",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "自定义端点。回退到 SIGNOZ_ENDPOINT 环境变量。",
+      required: false,
+    },
+  ]}
+/>
+
+### NewRelicConfig
+
+```typescript
+interface NewRelicConfig {
+  apiKey?: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "New Relic 许可证密钥。回退到 NEW_RELIC_LICENSE_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "自定义端点。回退到 NEW_RELIC_ENDPOINT 环境变量。（默认：https://otlp.nr-data.net:443/v1/traces）",
+      required: false,
+    },
+  ]}
+/>
+
+### TraceloopConfig
+
+```typescript
+interface TraceloopConfig {
+  apiKey?: string;
+  destinationId?: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Traceloop API 密钥。回退到 TRACELOOP_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "destinationId",
+      type: "string",
+      description: "目标标识符。回退到 TRACELOOP_DESTINATION_ID 环境变量。",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "自定义端点。回退到 TRACELOOP_ENDPOINT 环境变量。（默认：https://api.traceloop.com/v1/traces）",
+      required: false,
+    },
+  ]}
+/>
+
+### LaminarConfig
+
+```typescript
+interface LaminarConfig {
+  apiKey?: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Laminar 项目 API 密钥。回退到 LMNR_PROJECT_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "自定义端点。回退到 LAMINAR_ENDPOINT 环境变量。（默认：https://api.lmnr.ai/v1/traces）",
+      required: false,
+    },
+  ]}
+/>
+
+### CustomConfig
+
+```typescript
+interface CustomConfig {
+  endpoint: string;
+  protocol?: "http/json" | "http/protobuf" | "grpc" | "zipkin";
+  headers?: Record<string, string>;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "endpoint",
+      type: "string",
+      description: "OTEL 收集器端点 URL",
+      required: true,
+    },
+    {
+      name: "protocol",
+      type: "'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'",
+      description: "导出协议（默认：'http/json'）",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "用于身份验证的自定义标头",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到配置的 OTEL 后端。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的跨度到 OTEL 后端而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新待处理的追踪并关闭导出器。
+
+## 使用示例
+
+### 零配置（使用环境变量）
+
+```typescript
+import { OtelExporter } from "@mastra/otel-exporter";
+
+// 设置 SIGNOZ_API_KEY、SIGNOZ_REGION 环境变量
+const exporter = new OtelExporter({ provider: { signoz: {} } });
+
+// 或对于其他提供者：
+// 设置 DASH0_API_KEY、DASH0_ENDPOINT 用于 Dash0
+// 设置 NEW_RELIC_LICENSE_KEY 用于 New Relic
+// 设置 TRACELOOP_API_KEY 用于 Traceloop
+// 设置 LMNR_PROJECT_API_KEY 用于 Laminar
+```
+
+### 显式配置
+
+```typescript
+import { OtelExporter } from "@mastra/otel-exporter";
+
+const exporter = new OtelExporter({
+  provider: {
+    signoz: {
+      apiKey: process.env.SIGNOZ_API_KEY,
+      region: "us",
+    },
+  },
+});
+```
+
+### 使用自定义端点
+
+```typescript
+const exporter = new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: "https://my-collector.example.com/v1/traces",
+      protocol: "http/protobuf",
+      headers: {
+        "x-api-key": process.env.API_KEY,
+      },
+    },
+  },
+  timeout: 60000,
+  logLevel: "debug",
+});
+```
+
+## 协议要求
+
+不同的提供者需要不同的 OTEL 导出器包：
+
+| 协议 | 必需的包 | 提供者 |
+| ------------- | ------------------------------------------ | -------------------------- |
+| gRPC | `@opentelemetry/exporter-trace-otlp-grpc` | Dash0 |
+| HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` | SigNoz, New Relic, Laminar |
+| HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` | Traceloop, Custom |
+| Zipkin | `@opentelemetry/exporter-zipkin` | Zipkin 收集器 |
+
+
+## 标签支持
+
+OtelExporter 支持追踪标签用于分类和筛选。标签仅应用于根跨度，并存储为 `mastra.tags` 属性。
+
+### 使用方法
+
+```typescript
+const result = await agent.generate("Hello", {
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### 标签的存储方式
+
+标签以 JSON 字符串化数组的形式存储在 `mastra.tags` 跨度属性中，以实现最大的后端兼容性：
+
+```json
+{
+  "mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
+}
+```
+
+:::note
+虽然 OpenTelemetry 规范支持原生数组属性，但许多后端（Jaeger、Zipkin、Tempo）的数组支持有限。JSON 字符串可确保在所有可观测性平台上的一致行为。
+:::
+
+## 相关内容
+
+- [OtelExporter 指南](/docs/cn/docs/observability/tracing/exporters/otel) - 提供者配置设置指南
+- [OtelBridge](/docs/cn/docs/observability/tracing/bridges/otel) - 双向 OTEL 上下文集成
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 一般追踪概念

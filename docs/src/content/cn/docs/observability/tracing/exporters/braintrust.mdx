@@ -1,0 +1,100 @@
+---
+title: "Braintrust 导出器 | 追踪 | 可观测性"
+description: "将追踪数据发送到 Braintrust 进行评估和监控"
+packages:
+  - "@mastra/braintrust"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Braintrust 导出器
+
+[Braintrust](https://www.braintrust.dev/) 是一个评估和监控平台，可帮助您测量和改进 LLM 应用程序质量。Braintrust 导出器将您的追踪数据发送到 Braintrust，从而实现系统化的评估、评分和实验。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/braintrust@latest
+```
+
+## 配置
+
+### 前置条件
+
+1. **Braintrust 账户**：在 [braintrust.dev](https://www.braintrust.dev/) 注册
+2. **项目**：为您的追踪数据创建或选择一个项目
+3. **API 密钥**：在 Braintrust 设置 → API 密钥中生成
+4. **环境变量**：设置您的凭据：
+
+```bash title=".env"
+BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
+
+# 可选
+BRAINTRUST_ENDPOINT=https://api.braintrust.dev  # 如有需要，使用自定义端点
+```
+
+### 零配置设置
+
+设置环境变量后，无需配置即可使用导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { BraintrustExporter } from "@mastra/braintrust";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: "my-service",
+        exporters: [new BraintrustExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { BraintrustExporter } from "@mastra/braintrust";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: "my-service",
+        exporters: [
+          new BraintrustExporter({
+            apiKey: process.env.BRAINTRUST_API_KEY,
+            projectName: "my-project",
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+### 完整配置
+
+```typescript
+new BraintrustExporter({
+  // 必填
+  apiKey: process.env.BRAINTRUST_API_KEY!,
+
+  // 可选设置
+  projectName: "my-project", // 默认：'mastra-tracing'
+  endpoint: "https://api.braintrust.dev", // 如有需要，使用自定义端点
+  logLevel: "info", // 诊断日志：debug | info | warn | error
+});
+```
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [Braintrust 文档](https://www.braintrust.dev/docs)

@@ -1,0 +1,187 @@
+---
+title: "参考：GraphRAG | RAG"
+description: "Mastra 中 GraphRAG 类的文档，该类实现了基于图的检索增强生成方法。"
+packages:
+  - "@mastra/rag"
+---
+
+# GraphRAG
+
+`GraphRAG` 类实现了基于图的检索增强生成方法。它从文档块创建知识图，其中节点表示文档，边表示语义关系，从而能够直接进行相似性匹配，并通过图遍历发现相关内容。
+
+## 基本用法
+
+```typescript
+import { GraphRAG } from "@mastra/rag";
+
+const graphRag = new GraphRAG({
+  dimension: 1536,
+  threshold: 0.7,
+});
+
+// 从块和嵌入创建图
+graphRag.createGraph(documentChunks, embeddings);
+
+// 使用嵌入查询图
+const results = await graphRag.query({
+  query: queryEmbedding,
+  topK: 10,
+  randomWalkSteps: 100,
+  restartProb: 0.15,
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "dimension",
+      type: "number",
+      description: "嵌入向量的维度",
+      isOptional: true,
+      defaultValue: "1536",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "在节点之间创建边的相似度阈值 (0-1)",
+      isOptional: true,
+      defaultValue: "0.7",
+    },
+  ]}
+/>
+
+## 方法
+
+### createGraph
+
+从文档块及其嵌入创建知识图。
+
+```typescript
+createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
+```
+
+#### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "chunks",
+      type: "GraphChunk[]",
+      description: "带有文本和元数据的文档块数组",
+      isOptional: false,
+    },
+    {
+      name: "embeddings",
+      type: "GraphEmbedding[]",
+      description: "与块对应的嵌入数组",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### query
+
+执行结合向量相似性和图遍历的基于图的搜索。
+
+```typescript
+query({
+  query,
+  topK = 10,
+  randomWalkSteps = 100,
+  restartProb = 0.15
+}: {
+  query: number[];
+  topK?: number;
+  randomWalkSteps?: number;
+  restartProb?: number;
+}): RankedNode[]
+```
+
+#### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "query",
+      type: "number[]",
+      description: "查询嵌入向量",
+      isOptional: false,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "要返回的结果数量",
+      isOptional: true,
+      defaultValue: "10",
+    },
+    {
+      name: "randomWalkSteps",
+      type: "number",
+      description: "随机游走的步数",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "restartProb",
+      type: "number",
+      description: "从查询节点重新开始的概率",
+      isOptional: true,
+      defaultValue: "0.15",
+    },
+  ]}
+/>
+
+#### 返回值
+
+返回 `RankedNode` 对象数组，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "节点的唯一标识符",
+    },
+    {
+      name: "content",
+      type: "string",
+      description: "文档块的文本内容",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "与块关联的附加元数据",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "来自图遍历的组合相关性分数",
+    },
+  ]}
+/>
+
+## 高级示例
+
+```typescript
+const graphRag = new GraphRAG({
+  dimension: 1536,
+  threshold: 0.8, // 更严格的相似度阈值
+});
+
+// 从块和嵌入创建图
+graphRag.createGraph(documentChunks, embeddings);
+
+// 使用自定义参数查询
+const results = await graphRag.query({
+  query: queryEmbedding,
+  topK: 5,
+  randomWalkSteps: 200,
+  restartProb: 0.2,
+});
+```
+
+## 相关内容
+
+- [createGraphRAGTool](../tools/graph-rag-tool)

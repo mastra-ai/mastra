@@ -1,0 +1,237 @@
+---
+title: "参考文档：Step 类 | 工作流"
+description: "Mastra 中 Step 类的文档，用于定义工作流中的单个工作单元。"
+packages:
+  - "@mastra/core"
+---
+
+# Step 类
+
+Step 类定义工作流中的单个工作单元，封装了执行逻辑、数据验证和输入/输出处理。
+它可以将工具或智能体作为参数，以自动从中创建步骤。
+
+## 使用示例
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: "step-1",
+  description: "将值从输入传递到输出",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      value,
+    };
+  },
+});
+```
+
+## 从智能体创建步骤
+
+您可以直接从智能体创建步骤。该步骤将使用智能体的名称作为其 ID。
+
+### 基本智能体步骤
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+import { testAgent } from "../agents/test-agent";
+
+const agentStep = createStep(testAgent);
+// inputSchema: { prompt: string }
+// outputSchema: { text: string }
+```
+
+### 具有结构化输出的智能体步骤
+
+传递 `structuredOutput` 以使智能体返回类型化的结构化数据：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+});
+
+const agentStep = createStep(testAgent, {
+  structuredOutput: { schema: articleSchema },
+});
+// inputSchema: { prompt: string }
+// outputSchema: { title: string, summary: string, tags: string[] }
+```
+
+### 智能体步骤选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "structuredOutput",
+      type: "{ schema: z.ZodType<any> }",
+      description: "如果提供，智能体返回匹配此模式的结构化数据而不是纯文本。步骤的 outputSchema 设置为提供的模式。",
+      required: false,
+    },
+    {
+      name: "onFinish",
+      type: "(result: AgentResult) => void",
+      description: "智能体完成生成时调用的回调。",
+      required: false,
+    },
+  ]}
+/>
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "步骤的唯一标识符",
+      required: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "步骤功能的可选描述",
+      required: false,
+    },
+    {
+      name: "inputSchema",
+      type: "z.ZodType<any>",
+      description: "定义输入结构的 Zod 模式",
+      required: true,
+    },
+    {
+      name: "outputSchema",
+      type: "z.ZodType<any>",
+      description: "定义输出结构的 Zod 模式",
+      required: true,
+    },
+    {
+      name: "resumeSchema",
+      type: "z.ZodType<any>",
+      description: "用于恢复步骤的可选 Zod 模式",
+      required: false,
+    },
+    {
+      name: "suspendSchema",
+      type: "z.ZodType<any>",
+      description: "用于暂停步骤的可选 Zod 模式",
+      required: false,
+    },
+    {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description:
+        "步骤状态的可选 Zod 模式。使用 Mastra 的状态系统时自动注入。stateSchema 必须是工作流 stateSchema 的子集。如果未指定，类型为 'any'。",
+      required: false,
+    },
+    {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      description:
+        "用于验证请求上下文值的 Zod 模式。如果提供，上下文在步骤的 execute() 运行之前进行验证，如果验证失败则步骤失败。",
+      required: false,
+    },
+    {
+      name: "execute",
+      type: "(params: ExecuteParams) => Promise<any>",
+      description: "包含步骤逻辑的异步函数",
+      required: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "用于存储附加步骤信息的可选键值对。值必须可序列化（不能有函数、循环引用等）。",
+      required: false,
+    },
+  ]}
+/>
+
+### ExecuteParams
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TStepInput>",
+      description: "与 inputSchema 匹配的输入数据",
+    },
+    {
+      name: "resumeData",
+      type: "z.infer<TResumeSchema>",
+      description:
+        "与 resumeSchema 匹配的重试数据，从暂停状态恢复步骤时。仅在恢复步骤时存在。",
+    },
+    {
+      name: "suspendData",
+      type: "z.infer<TSuspendSchema>",
+      description:
+        "步骤暂停时最初传递给 suspend() 的暂停数据。仅在恢复且之前带有数据暂停的步骤时存在。",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "访问 Mastra 服务（智能体、工具等）",
+    },
+    {
+      name: "getStepResult",
+      type: "(step: Step | string) => any",
+      description: "访问其他步骤结果的函数",
+    },
+    {
+      name: "getInitData",
+      type: "() => any",
+      description:
+        "在任何步骤中访问工作流初始输入数据的函数",
+    },
+    {
+      name: "suspend",
+      type: "(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>",
+      description: "暂停工作流执行的函数",
+    },
+    {
+      name: "state",
+      type: "z.infer<TState>",
+      description:
+        "当前工作流状态。包含跨所有步骤和暂停/恢复周期持久化的共享值。结构由步骤的 stateSchema 定义。",
+    },
+    {
+      name: "setState",
+      type: "(state: z.infer<TState>) => void",
+      description:
+        "设置工作流状态的函数。通过类似 reducer 的模式注入，例如 'setState({ ...state, ...newState })'",
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "当前运行 ID",
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description:
+        "此特定步骤的重试计数，每次重试步骤时自动增加",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [工作流状态](/docs/cn/docs/workflows/workflow-state)
+- [控制流](/docs/cn/docs/workflows/control-flow)
+- [使用智能体和工具](/docs/cn/docs/workflows/agents-and-tools)

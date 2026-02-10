@@ -1,0 +1,96 @@
+---
+title: "参考：Workflow.createRun() | 工作流"
+description: "工作流中 `Workflow.createRun()` 方法的文档，用于创建新的工作流运行实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.createRun()
+
+`.createRun()` 方法创建一个新的工作流运行实例，允许您使用特定的输入数据执行工作流。这是返回 `Run` 实例的当前 API。
+
+## 使用示例
+
+```typescript
+await workflow.createRun();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "工作流运行的可选自定义标识符",
+      isOptional: true,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "可选标识符，用于将工作流运行与特定资源关联（例如用户 ID、租户 ID）。该值会随工作流运行持久化，可用于过滤和查询运行。",
+      isOptional: true,
+    },
+    {
+      name: "disableScorers",
+      type: "boolean",
+      description: "可选标志，用于禁用此工作流运行的评分器",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "run",
+      type: "Run",
+      description:
+        "可用于执行工作流的新的工作流运行实例",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+const workflow = mastra.getWorkflow("workflow");
+
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: {
+    value: 10,
+  },
+});
+```
+
+## 使用 resourceId
+
+`resourceId` 参数将工作流运行与特定资源（如用户或租户）关联。这在多租户应用程序中很有用，或者当您需要跟踪启动工作流的用户时。
+
+```typescript
+const workflow = mastra.getWorkflow("workflow");
+
+// 创建与特定用户关联的运行
+const run = await workflow.createRun({
+  resourceId: "user-123",
+});
+
+const result = await run.start({
+  inputData: {
+    value: 10,
+  },
+});
+
+// 之后检索运行并访问 resourceId
+const storedRun = await workflow.getWorkflowRunById(run.runId);
+console.log(storedRun.resourceId); // "user-123"
+```
+
+## 相关内容
+
+- [Run 类](../run)
+- [工作流概述](/docs/cn/docs/workflows/overview)

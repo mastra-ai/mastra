@@ -1,0 +1,411 @@
+---
+title: "工作流概述 | 工作流"
+description: "Mastra 中的工作流帮助你编排复杂的任务序列，包括分支、并行执行、资源暂停等功能。"
+packages:
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 工作流概述
+
+工作流允许你使用清晰、结构化的步骤定义复杂的任务序列，而不是依赖单个代理的推理。它们让你完全控制任务的分解方式、数据在它们之间的流动方式，以及何时执行什么内容。工作流默认使用内置的执行引擎运行，也可以部署到 [工作流运行器](/docs/cn/deployment/workflow-runners) 如 Inngest 以使用托管基础设施。
+
+![工作流概述](/img/workflows/workflows-overview.jpg)
+
+## 何时使用工作流
+
+对于预先明确定义且涉及多个具有特定执行顺序的步骤的任务，使用工作流。它们让你对数据在步骤之间如何流动和转换，以及每个阶段调用哪些原语进行细粒度控制。
+
+> **📹 观看**：→ 工作流介绍，以及它们与代理的比较 [YouTube（7分钟）](https://youtu.be/0jg2g3sNvgw)
+
+## 核心原则
+
+Mastra 工作流遵循以下原则运行：
+
+- 使用 `createStep` 定义**步骤**，指定输入/输出模式和业务逻辑。
+- 使用 `createWorkflow` 组合**步骤**以定义执行流程。
+- 运行**工作流**以执行整个序列，内置支持暂停、恢复和流式结果。
+
+## 创建工作流步骤
+
+步骤是工作流的构建块。使用 `createStep()` 创建步骤，并使用 `inputSchema` 和 `outputSchema` 定义它接受和返回的数据。
+
+`execute` 函数定义步骤执行的操作。使用它来调用代码库中的函数、外部 API、代理或工具。
+
+```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    formatted: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { message } = inputData;
+
+    return {
+      formatted: message.toUpperCase()
+    };
+  }
+});
+```
+
+:::info
+
+访问[步骤类](/reference/workflows/step)获取完整的配置选项列表。
+
+:::
+
+### 使用代理和工具
+
+工作流步骤也可以调用已注册的代理或直接导入和执行工具，访问[使用工具](/docs/cn/agents/using-tools)页面了解更多信息。
+
+## 创建工作流
+
+使用 `createWorkflow()` 创建工作流，并使用 `inputSchema` 和 `outputSchema` 定义它接受和返回的数据。使用 `.then()` 添加步骤，并使用 `.commit()` 完成工作流。
+
+```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .commit();
+```
+
+:::info
+
+访问[工作流类](/reference/workflows/workflow)获取完整的配置选项列表。
+
+:::
+
+### 理解控制流
+
+工作流可以使用多种不同的方法进行组合。你选择的方法决定了每个步骤的模式应该如何结构化。访问[控制流](/docs/cn/workflows/control-flow)页面了解更多信息。
+
+## 工作流状态
+
+工作流状态允许你在步骤之间共享值，而无需通过每个步骤的 inputSchema 和 outputSchema 传递。使用状态来跟踪进度、累积结果或在 entire 工作流中共享配置。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ formatted: z.string() }),
+  stateSchema: z.object({ counter: z.number() }),
+  execute: async ({ inputData, state, setState }) => {
+    // 从状态读取
+    console.log(state.counter);
+
+    // 为后续步骤更新状态
+    setState({ ...state, counter: state.counter + 1 });
+
+    return { formatted: inputData.message.toUpperCase() };
+  },
+});
+```
+
+:::info
+
+访问[工作流状态](/docs/cn/workflows/workflow-state)获取关于状态模式、初始状态、暂停/恢复持久化和嵌套工作流的完整文档。
+
+:::
+
+## 工作流作为步骤
+
+使用工作流作为步骤以在更大的组合中重用其逻辑。输入和输出遵循[核心原则](/docs/cn/workflows/control-flow)中描述的相同模式规则。
+
+```typescript {26} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+const childWorkflow = createWorkflow({
+  id: "child-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(childWorkflow)
+  .commit();
+```
+
+### 克隆工作流
+
+当你想重用工作流的逻辑但想在新 ID 下单独跟踪它时，使用 `cloneWorkflow()` 克隆工作流。每个克隆独立运行，并在日志和可观测性工具中显示为不同的工作流。
+
+```typescript {6} title="src/mastra/workflows/test-workflow.ts"
+import { cloneWorkflow } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+
+const parentWorkflow = createWorkflow({...})
+const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(clonedWorkflow)
+  .commit();
+```
+
+## 注册工作流
+
+在 Mastra 实例中注册你的工作流，使其在整个应用程序中可用。一旦注册，它可以从代理或工具调用，并可以访问日志和可观测性功能等共享资源：
+
+```typescript {5} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { testWorkflow } from "./workflows/test-workflow";
+
+export const mastra = new Mastra({
+  workflows: { testWorkflow },
+});
+```
+
+## 引用工作流
+
+你可以从代理、工具、Mastra 客户端或命令行运行工作流。根据你的设置，通过在 `mastra` 或 `mastraClient` 实例上调用 `.getWorkflow()` 获取引用：
+
+```typescript
+const testWorkflow = mastra.getWorkflow("testWorkflow");
+```
+
+:::info
+
+`mastra.getWorkflow()` 优于直接导入，原因有二：
+1. 它提供对 Mastra 实例配置（记录器、遥测、存储、已注册的代理和向量存储）的访问
+2. 它为工作流输入和输出模式提供完整的 TypeScript 类型推断
+
+**注意：** 使用 `getWorkflow()` 时使用工作流的**注册密钥**（添加到 Mastra 时使用的密钥）。虽然 `getWorkflowById()` 可用于通过 `id` 属性检索工作流，但它不提供相同级别的类型推断。
+
+:::
+
+## 运行工作流
+
+工作流可以以两种模式运行：start 等待所有步骤完成后返回，stream 在执行期间发出事件。选择适合你用例的方法：当你只需要最终结果时使用 start，当你想监控进度或在步骤完成时触发操作时使用 stream。
+
+<Tabs>
+  <TabItem value="start" label="启动">
+使用 `createRun()` 创建工作流运行实例，然后使用与工作流 `inputSchema` 匹配的 `inputData` 调用 `.start()`。工作流执行所有步骤并返回最终结果。
+
+```typescript
+const run = await testWorkflow.createRun();
+
+const result = await run.start({
+  inputData: {
+    message: "Hello world"
+  }
+});
+
+if (result.status === "success") {
+  console.log(result.result);
+}
+```
+  </TabItem>
+  <TabItem value="stream" label="流式">
+使用 `.createRun()` 创建工作流运行实例，然后使用与工作流 `inputSchema` 匹配的 `inputData` 调用 `.stream()`。迭代 `fullStream` 以跟踪进度，然后等待 `result` 获取最终工作流结果。
+
+```typescript
+const run = await testWorkflow.createRun();
+
+const stream = run.stream({
+  inputData: {
+    message: "Hello world"
+  }
+});
+
+for await (const chunk of stream.fullStream) {
+  console.log(chunk);
+}
+
+// 获取最终结果（与 run.start() 类型相同）
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
+}
+```
+  </TabItem>
+</Tabs>
+
+
+### 工作流结果类型
+
+`run.start()` 和 `stream.result` 都返回基于 `status` 属性的可识别联合，可以是 `success`、`failed`、`suspended`、`tripwire` 或 `paused`。无论状态如何，你始终可以安全地访问 `result.status`、`result.input`、`result.steps`，以及可选的 `result.state`。
+
+此外，根据状态不同，可以使用不同的属性：
+
+| 状态 | 唯一属性 | 描述 |
+| ----------- | ------------------------------- | -------------------------------------------------------- |
+| `success` | `result` | 工作流的输出数据 |
+| `failed` | `error` | 导致失败错误 |
+| `tripwire` | `tripwire` | 包含 `reason`、`retry?`、`metadata?`、`processorId?` |
+| `suspended` | `suspendPayload`、`suspended` | 暂停数据和暂停步骤路径数组 |
+| `paused` | _(none)_ | 只有通用属性可用 |
+
+要访问特定于状态的属性，请先检查 `status`：
+
+```typescript
+const result = await run.start({ inputData: { message: "Hello world" } });
+
+if (result.status === "success") {
+  console.log(result.result); // 仅在状态为 "success" 时可用
+} else if (result.status === "failed") {
+  console.log(result.error.message);
+} else if (result.status === "suspended") {
+  console.log(result.suspendPayload);
+}
+```
+
+### 工作流输出
+
+以下是成功的工作流结果示例，显示 `input`、`steps` 和 `result` 属性：
+
+```json
+{
+  "status": "success",
+  "steps": {
+    "step-1": {
+      "status": "success",
+      "payload": {
+        "message": "Hello world"
+      },
+      "output": {
+        "formatted": "HELLO WORLD"
+      }
+    },
+    "step-2": {
+      "status": "success",
+      "payload": {
+        "formatted": "HELLO WORLD"
+      },
+      "output": {
+        "emphasized": "HELLO WORLD!!!"
+      }
+    }
+  },
+  "input": {
+    "message": "Hello world"
+  },
+  "result": {
+    "emphasized": "HELLO WORLD!!!"
+  }
+}
+```
+
+## 重新启动运行中的工作流
+
+当工作流运行与服务器断开连接时，可以从最后一个活动步骤重新启动。这对于服务器断开连接时可能仍在运行的长运行工作流很有用。重新启动工作流运行将从最后一个活动步骤恢复执行，工作流将从那里继续。
+
+### 使用 `restartAllActiveWorkflowRuns()` 重新启动工作流的所有活动运行
+
+使用 `restartAllActiveWorkflowRuns()` 重新启动工作流的所有活动运行。这有助于重新启动工作流的所有活动运行，而无需手动循环遍历每个运行并重新启动。
+
+```typescript
+workflow.restartAllActiveWorkflowRuns();
+```
+
+### 使用 `restart()` 重新启动活动工作流运行
+
+使用 `restart()` 从最后一个活动步骤重新启动活动工作流运行。这将从最后一个活动步骤恢复执行，工作流将从那里继续。
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.start({ inputData: { value: "initial data" } });
+
+const restartedResult = await run.restart();
+```
+
+### 识别运行中的工作流
+
+当工作流运行时，它将具有 `running` 或 `waiting` 的 `status`。你可以检查工作流的 `status` 以确认它正在运行，并使用 `active` 来识别运行中的工作流。
+
+```typescript
+const activeRuns = await workflow.listActiveWorkflowRuns();
+if (activeRuns.runs.length > 0) {
+  console.log(activeRuns.runs);
+}
+```
+
+:::note
+
+运行本地 mastra 服务器时，所有活动工作流运行将在服务器启动时自动重新启动。
+
+:::
+
+## 使用 `RequestContext`
+
+使用 [RequestContext](/docs/cn/server/request-context) 访问特定于请求的值。这让你可以根据请求的上下文有条件地调整行为。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const step1 = createStep({
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    const maxResults = userTier === "enterprise"
+      ? 1000
+      : 50;
+
+    return { maxResults };
+  }
+});
+```
+
+:::info
+
+访问[请求上下文](/docs/cn/server/request-context)了解更多信息。
+
+:::
+
+:::tip
+
+有关类型安全的请求上下文模式验证，请参阅[模式验证](/docs/cn/server/request-context#schema-validation)。
+
+:::
+
+## 使用 Studio 测试
+
+使用 [Studio](/docs/cn/getting-started/studio) 轻松使用不同输入运行工作流、可视化执行生命周期、查看每个步骤的输入和输出，以及更详细地检查工作流的每个部分。
+
+## 相关内容
+
+要更详细地了解工作流，请参阅我们的[工作流指南](/guides/guide/ai-recruiter)，它通过实际示例讲解核心概念。
+
+- [工作流状态](/docs/cn/workflows/workflow-state)
+- [控制流](/docs/cn/workflows/control-flow)
+- [暂停与恢复](/docs/cn/workflows/suspend-and-resume)
+- [错误处理](/docs/cn/workflows/error-handling)

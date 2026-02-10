@@ -1,0 +1,134 @@
+---
+title: "Cloud 导出器 | 追踪 | 可观测性"
+description: "将追踪数据发送到 Mastra Cloud 进行生产监控"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Cloud 导出器
+
+`CloudExporter` 将追踪数据发送到 Mastra Cloud 以进行集中监控和团队协作。使用默认可观测性配置且具有有效访问令牌时，它会自动启用。
+
+## 配置
+
+### 前置条件
+
+1. **Mastra Cloud 账户**：在 [cloud.mastra.ai](https://cloud.mastra.ai) 注册
+2. **访问令牌**：在 Mastra Cloud → 设置 → API 令牌中生成
+3. **环境变量**：设置您的凭据：
+
+```bash title=".env"
+MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
+```
+
+### 基础设置
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability, CloudExporter } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: "my-service",
+        exporters: [
+          new CloudExporter(), // 使用 MASTRA_CLOUD_ACCESS_TOKEN 环境变量
+        ],
+      },
+    },
+  }),
+});
+```
+
+### 推荐配置
+
+在您的可观测性配置中包含 CloudExporter：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(), // 将追踪数据发送到 Mastra Cloud（需要 MASTRA_CLOUD_ACCESS_TOKEN）
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+### 完整配置
+
+```typescript
+new CloudExporter({
+  // 可选 - 默认为环境变量
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+
+  // 可选 - 用于自托管 Mastra Cloud
+  endpoint: "https://cloud.your-domain.com",
+
+  // 批处理配置
+  maxBatchSize: 1000, // 每批的最大 span 数量
+  maxBatchWaitMs: 5000, // 发送批次的最大等待时间
+
+  // 诊断日志
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+## 查看追踪数据
+
+### Mastra Cloud 仪表板
+
+1. 导航到 [cloud.mastra.ai](https://cloud.mastra.ai)
+2. 选择您的项目
+3. 进入可观测性 → 追踪
+4. 使用筛选器查找特定追踪：
+   - 服务名称
+   - 时间范围
+   - 追踪 ID
+   - 错误状态
+
+### 功能
+
+- **追踪时间线** - 可视化执行流程
+- **Span 详情** - 输入、输出、元数据
+- **性能指标** - 延迟、令牌使用量
+- **团队协作** - 分享追踪链接
+
+## 性能
+
+:::info
+
+CloudExporter 使用智能批处理来优化网络使用。追踪数据被缓冲并批量发送，在保持接近实时可见性的同时减少开销。
+
+:::
+
+### 批处理行为
+
+- 追踪数据最多批处理到 `maxBatchSize`（默认：1000）
+- 批次在满或经过 `maxBatchWaitMs`（默认：5 秒）后发送
+- 失败的批次会使用指数退避重试
+- 如果 Mastra Cloud 不可达，则优雅降级
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [DefaultExporter](/docs/cn/observability/tracing/exporters/default)
+- [Mastra Cloud 文档](/docs/cn/mastra-cloud/overview)

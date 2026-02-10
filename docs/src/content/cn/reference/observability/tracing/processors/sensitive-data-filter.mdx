@@ -1,0 +1,185 @@
+---
+title: "参考：SensitiveDataFilter | 可观测性"
+description: "SensitiveDataFilter 处理器的 API 参考"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# SensitiveDataFilter
+
+从跨度字段中编辑敏感信息的 SpanOutputProcessor。
+
+## 构造函数
+
+```typescript
+new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
+```
+
+## SensitiveDataFilterOptions
+
+```typescript
+interface SensitiveDataFilterOptions {
+  /**
+   * 要编辑的敏感字段名称列表。
+   * 匹配不区分大小写并规范化分隔符
+   * (api-key, api_key, Api Key → apikey)。
+   * 默认包括：password, token, secret, key, apikey, auth,
+   * authorization, bearer, bearertoken, jwt, credential,
+   * clientsecret, privatekey, refresh, ssn。
+   */
+  sensitiveFields?: string[];
+
+  /**
+   * 用于完全编辑的令牌。
+   * 默认："[REDACTED]"
+   */
+  redactionToken?: string;
+
+  /**
+   * 使用的编辑样式：
+   * - "full": 始终替换为 redactionToken
+   * - "partial": 显示开头和结尾的 3 个字符，编辑中间部分
+   * 默认："full"
+   */
+  redactionStyle?: RedactionStyle;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "sensitiveFields",
+      type: "string[]",
+      description:
+        "要编辑的字段名称（不区分大小写，不区分分隔符）",
+      required: false,
+    },
+    {
+      name: "redactionToken",
+      type: "string",
+      description: "完全编辑的替换令牌",
+      required: false,
+    },
+    {
+      name: "redactionStyle",
+      type: "'full' | 'partial'",
+      description: "编辑样式",
+      required: false,
+    },
+  ]}
+/>
+
+## RedactionStyle
+
+```typescript
+type RedactionStyle = "full" | "partial";
+```
+
+## 方法
+
+### process
+
+```typescript
+process(span: AnySpan): AnySpan
+```
+
+通过在其关键字段（attributes、metadata、input、output 和 errorInfo）中过滤敏感数据来处理跨度。
+
+<PropertiesTable
+  props={[
+    {
+      name: "span",
+      type: "AnySpan",
+      description: "要过滤的输入跨度",
+      required: true,
+    },
+  ]}
+/>
+
+**返回：** 敏感值被编辑后的新跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+此处理器不需要清理。
+
+## 属性
+
+```typescript
+readonly name = 'sensitive-data-filter';
+```
+
+## 默认敏感字段
+
+当未提供自定义字段时：
+
+```typescript
+[
+  "password",
+  "token",
+  "secret",
+  "key",
+  "apikey",
+  "auth",
+  "authorization",
+  "bearer",
+  "bearertoken",
+  "jwt",
+  "credential",
+  "clientsecret",
+  "privatekey",
+  "refresh",
+  "ssn",
+];
+```
+
+## 处理行为
+
+### 字段匹配
+
+- **不区分大小写**：`APIKey`、`apikey`、`ApiKey` 都匹配
+- **不区分分隔符**：`api-key`、`api_key`、`apiKey` 被同等对待
+- **精确匹配**：规范化后，字段必须完全匹配
+  - `token` 匹配 `token`、`Token`、`TOKEN`
+  - `token` 不匹配 `promptTokens` 或 `tokenCount`
+
+### 编辑样式
+
+#### 完全编辑（默认）
+
+所有匹配的值都被替换为 redactionToken。
+
+#### 部分编辑
+
+- 显示前 3 个和后 3 个字符
+- 小于等于 6 个字符的值被完全编辑
+- 非字符串值在部分编辑前被转换为字符串
+
+### 错误处理
+
+如果过滤字段失败，该字段被替换为：
+
+```typescript
+{
+  error: {
+    processor: "sensitive-data-filter";
+  }
+}
+```
+
+### 处理的字段
+
+过滤器递归处理：
+
+- `span.attributes` - 跨度元数据和属性
+- `span.metadata` - 自定义元数据
+- `span.input` - 输入数据
+- `span.output` - 输出数据
+- `span.errorInfo` - 错误信息
+
+安全地处理嵌套对象、数组和循环引用。

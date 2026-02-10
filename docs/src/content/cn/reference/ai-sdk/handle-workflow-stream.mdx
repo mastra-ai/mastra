@@ -1,0 +1,118 @@
+---
+title: "参考文档：handleWorkflowStream() | AI SDK"
+description: "handleWorkflowStream() 的 API 参考，这是一个用于 AI SDK 兼容格式的流式工作流执行的框架无关处理器。"
+packages:
+  - "@mastra/ai-sdk"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# handleWorkflowStream()
+
+用于 AI SDK 兼容格式的流式工作流执行的框架无关处理器。当您需要在 Hono 或 Mastra 自己的 [apiRoutes](/docs/cn/docs/server/custom-api-routes) 功能之外处理工作流流式传输时，直接使用此函数。
+
+`handleWorkflowStream()` 返回一个 `ReadableStream`，您可以使用 [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/create-ui-message-stream-response) 包装它。
+
+如果您想在 Mastra 服务器内创建工作流路由，请使用 [`workflowRoute()`](/reference/ai-sdk/workflow-route)。
+
+:::tip 工作流中的智能体流式传输
+
+当工作流步骤将智能体的流传输到工作流写入器时（例如 `await response.fullStream.pipeTo(writer)`），即使智能体在工作流步骤内运行，智能体的文本块和工具调用也会实时转发到 UI 流。
+
+详情请参阅[工作流流式传输](/docs/cn/docs/streaming/workflow-streaming)。
+
+:::
+
+## 使用示例
+
+Next.js App Router 示例：
+
+```typescript title="app/api/workflow/route.ts"
+import { handleWorkflowStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleWorkflowStream({
+    mastra,
+    workflowId: 'weatherWorkflow',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "包含已注册工作流的 Mastra 实例。",
+      isOptional: false,
+    },
+    {
+      name: "workflowId",
+      type: "string",
+      description: "要执行的工作流 ID。",
+      isOptional: false,
+    },
+    {
+      name: "params",
+      type: "WorkflowStreamHandlerParams",
+      description: "工作流流的参数。",
+      isOptional: false,
+    },
+    {
+      name: "params.runId",
+      type: "string",
+      description: "工作流执行的可选运行 ID。",
+      isOptional: true,
+    },
+    {
+      name: "params.resourceId",
+      type: "string",
+      description: "工作流运行的可选资源 ID。",
+      isOptional: true,
+    },
+    {
+      name: "params.inputData",
+      type: "Record<string, any>",
+      description: "用于启动新工作流执行的输入数据。",
+      isOptional: true,
+    },
+    {
+      name: "params.resumeData",
+      type: "Record<string, any>",
+      description: "用于恢复暂停的工作流执行的数据。",
+      isOptional: true,
+    },
+    {
+      name: "params.requestContext",
+      type: "RequestContext",
+      description: "传递给工作流执行的请求上下文。",
+      isOptional: true,
+    },
+    {
+      name: "params.tracingOptions",
+      type: "TracingOptions",
+      description: "追踪和可观测性的选项。",
+      isOptional: true,
+    },
+    {
+      name: "params.step",
+      type: "string",
+      description: "工作流中要定位的特定步骤。",
+      isOptional: true,
+    },
+    {
+      name: "includeTextStreamParts",
+      type: "boolean",
+      description: "是否在输出中包含文本流部分。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>

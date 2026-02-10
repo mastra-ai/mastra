@@ -1,0 +1,361 @@
+---
+title: "使用智能体 | 智能体"
+description: "Mastra 中智能体的概述，详细介绍它们的功能以及如何与工具、工作流和外部系统交互。"
+packages:
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 使用智能体
+
+智能体使用大型语言模型和工具来解决开放式任务。它们会思考目标、决定使用哪些工具、保留对话记忆，并在内部迭代，直到模型发出最终答案或满足可选的停止条件。智能体会产生结构化的响应，您可以在 UI 中渲染它们或以编程方式处理它们。可以直接使用智能体，也可以将它们组合成工作流或智能体网络。
+
+![智能体概述](/img/agents/agents-overview.jpg)
+
+:::tip[观看介绍]
+
+智能体介绍以及它们与工作流的比较，[YouTube（7分钟）](https://youtu.be/0jg2g3sNvgw)
+
+:::
+
+## 设置智能体
+
+### 安装
+
+<Steps>
+
+<StepItem>
+
+将 Mastra 核心包添加到您的项目：
+
+```bash npm2yarn
+npm install @mastra/core@latest
+```
+
+</StepItem>
+
+<StepItem>
+
+Mastra 的模型路由器会自动检测您所选提供程序的环境变量。对于 OpenAI，设置 `OPENAI_API_KEY`：
+
+```bash title=".env"
+OPENAI_API_KEY=<your-api-key>
+```
+
+:::note
+
+Mastra 支持 600 多种模型。从[完整列表](/models)中选择。
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+通过使用系统 `instructions` 和 `model` 实例化 `Agent` 类来创建智能体：
+
+```typescript title="src/mastra/agents/test-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const testAgent = new Agent({
+  id: "test-agent",
+  name: "测试智能体",
+  instructions: "您是一位乐于助人的助手。",
+  model: "openai/gpt-5.1",
+});
+```
+
+</StepItem>
+
+</Steps>
+
+### 指令格式
+
+指令定义智能体的行为、个性和能力。它们是建立智能体核心身份和专业知识的系统级提示。
+
+指令可以以多种格式提供，以获得更大的灵活性。以下示例说明了支持的形状：
+
+```typescript
+// 字符串（最常见）
+instructions: "您是一位乐于助人的助手。";
+
+// 字符串数组
+instructions: [
+  "您是一位乐于助人的助手。",
+  "始终保持礼貌。",
+  "提供详细的答案。",
+];
+
+// 系统消息数组
+instructions: [
+  { role: "system", content: "您是一位乐于助人的助手。" },
+  { role: "system", content: "您具有 TypeScript 专业知识。" },
+];
+```
+
+### 提供程序特定选项
+
+每个模型提供程序还支持一些不同的选项，包括提示缓存和配置推理。我们提供 `providerOptions` 标志来管理这些。您可以在指令级别设置 `providerOptions`，为每个系统指令/提示设置不同的缓存策略。
+
+```typescript
+// 使用提供程序特定选项（例如缓存、推理）
+instructions: {
+  role: "system",
+  content:
+    "您是代码审查专家。分析代码中的错误、性能问题和最佳实践。",
+  providerOptions: {
+    openai: { reasoningEffort: "high" },        // OpenAI 的推理模型
+    anthropic: { cacheControl: { type: "ephemeral" } }  // Anthropic 的提示缓存
+  }
+}
+```
+
+:::info
+
+访问[智能体参考](/reference/agents/agent)了解更多信息。
+
+:::
+
+### 动态指令
+
+指令可以作为异步函数提供，允许您在运行时解析提示。这实现了诸如根据用户上下文个性化指令、从外部注册表服务获取提示以及使用不同变体运行 A/B 测试等模式。
+
+:::info
+
+有关示例，请参阅[动态指令](/docs/cn/server/request-context#dynamic-instructions)。
+
+:::
+
+### 注册智能体
+
+在 Mastra 实例中注册您的智能体，以在整个应用程序中使用。一旦注册，就可以从工作流、工具或其他智能体调用它，并可以访问共享资源，如内存、日志记录和可观察性功能：
+
+```typescript {5} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { testAgent } from "./agents/test-agent";
+
+export const mastra = new Mastra({
+  agents: { testAgent },
+});
+```
+
+### 注册子智能体
+
+您可以在智能体中注册子智能体。它们将从父智能体作为工具执行。阅读[将智能体作为工具使用](/docs/cn/agents/using-tools#using-agents-as-tools)文档了解更多信息。
+
+### 注册子工作流
+
+您可以在智能体中注册子工作流。它们将从父智能体作为工具执行。阅读[将工作流作为工具使用](/docs/cn/agents/using-tools#using-workflows-as-tools)文档了解更多信息。
+
+## 引用智能体
+
+您可以从工作流步骤、工具、Mastra 客户端或命令行调用智能体。根据您的设置，通过在 `mastra` 或 `mastraClient` 实例上调用 `.getAgent()` 来获取引用：
+
+```typescript
+const testAgent = mastra.getAgent("testAgent");
+```
+
+::::info
+
+建议使用 `mastra.getAgent()` 而不是直接导入，因为它可以访问 Mastra 实例配置（日志记录、遥测、存储、已注册的智能体和向量存储）。
+
+::::
+
+## 生成响应
+
+智能体可以通过两种方式返回结果：生成完整输出后返回，或实时流式传输令牌。选择适合您用例的方法：生成用于简短的内部响应或调试，流式传输以尽快向最终用户传递内容。
+
+<Tabs>
+  <TabItem value="generate" label="生成">
+传递单个字符串用于简单提示，传递字符串数组以提供多个上下文片段，或传递具有 `role` 和 `content` 的消息对象数组。
+
+（`role` 定义每条消息的说话者。典型角色包括：`user` 用于人类输入，`assistant` 用于智能体响应，`system` 用于指令。）
+
+```typescript
+const response = await testAgent.generate([
+  { role: "user", content: "帮我安排我的一天" },
+  { role: "user", content: "我的一天从早上9点开始，下午5:30结束" },
+  { role: "user", content: "我在12:30到13:30之间吃午餐" },
+  {
+    role: "user",
+    content: "我周一到周五上午10:30到11:30有会议",
+  },
+]);
+
+console.log(response.text);
+```
+
+  </TabItem>
+  <TabItem value="stream" label="流式传输">
+传递单个字符串用于简单提示，传递字符串数组以提供多个上下文片段，或传递具有 `role` 和 `content` 的消息对象数组。
+
+（`role` 定义每条消息的说话者。典型角色包括：`user` 用于人类输入，`assistant` 用于智能体响应，`system` 用于指令。）
+
+```typescript
+const stream = await testAgent.stream([
+  { role: "user", content: "帮我安排我的一天" },
+  { role: "user", content: "我的一天从早上9点开始，下午5:30结束" },
+  { role: "user", content: "我在12:30到13:30之间吃午餐" },
+  {
+    role: "user",
+    content: "我周一到周五上午10:30到11:30有会议",
+  },
+]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+<h3 id="completion-using-onfinish">使用 `onFinish()` 完成</h3>
+
+流式传输响应时，`onFinish()` 回调在大型语言模型完成生成其响应并且所有工具执行完毕后运行。
+它提供最终的 `text`、执行 `steps`、`finishReason`、令牌 `usage` 统计信息以及其他对监控或日志记录有用的元数据。
+
+```typescript
+const stream = await testAgent.stream("帮我安排我的一天", {
+  onFinish: ({ steps, text, finishReason, usage }) => {
+    console.log({ steps, text, finishReason, usage });
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+  </TabItem>
+</Tabs>
+
+:::info
+
+访问[.generate()](/reference/agents/generate)或[.stream()](/reference/streaming/agents/stream)了解更多信息。
+
+:::
+
+## 结构化输出
+
+智能体可以使用 Zod 或 JSON Schema 返回结构化的、类型安全的数据。解析结果可在 `response.object` 上获得。
+
+:::info
+
+访问[结构化输出](/docs/cn/agents/structured-output)了解更多信息。
+
+:::
+
+## 分析图像
+
+智能体可以通过处理视觉内容和其中的任何文本来分析和描述图像。要启用图像分析，请在 `content` 数组中传递具有 `type: 'image'` 和图像 URL 的对象。您可以将图像内容与文本提示结合，以指导智能体的分析。
+
+```typescript
+const response = await testAgent.generate([
+  {
+    role: "user",
+    content: [
+      {
+        type: "image",
+        image: "https://placebear.com/cache/395-205.jpg",
+        mimeType: "image/jpeg",
+      },
+      {
+        type: "text",
+        text: "详细描述图像，并提取图像中的所有文本。",
+      },
+    ],
+  },
+]);
+
+console.log(response.text);
+```
+
+## 使用 `maxSteps`
+
+`maxSteps` 参数控制智能体可以进行的最大顺序大型语言模型调用次数。每个步骤包括生成响应、执行任何工具调用以及处理结果。限制步骤有助于防止无限循环、减少延迟并控制使用工具的智能体的令牌使用次数。默认值为 1，但可以增加：
+
+```typescript
+const response = await testAgent.generate("帮我安排我的一天", {
+  maxSteps: 10,
+});
+
+console.log(response.text);
+```
+
+## 使用 `onStepFinish`
+
+您可以使用 `onStepFinish` 回调来监控多步操作的进度。这对于调试或向用户提供进度更新很有用。
+
+`onStepFinish` 仅在流式传输或生成不带结构化输出的文本时可用。
+
+```typescript
+const response = await testAgent.generate("帮我安排我的一天", {
+  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
+    console.log({ text, toolCalls, toolResults, finishReason, usage });
+  },
+});
+```
+
+## 使用工具
+
+智能体可以使用工具超越语言生成，从而实现与外部 API 和服务的结构化交互。工具允许智能体以可靠、可重复的方式访问数据并执行明确定义的操作。
+
+```typescript title="src/mastra/agents/test-agent.ts"
+export const testAgent = new Agent({
+  id: "test-agent",
+  name: "测试智能体",
+  tools: { testTool },
+});
+```
+
+:::info
+
+访问[使用工具](/docs/cn/agents/using-tools)了解更多信息。
+
+:::
+
+## 使用 `RequestContext`
+
+使用 `RequestContext` 访问特定于请求的值。这允许您根据请求的上下文有条件地调整行为。
+
+```typescript title="src/mastra/agents/test-agent.ts"
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const testAgent = new Agent({
+  id: "test-agent",
+  name: "测试智能体",
+  model: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise"
+      ? "openai/gpt-5"
+      : "openai/gpt-4.1-nano";
+  },
+});
+```
+
+:::info
+
+参阅[请求上下文](/docs/cn/server/request-context)了解更多信息。
+
+:::
+
+:::tip
+
+有关类型安全的请求上下文模式验证，请参阅[模式验证](/docs/cn/server/request-context#schema-validation)。
+
+:::
+
+## 使用 Studio 测试
+
+使用 [Studio](/docs/cn/getting-started/studio) 来测试具有不同消息的智能体、检查工具调用和响应以及调试智能体行为。
+
+## 相关内容
+
+- [使用工具](/docs/cn/agents/using-tools)
+- [智能体内存](/docs/cn/agents/agent-memory)
+- [请求上下文](/docs/cn/server/request-context)

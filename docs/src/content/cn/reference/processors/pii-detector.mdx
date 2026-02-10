@@ -1,0 +1,193 @@
+---
+title: "参考：PII 检测器 | 处理器"
+description: "Mastra 中 PIIDetector 的文档，用于检测和编辑 AI 响应中的个人身份信息（PII）。"
+packages:
+  - "@mastra/core"
+---
+
+# PIIDetector
+
+`PIIDetector` 是一个**混合处理器**，可用于输入和输出处理，以检测和编辑个人身份信息（PII）以实现隐私合规。此处理器通过识别各种类型的 PII 并提供处理它们的灵活策略来帮助保持隐私，包括多种编辑方法以确保符合 GDPR、CCPA、HIPAA 和其他隐私法规。
+
+## 使用示例
+
+```typescript
+import { PIIDetector } from "@mastra/core/processors";
+
+const processor = new PIIDetector({
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
+  threshold: 0.6,
+  strategy: "redact",
+  detectionTypes: ["email", "phone", "credit-card", "ssn"]
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "PII 检测和编辑的配置选项",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "检测代理的模型配置",
+      isOptional: false,
+    },
+    {
+      name: "detectionTypes",
+      type: "string[]",
+      description: "要检测的 PII 类型。如果未指定，使用默认类型",
+      isOptional: true,
+      default: "['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "标记的置信度阈值（0-1）。如果任何类别分数超过此阈值，PII 将被标记",
+      isOptional: true,
+      default: "0.6",
+    },
+    {
+      name: "strategy",
+      type: "'block' | 'warn' | 'filter' | 'redact'",
+      description: "检测到 PII 时的策略：'block' 拒绝并报错，'warn' 记录警告但允许通过，'filter' 移除标记的消息，'redact' 用编辑版本替换 PII",
+      isOptional: true,
+      default: "'redact'",
+    },
+    {
+      name: "redactionMethod",
+      type: "'mask' | 'hash' | 'remove' | 'placeholder'",
+      description: "PII 的编辑方法：'mask' 用星号替换，'hash' 用 SHA256 哈希替换，'remove' 完全移除，'placeholder' 用类型占位符替换",
+      isOptional: true,
+      default: "'mask'",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "代理的自定义检测说明。如果未提供，使用基于检测类型的默认说明",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "includeDetections",
+      type: "boolean",
+      description: "是否在日志中包含检测详细信息。对于合规审计和调试很有用",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "preserveFormat",
+      type: "boolean",
+      description: "编辑时是否保留 PII 格式。如果为 true，则保持结构如电话号码的 ***-**-1234",
+      isOptional: true,
+      default: "true",
+    },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "传递给内部检测代理的提供者特定选项。使用此选项来控制模型行为，如思考模型的推理努力（例如，`{ openai: { reasoningEffort: 'low' } }`）",
+      isOptional: true,
+      default: "undefined",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'pii-detector'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "可选的处理器显示名称",
+      isOptional: true,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
+      description: "在发送到 LLM 之前处理输入消息以检测和编辑 PII",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
+      description: "处理流式输出片段以在流式传输过程中检测和编辑 PII",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+### 输入处理
+
+```typescript title="src/mastra/agents/private-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { PIIDetector } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "private-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-5.1",
+  inputProcessors: [
+    new PIIDetector({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      detectionTypes: ["email", "phone", "credit-card", "ssn"],
+      threshold: 0.6,
+      strategy: "redact",
+      redactionMethod: "mask",
+      instructions: "检测和编辑个人身份信息，同时保留消息意图",
+      includeDetections: true,
+      preserveFormat: true
+    })
+  ]
+});
+```
+
+### 带批处理的输出处理
+
+当使用 `PIIDetector` 作为输出处理器时，建议将其与 `BatchPartsProcessor` 结合使用以优化性能。`BatchPartsProcessor` 在将流片段传递给 PII 检测器之前将它们批量处理，减少检测所需的 LLM 调用次数。
+
+```typescript title="src/mastra/agents/output-pii-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, PIIDetector } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "output-pii-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-5.1",
+  outputProcessors: [
+    // 首先批量处理流片段以减少 LLM 调用
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // 然后对批量内容应用 PII 检测
+    new PIIDetector({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      strategy: "redact",
+    })
+  ]
+});
+```
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

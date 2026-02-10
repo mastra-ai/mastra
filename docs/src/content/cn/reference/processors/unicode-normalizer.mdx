@@ -1,0 +1,120 @@
+---
+title: "参考：Unicode 规范化器 | 处理器"
+description: "Mastra 中 UnicodeNormalizer 的文档，用于规范化 Unicode 文本以确保一致的格式并删除可能有问题的字符。"
+packages:
+  - "@mastra/core"
+---
+
+# UnicodeNormalizer
+
+`UnicodeNormalizer` 是一个**输入处理器**，用于规范化 Unicode 文本以确保一致的格式，并在消息发送到语言模型之前删除可能有问题的字符。此处理器通过处理各种 Unicode 表示、删除控制字符和标准化空白格式来帮助保持文本质量。
+
+## 使用示例
+
+```typescript
+import { UnicodeNormalizer } from "@mastra/core/processors";
+
+const processor = new UnicodeNormalizer({
+  stripControlChars: true,
+  collapseWhitespace: true
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "Unicode 文本规范化的配置选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "stripControlChars",
+      type: "boolean",
+      description: "是否删除控制字符。启用时，除 \\t、\\n、\\r 外删除所有控制字符",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "preserveEmojis",
+      type: "boolean",
+      description: "是否保留表情符号。禁用时，如果表情符号包含控制字符可能会被删除",
+      isOptional: true,
+      default: "true",
+    },
+    {
+      name: "collapseWhitespace",
+      type: "boolean",
+      description: "是否折叠连续空白。启用时，多个空格/制表符/换行符被折叠为单个",
+      isOptional: true,
+      default: "true",
+    },
+    {
+      name: "trim",
+      type: "boolean",
+      description: "是否修剪首尾空白",
+      isOptional: true,
+      default: "true",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'unicode-normalizer'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "可选的处理器显示名称",
+      isOptional: true,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => MastraDBMessage[]",
+      description: "处理输入消息以规范化 Unicode 文本",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/normalized-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { UnicodeNormalizer } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  id: "normalized-agent",
+  name: "normalized-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-5.1",
+  inputProcessors: [
+    new UnicodeNormalizer({
+      stripControlChars: true,
+      preserveEmojis: true,
+      collapseWhitespace: true,
+      trim: true
+    })
+  ]
+});
+```
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

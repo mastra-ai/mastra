@@ -1,0 +1,140 @@
+---
+title: "参考：内容相似度评分器 | 评估"
+description: "Mastra 中内容相似度评分器的文档，用于测量字符串之间的文本相似度并提供匹配分数。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 内容相似度评分器
+
+`createContentSimilarityScorer()` 函数测量两个字符串之间的文本相似度，提供表示它们匹配程度的分数。它支持区分大小写和空白处理的配置选项。
+
+## 参数
+
+`createContentSimilarityScorer()` 函数接受一个包含以下属性的选项对象：
+
+<PropertiesTable
+  content={[
+    {
+      name: "ignoreCase",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description: "比较字符串时是否忽略大小写差异。",
+    },
+    {
+      name: "ignoreWhitespace",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description: "比较字符串时是否标准化空白字符。",
+    },
+  ]}
+/>
+
+此函数返回 MastraScorer 类的实例。请参阅 [MastraScorer 参考](./mastra-scorer) 了解 `.run()` 方法及其输入/输出的详细信息。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description:
+        "包含处理后的输入和输出的对象: { processedInput: string, processedOutput: string }",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description: "包含相似度的对象: { similarity: number }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "相似度分数 (0-1)，其中 1 表示完全相似。",
+    },
+  ]}
+/>
+
+## 评分详情
+
+评分器通过字符级匹配和可配置的文本标准化来评估文本相似度。
+
+### 评分过程
+
+1. 标准化文本：
+   - 大小写标准化（如果 ignoreCase: true）
+   - 空白字符标准化（如果 ignoreWhitespace: true）
+2. 使用字符串相似度算法比较处理后的字符串：
+   - 分析字符序列
+   - 对齐词边界
+   - 考虑相对位置
+   - 考虑长度差异
+
+最终分数：`similarity_value * scale`
+
+## 示例
+
+评估预期和实际代理输出之间的文本相似度：
+
+```typescript title="src/example-content-similarity.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createContentSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createContentSimilarityScorer();
+
+const result = await runEvals({
+  data: [
+    {
+      input: "总结 TypeScript 的优势",
+      groundTruth:
+        "TypeScript 提供静态类型、更好的工具支持，以及改进的代码可维护性。",
+    },
+    {
+      input: "什么是机器学习？",
+      groundTruth:
+        "机器学习是人工智能的一个子集，它使系统能够从数据中学习而无需显式编程。",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      groundTruth: scorerResults[scorer.id].groundTruth,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+### 分数解释
+
+0 到 1 之间的相似度分数：
+
+- **1.0**：完全匹配 - 内容几乎相同。
+- **0.7–0.9**：高度相似 - 词汇选择或结构上的细微差异。
+- **0.4–0.6**：中等相似 - 大致重叠，有明显变化。
+- **0.1–0.3**：低相似度 - 很少有共同元素或共享含义。
+- **0.0**：无相似度 - 内容完全不同。
+
+## 相关内容
+
+- [完整性评分器](./completeness)
+- [文本差异评分器](./textual-difference)
+- [答案相关性评分器](./answer-relevancy)
+- [关键词覆盖率评分器](./keyword-coverage)

@@ -1,0 +1,186 @@
+---
+title: "智能体内存 | 智能体"
+description: 了解如何为智能体添加内存以存储消息历史记录并在交互之间保持上下文。
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 智能体内存
+
+智能体使用内存来在交互之间保持上下文。大型语言模型是无状态的，不会保留调用之间的信息，因此智能体需要内存来跟踪消息历史记录并回忆相关信息。
+
+可以配置 Mastra 智能体存储消息历史记录，可选择使用[工作内存](../memory/working-memory) 来保持最近的上下文，或使用[语义回忆](../memory/semantic-recall) 根据含义检索过去的消息。
+
+## 何时使用内存
+
+当您的智能体需要维持引用先前交换的多轮对话、回忆用户偏好或在会话早期的事实、或在对话线程中随时间建立上下文时使用内存。对于每次交互都是独立的单轮请求，请跳过内存设置。
+
+## 设置内存
+
+要在 Mastra 中启用内存，请安装 `@mastra/memory` 包以及存储提供程序。
+
+```bash npm2yarn
+npm install @mastra/memory@latest @mastra/libsql@latest
+```
+
+## 存储提供程序
+
+内存需要一个存储提供程序来持久化消息历史记录，包括用户消息和智能体响应。更多关于可用提供程序以及存储如何在 Mastra 中工作的详细信息，请参阅[存储](/docs/cn/memory/storage)文档。
+
+## 配置内存
+
+<Steps>
+  <StepItem>
+
+通过创建 `Memory` 实例并将其传递给智能体的 `memory` 选项来启用内存。
+
+```typescript {7-11} title="src/mastra/agents/memory-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: '内存智能体',
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
+});
+```
+
+:::info
+
+访问[内存类](/reference/memory/memory-class)以获取配置选项的完整列表。
+
+:::
+
+  </StepItem>
+
+  <StepItem>
+
+将存储提供程序添加到您的主 Mastra 实例，以在所有配置的智能体中启用内存。
+
+```typescript {5-8} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: ":memory:",
+  }),
+});
+```
+
+:::info
+
+访问 [libSQL 存储](/reference/storage/libsql) 以获取配置选项的完整列表。
+
+:::
+
+  </StepItem>
+</Steps>
+
+或者，直接向智能体的内存添加存储以保持数据分离，或为每个智能体使用不同的提供程序。
+
+```typescript {9-12} title="src/mastra/agents/memory-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: '内存智能体',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'mastra-storage',
+      url: ":memory:",
+    }),
+  }),
+});
+```
+
+:::warning[Mastra Cloud Store 限制]
+使用[Mastra Cloud Store](/docs/cn/mastra-cloud/deployment#using-mastra-cloud-store)时不支持智能体级别的存储。如果使用 Mastra Cloud Store，请在 Mastra 实例上配置存储。如果您使用自己的数据库，此限制不适用。
+:::
+
+## 消息历史记录
+
+在智能体调用期间包含一个 `memory` 对象，其中同时包含 `resource` 和 `thread` 来跟踪消息历史记录。
+
+- `resource`：用户或实体的稳定标识符。
+- `thread`：隔离特定对话或会话的 ID。
+
+这些字段告诉智能体在哪里存储和检索上下文，从而在对话中启用持久的、线程感知的内存。
+
+```typescript {4-7}
+const response = await memoryAgent.generate(
+  "记住我最喜欢的颜色是蓝色。",
+  {
+    memory: {
+      resource: "user-123",
+      thread: "conversation-123",
+    },
+  },
+);
+```
+
+要回忆存储在内存中的信息，请使用与原始对话中相同的 `resource` 和 `thread` 值调用智能体。
+
+```typescript {2-5}
+const response = await memoryAgent.generate("我最喜欢的颜色是什么？", {
+  memory: {
+    resource: "user-123",
+    thread: "conversation-123",
+  },
+});
+```
+
+:::warning
+每个线程都有一个所有者（`resourceId`），创建后无法更改。避免为不同所有者的线程重复使用相同的线程 ID，因为这在查询时会引起错误。
+:::
+
+要了解有关内存的更多信息，请参阅[内存](../memory/overview)文档。
+
+## 使用 `RequestContext`
+
+使用[RequestContext](/docs/cn/server/request-context)访问特定于请求的值。这允许您根据请求的上下文有条件地选择不同的内存或存储配置。
+
+```typescript title="src/mastra/agents/memory-agent.ts"
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const premiumMemory = new Memory();
+
+const standardMemory = new Memory();
+
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: '内存智能体',
+  memory: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise" ? premiumMemory : standardMemory;
+  },
+});
+```
+
+:::info
+
+访问[请求上下文](/docs/cn/server/request-context)了解更多信息。
+
+:::
+
+## 相关内容
+
+- [工作内存](../memory/working-memory)
+- [语义回忆](../memory/semantic-recall)
+- [存储](../memory/storage)
+- [请求上下文](/docs/cn/server/request-context)

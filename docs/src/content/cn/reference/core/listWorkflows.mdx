@@ -1,0 +1,47 @@
+---
+title: "参考文档：Mastra.listWorkflows() | 核心"
+description: "Mastra 中 `Mastra.listWorkflows()` 方法的文档，用于检索所有已配置的工作流。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listWorkflows()
+
+`.listWorkflows()` 方法用于检索已在 Mastra 实例中配置的所有工作流。该方法接受一个可选的选项对象。
+
+## 使用示例
+
+```typescript
+mastra.listWorkflows();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ serialized?: boolean }",
+      description:
+        "可选配置对象。当 `serialized` 为 true 时，返回仅包含 name 属性的简化工作流对象，而非完整的工作流实例。",
+      optional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Record<string, Workflow>",
+      description:
+        "所有已配置工作流的记录，其中键为工作流 ID，值为工作流实例（或如果 serialized 为 true，则为简化对象）。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [工作流概述](/docs/cn/docs/workflows/overview)

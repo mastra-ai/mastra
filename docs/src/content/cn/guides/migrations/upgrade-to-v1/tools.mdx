@@ -1,0 +1,193 @@
+---
+title: "工具 | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移工具相关的更改。"
+---
+
+# 工具
+
+工具执行签名已更新为使用分离的输入和上下文参数，并重新组织了上下文属性。
+
+## 变更
+
+### `createTool` 执行签名改为 `(inputData, context)` 格式
+
+所有 `createTool` 执行函数现在使用带有分离的 `inputData` 和 `context` 参数的新签名，而不是单个解构的对象。此更改在工具输入和执行上下文之间提供了更清晰的分离。
+
+**注意：** 此更改仅适用于 `createTool`。如果您将 `createStep` 用于工作流，签名保持为 `async (inputData, context)`，无需更改。
+
+要迁移，更新 `createTool` 签名以使用 `inputData` 作为第一个参数（从 `inputSchema` 类型化）和 `context` 作为第二个参数。
+
+```diff
+  createTool({
+    id: 'weather-tool',
+-   execute: async ({ context, requestContext, mastra }) => {
+-     const location = context.location;
+-     const userTier = requestContext.get('userTier');
+-     return getWeather(location, userTier);
+-   },
++   execute: async (inputData, context) => {
++     const location = inputData.location;
++     const userTier = context?.requestContext?.get('userTier');
++     return getWeather(location, userTier);
++   },
+  });
+```
+
+### `createTool` 上下文属性组织
+
+`createTool` 中的上下文属性现在组织到命名空间中。代理特定属性在 `context.agent` 下，工作流特定属性在 `context.workflow` 下，MCP 特定属性在 `context.mcp` 下。此更改提供了更好的组织和更清晰的 API 表面。
+
+对于在代理内执行的工具，通过 `context.agent` 访问代理特定属性。
+
+```diff
+  createTool({
+    id: 'suspendable-tool',
+    suspendSchema: z.object({ message: z.string() }),
+    resumeSchema: z.object({ approval: z.boolean() }),
+-   execute: async ({ context, suspend, resumeData }) => {
+-     if (!resumeData) {
+-       return await suspend({ message: 'Waiting for approval' });
+-     }
+-     if (resumeData.approval) {
+-       return { success: true };
+-     }
+-   },
++   execute: async (inputData, context) => {
++     if (!context?.agent?.resumeData) {
++       return await context?.agent?.suspend({
++         message: 'Waiting for approval',
++       });
++     }
++     if (context.agent.resumeData.approval) {
++       return { success: true };
++     }
++   },
+  });
+```
+
+对于在工作流内执行的工具，通过 `context.workflow` 访问工作流特定属性。
+
+```diff
+  createTool({
+    id: 'workflow-tool',
+-   execute: async ({ workflowId, runId, state, setState }) => {
+-     const currentState = state;
+-     setState({ step: 'completed' });
+-     return { result: 'done' };
+-   },
++   execute: async (inputData, context) => {
++     const currentState = context?.workflow?.state;
++     context?.workflow?.setState({ step: 'completed' });
++     return { result: 'done' };
++   },
+  });
+```
+
+当执行工具时，`suspendPayload` 会根据 `suspendSchema` 进行验证。如果 suspendPayload 与 `suspendSchema` 不匹配，则会记录警告，错误作为工具输出返回，但挂起会继续。
+
+此外，当恢复工具时，`resumeData` 会根据 `resumeSchema` 进行验证。如果 resumeData 与 `resumeSchema` 不匹配，该工具将返回 `ValidationError`，阻止工具恢复。
+
+要跳过 `suspendSchema` 或 `resumeSchema` 验证，请在工具创建中不要定义 `suspendSchema` 或 `resumeSchema`。
+
+:::note
+有关特定于 MCP 的工具上下文更改，请参阅 [MCP 迁移指南](/cn/guides/migrations/upgrade-to-v1/mcp)。
+:::
+
+### `RuntimeContext` 改为 `RequestContext`
+
+`RuntimeContext` 类已在工具执行上下文中重命名为 `RequestContext`。此更改提供了更清晰的命名，更好地描述了其作为请求特定数据的用途。
+
+要迁移，在工具执行函数中将引用从 `runtimeContext` 更新为 `requestContext`。
+
+```diff
+  createTool({
+    id: 'my-tool',
+    execute: async (inputData, context) => {
+-     const userTier = context?.runtimeContext?.get('userTier');
++     const userTier = context?.requestContext?.get('userTier');
+      return { result: userTier };
+    },
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新您的导入：
+
+```bash
+npx @mastra/codemod@latest v1/runtime-context .
+```
+
+:::
+
+这适用于所有工具执行，无论是直接调用还是通过代理和工作流调用。类型收窄确保您适当处理验证错误，并在访问输出属性时防止运行时错误。
+
+### 使用 `outputSchema` 进行工具输出验证
+
+带有 `outputSchema` 的工具现在在运行时验证其返回值。以前，`outputSchema` 仅用于类型推断 - 输出从未被验证。
+
+如果您的工具返回的数据与其 `outputSchema` 不匹配，它现在将返回 `ValidationError` 而不是无效数据。
+
+要修复验证错误，确保工具的输出与模式定义匹配：
+
+```diff
+  const getUserTool = createTool({
+    id: "get-user",
+    outputSchema: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+    execute: async (inputData) => {
+-     return { id: "123", name: "John" }; // 缺少 email
++     return { id: "123", name: "John", email: "john@example.com" };
+    },
+  });
+```
+
+当验证失败时，工具返回 `ValidationError`：
+
+```diff
++ // v1 之前 - 无效输出会静默通过
+  await getUserTool.execute({});
+- // { id: "123", name: "John" } - 缺少 email
++ // {
++ //   error: true,
++ //   message: "Tool output validation failed for get-user. The tool returned invalid output:\n- email: Required\n\nReturned output: {...}",
++ //   validationErrors: { ... }
++ // }
+```
+
+### `tool.execute` 返回类型包含 `ValidationError`
+
+`tool.execute` 的返回类型现在包含 `ValidationError` 以处理验证失败。在访问输出模式属性之前，您必须收窄结果类型以满足 TypeScript 的类型检查。
+
+在调用 `tool.execute` 时，在访问输出属性之前检查结果是否包含错误：
+
+```typescript
+const result = await getUserTool.execute({});
+
+// 类型安全的验证错误检查
+if ('error' in result && result.error) {
+  console.error('Validation failed:', result.message);
+  console.error('Details:', result.validationErrors);
+  return;
+}
+
+// TypeScript 在这里知道结果是有效的
+console.log(result.id, result.name, result.email);
+```
+
+或者，更新 `outputSchema` 以匹配您的实际输出，或者如果您不需要验证，完全移除 `outputSchema`。
+
+### 直接工具执行
+
+`tool.execute` 属性在类型系统中是可选的，以支持客户端工具定义，其中执行逻辑是单独处理的。当直接调用工具实例上的 `execute`（而不是通过代理或工作流）时，使用可选链或非空断言：
+
+```typescript
+// 可选链（推荐）
+const result = await weatherTool.execute?.({ location: 'New York' }, {});
+
+// 非空断言（当您知道 execute 存在时）
+const result = await weatherTool.execute!({ location: 'New York' }, {});
+```

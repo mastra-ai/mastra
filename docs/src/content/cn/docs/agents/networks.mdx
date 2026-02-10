@@ -1,0 +1,299 @@
+---
+title: "智能体网络 | 智能体"
+description: 了解如何使用智能体网络协调多个智能体、工作流和工具，以实现复杂的、非确定性的任务执行。
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# 智能体网络
+
+Mastra 中的智能体网络协调多个智能体、工作流和工具，以处理事先无法明确定义但可以从用户消息或上下文推断的任务。顶级的**路由智能体**（配置了其他智能体、工作流和工具的 Mastra 智能体）使用大型语言模型来解释请求并决定调用哪些原语（子智能体、工作流或工具）、以什么顺序调用以及传递什么数据。
+
+## 何时使用网络
+
+对于需要跨多个原语协调的复杂任务使用网络。与遵循预定义顺序的工作流不同，网络依赖大型语言模型的推理来解释请求并决定运行什么。
+
+## 核心原则
+
+Mastra 智能体网络根据以下原则运行：
+
+- 使用 `.network()` 时需要内存，用于存储任务历史记录并确定任务何时完成。
+- 根据描述选择原语。清晰、具体的描述可以改善路由。对于工作流和工具，输入模式有助于在运行时确定正确的输入。
+- 如果多个原语具有重叠的功能，智能体倾向于更具体的那个，使用模式和描述的组合来决定运行哪个。
+
+## 创建智能体网络
+
+智能体网络围绕一个顶级的路由智能体构建，该智能体将任务委托给其配置中定义的子智能体、工作流和工具。内存使用 `memory` 选项配置在路由智能体上，`instructions` 定义智能体的路由行为。
+
+```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+import { researchAgent } from "./research-agent";
+import { writingAgent } from "./writing-agent";
+
+import { cityWorkflow } from "../workflows/city-workflow";
+import { weatherTool } from "../tools/weather-tool";
+
+export const routingAgent = new Agent({
+  id: "routing-agent",
+  name: "路由智能体",
+  instructions: `
+      您是一个由写作智能体和研究智能体组成的网络。
+      用户会要求您研究某个主题。
+      始终以完整的报告回应——不要使用项目符号。
+      用完整的段落写作，像博客文章一样。
+      不要用不完整或不确定的信息回答。`,
+  model: "openai/gpt-5.1",
+  agents: {
+    researchAgent,
+    writingAgent,
+  },
+  workflows: {
+    cityWorkflow,
+  },
+  tools: {
+    weatherTool,
+  },
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'mastra-storage',
+      url: "file:../mastra.db",
+    }),
+  }),
+});
+```
+
+### 为网络原语编写描述
+
+配置 Mastra 智能体网络时，每个原语（智能体、工作流或工具）需要清晰的描述，以帮助路由智能体决定使用哪个。路由智能体使用每个原语的描述和模式来确定它的功能以及如何使用它。清晰的描述和明确定义的输入输出模式可以提高路由准确性。
+
+#### 智能体描述
+
+网络中的每个子智能体应包含清晰的 `description`，解释智能体的功能。
+
+```typescript title="src/mastra/agents/research-agent.ts"
+export const researchAgent = new Agent({
+  id: "research-agent",
+  name: "研究智能体",
+  description: `此智能体以项目符号形式收集简洁的研究见解。
+    它旨在提取关键事实，而不生成完整的
+    回应或叙述内容。`,
+});
+```
+
+```typescript title="src/mastra/agents/writing-agent.ts"
+export const writingAgent = new Agent({
+  id: "writing-agent",
+  name: "写作智能体",
+  description: `此智能体将研究材料转化为结构良好的
+    书面内容。它生成没有项目符号的完整段落报告，
+    适用于文章、摘要或博客文章。`,
+});
+```
+
+#### 工作流描述
+
+网络中的工作流应包含 `description` 来解释其目的，以及 `inputSchema` 和 `outputSchema` 来描述预期的数据。
+
+```typescript title="src/mastra/workflows/city-workflow.ts"
+export const cityWorkflow = createWorkflow({
+  id: "city-workflow",
+  description: `此工作流处理特定于城市的任务。
+    它首先收集关于该城市的事实性信息，然后将
+    这些研究综合成完整的书面报告。当用户输入
+    包含要研究的城市时使用它。`,
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+});
+```
+
+#### 工具描述
+
+网络中的工具应包含 `description` 来解释其目的，以及 `inputSchema` 和 `outputSchema` 来描述预期的数据。
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+export const weatherTool = createTool({
+  id: "weather-tool",
+  description: ` 使用 wttr.in API 获取当前天气信息。
+    接受城市或地点名称作为输入并返回简短的天气摘要。
+    每当请求最新天气数据时使用此工具。
+  `,
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    weather: z.string(),
+  }),
+});
+```
+
+## 调用智能体网络
+
+使用 `.network()` 和用户消息调用 Mastra 智能体网络。该方法返回一个事件流，您可以迭代该流来跟踪执行进度并检索最终结果。
+
+### 智能体示例
+
+在这个示例中，网络会解释消息并将请求路由到 `researchAgent` 和 `writingAgent` 以生成完整的响应。
+
+```typescript
+const result = await routingAgent.network(
+  "告诉我三种使用 Mastra 的酷方法",
+);
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+#### 智能体输出
+
+此请求期间发出以下 `chunk.type` 事件：
+
+```text
+routing-agent-start
+routing-agent-end
+agent-execution-start
+agent-execution-event-start
+agent-execution-event-step-start
+agent-execution-event-text-start
+agent-execution-event-text-delta
+agent-execution-event-text-end
+agent-execution-event-step-finish
+agent-execution-event-finish
+agent-execution-end
+network-execution-event-step-finish
+```
+
+## 工作流示例
+
+在这个示例中，路由智能体识别消息中的城市名称并运行 `cityWorkflow`。工作流定义了调用 `researchAgent` 收集事实然后调用 `writingAgent` 生成最终文本的步骤。
+
+```typescript
+const result = await routingAgent.network(
+  "告诉我一些关于伦敦的历史事实",
+);
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+#### 工作流输出
+
+此请求期间发出以下 `chunk.type` 事件：
+
+```text
+routing-agent-end
+workflow-execution-start
+workflow-execution-event-workflow-start
+workflow-execution-event-workflow-step-start
+workflow-execution-event-workflow-step-result
+workflow-execution-event-workflow-finish
+workflow-execution-end
+routing-agent-start
+network-execution-event-step-finish
+```
+
+### 工具示例
+
+在这个示例中，路由智能体跳过 `researchAgent`、`writingAgent` 和 `cityWorkflow`，直接调用 `weatherTool` 来完成任务。
+
+```typescript
+const result = await routingAgent.network("伦敦的天气如何？");
+
+for await (const chunk of result) {
+  console.log(chunk.type);
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+#### 工具输出
+
+此请求期间发出以下 `chunk.type` 事件：
+
+```text
+routing-agent-start
+routing-agent-end
+tool-execution-start
+tool-execution-end
+network-execution-event-step-finish
+```
+
+## 结构化输出
+
+当您需要从网络获取类型化、经验证的结果时，请使用 `structuredOutput` 选项。网络完成任务后，会生成与您的模式匹配的结构化响应。
+
+```typescript
+import { z } from "zod";
+
+const resultSchema = z.object({
+  summary: z.string().describe("发现的简要总结"),
+  recommendations: z.array(z.string()).describe("建议列表"),
+  confidence: z.number().min(0).max(1).describe("置信度分数"),
+});
+
+const stream = await routingAgent.network("研究 AI 趋势", {
+  structuredOutput: {
+    schema: resultSchema,
+  },
+});
+
+// 消费流
+for await (const chunk of stream) {
+  if (chunk.type === "network-object") {
+    // 生成过程中的部分对象
+    console.log("部分：", chunk.payload.object);
+  }
+  if (chunk.type === "network-object-result") {
+    // 最终结构化对象
+    console.log("最终：", chunk.payload.object);
+  }
+}
+
+// 获取类型化结果
+const result = await stream.object;
+console.log(result?.summary);
+console.log(result?.recommendations);
+console.log(result?.confidence);
+```
+
+### 流式传输部分对象
+
+要在结构化输出生成期间获取实时更新，请使用 `objectStream`：
+
+```typescript
+const stream = await routingAgent.network("分析市场数据", {
+  structuredOutput: { schema: resultSchema },
+});
+
+// 在生成时流式传输部分对象
+for await (const partial of stream.objectStream) {
+  console.log("构建结果：", partial);
+}
+
+// 获取最终的类型化结果
+const final = await stream.object;
+```
+
+## 相关内容
+
+- [智能体内存](./agent-memory)
+- [工作流概述](../workflows/overview)
+- [请求上下文](/docs/cn/server/request-context)
+- [主管示例](https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent)

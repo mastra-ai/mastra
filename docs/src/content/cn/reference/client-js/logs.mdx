@@ -1,0 +1,31 @@
+---
+title: "参考文档：日志 API | 客户端 SDK"
+description: "了解如何使用 client-js SDK 访问和查询 Mastra 中的系统日志和调试信息。"
+packages:
+  - "@mastra/client-js"
+---
+
+# 日志 API
+
+日志 API 提供了访问和查询 Mastra 中系统日志和调试信息的方法。
+
+## 获取日志
+
+检索带可选筛选的系统日志：
+
+```typescript
+const logs = await mastraClient.listLogs({
+  transportId: "transport-1",
+});
+```
+
+## 获取特定运行的日志
+
+检索特定执行运行的日志：
+
+```typescript
+const runLogs = await mastraClient.getLogForRun({
+  runId: "run-1",
+  transportId: "transport-1",
+});
+```

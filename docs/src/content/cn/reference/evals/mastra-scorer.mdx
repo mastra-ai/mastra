@@ -1,0 +1,192 @@
+---
+title: "参考：MastraScorer | 评估"
+description: "Mastra 中 MastraScorer 基类的文档，为所有自定义和内置评分器提供基础。"
+packages:
+  - "@mastra/core"
+---
+
+# MastraScorer
+
+`MastraScorer` 类是 Mastra 中所有评分器的基类。它为评估输入/输出对提供了标准的 `.run()` 方法，并支持多步骤评分工作流，执行流程为 preprocess → analyze → generateScore → generateReason。
+
+**注意**：大多数用户应该使用 [`createScorer`](./create-scorer) 创建评分器实例。不推荐直接实例化 `MastraScorer`。
+
+## 如何获取 MastraScorer 实例
+
+使用 `createScorer` 工厂函数，它返回 `MastraScorer` 实例：
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+
+const scorer = createScorer({
+  name: "My Custom Scorer",
+  description: "根据自定义标准评估响应",
+}).generateScore(({ run, results }) => {
+  // 评分逻辑
+  return 0.85;
+});
+
+// scorer 现在是 MastraScorer 实例
+```
+
+## .run() 方法
+
+`.run()` 方法是执行评分器和评估输入/输出对的主要方式。它通过定义的步骤（preprocess → analyze → generateScore → generateReason）处理数据，并返回包含分数、推理和中间结果的综合结果对象。
+
+```typescript
+const result = await scorer.run({
+  input: "什么是机器学习？",
+  output: "机器学习是人工智能的一个子集...",
+  runId: "optional-run-id",
+  requestContext: {
+    /* 可选上下文 */
+  },
+});
+```
+
+## .run() 输入
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "any",
+      required: true,
+      description:
+        "要评估的输入数据。根据评分器的需求可以是任何类型。",
+    },
+    {
+      name: "output",
+      type: "any",
+      required: true,
+      description:
+        "要评估的输出数据。根据评分器的需求可以是任何类型。",
+    },
+    {
+      name: "runId",
+      type: "string",
+      required: false,
+      description: "此评分运行的可选唯一标识符。",
+    },
+    {
+      name: "requestContext",
+      type: "any",
+      required: false,
+      description:
+        "被评估的代理或工作流步骤的可选请求上下文。",
+    },
+    {
+      name: "groundTruth",
+      type: "any",
+      required: false,
+      description:
+        "评分期间用于比较的可选预期或参考输出。使用 runEvals 时自动传递。",
+    },
+  ]}
+/>
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "此评分运行的唯一标识符。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "由 generateScore 步骤计算的数值分数。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "对分数的解释，如果定义了 generateReason 步骤（可选）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "any",
+      description: "预处理步骤的结果，如果已定义（可选）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "any",
+      description: "分析步骤的结果，如果已定义（可选）。",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "预处理提示词，如果已定义（可选）。",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "分析提示词，如果已定义（可选）。",
+    },
+    {
+      name: "generateScorePrompt",
+      type: "string",
+      description: "生成分数提示词，如果已定义（可选）。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "生成理由提示词，如果已定义（可选）。",
+    },
+  ]}
+/>
+
+## 步骤执行流程
+
+当您调用 `.run()` 时，MastraScorer 按以下顺序执行定义的步骤：
+
+1. **preprocess**（可选）- 提取或转换数据
+2. **analyze**（可选）- 处理输入/输出和预处理数据
+3. **generateScore**（必需）- 计算数值分数
+4. **generateReason**（可选）- 提供对分数的解释
+
+每个步骤接收前一步骤的结果，允许您构建复杂的评估管道。
+
+## 使用示例
+
+```typescript
+const scorer = createScorer({
+  name: "Quality Scorer",
+  description: "评估响应质量",
+})
+  .preprocess(({ run }) => {
+    // 提取关键信息
+    return { wordCount: run.output.split(" ").length };
+  })
+  .analyze(({ run, results }) => {
+    // 分析响应
+    const hasSubstance = results.preprocessStepResult.wordCount > 10;
+    return { hasSubstance };
+  })
+  .generateScore(({ results }) => {
+    // 计算分数
+    return results.analyzeStepResult.hasSubstance ? 1.0 : 0.0;
+  })
+  .generateReason(({ score, results }) => {
+    // 解释分数
+    const wordCount = results.preprocessStepResult.wordCount;
+    return `Score: ${score}. Response has ${wordCount} words.`;
+  });
+
+// 使用评分器
+const result = await scorer.run({
+  input: "什么是机器学习？",
+  output: "机器学习是人工智能的一个子集...",
+});
+
+console.log(result.score); // 1.0
+console.log(result.reason); // "Score: 1.0. Response has 12 words."
+```
+
+## 集成
+
+MastraScorer 实例可以用于代理和工作流步骤
+
+请参阅 [createScorer 参考](./create-scorer) 了解定义自定义评分逻辑的详细信息。

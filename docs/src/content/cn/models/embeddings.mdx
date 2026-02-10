@@ -1,0 +1,172 @@
+---
+title: "嵌入模型"
+sidebar_position: 2
+sidebar_label: "嵌入模型"
+description: "通过 Mastra 的模型路由器使用嵌入模型进行语义搜索和 RAG。"
+---
+
+# 嵌入模型
+
+Mastra 的模型路由器支持使用与语言模型相同的 `provider/model` 字符串格式来使用嵌入模型。这为聊天模型和嵌入模型提供了统一的接口，并支持 TypeScript 自动补全功能。
+
+## 快速开始
+
+```typescript
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { embedMany } from "ai";
+
+// 生成嵌入向量
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: ["Hello world", "Semantic search is powerful"],
+});
+```
+
+## 支持的模型
+
+### OpenAI
+
+- `text-embedding-3-small` - 1536 维度，8191 最大 token 数
+- `text-embedding-3-large` - 3072 维度，8191 最大 token 数
+- `text-embedding-ada-002` - 1536 维度，8191 最大 token 数
+
+```typescript
+const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+```
+
+### Google
+
+- `gemini-embedding-001` - 768 维度，2048 最大 token 数
+
+```typescript
+const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
+```
+
+## 身份验证
+
+模型路由器会自动从环境变量中检测 API 密钥：
+
+- **OpenAI**: `OPENAI_API_KEY`
+- **Google**: `GOOGLE_GENERATIVE_AI_API_KEY`
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...
+GOOGLE_GENERATIVE_AI_API_KEY=...
+```
+
+## 自定义提供商
+
+你可以使用任何 OpenAI 兼容的嵌入端点配合自定义 URL：
+
+```typescript
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const embedder = new ModelRouterEmbeddingModel({
+  providerId: "ollama",
+  modelId: "nomic-embed-text",
+  url: "http://localhost:11434/v1",
+  apiKey: "not-needed", // 某些提供商不需要 API 密钥
+});
+```
+
+## 与 Memory 配合使用
+
+嵌入模型路由器与 Mastra 的内存系统无缝集成：
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "my-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  }),
+});
+```
+
+:::info
+
+`embedder` 字段接受：
+
+- `EmbeddingModelId`（带自动补全的字符串）
+- `EmbeddingModel<string>`（AI SDK v1）
+- `EmbeddingModelV2<string>`（AI SDK v2）
+
+:::
+
+## 与 RAG 配合使用
+
+将嵌入模型用于文档分块和检索：
+
+```typescript
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { embedMany } from "ai";
+
+// 嵌入文档块
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
+});
+
+// 将嵌入向量存储到向量数据库中
+await vectorStore.upsert(
+  chunks.map((chunk, i) => ({
+    id: chunk.id,
+    vector: embeddings[i],
+    metadata: chunk.metadata,
+  })),
+);
+```
+
+## TypeScript 支持
+
+模型路由器为嵌入模型 ID 提供完整的 TypeScript 自动补全：
+
+```typescript
+import type { EmbeddingModelId } from "@mastra/core";
+
+// 类型安全的嵌入模型选择
+const modelId: EmbeddingModelId = "openai/text-embedding-3-small";
+//                                  ^ 自动补全显示所有支持的模型
+
+const embedder = new ModelRouterEmbeddingModel(modelId);
+```
+
+## 错误处理
+
+模型路由器在构造时验证提供商和模型 ID：
+
+```typescript
+try {
+  const embedder = new ModelRouterEmbeddingModel("invalid/model");
+} catch (error) {
+  console.error(error.message);
+  // "Unknown provider: invalid. Available providers: openai, google"
+}
+```
+
+缺失的 API 密钥也会被提前捕获：
+
+```typescript
+try {
+  const embedder = new ModelRouterEmbeddingModel(
+    "openai/text-embedding-3-small",
+  );
+  // 如果未设置 OPENAI_API_KEY 则抛出异常
+} catch (error) {
+  console.error(error.message);
+  // "API key not found for provider openai. Set OPENAI_API_KEY environment variable."
+}
+```
+
+## 下一步
+
+- [内存与语义召回](/docs/cn/docs/memory/semantic-recall) - 使用嵌入向量实现智能体记忆
+- [RAG 与分块](/docs/cn/docs/rag/chunking-and-embedding) - 构建检索增强生成系统
+- [向量数据库](/docs/cn/docs/rag/vector-databases) - 存储和查询嵌入向量

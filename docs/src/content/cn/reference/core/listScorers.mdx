@@ -1,0 +1,45 @@
+---
+title: "参考文档：listScorers() | 核心"
+description: "Mastra 中 `listScorers()` 方法的文档，用于返回所有注册的评分器以评估 AI 输出。"
+packages:
+  - "@mastra/core"
+---
+
+# listScorers()
+
+`listScorers()` 方法返回已在 Mastra 实例中注册的所有评分器。评分器用于评估 AI 输出，并可在智能体生成或工作流执行期间覆盖默认评分器。
+
+## 使用示例
+
+```typescript
+import { mastra } from "./mastra";
+
+// 获取所有已注册的评分器
+const allScorers = mastra.listScorers();
+
+// 访问特定的评分器
+const myScorer = allScorers.relevancyScorer;
+```
+
+## 参数
+
+此方法不需要参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorers",
+      type: "Record<string, MastraScorer> | undefined",
+      description:
+        "包含所有已注册评分器的对象，其中键为评分器名称，值为 MastraScorer 实例。如果未注册评分器，则返回 undefined。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [getScorer()](/reference/core/getScorer) - 按键获取特定评分器
+- [getScorerById()](/reference/core/getScorerById) - 通过 id 属性获取评分器
+- [评分器概述](/docs/cn/docs/evals/overview) - 了解如何创建和使用评分器

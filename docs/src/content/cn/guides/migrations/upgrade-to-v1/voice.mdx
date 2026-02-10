@@ -1,0 +1,39 @@
+---
+title: "语音 | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移语音包更改。"
+---
+
+# 语音包
+
+语音包已从 speech 重命名为 voice，并更新了类名和 API 方法。
+
+## 变更
+
+### 语音配置属性名称
+
+语音配置属性已重命名以保持一致。`speakProvider` 现在是 `output`，`listenProvider` 现在是 `input`，`realtimeProvider` 现在是 `realtime`。此更改提供了更直观的属性名称。
+
+要迁移，在配置具有语音功能的代理时更新配置属性名称。
+
+```diff
+  const agent = new Agent({
+    voice: {
+-     speakProvider: murfVoice,
+-     listenProvider: deepgramVoice,
+-     realtimeProvider: openaiRealtime,
++     output: murfVoice,
++     input: deepgramVoice,
++     realtime: openaiRealtime,
+    },
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/voice-property-names .
+```
+
+:::

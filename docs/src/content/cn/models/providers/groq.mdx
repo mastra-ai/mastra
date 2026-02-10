@@ -1,0 +1,197 @@
+---
+title: "Groq | 模型 | Mastra"
+description: "在 Mastra 中使用 Groq 模型。共 9 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/groq.svg" alt="Groq logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Groq
+
+通过 Mastra 的模型路由器访问 9 个 Groq 模型。身份验证使用 `GROQ_API_KEY` 环境变量自动处理。
+
+在 [Groq 文档](https://console.groq.com/docs/cn/docs/models) 中了解更多信息。
+
+```bash title=".env"
+GROQ_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "groq/llama-3.1-8b-instant"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## 模型
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "groq/llama-3.1-8b-instant",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.05,
+    "outputCost": 0.08
+  },
+  {
+    "model": "groq/llama-3.3-70b-versatile",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.59,
+    "outputCost": 0.79
+  },
+  {
+    "model": "groq/meta-llama/llama-4-maverick-17b-128e-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
+    "model": "groq/meta-llama/llama-4-scout-17b-16e-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.11,
+    "outputCost": 0.34
+  },
+  {
+    "model": "groq/meta-llama/llama-guard-4-12b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 1024,
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "model": "groq/moonshotai/kimi-k2-instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 1,
+    "outputCost": 3
+  },
+  {
+    "model": "groq/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "groq/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.075,
+    "outputCost": 0.3
+  },
+  {
+    "model": "groq/qwen/qwen3-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.29,
+    "outputCost": 0.59
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.groq.com/openai/v1",
+    id: "groq/llama-3.1-8b-instant",
+    apiKey: process.env.GROQ_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "groq/qwen/qwen3-32b"
+      : "groq/llama-3.1-8b-instant";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/groq) for more details.
+
+```bash npm2yarn
+npm install @ai-sdk/groq
+```
+
+For detailed provider-specific documentation, see the [AI SDK Groq provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/groq).

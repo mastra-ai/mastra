@@ -1,0 +1,310 @@
+---
+title: "MastraAuthFirebase 类 | 认证"
+description: "MastraAuthFirebase 类的文档，该类使用 Firebase 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-firebase"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MastraAuthFirebase 类
+
+`MastraAuthFirebase` 类使用 Firebase 身份验证为 Mastra 提供身份验证。它使用 Firebase ID 令牌验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 前置条件
+
+此示例使用 Firebase 身份验证。请确保：
+
+1. 在 [Firebase 控制台](https://console.firebase.google.com/) 中创建 Firebase 项目
+2. 启用身份验证并配置您首选的登录方法（Google、电子邮件/密码等）
+3. 从项目设置 > 服务账户生成服务账户密钥
+4. 下载服务账户 JSON 文件
+
+```env title=".env"
+FIREBASE_SERVICE_ACCOUNT=/path/to/your/service-account-key.json
+FIRESTORE_DATABASE_ID=(default)
+# 替代环境变量名称：
+# FIREBASE_DATABASE_ID=(default)
+```
+
+:::note
+
+安全地存储您的服务账户 JSON 文件，切勿将其提交到版本控制。
+
+:::
+
+## 安装
+
+在使用 `MastraAuthFirebase` 类之前，您必须安装 `@mastra/auth-firebase` 包。
+
+```bash
+npm install @mastra/auth-firebase@latest
+```
+
+## 使用示例
+
+### 使用环境变量的基础用法
+
+如果设置了必需的环境变量（`FIREBASE_SERVICE_ACCOUNT` 和 `FIRESTORE_DATABASE_ID`），您可以在没有任何构造函数参数的情况下初始化 `MastraAuthFirebase`。该类将自动读取这些环境变量作为配置：
+
+```typescript {2,7} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
+
+// 自动使用 FIREBASE_SERVICE_ACCOUNT 和 FIRESTORE_DATABASE_ID 环境变量
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthFirebase(),
+  },
+});
+```
+
+### 自定义配置
+
+```typescript {2,6-9} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthFirebase({
+      serviceAccount: "/path/to/service-account.json",
+      databaseId: "your-database-id",
+    }),
+  },
+});
+```
+
+## 配置
+
+`MastraAuthFirebase` 类可以通过构造函数选项或环境变量进行配置。
+
+### 环境变量
+
+- `FIREBASE_SERVICE_ACCOUNT`：Firebase 服务账户 JSON 文件的路径
+- `FIRESTORE_DATABASE_ID` 或 `FIREBASE_DATABASE_ID`：Firestore 数据库 ID
+
+:::note
+
+当未提供构造函数选项时，该类会自动读取这些环境变量。这意味着如果您的环境变量已正确配置，您可以简单地调用 `new MastraAuthFirebase()` 而无需任何参数。
+
+:::
+
+### 用户授权
+
+默认情况下，`MastraAuthFirebase` 使用 Firestore 管理用户访问权限。它期望有一个名为 `user_access` 的集合，其中的文档按用户 UID 键控。该集合中是否存在文档决定了用户是否已授权。
+
+```typescript title="firestore-structure.txt"
+user_access/
+  {user_uid_1}/     // 文档存在 = 用户已授权
+  {user_uid_2}/     // 文档存在 = 用户已授权
+```
+
+要自定义用户授权，请提供自定义 `authorizeUser` 函数：
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
+
+const firebaseAuth = new MastraAuthFirebase({
+  authorizeUser: async (user) => {
+    // 自定义授权逻辑
+    return user.email?.endsWith("@yourcompany.com") || false;
+  },
+});
+```
+
+:::info
+
+访问 [MastraAuthFirebase](/reference/auth/firebase) 了解所有可用的配置选项。
+
+:::
+
+## 客户端设置
+
+使用 Firebase 身份验证时，您需要在客户端初始化 Firebase，对用户进行身份验证，并检索他们的 ID 令牌以传递给您的 Mastra 请求。
+
+### 在客户端设置 Firebase
+
+首先，在您的客户端应用程序中初始化 Firebase：
+
+```typescript title="lib/firebase.ts"
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+```
+
+### 对用户进行身份验证并检索令牌
+
+使用 Firebase 身份验证登录用户并检索他们的 ID 令牌：
+
+```typescript title="lib/auth.ts"
+import { signInWithPopup, signOut, User } from "firebase/auth";
+import { auth, googleProvider } from "./firebase";
+
+export const signInWithGoogle = async () => {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (error) {
+    console.error("登录错误：", error);
+    throw error;
+  }
+};
+
+export const getIdToken = async (user: User) => {
+  try {
+    const idToken = await user.getIdToken();
+    return idToken;
+  } catch (error) {
+    console.error("获取 ID 令牌错误：", error);
+    throw error;
+  }
+};
+
+export const signOutUser = async () => {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error("登出错误：", error);
+    throw error;
+  }
+};
+```
+
+:::note
+
+有关其他身份验证方法（如电子邮件/密码、电话身份验证等），请参阅 [Firebase 文档](https://firebase.google.com/docs/cn/auth)。
+
+:::
+
+## 配置 `MastraClient`
+
+启用 `auth` 后，所有使用 `MastraClient` 发出的请求都必须在 `Authorization` 头中包含有效的 Firebase ID 令牌：
+
+```typescript {6} title="lib/mastra/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const createMastraClient = (idToken: string) => {
+  return new MastraClient({
+    baseUrl: "https://<mastra-api-url>",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+};
+```
+
+:::info
+
+ID 令牌必须在 Authorization 头中以 `Bearer` 为前缀。
+
+访问 [Mastra Client SDK](/docs/cn/server/mastra-client) 了解更多配置选项。
+
+:::
+
+### 发出身份验证请求
+
+一旦 `MastraClient` 配置了 Firebase ID 令牌，您就可以发送身份验证请求：
+
+<Tabs>
+  <TabItem value="react" label="React">
+
+    ```tsx title="src/components/test-agent.tsx"
+    "use client";
+
+    import { useAuthState } from 'react-firebase-hooks/auth';
+    import { MastraClient } from "@mastra/client-js";
+    import { auth } from '../lib/firebase';
+    import { getIdToken } from '../lib/auth';
+
+    export const TestAgent = () => {
+      const [user] = useAuthState(auth);
+
+      async function handleClick() {
+        if (!user) return;
+
+        const token = await getIdToken(user);
+        const client = createMastraClient(token);
+
+        const weatherAgent = client.getAgent("weatherAgent");
+        const response = await weatherAgent.generate("What's the weather like in New York");
+
+        console.log({ response });
+      }
+
+      return (
+        <button onClick={handleClick} disabled={!user}>
+          Test Agent
+        </button>
+      );
+    };
+    ```
+
+  </TabItem>
+  <TabItem value="nodejs" label="Node.js">
+
+    ```typescript title="server.js"
+    const express = require('express');
+    const admin = require('firebase-admin');
+    const { MastraClient } = require('@mastra/client-js');
+
+    // 初始化 Firebase Admin
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        // 您的服务账户凭据
+      })
+    });
+
+    const app = express();
+    app.use(express.json());
+
+    app.post('/generate', async (req, res) => {
+      try {
+        const { idToken } = req.body;
+
+        // 验证令牌
+        await admin.auth().verifyIdToken(idToken);
+
+        const mastra = new MastraClient({
+          baseUrl: "http://localhost:4111",
+          headers: {
+            Authorization: `Bearer ${idToken}`
+          }
+        });
+
+        const weatherAgent = mastra.getAgent("weatherAgent");
+        const response = await weatherAgent.generate("What's the weather like in Nairobi");
+
+        res.json({ response: response.text });
+      } catch (error) {
+        res.status(401).json({ error: 'Unauthorized' });
+      }
+    });
+    ```
+
+  </TabItem>
+  <TabItem value="curl" label="cURL">
+
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-firebase-id-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+
+  </TabItem>
+</Tabs>

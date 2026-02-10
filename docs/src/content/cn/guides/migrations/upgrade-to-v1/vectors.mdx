@@ -1,0 +1,92 @@
+---
+title: "向量 | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移向量相关的更改。"
+---
+
+# 向量
+
+向量存储构造函数现在需要 `id` 属性，向量存储方法已重命名以遵循一致的命名约定。
+
+## 变更
+
+### 向量存储实例需要 `id` 属性
+
+向量存储实例现在需要 `id` 属性。此唯一标识符用于在 Mastra 内跟踪和管理向量存储实例。`id` 应该是应用程序中每个向量存储的描述性唯一字符串。
+
+要迁移，请在向量存储构造函数中添加 `id` 字段。
+
+```diff
+  const vectorStore = new PgVector({
++   id: 'main-vector-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+  });
+
+  const chromaStore = new ChromaVector({
++   id: 'chroma-embeddings',
+    url: process.env.CHROMA_URL,
+  });
+
+  const pineconeStore = new PineconeVector({
++   id: 'pinecone-production',
+    apiKey: process.env.PINECONE_API_KEY,
+  });
+```
+
+### `getVectors` 改为 `listVectors`
+
+`getVectors()` 方法已重命名为 `listVectors()`。此更改符合 API 中的命名约定，复数形式的 getter 方法使用 `list` 前缀。
+
+要迁移，请将所有对 `getVectors()` 的调用替换为 `listVectors()`。
+
+```diff
+  const vectorStore = new VectorStore({ ... });
+
+- const vectors = await vectorStore.getVectors({ ... });
++ const vectors = await vectorStore.listVectors({ ... });
+```
+
+### LibSQLVector：`connectionUrl` 改为 `url`
+
+`connectionUrl` 参数已重命名为 `url`，以与 `@libsql/client` API 保持一致并匹配 LibSQLStorage。
+
+```diff
+  const vectorStore = new LibSQLVector({
+    id: 'my-vector',
+-   connectionUrl: 'file:./db.sqlite',
++   url: 'file:./db.sqlite',
+  });
+```
+
+### OpenSearchVector：`url` 改为 `node`
+
+`url` 参数已重命名为 `node` 以匹配 OpenSearch `ClientOptions` API。构造函数现在接受所有 OpenSearch 客户端选项，包括身份验证、SSL 和压缩。
+
+```diff
+  const vectorStore = new OpenSearchVector({
+    id: 'my-vector',
+-   url: 'http://localhost:9200',
++   node: 'http://localhost:9200',
+  });
+```
+
+### PineconeVector：移除了 `environment`
+
+`environment` 参数已被移除。如果您需要指定自定义控制器主机，请改用 `controllerHostUrl`。构造函数现在接受所有 Pinecone 配置选项。
+
+```diff
+  const vectorStore = new PineconeVector({
+    id: 'my-vector',
+    apiKey: process.env.PINECONE_API_KEY,
+-   environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
+
+如果您需要自定义控制器主机：
+
+```ts
+const vectorStore = new PineconeVector({
+  id: 'my-vector',
+  apiKey: process.env.PINECONE_API_KEY,
+  controllerHostUrl: 'https://api.pinecone.io',
+});
+```

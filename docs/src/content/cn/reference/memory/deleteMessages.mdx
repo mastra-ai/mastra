@@ -1,0 +1,64 @@
+---
+title: "参考：Memory.deleteMessages() | 内存"
+description: "Mastra 中 `Memory.deleteMessages()` 方法的文档，该方法按 ID 删除多条消息。"
+packages:
+  - "@mastra/core"
+---
+
+# Memory.deleteMessages()
+
+`.deleteMessages()` 方法按 ID 删除多条消息。
+
+## 使用示例
+
+```typescript
+await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "要删除的消息 ID 数组",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "void",
+      type: "Promise<void>",
+      description: "删除所有消息后解析的 promise",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/test-memory.ts"
+import { mastra } from "./mastra";
+import { MastraDBMessage } from "@mastra/core";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const { messages } = await memory!.recall({ threadId: "thread-123" });
+
+const messageIds = messages.map(
+  (message: MastraDBMessage) => message.id,
+);
+await memory?.deleteMessages([...messageIds]);
+```
+
+## 相关内容
+
+- [Memory 类参考](/reference/memory/memory-class)
+- [recall](/reference/memory/recall)
+- [内存入门指南](/docs/cn/docs/memory/overview)

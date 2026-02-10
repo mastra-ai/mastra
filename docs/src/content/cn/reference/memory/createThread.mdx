@@ -1,0 +1,121 @@
+---
+title: "参考：Memory.createThread() | 内存"
+description: "Mastra 中 `Memory.createThread()` 方法的文档，该方法在内存系统中创建新的对话线程。"
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.createThread()
+
+`.createThread()` 方法在内存系统中创建新的对话线程。每个线程代表一个独立的对话或上下文，可以包含多条消息。
+
+## 使用示例
+
+```typescript
+await memory?.createThread({ resourceId: "user-123" });
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "此线程所属资源的标识符（例如用户 ID、项目 ID）",
+      isOptional: false,
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "线程的可选自定义 ID。如果未提供，将自动生成。",
+      isOptional: true,
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "线程的可选标题",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "要与线程关联的可选元数据",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "创建的线程的唯一标识符",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "与线程关联的资源 ID",
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "线程的标题（如果提供）",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "线程创建时的时间戳",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "线程最后更新时的时间戳",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "与线程关联的附加元数据",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/test-memory.ts"
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const thread = await memory?.createThread({
+  resourceId: "user-123",
+  title: "内存测试线程",
+  metadata: {
+    source: "test-script",
+    purpose: "memory-testing",
+  },
+});
+
+const response = await agent.generate("发送给智能体的消息", {
+  memory: {
+    thread: thread!.id,
+    resource: thread!.resourceId,
+  },
+});
+
+console.log(response.text);
+```
+
+### 相关内容
+
+- [Memory 类参考](/reference/memory/memory-class)
+- [内存入门指南](/docs/cn/docs/memory/overview)（涵盖线程概念）
+- [getThreadById](/reference/memory/getThreadById)
+- [listThreads](/reference/memory/listThreads)
+- [recall](/reference/memory/recall)

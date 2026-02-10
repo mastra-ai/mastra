@@ -1,0 +1,38 @@
+---
+title: "参考文档：Mastra.getStorage() | 核心"
+description: "Mastra 中 `Mastra.getStorage()` 方法的文档，用于检索配置的存储实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getStorage()
+
+`.getStorage()` 方法用于检索已在 Mastra 实例中配置的存储实例。
+
+## 使用示例
+
+```typescript
+mastra.getStorage();
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraCompositeStore | undefined",
+      description:
+        "配置的存储实例；如果未配置存储，则为 undefined。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [存储概述](/reference/storage/overview)
+- [存储参考](/reference/storage/libsql)

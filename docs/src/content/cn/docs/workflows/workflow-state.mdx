@@ -1,0 +1,188 @@
+---
+title: "工作流状态 | 工作流"
+description: "使用贯穿整个工作流运行的全局状态在步骤之间共享值。"
+packages:
+  - "@mastra/core"
+---
+
+# 工作流状态
+
+工作流状态允许你在步骤之间共享值，而无需通过每个步骤的 inputSchema 和 outputSchema 传递。这对于跟踪进度、累积结果或在 entire 工作流中共享配置非常有用。
+
+## 状态与步骤输入/输出的区别
+
+理解**状态**与**步骤输入/输出**之间的区别非常重要：
+
+- **步骤输入/输出**：数据在步骤之间按顺序流动。每个步骤将前一步骤的输出作为其 `inputData` 接收，并返回供下一步骤使用的输出。
+- **状态**：所有步骤都可以通过 `state` 和 `setState` 读取和更新的共享存储。状态贯穿整个工作流运行持久化，包括暂停/恢复周期。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({ workflowInput: z.string() }),
+  outputSchema: z.object({ step1Output: z.string() }),
+  stateSchema: z.object({ sharedCounter: z.number() }),
+  execute: async ({ inputData, state, setState }) => {
+    // inputData 来自工作流输入或前一步骤的输出
+    console.log(inputData.workflowInput);
+
+    // state 是共享的工作流状态
+    console.log(state.sharedCounter);
+
+    // 为后续步骤更新状态
+    await setState({ sharedCounter: state.sharedCounter + 1 });
+
+    // 返回流向下一步骤 inputData 的输出
+    return { step1Output: "processed" };
+  },
+});
+```
+
+## 定义状态模式
+
+在工作流和各个步骤上定义 `stateSchema`。工作流的 stateSchema 是包含所有可能状态值的主模式，而每个步骤只声明它需要的子集：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    await setState({
+      processedItems: [...processedItems, "item-1", "item-2"],
+    });
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
+});
+
+const step2 = createStep({
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`,
+    };
+  },
+});
+
+export const testWorkflow = createWorkflow({
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
+  }),
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+## 设置初始状态
+
+启动工作流运行时传递 `initialState` 以设置起始值：
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { message: "Hello" },
+  initialState: {
+    processedItems: [],
+    metadata: { processedBy: "system" },
+  },
+});
+```
+
+`initialState` 对象应与工作流 `stateSchema` 中定义的结构匹配。
+
+## 暂停/恢复之间的状态持久化
+
+状态在暂停和恢复周期之间自动持久化。当工作流暂停后恢复时，暂停前所做的所有状态更新都会保留：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+  resumeSchema: z.object({ proceed: z.boolean() }),
+  execute: async ({ state, setState, suspend, resumeData }) => {
+    if (!resumeData) {
+      // 首次运行：更新状态并暂停
+      await setState({ count: state.count + 1, items: [...state.items, "item-1"] });
+      await suspend({});
+      return {};
+    }
+    // 恢复后：状态更改已保留（count: 1, items: ["item-1"]）
+    return {};
+  },
+});
+```
+
+## 嵌套工作流中的状态
+
+使用嵌套工作流时，状态从父工作流传播到子工作流。父工作流在调用嵌套工作流之前所做的更改对嵌套工作流内的步骤可见：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const nestedStep = createStep({
+  id: "nested-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state }) => {
+    // 接收由父工作流修改的状态
+    return { result: `Received: ${state.sharedValue}` };
+  },
+});
+
+const nestedWorkflow = createWorkflow({
+  id: "nested-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(nestedStep)
+  .commit();
+
+const parentStep = createStep({
+  id: "parent-step",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  stateSchema: z.object({ sharedValue: z.string() }),
+  execute: async ({ state, setState }) => {
+    // 在嵌套工作流运行前修改状态
+    await setState({ sharedValue: "modified-by-parent" });
+    return {};
+  },
+});
+
+const parentWorkflow = createWorkflow({
+  id: "parent-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({ result: z.string() }),
+  stateSchema: z.object({ sharedValue: z.string() }),
+})
+  .then(parentStep)
+  .then(nestedWorkflow)
+  .commit();
+```
+
+## 相关内容
+
+- [工作流概述](/docs/cn/workflows/overview)
+- [暂停与恢复](/docs/cn/workflows/suspend-and-resume)
+- [步骤类](/reference/workflows/step)
+- [工作流类](/reference/workflows/workflow)

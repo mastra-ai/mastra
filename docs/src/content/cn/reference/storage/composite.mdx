@@ -1,0 +1,250 @@
+---
+title: "参考文档: 复合存储 | 存储"
+description: "Mastra 中组合多个存储后端的文档。"
+packages:
+  - "@mastra/clickhouse"
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/pg"
+---
+
+# 复合存储
+
+`MastraCompositeStore` 可以从不同的提供商组合存储领域。当你需要为不同目的使用不同的数据库时使用它。例如，为内存使用 LibSQL，为工作流使用 PostgreSQL。
+
+## 安装
+
+`MastraCompositeStore` 包含在 `@mastra/core` 中：
+
+```bash npm2yarn
+npm install @mastra/core@latest
+```
+
+你还需要安装要组合的存储提供商：
+
+```bash npm2yarn
+npm install @mastra/pg@latest @mastra/libsql@latest
+```
+
+## 存储领域
+
+Mastra 将存储组织成五个专业领域，每个领域处理特定类型的数据。每个领域可以由不同的存储适配器支持，领域类从每个存储包导出。
+
+| 领域 | 描述 |
+|--------|-------------|
+| `memory` | 智能体的对话持久化。存储线程（对话会话）、消息、资源（用户身份）和工作内存（跨对话的持久化上下文）。 |
+| `workflows` | 工作流执行状态。当工作流因人工输入、外部事件或计划恢复而暂停时，它们的状态会持久化在这里，以便在服务器重启后能够恢复。 |
+| `scores` | 来自 Mastra 评估系统的评估结果。分数和指标持久化在这里以供分析和比较。 |
+| `observability` | 遥测数据，包括追踪和跨度。智能体交互、工具调用和 LLM 请求生成收集到追踪中的跨度，用于调试和性能分析。 |
+| `agents` | 存储智能体的智能体配置。使得能够在运行时定义和更新智能体，而无需代码部署。 |
+
+## 使用方法
+
+### 基本组合
+
+直接从每个存储包导入领域类并进行组合：
+
+```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: "composite",
+    domains: {
+      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    },
+  }),
+});
+```
+
+### 使用默认存储
+
+使用 `default` 指定后备存储，然后覆盖特定领域：
+
+```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { PostgresStore } from "@mastra/pg";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
+
+const pgStore = new PostgresStore({
+  id: "pg",
+  connectionString: process.env.DATABASE_URL,
+});
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: "composite",
+    default: pgStore,
+    domains: {
+      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+    },
+  }),
+});
+```
+
+## 选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此存储实例的唯一标识符。",
+      isOptional: false,
+    },
+    {
+      name: "default",
+      type: "MastraCompositeStore",
+      description: "默认存储适配器。未在 `domains` 中明确指定的领域将使用此存储的领域作为后备。",
+      isOptional: true,
+    },
+    {
+      name: "domains",
+      type: "object",
+      description: "个别领域覆盖。每个领域可以来自不同的存储适配器。这些优先于默认存储。",
+      isOptional: true,
+    },
+    {
+      name: "domains.memory",
+      type: "MemoryStorage",
+      description: "线程、消息和资源的存储。",
+      isOptional: true,
+    },
+    {
+      name: "domains.workflows",
+      type: "WorkflowsStorage",
+      description: "工作流快照的存储。",
+      isOptional: true,
+    },
+    {
+      name: "domains.scores",
+      type: "ScoresStorage",
+      description: "评估分数的存储。",
+      isOptional: true,
+    },
+    {
+      name: "domains.observability",
+      type: "ObservabilityStorage",
+      description: "追踪和跨度的存储。",
+      isOptional: true,
+    },
+    {
+      name: "domains.agents",
+      type: "AgentsStorage",
+      description: "存储智能体配置的存储。",
+      isOptional: true,
+    },
+    {
+      name: "disableInit",
+      type: "boolean",
+      description: "为 true 时，禁用自动初始化。你必须显式调用 init()。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 初始化
+
+`MastraCompositeStore` 独立初始化每个配置的领域。当传递给 Mastra 类时，`init()` 会自动调用：
+
+```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { Mastra } from "@mastra/core";
+
+const storage = new MastraCompositeStore({
+  id: "composite",
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+  },
+});
+
+export const mastra = new Mastra({
+  storage, // init() 自动调用
+});
+```
+
+如果直接使用存储，请显式调用 `init()`：
+
+```typescript
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { MemoryPG } from "@mastra/pg";
+
+const storage = new MastraCompositeStore({
+  id: "composite",
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+  },
+});
+
+await storage.init();
+
+// 通过 getStore() 访问特定领域的存储
+const memoryStore = await storage.getStore("memory");
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+## 用例
+
+### 不同工作负载的独立数据库
+
+在开发时使用本地数据库，同时将生产数据保留在托管服务中：
+
+```typescript
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { MemoryLibSQL } from "@mastra/libsql";
+
+const storage = new MastraCompositeStore({
+  id: "composite",
+  domains: {
+    // 开发时使用本地 SQLite，生产时使用 PostgreSQL
+    memory:
+      process.env.NODE_ENV === "development"
+        ? new MemoryLibSQL({ url: "file:./dev.db" })
+        : new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+  },
+});
+```
+
+### 可观察性的专业存储
+
+可观察性数据在生产中可能很快会淹没通用数据库。单次智能体交互可以生成数百个跨度，高流量应用程序每天可以产生数千个追踪。
+
+**ClickHouse** 因其针对高容量、写入密集型分析工作负载进行了优化而推荐用于生产可观察性。使用复合存储将可观察性路由到 ClickHouse，同时将其他数据保留在主数据库中：
+
+```typescript
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
+
+const storage = new MastraCompositeStore({
+  id: "composite",
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    observability: new ObservabilityStorageClickhouse({
+      url: process.env.CLICKHOUSE_URL,
+      username: process.env.CLICKHOUSE_USERNAME,
+      password: process.env.CLICKHOUSE_PASSWORD,
+    }),
+  },
+});
+```
+
+:::info
+
+当使用不支持可观察性的存储提供商时（如 Convex、DynamoDB 或 Cloudflare），也需要这种方法。请参阅 [DefaultExporter 文档](/docs/cn/docs/observability/tracing/exporters/default#storage-provider-support) 获取支持的提供商完整列表。
+
+:::

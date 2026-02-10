@@ -1,0 +1,198 @@
+---
+title: "文档分块和嵌入 | RAG"
+description: "Mastra 中用于高效处理和检索的文档分块和嵌入指南。"
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
+---
+
+# 文档分块和嵌入
+
+在处理之前，从您的内容创建 MDocument 实例。您可以从各种格式初始化它：
+
+```ts
+const docFromText = MDocument.fromText("您的纯文本内容...");
+const docFromHTML = MDocument.fromHTML("<html>您的 HTML 内容...</html>");
+const docFromMarkdown = MDocument.fromMarkdown("# 您的 Markdown 内容...");
+const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
+```
+
+## 步骤 1：文档处理
+
+使用 `chunk` 将文档分割成可管理的块。Mastra 支持多种针对不同文档类型优化的分块策略：
+
+- `recursive`：基于内容结构的智能分割
+- `character`：简单的基于字符的分割
+- `token`：感知 Token 的分割
+- `markdown`：感知 Markdown 的分割
+- `semantic-markdown`：基于相关标题家族的 Markdown 分割
+- `html`：感知 HTML 结构的分割
+- `json`：感知 JSON 结构的分割
+- `latex`：感知 LaTeX 结构的分割
+- `sentence`：感知句子的分割
+
+:::note
+每种策略接受针对其分块方法优化的不同参数。
+:::
+
+以下是使用 `recursive` 策略的示例：
+
+```ts
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  maxSize: 512,
+  overlap: 50,
+  separators: ["\n"],
+  extract: {
+    metadata: true, // 可选择提取元数据
+  },
+});
+```
+
+对于需要保留句子结构的文本，以下是使用 `sentence` 策略的示例：
+
+```ts
+const chunks = await doc.chunk({
+  strategy: "sentence",
+  maxSize: 450,
+  minSize: 50,
+  overlap: 0,
+  sentenceEnders: ["."],
+});
+```
+
+对于需要保留节之间语义关系的 Markdown 文档，以下是使用 `semantic-markdown` 策略的示例：
+
+```ts
+const chunks = await doc.chunk({
+  strategy: "semantic-markdown",
+  joinThreshold: 500,
+  modelName: "gpt-3.5-turbo",
+});
+```
+
+:::note
+元数据提取可能使用 LLM 调用，因此请确保设置了您的 API 密钥。
+:::
+
+我们在 [`chunk()` 参考文档](/reference/rag/chunk) 中更深入地介绍了分块策略。
+
+## 步骤 2：嵌入生成
+
+使用您首选的提供程序将块转换为嵌入向量。Mastra 通过模型路由器支持嵌入模型。
+
+### 使用模型路由器
+
+最简单的方法是使用带有 `provider/model` 字符串的 Mastra 模型路由器：
+
+```ts
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { embedMany } from "ai";
+
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
+
+Mastra 支持 OpenAI 和 Google 嵌入模型。受支持的嵌入模型的完整列表，请参阅[嵌入参考](/reference/rag/embeddings)。
+
+模型路由器自动从环境变量处理 API 密钥检测。
+
+嵌入函数返回向量，即代表文本语义含义的数字数组，可用于向量数据库中的相似性搜索。
+
+### 配置嵌入维度
+
+嵌入模型通常输出具有固定维度数量的向量（例如，OpenAI 的 `text-embedding-3-small` 为 1536 维）。
+有些模型支持减少此维度，这有助于：
+
+- 减少向量数据库中的存储需求
+- 降低相似性搜索的计算成本
+
+以下是一些受支持的模型：
+
+OpenAI（text-embedding-3 模型）：
+
+```ts
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  options: {
+    dimensions: 256, // 仅在 text-embedding-3 及更高版本中支持
+  },
+  values: chunks.map((chunk) => chunk.text),
+});
+```
+
+Google（text-embedding-001）：
+
+```ts
+const { embeddings } = await embedMany({
+  model: "google/gemini-embedding-001", {
+    outputDimensionality: 256, // 从末尾截断过多的值
+  }),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
+
+:::important[向量数据库兼容性]
+存储嵌入向量时，必须配置向量数据库索引以匹配您的嵌入模型的输出大小。如果维度不匹配，您可能会收到错误或数据损坏。
+:::
+
+## 示例：完整管道
+
+以下示例显示了两个提供程序的文档处理和嵌入生成：
+
+```ts
+import { embedMany } from "ai";
+
+import { MDocument } from "@mastra/rag";
+
+// 初始化文档
+const doc = MDocument.fromText(`
+  气候变化对全球农业构成重大挑战。
+  气温上升和降水模式变化影响作物产量。
+`);
+
+// 创建块
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  maxSize: 256,
+  overlap: 50,
+});
+
+// 使用 OpenAI 生成嵌入
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
+});
+
+// 或者
+
+// 使用 Cohere 生成嵌入
+const { embeddings } = await embedMany({
+  model: "cohere/embed-english-v3.0",
+  values: chunks.map((chunk) => chunk.text),
+});
+
+// 将嵌入存储到您的向量数据库
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+});
+```
+
+##
+
+有关不同分块策略和嵌入配置的更多示例，请参阅：
+
+- [分块参考](/reference/rag/chunk)
+- [嵌入参考](/reference/rag/embeddings)
+
+有关向量数据库和嵌入的更多详细信息，请参阅：
+
+- [向量数据库](./vector-databases)
+- [嵌入 API 参考](/reference/rag/embeddings)

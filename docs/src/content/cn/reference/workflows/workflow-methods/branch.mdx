@@ -1,0 +1,50 @@
+---
+title: "参考：Workflow.branch() | 工作流"
+description: "工作流中 `Workflow.branch()` 方法的文档，用于在工作流步骤之间创建条件分支。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.branch()
+
+`.branch()` 方法在工作流步骤之间创建条件分支，允许根据前一步骤的结果采取不同的路径。
+
+## 使用示例
+
+```typescript
+workflow.branch([
+  [async ({ context }) => true, step1],
+  [async ({ context }) => false, step2],
+]);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "steps",
+      type: "[() => boolean, Step]",
+      description:
+        "元组数组，每个元组包含一个条件函数和一个在条件为真时要执行的步骤",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "NewWorkflow",
+      description: "用于方法链的工作流实例",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [条件分支逻辑](/docs/cn/docs/workflows/control-flow#conditional-logic-with-branch)
+- [控制流](/docs/cn/docs/workflows/control-flow)

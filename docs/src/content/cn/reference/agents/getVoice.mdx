@@ -1,0 +1,71 @@
+---
+title: "参考文档：Agent.getVoice() | 智能体"
+description: "Mastra 智能体中 `Agent.getVoice()` 方法的文档，用于检索语音提供商的语音功能。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getVoice()
+
+`.getVoice()` 方法检索为智能体配置的语音提供商，如果它是函数则解析它。此方法用于访问智能体的语音功能，用于文本转语音和语音转文本功能。
+
+## 使用示例
+
+```typescript
+await agent.getVoice();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "包含请求上下文的选择性配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "voice",
+      type: "Promise<MastraVoice>",
+      description:
+        "解析为为智能体配置的语音提供商的 promise，如果未配置则返回默认语音提供商。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.getVoice({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [为智能体添加语音](/docs/cn/docs/agents/adding-voice)
+- [语音提供商](../voice/mastra-voice)

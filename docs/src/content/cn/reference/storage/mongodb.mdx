@@ -1,0 +1,280 @@
+---
+title: "参考文档: MongoDB 存储 | 存储"
+description: "Mastra 中 MongoDB 存储实现的文档。"
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+---
+
+# MongoDB 存储
+
+MongoDB 存储实现使用 MongoDB 数据库提供了可扩展的存储解决方案，同时支持文档存储和向量操作。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/mongodb@latest
+```
+
+## 使用方法
+
+确保你有一个启用了 Atlas Search 的 MongoDB Atlas Local（通过 Docker）或 MongoDB Atlas Cloud 实例。建议使用 MongoDB 7.0+。
+
+```typescript
+import { MongoDBStore } from "@mastra/mongodb";
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此存储实例的唯一标识符。",
+      isOptional: false,
+    },
+    {
+      name: "uri",
+      type: "string",
+      description: "MongoDB 连接字符串（例如，mongodb+srv://user:password@cluster.mongodb.net）。",
+      isOptional: false,
+    },
+    {
+      name: "url",
+      type: "string",
+      description: "已弃用。请改用 uri。MongoDB 连接字符串（支持向后兼容）。",
+      isOptional: true,
+    },
+    {
+      name: "dbName",
+      type: "string",
+      description: "存储要使用的数据库名称。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "MongoClientOptions",
+      description: "用于高级配置的 MongoDB 客户端选项（SSL、连接池等）。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+:::note[弃用通知]
+`url` 参数已弃用，但为支持向后兼容仍可使用。请在新代码中全部使用 `uri`。
+:::
+
+## 构造函数示例
+
+你可以通过以下方式实例化 `MongoDBStore`：
+
+```ts
+import { MongoDBStore } from "@mastra/mongodb";
+
+// 基本连接而不使用自定义选项
+const store1 = new MongoDBStore({
+  id: 'mongodb-storage-01',
+  uri: "mongodb+srv://user:password@cluster.mongodb.net",
+  dbName: "mastra_storage",
+});
+
+// 使用带选项的连接字符串
+const store2 = new MongoDBStore({
+  id: 'mongodb-storage-02',
+  uri: "mongodb+srv://user:password@cluster.mongodb.net",
+  dbName: "mastra_storage",
+  options: {
+    retryWrites: true,
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  },
+});
+```
+
+## 额外说明
+
+### 集合管理
+
+存储实现自动处理集合的创建和管理。它创建以下集合：
+
+- `mastra_workflow_snapshot`：存储工作流状态和执行数据
+- `mastra_evals`：存储评估结果和元数据
+- `mastra_threads`：存储对话线程
+- `mastra_messages`：存储单个消息
+- `mastra_traces`：存储遥测和追踪数据
+- `mastra_scorers`：存储评分和评估数据
+- `mastra_resources`：存储资源工作内存数据
+
+### 初始化
+
+当你将存储传递给 Mastra 类时，`init()` 会自动在任何存储操作之前调用：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { MongoDBStore } from "@mastra/mongodb";
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+});
+
+const mastra = new Mastra({
+  storage, // init() 自动调用
+});
+```
+
+如果你在没有 Mastra 的情况下直接使用存储，必须显式调用 `init()` 来创建集合：
+
+```typescript
+import { MongoDBStore } from "@mastra/mongodb";
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+});
+
+// 直接使用存储时需要
+await storage.init();
+
+// 通过 getStore() 访问特定领域的存储
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+:::warning
+如果未调用 `init()`，集合将不会创建，存储操作将静默失败或抛出错误。
+:::
+
+## 向量搜索功能
+
+MongoDB 存储包含用于 AI 应用程序的内置向量搜索功能：
+
+### 向量索引创建
+
+```typescript
+import { MongoDBVector } from "@mastra/mongodb";
+
+const vectorStore = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+});
+
+// 为嵌入创建向量索引
+await vectorStore.createIndex({
+  indexName: "document_embeddings",
+  dimension: 1536,
+});
+```
+
+### 向量操作
+
+```typescript
+// 存储带元数据的向量
+await vectorStore.upsert({
+  indexName: "document_embeddings",
+  vectors: [
+    {
+      id: "doc-1",
+      values: [0.1, 0.2, 0.3, ...], // 1536 维向量
+      metadata: {
+        title: "文档标题",
+        category: "技术",
+        source: "api-docs",
+      },
+    },
+  ],
+});
+
+// 相似性搜索
+const results = await vectorStore.query({
+  indexName: "document_embeddings",
+  vector: queryEmbedding,
+  topK: 5,
+  filter: {
+    category: "技术",
+  },
+});
+```
+
+## 使用示例
+
+### 为智能体添加内存
+
+要为智能体添加 MongoDB 内存，请使用 `Memory` 类并使用 `MongoDBStore` 创建一个新的 `storage` 键。配置支持本地和远程 MongoDB 实例。
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { MongoDBStore } from "@mastra/mongodb";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "你是一个具有自动回忆先前交互记忆能力的 AI 智能体。",
+  model: "openai/gpt-4o",
+  memory: new Memory({
+    storage: new MongoDBStore({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      generateTitle: true,
+    },
+  }),
+});
+```
+
+### 使用智能体
+
+使用 `memoryOptions` 来限定此请求的回忆。设置 `lastMessages: 5` 以限制基于最近性的回忆，并使用 `semanticRecall` 获取 `topK: 3` 最相关的消息，包括每个匹配的 `messageRange: 2` 个相邻消息以提供上下文。
+
+```typescript title="src/test-mongodb-agent.ts"
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mongodbAgent");
+
+const message = await agent.stream("我的名字是 Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("我的名字是什么？", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```

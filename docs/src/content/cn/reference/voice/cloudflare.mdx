@@ -1,0 +1,156 @@
+---
+title: "参考文档: Cloudflare | 语音"
+description: "CloudflareVoice 类的文档，提供使用 Cloudflare Workers AI 的文本转语音功能。"
+packages:
+  - "@mastra/voice-cloudflare"
+---
+
+# Cloudflare
+
+Mastra 中的 CloudflareVoice 类使用 Cloudflare Workers AI 提供文本转语音功能。此提供商专为边缘计算环境优化，提供高效、低延迟的语音合成。
+
+## 使用示例
+
+```typescript
+import { CloudflareVoice } from "@mastra/voice-cloudflare";
+
+// 使用配置初始化
+const voice = new CloudflareVoice({
+  speechModel: {
+    name: "@cf/meta/m2m100-1.2b",
+    apiKey: "your-cloudflare-api-token",
+    accountId: "your-cloudflare-account-id",
+  },
+  speaker: "en-US-1", // 默认语音
+});
+
+// 将文本转换为语音
+const audioStream = await voice.speak("Hello, how can I help you?", {
+  speaker: "en-US-2", // 覆盖默认语音
+});
+
+// 获取可用的语音
+const speakers = await voice.getSpeakers();
+console.log(speakers);
+```
+
+## 配置
+
+### 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "CloudflareSpeechConfig",
+      description: "文本转语音合成的配置。",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "语音合成的默认语音 ID。",
+      isOptional: true,
+      defaultValue: "'en-US-1'",
+    },
+  ]}
+/>
+
+### CloudflareSpeechConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "用于 TTS 的模型名称。",
+      isOptional: true,
+      defaultValue: "'@cf/meta/m2m100-1.2b'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "具有 Workers AI 访问权限的 Cloudflare API 令牌。回退到 CLOUDFLARE_API_TOKEN 环境变量。",
+      isOptional: true,
+    },
+    {
+      name: "accountId",
+      type: "string",
+      description:
+        "Cloudflare 账户 ID。回退到 CLOUDFLARE_ACCOUNT_ID 环境变量。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用 Cloudflare 的文本转语音服务将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "要转换为语音的文本或文本流。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "用于语音合成的语音 ID。",
+      isOptional: true,
+      defaultValue: "构造函数的 speaker 值",
+    },
+    {
+      name: "options.format",
+      type: "string",
+      description: "输出音频格式。",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+返回可用的语音选项数组，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符（例如：'en-US-1'）",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "语音的语言代码（例如：'en-US'）",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 说明
+
+- API 令牌可以通过构造函数选项或环境变量提供（CLOUDFLARE_API_TOKEN 和 CLOUDFLARE_ACCOUNT_ID）
+- Cloudflare Workers AI 针对边缘计算进行了优化，延迟低
+- 此提供商仅支持文本转语音（TTS）功能，不支持语音转文本（STT）
+- 该服务与其他 Cloudflare Workers 产品集成良好
+- 生产环境使用，请确保您的 Cloudflare 账户具有适当的 Workers AI 订阅
+- 与其他一些提供商相比，语音选项较为有限，但在边缘的性能非常出色
+
+## 相关提供商
+
+如果您需要语音转文本功能以及文本转语音功能，请考虑使用以下提供商之一：
+
+- [OpenAI](./openai) - 提供 TTS 和 STT
+- [Google](./google) - 提供 TTS 和 STT
+- [Azure](./azure) - 提供 TTS 和 STT

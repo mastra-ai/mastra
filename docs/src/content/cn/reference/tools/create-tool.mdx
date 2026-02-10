@@ -1,0 +1,417 @@
+---
+title: "参考：createTool() | 工具与 MCP"
+description: "Mastra 中用于为代理定义自定义工具的 `createTool()` 函数文档。"
+packages:
+  - "@mastra/core"
+---
+
+# createTool()
+
+`createTool()` 函数用于定义 Mastra 代理可以执行的自定义工具。工具通过允许代理与外部系统交互、执行计算或访问特定数据来扩展代理的功能。
+
+## 使用示例
+
+```typescript title="src/mastra/tools/reverse-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const tool = createTool({
+  id: "test-tool",
+  description: "反转输入字符串",
+  inputSchema: z.object({
+    input: z.string(),
+  }),
+  outputSchema: z.object({
+    output: z.string(),
+  }),
+  execute: async (inputData) => {
+    const reversed = inputData.input.split("").reverse().join("");
+
+    return {
+      output: reversed,
+    };
+  },
+});
+```
+
+## 带 MCP 注解的示例
+
+通过 MCP（模型上下文协议）公开工具时，您可以添加注解来描述工具行为并自定义客户端显示工具的方式。这些 MCP 特定属性分组在 `mcp` 属性下：
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "获取当前位置的当前天气",
+  inputSchema: z.object({
+    location: z.string().describe("城市名称或坐标"),
+  }),
+  // MCP 特定属性
+  mcp: {
+    // 客户端行为提示的注解
+    annotations: {
+      title: "天气查询",           // 人类可读的显示名称
+      readOnlyHint: true,                // 工具不修改环境
+      destructiveHint: false,            // 工具不执行破坏性更新
+      idempotentHint: true,              // 相同参数 = 相同结果
+      openWorldHint: true,               // 与外部 API 交互
+    },
+    // 客户端特定功能的自定义元数据
+    _meta: {
+      version: "1.0.0",
+      category: "weather",
+    },
+  },
+  execute: async (inputData) => {
+    const weather = await fetchWeather(inputData.location);
+    return { weather };
+  },
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "工具的唯一标识符。",
+      isOptional: false,
+    },
+    {
+      name: "description",
+      type: "string",
+      description:
+        "工具功能的描述。代理使用此描述来决定何时使用该工具。",
+      isOptional: false,
+    },
+    {
+      name: "inputSchema",
+      type: "Zod schema",
+      description:
+        "定义工具 `execute` 函数预期输入参数的 Zod 模式。",
+      isOptional: true,
+    },
+    {
+      name: "outputSchema",
+      type: "Zod schema",
+      description:
+        "定义工具 `execute` 函数预期输出结构的 Zod 模式。",
+      isOptional: true,
+    },
+    {
+      name: "suspendSchema",
+      type: "Zod schema",
+      description:
+        "定义传递给 `suspend()` 的有效载荷结构的 Zod 模式。当工具暂停执行时，此有效载荷将返回给客户端。",
+      isOptional: true,
+    },
+    {
+      name: "resumeSchema",
+      type: "Zod schema",
+      description:
+        "定义工具恢复时 `resumeData` 预期结构的 Zod 模式。当启用 `autoResumeSuspendedTools` 时，代理使用此模式从用户消息中提取数据。",
+      isOptional: true,
+    },
+    {
+      name: "requireApproval",
+      type: "boolean",
+      description:
+        "当为 true 时，工具需要在执行前明确批准。代理将发出 `tool-call-approval` 块并暂停，直到获得批准或拒绝。",
+      isOptional: true,
+    },
+    {
+      name: "mcp",
+      type: "MCPToolProperties",
+      description:
+        "通过模型上下文协议公开的工具的 MCP 特定属性。包括 `annotations`（工具行为提示，如 `title`、`readOnlyHint`、`destructiveHint`、`idempotentHint`、`openWorldHint`）和 `_meta`（传递给 MCP 客户端的任意元数据）。",
+      isOptional: true,
+    },
+    {
+      name: "requestContextSchema",
+      type: "Zod schema",
+      description:
+        "用于验证请求上下文值的 Zod 模式。如果提供，上下文将在 `execute()` 运行之前进行验证，如果验证失败则返回错误对象。",
+      isOptional: true,
+    },
+    {
+      name: "execute",
+      type: "function",
+      description:
+        "包含工具逻辑的函数。它接收两个参数：验证后的输入数据（第一个参数）和可选的执行上下文对象（第二个参数），其中包含 `requestContext`、`tracingContext`、`abortSignal` 和其他执行元数据。",
+      isOptional: false,
+      properties: [
+        {
+          parameters: [
+            {
+              name: "input",
+              type: "z.infer<TInput>",
+              description: "基于 inputSchema 的验证后输入数据",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "context",
+              type: "ToolExecutionContext",
+              isOptional: true,
+              description: "包含元数据的可选执行上下文",
+              properties: [
+                {
+                  name: "requestContext",
+                  type: "RequestContext",
+                  isOptional: true,
+                  description:
+                    "用于访问共享状态和依赖项的请求上下文",
+                },
+                {
+                  name: "tracingContext",
+                  type: "TracingContext",
+                  isOptional: true,
+                  description:
+                    "用于创建子跨度和添加元数据的跟踪上下文",
+                },
+                {
+                  name: "abortSignal",
+                  type: "AbortSignal",
+                  isOptional: true,
+                  description: "用于中止工具执行的信号",
+                },
+                {
+                  name: "agent",
+                  type: "AgentToolExecutionContext",
+                  isOptional: true,
+                  description: "代理特定上下文（消息、暂停、resumeData 等）",
+                },
+                {
+                  name: "workflow",
+                  type: "WorkflowToolExecutionContext",
+                  isOptional: true,
+                  description: "工作流特定上下文（状态、setState、暂停等）",
+                },
+                {
+                  name: "mcp",
+                  type: "MCPToolExecutionContext",
+                  isOptional: true,
+                  description: "MCP 特定上下文（征求等）",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "onInputStart",
+      type: "function",
+      description:
+        "可选回调，在工具调用输入流开始时调用。接收 `toolCallId`、`messages` 和 `abortSignal`。",
+      isOptional: true,
+    },
+    {
+      name: "onInputDelta",
+      type: "function",
+      description:
+        "可选回调，对输入流中流入的每个增量文本块调用。接收 `inputTextDelta`、`toolCallId`、`messages` 和 `abortSignal`。",
+      isOptional: true,
+    },
+    {
+      name: "onInputAvailable",
+      type: "function",
+      description:
+        "可选回调，当完整的工具输入可用并已解析时调用。接收验证后的 `input` 对象、`toolCallId`、`messages` 和 `abortSignal`。",
+      isOptional: true,
+    },
+    {
+      name: "onOutput",
+      type: "function",
+      description:
+        "可选回调，在工具成功执行并返回输出后调用。接收工具的 `output`、`toolCallId`、`messages` 和 `abortSignal`。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+`createTool()` 函数返回一个 `Tool` 对象。
+
+<PropertiesTable
+  content={[
+    {
+      name: "Tool",
+      type: "object",
+      description:
+        "表示已定义工具的对象，已准备好添加到代理中。",
+    },
+  ]}
+/>
+
+## 工具生命周期钩子
+
+工具支持生命周期钩子，允许您监控工具执行的不同阶段并对其做出反应。这些钩子对于日志记录、分析、验证和流式传输期间的实时更新特别有用。
+
+### 可用钩子
+
+#### onInputStart
+
+在工具调用输入流开始时调用，在收到任何输入数据之前。
+
+```typescript
+export const tool = createTool({
+  id: "example-tool",
+  description: "带钩子的示例工具",
+  onInputStart: ({ toolCallId, messages, abortSignal }) => {
+    console.log(`工具 ${toolCallId} 输入流开始`);
+  },
+});
+```
+
+#### onInputDelta
+
+对输入流中流入的每个增量文本块调用。用于显示实时进度或解析部分 JSON。
+
+```typescript
+export const tool = createTool({
+  id: "example-tool",
+  description: "带钩子的示例工具",
+  onInputDelta: ({ inputTextDelta, toolCallId, messages, abortSignal }) => {
+    console.log(`收到输入块: ${inputTextDelta}`);
+  },
+});
+```
+
+#### onInputAvailable
+
+当完整的工具输入可用并已根据 `inputSchema` 解析和验证时调用。
+
+```typescript
+export const tool = createTool({
+  id: "example-tool",
+  description: "带钩子的示例工具",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  onInputAvailable: ({ input, toolCallId, messages, abortSignal }) => {
+    console.log(`工具收到完整输入:`, input);
+    // input 完全基于 inputSchema 类型化
+  },
+});
+```
+
+#### onOutput
+
+在工具成功执行并返回输出后调用。用于记录结果、触发后续操作或分析。
+
+```typescript
+export const tool = createTool({
+  id: "example-tool",
+  description: "带钩子的示例工具",
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async (input) => {
+    return { result: "Success" };
+  },
+  onOutput: ({ output, toolCallId, toolName, abortSignal }) => {
+    console.log(`${toolName} 执行完成:`, output);
+    // output 完全基于 outputSchema 类型化
+  },
+});
+```
+
+### 钩子执行顺序
+
+对于典型的流式工具调用，钩子按以下顺序调用：
+
+1. **onInputStart** - 输入流开始
+2. **onInputDelta** - 当块到达时多次调用
+3. **onInputAvailable** - 完整输入被解析和验证
+4. 工具的 **execute** 函数运行
+5. **onOutput** - 工具成功完成
+
+### 钩子参数
+
+所有钩子都接收一个包含以下公共属性的参数对象：
+
+- `toolCallId` (string)：此特定工具调用的唯一标识符
+- `abortSignal` (AbortSignal)：用于检测操作是否应取消的信号
+
+此外：
+- `onInputStart`、`onInputDelta` 和 `onInputAvailable` 接收 `messages` (数组)：工具调用时的对话消息
+- `onInputDelta` 接收 `inputTextDelta` (string)：增量文本块
+- `onInputAvailable` 接收 `input`：验证后的输入数据（根据 `inputSchema` 类型化）
+- `onOutput` 接收 `output`：工具的返回值（根据 `outputSchema` 类型化）和 `toolName` (string)：工具名称
+
+### 错误处理
+
+钩子错误会被自动捕获和记录，但不会阻止工具执行继续。如果钩子抛出错误，它将被记录到控制台，但不会导致工具调用失败。
+
+## MCP 工具注解
+
+通过模型上下文协议（MCP）公开工具时，您可以提供描述工具行为的注解。这些注解帮助 MCP 客户端（如 OpenAI Apps SDK）了解如何呈现和处理您的工具。
+
+MCP 特定属性分组在 `mcp` 属性下，包括 `annotations` 和 `_meta`：
+
+```typescript
+mcp: {
+  annotations: { /* 行为提示 */ },
+  _meta: { /* 自定义元数据 */ },
+}
+```
+
+### ToolAnnotations 属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "title",
+      type: "string",
+      description:
+        "工具的人类可读标题。用于 UI 组件中的显示目的。",
+      isOptional: true,
+    },
+    {
+      name: "readOnlyHint",
+      type: "boolean",
+      description:
+        "如果为 true，工具不会修改其环境。此提示表示工具只读取数据，没有副作用。默认为 false。",
+      isOptional: true,
+    },
+    {
+      name: "destructiveHint",
+      type: "boolean",
+      description:
+        "如果为 true，工具可能对其环境执行破坏性更新。如果为 false，工具只执行附加更新。此提示帮助客户端确定是否需要确认。默认为 true。",
+      isOptional: true,
+    },
+    {
+      name: "idempotentHint",
+      type: "boolean",
+      description:
+        "如果为 true，使用相同参数重复调用工具不会对其环境产生额外效果。此提示表示幂等行为。默认为 false。",
+      isOptional: true,
+    },
+    {
+      name: "openWorldHint",
+      type: "boolean",
+      description:
+        "如果为 true，此工具可能与\"开放世界\"的外部实体交互（例如，网络搜索、外部 API）。如果为 false，工具的域是封闭且完全定义的。默认为 true。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+这些注解遵循 [MCP 规范](https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations)，并在通过 MCP 列出工具时传递。
+
+## 相关内容
+
+- [MCP 概述](/docs/cn/docs/mcp/overview)
+- [与代理一起使用工具](/docs/cn/docs/agents/using-tools)
+- [代理批准](/docs/cn/docs/agents/agent-approval)
+- [工具流式传输](/docs/cn/docs/streaming/tool-streaming)
+- [请求上下文](/docs/cn/docs/server/request-context#accessing-values-with-tools)

@@ -1,0 +1,367 @@
+---
+title: "参考：元数据过滤器 | RAG"
+description: "Mastra 中元数据过滤功能的文档，允许跨不同向量存储精确查询向量搜索结果。"
+packages:
+  - "@mastra/pg"
+---
+
+# 元数据过滤器
+
+Mastra 在所有向量存储中提供统一的元数据过滤语法，基于 MongoDB/Sift 查询语法。每个向量存储将这些过滤器转换为其本机格式。
+
+## 基本示例
+
+```typescript
+import { PgVector } from "@mastra/pg";
+
+const store = new PgVector({
+  id: 'pg-vector',
+  connectionString
+});
+
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  topK: 10,
+  filter: {
+    category: "electronics", // 简单相等
+    price: { $gt: 100 }, // 数字比较
+    tags: { $in: ["sale", "new"] }, // 数组成员资格
+  },
+});
+```
+
+## 支持的操作符
+
+<OperatorsTable
+  title="基本比较"
+  operators={[
+    {
+      name: "$eq",
+      description: "匹配等于指定值的值",
+      example: "{ age: { $eq: 25 } }",
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+    {
+      name: "$ne",
+      description: "匹配不等的值",
+      example: "{ status: { $ne: 'inactive' } }",
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+    {
+      name: "$gt",
+      description: "大于",
+      example: "{ price: { $gt: 100 } }",
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+    {
+      name: "$gte",
+      description: "大于或等于",
+      example: "{ rating: { $gte: 4.5 } }",
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+    {
+      name: "$lt",
+      description: "小于",
+      example: "{ stock: { $lt: 20 } }",
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+    {
+      name: "$lte",
+      description: "小于或等于",
+      example: "{ priority: { $lte: 3 } }",
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+  ]}
+/>
+
+<OperatorsTable
+  title="数组操作符"
+  operators={[
+    {
+      name: "$in",
+      description: "匹配数组中的任何值",
+      example: '{ category: { $in: ["A", "B"] } }',
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+    {
+      name: "$nin",
+      description: "不匹配任何值",
+      example: '{ status: { $nin: ["deleted", "archived"] } }',
+      supportedBy: ["除 Couchbase 外的所有"],
+    },
+    {
+      name: "$all",
+      description: "匹配包含所有元素的数组",
+      example: '{ tags: { $all: ["urgent", "high"] } }',
+      supportedBy: ["Astra", "Pinecone", "Upstash", "MongoDB"],
+    },
+    {
+      name: "$elemMatch",
+      description: "匹配满足条件的数组元素",
+      example: "{ scores: { $elemMatch: { $gt: 80 } } }",
+      supportedBy: ["libSQL", "PgVector", "MongoDB"],
+    },
+  ]}
+/>
+
+<OperatorsTable
+  title="逻辑操作符"
+  operators={[
+    {
+      name: "$and",
+      description: "逻辑与",
+      example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
+      supportedBy: ["除 Vectorize, Couchbase 外的所有"],
+    },
+    {
+      name: "$or",
+      description: "逻辑或",
+      example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
+      supportedBy: ["除 Vectorize, Couchbase 外的所有"],
+    },
+    {
+      name: "$not",
+      description: "逻辑非",
+      example: "{ price: { $not: { $lt: 100 } } }",
+      supportedBy: [
+        "Astra",
+        "Qdrant",
+        "Upstash",
+        "PgVector",
+        "libSQL",
+        "MongoDB",
+      ],
+    },
+    {
+      name: "$nor",
+      description: "逻辑非或",
+      example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "libSQL", "MongoDB"],
+    },
+  ]}
+/>
+
+<OperatorsTable
+  title="元素操作符"
+  operators={[
+    {
+      name: "$exists",
+      description: "匹配具有字段的文档",
+      example: "{ rating: { $exists: true } }",
+      supportedBy: ["除 Vectorize, Chroma, Couchbase 外的所有"],
+    },
+  ]}
+/>
+
+<OperatorsTable
+  title="自定义操作符"
+  operators={[
+    {
+      name: "$contains",
+      description: "文本包含子字符串",
+      example: '{ description: { $contains: "sale" } }',
+      supportedBy: ["Upstash", "libSQL", "PgVector"],
+    },
+    {
+      name: "$regex",
+      description: "正则表达式匹配",
+      example: '{ name: { $regex: "^test" } }',
+      supportedBy: ["Qdrant", "PgVector", "Upstash", "MongoDB"],
+    },
+    {
+      name: "$size",
+      description: "数组长度检查",
+      example: "{ tags: { $size: { $gt: 2 } } }",
+      supportedBy: ["Astra", "libSQL", "PgVector", "MongoDB"],
+    },
+    {
+      name: "$geo",
+      description: "地理空间查询",
+      example: '{ location: { $geo: { type: "radius", ... } } }',
+      supportedBy: ["Qdrant"],
+    },
+    {
+      name: "$datetime",
+      description: "日期时间范围查询",
+      example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
+      supportedBy: ["Qdrant"],
+    },
+    {
+      name: "$hasId",
+      description: "向量 ID 存在性检查",
+      example: '{ $hasId: ["id1", "id2"] }',
+      supportedBy: ["Qdrant"],
+    },
+    {
+      name: "$hasVector",
+      description: "向量存在性检查",
+      example: "{ $hasVector: true }",
+      supportedBy: ["Qdrant"],
+    },
+  ]}
+/>
+
+## 通用规则和限制
+
+1. 字段名称不能：
+   - 包含点 (.)，除非引用嵌套字段
+   - 以 $ 开头或包含空字符
+   - 为空字符串
+
+2. 值必须是：
+   - 有效的 JSON 类型（字符串、数字、布尔值、对象、数组）
+   - 不能是 undefined
+   - 对于操作符具有正确的类型（例如，数字比较使用数字）
+
+3. 逻辑操作符：
+   - 必须包含有效条件
+   - 不能为空
+   - 必须正确嵌套
+   - 只能在顶层或在 other 逻辑操作符内嵌套使用
+   - 不能在字段级别或嵌套在字段内使用
+   - 不能在操作符内使用
+   - 有效：`{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - 有效：`{ "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }`
+   - 无效：`{ "field": { "$and": [{ "$gt": 100 }] } }`
+   - 无效：`{ "field": { "$gt": { "$and": [{...}] } } }`
+
+4. $not 操作符：
+   - 必须是对象
+   - 不能为空
+   - 可以在字段级别或顶层使用
+   - 有效：`{ "$not": { "field": "value" } }`
+   - 有效：`{ "field": { "$not": { "$eq": "value" } } }`
+
+5. 操作符嵌套：
+   - 逻辑操作符必须包含字段条件，而不是直接的操作符
+   - 有效：`{ "$and": [{ "field": { "$gt": 100 } }] }`
+   - 无效：`{ "$and": [{ "$gt": 100 }] }`
+
+## 存储特定说明
+
+### Astra
+
+- 支持使用点表示法进行嵌套字段查询
+- 元数据中的数组字段必须显式定义为数组
+- 元数据值区分大小写
+
+### ChromaDB
+
+- Where 过滤器仅返回过滤字段存在于元数据中的结果
+- 空元数据字段不包含在过滤器结果中
+- 元数据字段必须存在才能进行负匹配（例如，$ne 不会匹配缺少该字段的文档）
+
+### Cloudflare Vectorize
+
+- 在使用过滤之前需要显式元数据索引
+- 使用 `createMetadataIndex()` 对要过滤的字段进行索引
+- 每个 Vectorize 索引最多 10 个元数据索引
+- 字符串值索引最多 64 个字节（在 UTF-8 边界截断）
+- 数值使用 float64 精度
+- 过滤 JSON 必须小于 2048 字节
+- 字段名称不能包含点 (.) 或以 $ 开头
+- 字段名称限制为 512 个字符
+- 创建新的元数据索引后必须重新插入向量才能包含在过滤结果中
+- 范围查询在非常大的数据集（约 1000 万+向量）上可能准确性降低
+
+### libSQL
+
+- 支持使用点表示法进行嵌套对象查询
+- 验证数组字段确保它们包含有效的 JSON 数组
+- 数字比较保持正确的类型处理
+- 条件中的空数组被优雅处理
+- 元数据存储在 JSONB 列中以实现高效查询
+
+### PgVector
+
+- 完全支持 PostgreSQL 的本机 JSON 查询功能
+- 使用本机数组函数高效处理数组操作
+- 对数字、字符串和布尔值的正确类型处理
+- 嵌套字段查询在内部使用 PostgreSQL 的 JSON 路径语法
+- JSONB 列中以实现高效索引
+
+### Pinecone
+
+- 元数据字段名称限制为 元数据存储在 512 个字符
+- 数值必须在 ±1e38 范围内
+- 元数据中的数组限制为 64KB 总大小
+- 嵌套对象使用点表示法扁平化
+- 元数据更新替换整个元数据对象
+
+### Qdrant
+
+- 支持带嵌套条件的高级过滤
+- Payload（元数据）字段必须显式索引才能过滤
+- 使用 `createPayloadIndex()` 对要过滤的字段进行索引：
+
+```typescript
+// 在过滤之前索引字段
+await store.createPayloadIndex({
+  indexName: "my_index",
+  fieldName: "source",
+  fieldSchema: "keyword", // 'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'
+});
+
+// 现在过滤生效
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  filter: { source: "document-a" },
+});
+```
+
+- 高效处理地理空间查询
+- 对空值和空值的特殊处理
+- 向量特定过滤功能
+- 日期时间值必须为 RFC 3339 格式
+
+### Upstash
+
+- 元数据字段键的 512 字符限制
+- 查询大小有限制（避免大型 IN 子句）
+- 不支持过滤器中的 null/undefined 值
+- 在内部转换为类似 SQL 的语法
+- 区分大小写的字符串比较
+- 元数据更新是原子的
+
+### MongoDB
+
+- 完全支持 MongoDB/Sift 查询语法用于元数据过滤器
+- 支持所有标准比较、数组、逻辑和元素操作符
+- 支持元数据中的嵌套字段和数组
+- 过滤可以分别使用 `filter` 和 `documentFilter` 选项应用于 `metadata` 和原始文档内容
+- `filter` 应用于元数据对象；`documentFilter` 应用于原始文档字段
+- 过滤器大小或复杂性没有人为限制（受 MongoDB 查询限制）
+- 建议对元数据字段进行索引以获得最佳性能
+
+### Couchbase
+
+- 目前不支持元数据过滤器。过滤必须在检索结果后在客户端完成，或直接使用 Couchbase SDK 的搜索功能进行更复杂的查询。
+
+### Amazon S3 Vectors
+
+- 相等值必须是原始类型（字符串/数字/布尔值）。`null`/`undefined`、数组、对象和日期不允许用于相等方面。范围操作符接受数字或日期（日期被规范化为 epoch ms）。
+- `$in`/`$nin` 需要**非空的原始类型数组**；允许日期元素并被规范化为 epoch ms。不支持**数组相等**。
+- 隐式与被规范化（`{a:1,b:2}` → `{$and:[{a:1},{b:2}]}`）。逻辑操作符必须包含字段条件，使用非空数组，并且只能出现在根或其他逻辑操作符内（不能在字段值内）。
+- `nonFilterableMetadataKeys` 中列出的键在索引创建时被存储但不可过滤；此设置是不可变的。
+- $exists 需要布尔值。
+- undefined/null/空过滤器被视为无过滤器。
+- 每个元数据键名称限制为 63 个字符。
+- 每个向量的总元数据：最多 40 KB（可过滤 + 不可过滤）
+- 每个向量的总元数据键：最多 10 个
+- 每个向量的可过滤元数据：最多 2 KB
+- 每个向量索引的不可过滤元数据键：最多 10 个
+
+## 相关内容
+
+- [Astra](/reference/vectors/astra)
+- [Chroma](/reference/vectors/chroma)
+- [Cloudflare Vectorize](/reference/vectors/vectorize)
+- [libSQL](/reference/vectors/libsql)
+- [MongoDB](/reference/vectors/mongodb)
+- [PgStore](/reference/vectors/pg)
+- [Pinecone](/reference/vectors/pinecone)
+- [Qdrant](/reference/vectors/qdrant)
+- [Upstash](/reference/vectors/upstash)
+- [Amazon S3 Vectors](/reference/vectors/s3vectors)

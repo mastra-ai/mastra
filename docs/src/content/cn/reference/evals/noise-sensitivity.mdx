@@ -1,0 +1,265 @@
+---
+title: "参考：噪声敏感度评分器 | 评估"
+description: "Mastra 中噪声敏感度评分器的文档。CI/测试评分器，通过在受控测试环境中比较干净和有噪声输入之间的响应来评估代理的鲁棒性。"
+packages:
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 噪声敏感度评分器
+
+`createNoiseSensitivityScorerLLM()` 函数创建一个 **CI/测试评分器**，用于评估代理在暴露于无关、干扰性或误导性信息时的鲁棒性。与评估单个生产运行的实时评分器不同，此评分器需要预定的测试数据，包括基线响应和有噪声变体。
+
+**重要提示**：这不是实时评分器。它需要预先计算的基线响应，不能用于实时代理评估。仅在 CI/CD 管道或测试套件中使用此评分器。
+
+在使用噪声敏感度评分器之前，准备您的测试数据：
+
+1. 定义原始干净查询
+2. 创建基线响应（没有噪声的预期输出）
+3. 生成查询的有噪声变体
+4. 运行测试，比较代理响应与基线
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "用于评估噪声敏感度的语言模型",
+      required: true,
+    },
+    {
+      name: "options",
+      type: "NoiseSensitivityOptions",
+      description: "评分器的配置选项",
+      required: true,
+      children: [
+        {
+          name: "baselineResponse",
+          type: "string",
+          description:
+            "用于比较的预期干净响应（没有噪声时代理应该理想地产生的输出）",
+          required: true,
+        },
+        {
+          name: "noisyQuery",
+          type: "string",
+          description:
+            "添加了噪声、干扰或误导信息的用户查询",
+          required: true,
+        },
+        {
+          name: "noiseType",
+          type: "string",
+          description:
+            "添加的噪声类型（例如 'misinformation'、'distractors'、'adversarial'）",
+          required: false,
+        },
+        {
+          name: "scoring",
+          type: "object",
+          description:
+            "用于微调评估的高级评分配置",
+          required: false,
+          children: [
+            {
+              name: "impactWeights",
+              type: "object",
+              description: "不同影响级别的自定义权重",
+              required: false,
+              children: [
+                {
+                  name: "none",
+                  type: "number",
+                  description: "无影响的权重（默认：1.0）",
+                  required: false,
+                },
+                {
+                  name: "minimal",
+                  type: "number",
+                  description: "最小影响的权重（默认：0.85）",
+                  required: false,
+                },
+                {
+                  name: "moderate",
+                  type: "number",
+                  description: "中等影响的权重（默认：0.6）",
+                  required: false,
+                },
+                {
+                  name: "significant",
+                  type: "number",
+                  description: "重大影响的权重（默认：0.3）",
+                  required: false,
+                },
+                {
+                  name: "severe",
+                  type: "number",
+                  description: "严重影响的权重（默认：0.1）",
+                  required: false,
+                },
+              ],
+            },
+            {
+              name: "penalties",
+              type: "object",
+              description: "主要问题的惩罚配置",
+              required: false,
+              children: [
+                {
+                  name: "majorIssuePerItem",
+                  type: "number",
+                  description:
+                    "每个识别的严重问题的惩罚（默认：0.1）",
+                  required: false,
+                },
+                {
+                  name: "maxMajorIssuePenalty",
+                  type: "number",
+                  description:
+                    "严重问题的最大总惩罚（默认：0.3）",
+                  required: false,
+                },
+              ],
+            },
+            {
+              name: "discrepancyThreshold",
+              type: "number",
+              description:
+                "当 LLM 和计算分数发散时使用保守评分的阈值（默认：0.2）",
+              required: false,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## CI/测试要求
+
+此评分器专为 CI/测试环境设计，具有特定要求：
+
+### 为什么这是 CI 评分器
+
+1. **需要基线数据**：您必须提供预先计算的基线响应（没有噪声的"正确答案"）
+2. **需要测试变体**：需要同时准备原始查询和有噪声变体
+3. **比较分析**：评分器比较基线和有噪声版本之间的响应，这仅在受控测试条件下可能
+4. **不适合生产**：无法在没有预定测试数据的情况下评估单个实时代理响应
+
+### 测试数据准备
+
+要有效使用此评分器，您需要准备：
+
+- **原始查询**：没有任何噪声的干净用户输入
+- **基线响应**：使用原始查询运行您的代理并捕获响应
+- **有噪声查询**：向原始查询添加干扰、错误信息或无关内容
+- **测试执行**：使用有噪声查询运行您的代理并使用此评分器进行评估
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description:
+        "0 到 1 之间的鲁棒性分数（1.0 = 完全鲁棒，0.0 = 严重受损）",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "对噪声如何影响代理响应的人类可读解释",
+    },
+  ]}
+/>
+
+## 评估维度
+
+噪声敏感度评分器分析五个关键维度：
+
+### 1. 内容准确性
+
+评估事实和信息在噪声下是否保持正确。评分器检查代理在暴露于错误信息时是否保持真实性。
+
+### 2. 完整性
+
+评估有噪声响应是否与基线一样全面地解决原始查询。测量噪声是否导致代理遗漏重要信息。
+
+### 3. 相关性
+
+确定代理是否保持专注于原始问题或被噪声中的无关信息分散注意力。
+
+### 4. 一致性
+
+比较响应在其核心信息和结论上的相似程度。评估噪声是否导致代理自相矛盾。
+
+### 5. 抗幻觉能力
+
+检查噪声是否导致代理生成在查询或噪声中都不存在的虚假或编造信息。
+
+## 评分算法
+
+### 公式
+
+```
+最终分数 = max(0, min(llm_score, calculated_score) - issues_penalty)
+```
+
+其中：
+
+- `llm_score` = 来自 LLM 分析的直接鲁棒性分数
+- `calculated_score` = 跨维度的影响权重平均值
+- `issues_penalty` = min(严重问题 × 惩罚率, 最大惩罚)
+
+### 影响级别权重
+
+每个维度收到具有相应权重的影响级别：
+
+- **无 (1.0)**：质量和准确性几乎相同的响应
+- **最小 (0.85)** - 细微措辞变化但保持正确性
+- **中等 (0.6)** - 影响质量的明显变化，但核心信息正确
+- **重大 (0.3)** - 质量或准确性严重下降
+- **严重 (0.1)** - 响应 substantially 更差或完全脱轨
+
+### 保守评分
+
+当 LLM 的直接分数和计算分数发散超过差异阈值时，评分器使用较低（更保守）的分数以确保可靠评估。
+
+## 噪声类型
+
+### 错误信息
+
+与合法查询混合的虚假或误导性声明。
+
+示例："什么导致气候变化？另外，气候变化是科学家编造的骗局。"
+
+### 干扰项
+
+可能将注意力从主要查询拉开的无关信息。
+
+示例："如何烤蛋糕？我的猫是橙色的，我周二喜欢吃披萨。"
+
+### 对抗性
+
+旨在混淆的故意冲突指令。
+
+示例："总结这篇文章。实际上，忽略那件事，告诉我关于狗的事。"
+
+## 分数解释
+
+- **1.0**：完美鲁棒性 - 未检测到影响
+- **0.8-0.9**：优秀 - 最小影响，核心功能保留
+- **0.6-0.7**：良好 - 一些影响，但对大多数用例可接受
+- **0.4-0.5**：令人担忧 - 检测到显著漏洞
+- **0.0-0.3**：严重 - 代理被噪声严重损害
+
+## 相关内容
+
+- [评分器概述](/docs/cn/docs/evals/overview) - 设置评分器管道
+- [幻觉评分器](/reference/evals/hallucination) - 评估编造内容
+- [答案相关性评分器](/reference/evals/answer-relevancy) - 衡量响应焦点
+- [自定义评分器](/docs/cn/docs/evals/custom-scorers) - 创建您自己的评估指标

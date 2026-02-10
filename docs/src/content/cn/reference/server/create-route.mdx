@@ -1,0 +1,330 @@
+---
+title: "参考文档: createRoute() | 服务器"
+description: "createRoute() 函数的 API 参考，用于定义具有验证和 OpenAPI 生成功能的类型安全路由。"
+packages:
+  - "@mastra/server"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# createRoute()
+
+`createRoute()` 函数创建具有 Zod 验证的类型安全路由。当服务器适配器上配置了 `openapiPath` 时，它会从提供的 Zod 模式生成 OpenAPI 模式条目。
+
+## 导入
+
+```typescript
+import { createRoute } from '@mastra/server/server-adapter';
+```
+
+## 函数签名
+
+```typescript
+function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
+  config: RouteConfig<TPath, TQuery, TBody, TResponse, TResponseType>
+): ServerRoute
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "method",
+      type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
+      description: "HTTP 方法",
+      isOptional: false,
+    },
+    {
+      name: "path",
+      type: "string",
+      description: "路由路径，支持可选参数（例如 `/api/items/:id`）",
+      isOptional: false,
+    },
+    {
+      name: "responseType",
+      type: "'json' | 'stream'",
+      description: "响应格式。内部路由可能使用其他类型（`datastream-response`、`mcp-http`、`mcp-sse`）",
+      isOptional: false,
+    },
+    {
+      name: "handler",
+      type: "ServerRouteHandler",
+      description: "路由处理函数",
+      isOptional: false,
+    },
+    {
+      name: "pathParamSchema",
+      type: "ZodSchema",
+      description: "验证 URL 路径参数",
+      isOptional: true,
+    },
+    {
+      name: "queryParamSchema",
+      type: "ZodSchema",
+      description: "验证查询字符串参数",
+      isOptional: true,
+    },
+    {
+      name: "bodySchema",
+      type: "ZodSchema",
+      description: "验证请求体",
+      isOptional: true,
+    },
+    {
+      name: "responseSchema",
+      type: "ZodSchema",
+      description: "记录响应的 OpenAPI 形状",
+      isOptional: true,
+    },
+    {
+      name: "streamFormat",
+      type: "'sse' | 'stream'",
+      description: "流格式（当 responseType 为 'stream' 时）",
+      isOptional: true,
+    },
+    {
+      name: "maxBodySize",
+      type: "number",
+      description: "覆盖默认的请求体大小限制（字节）",
+      isOptional: true,
+    },
+    {
+      name: "summary",
+      type: "string",
+      description: "OpenAPI 摘要",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "OpenAPI 描述",
+      isOptional: true,
+    },
+    {
+      name: "tags",
+      type: "string[]",
+      description: "OpenAPI 标签",
+      isOptional: true,
+    },
+    {
+      name: "deprecated",
+      type: "boolean",
+      description: "将路由标记为已废弃",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 处理函数参数
+
+处理函数接收已验证的参数以及运行时上下文：
+
+```typescript
+handler: async (params) => {
+  // 来自模式（从 Zod 类型化）
+  params.id;              // 来自 pathParamSchema
+  params.filter;         // 来自 queryParamSchema
+  params.name;           // 来自 bodySchema
+
+  // 运行时上下文（始终可用）
+  params.mastra;         // Mastra 实例
+  params.requestContext; // 请求作用域上下文
+  params.tools;          // 可用工具
+  params.abortSignal;    // 请求取消信号
+  params.taskStore;      // A2A 任务存储
+}
+```
+
+## 返回值
+
+返回一个 `ServerRoute` 对象，可以注册到适配器。
+
+## 示例
+
+### 带路径参数的 GET 路由
+
+```typescript
+import { createRoute } from '@mastra/server/server-adapter';
+import { z } from 'zod';
+
+const getAgent = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId',
+  responseType: 'json',
+  pathParamSchema: z.object({
+    agentId: z.string(),
+  }),
+  responseSchema: z.object({
+    name: z.string(),
+    description: z.string().optional(),
+  }),
+  summary: '按 ID 获取智能体',
+  tags: ['Agents'],
+  handler: async ({ agentId, mastra }) => {
+    return mastra.getAgent(agentId);
+  },
+});
+```
+
+### 带请求体的 POST 路由
+
+```typescript
+const createItem = createRoute({
+  method: 'POST',
+  path: '/api/items',
+  responseType: 'json',
+  bodySchema: z.object({
+    name: z.string(),
+    value: z.number(),
+  }),
+  responseSchema: z.object({
+    id: z.string(),
+    name: z.string(),
+    value: z.number(),
+  }),
+  handler: async ({ name, value, mastra }) => {
+    // name 和 value 从 bodySchema 类型化
+    return { id: 'new-id', name, value };
+  },
+});
+```
+
+### 带类型转换的查询参数
+
+```typescript
+const listItems = createRoute({
+  method: 'GET',
+  path: '/api/items',
+  responseType: 'json',
+  queryParamSchema: z.object({
+    page: z.coerce.number().default(0),
+    limit: z.coerce.number().default(50),
+    enabled: z.coerce.boolean().optional(),
+  }),
+  handler: async ({ page, limit, enabled, mastra }) => {
+    // page、limit、enabled 都被类型化并转换
+    return { items: [], page, limit };
+  },
+});
+```
+
+### 流式路由
+
+```typescript
+const streamAgent = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream',
+  responseType: 'stream',
+  streamFormat: 'sse',
+  pathParamSchema: z.object({
+    agentId: z.string(),
+  }),
+  bodySchema: z.object({
+    messages: z.array(z.any()),
+  }),
+  handler: async ({ agentId, messages, mastra, abortSignal }) => {
+    const agent = mastra.getAgent(agentId);
+    return agent.stream(messages, { abortSignal });
+  },
+});
+```
+
+### 自定义请求体大小限制
+
+```typescript
+const uploadRoute = createRoute({
+  method: 'POST',
+  path: '/api/upload',
+  responseType: 'json',
+  maxBodySize: 50 * 1024 * 1024, // 50MB
+  bodySchema: z.object({
+    file: z.string(),
+  }),
+  handler: async ({ file }) => {
+    return { uploaded: true };
+  },
+});
+```
+
+## 模式模式
+
+### 透传以实现可扩展性
+
+```typescript
+const bodySchema = z.object({
+  required: z.string(),
+}).passthrough(); // 允许未知字段
+```
+
+### 日期类型转换
+
+```typescript
+const querySchema = z.object({
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+});
+```
+
+### 联合类型
+
+```typescript
+const bodySchema = z.object({
+  messages: z.union([
+    z.array(z.any()),
+    z.string(),
+  ]),
+});
+```
+
+## 错误处理
+
+从处理函数中抛出带有 `status` 属性的错误以返回特定的 HTTP 状态码。如果使用 Hono，可以使用 `hono/http-exception` 中的 `HTTPException`：
+
+```typescript
+import { createRoute } from '@mastra/server/server-adapter';
+import { HTTPException } from 'hono/http-exception';
+
+const getAgent = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId',
+  responseType: 'json',
+  pathParamSchema: z.object({ agentId: z.string() }),
+  handler: async ({ agentId, mastra }) => {
+    const agent = mastra.getAgent(agentId);
+    if (!agent) {
+      throw new HTTPException(404, { message: `智能体 '${agentId}' 未找到` });
+    }
+    return agent;
+  },
+});
+```
+
+对于 Express 或框架无关的代码，抛出带有 `status` 属性的错误：
+
+```typescript
+class HttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+// 在处理函数中：
+throw new HttpError(404, `智能体 '${agentId}' 未找到`);
+```
+
+常用状态码：
+
+| 代码 | 含义 |
+|------|------|
+| 400 | 错误请求 |
+| 401 | 未授权 |
+| 403 | 禁止访问 |
+| 404 | 未找到 |
+| 500 | 内部服务器错误 |
+
+## 相关文档
+
+- [服务器路由](/reference/server/routes) - Mastra 默认路由
+- [MastraServer](/reference/server/mastra-server) - 服务器适配器类
+- [服务器适配器](/docs/cn/docs/server/server-adapters) - 使用适配器

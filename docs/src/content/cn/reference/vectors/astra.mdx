@@ -1,0 +1,259 @@
+---
+title: "参考：Astra 向量存储 | 向量"
+description: Mastra 中 AstraVector 类的文档，该类使用 DataStax Astra DB 提供向量搜索功能。
+packages:
+  - "@mastra/astra"
+---
+
+# Astra 向量存储
+
+AstraVector 类使用 [DataStax Astra DB](https://www.datastax.com/products/datastax-astra) 提供向量搜索功能，Astra DB 是一个构建在 Apache Cassandra 之上的云原生、无服务器数据库。它提供具有企业级可扩展性和高可用性的向量搜索功能。
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "token",
+      type: "string",
+      description: "Astra DB API 令牌",
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "Astra DB API 端点",
+    },
+    {
+      name: "keyspace",
+      type: "string",
+      isOptional: true,
+      description: "可选的键空间名称",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "相似性搜索的距离度量（dotproduct 映射为 dot_product）",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "查询的元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+返回索引名称字符串数组。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要更新的向量 ID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "包含向量和/或元数据更改的更新对象",
+      properties: [
+        {
+          name: "vector",
+          type: "number[]",
+          isOptional: true,
+          description: "新的向量值",
+        },
+        {
+          name: "metadata",
+          type: "Record<string, any>",
+          isOptional: true,
+          description: "新的元数据值",
+        },
+      ],
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // 额外的错误上下文
+  }
+}
+```
+
+## 环境变量
+
+必需的环境变量：
+
+- `ASTRA_DB_TOKEN`：你的 Astra DB API 令牌
+- `ASTRA_DB_ENDPOINT`：你的 Astra DB API 端点
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

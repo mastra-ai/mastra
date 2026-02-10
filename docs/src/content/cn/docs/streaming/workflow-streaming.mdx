@@ -1,0 +1,120 @@
+---
+title: "工作流流式传输 | Streaming"
+description: "了解如何在 Mastra 中使用工作流流式传输，包括处理工作流执行事件、步骤流式传输以及工作流与智能体和工具的集成。"
+packages:
+  - "@mastra/core"
+---
+
+# 工作流流式传输
+
+Mastra 中的工作流流式传输使工作流能够在执行时发送增量结果，而不是等待完成。这使您能够直接向用户或上游智能体和工作流展示部分进度、中间状态或渐进数据。
+
+流可以通过两种主要方式写入：
+
+- **从工作流步骤内部**：每个工作流步骤接收一个 `writer` 参数，这是一个可写的流，您可以在执行进度时使用它来推送更新。
+- **从智能体流**：您还可以将智能体的 `stream` 输出直接管道传输到工作流步骤的 writer，从而轻松地将智能体响应链接到工作流结果，而无需额外的粘合代码。
+
+通过将可写工作流流与智能体流式传输相结合，您可以精细控制中间结果如何流经系统并进入用户体验。
+
+### 使用 `writer` 参数
+
+`writer` 参数传递给工作流步骤的 `execute` 函数，可用于将自定义事件、数据或值发射到活动流中。这使工作流步骤能够在执行仍在进行时提供中间结果或状态更新。
+
+:::warning
+
+您必须 `await` 对 `writer.write(...)` 的调用，否则您将锁定流并获得 `WritableStream is locked` 错误。
+
+:::
+
+```typescript {5,7,14}
+import { createStep } from "@mastra/core/workflows";
+
+export const testStep = createStep({
+  execute: async ({ inputData, writer }) => {
+    const { value } = inputData;
+
+    await writer?.write({
+      type: "custom-event",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+    await writer?.write({
+      type: "custom-event",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  },
+});
+```
+
+### 检查工作流流有效负载
+
+写入流的事件包含在发射的块中。可以检查这些块以访问任何自定义字段，例如事件类型、中间值或步骤特定数据。
+
+```typescript
+const testWorkflow = mastra.getWorkflow("testWorkflow");
+
+const run = await testWorkflow.createRun();
+
+const stream = await run.stream({
+  inputData: {
+    value: "初始数据",
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+
+if (result!.status === "suspended") {
+  // 如果工作流被暂停，我们可以使用 resumeStream 方法恢复它
+  const resumedStream = await run.resumeStream({
+    resumeData: { value: "恢复数据" },
+  });
+
+  for await (const chunk of resumedStream) {
+    console.log(chunk);
+  }
+}
+```
+
+### 恢复中断的工作流流
+
+如果工作流流因任何原因关闭或中断，您可以使用 `resumeStream` 方法恢复它。这将返回一个新的 `ReadableStream`，您可以使用它来观察工作流事件。
+
+```typescript
+const newStream = await run.resumeStream();
+
+for await (const chunk of newStream) {
+  console.log(chunk);
+}
+```
+
+## 使用智能体的工作流
+
+将智能体的 `textStream` 管道传输到工作流步骤的 `writer`。这将流式传输部分输出，Mastra 自动将智能体的使用聚合到工作流运行中。
+
+```typescript
+import { createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const testStep = createStep({
+  execute: async ({ inputData, mastra, writer }) => {
+    const { city } = inputData;
+
+    const testAgent = mastra?.getAgent("testAgent");
+    const stream = await testAgent?.stream(` ${city} 的天气是什么？`);
+
+    await stream!.textStream.pipeTo(writer!);
+
+    return {
+      value: await stream!.text,
+    };
+  },
+});
+```

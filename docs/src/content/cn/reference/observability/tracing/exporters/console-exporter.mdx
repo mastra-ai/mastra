@@ -1,0 +1,187 @@
+---
+title: "参考：ConsoleExporter | 可观测性"
+description: "ConsoleExporter 的 API 参考"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# ConsoleExporter
+
+将跟踪事件输出到控制台用于调试和开发。
+
+## 构造函数
+
+```typescript
+new ConsoleExporter(config?: BaseExporterConfig)
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "config",
+      type: "BaseExporterConfig",
+      description: "配置选项",
+      required: false,
+    },
+  ]}
+/>
+
+## BaseExporterConfig
+
+```typescript
+interface BaseExporterConfig {
+  logger?: IMastraLogger;
+  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error';
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "日志记录器实例（回退到 INFO 级别的 ConsoleLogger）",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+      description: "导出器的日志级别（默认：INFO）",
+      required: false,
+    },
+  ]}
+/>
+
+## 属性
+
+```typescript
+readonly name = 'tracing-console-exporter';
+```
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到控制台。
+
+<PropertiesTable
+  props={[
+    {
+      name: "event",
+      type: "TracingEvent",
+      description: "要导出的追踪事件",
+      required: true,
+    },
+  ]}
+/>
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+记录关闭消息。
+
+## 输出格式
+
+导出器根据事件类型输出不同的格式：
+
+### SPAN_STARTED
+
+```
+🚀 SPAN_STARTED
+   类型: [跨度类型]
+   名称: [跨度名称]
+   ID: [跨度ID]
+   跟踪ID: [跟踪ID]
+   输入: [格式化输入]
+   属性: [格式化属性]
+────────────────────────────────────────
+```
+
+### SPAN_ENDED
+
+```
+✅ SPAN_ENDED
+   类型: [跨度类型]
+   名称: [跨度名称]
+   ID: [跨度ID]
+   持续时间: [持续时间]ms
+   跟踪ID: [跟踪ID]
+   输入: [格式化输入]
+   输出: [格式化输出]
+   错误: [格式化错误（如果存在）]
+   属性: [格式化属性]
+────────────────────────────────────────
+```
+
+### SPAN_UPDATED
+
+```
+📝 SPAN_UPDATED
+   类型: [跨度类型]
+   名称: [跨度名称]
+   ID: [跨度ID]
+   跟踪ID: [跟踪ID]
+   输入: [格式化输入]
+   输出: [格式化输出]
+   错误: [格式化错误（如果存在）]
+   更新的属性: [格式化属性]
+────────────────────────────────────────
+```
+
+## 使用方法
+
+```typescript
+import { ConsoleExporter } from "@mastra/observability";
+import { ConsoleLogger, LogLevel } from "@mastra/core/logger";
+
+// 使用默认日志记录器（INFO 级别）
+const exporter = new ConsoleExporter();
+
+// 使用自定义日志级别
+const exporter = new ConsoleExporter({
+  logLevel: 'debug'
+});
+
+// 使用自定义日志记录器实例
+const customLogger = new ConsoleLogger({ level: LogLevel.DEBUG });
+const exporterWithLogger = new ConsoleExporter({
+  logger: customLogger
+});
+```
+
+## 实现细节
+
+- 将属性格式化为 JSON，使用 2 空格缩进
+- 计算并显示跨度的持续时间（毫秒）
+- 优雅地处理序列化错误
+- 将未实现的事件类型记录为警告
+- 在事件之间使用 80 字符分隔线
+
+## 另请参阅
+
+### 文档
+
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 完整指南
+- [导出器](/docs/cn/docs/observability/tracing/overview#exporters) - 导出器概念
+
+### 其他导出器
+
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - 存储持久化
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse 集成
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust 集成
+
+### 参考
+
+- [配置](/reference/observability/tracing/configuration) - 配置选项
+- [接口](/reference/observability/tracing/interfaces) - 类型定义

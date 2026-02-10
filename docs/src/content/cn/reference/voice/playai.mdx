@@ -1,0 +1,166 @@
+---
+title: "参考：PlayAI | 语音"
+description: "PlayAI 语音实现的文档，提供语音合成能力。"
+packages:
+  - "@mastra/voice-playai"
+---
+
+# PlayAI
+
+Mastra 中的 PlayAI 语音实现使用 PlayAI 的 API 提供语音合成能力。
+
+## 使用示例
+
+```typescript
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+// 使用默认配置初始化（使用 PLAYAI_API_KEY 和 PLAYAI_USER_ID 环境变量）
+const voice = new PlayAIVoice();
+
+// 使用默认配置初始化
+const voice = new PlayAIVoice({
+  speechModel: {
+    name: "PlayDialog",
+    apiKey: process.env.PLAYAI_API_KEY,
+    userId: process.env.PLAYAI_USER_ID,
+  },
+  speaker: "Angelo", // 默认语音
+});
+
+// 使用特定语音将文本转换为语音
+const audioStream = await voice.speak("Hello, world!", {
+  speaker:
+    "s3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json", // Dexter 语音
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "PlayAIConfig",
+      description: "语音合成功能的配置",
+      isOptional: true,
+      defaultValue: "{ name: 'PlayDialog' }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "用于语音合成的默认语音 ID",
+      isOptional: true,
+      defaultValue: "第一个可用的语音 ID",
+    },
+  ]}
+/>
+
+### PlayAIConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'PlayDialog' | 'Play3.0-mini'",
+      description: "要使用的 PlayAI 模型",
+      isOptional: true,
+      defaultValue: "'PlayDialog'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "PlayAI API 密钥。回退到 PLAYAI_API_KEY 环境变量",
+      isOptional: true,
+    },
+    {
+      name: "userId",
+      type: "string",
+      description:
+        "PlayAI 用户 ID。回退到 PLAYAI_USER_ID 环境变量",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用配置的语音模型和语音将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "要转换为语音的文本。如果提供了流，将先转换为文本。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "覆盖此请求的默认语音",
+      isOptional: true,
+      defaultValue: "构造函数的 speaker 值",
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>`。
+
+### getSpeakers()
+
+返回可用语音选项的数组，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "语音名称",
+      isOptional: false,
+    },
+    {
+      name: "accent",
+      type: "string",
+      description: "语音口音（例如 'US'、'British'、'Australian'）",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "'M' | 'F'",
+      description: "语音性别",
+      isOptional: false,
+    },
+    {
+      name: "age",
+      type: "'Young' | 'Middle' | 'Old'",
+      description: "语音年龄类别",
+      isOptional: false,
+    },
+    {
+      name: "style",
+      type: "'Conversational' | 'Narrative'",
+      description: "语音说话风格",
+      isOptional: false,
+    },
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### listen()
+
+PlayAI 不支持此方法，会抛出错误。PlayAI 不提供语音识别功能。
+
+## 注意事项
+
+- PlayAI 需要 API 密钥和用户 ID 进行身份验证
+- 该服务提供两种模型：'PlayDialog' 和 'Play3.0-mini'
+- 每个语音都有唯一的 S3 清单 ID，在调用 API 时必须使用

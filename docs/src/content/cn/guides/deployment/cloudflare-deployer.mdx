@@ -1,0 +1,91 @@
+---
+title: "CloudflareDeployer | 部署"
+description: "了解如何使用 Mastra CloudflareDeployer 将 Mastra 应用程序部署到 Cloudflare"
+---
+
+# CloudflareDeployer
+
+`CloudflareDeployer` 类处理将独立的 Mastra 应用程序部署到 Cloudflare Workers。它管理配置和部署，并扩展基类 [Deployer](/reference/deployer/) 以提供 Cloudflare 特定功能。
+
+:::warning
+
+Cloudflare Workers 不支持文件系统访问。请从您的 Mastra 配置中移除所有使用文件 URL 的 [LibSQLStore](/reference/storage/libsql)。使用内存存储 (`:memory:`) 或外部存储提供商，如 Turso、PostgreSQL 或 Upstash。
+
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/deployer-cloudflare@latest
+```
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  deployer: new CloudflareDeployer({
+    projectName: "hello-mastra",
+    env: {
+      NODE_ENV: "production",
+    },
+  }),
+});
+```
+
+> 有关所有可用配置选项，请参阅 [CloudflareDeployer](/reference/deployer/cloudflare) API 参考。
+
+## 手动部署
+
+也可以使用 [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) 进行手动部署。安装 Wrangler CLI 后，从项目根目录运行以下命令来部署您的应用程序。
+
+安装 Wrangler CLI 后，使用您的 Cloudflare 登录凭证登录并进行身份验证：
+
+```bash
+npx wrangler login
+```
+
+运行以下命令来构建和部署您的应用程序到 Cloudflare
+
+```bash
+npm run build && wrangler deploy --config .mastra/output/wrangler.json
+```
+
+> 您也可以从项目根目录运行 `wrangler dev --config .mastra/output/wrangler.json` 来在本地测试您的 Mastra 应用程序。
+
+## 构建输出
+
+使用 `CloudflareDeployer` 的 Mastra 应用程序的构建输出包括您项目中的所有代理、工具和工作流，以及在 Cloudflare 上运行应用程序所需的特定于 Mastra 的文件。
+
+```
+.mastra/
+└── output/
+    ├── index.mjs
+    └── wrangler.json
+package.json
+```
+
+`CloudflareDeployer` 自动在 `.mastra/output` 中生成 `wrangler.json` 配置文件，包含以下设置：
+
+```json
+{
+  "name": "hello-mastra",
+  "main": "./index.mjs",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
+  "observability": { "logs": { "enabled": true } },
+  "vars": {
+    "OPENAI_API_KEY": "...",
+    "CLOUDFLARE_API_TOKEN": "..."
+  }
+}
+```
+
+## 后续步骤
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)

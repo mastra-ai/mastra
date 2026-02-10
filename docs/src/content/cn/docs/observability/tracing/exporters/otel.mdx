@@ -1,0 +1,457 @@
+---
+title: "OpenTelemetry 导出器 | 追踪 | 可观测性"
+description: "将追踪发送到任何 OpenTelemetry 兼容的可观测性平台"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/otel-exporter"
+---
+
+# OpenTelemetry 导出器
+
+OpenTelemetry（OTEL）导出器使用标准的 [OpenTelemetry GenAI 语义约定](https://opentelemetry.io/docs/cn/specs/semconv/gen-ai/) 将您的追踪发送到任何 OTEL 兼容的可观测性平台。这确保了与 Datadog、New Relic、SigNoz、MLflow、Dash0、Traceloop、Laminar 等平台的广泛兼容性。
+
+:::info 寻找双向 OTEL 集成？
+
+如果您有现有的 OpenTelemetry 检测，并且希望 Mastra 追踪从活动的 OTEL 跨度继承上下文，请改用 [OpenTelemetry Bridge](/docs/cn/observability/tracing/bridges/otel)。
+
+:::
+
+## 安装
+
+每个提供商都需要特定的协议包。安装基础导出器以及您提供商的协议包：
+
+### 对于 HTTP/Protobuf 提供商（SigNoz、New Relic、Laminar、MLflow）
+
+```bash npm2yarn
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
+```
+
+### 对于 gRPC 提供商（Dash0、Datadog）
+
+```bash npm2yarn
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
+```
+
+### 对于 HTTP/JSON 提供商（Traceloop）
+
+```bash npm2yarn
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
+```
+
+## 环境变量
+
+所有提供商都支持通过环境变量进行零配置设置。设置适当的变量，导出器将自动使用它们：
+
+| 提供商 | 环境变量 |
+| --------- | ------------------------------------------------------------------------------------------ |
+| Dash0 | `DASH0_API_KEY`（必需）、`DASH0_ENDPOINT`（必需）、`DASH0_DATASET`（可选） |
+| SigNoz | `SIGNOZ_API_KEY`（必需）、`SIGNOZ_REGION`（可选）、`SIGNOZ_ENDPOINT`（可选） |
+| New Relic | `NEW_RELIC_LICENSE_KEY`（必需）、`NEW_RELIC_ENDPOINT`（可选） |
+| Traceloop | `TRACELOOP_API_KEY`（必需）、`TRACELOOP_DESTINATION_ID`、`TRACELOOP_ENDPOINT`（可选） |
+| Laminar | `LMNR_PROJECT_API_KEY`（必需）、`LAMINAR_ENDPOINT`（可选） |
+
+## 提供商配置
+
+
+### MLflow
+
+[MLflow](https://mlflow.org/docs/cn/latest/genai/tracing/integrations/listing/mastra) 通过其在 `/v1/traces` 的 OTLP 端点原生支持 Mastra 追踪。使用带有 HTTP/Protobuf 的 `custom` 提供商，并包含实验标头，以便追踪进入正确的 MLflow 实验：
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
+      protocol: "http/protobuf",
+      headers: {
+        "x-mlflow-experiment-id": process.env.MLFLOW_EXPERIMENT_ID,
+      },
+    },
+  },
+})
+```
+
+### Dash0
+
+[Dash0](https://www.dash0.com/) 提供带有自动洞察的实时可观测性。
+
+#### 零配置设置
+
+设置环境变量并使用空配置使用导出器：
+
+```bash title=".env"
+# 必需
+DASH0_API_KEY=your-api-key
+DASH0_ENDPOINT=ingress.us-west-2.aws.dash0.com:4317
+
+# 可选
+DASH0_DATASET=production
+```
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelExporter } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      otel: {
+        serviceName: "my-service",
+        exporters: [new OtelExporter({ provider: { dash0: {} } })],
+      },
+    },
+  }),
+});
+```
+
+#### 显式配置
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelExporter } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      otel: {
+        serviceName: "my-service",
+        exporters: [
+          new OtelExporter({
+            provider: {
+              dash0: {
+                apiKey: process.env.DASH0_API_KEY,
+                endpoint: process.env.DASH0_ENDPOINT, // 例如 'ingress.us-west-2.aws.dash0.com:4317'
+                dataset: "production", // 可选数据集名称
+              },
+            },
+            resourceAttributes: {
+              // 可选的 OpenTelemetry 资源属性用于追踪
+              ["deployment.environment"]: "dev",
+            },
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+:::info
+
+从仪表板获取您的 Dash0 端点。它应该是 `ingress.{region}.aws.dash0.com:4317` 格式。
+
+:::
+
+### SigNoz
+
+[SigNoz](https://signoz.io/) 是一个带有内置追踪支持的开源 APM 替代方案。
+
+#### 零配置设置
+
+```bash title=".env"
+# 必需
+SIGNOZ_API_KEY=your-api-key
+
+# 可选
+SIGNOZ_REGION=us  # 'us' | 'eu' | 'in'
+SIGNOZ_ENDPOINT=https://my-signoz.example.com  # 用于自托管
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { signoz: {} } })
+```
+
+#### 显式配置
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    signoz: {
+      apiKey: process.env.SIGNOZ_API_KEY,
+      region: "us", // 'us' | 'eu' | 'in'
+      // endpoint: 'https://my-signoz.example.com', // 用于自托管
+    },
+  },
+});
+```
+
+### New Relic
+
+[New Relic](https://newrelic.com/) 提供具有 AI 监控功能的综合可观测性。
+
+#### 零配置设置
+
+```bash title=".env"
+# 必需
+NEW_RELIC_LICENSE_KEY=your-license-key
+
+# 可选
+NEW_RELIC_ENDPOINT=https://otlp.eu01.nr-data.net  # 用于欧盟区域
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { newrelic: {} } })
+```
+
+#### 显式配置
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    newrelic: {
+      apiKey: process.env.NEW_RELIC_LICENSE_KEY,
+      // endpoint: 'https://otlp.eu01.nr-data.net', // 用于欧盟区域
+    },
+  },
+});
+```
+
+### Traceloop
+
+[Traceloop](https://www.traceloop.com/) 专注于具有自动提示跟踪的 LLM 可观测性。
+
+#### 零配置设置
+
+```bash title=".env"
+# 必需
+TRACELOOP_API_KEY=your-api-key
+
+# 可选
+TRACELOOP_DESTINATION_ID=my-destination
+TRACELOOP_ENDPOINT=https://custom.traceloop.com
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { traceloop: {} } })
+```
+
+#### 显式配置
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    traceloop: {
+      apiKey: process.env.TRACELOOP_API_KEY,
+      destinationId: "my-destination", // 可选
+    },
+  },
+});
+```
+
+### Laminar
+
+[Laminar](https://laminar.sh/) 提供专门的 LLM 可观测性和分析。
+
+#### 零配置设置
+
+```bash title=".env"
+# 必需
+LMNR_PROJECT_API_KEY=your-api-key
+
+# 可选
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({ provider: { laminar: {} } })
+```
+
+#### 显式配置
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    laminar: {
+      apiKey: process.env.LMNR_PROJECT_API_KEY,
+    },
+  },
+});
+```
+
+:::tip Laminar 原生导出器
+
+对于 Laminar 特定功能，如原生跨度路径、元数据和标签在 Laminar 仪表板中的渲染，请考虑改用专用的 [`@mastra/laminar`](/docs/cn/observability/tracing/exporters/laminar) 导出器。它提供与 Laminar 平台的优化集成。
+
+:::
+
+### Datadog
+
+[Datadog](https://www.datadoghq.com/) APM 提供具有分布式追踪的应用程序性能监控。要通过 OTLP 发送追踪到 Datadog，您需要运行已启用 OTLP 摄入的 Datadog 代理。
+
+Datadog 使用 OTLP 摄入的 gRPC，这需要显式导入和[打包器配置](/reference/configuration#bundlerexternals) 才能正常工作：
+
+```typescript title="src/mastra/index.ts"
+// 显式导入 gRPC 依赖项用于打包器
+import "@grpc/grpc-js";
+import "@opentelemetry/exporter-trace-otlp-grpc";
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelExporter, type ExportProtocol } from "@mastra/otel-exporter";
+
+export const mastra = new Mastra({
+  // 添加 grpc-js 到 externals，以便在运行时处理
+  bundler: {
+    externals: ["@grpc/grpc-js"],
+  },
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          new OtelExporter({
+            provider: {
+              custom: {
+                endpoint:
+                  process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+                  "http://localhost:4317",
+                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
+                  "grpc") as ExportProtocol,
+                headers: {},
+              },
+            },
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+:::info
+
+必须配置 Datadog 代理以启用 OTLP 摄入。将以下内容添加到您的 `datadog.yaml`：
+
+```yaml
+otlp_config:
+  receiver:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+```
+
+本地运行 Datadog 代理时，默认 OTLP 端点是 `http://localhost:4317`。
+
+:::
+
+:::warning
+
+文件顶部的 `@grpc/grpc-js` 和 `@opentelemetry/exporter-trace-otlp-grpc` 的显式导入，以及 [`bundler.externals`](/reference/configuration#bundlerexternals) 配置，对于 gRPC 传输正常工作是必需的。没有这些，您可能会遇到连接问题。
+
+:::
+
+:::tip Datadog 原生导出器
+
+对于 Datadog 特定功能，如自动跨度类型映射、LLM 跨度分类以及无需 gRPC 配置的简化设置，请考虑改用专用的 [`@mastra/datadog`](/docs/cn/observability/tracing/exporters/datadog) 导出器。它提供与 Datadog APM 平台的优化集成。
+
+:::
+
+### 自定义/通用 OTEL 端点
+
+对于其他 OTEL 兼容平台或自定义收集器：
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: "https://your-collector.example.com/v1/traces",
+      protocol: "http/protobuf", // 'http/json' | 'http/protobuf' | 'grpc'
+      headers: {
+        "x-api-key": process.env.API_KEY,
+      },
+    },
+  },
+});
+```
+
+## 配置选项
+
+### 完整配置
+
+```typescript
+new OtelExporter({
+  // 提供商配置（必需）
+  provider: {
+    // 使用以下之一：dash0、signoz、newrelic、traceloop、laminar、custom
+  },
+
+  // 导出配置
+  timeout: 30000, // 导出超时（毫秒）
+  batchSize: 100, // 每批的跨度数量
+
+  // 调试选项
+  logLevel: "info", // 'debug' | 'info' | 'warn' | 'error'
+});
+```
+
+## OpenTelemetry 语义约定
+
+导出器遵循 [OpenTelemetry GenAI 语义约定 v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/cn/gen-ai)，确保与可观测性平台的兼容性：
+
+### 跨度命名
+
+- **LLM 操作**：`chat {model}`
+- **工具执行**：`execute_tool {tool_name}`
+- **智能体运行**：`invoke_agent {agent_id}`
+- **工作流运行**：`invoke_workflow {workflow_id}`
+
+### 关键属性
+
+- `gen_ai.operation.name` - 操作类型（chat、tool.execute 等）
+- `gen_ai.provider.name` - AI 提供商（openai、anthropic 等）
+- `gen_ai.request.model` - 模型标识符
+- `gen_ai.input.messages` - 提供给模型的聊天历史
+- `gen_ai.output.messages` - 模型返回的消息
+- `gen_ai.usage.input_tokens` - 输入代币数量
+- `gen_ai.usage.output_tokens` - 输出代币数量
+- `gen_ai.request.temperature` - 采样温度
+- `gen_ai.response.finish_reasons` - 完成原因
+
+## 协议选择指南
+
+根据您的提供商选择正确的协议包：
+
+| 提供商 | 协议 | 必需包 |
+| --------- | ------------- | ------------------------------------------ |
+| Dash0 | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
+| Datadog | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
+| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
+| Laminar | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Custom | 取决于 | 取决于您的收集器 |
+
+:::warning
+
+确保为您的提供商安装正确的协议包。如果安装了错误的包，导出器会提供有用的错误消息。
+
+:::
+
+## 故障排除
+
+### 缺少依赖项错误
+
+如果您看到类似错误：
+
+```
+HTTP/Protobuf 导出器未安装（signoz 需要）。
+要使用 HTTP/Protobuf 导出，请安装所需的包：
+  npm install @opentelemetry/exporter-trace-otlp-proto
+```
+
+为您的提供商安装建议的包。
+
+### 常见问题
+
+1. **错误的协议包**：验证您为提供商安装了正确的导出器
+2. **无效的端点**：检查端点格式是否符合提供商要求
+3. **身份验证失败**：验证 API 密钥和标头是否正确
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [OpenTelemetry Bridge](/docs/cn/observability/tracing/bridges/otel)
+- [OpenTelemetry GenAI 语义约定 v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/cn/gen-ai)
+- [OTEL 导出器参考](/reference/observability/tracing/exporters/otel)

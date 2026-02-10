@@ -1,0 +1,225 @@
+---
+title: "参考：runEvals | 评估"
+description: "Mastra 中 runEvals 函数的文档，用于批量评估代理和工作流，支持多个评分器并发测试。"
+packages:
+  - "@mastra/core"
+---
+
+# runEvals
+
+`runEvals` 函数支持通过多个评分器并发运行测试用例来批量评估代理和工作流。这对于系统测试、性能分析和 AI 系统验证至关重要。
+
+## 使用示例
+
+```typescript
+import { runEvals } from "@mastra/core/evals";
+import { myAgent } from "./agents/my-agent";
+import { myScorer1, myScorer2 } from "./scorers";
+
+const result = await runEvals({
+  target: myAgent,
+  data: [
+    { input: "什么是机器学习？" },
+    { input: "解释神经网络" },
+    { input: "AI 如何工作？" },
+  ],
+  scorers: [myScorer1, myScorer2],
+  concurrency: 2,
+  onItemComplete: ({ item, targetResult, scorerResults }) => {
+    console.log(`完成: ${item.input}`);
+    console.log(`评分:`, scorerResults);
+  },
+});
+
+console.log(`平均评分:`, result.scores);
+console.log(`处理了 ${result.summary.totalItems} 个项目`);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "target",
+      type: "Agent | Workflow",
+      description: "要评估的代理或工作流。",
+      isOptional: false,
+    },
+    {
+      name: "data",
+      type: "RunEvalsDataItem[]",
+      description:
+        "包含输入数据和可选基准真相的测试用例数组。",
+      isOptional: false,
+    },
+    {
+      name: "scorers",
+      type: "MastraScorer[] | WorkflowScorerConfig",
+      description:
+        "代理的评分器数组，或工作流的配置对象，指定工作流和各步骤的评分器。",
+      isOptional: false,
+    },
+    {
+      name: "concurrency",
+      type: "number",
+      description: "并发运行的测试用例数量。",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "onItemComplete",
+      type: "function",
+      description:
+        "每个测试用例完成后调用的回调函数。接收 item、target result 和 scorer results。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 数据项结构
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | string[] | CoreMessage[] | any",
+      description:
+        "目标的输入数据。代理：消息或字符串。工作流：工作流输入数据。",
+      isOptional: false,
+    },
+    {
+      name: "groundTruth",
+      type: "any",
+      description: "用于评分时比较的预期或参考输出。",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "传递给目标执行时的请求上下文。",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "用于可观测性和调试的追踪上下文。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 工作流评分器配置
+
+对于工作流，可以使用 `WorkflowScorerConfig` 在不同级别指定评分器：
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "MastraScorer[]",
+      description: "用于评估整个工作流输出的评分器数组。",
+      isOptional: true,
+    },
+    {
+      name: "steps",
+      type: "Record<string, MastraScorer[]>",
+      description:
+        "将步骤 ID 映射到评分器数组的对象，用于评估单个步骤输出。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "scores",
+      type: "Record<string, any>",
+      description:
+        "所有测试用例的平均评分，按评分器名称组织。",
+    },
+    {
+      name: "summary",
+      type: "object",
+      description: "实验执行的摘要信息。",
+    },
+    {
+      name: "summary.totalItems",
+      type: "number",
+      description: "处理的测试用例总数。",
+    },
+  ]}
+/>
+
+## 示例
+
+### 代理评估
+
+```typescript
+import { createScorer, runEvals } from "@mastra/core/evals";
+
+const myScorer = createScorer({
+  id: "my-scorer",
+  description: "检查代理响应是否包含基准真相",
+  type: "agent",
+}).generateScore(({ run }) => {
+  const response = run.output[0]?.content || "";
+  const expectedResponse = run.groundTruth;
+  return response.includes(expectedResponse) ? 1 : 0;
+});
+
+const result = await runEvals({
+  target: chatAgent,
+  data: [
+    {
+      input: "什么是 AI？",
+      groundTruth:
+        "AI 是创建智能机器的计算机科学领域。",
+    },
+    {
+      input: "机器学习如何工作？",
+      groundTruth:
+        "机器学习使用算法从数据中学习模式。",
+    },
+  ],
+  scorers: [relevancyScorer],
+  concurrency: 3,
+});
+```
+
+### 工作流评估
+
+```typescript
+const workflowResult = await runEvals({
+  target: myWorkflow,
+  data: [
+    { input: { query: "处理此数据", priority: "high" } },
+    { input: { query: "另一个任务", priority: "low" } },
+  ],
+  scorers: {
+    workflow: [outputQualityScorer],
+    steps: {
+      "validation-step": [validationScorer],
+      "processing-step": [processingScorer],
+    },
+  },
+  onItemComplete: ({ item, targetResult, scorerResults }) => {
+    console.log(`工作流完成: ${item.inputData.query}`);
+    if (scorerResults.workflow) {
+      console.log("工作流评分:", scorerResults.workflow);
+    }
+    if (scorerResults.steps) {
+      console.log("步骤评分:", scorerResults.steps);
+    }
+  },
+});
+```
+
+## 相关内容
+
+- [createScorer()](/reference/evals/create-scorer) - 为实验创建自定义评分器
+- [MastraScorer](/reference/evals/mastra-scorer) - 了解评分器结构和方法
+- [自定义评分器](/docs/cn/docs/evals/custom-scorers) - 构建评估逻辑指南
+- [评分器概述](/docs/cn/docs/evals/overview) - 理解评分器概念

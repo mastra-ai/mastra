@@ -1,0 +1,414 @@
+---
+title: "工作内存 | 内存"
+description: "了解如何在 Mastra 中配置工作内存以存储持久的用户数据、偏好设置。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+  - "@mastra/pg"
+  - "@mastra/upstash"
+---
+
+import YouTube from "@site/src/components/YouTube-player";
+
+# 工作内存
+
+虽然[消息历史记录](/docs/cn/memory/message-history)和[语义回忆](./semantic-recall)帮助智能体记住对话，工作内存允许它们在交互之间保持关于用户的持久信息。
+
+将其视为智能体的主动想法或草稿纸——它们保留的关于用户或任务的关键信息。它类似于一个人在对话中自然会记住某人的名字、偏好或重要细节的方式。
+
+这对于维护始终相关且应始终对智能体可用的持续状态很有用。
+
+工作内存可以在两个不同的作用域中持久化：
+
+- **资源作用域**（默认）：记忆在同一用户的所有对话线程中持久化
+- **线程作用域**：记忆在每个对话线程中是隔离的
+
+**重要：** 在作用域之间切换意味着智能体不会看到另一个作用域的记忆——线程作用域的记忆与资源作用域的记忆完全分开。
+
+## 快速入门
+
+以下是设置具有工作内存的智能体的最小示例：
+
+```typescript {11-15}
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+// 创建启用了工作内存的智能体
+const agent = new Agent({
+  id: "personal-assistant",
+  name: "PersonalAssistant",
+  instructions: "You are a helpful personal assistant.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+});
+```
+
+## 工作原理
+
+工作内存是一块标记语言文本块，智能体可以随时间更新它以存储持续相关信息：
+
+<YouTube id="UMy_JHLf1n8" />
+
+## 记忆持久化作用域
+
+工作内存可以在两个不同的作用域中运行，允许您选择记忆如何在对话之间持久化：
+
+### 资源作用域内存（默认）
+
+默认情况下，工作内存对同一用户（resourceId）的所有对话线程持久化，启用持久化用户记忆：
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: "resource", // 记忆在所有用户线程中持久化
+      template: `# 用户资料
+- **姓名**:
+- **位置**:
+- **兴趣**:
+- **偏好**:
+- **长期目标**:
+`,
+    },
+  },
+});
+```
+
+**用例：**
+
+- 记住用户偏好的个人助理
+- 维护客户上下文客户服务机器人
+- 跟踪学习进度的教育应用程序
+
+### 与智能体一起使用
+
+使用资源作用域内存时，请确保在内存选项中传递 `resource` 参数：
+
+```typescript
+// 资源作用域内存需要资源
+const response = await agent.generate("Hello!", {
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456", // 不同线程中的同一用户
+  },
+});
+```
+
+### 线程作用域内存
+
+线程作用域内存将工作内存隔离到各个对话线程中。每个线程维护自己的独立内存：
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: "thread", // 记忆在每个线程中是隔离的
+      template: `# 用户资料
+- **姓名**:
+- **兴趣**:
+- **当前目标**:
+`,
+    },
+  },
+});
+```
+
+**用例：**
+
+- 关于不同主题的单独对话
+- 临时或会话特定的信息
+- 工作流中每个线程需要工作内存但线程是短暂的且彼此无关的情况
+
+## 存储适配器支持
+
+资源作用域工作内存需要支持 `mastra_resources` 表的特定存储适配器：
+
+### 支持的存储适配器
+
+- **libSQL** (`@mastra/libsql`)
+- **PostgreSQL** (`@mastra/pg`)
+- **Upstash** (`@mastra/upstash`)
+- **MongoDB** (`@mastra/mongodb`)
+
+## 自定义模板
+
+模板指导智能体在工作内存中跟踪和更新什么信息。如果未提供，将使用默认模板，但您通常需要定义适合您的智能体特定用例的自定义模板，以确保它记住最相关的信息。
+
+以下是自定义模板的示例。在这个示例中，智能体会在用户发送包含任何这些信息的消息后立即存储用户的姓名、位置、时区等：
+
+```typescript {5-28}
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `
+# 用户资料
+
+## 个人信息
+
+- 姓名:
+- 位置:
+- 时区:
+
+## 偏好
+
+- 沟通风格: [例如，正式、随意]
+- 项目目标:
+- 关键截止日期:
+  - [截止日期 1]: [日期]
+  - [截止日期 2]: [日期]
+
+## 会话状态
+
+- 上次讨论的任务:
+- 开放问题:
+  - [问题 1]
+  - [问题 2]
+`,
+    },
+  },
+});
+```
+
+## 设计有效的模板
+
+结构良好的模板使信息易于智能体解析和更新。将模板视为您希望助手保持更新的简短表格。
+
+- **简短、集中的标签。** 避免段落或非常长的标题。保持标签简短（例如 `## 个人信息` 或 `- 姓名:`），以便更新易于阅读且不太可能被截断。
+- **使用一致的命名大小写。** 不一致的大小写（`时区:` vs `timezone:`）会导致混乱的更新。坚持使用标题大小写或小写作为标题和项目符号标签。
+- **保持占位符文本简单。** 使用提示，例如 `[例如，正式]` 或 `[日期]` 以帮助大型语言模型填写正确的位置。
+- **非常长的值请缩写。** 如果您只需要简短形式，请包含指导，例如 `- 姓名: [名字或昵称]` 或 `- 地址（简短）:` 而不是完整的法律文本。
+- **在 `instructions` 中提及更新规则。** 您可以直接在智能体的 `instructions` 字段中指示如何以及何时填写或清除模板的某些部分。
+
+### 替代模板样式
+
+如果您只需要几个项目，请使用较短的单个块：
+
+```typescript
+const basicMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `用户事实:\n- 姓名:\n- 喜欢的颜色:\n- 当前主题:`,
+    },
+  },
+});
+```
+
+如果您更喜欢叙事风格，也可以将关键事实存储在简短的段落格式中：
+
+```typescript
+const paragraphMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `重要细节:\n\n保留包含用户重要事实（姓名、主要目标、当前任务）的简短段落。`,
+    },
+  },
+});
+```
+
+## 结构化工作内存
+
+工作内存也可以使用结构化模式定义而不是标记语言模板。这允许您指定应该跟踪的确切字段和类型，使用 [Zod](https://zod.dev/) 模式。当使用模式时，智能体将看到并更新符合您的模式的工作内存作为 JSON 对象。
+
+**重要：** 您必须指定 `template` 或 `schema`，但不能同时指定两者。
+
+### 示例：基于模式的工作内存
+
+```typescript
+import { z } from "zod";
+import { Memory } from "@mastra/memory";
+
+const userProfileSchema = z.object({
+  name: z.string().optional(),
+  location: z.string().optional(),
+  timezone: z.string().optional(),
+  preferences: z
+    .object({
+      communicationStyle: z.string().optional(),
+      projectGoal: z.string().optional(),
+      deadlines: z.array(z.string()).optional(),
+    })
+    .optional(),
+});
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      schema: userProfileSchema,
+      // template: ... (不要设置)
+    },
+  },
+});
+```
+
+提供模式时，智能体会将工作内存作为 JSON 对象接收。例如：
+
+```json
+{
+  "name": "Sam",
+  "location": "Berlin",
+  "timezone": "CET",
+  "preferences": {
+    "communicationStyle": "正式",
+    "projectGoal": "启动 MVP",
+    "deadlines": ["2025-07-01"]
+  }
+}
+```
+
+### 基于模式的内存合并语义
+
+基于模式的工作内存使用**合并语义**，这意味着智能体只需要包含它想要添加或更新的字段。现有字段会自动保留。
+
+- **对象字段深度合并：** 仅更新提供的字段；其他保持不变
+- **将字段设置为 `null` 以删除它：** 这明确地从内存中移除该字段
+- **数组完全替换：** 提供数组字段时，它会替换现有数组（数组不会逐元素合并）
+
+## 在模板和模式之间选择
+
+- 如果您希望智能体将记忆维护为自由格式文本块（例如用户资料或草稿纸），请使用**模板**（标记语言）。模板使用**替换语义**——智能体必须在每次更新时提供完整的记忆内容。
+- 如果您需要可以通过 JSON 进行验证和程序化访问的结构化、类型安全数据，请使用**模式**。模式使用**合并语义**——智能体只提供要更新的字段，现有字段会被保留。
+- 一次只能激活一种模式：设置 `template` 和 `schema` 不受支持。
+
+## 示例：多步骤保留
+
+以下是 `用户资料` 模板如何在简短用户对话中更新的简化视图：
+
+```nohighlight
+# 用户资料
+
+## 个人信息
+
+- 姓名:
+- 位置:
+- 时区:
+
+--- 用户说 "我的名字是 **Sam**，我来自 **Berlin**" 之后 ---
+
+# 用户资料
+- 姓名: Sam
+- 位置: Berlin
+- 时区:
+
+--- 用户补充 "对了，我通常在 **CET**" 之后 ---
+
+# 用户资料
+- 姓名: Sam
+- 位置: Berlin
+- 时区: CET
+```
+
+智能体现在可以在后续响应中引用 `Sam` 或 `Berlin`，而无需再次请求这些信息，因为它已存储在工作内存中。
+
+如果您的智能体没有在您期望时正确更新工作内存，您可以在智能体的 `instructions` 设置中添加关于**如何**和**何时**使用此模板的系统说明。
+
+## 设置初始工作内存
+
+虽然智能体通常通过 `updateWorkingMemory` 工具更新工作内存，您也可以在创建或更新线程时以编程方式设置初始工作内存。这对于注入您希望智能体可用的用户数据（如姓名、偏好或其他信息）很有用，而无需在每次请求中传递它。
+
+### 通过线程元数据设置工作内存
+
+创建线程时，您可以通过元数据的 `workingMemory` 键提供初始工作内存：
+
+```typescript title="src/app/medical-consultation.ts"
+// 创建带有初始工作内存的线程
+const thread = await memory.createThread({
+  threadId: "thread-123",
+  resourceId: "user-456",
+  title: "Medical Consultation",
+  metadata: {
+    workingMemory: `# 患者资料
+- 姓名: John Doe
+- 血型: O+
+- 过敏史: 青霉素
+- 当前用药: 无
+- 病史: 高血压（已控制）
+`,
+  },
+});
+
+// 智能体现在可以在所有消息中访问这些信息
+await agent.generate("我的血型是什么？", {
+  memory: {
+    thread: thread.id,
+    resource: "user-456",
+  },
+});
+// 回答："您的血型是 O+。"
+```
+
+### 以编程方式更新工作内存
+
+您也可以更新现有线程的工作内存：
+
+```typescript title="src/app/medical-consultation.ts"
+// 更新线程元数据以添加/修改工作内存
+await memory.updateThread({
+  id: "thread-123",
+  title: thread.title,
+  metadata: {
+    ...thread.metadata,
+    workingMemory: `# 患者资料
+- 姓名: John Doe
+- 血型: O+
+- 过敏史: 青霉素、布洛芬  // 已更新
+- 当前用药: 赖诺普利 10mg 每日  // 已添加
+- 病史: 高血压（已控制）
+`,
+  },
+});
+```
+
+### 直接内存更新
+
+或者，直接使用 `updateWorkingMemory` 方法：
+
+```typescript title="src/app/medical-consultation.ts"
+await memory.updateWorkingMemory({
+  threadId: "thread-123",
+  resourceId: "user-456", // 资源作用域内存需要
+  workingMemory: "更新的内存内容...",
+});
+```
+
+## 只读工作内存
+
+在某些情况下，您可能希望智能体能够访问工作内存数据而不具备修改它的能力。这对于以下情况很有用：
+
+- **路由智能体**需要上下文但不应更新用户资料
+- **多智能体系统中的子智能体**应该引用但不拥有记忆
+
+要启用只读模式，请在内存选项中设置 `readOnly: true`：
+
+```typescript
+const response = await agent.generate("你了解我什么？", {
+  memory: {
+    thread: "conversation-123",
+    resource: "user-alice-456",
+    options: {
+      readOnly: true, // 提供工作内存但无法更新
+    },
+  },
+});
+```
+
+## 示例
+
+- [带模板的工作内存](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template)
+- [带模式的工作内存](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema)
+- [每个资源的工作内存](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example) - 显示资源作用域内存持久化的完整示例

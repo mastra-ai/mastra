@@ -1,0 +1,356 @@
+---
+title: "参考：观察内存 | 内存"
+description: "Mastra 中观察内存的 API 参考——一种三层记忆系统，使用观察者和反思智能体在对话之间维护长期记忆。"
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# 观察内存
+
+**新增于：** `@mastra/memory@1.1.0`
+
+观察内存 (OM) 是 Mastra 的长上下文智能体记忆系统。两个后台智能体——观察对话并创建观察的**观察者**，以及通过组合相关项目、反思整体模式并在可能时压缩来重构观察的**反思者**——维护一个观察日志，随着其增长，它会取代原始消息历史。
+
+## 使用方法
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "你是一个有用的助手。",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: true,
+    },
+  }),
+});
+```
+
+## 配置
+
+`observationalMemory` 选项接受 `true`、`false` 或配置对象。
+
+设置 `observationalMemory: true` 使用所有默认值启用它。设置 `observationalMemory: false` 或省略它会禁用它。
+
+<PropertiesTable
+  content={[
+    {
+      name: "enabled",
+      type: "boolean",
+      description:
+        "启用或禁用观察内存。从配置对象中省略时默认为 `true`。只有 `enabled: false` 会显式禁用它。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "model",
+      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+      description:
+        "观察者和反思智能体的模型。同时设置两者的模型。不能与 `observation.model` 或 `reflection.model` 一起使用——如果两者都设置，将抛出错误。",
+      isOptional: true,
+      defaultValue: "'google/gemini-2.5-flash'",
+    },
+    {
+      name: "scope",
+      type: "'resource' | 'thread'",
+      description:
+        "观察的记忆范围。`'thread'` 每个线程保留观察。`'resource'` 在资源的所有线程之间共享观察，实现跨对话记忆。",
+      isOptional: true,
+      defaultValue: "'thread'",
+    },
+    {
+      name: "shareTokenBudget",
+      type: "boolean",
+      description:
+        "在消息和观察之间共享令牌预算。启用时，总预算为 `observation.messageTokens + reflection.observationTokens`。当观察较小时，消息可以使用更多空间，反之亦然。这通过灵活分配最大化上下文使用。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "observation",
+      type: "ObservationalMemoryObservationConfig",
+      description:
+        "观察步骤的配置。控制观察者智能体何时运行及其行为。",
+      isOptional: true,
+    },
+    {
+      name: "reflection",
+      type: "ObservationalMemoryReflectionConfig",
+      description:
+        "反思步骤的配置。控制反思者智能体何时运行及其行为。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 观察配置
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+      description:
+        "观察者智能体的模型。如果同时提供了顶层 `model`，则不能设置此选项。",
+      isOptional: true,
+      defaultValue: "'google/gemini-2.5-flash'",
+    },
+    {
+      name: "messageTokens",
+      type: "number",
+      description:
+        "触发观察的未观察消息令牌数。当未观察消息令牌超过此阈值时，将调用观察者智能体。",
+      isOptional: true,
+      defaultValue: "30000",
+    },
+    {
+      name: "maxTokensPerBatch",
+      type: "number",
+      description:
+        "在资源范围内观察多个线程时每批的最大令牌数。线程被分块成此大小的批次并并行处理。值越低意味着更多并行性但更多 API 调用。",
+      isOptional: true,
+      defaultValue: "10000",
+    },
+    {
+      name: "modelSettings",
+      type: "ObservationalMemoryModelSettings",
+      description:
+        "观察者智能体的模型设置。",
+      isOptional: true,
+      defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
+    },
+  ]}
+/>
+
+### 反思配置
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
+      description:
+        "反思者智能体的模型。如果同时提供了顶层 `model`，则不能设置此选项。",
+      isOptional: true,
+      defaultValue: "'google/gemini-2.5-flash'",
+    },
+    {
+      name: "observationTokens",
+      type: "number",
+      description:
+        "触发反思的观察令牌数。当观察令牌超过此阈值时，将调用反思者智能体来压缩它们。",
+      isOptional: true,
+      defaultValue: "40000",
+    },
+    {
+      name: "modelSettings",
+      type: "ObservationalMemoryModelSettings",
+      description:
+        "反思者智能体的模型设置。",
+      isOptional: true,
+      defaultValue: "{ temperature: 0, maxOutputTokens: 100_000 }",
+    },
+  ]}
+/>
+
+### 模型设置
+
+<PropertiesTable
+  content={[
+    {
+      name: "temperature",
+      type: "number",
+      description:
+        "生成的温度。较低的值产生更一致的输出。",
+      isOptional: true,
+      defaultValue: "0.3",
+    },
+    {
+      name: "maxOutputTokens",
+      type: "number",
+      description:
+        "最大输出令牌数。设置高以防止观察被截断。",
+      isOptional: true,
+      defaultValue: "100000",
+    },
+  ]}
+/>
+
+## 示例
+
+### 资源范围和自定义阈值
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "你是一个有用的助手。",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        scope: "resource",
+        observation: {
+          messageTokens: 20_000,
+        },
+        reflection: {
+          observationTokens: 60_000,
+        },
+      },
+    },
+  }),
+});
+```
+
+### 共享令牌预算
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "你是一个有用的助手。",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        shareTokenBudget: true,
+        observation: {
+          messageTokens: 20_000,
+        },
+        reflection: {
+          observationTokens: 80_000,
+        },
+      },
+    },
+  }),
+});
+```
+
+当启用 `shareTokenBudget` 时，总预算为 `observation.messageTokens + reflection.observationTokens`（本例中为 100k）。如果观察只使用 30k 令牌，消息可以扩展到使用最多 70k。如果消息较短，观察在触发反思之前有更多空间。
+
+### 自定义模型
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "你是一个有用的助手。",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        model: "openai/gpt-4o-mini",
+      },
+    },
+  }),
+});
+```
+
+### 每个智能体使用不同模型
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "你是一个有用的助手。",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          model: "google/gemini-2.5-flash",
+        },
+        reflection: {
+          model: "openai/gpt-4o-mini",
+        },
+      },
+    },
+  }),
+});
+```
+
+## 独立使用
+
+大多数用户应该使用上面的 `Memory` 类。直接使用 `ObservationalMemory` 主要适用于基准测试、实验，或当您需要与其他处理器（如[护栏](/docs/cn/docs/agents/guardrails)）一起控制处理器排序时。
+
+```typescript title="src/mastra/agents/agent.ts"
+import { ObservationalMemory } from "@mastra/memory/processors";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: "my-storage",
+  url: "file:./memory.db",
+});
+
+const om = new ObservationalMemory({
+  storage: storage.stores.memory,
+  model: "google/gemini-2.5-flash",
+  scope: "resource",
+  observation: {
+    messageTokens: 20_000,
+  },
+  reflection: {
+    observationTokens: 60_000,
+  },
+});
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "你是一个有用的助手。",
+  model: "openai/gpt-5-mini",
+  inputProcessors: [om],
+  outputProcessors: [om],
+});
+```
+
+### 独立配置
+
+独立的 `ObservationalMemory` 类接受与上面 `observationalMemory` 配置对象相同的所有选项，加上以下内容：
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description:
+        "用于持久化观察的存储适配器。必须是 MemoryStorage 实例（来自 `MastraStorage.stores.memory`）。",
+      isOptional: false,
+    },
+    {
+      name: "onDebugEvent",
+      type: "(event: ObservationDebugEvent) => void",
+      description:
+        "观察事件的调试回调。每当发生观察相关事件时调用。适用于调试和理解观察流程。",
+      isOptional: true,
+    },
+    {
+      name: "obscureThreadIds",
+      type: "boolean",
+      description:
+        "启用时，线程 ID 在包含在观察上下文中之前会被哈希处理。这可以防止 LLM 识别线程标识符中的模式。通过 Memory 类使用资源范围时自动启用。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### 相关内容
+
+- [观察内存](/docs/cn/docs/memory/observational-memory)
+- [内存概述](/docs/cn/docs/memory/overview)
+- [Memory 类](/reference/memory/memory-class)
+- [内存处理器](/docs/cn/docs/memory/memory-processors)
+- [处理器](/docs/cn/docs/agents/processors)

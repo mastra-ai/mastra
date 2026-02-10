@@ -1,0 +1,150 @@
+---
+title: "MastraAuthSupabase 类 | 认证"
+description: "MastraAuthSupabase 类的文档，该类使用 Supabase 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-supabase"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MastraAuthSupabase 类
+
+`MastraAuthSupabase` 类使用 Supabase 身份验证为 Mastra 提供身份验证。它使用 Supabase 的身份验证系统验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 前置条件
+
+此示例使用 Supabase 身份验证。请确保将您的 Supabase 凭据添加到 `.env` 文件中，并确保您的 Supabase 项目已正确配置。
+
+```env title=".env"
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+```
+
+:::note
+
+检查您的 Supabase 行级安全 (RLS) 设置以确保正确的数据访问控制。
+
+:::
+
+## 安装
+
+在使用 `MastraAuthSupabase` 类之前，您必须安装 `@mastra/auth-supabase` 包。
+
+```bash
+npm install @mastra/auth-supabase@latest
+```
+
+## 使用示例
+
+```typescript {2,6-9} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthSupabase({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY,
+    }),
+  },
+});
+```
+
+:::info
+
+默认的 `authorizeUser` 方法检查 `public` 模式中 `users` 表的 `isAdmin` 列。要自定义用户授权，请在构建提供程序时提供自定义 `authorizeUser` 函数。
+
+访问 [MastraAuthSupabase](/reference/auth/supabase) 了解所有可用的配置选项。
+
+:::
+
+## 客户端设置
+
+使用 Supabase 身份验证时，您需要从客户端的 Supabase 检索访问令牌，并将其传递给您的 Mastra 请求。
+
+### 检索访问令牌
+
+使用 Supabase 客户端对用户进行身份验证并检索他们的访问令牌：
+
+```typescript title="lib/auth.ts"
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient("<supabase-url>", "<supabase-key>");
+
+const authTokenResponse = await supabase.auth.signInWithPassword({
+  email: "<user's email>",
+  password: "<user's password>",
+});
+
+const accessToken = authTokenResponse.data?.session?.access_token;
+```
+
+:::note
+
+有关其他身份验证方法（如 OAuth、魔法链接等），请参阅 [Supabase 文档](https://supabase.com/docs/cn/guides/auth)。
+
+:::
+
+## 配置 `MastraClient`
+
+启用 `auth` 后，所有使用 `MastraClient` 发出的请求都必须在 `Authorization` 头中包含有效的 Supabase 访问令牌：
+
+```typescript {6} title="lib/mastra/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "https://<mastra-api-url>",
+  headers: {
+    Authorization: `Bearer ${accessToken}`,
+  },
+});
+```
+
+:::info
+
+访问令牌必须在 Authorization 头中以 `Bearer` 为前缀。
+
+访问 [Mastra Client SDK](/docs/cn/server/mastra-client) 了解更多配置选项。
+
+:::
+
+### 发出身份验证请求
+
+一旦 `MastraClient` 配置了 Supabase 访问令牌，您就可以发送身份验证请求：
+
+<Tabs>
+    <TabItem value="react" label="React">
+
+      ```tsx title="src/components/test-agent.tsx"
+      import { mastraClient } from "../../lib/mastra-client";
+
+      export const TestAgent = () => {
+        async function handleClick() {
+          const agent = mastraClient.getAgent("weatherAgent");
+
+          const response = await agent.generate("What's the weather like in New York");
+
+          console.log(response);
+        }
+
+        return <button onClick={handleClick}>Test Agent</button>;
+      };
+      ```
+
+  </TabItem>
+  <TabItem value="curl" label="cURL">
+
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-supabase-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+
+  </TabItem>
+</Tabs>

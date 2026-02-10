@@ -1,0 +1,119 @@
+---
+title: "MiniMax (minimax.io) | 模型 | Mastra"
+description: "在 Mastra 中使用 MiniMax (minimax.io) 模型。共 2 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/minimax.svg" alt="MiniMax (minimax.io) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />MiniMax (minimax.io)
+
+通过 Mastra 的模型路由器访问 2 个 MiniMax (minimax.io) 模型。身份验证使用 `MINIMAX_API_KEY` 环境变量自动处理。
+
+在 [MiniMax (minimax.io) 文档](https://platform.minimax.io/docs/cn/docs/guides/quickstart) 中了解更多信息。
+
+```bash title=".env"
+MINIMAX_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "minimax/MiniMax-M2"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [MiniMax (minimax.io) 文档](https://platform.minimax.io/docs/cn/docs/guides/quickstart) 了解详情。
+
+:::
+
+## 模型
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "minimax/MiniMax-M2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 128000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "minimax/MiniMax-M2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.minimax.io/anthropic/v1",
+    id: "minimax/MiniMax-M2",
+    apiKey: process.env.MINIMAX_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "minimax/MiniMax-M2.1"
+      : "minimax/MiniMax-M2";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/anthropic) for more details.
+
+```bash npm2yarn
+npm install @ai-sdk/anthropic
+```
+
+For detailed provider-specific documentation, see the [AI SDK MiniMax (minimax.io) provider docs](https://ai-sdk.dev/providers/community-providers/minimax).

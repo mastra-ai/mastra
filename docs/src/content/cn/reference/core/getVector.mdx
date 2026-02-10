@@ -1,0 +1,47 @@
+---
+title: "参考文档：Mastra.getVector() | 核心"
+description: "Mastra 中 `Mastra.getVector()` 方法的文档，用于按名称检索向量存储。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getVector()
+
+`.getVector()` 方法用于按名称检索向量存储。该方法接受一个字符串参数作为向量存储的名称。
+
+## 使用示例
+
+```typescript
+mastra.getVector("testVectorStore");
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "TVectorName extends keyof TVectors",
+      description:
+        "要检索的向量存储名称。必须是存在于 Mastra 配置中的有效向量存储名称。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "vector",
+      type: "TVectors[TVectorName]",
+      description:
+        "具有指定名称的向量存储实例。如果找不到向量存储，则抛出错误。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [向量存储概述](/docs/cn/docs/rag/vector-databases)
+- [RAG 概述](/docs/cn/docs/rag/overview)

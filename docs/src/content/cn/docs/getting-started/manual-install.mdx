@@ -1,0 +1,219 @@
+---
+title: "手动安装 | 入门"
+description: "不使用 create mastra CLI 手动设置 Mastra 项目。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 手动安装
+
+:::info
+
+使用本指南手动逐步构建独立的 Mastra 服务器。在大多数情况下，遵循[入门指南](/docs/cn/getting-started/start) 会更快，它使用 [`mastra create`](/reference/cli/create-mastra) 命令实现相同的结果。对于现有项目，您也可以使用 [`mastra init`](/reference/cli/mastra#mastra-init)。
+
+:::
+
+如果您更喜欢不使用我们的自动 CLI 工具，可以通过遵循以下指南自行设置项目。
+
+<Steps>
+
+<StepItem>
+
+创建新项目并更改目录：
+
+```bash
+mkdir my-first-agent && cd my-first-agent
+```
+
+生成一个新的 `package.json` 文件：
+
+```bash npm2yarn
+npm init
+```
+
+安装以下依赖项：
+
+```bash npm2yarn
+npm install -D typescript @types/node mastra@latest
+npm install @mastra/core@latest zod@^4
+```
+
+将 `dev` 和 `build` 脚本添加到您的 `package.json` 文件：
+
+```json title="package.json" /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
+{
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build"
+  }
+}
+```
+
+</StepItem>
+
+<StepItem>
+
+创建 `tsconfig.json` 文件：
+
+```bash
+touch tsconfig.json
+```
+
+添加以下配置：
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
+}
+```
+
+:::info
+
+Mastra 需要现代的 `module` 和 `moduleResolution` 设置。使用 `CommonJS` 或 `node` 会导致解析错误。
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+创建 `.env` 文件：
+
+```bash
+touch .env
+```
+
+添加您的 API 密钥：
+
+```bash title=".env"
+GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
+```
+
+:::note
+
+本指南使用 Google Gemini，但您可以使用任何支持的[模型提供商](/models)，包括 OpenAI、Anthropic 等。
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+创建 `weather-tool.ts` 文件：
+
+```bash
+mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
+```
+
+添加以下代码：
+
+```ts title="src/mastra/tools/weather-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "获取某个地点的当前天气",
+  inputSchema: z.object({
+    location: z.string().describe("城市名称"),
+  }),
+  outputSchema: z.object({
+    output: z.string(),
+  }),
+  execute: async () => {
+    return {
+      output: "天气晴朗",
+    };
+  },
+});
+```
+
+:::info
+
+我们在此简化了 `weatherTool` 示例。您可以在[给智能体一个工具](/docs/cn/agents/using-tools) 下查看完整的天气工具。
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+创建 `weather-agent.ts` 文件：
+
+```bash
+mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
+```
+
+添加以下代码：
+
+```ts title="src/mastra/agents/weather-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather-tool";
+
+export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "天气智能体",
+  instructions: `
+      您是一位提供准确天气信息的乐于助人的天气助手。
+
+      您的主要功能是帮助用户获取特定地点的天气详细信息。回复时：
+      - 如果没有提供地点，请始终询问
+      - 如果地点名称不是英文，请翻译
+      - 如果给出包含多个部分的地点（例如"纽约，纽约"），请使用最相关的部分（例如"纽约"）
+      - 包含相关细节，如湿度、风况和降水
+      - 保持回复简洁但信息丰富
+
+      使用 weatherTool 获取当前的天气数据。
+`,
+  model: "google/gemini-2.5-pro",
+  tools: { weatherTool },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+创建 Mastra 入口点并注册您的智能体：
+
+```bash
+touch src/mastra/index.ts
+```
+
+添加以下代码：
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { weatherAgent } from "./agents/weather-agent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+您现在可以启动 [Studio](/docs/cn/getting-started/studio) 并测试您的智能体。
+
+```bash npm2yarn
+npm run dev
+```
+
+</StepItem>
+
+</Steps>

@@ -1,0 +1,229 @@
+---
+title: "搜索与索引 | 工作区"
+description: "为工作区内容建立索引以进行 BM25 关键字搜索、向量语义搜索或混合模式搜索。"
+packages:
+  - "@mastra/core"
+---
+
+# 搜索与索引
+
+**新增于：** `@mastra/core@1.1.0`
+
+搜索使代理能够在索引的工作区文件中查找相关内容。当代理需要回答问题或查找信息时，它可以搜索索引的内容，而不是读取每个文件。
+
+## 工作原理
+
+工作区搜索有两个阶段：索引和查询。
+
+### 索引
+
+内容必须先被索引才能被搜索。当你索引文档时：
+
+- 内容被分词（拆分为可搜索的术语）
+- 对于 BM25：计算词频和文档统计
+- 对于向量：使用你的嵌入函数对内容进行嵌入并存储在向量存储中
+
+每个索引的文档都有：
+- **id** - 唯一标识符（通常是文件路径）
+- **content** - 文本内容
+- **metadata** - 与文档一起存储的可选键值数据
+
+### 查询
+
+当你搜索时：
+
+1. 使用与索引相同的分词/嵌入处理查询
+2. 根据文档与查询的相关性进行评分
+3. 按评分对结果进行排名并返回匹配的内容
+
+工作区支持三种搜索模式：BM25 关键字搜索、向量语义搜索，以及结合两者的混合搜索。
+
+## BM25 关键字搜索
+
+BM25 根据词频和文档长度对文档进行评分。它适用于精确匹配和特定术语。
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  // highlight-next-line
+  bm25: true,
+});
+```
+
+对于自定义 BM25 参数（`k1` 是词频饱和度，`b` 是文档长度归一化）：
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: {
+    k1: 1.5,
+    b: 0.75,
+  },
+});
+```
+
+## 向量搜索
+
+向量搜索使用嵌入来查找语义相似的内容。它需要向量存储和嵌入函数。
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { PineconeVector } from '@mastra/pinecone';
+import { embed } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  vectorStore: new PineconeVector({
+    apiKey: process.env.PINECONE_API_KEY,
+    index: 'workspace-index',
+  }),
+  embedder: async (text: string) => {
+    const { embedding } = await embed({
+      model: openai.embedding('text-embedding-3-small'),
+      value: text,
+    });
+    return embedding;
+  },
+});
+```
+
+## 混合搜索
+
+配置 BM25 和向量搜索以启用混合模式，将关键字匹配与语义理解相结合。
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  vectorStore: pineconeVector,
+  embedder: embedderFn,
+});
+```
+
+## 索引内容
+
+### 手动索引
+
+使用 `workspace.index()` 以编程方式向搜索索引添加内容。文件路径成为文档 ID。你也可以为每个文档传递元数据。
+
+```typescript
+// 基本索引
+await workspace.index('/docs/cn/guide.md', 'Content of the guide...');
+
+// 带有用于过滤或上下文的元数据的索引
+await workspace.index('/docs/cn/api.md', apiDocContent, {
+  metadata: {
+    category: 'api',
+    version: '2.0',
+  },
+});
+```
+
+手动索引在以下情况下有用：
+- 你正在索引不是来自文件的内容（例如，数据库记录、API 响应）
+- 你想在索引前对内容进行预处理或分块
+- 你需要向文档添加自定义元数据
+
+### 自动索引
+
+配置 `autoIndexPaths` 以在工作区初始化时自动索引文件。每个路径指定要递归索引的目录。
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  autoIndexPaths: ['/docs', '/support/faq'],
+});
+
+await workspace.init();
+```
+
+当调用 `init()` 时，指定目录中的所有文件都会被读取并建立搜索索引。文件路径成为文档 ID。
+
+:::note
+
+路径必须是目录，而不是 glob 模式。使用 `/docs` 递归索引 docs 目录中的所有文件。不支持像 `**/*.md` 这样的 glob 模式。
+
+:::
+
+## 搜索
+
+使用 `workspace.search()` 查找相关内容。结果按相关性评分排名。
+
+```typescript
+const results = await workspace.search('password reset');
+
+for (const result of results) {
+  console.log(`${result.id}: ${result.score}`);
+  console.log(result.content);
+}
+```
+
+### 搜索选项
+
+你可以使用选项自定义搜索行为：
+
+```typescript
+const results = await workspace.search('authentication flow', {
+  topK: 10,
+  mode: 'hybrid',
+  minScore: 0.5,
+  vectorWeight: 0.5,
+});
+```
+
+| 选项 | 描述 |
+|--------|-------------|
+| `topK` | 返回的最大结果数量。默认值：5 |
+| `mode` | 搜索模式：`'bm25'`、`'vector'` 或 `'hybrid'`。默认为基于配置的最佳可用模式。 |
+| `minScore` | 过滤掉低于此分数阈值的结果（0-1）。 |
+| `vectorWeight` | 在混合模式下，向量评分与 BM25 的权重。0 = 全部 BM25，1 = 全部向量，0.5 = 相等。 |
+
+### 搜索结果
+
+每个结果包含：
+
+```typescript
+interface SearchResult {
+  id: string; // 文档 ID（通常是文件路径）
+  content: string; // 匹配的内容
+  score: number; // 相关性评分 (0-1)
+  lineRange?: { // 找到匹配的行
+    start: number;
+    end: number;
+  };
+  metadata?: Record<string, unknown>; // 与文档一起存储的元数据
+  scoreDetails?: { // 分数细分（仅混合模式）
+    vector?: number;
+    bm25?: number;
+  };
+}
+```
+
+**理解分数：**
+
+- 分数范围从 0 到 1，其中 1 是完美匹配
+- BM25 分数根据结果集中的最佳匹配进行归一化
+- 向量分数表示查询和文档嵌入之间的余弦相似度
+- 在混合模式下，使用 `vectorWeight` 参数组合分数
+
+### 每种模式的使用场景
+
+| 模式 | 适用于 | 示例查询 |
+|------|----------|-----------------|
+| `bm25` | 精确术语、技术查询、代码 | "useState hook"、"404 error"、"config.yaml" |
+| `vector` | 概念查询、自然语言 | "how to handle user authentication"、"best practices for error handling" |
+| `hybrid` | 一般搜索、未知查询类型 | 大多数代理用例 |
+
+## 代理工具
+
+当你在工作区上配置搜索时，代理会收到用于搜索和索引内容的工具。详情请参阅[工作区类参考](/reference/workspace/workspace-class#search-tools)。
+
+## 相关内容
+
+- [工作区概述](/docs/cn/workspace/overview)
+- [RAG 概述](/docs/cn/rag/overview)
+- [工作区类参考](/reference/workspace/workspace-class)

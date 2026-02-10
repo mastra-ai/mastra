@@ -1,0 +1,362 @@
+---
+title: "Client SDK | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移客户端 SDK 的更改。"
+---
+
+# Client SDK
+
+客户端 SDK 的更改与服务器端 API 更新保持一致，包括重命名的实用程序、更新分页和类型命名约定。
+
+## 变更
+
+### `messages` 现在与 `@mastra/core/agent` 语法相同
+
+`messages` 参数现在是 `generate`、`stream` 和 `network` 方法调用的第一个参数，类似于 `@mastra/core/agent` 中的 NodeJS 版本。
+
+要迁移，请将 `messages` 移至方法调用的第一个参数：
+
+**使用 `@mastra/client-js`：**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+-  await agent.generate({
+-    messages: [...]
++  await agent.generate([...], {
+  });
+
+-  await agent.stream({
+-    messages: [...]
++  await agent.stream([...], {
+  });
+
+-  await agent.network({
+-    messages: [...]
++  await agent.network([...], {
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@beta v1/client-msg-function-args .
+```
+
+:::
+
+### `threadId` 和 `resourceId` 改为 `memory` 选项
+
+`threadId` 和 `resourceId` 选项已从代理方法调用中移除。改用 `memory` 选项，它提供了更干净的内存配置 API。这适用于 `@mastra/client-js` 和 `@mastra/react` 包。
+
+要迁移，请将 `threadId` 和 `resourceId` 移入 `memory` 选项：
+
+**使用 `@mastra/client-js`：**
+
+```diff
+  const agent = client.getAgent('my-agent');
+
+  await agent.generate([...], {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+
++  await agent.stream([...], {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+**使用 `@mastra/react` `useChat` 钩子：**
+
+`useChat` 钩子在您提供 `threadId` 时会在内部传递内存选项。如果使用钩子的内置内存处理，您的组件代码不需要更改。但是，如果您手动将选项传递给 `sendMessage`，请相应更新它们：
+
+```diff
+  const { sendMessage } = useChat({ agentId: 'my-agent' });
+
+  await sendMessage({
+    message: 'Hello',
+    mode: 'stream',
+-   threadId: 'thread-123',
++   threadId: 'thread-123', // 仍然有效 - 内部转换为内存选项
+  });
+```
+
+`memory` 选项还支持在创建新线程时传递线程元数据：
+
+```typescript
+await agent.generate([...], {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
+```
+
+### 客户端 SDK 类型从 `Get*` 改为 `List*`
+
+客户端 SDK 类型已从 `Get*` 重命名为 `List*` 模式。此更改使类型名称与方法命名约定保持一致。
+
+要迁移，请更新类型导入以使用新的命名模式。
+
+```diff
+- import type {
+-   GetWorkflowRunsParams,
+-   GetWorkflowRunsResponse,
+-   GetMemoryThreadParams,
+- } from '@mastra/client-js';
++ import type {
++   ListWorkflowRunsParams,
++   ListWorkflowRunsResponse,
++   ListMemoryThreadsParams,
++ } from '@mastra/client-js';
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/client-sdk-types .
+```
+
+:::
+
+### 分页参数从 `offset/limit` 改为 `page/perPage`
+
+所有使用 `offset/limit` 的客户端 SDK 方法现在都使用 `page/perPage`。此更改提供了更直观的分页模型，与 Web 分页模式保持一致。
+
+要迁移，更新所有客户端 SDK 方法调用中的分页参数。示例：
+
+```diff
+  client.memory.listMessages({
+    threadId: 'thread-123',
+-   offset: 0,
+-   limit: 20,
++   page: 0,
++   perPage: 20,
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/client-offset-limit .
+```
+
+:::
+
+### `getMemoryThread` 参数结构
+
+`getMemoryThread` 方法参数结构已更新。此更改在内存方法之间提供了更一致的 API。
+
+要迁移，使用新的参数结构更新方法调用。查看更新的 API 文档以了解具体更改。
+
+```diff
+- const thread = await client.getMemoryThread(threadId, agentId);
++ const thread = await client.getMemoryThread({ threadId, agentId });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/client-get-memory-thread .
+```
+
+:::
+
+### 工作流运行的统一 `runById` API
+
+`runById()` 方法现在返回一个统一的 `WorkflowState` 对象，其中包含元数据（runId、workflowName、resourceId、createdAt、updatedAt）和处理后的执行状态（status、result、error、payload、steps）。这统一了之前分离的 `runById()` 和 `runExecutionResult()` 方法。
+
+该方法还接受带有可选 `fields` 和 `withNestedWorkflows` 参数的选项对象以进行性能优化。
+
+```diff
+  const workflow = client.getWorkflow('my-workflow');
+
+- // 以前：runById 返回带有快照的原始 WorkflowRun
+- const run = await workflow.runById(runId, requestContext);
+- // 单独地：runExecutionResult 返回处理后的执行状态
+- const result = await workflow.runExecutionResult(runId);
+
++ // 现在：单个方法返回统一的 WorkflowState
++ const run = await workflow.runById(runId, {
++   requestContext,  // 可选的请求上下文
++   fields: ['status', 'result'],  // 可选：仅请求特定字段
++   withNestedWorkflows: false,  // 可选：跳过嵌套工作流数据以提高性能
++ });
++ // 返回：{ runId, workflowName, resourceId, createdAt, updatedAt, status, result, error, payload, steps }
+```
+
+## 移除
+
+### `runExecutionResult` 方法和 `GetWorkflowRunExecutionResultResponse` 类型
+
+`runExecutionResult()` 方法和 `GetWorkflowRunExecutionResultResponse` 类型已从 `@mastra/client-js` 中移除。`/execution-result` API 端点也已移除。
+
+要迁移，请改用 `runById()`，它现在返回相同的统一 `WorkflowState`，其中包含元数据和处理后的执行状态。
+
+```diff
+- import type { GetWorkflowRunExecutionResultResponse } from '@mastra/client-js';
+-
+- const workflow = client.getWorkflow('my-workflow');
+- const result = await workflow.runExecutionResult(runId);
+
++ const workflow = client.getWorkflow('my-workflow');
++ const result = await workflow.runById(runId);
++ // 或使用选项进行性能优化：
++ const result = await workflow.runById(runId, {
++   fields: ['status', 'result'],  // 仅获取特定字段
++   withNestedWorkflows: false,     // 跳过昂贵的嵌套工作流数据
++ });
+```
+
+### `toAISdkFormat` 函数
+
+`toAISdkFormat()` 函数已从 `@mastra/ai-sdk` 中移除。此更改为流式转换实用程序提供了更清晰的命名。
+
+要迁移，请改用 `toAISdkStream()`。
+
+```diff
+- import { toAISdkFormat } from '@mastra/ai-sdk';
+- const stream = toAISdkFormat(agentStream, { from: 'agent' });
++ import { toAISdkStream } from '@mastra/ai-sdk';
++ const stream = toAISdkStream(agentStream, { from: 'agent' });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/client-to-ai-sdk-format .
+```
+
+:::
+
+### 网络内存方法
+
+网络内存方法已从 `@mastra/client-js` 中移除。`NetworkMemoryThread` 类和所有网络内存相关方法不再可用。此更改通过删除专用网络内存功能来简化内存 API。
+
+要迁移，请使用常规内存 API 而不是网络内存。
+
+```diff
+- import { MastraClient } from '@mastra/client-js';
+-
+- const client = new MastraClient({ baseUrl: '...' });
+- const networkThread = client.networkMemory.getThread('thread-id');
+- const networkThread = client.memory.networkThread('thread-id', 'network-id');
+- await networkThread.get();
+- await networkThread.getMessages();
+
++ // 改用常规内存线程 API
++ const client = new MastraClient({ baseUrl: '...' });
++ const thread = client.memory.getThread('thread-id');
++ await thread.get();
++ const messages = await thread.listMessages();
+```
+
+### Watch 相关类型
+
+Watch 相关类型已从 `@mastra/client-js` 中移除。这包括 `WorkflowWatchResult`、`WatchEvent` 和相关类型。此更改反映了移除 watch API 以支持流式传输。
+
+要迁移，请改用工作流流式 API 而不是 watch。
+
+```diff
+- import type { WorkflowWatchResult, WatchEvent } from '@mastra/client-js';
+-
+- const workflow = client.getWorkflow('my-workflow');
+- const run = await workflow.createRun();
+- await run.watch((event: WatchEvent) => {
+-   console.log('Event:', event);
+- });
+
++ const workflow = client.getWorkflow('my-workflow');
++ const run = await workflow.createRun();
++ const stream = await run.stream({ inputData: { ... } });
++ for await (const chunk of stream) {
++   console.log('Event:', chunk);
++ }
+```
+
+### 不能直接在 workflow 实例上调用运行相关方法
+
+运行相关方法不能直接在 workflow 实例上调用。您需要先使用 `createRun()` 方法创建一个运行实例。
+
+```diff
+- const result = await workflow.start({ runId: '123', inputData: { ... } });
++ const run = await workflow.createRun({ runId: '123' });
++ const result = await run.start({ inputData: { ... } });
+```
+
+```diff
+- const result = await workflow.stream({ runId: '123', inputData: { ... } });
++ const run = await workflow.createRun({ runId: '123' });
++ const stream = await run.stream({ inputData: { ... } });
+```
+
+### `streamVNext`、`resumeStreamVNext` 和 `observeStreamVNext` 方法
+
+实验性的 `streamVNext()`、`resumeStreamVNext()` 和 `observeStreamVNext()` 方法已被移除。这些方法现在是具有更新事件结构和返回类型的标准实现。
+
+要迁移，请改用标准的 `stream()`、`resumeStream()` 和 `observeStream()` 方法。
+
+```diff
++ const run = await workflow.createRun({ runId: '123' });
+- const stream = await run.streamVNext({ inputData: { ... } });
++ const stream = await run.stream({ inputData: { ... } });
+```
+
+### 已弃用的流式端点
+
+某些流式端点已被弃用并将移除。`/api/agents/:agentId/stream/vnext` 端点返回 410 Gone，`/api/agents/:agentId/stream/ui` 已被弃用。此更改统一了标准流式端点。
+
+要迁移，请使用标准流式端点或 `@mastra/ai-sdk` 进行 UI 消息转换。
+
+```diff
+- const response = await fetch('/api/agents/my-agent/stream/vnext', {
+-   method: 'POST',
+-   body: JSON.stringify({ messages: [...] }),
+- });
+
++ const response = await fetch('/api/agents/my-agent/stream', {
++   method: 'POST',
++   body: JSON.stringify({ messages: [...] }),
++ });
++
++ // 或使用 @mastra/ai-sdk 进行 UI 消息转换
+```
+
+### 网络内存 API 端点
+
+网络内存 API 端点已被移除，包括 `/api/memory/network/*`。此更改简化了内存 API 表面。
+
+要迁移，请使用常规内存 API 端点。
+
+```diff
+- const networkThread = await fetch('/api/memory/network/threads/thread-123');
++ const thread = await fetch('/api/memory/threads/thread-123');
+```
+
+### 评估相关客户端 SDK 类型
+
+多个评估相关类型已从客户端 SDK 中移除，包括 `GetEvalsByAgentIdResponse`、`GetTelemetryResponse` 和 `GetTelemetryParams`。此更改反映了移除旧版评估功能。
+
+要迁移，请使用新的评分器 API 而不是旧版评估。

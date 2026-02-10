@@ -1,0 +1,317 @@
+---
+title: "参考文档：ElasticSearch 向量存储 | 向量"
+description: "Mastra 中 ElasticSearchVector 类的文档，该类使用 ElasticSearch 的 dense_vector 字段类型和 k-NN 搜索功能提供向量搜索。"
+packages:
+  - "@mastra/elasticsearch"
+---
+
+# ElasticSearch 向量存储
+
+ElasticSearchVector 类使用 [ElasticSearch](https://www.elastic.co/elasticsearch/) 提供向量搜索，利用其 `dense_vector` 字段类型和 k-NN 搜索功能。它是 `@mastra/elasticsearch` 包的一部分。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/elasticsearch@latest
+```
+
+## 使用方法
+
+```typescript
+import { ElasticSearchVector } from "@mastra/elasticsearch";
+
+const store = new ElasticSearchVector({
+  id: "elasticsearch-vector",
+  url: process.env.ELASTICSEARCH_URL,
+});
+
+// 创建索引
+await store.createIndex({
+  indexName: "my-collection",
+  dimension: 1536,
+});
+
+// 添加带元数据的向量
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [
+  { text: "first document", category: "A" },
+  { text: "second document", category: "B" }
+];
+await store.upsert({
+  indexName: "my-collection",
+  vectors,
+  metadata,
+});
+
+// 查询相似向量
+const results = await store.query({
+  indexName: "my-collection",
+  queryVector: [0.1, 0.2, ...],
+  topK: 10,
+  filter: { category: "A" },
+});
+```
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此向量存储实例的唯一标识符",
+    },
+    {
+      name: "url",
+      type: "string",
+      description: "ElasticSearch 连接 URL（例如：'http://localhost:9200'）",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+创建具有指定配置的新索引。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "用于相似性搜索的距离度量",
+    },
+  ]}
+/>
+
+### upsert()
+
+在索引中添加或更新向量及其元数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入到的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+搜索相似向量，可选择进行元数据过滤。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要搜索的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量数据",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+获取索引信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+删除索引及其所有数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+列出所有向量索引。
+
+返回：`Promise<string[]>`
+
+### updateVector()
+
+通过 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter` 之一，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新的向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "包含向量和/或元数据的更新数据",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "新的向量数据",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "新的元数据",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+通过 ID 删除单个向量。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+通过 ID 或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter` 之一，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除的向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

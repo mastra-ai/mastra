@@ -1,0 +1,196 @@
+---
+title: "参考：答案相似度评分器 | 评估"
+description: "Mastra 中答案相似度评分器的文档，用于将代理输出与标准答案进行比较以进行 CI/CD 测试。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 答案相似度评分器
+
+`createAnswerSimilarityScorer()` 函数创建一个评分器，用于评估代理输出与标准答案的相似程度。此评分器专为 CI/CD 测试场景设计，当您有预期答案并希望确保长期一致性时使用。
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description:
+        "用于评估输出与标准答案之间语义相似性的语言模型。",
+    },
+    {
+      name: "options",
+      type: "AnswerSimilarityOptions",
+      required: false,
+      description: "评分器的配置选项。",
+    },
+  ]}
+/>
+
+### AnswerSimilarityOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "requireGroundTruth",
+      type: "boolean",
+      required: false,
+      defaultValue: "true",
+      description:
+        "是否要求提供标准答案进行评估。如果为 false，缺少标准答案将返回分数 0。",
+    },
+    {
+      name: "semanticThreshold",
+      type: "number",
+      required: false,
+      defaultValue: "0.8",
+      description: "语义匹配与精确匹配的权重 (0-1)。",
+    },
+    {
+      name: "exactMatchBonus",
+      type: "number",
+      required: false,
+      defaultValue: "0.2",
+      description: "精确匹配的额外分数奖励 (0-1)。",
+    },
+    {
+      name: "missingPenalty",
+      type: "number",
+      required: false,
+      defaultValue: "0.15",
+      description: "每个缺失的标准答案关键概念的惩罚。",
+    },
+    {
+      name: "contradictionPenalty",
+      type: "number",
+      required: false,
+      defaultValue: "1.0",
+      description:
+        "矛盾信息的惩罚。高分值确保错误答案获得接近 0 的分数。",
+    },
+    {
+      name: "extraInfoPenalty",
+      type: "number",
+      required: false,
+      defaultValue: "0.05",
+      description:
+        "对标准答案中未包含的额外信息的轻微惩罚（上限为 0.2）。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "分数缩放因子。",
+    },
+  ]}
+/>
+
+此函数返回 MastraScorer 类的实例。`.run()` 方法接受与其他评分器相同的输入（请参阅 [MastraScorer 参考](./mastra-scorer)），但**要求**在运行对象中提供标准答案。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "0-1 之间的相似度分数（或 0-scale 如果使用自定义缩放）。分数越高表示与标准答案的相似性越好。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "分数的人类可读解释，包含可操作的反馈。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "从输出和标准答案中提取的语义单元。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "对匹配、矛盾和额外信息的详细分析。",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description: "用于语义单元提取的提示词。",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description: "用于相似性分析的提示词。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "用于生成解释的提示词。",
+    },
+  ]}
+/>
+
+## 评分详情
+
+评分器使用多步骤过程：
+
+1. **提取**：将输出和标准答案分解为语义单元
+2. **分析**：比较单元并识别匹配、矛盾和差距
+3. **评分**：计算加权相似性，对矛盾进行惩罚
+4. **理由**：生成人类可读的解释
+
+分数计算：`max(0, base_score - contradiction_penalty - missing_penalty - extra_info_penalty) × scale`
+
+## 示例
+
+评估不同场景下代理响应与标准答案的相似度：
+
+```typescript title="src/example-answer-similarity.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createAnswerSimilarityScorer({ model: "openai/gpt-4o" });
+
+const result = await runEvals({
+  data: [
+    {
+      input: "2+2 等于多少？",
+      groundTruth: "4",
+    },
+    {
+      input: "法国的首都是哪里？",
+      groundTruth: "法国的首都是巴黎",
+    },
+    {
+      input: "三原色是什么？",
+      groundTruth: "三原色是红色、蓝色和黄色",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。

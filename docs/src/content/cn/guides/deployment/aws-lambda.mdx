@@ -1,0 +1,291 @@
+---
+title: "AWS Lambda | 部署"
+description: "使用 Docker 容器和 AWS Lambda Web Adapter 将您的 Mastra 应用程序部署到 AWS Lambda。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# AWS Lambda
+
+使用 Docker 容器和 AWS Lambda Web Adapter 将您的 Mastra 应用程序部署到 AWS Lambda。这种方法允许您将 Mastra 服务器作为容器化的 Lambda 函数运行，并支持自动扩展。
+
+:::note
+
+本指南假设您的 Mastra 应用程序已使用默认的 `npx create-mastra@latest` 命令创建。
+
+有关如何创建新的 Mastra 应用程序的更多信息，请参阅我们的[快速入门指南](/guides/getting-started/quickstart)
+
+:::
+
+## 前置条件
+
+在部署到 AWS Lambda 之前，请确保您已具备：
+
+- 已安装并配置 [AWS CLI](https://aws.amazon.com/cli/)
+- 已安装并运行 [Docker](https://www.docker.com/)
+- 具有 Lambda、ECR 和 IAM 适当权限的 AWS 账户
+- 已配置适当内存存储的 Mastra 应用程序
+
+## 内存配置
+
+:::warning
+AWS Lambda 使用临时文件系统，这意味着写入磁盘的任何文件都是短期的，可能会丢失。请从您的 Mastra 配置中移除所有使用文件 URL 的 [LibSQLStore](/reference/storage/libsql)。使用内存存储 (`:memory:`) 或外部存储提供商，如 Turso、PostgreSQL 或 Upstash。
+:::
+
+Lambda 函数对文件系统存储有限制。请配置您的 Mastra 应用程序使用内存存储或外部存储提供商：
+
+### 选项 1：内存存储（最简单）
+
+```typescript title="src/mastra/index.ts"
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: ":memory:", // 内存存储
+});
+```
+
+### 选项 2：外部存储提供商
+
+要在 Lambda 调用之间保持持久内存，请使用外部存储提供商，如带有 Turso 的 `LibSQLStore` 或其他存储提供商（如 `PostgreStore`）：
+
+```typescript title="src/mastra/index.ts"
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: "libsql://your-database.turso.io", // 外部 Turso 数据库
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+```
+
+有关更多内存配置选项，请参阅[内存文档](/docs/cn/docs/memory/overview)。
+
+## 创建 Dockerfile
+
+在您的 Mastra 项目根目录中创建 `Dockerfile`：
+
+```dockerfile title="Dockerfile"
+FROM node:22-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY src ./src
+RUN npx mastra build
+RUN apk add --no-cache gcompat
+
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt/extensions/lambda-adapter
+RUN addgroup -g 1001 -S nodejs && \
+  adduser -S mastra -u 1001 && \
+  chown -R mastra:nodejs /app
+
+USER mastra
+
+ENV PORT=8080
+ENV NODE_ENV=production
+ENV READINESS_CHECK_PATH="/api"
+
+EXPOSE 8080
+
+CMD ["node", ".mastra/output/index.mjs"]
+```
+
+## 构建和部署
+
+<Steps>
+
+<StepItem>
+
+为部署过程设置环境变量：
+
+```bash
+export PROJECT_NAME="your-mastra-app"
+export AWS_REGION="us-east-1"
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+
+</StepItem>
+
+<StepItem>
+
+在本地构建 Docker 镜像：
+
+```bash
+docker build -t "$PROJECT_NAME" .
+```
+
+</StepItem>
+
+<StepItem>
+
+创建 Amazon ECR 仓库来存储您的 Docker 镜像：
+
+```bash
+aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
+```
+
+</StepItem>
+
+<StepItem>
+
+登录到 Amazon ECR：
+
+```bash
+aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+```
+
+</StepItem>
+
+<StepItem>
+
+为您的镜像添加 ECR 仓库 URI 标签并推送：
+
+```bash
+docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+```
+
+</StepItem>
+
+<StepItem>
+
+使用 AWS 控制台创建 Lambda 函数：
+
+1. 导航到 [AWS Lambda 控制台](https://console.aws.amazon.com/lambda/)
+2. 点击 **创建函数**
+3. 选择 **容器镜像**
+4. 配置函数：
+   - **函数名称**：您的函数名称（例如，`mastra-app`）
+   - **容器镜像 URI**：点击 **浏览镜像** 并选择您的 ECR 仓库，然后选择 `latest` 标签
+   - **架构**：选择与您的 Docker 构建匹配的架构（通常为 `x86_64`）
+
+</StepItem>
+
+<StepItem>
+
+为外部访问启用函数 URL：
+
+1. 在 Lambda 函数配置中，转到 **配置** > **函数 URL**
+2. 点击 **创建函数 URL**
+3. 将 **身份验证类型** 设置为 **无**（用于公共访问）
+4. 配置 **CORS** 设置：
+   - **允许来源**：`*`（在生产环境中限制为您的域名）
+   - **允许标头**：`content-type`（与 Cloudfront/API Gateway 等服务一起使用时还需要 `x-amzn-request-context`）
+   - **允许方法**：`*`（在生产环境中进行审核并限制）
+5. 点击 **保存**
+
+</StepItem>
+
+<StepItem>
+
+在 Lambda 函数配置中添加环境变量：
+
+1. 转至 **配置** > **环境变量**
+2. 为您的 Mastra 应用程序添加必需的变量：
+   - `OPENAI_API_KEY`：您的 OpenAI API key（如果使用 OpenAI）
+   - `ANTHROPIC_API_KEY`：您的 Anthropic API key（如果使用 Anthropic）
+   - `TURSO_AUTH_TOKEN`：您的 Turso 身份验证令牌（如果使用 libSQL 和 Turso）
+   - 根据需要添加其他提供商特定的 API key
+
+</StepItem>
+
+<StepItem>
+
+配置函数的内存和超时设置：
+
+1. 转至 **配置** > **常规配置**
+2. 设置以下推荐值：
+   - **内存**：512 MB（根据您的应用程序需求调整）
+   - **超时**：30 秒（根据您的应用程序需求调整）
+   - **临时存储**：512 MB（可选，用于临时文件）
+
+</StepItem>
+
+</Steps>
+
+## 测试部署
+
+部署后，测试您的 Lambda 函数：
+
+1. 从 Lambda 控制台复制 **函数 URL**
+2. 在浏览器中访问该 URL 以查看 Mastra 的服务器主页
+3. 使用生成的 API 端点测试您的代理和工作流
+
+有关可用 API 端点的更多信息，请参阅[服务器文档](/docs/cn/docs/deployment/mastra-server)。
+
+## 连接客户端
+
+更新您的客户端应用程序以使用 Lambda 函数 URL：
+
+```typescript title="src/client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://your-function-url.lambda-url.us-east-1.on.aws",
+});
+```
+
+## 故障排除
+
+### 函数超时错误
+
+如果您的 Lambda 函数超时：
+
+- 在 **配置** > **常规配置** 中增加超时值
+- 优化您的 Mastra 应用程序以加快冷启动速度
+- 考虑使用预配置并发以获得一致的性能
+
+### 内存问题
+
+如果您遇到与内存相关的错误：
+
+- 在 **配置** > **常规配置** 中增加内存分配
+- 在 CloudWatch 日志中监控内存使用情况
+- 优化您应用程序的内存使用
+
+### CORS 问题
+
+如果您在访问端点时遇到 CORS 错误（但主页正常）：
+
+- 验证 CORS 标头是否在您的 Mastra 服务器配置中正确设置
+- 检查 Lambda 函数 URL CORS 配置
+- 确保您的客户端正在向正确的 URL 发送请求
+
+### 容器镜像问题
+
+如果 Lambda 函数无法启动：
+
+- 验证 Docker 镜像在本地能否成功构建
+- 检查 Dockerfile 中的 `CMD` 指令是否正确
+- 查看 CloudWatch 日志中的容器启动错误
+- 确保 Lambda Web Adapter 已正确安装在容器中
+
+## 生产环境注意事项
+
+对于生产环境部署：
+
+### 安全性
+
+- 将 CORS 来源限制为受信任的域
+- 使用 AWS IAM 角色安全访问其他 AWS 服务
+- 将敏感环境变量存储在 AWS Secrets Manager 或 Parameter Store 中
+
+### 监控
+
+- 为您的 Lambda 函数启用 CloudWatch 监控
+- 为错误和性能指标设置 CloudWatch 警报
+- 使用 AWS X-Ray 进行分布式跟踪
+
+### 扩展
+
+- 配置预配置并发以获得可预测的性能
+- 监控并发执行并根据需要调整限制
+- 对于更复杂的路由需求，考虑使用 Application Load Balancer
+
+## 后续步骤
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)
+- [AWS Lambda 文档](https://docs.aws.amazon.com/lambda/)
+- [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)

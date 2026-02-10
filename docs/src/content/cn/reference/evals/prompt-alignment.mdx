@@ -1,0 +1,193 @@
+---
+title: "参考：提示词对齐评分器 | 评估"
+description: "Mastra 中提示词对齐评分器的文档。使用多维分析评估代理响应对用户提示词意图、要求、完整性和适当性的对齐程度。"
+packages:
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 提示词对齐评分器
+
+`createPromptAlignmentScorerLLM()` 函数创建一个评分器，用于评估代理响应对用户提示词在多个维度上的对齐程度：意图理解、要求履行、响应完整性和格式适当性。
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description:
+        "用于评估提示词-响应对齐程度的语言模型",
+      required: true,
+    },
+    {
+      name: "options",
+      type: "PromptAlignmentOptions",
+      description: "评分器的配置选项",
+      required: false,
+      children: [
+        {
+          name: "scale",
+          type: "number",
+          description: "乘以最终分数的缩放因子（默认：1）",
+          required: false,
+        },
+        {
+          name: "evaluationMode",
+          type: "'user' | 'system' | 'both'",
+          description:
+            "评估模式 - 'user' 仅评估用户提示词对齐，'system' 仅评估系统合规性，'both' 使用加权评分评估两者（默认：'both'）",
+          required: false,
+        },
+      ],
+    },
+  ]}
+/>
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description:
+        "0 到 scale（默认 0-1）之间的多维对齐分数",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "对提示词对齐评估的人类可读解释，包含详细分解",
+    },
+  ]}
+/>
+
+`.run()` 返回以下形状的结果：
+
+```typescript
+{
+  runId: string,
+  score: number,
+  reason: string,
+  analyzeStepResult: {
+    intentAlignment: {
+      score: number,
+      primaryIntent: string,
+      isAddressed: boolean,
+      reasoning: string
+    },
+    requirementsFulfillment: {
+      requirements: Array<{
+        requirement: string,
+        isFulfilled: boolean,
+        reasoning: string
+      }>,
+      overallScore: number
+    },
+    completeness: {
+      score: number,
+      missingElements: string[],
+      reasoning: string
+    },
+    responseAppropriateness: {
+      score: number,
+      formatAlignment: boolean,
+      toneAlignment: boolean,
+      reasoning: string
+    },
+    overallAssessment: string
+  }
+}
+```
+
+## 评分详情
+
+### 评分器配置
+
+您可以通过调整 scale 参数和评估模式来自定义提示词对齐评分器以适合您的评分需求。
+
+```typescript
+const scorer = createPromptAlignmentScorerLLM({
+  model: "openai/gpt-5.1",
+  options: {
+    scale: 10, // 从 0-10 而不是 0-1 计分
+    evaluationMode: "both", // 'user'、'system' 或 'both'（默认）
+  },
+});
+```
+
+### 多维分析
+
+提示词对齐评估跨四个关键维度评估响应，加权评分根据评估模式自适应：
+
+#### 用户模式 ('user')
+
+仅评估用户提示词的对齐：
+
+1. **意图对齐 (40% 权重)** - 响应是否解决用户的核心请求
+2. **要求履行 (30% 权重)** - 是否满足所有用户要求
+3. **完整性 (20% 权重)** - 响应是否对用户需求全面
+4. **响应适当性 (10% 权重)** - 格式和语气是否符合用户期望
+
+#### 系统模式 ('system')
+
+仅评估对系统指南的合规性：
+
+1. **意图对齐 (35% 权重)** - 响应是否遵循系统行为指南
+2. **要求履行 (35% 权重)** - 是否尊重所有系统约束
+3. **完整性 (15% 权重)** - 响应是否遵守所有系统规则
+4. **响应适当性 (15% 权重)** - 格式和语气是否符合系统规范
+
+#### 两者模式 ('both' - 默认)
+
+结合用户和系统对齐的评估：
+
+- **用户对齐**：最终分数的 70%（使用用户模式权重）
+- **系统合规性**：最终分数的 30%（使用系统模式权重）
+- 提供用户满意度和系统 adherence 的平衡评估
+
+### 评分公式
+
+**用户模式：**
+
+```
+加权分数 = (intent_score × 0.4) + (requirements_score × 0.3) +
+                 (completeness_score × 0.2) + (appropriateness_score × 0.1)
+最终分数 = 加权分数 × scale
+```
+
+**系统模式：**
+
+```
+加权分数 = (intent_score × 0.35) + (requirements_score × 0.35) +
+                 (completeness_score × 0.15) + (appropriateness_score × 0.15)
+最终分数 = 加权分数 × scale
+```
+
+**两者模式（默认）：**
+
+```
+用户分数 =（使用用户权重的用户维度）
+系统分数 =（使用系统权重的系统维度）
+加权分数 = (用户分数 × 0.7) + (系统分数 × 0.3)
+最终分数 = 加权分数 × scale
+```
+
+### 分数解释
+
+- **0.9-1.0** = 所有维度的优秀对齐
+- **0.8-0.9** = 非常好的对齐，有小缺口
+- **0.7-0.8** = 良好对齐但遗漏一些要求或完整性
+- **0.6-0.7** = 中等对齐，有明显缺口
+- **0.4-0.6** = 差对齐，有显著问题
+- **0.0-0.4** = 非常差的对齐，响应不能有效处理提示词
+
+## 相关内容
+
+- [答案相关性评分器](/reference/evals/answer-relevancy) - 评估查询-响应的相关性
+- [忠实度评分器](/reference/evals/faithfulness) - 衡量上下文 groundedness
+- [工具调用准确性评分器](/reference/evals/tool-call-accuracy) - 评估工具选择
+- [自定义评分器](/docs/cn/docs/evals/custom-scorers) - 创建您自己的评估指标

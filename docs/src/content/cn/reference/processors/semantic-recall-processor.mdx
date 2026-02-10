@@ -1,0 +1,202 @@
+---
+title: "参考：语义召回处理器 | 处理器"
+description: "Mastra 中 SemanticRecall 处理器的文档，用于使用向量嵌入在对话历史中进行语义搜索。"
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+---
+
+# SemanticRecall
+
+`SemanticRecall` 是一个**混合处理器**，用于使用向量嵌入在对话历史中启用语义搜索。在输入时，它执行语义搜索以找到相关的历史消息。在输出时，它为新消息创建嵌入以启用未来的语义检索。
+
+## 使用示例
+
+```typescript
+import { SemanticRecall } from "@mastra/core/processors";
+import { openai } from "@ai-sdk/openai";
+
+const processor = new SemanticRecall({
+  storage: memoryStorage,
+  vector: vectorStore,
+  embedder: openai.embedding("text-embedding-3-small"),
+  topK: 5,
+  messageRange: 2,
+  scope: "resource",
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "SemanticRecallOptions",
+      description: "语义召回处理器的配置选项",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description: "用于检索消息的存储实例",
+      isOptional: false,
+    },
+    {
+      name: "vector",
+      type: "MastraVector",
+      description: "用于语义搜索的向量存储",
+      isOptional: false,
+    },
+    {
+      name: "embedder",
+      type: "MastraEmbeddingModel<string>",
+      description: "用于生成查询嵌入的嵌入模型",
+      isOptional: false,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "要检索的最相似消息数量",
+      isOptional: true,
+      default: "4",
+    },
+    {
+      name: "messageRange",
+      type: "number | { before: number; after: number }",
+      description: "每个匹配项要包含的前后上下文消息数量。可以是单个数字（两者相同）或包含单独值的对象",
+      isOptional: true,
+      default: "1",
+    },
+    {
+      name: "scope",
+      type: "'thread' | 'resource'",
+      description: "语义搜索的范围。'thread' 仅在当前线程内搜索。'resource' 跨资源的所有线程搜索",
+      isOptional: true,
+      default: "'resource'",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "最小相似度分数阈值（0-1）。低于此阈值的消息会被过滤掉",
+      isOptional: true,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description: "向量存储的索引名称。如果未提供，根据嵌入模型自动生成",
+      isOptional: true,
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "用于结构化日志记录的可选日志记录器实例",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'semantic-recall'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "处理器显示名称，设置为 'SemanticRecall'",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "对历史消息执行语义搜索并将相关上下文添加到消息列表",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraDBMessage[]; messageList?: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "为新消息创建嵌入以启用未来的语义搜索",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/semantic-memory-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { SemanticRecall, MessageHistory } from "@mastra/core/processors";
+import { PostgresStorage } from "@mastra/pg";
+import { PgVector } from "@mastra/pg";
+import { openai } from "@ai-sdk/openai";
+
+const storage = new PostgresStorage({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+const vector = new PgVector({
+  id: 'pg-vector',
+  connectionString: process.env.DATABASE_URL,
+});
+
+const semanticRecall = new SemanticRecall({
+  storage,
+  vector,
+  embedder: openai.embedding("text-embedding-3-small"),
+  topK: 5,
+  messageRange: { before: 2, after: 1 },
+  scope: "resource",
+  threshold: 0.7,
+});
+
+export const agent = new Agent({
+  name: "semantic-memory-agent",
+  instructions: "你是一个具有语义记忆召回功能的有用助手",
+  model: "openai:gpt-4o",
+  inputProcessors: [
+    semanticRecall,
+    new MessageHistory({ storage, lastMessages: 50 }),
+  ],
+  outputProcessors: [
+    semanticRecall,
+    new MessageHistory({ storage }),
+  ],
+});
+```
+
+## 行为
+
+### 输入处理
+1. 从最后一条用户消息中提取用户查询
+2. 为查询生成嵌入
+3. 执行向量搜索以找到语义相似的消息
+4. 检索匹配的消息及其周围上下文（基于 `messageRange`）
+5. 对于 `scope: 'resource'`，将跨线程消息格式化为带时间戳的系统消息
+6. 添加带有 `source: 'memory'` 标签的召回消息
+
+### 输出处理
+1. 从新的用户和助手消息中提取文本内容
+2. 为每条消息生成嵌入
+3. 将嵌入存储到向量存储中，并带有元数据（消息 ID、线程 ID、资源 ID、角色、内容、时间戳）
+4. 使用 LRU 缓存来避免冗余的 API 调用
+
+### 跨线程召回
+当 `scope` 设置为 `'resource'` 时，处理器可以召回其他线程的消息。这些跨线程消息被格式化为带有时间戳和对话标签的系统消息，以提供关于对话发生时间和地点的上下文。
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

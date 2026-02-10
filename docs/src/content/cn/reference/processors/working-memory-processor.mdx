@@ -1,0 +1,230 @@
+---
+title: "参考：工作内存处理器 | 处理器"
+description: "Mastra 中 WorkingMemory 处理器的文档，用于将持久化的用户/上下文数据作为系统指令注入。"
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+---
+
+# WorkingMemory
+
+`WorkingMemory` 是一个**输入处理器**，将工作内存数据作为系统消息注入。它从存储中检索持久化信息并将其格式化为 LLM 的指令，使代理能够保持跨对话的用户上下文。
+
+## 使用示例
+
+```typescript
+import { WorkingMemory } from "@mastra/core/processors";
+
+const processor = new WorkingMemory({
+  storage: memoryStorage,
+  scope: "resource",
+  template: {
+    format: "markdown",
+    content: `# 用户资料
+- **姓名**:
+- **偏好**:
+- **目标**:
+`,
+  },
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "工作内存处理器的配置选项",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description: "用于检索工作内存数据的存储实例",
+      isOptional: false,
+    },
+    {
+      name: "template",
+      type: "WorkingMemoryTemplate",
+      description: "定义工作内存格式和结构的模板",
+      isOptional: true,
+    },
+    {
+      name: "scope",
+      type: "'thread' | 'resource'",
+      description: "工作内存的范围。'thread' 限定为当前线程，'resource' 在资源的所有线程之间共享",
+      isOptional: true,
+      default: "'resource'",
+    },
+    {
+      name: "useVNext",
+      type: "boolean",
+      description: "使用改进的下一代指令格式",
+      isOptional: true,
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description: "当为 true 时，工作内存作为只读上下文提供。数据被注入到对话中，但没有 updateWorkingMemory 工具或更新指令。对于应该引用工作内存而不修改它的代理很有用。",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "templateProvider",
+      type: "{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }",
+      description: "用于运行时模板解析的动态模板提供者",
+      isOptional: true,
+    },
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "用于结构化日志记录的可选日志记录器实例",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### WorkingMemoryTemplate
+
+<PropertiesTable
+  content={[
+    {
+      name: "format",
+      type: "'markdown' | 'json'",
+      description: "工作内存内容的格式",
+      isOptional: false,
+    },
+    {
+      name: "content",
+      type: "string",
+      description: "定义工作内存数据结构模板内容",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'working-memory'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "处理器显示名称，设置为 'WorkingMemory'",
+      isOptional: false,
+    },
+    {
+      name: "defaultWorkingMemoryTemplate",
+      type: "string",
+      description: "未提供自定义模板时使用的默认 markdown 模板",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "检索工作内存并将其作为系统消息添加到消息列表",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/personalized-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { WorkingMemory, MessageHistory } from "@mastra/core/processors";
+import { PostgresStorage } from "@mastra/pg";
+
+const storage = new PostgresStorage({
+  connectionString: process.env.DATABASE_URL,
+});
+
+export const agent = new Agent({
+  name: "personalized-agent",
+  instructions: "你是一个记住用户偏好的有用助手",
+  model: "openai:gpt-4o",
+  inputProcessors: [
+    new WorkingMemory({
+      storage,
+      scope: "resource",
+      template: {
+        format: "markdown",
+        content: `# 用户信息
+- **姓名**:
+- **位置**:
+- **偏好**:
+- **沟通风格**:
+- **当前项目**:
+`,
+      },
+    }),
+    new MessageHistory({ storage, lastMessages: 50 }),
+  ],
+  outputProcessors: [
+    new MessageHistory({ storage }),
+  ],
+});
+```
+
+## JSON 格式示例
+
+```typescript
+import { WorkingMemory } from "@mastra/core/processors";
+
+const processor = new WorkingMemory({
+  storage: memoryStorage,
+  scope: "resource",
+  template: {
+    format: "json",
+    content: JSON.stringify({
+      user: {
+        name: { type: "string" },
+        preferences: { type: "object" },
+        goals: { type: "array" },
+      },
+    }),
+  },
+});
+```
+
+## 行为
+
+### 输入处理
+1. 从请求上下文中检索 `threadId` 和 `resourceId`
+2. 根据范围，从以下位置获取工作内存：
+   - 线程元数据 (`scope: 'thread'`)
+   - 资源记录 (`scope: 'resource'`)
+3. 解析模板（来自提供者、选项或默认值）
+4. 根据模式生成系统指令：
+   - **正常模式**：包含存储/更新信息的指南、模板结构和当前数据
+   - **只读模式** (`readOnly: true`)：仅将当前数据作为上下文包含，不包含更新指令
+5. 将指令添加为带有 `source: 'memory'` 标签的系统消息
+
+### 工作内存更新
+工作内存更新通过 Memory 类提供的 `updateWorkingMemory` 工具发生，而不是通过此处理器。处理器仅处理将当前工作内存状态注入到对话中。
+
+### 默认模板
+如果未提供模板，处理器使用带有以下字段的默认 markdown 模板：
+- 名、姓
+- 位置、职业
+- 兴趣、目标
+- 事件、事实、项目
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

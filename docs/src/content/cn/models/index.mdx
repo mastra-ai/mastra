@@ -1,0 +1,358 @@
+---
+title: "模型"
+description: "通过 Mastra 的模型路由器访问 77+ 提供商和 2108+ 模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
+
+# 模型提供商
+
+Mastra 为跨多个提供商的 LLM 工作提供了统一的界面，使您能够通过单个 API 访问来自 77 个提供商的 2108 个模型。
+
+## 功能特点
+
+- **一个 API 适用于任何模型** - 无需安装和管理额外的提供商依赖项，即可访问任何模型。
+
+- **使用最新的 AI 模型** - 新模型发布时即可立即使用，无论来自哪个提供商。使用 Mastra 的提供商无关界面避免供应商锁定。
+
+- [**混合搭配模型**](#mix-and-match-models) - 为不同任务使用不同的模型。例如，使用 GPT-4o-mini 进行大上下文处理，然后切换到 Claude Opus 4.1 进行推理任务。
+
+- [**模型回退**](#model-fallbacks) - 如果提供商遇到故障，Mastra 可以在应用程序级别自动切换到另一个提供商，与 API 网关相比，延迟更低。
+
+## 基本用法
+
+无论您使用 OpenAI、Anthropic、Google 还是 OpenRouter 之类的网关，只需将模型指定为 `"provider/model-name"`，Mastra 就会处理其余部分。
+
+Mastra 读取相关的环境变量（例如 `ANTHROPIC_API_KEY`）并将请求路由到提供商。如果 API 密钥缺失，您会收到清晰的运行时错误，确切显示需要设置哪个变量。
+
+<Tabs>
+  <TabItem value="OpenAI" label="OpenAI">
+
+    ```typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
+
+    const agent = new Agent({
+      id: "my-agent",
+      name: "My Agent",
+      instructions: "You are a helpful assistant",
+      model: "openai/gpt-5"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="Anthropic" label="Anthropic">
+
+    ```typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
+
+    const agent = new Agent({
+      id: "my-agent",
+      name: "My Agent",
+      instructions: "You are a helpful assistant",
+      model: "anthropic/claude-4-5-sonnet"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="Google Gemini" label="Google Gemini">
+
+    ```typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
+
+    const agent = new Agent({
+      id: "my-agent",
+      name: "My Agent",
+      instructions: "You are a helpful assistant",
+      model: "google/gemini-2.5-flash"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="xAI" label="xAI">
+
+    ```typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
+
+    const agent = new Agent({
+      id: "my-agent",
+      name: "My Agent",
+      instructions: "You are a helpful assistant",
+      model: "xai/grok-4"
+    })
+    ```
+
+  </TabItem>
+  <TabItem value="OpenRouter" label="OpenRouter">
+
+    ```typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
+
+    const agent = new Agent({
+      id: "my-agent",
+      name: "My Agent",
+      instructions: "You are a helpful assistant",
+      model: "openrouter/anthropic/claude-haiku-4-5"
+    })
+    ```
+
+  </TabItem>
+</Tabs>
+
+## 模型目录
+
+使用左侧导航浏览可用模型目录，或在下方探索。
+
+<CardGrid>
+    <CardGridItem
+      title="网关"
+      href="/models/gateways"
+    >
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>OpenRouter</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <NetlifyLogo className="w-4 h-4" />
+            <span>Netlify</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/vercel.svg" alt="Vercel" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Vercel</span>
+          </div>
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 1 更多</div>
+      </div>
+    </CardGridItem>
+    <CardGridItem
+      title="提供商"
+      href="/models/providers"
+    >
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/openai.svg" alt="OpenAI" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>OpenAI</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/anthropic.svg" alt="Anthropic" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Anthropic</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <img src="https://models.dev/logos/google.svg" alt="Google" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
+            <span>Google</span>
+          </div>
+        </div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 70 更多</div>
+      </div>
+    </CardGridItem>
+</CardGrid>
+
+您也可以直接在编辑器中发现模型。Mastra 为 `model` 字段提供完整的自动补全功能 - 只需开始输入，您的 IDE 就会显示可用选项。
+
+或者，在 [Studio](/docs/cn/docs/getting-started/studio) UI 中浏览和测试模型。
+
+:::info
+
+在开发环境中，我们每小时自动刷新您的本地模型列表，确保您的 TypeScript 自动补全和 Studio 与最新模型保持同步。要禁用此功能，请设置 `MASTRA_AUTO_REFRESH_PROVIDERS=false`。在生产环境中默认禁用自动刷新。
+
+:::
+
+## 混合搭配模型
+
+有些模型速度更快但能力较弱，而其他模型则提供更大的上下文窗口或更强的推理技能。使用来自同一提供商的模型，或混合搭配不同提供商的模型以适应每项任务。
+
+```typescript title="src/mastra/agents/reasoning-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+// 使用具有成本效益的模型进行文档处理
+const documentProcessor = new Agent({
+  id: "document-processor",
+  name: "Document Processor",
+  instructions: "Extract and summarize key information from documents",
+  model: "openai/gpt-4o-mini"
+})
+
+// 使用功能强大的推理模型进行复杂分析
+const reasoningAgent = new Agent({
+  id: "reasoning-agent",
+  name: "Reasoning Agent",
+  instructions: "Analyze data and provide strategic recommendations",
+  model: "anthropic/claude-opus-4-1"
+})
+```
+
+## 动态模型选择
+
+由于模型只是字符串，您可以根据[请求上下文](/docs/cn/docs/server/request-context)、变量或任何其他逻辑动态选择它们。
+
+```typescript title="src/mastra/agents/dynamic-assistant-agent.ts"
+const agent = new Agent({
+  id: "dynamic-assistant",
+  name: "Dynamic Assistant",
+  model: ({ requestContext }) => {
+    const provider = requestContext.get("provider-id");
+    const model = requestContext.get("model-id");
+    return `${provider}/${model}`;
+  },
+});
+```
+
+这支持强大的模式：
+
+- A/B 测试 - 在生产环境中比较模型性能。
+- 用户可选择的模型 - 让用户在您的应用程序中选择他们喜欢的模型。
+- 多租户应用程序 - 每个客户都可以使用自己的 API 密钥和模型偏好。
+
+## 提供商特定选项
+
+不同的模型提供商公开自己的配置选项。使用 OpenAI，您可能会调整 `reasoningEffort`。使用 Anthropic，您可能会调整 `cacheControl`。Mastra 允许您设置这些特定的 `providerOptions`，可以在智能体级别或每条消息设置。
+
+```typescript title="src/mastra/agents/planner-agent.ts"
+// 智能体级别（应用于所有未来消息）
+const planner = new Agent({
+  id: "planner",
+  name: "Planner",
+  instructions: {
+    role: "system",
+    content: "You are a helpful assistant.",
+    providerOptions: {
+      openai: { reasoningEffort: "low" }
+    }
+  },
+  model: "openai/o3-pro",
+});
+
+const lowEffort =
+  await planner.generate("Plan a simple 3 item dinner menu");
+
+// 消息级别（仅应用于此消息）
+const highEffort = await planner.generate([
+  {
+    role: "user",
+    content: "Plan a simple 3 item dinner menu for a celiac",
+    providerOptions: {
+      openai: { reasoningEffort: "high" }
+    }
+  }
+]);
+```
+
+## 自定义标头
+
+如果您需要指定自定义标头，例如组织 ID 或其他提供商特定字段，请使用此语法。
+
+```typescript title="src/mastra/agents/custom-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "Custom Agent",
+  model: {
+    id: "openai/gpt-4-turbo",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "OpenAI-Organization": "org-abc123"
+    }
+  }
+});
+```
+
+:::info
+
+配置因提供商而异。请参阅左侧导航中的提供商页面，了解自定义标头的详细信息。
+
+:::
+
+## 模型回退
+
+依赖单个模型会为您的应用程序创建单点故障。模型回退提供模型和提供商之间的自动故障转移。如果主模型变得不可用，请求会重试下一个配置的回退，直到成功。
+
+```typescript title="src/mastra/agents/resilient-assistant-agent.ts"
+import { Agent } from '@mastra/core/agent';
+
+const agent = new Agent({
+  id: 'resilient-assistant',
+  name: 'Resilient Assistant',
+  instructions: 'You are a helpful assistant.',
+  model: [
+    {
+      model: "openai/gpt-5",
+      maxRetries: 3,
+    },
+    {
+      model: "anthropic/claude-4-5-sonnet",
+      maxRetries: 2,
+    },
+    {
+      model: "google/gemini-2.5-pro",
+      maxRetries: 2,
+    },
+  ],
+});
+```
+
+Mastra 首先尝试您的主模型。如果遇到 500 错误、速率限制或超时，它会自动切换到您的第一个回退。如果那个也失败了，它会移动到下一个。每个模型在继续之前都有自己的重试计数。
+
+您的用户永远不会遇到中断 - 响应以相同的格式返回，只是来自不同的模型。错误上下文会在系统遍历您的回退链时保留，确保在保持流式兼容性的同时实现干净的错误传播。
+
+## 在 Mastra 中使用本地模型
+
+Mastra 还支持本地模型，如 `gpt-oss`、`Qwen3`、`DeepSeek` 以及您可以在自己的硬件上运行的更多模型。运行本地模型的应用程序需要为 Mastra 提供一个 OpenAI 兼容的 API 服务器。我们建议使用 [LMStudio](https://lmstudio.ai/)（请参阅[运行 LMStudio 服务器](https://lmstudio.ai/docs/cn/docs/developer/core/server)）。
+
+对于自定义提供商，需要 `id`（`${providerId}/${modelId}`），但它仅用于显示目的。`modelId` 需要是您实际要使用的模型。示例：`custom/my-qwen3-model`。
+
+对于 `url`，**重要的是**您将 Mastra 的 `model` 设置为 OpenAI 兼容端点的基础 URL，而不是单独的聊天端点。
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "custom/my-qwen3-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1"
+  }
+})
+```
+
+### 示例：LMStudio
+
+启动 LMStudio 服务器后，本地服务器可在 `http://localhost:1234` 访问，它提供 `/v1/models`、`/v1/chat/completions` 等端点。`url` 将是 `http://localhost:1234/v1`。对于 `id`，您可以使用 (`lmstudio/${modelId}`)，它将显示在 LMStudio 界面中。
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "lmstudio/qwen/qwen3-30b-a3b-2507",
+    url: "http://localhost:1234/v1"
+  }
+})
+```
+
+## 在 Mastra 中使用 AI SDK
+
+Mastra 支持 AI SDK 提供商模块，如果您需要直接使用它们。
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { groq } from '@ai-sdk/groq';
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  model: groq('gemma2-9b-it')
+})
+```
+
+您可以在任何接受 `"provider/model"` 字符串的地方使用 AI SDK 模型（例如 `groq('gemma2-9b-it')`），包括在模型路由器回退和[评分器](/docs/cn/docs/evals/overview)中。

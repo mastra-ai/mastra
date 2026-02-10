@@ -1,0 +1,115 @@
+---
+title: "MastraJwtAuth 类 | 认证"
+description: "MastraJwtAuth 类的文档，该类使用 JSON Web Token 对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MastraJwtAuth 类
+
+`MastraJwtAuth` 类使用 JSON Web Token (JWT) 为 Mastra 提供轻量级身份验证机制。它基于共享密钥验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 安装
+
+在使用 `MastraJwtAuth` 类之前，您必须安装 `@mastra/auth` 包。
+
+```bash npm2yarn
+npm install @mastra/auth@latest
+```
+
+## 使用示例
+
+```typescript {2,6-8} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraJwtAuth } from "@mastra/auth";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      secret: process.env.MASTRA_JWT_SECRET,
+    }),
+  },
+});
+```
+
+:::info
+
+访问 [MastraJwtAuth](/reference/auth/jwt) 了解所有可用的配置选项。
+
+:::
+
+## 配置 `MastraClient`
+
+启用 `auth` 后，所有使用 `MastraClient` 发出的请求都必须在 `Authorization` 头中包含有效的 JWT：
+
+```typescript {6} title="lib/mastra/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "https://<mastra-api-url>",
+  headers: {
+    Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`,
+  },
+});
+```
+
+:::info
+
+访问 [Mastra Client SDK](/docs/cn/server/mastra-client) 了解更多配置选项。
+
+:::
+
+### 发出身份验证请求
+
+配置 `MastraClient` 后，您可以从前端应用程序发送身份验证请求，或使用 `curl` 进行快速本地测试：
+
+<Tabs>
+  <TabItem value="react" label="React">
+
+    ```tsx title="src/components/test-agent.tsx"
+    import { mastraClient } from "../../lib/mastra-client";
+
+    export const TestAgent = () => {
+      async function handleClick() {
+        const agent = mastraClient.getAgent("weatherAgent");
+
+        const response = await agent.generate("Weather in London");
+
+        console.log(response);
+      }
+
+      return <button onClick={handleClick}>Test Agent</button>;
+    };
+    ```
+
+  </TabItem>
+  <TabItem value="curl" label="cURL">
+
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-jwt>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+
+  </TabItem>
+</Tabs>
+
+## 创建 JWT
+
+要向 Mastra 服务器进行身份验证，您需要一个使用 `MASTRA_JWT_SECRET` 签名的有效 JSON Web Token (JWT)。
+
+生成 JWT 最简单的方法是使用 [jwt.io](https://www.jwt.io/)：
+
+1. 选择 **JWT 编码器**
+2. 向下滚动到 **签署 JWT：密钥** 部分
+3. 输入您的密钥（例如：`supersecretdevkeythatishs256safe!`）
+4. 点击 **生成示例** 以创建有效的 JWT
+5. 复制生成的令牌并将其设置为 `.env` 文件中的 `MASTRA_JWT_TOKEN`

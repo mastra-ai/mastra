@@ -1,0 +1,313 @@
+---
+title: "参考文档: 服务器路由 | 服务器"
+description: "Mastra 服务器适配器注册的 HTTP 路由的 API 参考。"
+packages:
+  - "@mastra/server"
+---
+
+# 服务器路由
+
+当调用 `server.init()` 时，服务器适配器会注册这些路由。如果配置了，所有路由都会添加 `prefix` 选项作为前缀。
+
+## 智能体
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `GET` | `/api/agents` | 列出所有智能体 |
+| `GET` | `/api/agents/:agentId` | 按 ID 获取智能体 |
+| `POST` | `/api/agents/:agentId/generate` | 生成智能体响应 |
+| `POST` | `/api/agents/:agentId/stream` | 流式智能体响应 |
+| `GET` | `/api/agents/:agentId/tools` | 列出智能体工具 |
+| `POST` | `/api/agents/:agentId/tools/:toolId/execute` | 执行智能体工具 |
+
+### 生成请求体
+
+```typescript
+{
+  messages: CoreMessage[] | string;       // 必需
+  instructions?: string;                   // 系统指令
+  system?: string;                        // 系统提示
+  context?: CoreMessage[];                // 额外上下文
+  memory?: { key: string } | boolean;    // 记忆配置
+  resourceId?: string;                   // 资源标识符
+  threadId?: string;                      // 线程标识符
+  runId?: string;                         // 运行标识符
+  maxSteps?: number;                      // 最大工具调用次数
+  activeTools?: string[];                // 要启用的工具
+  toolChoice?: ToolChoice;                // 工具选择模式
+  requestContext?: Record<string, unknown>; // 请求上下文
+  output?: ZodSchema;                    // 结构化输出模式
+}
+```
+
+### 生成响应
+
+```typescript
+{
+  text: string;
+  toolCalls?: ToolCall[];
+  finishReason: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+  };
+}
+```
+
+## 工作流
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `GET` | `/api/workflows` | 列出所有工作流 |
+| `GET` | `/api/workflows/:workflowId` | 按 ID 获取工作流 |
+| `POST` | `/api/workflows/:workflowId/create-run` | 创建新的工作流运行 |
+| `POST` | `/api/workflows/:workflowId/start-async` | 启动工作流并等待结果 |
+| `POST` | `/api/workflows/:workflowId/stream` | 流式工作流执行 |
+| `POST` | `/api/workflows/:workflowId/resume` | 恢复暂停的工作流 |
+| `POST` | `/api/workflows/:workflowId/resume-async` | 异步恢复 |
+| `GET` | `/api/workflows/:workflowId/runs` | 列出工作流运行 |
+| `GET` | `/api/workflows/:workflowId/runs/:runId` | 获取特定运行 |
+
+### 创建运行请求体
+
+```typescript
+{
+  resourceId?: string;     // 将运行与资源关联（例如用户 ID）
+  disableScorers?: boolean; // 禁用此运行的评分器
+}
+```
+
+### 启动异步请求体
+
+```typescript
+{
+  resourceId?: string;     // 将运行与资源关联（例如用户 ID）
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  tracingOptions?: {
+    spanName?: string;
+    attributes?: Record<string, unknown>;
+  };
+}
+```
+
+### 流式工作流请求体
+
+```typescript
+{
+  resourceId?: string;     // 将运行与资源关联（例如用户 ID）
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  closeOnSuspend?: boolean;
+}
+```
+
+### 恢复请求体
+
+```typescript
+{
+  step?: string | string[];
+  resumeData?: unknown;
+  requestContext?: Record<string, unknown>;
+}
+```
+
+## 工具
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `GET` | `/api/tools` | 列出所有工具 |
+| `GET` | `/api/tools/:toolId` | 按 ID 获取工具 |
+| `POST` | `/api/tools/:toolId/execute` | 执行工具 |
+
+### 执行工具请求体
+
+```typescript
+{
+  data: unknown;  // 工具输入数据
+  requestContext?: Record<string, unknown>;
+}
+```
+
+## 记忆
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `GET` | `/api/memory/threads` | 列出线程 |
+| `GET` | `/api/memory/threads/:threadId` | 获取线程 |
+| `POST` | `/api/memory/threads` | 创建线程 |
+| `DELETE` | `/api/memory/threads/:threadId` | 删除线程 |
+| `POST` | `/api/memory/threads/:threadId/clone` | 克隆线程 |
+| `GET` | `/api/memory/threads/:threadId/messages` | 获取线程消息 |
+| `POST` | `/api/memory/threads/:threadId/messages` | 添加消息 |
+
+### 创建线程请求体
+
+```typescript
+{
+  resourceId: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+### 克隆线程请求体
+
+```typescript
+{
+  newThreadId?: string;           // 克隆线程的自定义 ID
+  resourceId?: string;            // 覆盖资源 ID
+  title?: string;                 // 克隆的自定义标题
+  metadata?: Record<string, unknown>;  // 额外元数据
+  options?: {
+    messageLimit?: number;        // 最大克隆消息数
+    messageFilter?: {
+      startDate?: Date;          // 克隆此日期之后的消息
+      endDate?: Date;            // 克隆此日期之前的消息
+      messageIds?: string[];     // 克隆特定消息
+    };
+  };
+}
+```
+
+### 克隆线程响应
+
+```typescript
+{
+  thread: {
+    id: string;
+    resourceId: string;
+    title: string;
+    createdAt: Date;
+    updatedAt: Date;
+    metadata: {
+      clone: {
+        sourceThreadId: string;
+        clonedAt: Date;
+        lastMessageId?: string;
+      };
+      // ... 其他元数据
+    };
+  };
+  clonedMessages: MastraDBMessage[];
+}
+```
+
+## 向量
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `POST` | `/api/vectors/:vectorName/upsert` | 插入或更新向量 |
+| `POST` | `/api/vectors/:vectorName/query` | 查询向量 |
+| `POST` | `/api/vectors/:vectorName/delete` | 删除向量 |
+
+### 插入请求体
+
+```typescript
+{
+  vectors: Array<{
+    id: string;
+    values: number[];
+    metadata?: Record<string, unknown>;
+  }>;
+}
+```
+
+### 查询请求体
+
+```typescript
+{
+  vector: number[];
+  topK?: number;
+  filter?: Record<string, unknown>;
+  includeMetadata?: boolean;
+}
+```
+
+## MCP
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `GET` | `/api/mcp/servers` | 列出 MCP 服务器 |
+| `GET` | `/api/mcp/servers/:serverId/tools` | 列出服务器工具 |
+| `POST` | `/api/mcp/:serverId` | MCP HTTP 传输 |
+| `GET` | `/api/mcp/:serverId/sse` | MCP SSE 传输 |
+
+## 日志
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `GET` | `/api/logs` | 列出日志 |
+| `GET` | `/api/logs/:runId` | 按运行 ID 获取日志 |
+
+### 查询参数
+
+```typescript
+{
+  page?: number;
+  perPage?: number;
+  transportId?: string;
+}
+```
+
+## 遥测
+
+| 方法 | 路径 | 描述 |
+|--------|------|-------------|
+| `GET` | `/api/telemetry/traces` | 列出追踪 |
+| `GET` | `/api/telemetry/traces/:traceId` | 获取追踪 |
+| `GET` | `/api/telemetry/traces/:traceId/spans` | 获取追踪跨度 |
+
+## 通用查询参数
+
+### 分页
+
+大多数列表端点支持：
+
+```typescript
+{
+  page?: number;   // 页码（从 0 开始）
+  perPage?: number; // 每页项目数（默认：10）
+}
+```
+
+### 筛选
+
+工作流运行支持：
+
+```typescript
+{
+  fromDate?: string;  // ISO 日期字符串
+  toDate?: string;    // ISO 日期字符串
+  status?: string;    // 运行状态筛选
+  resourceId?: string; // 按资源筛选
+}
+```
+
+## 错误响应
+
+所有路由以以下格式返回错误：
+
+```typescript
+{
+  error: string;      // 错误消息
+  details?: unknown;  // 额外详情
+}
+```
+
+常用状态码：
+
+| 代码 | 含义 |
+|------|---------|
+| 400 | 错误请求 - 无效参数 |
+| 401 | 未授权 - 缺少/无效认证 |
+| 403 | 禁止 - 权限不足 |
+| 404 | 未找到 - 资源不存在 |
+| 500 | 内部服务器错误 |
+
+## 相关文档
+
+- [createRoute()](/reference/server/create-route) - 创建自定义路由
+- [服务器适配器](/docs/cn/docs/server/server-adapters) - 使用适配器

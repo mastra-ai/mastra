@@ -1,0 +1,424 @@
+---
+title: "护栏 | 智能体"
+description: "了解如何使用输入和输出处理器实现护栏，以保护和控制 AI 交互。"
+packages:
+  - "@mastra/core"
+---
+
+# 护栏
+
+智能体使用处理器对输入和输出应用护栏。它们在每次交互之前或之后运行，为您提供一种方式来审查、转换或阻止信息在用户和智能体之间传递。
+
+处理器可以配置为：
+
+- **`inputProcessors`**：在消息到达语言模型之前应用。
+- **`outputProcessors`**：在响应返回给用户之前应用。
+
+有些处理器是_混合型_的，这意味着它们可以与 `inputProcessors` 或 `outputProcessors` 一起使用，具体取决于逻辑应该应用在哪里。
+
+## 何时使用处理器
+
+将处理器用于内容审核、提示注入预防、响应清理、消息转换和其他安全相关的控制。Mastra 为常见用例提供了多种内置输入和输出处理器。
+
+## 向智能体添加处理器
+
+导入并实例化相关的处理器类，然后使用 `inputProcessors` 或 `outputProcessors` 选项将其传递给智能体的配置：
+
+```typescript {2,9-17} title="src/mastra/agents/moderated-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const moderatedAgent = new Agent({
+  id: "moderated-agent",
+  name: "审核智能体",
+  instructions: "您是一位乐于助人的助手",
+  model: "openai/gpt-5.1",
+  inputProcessors: [
+    new ModerationProcessor({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      categories: ["hate", "harassment", "violence"],
+      threshold: 0.7,
+      strategy: "block",
+      instructions: "检测并标记用户消息中的不当内容",
+    }),
+  ],
+});
+```
+
+## 输入处理器
+
+输入处理器在用户消息到达语言模型之前应用。它们可用于规范化、验证、内容审核、提示注入检测和安全检查。
+
+### 规范化用户消息
+
+`UnicodeNormalizer` 是一个输入处理器，通过统一 Unicode 字符、标准化空白符以及删除有问题的符号来清理和规范化用户输入，让大型语言模型更好地理解用户消息。
+
+```typescript {7-10} title="src/mastra/agents/normalized-agent.ts"
+import { UnicodeNormalizer } from "@mastra/core/processors";
+
+export const normalizedAgent = new Agent({
+  id: "normalized-agent",
+  name: "规范化智能体",
+  inputProcessors: [
+    new UnicodeNormalizer({
+      stripControlChars: true,
+      collapseWhitespace: true,
+    }),
+  ],
+});
+```
+
+:::info
+
+访问 [UnicodeNormalizer](/reference/processors/unicode-normalizer) 以获取配置选项的完整列表。
+
+:::
+
+### 防止提示注入
+
+`PromptInjectionDetector` 是一个输入处理器，用于扫描用户消息中的提示注入、越狱尝试和系统覆盖模式。它使用大型语言模型对风险输入进行分类，可以在到达模型之前阻止或重写它。
+
+```typescript {7-12} title="src/mastra/agents/secure-agent.ts"
+import { PromptInjectionDetector } from "@mastra/core/processors";
+
+export const secureAgent = new Agent({
+  id: "secure-agent",
+  name: "安全智能体",
+  inputProcessors: [
+    new PromptInjectionDetector({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      threshold: 0.8,
+      strategy: "rewrite",
+      detectionTypes: ["injection", "jailbreak", "system-override"],
+    }),
+  ],
+});
+```
+
+:::info
+
+访问 [PromptInjectionDetector](/reference/processors/prompt-injection-detector) 以获取配置选项的完整列表。
+
+:::
+
+### 检测和翻译语言
+
+`LanguageDetector` 是一个输入处理器，用于检测并将用户消息翻译成目标语言，在保持一致交互的同时实现多语言支持。它使用大型语言模型来识别语言并执行翻译。
+
+```typescript {7-12} title="src/mastra/agents/multilingual-agent.ts"
+import { LanguageDetector } from "@mastra/core/processors";
+
+export const multilingualAgent = new Agent({
+  id: "multilingual-agent",
+  name: "多语言智能体",
+  inputProcessors: [
+    new LanguageDetector({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      targetLanguages: ["English", "en"],
+      strategy: "translate",
+      threshold: 0.8,
+    }),
+  ],
+});
+```
+
+:::info
+
+访问 [LanguageDetector](/reference/processors/language-detector) 以获取配置选项的完整列表。
+
+:::
+
+## 输出处理器
+
+输出处理器在语言模型生成响应之后、但在返回给用户之前应用。它们可用于响应优化、审核、转换和应用安全控制。
+
+### 批量处理流式输出
+
+`BatchPartsProcessor` 是一个输出处理器，它在向客户端发送之前将多个流式部分组合在一起。通过将小块合并成更大的批次来减少网络开销并改善用户体验。
+
+```typescript {7-11} title="src/mastra/agents/batched-agent.ts"
+import { BatchPartsProcessor } from "@mastra/core/processors";
+
+export const batchedAgent = new Agent({
+  id: "batched-agent",
+  name: "批量智能体",
+  outputProcessors: [
+    new BatchPartsProcessor({
+      batchSize: 5,
+      maxWaitTime: 100,
+      emitOnNonText: true,
+    }),
+  ],
+});
+```
+
+:::info
+
+访问 [BatchPartsProcessor](/reference/processors/batch-parts-processor) 以获取配置选项的完整列表。
+
+:::
+
+### 限制令牌使用
+
+`TokenLimiterProcessor` 是一个输出处理器，用于限制模型响应中的令牌数量。它通过在超出限制时截断或阻止消息来帮助管理成本和性能。
+
+```typescript {7-11} title="src/mastra/agents/limited-agent.ts"
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+
+export const limitedAgent = new Agent({
+  id: "limited-agent",
+  name: "限制智能体",
+  outputProcessors: [
+    new TokenLimiterProcessor({
+      limit: 1000,
+      strategy: "truncate",
+      countMode: "cumulative",
+    }),
+  ],
+});
+```
+
+:::info
+
+访问 [TokenLimiterProcessor](/reference/processors/token-limiter-processor) 以获取配置选项的完整列表。
+
+:::
+
+### 清理系统提示
+
+`SystemPromptScrubber` 是一个输出处理器，用于检测并编辑模型响应中的系统提示或其他内部指令。它有助于防止提示内容或配置细节的意外泄露，从而避免引入安全风险。它使用大型语言模型根据配置的检测类型来识别和编辑敏感内容。
+
+```typescript {7-16} title="src/mastra/agents/scrubbed-agent.ts"
+import { SystemPromptScrubber } from "@mastra/core/processors";
+
+const scrubbedAgent = new Agent({
+  id: "scrubbed-agent",
+  name: "清理智能体",
+  outputProcessors: [
+    new SystemPromptScrubber({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      strategy: "redact",
+      customPatterns: ["system prompt", "internal instructions"],
+      includeDetections: true,
+      instructions:
+        "检测并编辑系统提示、内部指令和安全敏感内容",
+      redactionMethod: "placeholder",
+      placeholderText: "[已编辑]",
+    }),
+  ],
+});
+```
+
+:::info
+
+访问 [SystemPromptScrubber](/reference/processors/system-prompt-scrubber) 以获取配置选项的完整列表。
+
+:::
+
+:::note
+
+通过 HTTP 流式传输响应时，Mastra 默认在服务器级别从流块中编辑敏感的请求数据（系统提示、工具定义、API 密钥）。详情请参阅[流数据编辑](/docs/cn/server/mastra-server#stream-data-redaction)。
+
+:::
+
+## 混合处理器
+
+混合处理器可以在将消息发送到语言模型之前应用，也可以在将响应返回给用户之前应用。它们可用于内容审核和 PII 编辑等任务。
+
+### 审核输入和输出
+
+`ModerationProcessor` 是一个混合处理器，用于检测跨类别（如仇恨、骚扰和暴力）的不当或有害内容。它可用于审核用户输入或模型输出，具体取决于应用位置。它使用大型语言模型对消息进行分类，并可根据您的配置阻止或重写它。
+
+```typescript {7-12,15} title="src/mastra/agents/moderated-agent.ts"
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const moderatedAgent = new Agent({
+  id: "moderated-agent",
+  name: "审核智能体",
+  inputProcessors: [
+    new ModerationProcessor({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      threshold: 0.7,
+      strategy: "block",
+      categories: ["hate", "harassment", "violence"],
+    }),
+  ],
+  outputProcessors: [
+    new ModerationProcessor(),
+  ],
+});
+```
+
+:::info
+
+访问 [ModerationProcessor](/reference/processors/moderation-processor) 以获取配置选项的完整列表。
+
+:::
+
+### 检测和编辑 PII
+
+`PIIDetector` 是一个混合处理器，用于检测和删除个人身份信息，如电子邮件、电话号码和信用卡号。它可以根据应用位置编辑用户输入或模型输出。它使用大型语言模型根据配置的检测类型来识别敏感内容。
+
+```typescript {7-14,17} title="src/mastra/agents/private-agent.ts"
+import { PIIDetector } from "@mastra/core/processors";
+
+export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "隐私智能体",
+  inputProcessors: [
+    new PIIDetector({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      threshold: 0.6,
+      strategy: "redact",
+      redactionMethod: "mask",
+      detectionTypes: ["email", "phone", "credit-card"],
+      instructions: "检测并遮盖个人身份信息。",
+    }),
+  ],
+  outputProcessors: [
+    new PIIDetector(),
+  ],
+});
+```
+
+:::info
+
+访问 [PIIDetector](/reference/processors/pii-detector) 以获取配置选项的完整列表。
+
+:::
+
+## 应用多个处理器
+
+您可以通过在 `inputProcessors` 或 `outputProcessors` 数组中列出它们来应用多个处理器。它们按顺序运行，每个处理器接收前一个处理器的输出。
+
+典型的顺序可能是：
+
+1. **规范化**：标准化输入格式（`UnicodeNormalizer`）。
+2. **安全检查**：检测威胁或敏感内容（`PromptInjectionDetector`、`PIIDetector`）。
+3. **过滤**：阻止或转换消息（`ModerationProcessor`）。
+
+顺序会影响行为，因此请安排处理器以适合您的目标。
+
+```typescript title="src/mastra/agents/test-agent.ts"
+import {
+  UnicodeNormalizer,
+  ModerationProcessor,
+  PromptInjectionDetector,
+  PIIDetector,
+} from "@mastra/core/processors";
+
+export const testAgent = new Agent({
+  id: "test-agent",
+  name: "测试智能体",
+  inputProcessors: [
+    new UnicodeNormalizer(),
+    new PromptInjectionDetector(),
+    new PIIDetector(),
+    new ModerationProcessor(),
+  ],
+});
+```
+
+## 处理器策略
+
+许多内置处理器支持 `strategy` 参数，控制它们如何处理标记的输入或输出。支持的 值可能包括：`block`、`warn`、`detect` 或 `redact`。
+
+大多数策略允许请求继续而不中断。当使用 `block` 时，处理器会调用其内部的 `abort()` 函数，这会立即停止请求并阻止任何后续处理器运行。
+
+```typescript {8} title="src/mastra/agents/private-agent.ts"
+import { PIIDetector } from "@mastra/core/processors";
+
+export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "隐私智能体",
+  inputProcessors: [
+    new PIIDetector({
+      strategy: "block",
+    }),
+  ],
+});
+```
+
+### 处理被阻止的请求
+
+当处理器阻止请求时，智能体仍会成功返回而不会抛出错误。要处理被阻止的请求，请在响应中检查 `tripwire`。
+
+例如，如果智能体使用 `PIIDetector` 且 `strategy: "block"`，而请求中包含信用卡号，它将被阻止，响应将包含 tripwire 信息。
+
+#### `.generate()` 示例
+
+```typescript
+const result = await agent.generate(
+  "这个信用卡号有效吗？: 4543 1374 5089 4332",
+);
+
+if (result.tripwire) {
+  console.error("已阻止：", result.tripwire.reason);
+  console.error("处理器：", result.tripwire.processorId);
+  // 可选：检查是否请求重试
+  console.error("请求重试：", result.tripwire.retry);
+  // 可选：访问其他元数据
+  console.error("元数据：", result.tripwire.metadata);
+}
+```
+
+#### `.stream()` 示例
+
+```typescript
+const stream = await agent.stream(
+  "这个信用卡号有效吗？: 4543 1374 5089 4332",
+);
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tripwire") {
+    console.error("已阻止：", chunk.payload.reason);
+    console.error("处理器：", chunk.payload.processorId);
+  }
+}
+```
+
+在这种情况下，`reason` 表示检测到了信用卡号：
+
+```text
+检测到 PII。类型：credit-card
+```
+
+### 请求重试
+
+处理器可以请求大型语言模型重试其响应并提供反馈。这对于实现质量检查很有用：
+
+```typescript
+export class QualityChecker implements Processor {
+  id = "quality-checker";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const score = await evaluateQuality(text);
+
+    if (score < 0.7 && retryCount < 3) {
+      // 请求重试并向大型语言模型提供反馈
+      abort("响应质量太低。请更具体一些。", {
+        retry: true,
+        metadata: { score },
+      });
+    }
+
+    return [];
+  }
+}
+```
+
+`abort()` 函数接受一个可选的第二个参数：
+- `retry: true` - 请求大型语言模型重试该步骤
+- `metadata: unknown` - 附加用于调试/日志记录的其他数据
+
+使用 `retryCount` 来跟踪重试尝试并防止无限循环。
+
+## 自定义处理器
+
+如果内置处理器不能满足您的需求，您可以通过扩展 `Processor` 类来创建自己的处理器。
+
+可用示例：
+
+- [消息长度限制器](https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter)
+- [响应长度限制器](https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter)
+- [响应验证器](https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator)

@@ -1,0 +1,215 @@
+---
+title: "参考：DefaultExporter | 可观测性"
+description: "DefaultExporter 的 API 参考"
+packages:
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# DefaultExporter
+
+使用自动批处理和重试逻辑将跟踪持久化到 Mastra 配置的存储中。
+
+## 构造函数
+
+```typescript
+new DefaultExporter(config?: DefaultExporterConfig)
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "config",
+      type: "DefaultExporterConfig",
+      description: "批处理和配置选项",
+      required: false,
+    },
+  ]}
+/>
+
+## DefaultExporterConfig
+
+```typescript
+interface DefaultExporterConfig extends BaseExporterConfig {
+  /** 每批的最大跨度数。默认值：1000 */
+  maxBatchSize?: number;
+
+  /** 紧急刷新前的最大缓冲区大小。默认值：10000 */
+  maxBufferSize?: number;
+
+  /** 刷新批次的最大等待时间（毫秒）。默认值：5000 */
+  maxBatchWaitMs?: number;
+
+  /** 最大重试次数。默认值：4 */
+  maxRetries?: number;
+
+  /** 基础重试延迟（毫秒）（使用指数退避）。默认值：500 */
+  retryDelayMs?: number;
+
+  /** 追踪存储策略或 'auto' 表示自动选择。默认值：'auto' */
+  strategy?: TracingStorageStrategy | "auto";
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+## TracingStorageStrategy
+
+```typescript
+type TracingStorageStrategy = "realtime" | "batch-with-updates" | "insert-only";
+```
+
+### 策略行为
+
+- **realtime**: 立即将每个事件持久化到存储
+- **batch-with-updates**: 分别批处理创建和更新，按顺序应用
+- **insert-only**: 仅处理 SPAN_ENDED 事件，忽略更新
+
+## 属性
+
+```typescript
+readonly name = 'mastra-default-observability-exporter';
+```
+
+## 方法
+
+### init
+
+```typescript
+init(options: InitExporterOptions): void
+```
+
+在依赖项准备就绪后初始化导出器。根据存储能力解析追踪策略。
+
+<PropertiesTable
+  props={[
+    {
+      name: "options",
+      type: "InitExporterOptions",
+      description: "包含 Mastra 实例和配置的初始化选项",
+      required: true,
+    },
+  ]}
+/>
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+根据解析的策略处理追踪事件。
+
+<PropertiesTable
+  props={[
+    {
+      name: "event",
+      type: "TracingEvent",
+      description: "要导出的追踪事件",
+      required: true,
+    },
+  ]}
+/>
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的事件到存储而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新剩余的缓冲事件并执行清理。
+
+## 自动策略选择
+
+当 `strategy: 'auto'`（默认）时，导出器查询存储适配器的能力：
+
+```typescript
+interface TracingStrategy {
+  /** 此适配器支持的策略 */
+  supported: TracingStorageStrategy[];
+
+  /** 最佳性能的首选策略 */
+  preferred: TracingStorageStrategy;
+}
+```
+
+导出器将：
+
+1. 如果可用，使用存储适配器的首选策略
+2. 如果首选策略不可用，回退到第一个支持的策略
+3. 如果用户指定的策略不受支持，记录警告
+
+## 批处理行为
+
+### 刷新触发器
+
+当满足以下任一条件时刷新缓冲区：
+
+- 缓冲区大小达到 `maxBatchSize`
+- 自第一个缓冲事件以来的时间超过 `maxBatchWaitMs`
+- 缓冲区大小达到 `maxBufferSize`（紧急刷新）
+- 调用 `shutdown()`
+
+### 重试逻辑
+
+失败的刷新使用指数退避进行重试：
+
+- 重试延迟：`retryDelayMs * 2^attempt`
+- 最大尝试次数：`maxRetries`
+- 所有重试失败后丢弃批次
+
+### 乱序处理
+
+对于 `batch-with-updates` 策略：
+
+- 跟踪已创建的跨度
+- 拒绝尚未创建的跨度的更新/结束
+- 为乱序事件记录警告
+- 维护有序更新的序列号
+
+## 使用方法
+
+```typescript
+import { DefaultExporter } from "@mastra/observability";
+
+// 默认配置
+const exporter = new DefaultExporter();
+
+// 自定义批处理配置
+const customExporter = new DefaultExporter({
+  maxBatchSize: 500,
+  maxBatchWaitMs: 2000,
+  strategy: "batch-with-updates",
+  logLevel: 'debug'
+});
+```
+
+## 另请参阅
+
+### 文档
+
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 完整指南
+- [导出器](/docs/cn/docs/observability/tracing/overview#exporters) - 导出器概念
+
+### 其他导出器
+
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - 调试输出
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse 集成
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust 集成
+
+### 参考
+
+- [配置](/reference/observability/tracing/configuration) - 配置选项
+- [接口](/reference/observability/tracing/interfaces) - 类型定义

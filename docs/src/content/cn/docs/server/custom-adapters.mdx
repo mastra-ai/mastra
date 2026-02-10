@@ -1,0 +1,396 @@
+---
+title: "自定义适配器 | 服务器"
+description: "为 Hono 或 Express 以外的框架创建自定义服务器适配器。"
+packages:
+  - "@mastra/core"
+  - "@mastra/express"
+  - "@mastra/hono"
+  - "@mastra/server"
+  - "@mastra/fastify"
+  - "@mastra/koa"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 自定义适配器
+
+当您需要使用 Hono 或 Express 以外的框架运行 Mastra 时，可以创建自定义适配器。如果 `@mastra/hono` 和 `@mastra/express` 不支持您特定的请求/响应处理要求，这可能是必要的。
+
+自定义适配器在 Mastra 的路由定义和您的框架的路由系统之间进行转换。您将实现使用框架的 API 注册中间件、处理请求和发送响应的方法。
+
+:::info
+
+使用任何这些预构建的服务器适配器：
+
+- [@mastra/hono](/reference/server/hono-adapter)
+- [@mastra/express](/reference/server/express-adapter)
+- [@mastra/fastify](/reference/server/fastify-adapter)
+- [@mastra/koa](/reference/server/koa-adapter)
+
+:::
+
+## 抽象类
+
+来自 `@mastra/server/server-adapter` 的 `MastraServer` 抽象类为所有适配器提供了基础。它处理路由注册逻辑、参数验证和其他共享功能。您的自定义适配器扩展此类并实现特定于框架的部分。
+
+该类接受三个类型参数，表示您框架的类型：
+
+```typescript title="my-framework-adapter.ts"
+import { MastraServer } from '@mastra/server/server-adapter';
+
+export class MyFrameworkServer extends MastraServer<
+  // 您框架的应用程序类型（例如：FastifyInstance）
+  MyApp,
+  // 您框架的请求类型（例如：FastifyRequest）
+  MyRequest,
+  // 您框架的响应类型（例如：FastifyReply）
+  MyResponse
+> {
+  // 实现抽象方法
+}
+```
+
+这些类型参数确保整个适配器实现的类型安全，并在访问特定于框架的 API 时启用正确的类型。
+
+## 必需方法
+
+您必须实现这六个抽象方法。每个方法处理请求生命周期的特定部分，从附加上下文到发送响应。
+
+### registerContextMiddleware()
+
+此方法首先运行，并将 Mastra 上下文附加到每个传入请求。路由处理程序需要访问 Mastra 实例、工具和其他上下文才能工作。如何附加此上下文取决于您的框架 — Express 使用 `res.locals`，Hono 使用 `c.set()`，其他框架有自己的模式。
+
+```typescript
+registerContextMiddleware(): void {
+  this.app.use('*', (req, res, next) => {
+    // 将上下文附加到您框架的请求/响应
+    res.locals.mastra = this.mastra;
+    res.locals.requestContext = new RequestContext();
+    res.locals.tools = this.tools;
+    res.locals.abortSignal = createAbortSignal(req);
+    next();
+  });
+}
+```
+
+要附加的上下文：
+
+| 键 | 类型 | 描述 |
+|-----|------|-------------|
+| `mastra` | `Mastra` | Mastra 实例 |
+| `requestContext` | `RequestContext` | 请求作用域上下文映射 |
+| `tools` | `Record<string, Tool>` | 可用工具 |
+| `abortSignal` | `AbortSignal` | 请求取消信号 |
+| `taskStore` | `InMemoryTaskStore` | A2A 任务存储（如果已配置） |
+
+### registerAuthMiddleware()
+
+注册身份验证和授权中间件。此方法应检查 Mastra 实例上是否配置了身份验证，如果未配置，则完全跳过注册。配置了身份验证后，您通常会注册两个中间件函数：一个用于身份验证（验证令牌并设置用户），一个用于授权（检查用户是否可以访问请求的资源）。
+
+```typescript
+registerAuthMiddleware(): void {
+  const authConfig = this.mastra.getServer()?.auth;
+  if (!authConfig) return;
+
+  // 注册身份验证（验证令牌，设置用户）
+  this.app.use('*', async (req, res, next) => {
+    const token = extractToken(req);
+    const user = await authConfig.authenticateToken?.(token, req);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    res.locals.user = user;
+    next();
+  });
+
+  // 注册授权（检查权限）
+  this.app.use('*', async (req, res, next) => {
+    const allowed = await authConfig.authorize?.(
+      req.path,
+      req.method,
+      res.locals.user,
+      res
+    );
+    if (!allowed) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  });
+}
+```
+
+### registerRoute()
+
+使用您的框架注册单个路由。此方法在初始化期间为每个 Mastra 路由调用一次。它接收一个包含路径、HTTP 方法、处理函数和用于验证的 Zod 模式的 `ServerRoute` 对象。您的实现应该将其连接到您框架的路由系统。
+
+```typescript
+async registerRoute(
+  app: MyApp,
+  route: ServerRoute,
+  { prefix }: { prefix?: string }
+): Promise<void> {
+  const path = `${prefix || ''}${route.path}`;
+  const method = route.method.toLowerCase();
+
+  app[method](path, async (req, res) => {
+    try {
+      // 1. 提取参数
+      const params = await this.getParams(route, req);
+
+      // 2. 使用 Zod 模式验证
+      const queryParams = await this.parseQueryParams(route, params.queryParams);
+      const body = await this.parseBody(route, params.body);
+
+      // 3. 构建处理程序参数
+      const handlerParams = {
+        ...params.urlParams,
+        ...queryParams,
+        ...(typeof body === 'object' ? body : {}),
+        mastra: this.mastra,
+        requestContext: res.locals.requestContext,
+        tools: res.locals.tools,
+        abortSignal: res.locals.abortSignal,
+        taskStore: this.taskStore,
+      };
+
+      // 4. 调用处理程序
+      const result = await route.handler(handlerParams);
+
+      // 5. 发送响应
+      return this.sendResponse(route, res, result);
+    } catch (error) {
+      const status = error.status ?? error.details?.status ?? 500;
+      return res.status(status).json({ error: error.message });
+    }
+  });
+}
+```
+
+### getParams()
+
+从传入请求中提取 URL 参数、查询参数和请求体。不同框架以不同方式暴露这些值 — Express 使用 `req.params`、`req.query` 和 `req.body`，而其他框架可能使用不同的属性名或需要方法调用。此方法为您的框架规范化提取。
+
+```typescript
+async getParams(
+  route: ServerRoute,
+  request: MyRequest
+): Promise<{
+  urlParams: Record<string, string>;
+  queryParams: Record<string, string>;
+  body: unknown;
+}> {
+  return {
+    // 从路由路径（例如：:agentId）
+    urlParams: request.params,
+    // 从 URL 查询字符串
+    queryParams: request.query,
+    // 从请求体
+    body: request.body,
+  };
+}
+```
+
+### sendResponse()
+
+根据路由的响应类型将响应发送回客户端。Mastra 路由可以返回不同的响应类型：大多数 API 响应返回 JSON，代理生成返回流，以及 MCP 传输的特殊类型。您的实现应该为您的框架适当处理每种类型。
+
+```typescript
+async sendResponse(
+  route: ServerRoute,
+  response: MyResponse,
+  result: unknown
+): Promise<unknown> {
+  switch (route.responseType) {
+    case 'json':
+      return response.json(result);
+
+    case 'stream':
+      return this.stream(route, response, result);
+
+    case 'datastream-response':
+      // 直接返回 AI SDK Response
+      return result;
+
+    case 'mcp-http':
+      // 处理 MCP HTTP 传输
+      return this.handleMcpHttp(response, result);
+
+    case 'mcp-sse':
+      // 处理 MCP SSE 传输
+      return this.handleMcpSse(response, result);
+
+    default:
+      return response.json(result);
+  }
+}
+```
+
+### stream()
+
+处理代理生成的流式响应。当代理生成响应时，它会产生一个块流，这些块应在可用时立即发送给客户端。此方法从流中读取，可选地应用编辑以隐藏敏感数据，并以适当的格式（SSE 或换行符分隔的 JSON）将块写入响应。
+
+```typescript
+async stream(
+  route: ServerRoute,
+  response: MyResponse,
+  result: unknown
+): Promise<unknown> {
+  const isSSE = route.streamFormat === 'sse';
+
+  // 根据格式设置流式传输头
+  response.setHeader('Content-Type', isSSE ? 'text/event-stream' : 'text/plain');
+  response.setHeader('Transfer-Encoding', 'chunked');
+
+  const reader = result.fullStream.getReader();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      // 如果启用，应用编辑
+      const chunk = this.streamOptions.redact
+        ? redactChunk(value)
+        : value;
+
+      // 根据流格式格式化
+      if (isSSE) {
+        response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      } else {
+        response.write(JSON.stringify(chunk) + '\x1E');
+      }
+    }
+
+    // 发送完成标记（SSE 使用 data: [DONE]，其他格式使用记录分隔符）
+    if (isSSE) {
+      response.write('data: [DONE]\n\n');
+    }
+    response.end();
+  } catch (error) {
+    reader.cancel();
+    throw error;
+  }
+}
+```
+
+## 辅助方法
+
+基类提供了您可以在实现中使用的辅助方法。这些处理常见任务，如参数验证和路由注册，因此您不需要重新实现它们：
+
+| 方法 | 描述 |
+|--------|-------------|
+| `parsePathParams(route, params)` | 使用 Zod 模式验证路径参数 |
+| `parseQueryParams(route, params)` | 使用 Zod 模式验证查询参数 |
+| `parseBody(route, body)` | 使用 Zod 模式验证请求体 |
+| `mergeRequestContext({ paramsRequestContext, bodyRequestContext })` | 从多个来源合并请求上下文 |
+| `registerRoutes()` | 注册所有 Mastra 路由（为每个路由调用 `registerRoute`）|
+| `registerOpenAPIRoute(app, config, { prefix })` | 注册 OpenAPI 规范端点 |
+
+`parse*` 方法使用每个路由上定义的 Zod 模式来验证输入并返回类型化的结果。如果验证失败，它们会抛出关于出错细节的错误。
+
+## 构造函数
+
+适配器的构造函数应接受与基类相同的选项并将它们传递给 `super()`。如果需要，您可以添加其他特定于框架的选项：
+
+```typescript
+constructor(options: {
+  app: MyApp;
+  mastra: Mastra;
+  prefix?: string;
+  openapiPath?: string;
+  bodyLimitOptions?: BodyLimitOptions;
+  streamOptions?: StreamOptions;
+  customRouteAuthConfig?: Map<string, boolean>;
+}) {
+  super(options);
+}
+```
+
+有关每个选项的完整文档，请参阅[服务器适配器](/docs/cn/server/server-adapters)。
+
+## 完整示例
+
+这是一个显示所有必需方法的骨架实现。这对框架特定部分使用伪代码 — 用您框架的实际 API 替换：
+
+```typescript title="my-framework-adapter.ts"
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
+import type { Mastra } from '@mastra/core';
+
+export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse> {
+  constructor(options: { app: MyApp; mastra: Mastra; prefix?: string }) {
+    super(options);
+  }
+
+  registerContextMiddleware(): void {
+    this.app.use('*', (req, res, next) => {
+      res.locals.mastra = this.mastra;
+      res.locals.requestContext = this.mergeRequestContext({
+        paramsRequestContext: req.query.requestContext,
+        bodyRequestContext: req.body?.requestContext,
+      });
+      res.locals.tools = this.tools ?? {};
+      res.locals.abortSignal = createAbortSignal(req);
+      next();
+    });
+  }
+
+  registerAuthMiddleware(): void {
+    const authConfig = this.mastra.getServer()?.auth;
+    if (!authConfig) return;
+    // ... 实现身份验证中间件
+  }
+
+  async registerRoute(app: MyApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+    // ... 实现路由注册
+  }
+
+  async getParams(route: ServerRoute, request: MyRequest) {
+    return {
+      urlParams: request.params,
+      queryParams: request.query,
+      body: request.body,
+    };
+  }
+
+  async sendResponse(route: ServerRoute, response: MyResponse, result: unknown) {
+    if (route.responseType === 'stream') {
+      return this.stream(route, response, result);
+    }
+    return response.json(result);
+  }
+
+  async stream(route: ServerRoute, response: MyResponse, result: unknown) {
+    // ... 实现流式传输
+  }
+}
+```
+
+## 使用
+
+实现适配器后，以与提供适配器相同的方式使用它：
+
+```typescript title="server.ts"
+import { MyFrameworkServer } from './my-framework-adapter';
+import { mastra } from './mastra';
+
+const app = createMyFrameworkApp();
+const server = new MyFrameworkServer({ app, mastra });
+
+await server.init();
+
+app.listen(4111);
+```
+
+:::tip
+
+在构建自定义适配器时，现有的 [@mastra/hono](https://github.com/mastra-ai/mastra/blob/main/server-adapters/hono/src/index.ts) 和 [@mastra/express](https://github.com/mastra-ai/mastra/blob/main/server-adapters/express/src/index.ts) 实现是很好的参考。它们展示了如何处理特定于框架的模式，用于上下文存储、中间件注册和响应处理。
+
+:::
+
+## 相关内容
+
+- [服务器适配器](/docs/cn/server/server-adapters) - 概述和共享概念
+- [Hono 适配器](/reference/server/hono-adapter) - 参考实现
+- [Express 适配器](/reference/server/express-adapter) - 参考实现
+- [MastraServer 参考](/reference/server/mastra-server) - 完整 API 参考
+- [createRoute() 参考](/reference/server/create-route) - 创建类型安全的自定义路由

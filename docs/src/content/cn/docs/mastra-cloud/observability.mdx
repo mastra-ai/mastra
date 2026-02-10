@@ -1,0 +1,43 @@
+---
+title: "可观察性 | Mastra Cloud"
+description: "Mastra Cloud 部署的监控和调试工具"
+---
+
+# 可观察性
+
+云为生产应用程序提供可观察性，让您深入了解智能体和工作流的行为。无论您的应用程序部署在 Mastra Cloud、在本地运行还是托管在您自己的基础设施上，可观察性都能正常工作。任何 Mastra 项目都可以向平台发送跟踪和日志，无论它在哪里运行。
+
+有关配置可观察性的详细信息，请参阅 [Cloud Exporter](/docs/cn/observability/tracing/exporters/cloud) 文档。
+
+## 跟踪
+
+通过使用[支持的提供商](/docs/cn/observability/tracing/overview#exporters)之一启用[可观察性](/docs/cn/observability/tracing/overview)，智能体和工作流都可以使用跟踪。
+
+### 智能体
+
+启用可观察性后，您可以在 [Studio](/docs/cn/mastra-cloud/studio) 的**跟踪**部分查看来自智能体的详细输出。
+
+![可观察性智能体](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
+
+智能体跟踪将运行分解为清晰的步骤：模型调用、工具调用和中间块。每个步骤都包含时序、输入、输出和错误。深入查看任何跨度以检查提示、令牌使用情况和结果。
+
+### 工作流
+
+启用可观察性后，您可以在 [Studio](/docs/cn/mastra-cloud/studio) 的**跟踪**部分查看来自工作流的详细输出。
+
+![可观察性工作流](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
+
+工作流跟踪捕获运行中的每个步骤，包括转换、分支、时序和任何工具调用。检查每个步骤的输入、输出和错误，以调试长时间运行或多步骤的流程。
+
+## 日志
+
+[项目仪表板](/docs/cn/mastra-cloud/deployment#dashboard) 中的**日志**页面显示用于调试和监控应用程序行为的详细信息。
+
+![仪表板日志](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+每个日志条目都包含其严重性级别和显示智能体、工作流或存储活动的详细消息。
+
+## 下一步
+
+- [日志记录](/docs/cn/observability/logging)
+- [跟踪](/docs/cn/observability/tracing/overview)

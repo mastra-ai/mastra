@@ -1,0 +1,266 @@
+---
+title: "消息历史 | 内存"
+description: "了解如何在 Mastra 中配置消息历史以存储当前对话中的最近消息。"
+packages:
+  - "@mastra/memory"
+  - "@mastra/libsql"
+  - "@mastra/ai-sdk"
+---
+
+# 消息历史
+
+消息历史是最基本也是最重要的记忆形式。它让大型语言模型能够看到上下文窗口中的最近消息，使您的智能体能够引用早期的对话内容并做出连贯的响应。
+
+您还可以检索消息历史以在 UI 中显示过去的对话。
+
+:::info
+
+每条消息都属于一个线程（对话）和一个资源（与之关联的用户或实体）。有关更多详情，请参阅[线程和资源](/docs/cn/memory/storage#threads-and-resources)。
+
+:::
+
+## 入门指南
+
+安装 Mastra 内存模块以及适用于您的数据库的[存储适配器](/docs/cn/memory/storage#supported-providers)。以下示例使用 `@mastra/libsql`，它将数据存储在本地 `mastra.db` 文件中。
+
+```bash npm2yarn
+npm install @mastra/memory@latest @mastra/libsql@latest
+```
+
+消息历史需要存储适配器来持久化对话。如果您还没有在 Mastra 实例上配置存储：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+为您的智能体配置 `Memory`：
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  id: "test-agent",
+  memory: new Memory({
+    options: {
+      lastMessages: 10,
+    },
+  }),
+});
+```
+
+当您调用智能体时，消息会自动保存到数据库。您可以指定 `threadId`、`resourceId` 和可选的 `metadata`：
+
+<Tabs>
+  <TabItem value="generate" label="生成">
+
+```typescript
+await agent.generate("Hello", {
+  memory: {
+    thread: {
+      id: "thread-123",
+      title: "Support conversation",
+      metadata: { category: "billing" },
+    },
+    resource: "user-456",
+  },
+});
+```
+
+  </TabItem>
+  <TabItem value="stream" label="流式">
+
+```typescript
+await agent.stream("Hello", {
+  memory: {
+    thread: {
+      id: "thread-123",
+      title: "Support conversation",
+      metadata: { category: "billing" },
+    },
+    resource: "user-456",
+  },
+});
+```
+
+  </TabItem>
+</Tabs>
+
+:::info
+
+当您调用 `agent.generate()` 或 `agent.stream()` 时，线程和消息会自动创建，但您也可以使用 [`createThread()`](/reference/memory/createThread) 和 [`saveMessages()`](/reference/memory/memory-class) 手动创建它们。
+
+:::
+
+有两种使用此历史记录的方式：
+
+- **自动包含** - Mastra 自动获取并将最近的消息包含在上下文窗口中。默认情况下，它包含最后 10 条消息，使智能体能够紧跟对话。您可以使用 `lastMessages` 调整此数字，但在大多数情况下您不需要考虑它。
+- [**手动查询**](#查询) - 要获得更多控制，请使用 `recall()` 函数直接查询线程和消息。这让您可以准确选择哪些记忆包含在上下文窗口中，或获取消息以在 UI 中呈现对话历史记录。
+
+## 访问内存
+
+要访问用于查询、克隆或删除线程和消息的内存函数，请在智能体上调用 `getMemory()`：
+
+```typescript
+const agent = mastra.getAgent("weatherAgent");
+const memory = await agent.getMemory();
+```
+
+`Memory` 实例为您提供列出线程、回忆消息、克隆对话等功能的功能。
+
+## 查询
+
+使用这些方法获取线程和消息以在 UI 中显示对话历史记录或用于自定义记忆检索逻辑。
+
+:::warning
+
+内存系统不强制执行访问控制。在运行任何查询之前，请在您的应用程序逻辑中验证当前用户是否有权访问正在查询的 `resourceId`。
+
+:::
+
+### 线程
+
+使用 [`listThreads()`](/reference/memory/listThreads) 检索资源的线程：
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  perPage: false,
+});
+```
+
+对线程进行分页：
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  page: 0,
+  perPage: 10,
+});
+
+console.log(result.threads); // 线程对象
+console.log(result.hasMore); // 还有更多页面吗？
+```
+
+您还可以按元数据过滤并控制排序顺序：
+
+```typescript
+const result = await memory.listThreads({
+  filter: {
+    resourceId: "user-123",
+    metadata: { status: "active" },
+  },
+  orderBy: { field: "createdAt", direction: "DESC" },
+});
+```
+
+要按 ID 获取单个线程，请使用 [`getThreadById()`](/reference/memory/getThreadById)：
+
+```typescript
+const thread = await memory.getThreadById({ threadId: "thread-123" });
+```
+
+### 消息
+
+获得线程后，使用 [`recall()`](/reference/memory/recall) 检索其消息。它支持分页、日期过滤和[语义搜索](/docs/cn/memory/semantic-recall)。
+
+基本回忆返回线程中的所有消息：
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  perPage: false,
+});
+```
+
+对消息进行分页：
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  page: 0,
+  perPage: 50,
+});
+```
+
+按日期范围过滤：
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  filter: {
+    dateRange: {
+      start: new Date("2025-01-01"),
+      end: new Date("2025-06-01"),
+    },
+  },
+});
+```
+
+按 ID 获取单条消息：
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  include: [{ id: "msg-123" }],
+});
+```
+
+按 ID 获取多条消息并包含周围上下文：
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  include: [
+    { id: "msg-123" },
+    {
+      id: "msg-456",
+      withPreviousMessages: 3,
+      withNextMessages: 1,
+    },
+  ],
+});
+```
+
+按含义搜索（设置请参阅[语义回忆](/docs/cn/memory/semantic-recall)）：
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: "thread-123",
+  vectorSearchString: "project deadline discussion",
+  threadConfig: {
+    semanticRecall: true,
+  },
+});
+```
+
+### UI 格式
+
+消息查询返回 `MastraDBMessage[]` 格式。要在前端显示消息，您可能需要将它们转换为 UI 库期望的格式。例如，[`toAISdkV5Messages`](/reference/ai-sdk/to-ai-sdk-v5-messages) 将消息转换为 AI SDK UI 格式。
+
+## 线程克隆
+
+线程克隆创建现有线程及其消息的副本。这对于分支对话、在可能具有破坏性的操作之前创建检查点，或测试对话的变体很有用。
+
+```typescript
+const { thread, clonedMessages } = await memory.cloneThread({
+  sourceThreadId: "thread-123",
+  title: "Branched conversation",
+});
+```
+
+您可以过滤要克隆哪些消息（按数量或日期范围），指定自定义线程 ID，并使用实用程序方法来检查克隆关系。
+
+有关完整 API，请参阅 [`cloneThread()`](/reference/memory/cloneThread) 和[克隆实用程序](/reference/memory/clone-utilities)。
+
+## 删除消息
+
+要从线程中删除消息，请使用 [`deleteMessages()`](/reference/memory/deleteMessages)。您可以按消息 ID 删除或清除线程中的所有消息。

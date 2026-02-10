@@ -1,0 +1,46 @@
+---
+title: "参考文档：Mastra.getAgent() | 核心"
+description: "Mastra 中 `Agent.getAgent()` 方法的文档，用于按名称检索智能体。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getAgent()
+
+`.getAgent()` 方法用于检索智能体。该方法接受一个字符串参数作为智能体的名称。
+
+## 使用示例
+
+```typescript
+mastra.getAgent("testAgent");
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "TAgentName extends keyof TAgents",
+      description:
+        "要检索的智能体名称。必须是存在于 Mastra 配置中的有效智能体名称。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "TAgents[TAgentName]",
+      description:
+        "具有指定名称的智能体实例。如果找不到智能体，则抛出错误。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)

@@ -1,0 +1,294 @@
+---
+title: "结构化输出 | 智能体"
+description: "了解如何使用模式和验证从智能体生成结构化数据。"
+packages:
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 结构化输出
+
+结构化输出让智能体返回与模式定义形状匹配的对象，而不是返回文本。模式告诉模型要生成哪些字段，模型确保最终结果符合该形状。
+
+## 何时使用结构化输出
+
+当您需要智能体返回数据对象而不是文本时使用结构化输出。定义良好的字段可以更轻松地提取 API 调用、UI 渲染或应用程序逻辑所需的值。
+
+## 定义模式
+
+智能体可以通过使用 [Zod](https://zod.dev/) 或 [JSON Schema](https://json-schema.org/) 定义预期输出来返回结构化数据。推荐使用 Zod，因为它提供 TypeScript 类型推断和运行时验证，而 JSON Schema 在您需要语言无关格式时很有用。
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+
+使用 [Zod](https://zod.dev/) 定义 `output` 形状：
+
+```typescript
+import { z } from "zod";
+
+const response = await testAgent.generate("帮我计划我的一天。", {
+  structuredOutput: {
+    schema: z.array(
+      z.object({
+        name: z.string(),
+        activities: z.array(z.string()),
+      }),
+    ),
+  },
+});
+
+console.log(response.object);
+```
+
+  </TabItem>
+  <TabItem value="json-schema" label="JSON Schema">
+
+您也可以使用 JSON Schema 来定义输出结构：
+
+```typescript
+const response = await testAgent.generate("帮我计划我的一天。", {
+  structuredOutput: {
+    schema: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          activities: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+        required: ["name", "activities"],
+      },
+    },
+  },
+});
+
+console.log(response.object);
+```
+
+  </TabItem>
+</Tabs>
+
+:::info
+
+访问 [.generate()](/reference/agents/generate) 获取配置选项的完整列表。
+
+:::
+
+### 示例输出
+
+`response.object` 将包含按模式定义的结构化数据。
+
+```json
+[
+  {
+    "name": "早晨例程",
+    "activities": ["早上7点起床", "锻炼", "淋浴", "早餐"]
+  },
+  {
+    "name": "工作",
+    "activities": ["查看邮件", "团队会议", "午休"]
+  },
+  {
+    "name": "晚上",
+    "activities": ["晚餐", "放松", "阅读一本书", "晚上10点前睡觉"]
+  }
+]
+```
+
+## 流式传输
+
+流式传输也支持结构化输出。最终的结构化对象在 `stream.fullStream` 上可用，流完成后在 `stream.object` 上可用。文本流块仍然会发出，但它们包含自然语言文本而不是结构化数据。
+
+```typescript
+import { z } from "zod";
+
+const stream = await testAgent.stream("帮我计划我的一天。", {
+  structuredOutput: {
+    schema: z.array(
+      z.object({
+        name: z.string(),
+        activities: z.array(z.string())
+      })
+    ),
+  },
+});
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "object-result") {
+    console.log("\n", JSON.stringify(chunk, null, 2));
+  }
+  process.stdout.write(JSON.stringify(chunk));
+}
+
+console.log(await stream.object)
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## 结构化智能体
+
+当您的主智能体不擅长创建结构化输出时，可以向 `structuredOutput` 提供一个 `model`。在这种情况下，Mastra 在底层使用第二个智能体从主智能体的自然语言响应中提取结构化数据。这会产生两次大型语言模型调用，一次生成响应，另一次将该响应转换为结构化对象，这会增加一些延迟和成本，但可以提高复杂结构化任务的准确性。
+
+```typescript
+import { z } from "zod";
+
+const response = await testAgent.generate("分析 TypeScript 编程语言。", {
+  structuredOutput: {
+    schema: z.object({
+      overview: z.string(),
+      strengths: z.array(z.string()),
+      weaknesses: z.array(z.string()),
+      useCases: z.array(z.object({
+        scenario: z.string(),
+        reasoning: z.string(),
+      })),
+      comparison: z.object({
+        similarTo: z.array(z.string()),
+        differentiators: z.array(z.string()),
+      }),
+    }),
+    model: "openai/gpt-4o",
+  },
+});
+
+console.log(response.object);
+```
+
+## 组合工具和结构化输出
+
+当智能体同时配置了工具和结构化输出时，某些模型可能不支持同时使用这两个功能。这是底层模型 API 的限制，而不是 Mastra 本身的限制。
+
+如果启用结构化输出时您的工具没有被调用，或者在组合两个功能时收到错误，请尝试以下解决方法。
+
+### 解决方法选项
+
+当您的模型不支持同时使用工具和结构化输出时，您有三个选项：
+
+1. **使用 `jsonPromptInjection: true`** - 将模式注入到提示中，而不是使用 API 的 `response_format` 参数
+2. **使用单独的结构化模型** - 向 `structuredOutput` 传递 `model`，使用第二个大型语言模型进行结构化
+3. **使用 `prepareStep`** - 在单独的步骤中处理工具和结构化输出
+
+每种方法在下面的部分中详细说明。
+
+## 大型语言模型结构化输出支持
+
+由于 API 的差异，大型语言模型对结构化输出的支持各不相同。以下部分涵盖不完全支持结构化输出或将其与工具组合的模型的解决方法。
+
+### `jsonPromptInjection`
+
+默认情况下，Mastra 使用 `response_format` API 参数将模式传递给模型提供程序。大多数模型提供程序都内置支持此功能，可以可靠地强制执行模式。
+
+如果您的模型提供程序不支持 `response_format`，您将从 API 收到错误。发生这种情况时，设置 `jsonPromptInjection: true`。这会将模式添加到系统提示中，指示模型输出 JSON。这不如 API 参数方法可靠。
+
+```typescript
+import { z } from "zod";
+
+const response = await testAgent.generate("帮我计划我的一天。", {
+  structuredOutput: {
+    schema: z.array(
+      z.object({
+        name: z.string(),
+        activities: z.array(z.string()),
+      }),
+    ),
+    jsonPromptInjection: true,
+  },
+});
+
+console.log(response.object);
+```
+
+:::info[Gemini 2.5 与工具]
+
+Gemini 2.5 模型不支持在同一个 API 调用中将 `response_format`（结构化输出）与函数调用（工具）组合使用。如果您的智能体有工具，并且您正在将 `structuredOutput` 与 Gemini 2.5 模型一起使用，则必须设置 `jsonPromptInjection: true` 以避免错误 `Function calling with a response mime type: 'application/json' is unsupported`。
+
+```typescript
+const response = await agentWithTools.generate("您的提示", {
+  structuredOutput: {
+    schema: yourSchema,
+    jsonPromptInjection: true,  // Gemini 2.5 在存在工具时需要此设置
+  },
+});
+```
+
+:::
+
+### 使用单独的结构化模型
+
+当 `model` 提供给 `structuredOutput` 属性时，Mastra 使用单独的内部智能体来处理结构化输出。主智能体将处理所有步骤（包括工具调用），而结构化输出模型将仅处理结构化输出的生成。
+
+```typescript
+const response = await testAgent.generate("告诉我关于 TypeScript 的信息。", {
+  structuredOutput: {
+    schema: yourSchema
+    model: 'openai/gpt-4o'
+  }
+});
+```
+
+### 使用 `prepareStep` 的多步方法
+
+对于不支持同时使用工具和结构化输出的模型，您可以使用 `prepareStep` 在单独的步骤中处理它们。
+
+```typescript
+const result = await agent.stream("温哥华的天气？", {
+  prepareStep: async ({ stepNumber }) => {
+    if (stepNumber === 0) {
+      return {
+        model: "anthropic/claude-sonnet-4-20250514",
+        tools: {
+          weatherTool,
+        },
+        toolChoice: "required",
+      };
+    }
+    return {
+      model: "anthropic/claude-sonnet-4-20250514",
+      tools: undefined,
+      structuredOutput: {
+        schema: z.object({
+          temperature: z.number(),
+          humidity: z.number(),
+          windSpeed: z.number(),
+        }),
+      },
+    };
+  },
+});
+```
+
+## 错误处理
+
+当模式验证失败时，您可以使用 `errorStrategy` 控制错误的处理方式。默认的 `strict` 策略抛出错误，而 `warn` 记录警告并继续。`fallback` 策略返回使用 `fallbackValue` 提供的值。
+
+```typescript
+import { z } from "zod";
+
+const response = await testAgent.generate("告诉我关于 TypeScript 的信息。", {
+  structuredOutput: {
+    schema: z.object({
+      summary: z.string(),
+      keyFeatures: z.array(z.string())
+    }),
+    errorStrategy: "fallback",
+    fallbackValue: {
+      summary: "TypeScript 是 JavaScript 的类型超集",
+      keyFeatures: ["静态类型", "编译为 JavaScript", "更好的工具"]
+    }
+  }
+});
+
+console.log(response.object);
+```
+
+## 相关内容
+
+- [使用工具](/docs/cn/agents/using-tools)
+- [智能体内存](/docs/cn/agents/agent-memory)

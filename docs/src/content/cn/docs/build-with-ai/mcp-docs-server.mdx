@@ -1,0 +1,243 @@
+---
+title: "Mastra 文档服务器 | 构建 AI"
+description: "了解如何在您的 IDE 中使用 Mastra MCP 文档服务器，将其转变为智能体化的 Mastra 专家。"
+packages:
+  - "@mastra/mcp-docs-server"
+---
+
+import YouTube from "@site/src/components/YouTube-player";
+
+# Mastra 文档服务器
+
+`@mastra/mcp-docs-server` 包通过[模型上下文协议 (MCP)](https://modelcontextprotocol.io/docs/cn/getting-started/intro) 提供对 Mastra 完整文档的直接访问。它适用于 Cursor、Windsurf、Cline、Claude Code、VS Code、Codex 或任何支持 MCP 的工具。
+
+这些工具旨在帮助智能体检索精确的、特定于任务的信息——无论您是在为智能体添加功能、搭建新项目，还是探索某些功能的工作原理。
+
+在本指南中，您将了解如何将 Mastra 的 MCP 服务器添加到您的 AI 工具中。
+
+<YouTube id="vciV57lF0og" />
+
+## 安装
+
+### create-mastra
+
+在交互式 [create-mastra](/reference/cli/create-mastra) 向导中，在 MCP 步骤中选择您的工具之一。
+
+### 手动设置
+
+如果下面没有针对您工具的具体说明，您仍然可以使用这个常见的 JSON 配置来添加 MCP 服务器。
+
+```json title="mcp.json"
+{
+  "mcpServers": {
+    "mastra": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
+
+### Claude Code CLI
+
+使用终端命令安装：
+
+```bash
+claude mcp add --scope project mastra -- npx -y @mastra/mcp-docs-server@latest
+```
+
+如果尚不存在，这会创建一个项目范围的 `.mcp.json` 文件。当您将 Claude Code 用作 [Visual Studio Code 扩展](https://code.claude.com/docs/cn/en/vs-code#connect-to-external-tools-with-mcp) 时，可以使用相同的命令。
+
+[在 Claude Code 中使用 MCP 服务器的更多信息](https://docs.claude.com/en/docs/claude-code/mcp)
+
+### OpenAI Codex CLI
+
+1. 从终端注册它：
+
+   ```bash
+   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@latest
+   ```
+
+2. 运行 `codex mcp list` 确认服务器显示为 `enabled`。
+
+[在 OpenAI Codex 中使用 MCP 服务器的更多信息](https://developers.openai.com/codex/mcp)
+
+### Cursor
+
+通过点击下面的按钮安装：
+
+[![安装 MCP 服务器](https://cursor.com/deeplink/mcp-install-light.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=mastra&config=eyJjb21tYW5kIjoibnB4IC15IEBtYXN0cmEvbWNwLWRvY3Mtc2VydmVyIn0%3D)
+
+如果您遵循了自动安装，当您在 Cursor 中打开时，会在左下角看到一个弹出窗口，提示您启用 Mastra 文档 MCP 服务器。
+
+![Cursor 内部的弹出窗口，显示："检测到新的 MCP 服务器：mastra"。用户可以选择"跳过"或"启用"作为操作。](/img/enable-mastra-docs-cursor.png)
+
+[在 Cursor 中使用 MCP 服务器的更多信息](https://cursor.com/de/docs/context/mcp)
+
+### Antigravity
+
+Google Antigravity 是一个支持 MCP 服务器的智能体优先开发平台，用于访问外部文档、API 和项目上下文。
+
+1. 打开您的 Antigravity MCP 配置文件：
+    - 点击 **Agent session** 并在编辑器侧面板顶部的 **"..."** 下拉菜单中选择 **MCP Servers**，以访问 **MCP Store**。
+    - 您可以通过 Antigravity 中的 MCP Store 界面访问它
+
+    ![Antigravity MCP 商店。顶部是一个搜索栏，下面是可用 MCP 服务器列表。最右上角是一个下拉菜单。](/img/antigravity_mcp_server.png)
+
+1. 要添加自定义 MCP 服务器，请在 MCP Store 顶部选择 **Manage MCP Servers**，然后在主选项卡中点击 **View raw config**。
+
+    ![Antigravity MCP 商店，显示 Manage MCP Servers 选项和 View raw config 按钮。](/img/antigravity_managed_mcp.png)
+
+1. 添加 Mastra MCP 服务器配置：
+
+    ```json
+    {
+      "mcpServers": {
+        "mastra-docs": {
+          "command": "npx",
+          "args": [
+            "-y",
+            "@mastra/mcp-docs-server"
+          ]
+        }
+      }
+    }
+    ```
+
+1. 保存配置并重启 Antigravity
+
+    ![UI 显示 MCP 服务器已启用。您还可以切换各个工具。](/img/antigravity_final_interface_mcp.png)
+
+配置完成后，Mastra MCP 服务器向 Antigravity 智能体公开以下内容：
+- Mastra 的索引文档和 API 模式，支持在代码生成过程中以编程方式检索相关上下文
+- 访问存储在 Mastra 文档中的示例代码片段和使用模式
+- 编辑器中用于错误处理和调试引用的结构化数据
+- 有关当前 Mastra 项目模式用于代码建议和完成的元数据
+
+MCP 服务器将出现在 Antigravity 的 MCP Store 中，您可以在其中管理其连接状态和身份验证（如果需要）。
+
+[在 Antigravity 中使用 MCP 服务器的更多信息](https://antigravity.google)
+
+### Visual Studio Code
+
+1. 在您的工作区中创建 `.vscode/mcp.json` 文件
+2. 插入以下配置：
+
+   ```json title=".vscode/mcp.json"
+   {
+     "servers": {
+       "mastra": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "@mastra/mcp-docs-server@latest"]
+       }
+     }
+   }
+   ```
+
+安装 MCP 服务器后，您可以像这样使用它：
+
+1. 打开 VSCode 设置。
+2. 导航到 MCP 设置。
+3. 在 Chat > MCP 选项上点击 "enable"。
+
+    ![VSCode 设置页面中的条目。该选项称为"Chat > MCP: Enabled (Preview)"。描述说明："启用与模型上下文协议服务器的集成，以提供额外的工具和功能。"](/img/vscode-mcp-setting.png)
+
+MCP 仅在 VSCode 的智能体模式下工作。进入智能体模式后，打开 `mcp.json` 文件并点击"启动"按钮。请注意，"启动"按钮仅在包含 `mcp.json` 的 `.vscode` 文件夹位于您的工作区根目录或编辑器内文件浏览器的最高级别时才会出现。
+
+![显示 mcp.json 文件的屏幕截图，编辑器中显示了启动按钮](/img/vscode-start-mcp.png)
+
+启动 MCP 服务器后，点击 Copilot 窗格中的工具按钮以查看可用的工具。
+
+![VSCode 的工具页面，查看可用的工具](/img/vscode-mcp-running.png)
+
+[在 Visual Studio Code 中使用 MCP 服务器的更多信息](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
+
+### Windsurf
+
+1. 在编辑器中打开 `~/.codeium/windsurf/mcp_config.json`
+2. 插入以下配置：
+
+   ```json title="~/.codeium/windsurf/mcp_config.json"
+   {
+     "mcpServers": {
+       "mastra": {
+         "command": "npx",
+         "args": ["-y", "@mastra/mcp-docs-server@latest"]
+       }
+     }
+   }
+   ```
+
+3. 保存配置并重启 Windsurf
+
+[在 Windsurf 中使用 MCP 服务器的更多信息](https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json)
+
+### OpenCode
+
+您可以在 [OpenCode 配置](https://opencode.ai/docs/config/) 中的 `mcp` 下定义 MCP 服务器。在项目根目录中创建包含以下内容的 `opencode.jsonc` 文件：
+
+```json title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "mastra": {
+      "type": "local",
+      "command": ["npx", "-y", "@mastra/mcp-docs-server@latest"],
+      "enabled": true,
+    },
+  },
+}
+```
+
+[在 OpenCode 中使用 MCP 服务器的更多信息](https://opencode.ai/docs/cn/mcp-servers)
+
+### Zed
+
+1. 在编辑器中打开 `~/.config/zed/settings.json`
+2. 插入以下配置：
+
+```json title="~/.config/zed/settings.json"
+{
+  "context_servers": {
+    "Mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
+
+## 使用方法
+
+配置完成后，您可以向您的 AI 工具询问有关 Mastra 的问题，或指示它采取操作。对于这些步骤，它将从 Mastra 的 MCP 服务器获取最新信息。
+
+**添加功能：**
+
+- "为我的智能体添加评估并编写测试"
+- "编写一个执行以下 `[任务]` 的工作流"
+- "创建一个新工具，让我的智能体能够访问 `[第三方 API]`"
+
+**询问集成：**
+
+- "Mastra 是否与 AI SDK 兼容？
+  如何在我的 `[React/Svelte/等]` 项目中使用它？"
+- "Mastra 是否支持 `[提供商]` 的语音和语音 API？在我代码中给我展示一个如何使用它的示例。"
+
+**调试或更新现有代码：**
+
+- "我在智能体内存方面遇到了一个错误，最近有没有相关的更改或错误修复？"
+- "Mastra 中的工作内存如何工作，我如何使用它来执行 `[任务]`？它似乎不像我预期的那样工作。"
+- "我看到有新的工作流功能，向我解释它们，然后更新 `[工作流]` 以使用它们。"
+
+### 故障排除
+
+1. **服务器未启动**
+   - 确保 [npx](https://docs.npmjs.com/cli/v11/commands/npx) 已安装并正常工作。
+   - 检查冲突的 MCP 服务器。
+   - 验证您的配置文件语法。
+
+2. **工具调用失败**
+   - 重启 MCP 服务器和/或您的 IDE。
+   - 更新到最新版本的 IDE。

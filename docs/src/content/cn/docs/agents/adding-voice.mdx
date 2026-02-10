@@ -1,0 +1,370 @@
+---
+title: "语音 | 智能体"
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-azure"
+  - "@mastra/voice-cloudflare"
+  - "@mastra/voice-deepgram"
+  - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-google"
+  - "@mastra/voice-murf"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
+  - "@mastra/voice-sarvam"
+  - "@mastra/voice-speechify"
+---
+
+# 语音
+
+Mastra 智能体可以增强语音功能，使其能够说话回应和听取用户输入。您可以将智能体配置为使用单个语音提供商，也可以组合多个提供商以执行不同的操作。
+
+## 基础用法
+
+为智能体添加语音功能的最简单方法是使用单个提供商同时进行说话和听取：
+
+```typescript
+import { createReadStream } from "fs";
+import path from "path";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+// 使用默认设置初始化语音提供商
+const voice = new OpenAIVoice();
+
+// 创建具有语音功能的智能体
+export const agent = new Agent({
+  id: "voice-agent",
+  name: "语音智能体",
+  instructions: `您是一位同时具备语音转文字和文字转语音功能的助手。`,
+  model: "openai/gpt-5.1",
+  voice,
+});
+
+// 智能体现在可以使用语音进行交互
+const audioStream = await agent.voice.speak("您好，我是您的 AI 助手！", {
+  filetype: "m4a",
+});
+
+playAudio(audioStream!);
+
+try {
+  const transcription = await agent.voice.listen(audioStream);
+  console.log(transcription);
+} catch (error) {
+  console.error("转录音频时出错：", error);
+}
+```
+
+## 使用音频流
+
+`speak()` 和 `listen()` 方法与 Node.js 流配合使用。以下是保存和加载音频文件的方法：
+
+### 保存语音输出
+
+`speak` 方法返回一个可以管道传输到文件或扬声器的流。
+
+```typescript
+import { createWriteStream } from "fs";
+import path from "path";
+
+// 生成语音并保存到文件
+const audio = await agent.voice.speak("您好，世界！");
+const filePath = path.join(process.cwd(), "agent.mp3");
+const writer = createWriteStream(filePath);
+
+audio.pipe(writer);
+
+await new Promise<void>((resolve, reject) => {
+  writer.on("finish", () => resolve());
+  writer.on("error", reject);
+});
+```
+
+### 转录音频输入
+
+`listen` 方法期望接收来自麦克风或文件的音频数据流。
+
+```typescript
+import { createReadStream } from "fs";
+import path from "path";
+
+// 读取音频文件并进行转录
+const audioFilePath = path.join(process.cwd(), "/agent.m4a");
+const audioStream = createReadStream(audioFilePath);
+
+try {
+  console.log("正在转录音频文件...");
+  const transcription = await agent.voice.listen(audioStream, {
+    filetype: "m4a",
+  });
+  console.log("转录结果：", transcription);
+} catch (error) {
+  console.error("转录音频时出错：", error);
+}
+```
+
+## 语音到语音交互
+
+为了获得更具动态性和交互性的语音体验，您可以使用支持语音到语音功能的实时语音提供商：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { search, calculate } from "../tools";
+
+// 初始化实时语音提供商
+const voice = new OpenAIRealtimeVoice({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: "gpt-5.1-realtime",
+  speaker: "alloy",
+});
+
+// 创建具有语音到语音功能的智能体
+export const agent = new Agent({
+  id: "speech-to-speech-agent",
+  name: "语音到语音智能体",
+  instructions: `您是一位具备语音到语音功能的助手。`,
+  model: "openai/gpt-5.1",
+  tools: {
+    // 配置在智能体上的工具会传递给语音提供商
+    search,
+    calculate,
+  },
+  voice,
+});
+
+// 建立 WebSocket 连接
+await agent.voice.connect();
+
+// 开始对话
+agent.voice.speak("您好，我是您的 AI 助手！");
+
+// 从麦克风流式传输音频
+const microphoneStream = getMicrophoneStream();
+agent.voice.send(microphoneStream);
+
+// 对话结束时
+agent.voice.close();
+```
+
+### 事件系统
+
+实时语音提供商会发出多个事件，您可以监听这些事件：
+
+```typescript
+// 监听语音提供商发送的语音音频数据
+agent.voice.on("speaking", ({ audio }) => {
+  // audio 包含 ReadableStream 或 Int16Array 音频数据
+});
+
+// 监听来自语音提供商和用户的转录文本
+agent.voice.on("writing", ({ text, role }) => {
+  console.log(`${role} 说：${text}`);
+});
+
+// 监听错误
+agent.voice.on("error", (error) => {
+  console.error("语音错误：", error);
+});
+```
+
+## 示例
+
+### 端到端语音交互
+
+此示例演示了两个智能体之间的语音交互。混合语音智能体使用多个提供商，它会说话提出一个问题，并将其保存为音频文件。统一语音智能体听取该文件，处理问题，生成回应并说话回复。两种音频输出都保存到 `audio` 目录。
+
+创建以下文件：
+
+- **hybrid-question.mp3** – 混合智能体的口头问题。
+- **unified-response.mp3** – 统一智能体的口头回应。
+
+```typescript title="src/test-voice-agents.ts"
+import "dotenv/config";
+
+import path from "path";
+import { createReadStream } from "fs";
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { Mastra } from "@mastra/core";
+
+// 将音频流保存到 audio 目录中的文件，如目录不存在则创建。
+export const saveAudioToFile = async (
+  audio: NodeJS.ReadableStream,
+  filename: string,
+): Promise<void> => {
+  const audioDir = path.join(process.cwd(), "audio");
+  const filePath = path.join(audioDir, filename);
+
+  await fs.promises.mkdir(audioDir, { recursive: true });
+
+  const writer = createWriteStream(filePath);
+  audio.pipe(writer);
+  return new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
+};
+
+// 将音频流保存到 audio 目录中的文件，如目录不存在则创建。
+export const convertToText = async (
+  input: string | NodeJS.ReadableStream,
+): Promise<string> => {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    inputData.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    inputData.on("error", reject);
+    inputData.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+  });
+};
+
+export const hybridVoiceAgent = new Agent({
+  id: "hybrid-voice-agent",
+  name: "混合语音智能体",
+  model: "openai/gpt-5.1",
+  instructions: "您可以使用不同的提供商进行说话和听取。",
+  voice: new CompositeVoice({
+    input: new OpenAIVoice(),
+    output: new OpenAIVoice(),
+  }),
+});
+
+export const unifiedVoiceAgent = new Agent({
+  id: "unified-voice-agent",
+  name: "统一语音智能体",
+  instructions: "您是一位同时具备语音转文字和文字转语音功能的智能体。",
+  model: "openai/gpt-5.1",
+  voice: new OpenAIVoice(),
+});
+
+export const mastra = new Mastra({
+  agents: { hybridVoiceAgent, unifiedVoiceAgent },
+});
+
+const hybridVoiceAgent = mastra.getAgent("hybridVoiceAgent");
+const unifiedVoiceAgent = mastra.getAgent("unifiedVoiceAgent");
+
+const question = "生命的意义是什么？请用一句话回答。";
+
+const hybridSpoken = await hybridVoiceAgent.voice.speak(question);
+
+await saveAudioToFile(hybridSpoken!, "hybrid-question.mp3");
+
+const audioStream = createReadStream(
+  path.join(process.cwd(), "audio", "hybrid-question.mp3"),
+);
+const unifiedHeard = await unifiedVoiceAgent.voice.listen(audioStream);
+
+const inputText = await convertToText(unifiedHeard!);
+
+const unifiedResponse = await unifiedVoiceAgent.generate(inputText);
+const unifiedSpoken = await unifiedVoiceAgent.voice.speak(unifiedResponse.text);
+
+await saveAudioToFile(unifiedSpoken!, "unified-response.mp3");
+```
+
+### 使用多个提供商
+
+为了更灵活，您可以使用 CompositeVoice 类为说话和听取分别使用不同的提供商：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+export const agent = new Agent({
+  id: "voice-agent",
+  name: "语音智能体",
+  instructions: `您是一位同时具备语音转文字和文字转语音功能的助手。`,
+  model: "openai/gpt-5.1",
+
+  // 使用 OpenAI 进行听取，PlayAI 进行说话，创建混合语音
+  voice: new CompositeVoice({
+    input: new OpenAIVoice(),
+    output: new PlayAIVoice(),
+  }),
+});
+```
+
+### 使用 AI SDK
+
+Mastra 支持直接在 `CompositeVoice` 中使用 AI SDK 的转录和语音模型，让您通过 AI SDK 生态系统访问广泛的提供商：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { groq } from "@ai-sdk/groq";
+
+export const agent = new Agent({
+  id: "aisdk-voice-agent",
+  name: "AI SDK 语音智能体",
+  instructions: `您是一位具备语音功能的助手。`,
+  model: "openai/gpt-5.1",
+
+  // 直接将 AI SDK 模型传递给 CompositeVoice
+  voice: new CompositeVoice({
+    input: openai.transcription('whisper-1'),      // AI SDK 转录模型
+    output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK 语音模型
+  }),
+});
+
+// 像往常一样使用语音功能
+const audioStream = await agent.voice.speak("您好！");
+const transcribedText = await agent.voice.listen(audioStream);
+```
+
+#### 混合搭配提供商
+
+您可以将 AI SDK 模型与 Mastra 语音提供商混合使用：
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { openai } from "@ai-sdk/openai";
+
+// 使用 AI SDK 进行转录，Mastra 提供商进行语音
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),  // AI SDK
+  output: new PlayAIVoice(),                  // Mastra 提供商
+});
+```
+
+有关支持的 AI SDK 提供商及其功能的完整列表：
+* [转录](https://ai-sdk.dev/docs/cn/providers/openai/transcription)
+* [语音](https://ai-sdk.dev/docs/cn/providers/elevenlabs/speech)
+
+## 支持的语音提供商
+
+Mastra 支持多种语音提供商，提供文字转语音（TTS）和语音转文字（STT）功能：
+
+| 提供商           | 包                                | 功能                      | 参考文档                                             |
+| --------------- | --------------------------------- | ------------------------ | --------------------------------------------------- |
+| OpenAI          | `@mastra/voice-openai`           | TTS, STT                 | [文档](/reference/voice/openai)                      |
+| OpenAI 实时     | `@mastra/voice-openai-realtime`   | 实时语音到语音            | [文档](/reference/voice/openai-realtime)             |
+| ElevenLabs      | `@mastra/voice-elevenlabs`        | 高质量 TTS               | [文档](/reference/voice/elevenlabs)                  |
+| PlayAI          | `@mastra/voice-playai`            | TTS                      | [文档](/reference/voice/playai)                       |
+| Google          | `@mastra/voice-google`            | TTS, STT                 | [文档](/reference/voice/google)                       |
+| Deepgram        | `@mastra/voice-deepgram`          | STT                      | [文档](/reference/voice/deepgram)                    |
+| Murf            | `@mastra/voice-murf`              | TTS                      | [文档](/reference/voice/murf)                        |
+| Speechify       | `@mastra/voice-speechify`        | TTS                      | [文档](/reference/voice/speechify)                   |
+| Sarvam          | `@mastra/voice-sarvam`          | TTS, STT                 | [文档](/reference/voice/sarvam)                      |
+| Azure           | `@mastra/voice-azure`             | TTS, STT                 | [文档](/reference/voice/mastra-voice)                |
+| Cloudflare      | `@mastra/voice-cloudflare`        | TTS                      | [文档](/reference/voice/mastra-voice)                |
+
+## 下一步
+
+- [语音 API 参考](/reference/voice/mastra-voice) - 语音功能的详细 API 文档
+- [文字转语音示例](https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech) - 交互式故事生成器和其他 TTS 实现
+- [语音转文字示例](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text) - 语音备忘录应用和其他 STT 实现
+- [语音到语音示例](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech) - 实时语音对话及通话分析

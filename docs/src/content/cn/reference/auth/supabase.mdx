@@ -1,0 +1,67 @@
+---
+title: "参考文档：MastraAuthSupabase 类 | 认证"
+description: "MastraAuthSupabase 类的 API 参考，该类使用 Supabase 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-supabase"
+  - "@mastra/core"
+---
+
+# MastraAuthSupabase 类
+
+`MastraAuthSupabase` 类使用 Supabase 身份验证为 Mastra 提供身份验证。它使用 Supabase 的身份验证系统验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthSupabase({
+      url: process.env.SUPABASE_URL,
+      anonKey: process.env.SUPABASE_ANON_KEY,
+    }),
+  },
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "您的 Supabase 项目的 URL。可以在 Supabase 项目设置中找到。",
+      isOptional: true,
+      defaultValue: "process.env.SUPABASE_URL",
+    },
+    {
+      name: "anonKey",
+      type: "string",
+      description:
+        "您的 Supabase 项目的匿名/公共密钥。用于客户端身份验证。",
+      isOptional: true,
+      defaultValue: "process.env.SUPABASE_ANON_KEY",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "身份验证提供程序实例的自定义名称。",
+      isOptional: true,
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: User, request: HoneRequest) => Promise<boolean> | boolean",
+      description:
+        "自定义授权函数，用于确定用户是否应该获得访问权限。在令牌验证后调用。默认情况下，检查 'users' 表中的 'isAdmin' 列。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 相关内容
+
+[MastraAuthSupabase](/docs/cn/docs/server/auth/supabase)

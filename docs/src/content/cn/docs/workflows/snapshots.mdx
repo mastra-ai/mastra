@@ -1,0 +1,246 @@
+---
+title: "快照 | 工作流"
+description: "了解如何在 Mastra 中保存和恢复工作流执行状态快照"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# 快照
+
+在 Mastra 中，快照是工作流在特定时间点的完整执行状态的可序列化表示。快照捕获了恢复工作流所需的所有信息，包括：
+
+- 工作流中每个步骤的当前状态
+- 已完成步骤的输出
+- 通过工作流的执行路径
+- 任何暂停的步骤及其元数据
+- 每个步骤的剩余重试次数
+- 恢复执行所需的额外上下文数据
+
+当工作流暂停时，Mastra 会自动创建和管理快照，并将其持久化到配置的存储系统中。
+
+## 快照在暂停和恢复中的作用
+
+快照是实现 Mastra 暂停和恢复功能的关键机制。当工作流步骤调用 `await suspend()` 时：
+
+1. 工作流执行在该精确点暂停
+2. 工作流的当前状态被捕获为快照
+3. 快照被持久化到存储
+4. 工作流步骤被标记为"暂停"，状态为 `'suspended'`
+5. 稍后，当对暂停的步骤调用 `resume()` 时，会检索快照
+6. 工作流执行从离开的地方继续
+
+这个机制提供了一种强大的方式来实现人机交互工作流、处理速率限制、等待外部资源，以及实现可能需要暂停较长时间的复杂分支工作流。
+
+## 快照结构
+
+每个快照都包含 `runId`、输入、步骤状态（`success`、`suspended` 等）、任何暂停和恢复负载，以及最终输出。这确保了在恢复执行时可以使用完整上下文。
+
+```json
+{
+  "runId": "34904c14-e79e-4a12-9804-9655d4616c50",
+  "status": "success",
+  "value": {},
+  "context": {
+    "input": {
+      "value": 100,
+      "user": "Michael",
+      "requiredApprovers": ["manager", "finance"]
+    },
+    "approval-step": {
+      "payload": {
+        "value": 100,
+        "user": "Michael",
+        "requiredApprovers": ["manager", "finance"]
+      },
+      "startedAt": 1758027577955,
+      "status": "success",
+      "suspendPayload": {
+        "message": "Workflow suspended",
+        "requestedBy": "Michael",
+        "approvers": ["manager", "finance"]
+      },
+      "suspendedAt": 1758027578065,
+      "resumePayload": { "confirm": true, "approver": "manager" },
+      "resumedAt": 1758027578517,
+      "output": { "value": 100, "approved": true },
+      "endedAt": 1758027578634
+    }
+  },
+  "activePaths": [],
+  "serializedStepGraph": [
+    {
+      "type": "step",
+      "step": {
+        "id": "approval-step",
+        "description": "Accepts a value, waits for confirmation"
+      }
+    }
+  ],
+  "suspendedPaths": {},
+  "waitingPaths": {},
+  "result": { "value": 100, "approved": true },
+  "requestContext": {},
+  "timestamp": 1758027578740
+}
+```
+
+## 快照如何保存和检索
+
+快照保存到配置的存储系统。默认情况下，它们使用 libSQL，但你可以配置 Upstash 或 PostgreSQL。每个快照都保存在 `workflow_snapshots` 表中，并通过工作流的 `runId` 标识。
+
+了解更多：
+
+- [libSQL 存储](/reference/storage/libsql)
+- [Upstash 存储](/reference/storage/upstash)
+- [PostgreSQL 存储](/reference/storage/postgresql)
+
+### 保存快照
+
+当工作流暂停时，Mastra 会自动持久化工作流快照，步骤如下：
+
+1. 步骤执行中的 `suspend()` 函数触发快照过程
+2. `WorkflowInstance.suspend()` 方法记录暂停的机器
+3. 调用 `persistWorkflowSnapshot()` 保存当前状态
+4. 快照被序列化并存储在配置数据库的 `workflow_snapshots` 表中
+5. 存储记录包括工作流名称、运行 ID 和序列化的快照
+
+### 检索快照
+
+当恢复工作流时，Mastra 通过以下步骤检索持久化的快照：
+
+1. 使用特定步骤 ID 调用 `resume()` 方法
+2. 使用 `loadWorkflowSnapshot()` 从存储加载快照
+3. 解析快照并准备恢复
+4. 使用快照状态重新创建工作流执行
+5. 恢复暂停的步骤，执行继续
+
+```typescript
+const storage = mastra.getStorage();
+const workflowStore = await storage?.getStore('workflows');
+
+const snapshot = await workflowStore?.loadWorkflowSnapshot({
+  runId: "<run-id>",
+  workflowName: "<workflow-id>",
+});
+
+console.log(snapshot);
+```
+
+## 快照的存储选项
+
+快照使用 `Mastra` 类上配置的 `storage` 实例持久化。此存储层在该实例上注册的所有工作流之间共享。Mastra 支持多种存储选项，以适应不同环境的灵活性。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+import { approvalWorkflow } from "./workflows";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: ":memory:",
+  }),
+  workflows: { approvalWorkflow },
+});
+```
+
+- [libSQL 存储](/reference/storage/libsql)
+- [PostgreSQL 存储](/reference/storage/postgresql)
+- [MongoDB 存储](/reference/storage/mongodb)
+- [Upstash 存储](/reference/storage/upstash)
+- [Cloudflare D1](/reference/storage/cloudflare-d1)
+- [DynamoDB](/reference/storage/dynamodb)
+- [更多存储提供程序](/docs/cn/memory/storage)
+
+## 最佳实践
+
+1. **确保可序列化**：需要包含在快照中的任何数据必须是可序列化的（可转换为 JSON）。
+2. **最小化快照大小**：避免直接在工作流上下文中存储大型数据对象。相反，存储对它们的引用（如 ID），并在需要时检索数据。
+3. **谨慎处理恢复上下文**：恢复工作流时，仔细考虑要提供什么上下文。这将与现有快照数据合并。
+4. **设置适当的监控**：为暂停的工作流实施监控，尤其是长时间运行的工作流，以确保它们被正确恢复。
+5. **考虑存储扩展**：对于有许多暂停工作流的应用程序，确保你的存储解决方案适当扩展。
+
+## 自定义快照元数据
+
+你可以通过定义 `suspendSchema` 在暂停工作流时附加自定义元数据。此元数据存储在快照中，并在恢复工作流时可用。
+
+```typescript {30-34} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const approvalStep = createStep({
+  id: "approval-step",
+  description: "Accepts a value, waits for confirmation",
+  inputSchema: z.object({
+    value: z.number(),
+    user: z.string(),
+    requiredApprovers: z.array(z.string()),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    requestedBy: z.string(),
+    approvers: z.array(z.string()),
+  }),
+  resumeSchema: z.object({
+    confirm: z.boolean(),
+    approver: z.string(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+    approved: z.boolean(),
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { value, user, requiredApprovers } = inputData;
+    const { confirm } = resumeData ?? {};
+
+    if (!confirm) {
+      return await suspend({
+        message: "Workflow suspended",
+        requestedBy: user,
+        approvers: [...requiredApprovers],
+      });
+    }
+
+    return {
+      value,
+      approved: confirm,
+    };
+  },
+});
+```
+
+### 提供恢复数据
+
+恢复暂停的步骤时，使用 `resumeData` 传递结构化输入。它必须与步骤的 `resumeSchema` 匹配。
+
+```typescript {14-20}
+const workflow = mastra.getWorkflow("approvalWorkflow");
+
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: {
+    value: 100,
+    user: "Michael",
+    requiredApprovers: ["manager", "finance"],
+  },
+});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    step: "approval-step",
+    resumeData: {
+      confirm: true,
+      approver: "manager",
+    },
+  });
+}
+```
+
+## 相关内容
+
+- [控制流](/docs/cn/workflows/control-flow)
+- [暂停与恢复](/docs/cn/workflows/suspend-and-resume)
+- [时光旅行](/docs/cn/workflows/time-travel)
+- [人机交互](/docs/cn/workflows/human-in-the-loop)

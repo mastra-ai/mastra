@@ -1,0 +1,191 @@
+---
+title: "LangSmith 导出器 | 追踪 | 可观测性"
+description: "将追踪发送到 LangSmith 进行 LLM 可观测性和评估"
+packages:
+  - "@mastra/core"
+  - "@mastra/langsmith"
+  - "@mastra/observability"
+---
+
+# LangSmith 导出器
+
+[LangSmith](https://smith.langchain.com/) 是 LangChain 的监控和评估 LLM 应用程序的平台。LangSmith 导出器将您的追踪发送到 LangSmith，提供对模型性能、调试能力和评估工作流的洞察。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/langsmith@latest
+```
+
+## 配置
+
+### 前提条件
+
+1. **LangSmith 账户**：在 [smith.langchain.com](https://smith.langchain.com) 注册
+2. **API 密钥**：在 LangSmith 设置 → API 密钥中生成 API 密钥
+3. **环境变量**：设置您的凭据
+
+```bash title=".env"
+# 必需
+LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
+
+# 可选
+LANGCHAIN_PROJECT=my-project  # 追踪的默认项目
+LANGSMITH_BASE_URL=https://api.smith.langchain.com  # 用于自托管
+```
+
+### 零配置设置
+
+设置环境变量后，使用无需配置的导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangSmithExporter } from "@mastra/langsmith";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langsmith: {
+        serviceName: "my-service",
+        exporters: [new LangSmithExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangSmithExporter } from "@mastra/langsmith";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langsmith: {
+        serviceName: "my-service",
+        exporters: [
+          new LangSmithExporter({
+            apiKey: process.env.LANGSMITH_API_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 配置选项
+
+### 完整配置
+
+```typescript
+new LangSmithExporter({
+  // 必需凭据
+  apiKey: process.env.LANGSMITH_API_KEY!,
+
+  // 可选设置
+  apiUrl: process.env.LANGSMITH_BASE_URL, // 默认：https://api.smith.langchain.com
+  projectName: "my-project", // 发送追踪到的项目（覆盖 LANGCHAIN_PROJECT 环境变量）
+  callerOptions: {
+    // HTTP 客户端选项
+    timeout: 30000, // 请求超时（毫秒）
+    maxRetries: 3, // 重试次数
+  },
+  logLevel: "info", // 诊断日志记录：debug | info | warn | error
+
+  // LangSmith 特定选项
+  hideInputs: false, // 在 UI 中隐藏输入数据
+  hideOutputs: false, // 在 UI 中隐藏输出数据
+});
+```
+
+### 环境变量
+
+| 变量 | 描述 |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | 您的 LangSmith API 密钥（必需） |
+| `LANGCHAIN_PROJECT` | 追踪的默认项目名称（可选，默认为 "default"） |
+| `LANGSMITH_BASE_URL` | 用于自托管实例的 API URL（可选） |
+
+`projectName` 配置选项优先于 `LANGCHAIN_PROJECT` 环境变量，允许您以编程方式将追踪路由到不同的项目。
+
+## 动态配置
+
+您可以使用 `withLangsmithMetadata` 动态覆盖每个跨度的 LangSmith 设置。这对于根据运行时条件（例如客户、环境或功能）将追踪路由到不同的项目很有用。
+
+### 使用辅助函数
+
+将 `withLangsmithMetadata` 与 `buildTracingOptions` 一起使用以设置 LangSmith 特定的选项：
+
+```typescript title="src/agents/support-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangsmithMetadata } from "@mastra/langsmith";
+
+export const supportAgent = new Agent({
+  id: "support-agent",
+  name: "support-agent",
+  instructions: "You are a helpful support agent.",
+  model: "openai/gpt-4o",
+  defaultOptions: {
+    tracingOptions: buildTracingOptions(
+      withLangsmithMetadata({ projectName: "customer-support" }),
+    ),
+  },
+});
+```
+
+### 动态项目路由
+
+使用 `requestContext` 根据运行时条件将追踪路由到不同的项目。
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangsmithMetadata } from "@mastra/langsmith";
+
+export const supportAgent = new Agent({
+  id: "support-agent",
+  name: "support-agent",
+  instructions: "You are a helpful support agent.",
+  model: "openai/gpt-4o",
+  defaultOptions: ({ requestContext }) => {
+    const userTier = requestContext?.get("user-tier") as string;
+    const userId = requestContext?.get("user-id") as string;
+
+    return {
+      tracingOptions: buildTracingOptions(
+        withLangsmithMetadata({
+          projectName: userTier === "enterprise"
+            ? "enterprise-traces"
+            : "standard-traces",
+          sessionId: userId,
+        }),
+      ),
+    };
+  },
+});
+```
+
+### 可用字段
+
+`withLangsmithMetadata` 辅助函数接受以下字段：
+
+| 字段 | 类型 | 描述 |
+|-------|------|-------------|
+| `projectName` | string | 覆盖此追踪的项目 |
+| `sessionId` | string | 按会话对相关追踪进行分组 |
+| `sessionName` | string | 会话的显示名称 |
+
+所有字段都是可选的。辅助函数与任何现有元数据合并，因此您可以多次调用它或与其他追踪选项组合。
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [LangSmith 文档](https://docs.smith.langchain.com/)

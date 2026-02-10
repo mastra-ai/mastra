@@ -1,0 +1,90 @@
+---
+title: "部署 | Mastra Cloud"
+description: "将您的 Mastra 应用程序部署到生产环境"
+---
+
+# 部署
+
+将您的 Mastra 应用程序部署到生产环境，并将您的智能体、工具和工作流公开为 REST API 端点。
+
+:::info
+
+Mastra Cloud 目前处于测试阶段，但许多团队已经在使用它来部署他们的智能体。这是在托管环境中运行 Mastra 智能体最简单的方法。
+
+:::
+
+## 启用部署
+
+[设置好您的项目](/docs/cn/mastra-cloud/setup)后，点击侧边栏中的**部署**并选择**启用部署**。
+
+启用后，您的项目会自动构建和部署。将来推送到主分支会触发自动重新部署。
+
+## 仪表板
+
+**概览**页面显示您项目的域名 URL、状态、最新部署以及连接的智能体和工作流。
+
+![项目仪表板](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+点击**部署**菜单项查看构建日志。打开**设置**以配置环境变量、分支、存储和端点 URL。
+
+:::note
+
+设置更改需要新的部署才能生效
+
+:::
+
+## 存储配置
+
+Mastra Cloud 提供两种存储选项：
+
+1. **Mastra Cloud Store**: 由 Mastra Cloud 提供的托管存储
+2. **自带数据库**: 连接到您自己的外部数据库
+
+### 使用 Mastra Cloud Store
+
+使用托管的 Mastra Cloud Store（可在项目设置中启用）时，必须在 `Mastra` 实例上配置存储，而不是在单个智能体 `Memory` 实例上配置。
+
+在您的 Mastra 实例上配置存储：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-store",
+    url: "file:./mastra.db",
+  }),
+  agents: { myAgent },
+});
+```
+
+智能体可以在不指定存储的情况下使用 Memory，因为它们继承自 Mastra 实例：
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+export const myAgent = new Agent({
+  id: "my-agent",
+  memory: new Memory({
+    // 这里没有存储 - 使用来自 Mastra Cloud Store 的实例级存储
+    options: {
+      lastMessages: 20,
+    },
+  }),
+});
+```
+
+### 自带数据库
+
+如果您不使用 Mastra Cloud Store，可以使用任何[存储提供商](/docs/cn/memory/storage#supported-providers)及其任意配置。在项目的**设置**页面中将数据库连接字符串设置为环境变量。
+
+## 使用您的部署
+
+部署后，使用 [Mastra Client](/docs/cn/server/mastra-client) 与您的智能体交互，或直接调用 REST API 端点。
+
+## 下一步
+
+- [Studio](/docs/cn/mastra-cloud/studio) - 在云端测试您的智能体
+- [可观察性](/docs/cn/mastra-cloud/observability) - 监控跟踪和日志

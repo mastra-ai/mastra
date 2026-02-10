@@ -1,0 +1,22 @@
+---
+title: "参考：NetlifyDeployer | 部署器"
+description: "NetlifyDeployer 类的文档，用于将 Mastra 应用程序部署到 Netlify Functions。"
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-netlify"
+---
+
+# NetlifyDeployer
+
+`NetlifyDeployer` 类用于将独立的 Mastra 应用程序部署到 Netlify。它管理配置和部署过程，并扩展了基础的 [Deployer](/reference/deployer/) 类，添加了 Netlify 特定的功能。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  deployer: new NetlifyDeployer(),
+});
+```

@@ -1,0 +1,160 @@
+---
+title: "参考：答案相关性评分器 | 评估"
+description: "Mastra 中答案相关性评分器的文档，用于评估 LLM 输出对输入查询的响应程度。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 答案相关性评分器
+
+`createAnswerRelevancyScorer()` 函数接受一个包含以下属性的选项对象：
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "用于评估相关性的模型配置。",
+    },
+    {
+      name: "uncertaintyWeight",
+      type: "number",
+      required: false,
+      defaultValue: "0.3",
+      description: "评分中对'不确定'判断的权重 (0-1)。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "最大分值。",
+    },
+  ]}
+/>
+
+此函数返回 MastraScorer 类的实例。`.run()` 方法接受与其他评分器相同的输入（请参阅 [MastraScorer 参考](./mastra-scorer)），但返回值包含 LLM 特定的字段，如下所述。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "相关性分数 (0 到 scale，默认 0-1)",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于预处理步骤的提示词（可选）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "包含提取语句的对象: { statements: string[] }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于分析步骤的提示词（可选）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "包含结果的对象: { results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "发送给 LLM 用于生成理由步骤的提示词（可选）。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "分数的解释。",
+    },
+  ]}
+/>
+
+## 评分详情
+
+评分器通过查询-答案匹配来评估相关性，考虑完整性和细节程度，但不评估事实正确性。
+
+### 评分过程
+
+1. **语句预处理**：
+   - 将输出分解为有意义的语句，同时保留上下文。
+2. **相关性分析**：
+   - 每个语句被评估为：
+     - "yes": 直接匹配获得满分
+     - "unsure": 部分匹配获得部分权重（默认：0.3）
+     - "no": 不相关内容获得零分
+3. **分数计算**：
+   - `((直接匹配 + 不确定 * 部分匹配) / 总语句数) * scale`
+
+### 分数解释
+
+0 到 1 之间的相关性分数：
+
+- **1.0**：响应完全回答了查询，包含相关且聚焦的信息。
+- **0.7–0.9**：响应基本回答了查询，但可能包含少量无关内容。
+- **0.4–0.6**：响应部分回答了查询，混合了相关和无关信息。
+- **0.1–0.3**：响应包含极少的相关内容，基本错过了查询的意图。
+- **0.0**：响应完全无关，没有回答查询。
+
+## 示例
+
+评估不同场景下代理响应的相关性：
+
+```typescript title="src/example-answer-relevancy.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o" });
+
+const result = await runEvals({
+  data: [
+    {
+      input: "经常运动有哪些健康益处？",
+    },
+    {
+      input: "健康的早餐应该包括什么？",
+    },
+    {
+      input: "冥想有哪些益处？",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview) 指南。
+
+## 相关内容
+
+- [忠实度评分器](./faithfulness)

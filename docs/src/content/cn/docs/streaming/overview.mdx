@@ -1,0 +1,200 @@
+---
+title: "流式传输概述 | 流式传输"
+description: "Mastra 中的流式传输支持来自智能体和工作流的实时、增量响应，在 AI 生成内容时提供即时反馈。"
+packages:
+  - "@mastra/ai-sdk"
+---
+
+# 流式传输概述
+
+Mastra 支持来自智能体和工作流的实时、增量响应，允许用户在输出生成时看到它，而不是等待完成。这对于聊天、长篇内容、多步骤工作流或任何需要即时反馈的场景都很有用。
+
+## 入门
+
+Mastra 的流式传输 API 根据您的模型版本进行调整：
+
+- **`.stream()`**：对于 V2 模型，支持 **AI SDK v5** 及更高版本（`LanguageModelV2`）。
+- **`.streamLegacy()`**：对于 V1 模型，支持 **AI SDK v4**（`LanguageModelV1`）。
+
+## 使用智能体进行流式传输
+
+对于简单提示，您可以传递单个字符串；在提供多个上下文片段时传递字符串数组，或传递带有 `role` 和 `content` 的消息对象数组以精确控制角色和对话流程。
+
+### 使用 `Agent.stream()`
+
+`textStream` 将响应分解为生成时的块，允许输出逐步流式传输，而不是一次全部到达。使用 `for await` 循环迭代 `textStream` 以检查每个流块。
+
+```typescript {3,7}
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+:::info
+
+访问 [Agent.stream()](/reference/streaming/agents/stream) 了解更多信息。
+
+:::
+
+### `Agent.stream()` 的输出
+
+输出流式传输来自智能体的生成响应。
+
+```text
+Of course!
+To help you organize your day effectively, I need a bit more information.
+Here are some questions to consider:
+...
+```
+
+### 智能体流属性
+
+智能体流提供对各种响应属性的访问：
+
+- **`stream.textStream`**：发出文本块的可读流。
+- **`stream.text`**：解析为完整文本响应的 Promise。
+- **`stream.finishReason`**：智能体停止流式传输的原因。
+- **`stream.usage`**：令牌使用信息。
+
+### AI SDK v5+ 兼容性
+
+AI SDK v5（及更高版本）对模型提供程序使用 `LanguageModelV2`。如果您遇到错误，提示您正在使用 AI SDK v4 模型，则需要将模型包升级到下一个主要版本。
+
+要与 AI SDK v5+ 集成，请使用 `@mastra/ai-sdk` 中的 `toAISdkV5Stream()` 工具将 Mastra 流转换为 AI SDK 兼容格式：
+
+```typescript {2,9-12}
+import { toAISdkV5Stream } from "@mastra/ai-sdk";
+
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+]);
+
+// 转换为 AI SDK v5+ 兼容流
+const aiSDKStream = toAISdkV5Stream(stream, { from: "agent" });
+
+// 与 AI SDK v5+ 方法一起使用
+```
+
+要将消息转换为 AI SDK v5+ 格式，请使用 `@mastra/ai-sdk/ui` 中的 `toAISdkV5Messages()` 工具：
+
+```typescript {1,4}
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+
+const messages = [{ role: "user", content: "Hello" }];
+const aiSDKMessages = toAISdkV5Messages(messages);
+```
+
+### 使用 `Agent.network()`
+
+`network()` 方法通过执行网络循环实现多智能体协作，多个智能体可以一起处理复杂任务。路由智能体根据对话上下文将任务委托给适当的子智能体、工作流和工具。
+
+> **注意**：此方法是实验性的，需要在智能体上配置内存。
+
+```typescript {3,5-7}
+const testAgent = mastra.getAgent("testAgent");
+
+const networkStream = await testAgent.network("Help me organize my day");
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+访问 [Agent.network()](/reference/agents/network) 了解更多信息。
+
+:::
+
+#### 网络流属性
+
+网络流提供对执行信息的访问：
+
+- **`networkStream.status`**：解析为工作流执行状态的 Promise
+- **`networkStream.result`**：解析为完整执行结果的 Promise
+- **`networkStream.usage`**：解析为令牌使用信息的 Promise
+
+```typescript {9-11}
+const testAgent = mastra.getAgent("testAgent");
+
+const networkStream = await testAgent.network(
+  "Research dolphins then write a report",
+);
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+
+console.log("Final status:", await networkStream.status);
+console.log("Final result:", await networkStream.result);
+console.log("Token usage:", await networkStream.usage);
+```
+
+## 使用工作流进行流式传输
+
+从工作流流式传输返回描述运行生命周期的结构化事件序列，而不是增量文本块。这种基于事件的格式使得在 once a run is created using `.createRun()` 后可以实时跟踪和响应工作流进度。
+
+### 使用 `Run.stream()`
+
+`stream()` 方法直接返回事件的 `ReadableStream`。
+
+```typescript {3,9}
+const run = await testWorkflow.createRun();
+
+const stream = await run.stream({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+访问 [Run.stream()](/reference/streaming/workflows/stream) 了解更多信息。
+
+:::
+
+### `Run.stream()` 的输出
+
+事件结构在顶层包含 `runId` 和 `from`，使识别和跟踪工作流运行变得更加容易，而无需深入研究负载。
+
+```typescript
+{
+  type: 'workflow-start',
+  runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
+  from: 'WORKFLOW',
+  payload: {
+    stepName: 'step-1',
+    args: { value: 'initial data' },
+    stepCallId: '8e15e618-be0e-4215-a5d6-08e58c152068',
+    startedAt: 1755121710066,
+    status: 'running'
+  }
+}
+```
+
+## 工作流流属性
+
+工作流流提供对各种响应属性的访问：
+
+- **`stream.status`**：工作流运行的状态。
+- **`stream.result`**：工作流运行的结果。
+- **`stream.usage`**：工作流运行的令牌使用总量。
+
+## 相关内容
+
+- [流式传输事件](./events)
+- [使用智能体](/docs/cn/agents/overview)
+- [工作流概述](../workflows/overview)

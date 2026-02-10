@@ -1,0 +1,153 @@
+---
+title: "参考：关键词覆盖率评分器 | 评估"
+description: "Mastra 中关键词覆盖率评分器的文档，用于评估 LLM 输出对输入中重要关键词的覆盖程度。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 关键词覆盖率评分器
+
+`createKeywordCoverageScorer()` 函数评估 LLM 输出对输入中重要关键词的覆盖程度。它分析关键词的存在和匹配，同时忽略常用词和停用词。
+
+## 参数
+
+`createKeywordCoverageScorer()` 函数不接受任何选项。
+
+此函数返回 MastraScorer 类的实例。请参阅 [MastraScorer 参考](./mastra-scorer) 了解 `.run()` 方法及其输入/输出的详细信息。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description:
+        "包含提取关键词的对象: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "包含关键词覆盖率的对象: { totalKeywords: number, matchedKeywords: number }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "覆盖率分数 (0-1)，表示匹配关键词的比例。",
+    },
+  ]}
+/>
+
+`.run()` 返回以下形状的结果：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    referenceKeywords: Set<string>,
+    responseKeywords: Set<string>
+  },
+  analyzeStepResult: {
+    totalKeywords: number,
+    matchedKeywords: number
+  },
+  score: number
+}
+```
+
+## 评分详情
+
+评分器通过以下特征匹配关键词来评估关键词覆盖率：
+
+- 常用词和停用词过滤（例如 "the"、"a"、"and"）
+- 不区分大小写的匹配
+- 词形变化处理
+- 专业术语和复合词的特殊处理
+
+### 评分过程
+
+1. 处理输入和输出中的关键词：
+   - 过滤常用词和停用词
+   - 标准化大小写和词形
+   - 处理特殊术语和复合词
+2. 计算关键词覆盖率：
+   - 在文本之间匹配关键词
+   - 计算成功匹配数
+   - 计算覆盖率比率
+
+最终分数：`(matched_keywords / total_keywords) * scale`
+
+### 分数解释
+
+0 到 1 之间的覆盖率分数：
+
+- **1.0**：完全覆盖 - 所有关键词都存在。
+- **0.7–0.9**：高覆盖率 - 大部分关键词包含。
+- **0.4–0.6**：部分覆盖率 - 一些关键词存在。
+- **0.1–0.3**：低覆盖率 - 很少匹配关键词。
+- **0.0**：无覆盖率 - 未找到关键词。
+
+### 特殊情况
+
+评分器处理几种特殊情况：
+
+- 空输入/输出：如果两者都为空返回 1.0，如果只有一个为空返回 0.0
+- 单个词：被视为单个关键词
+- 技术术语：保留复合技术术语（例如 "React.js"、"machine learning"）
+- 大小写差异："JavaScript" 匹配 "javascript"
+- 常用词：忽略计分以专注于有意义的关键词
+
+## 示例
+
+评估输入查询和代理响应之间的关键词覆盖率：
+
+```typescript title="src/example-keyword-coverage.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createKeywordCoverageScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createKeywordCoverageScorer();
+
+const result = await runEvals({
+  data: [
+    {
+      input: "JavaScript 框架如 React 和 Vue",
+    },
+    {
+      input: "TypeScript 提供接口、泛型和类型推断",
+    },
+    {
+      input:
+        "机器学习模型需要数据预处理、特征工程和超参数调优",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+## 相关内容
+
+- [完整性评分器](./completeness)
+- [内容相似度评分器](./content-similarity)
+- [答案相关性评分器](./answer-relevancy)
+- [文本差异评分器](./textual-difference)

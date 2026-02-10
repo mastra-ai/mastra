@@ -1,0 +1,83 @@
+---
+title: "参考文档：Mastra.getMCPServerById() | 核心"
+description: "Mastra 中 `Mastra.getMCPServerById()` 方法的文档，用于通过其固有的 id 属性检索特定的 MCP 服务器实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getMCPServerById()
+
+`.getMCPServerById()` 方法通过其固有的 `id` 属性检索 MCP 服务器实例。要按注册表键（在配置中使用的键）检索，请改用 `.getMCPServer()`。
+
+## 使用示例
+
+```typescript
+// 使用注册表键注册 MCP 服务器
+const myServer = new MCPServer({
+  id: 'my-mcp-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    customKey: myServer,  // 'customKey' 是注册表键
+  },
+});
+
+// 按固有 ID 检索
+const server = mastra.getMCPServerById('my-mcp-server');
+
+// 或者，按注册表键检索
+const serverByKey = mastra.getMCPServer('customKey');
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "serverId",
+      type: "string",
+      description:
+        "MCP 服务器的固有 id 属性（创建服务器实例时设置）。",
+    },
+    {
+      name: "version",
+      type: "string",
+      description:
+        "可选。如果提供，仅在服务器版本匹配时返回。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "server",
+      type: "MCPServerBase | undefined",
+      description:
+        "具有指定 id（和版本，如果提供）的 MCP 服务器实例，如果未找到则为 undefined。",
+    },
+  ]}
+/>
+
+## 说明
+
+- 服务器的 `id` 在构建期间会被 slug 化，因此 `'myMcpServer'` 变成 `'my-mcp-server'`
+- 如果多个服务器具有相同的 `id` 但不同的版本，您必须提供 `version` 参数以消除歧义
+- 如果未提供 `version` 且存在多个版本，该方法返回第一个匹配项
+
+## 相关方法
+
+- [Mastra.getMCPServer()](/reference/core/getMCPServer) - 通过其注册表键检索 MCP 服务器
+- [Mastra.listMCPServers()](/reference/core/listMCPServers) - 列出所有注册的 MCP 服务器
+
+## 另请参阅
+
+- [MCP 概述](/docs/cn/docs/mcp/overview)
+- [MCP 服务器参考](/reference/tools/mcp-server)

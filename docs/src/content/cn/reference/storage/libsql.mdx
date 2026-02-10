@@ -1,0 +1,141 @@
+---
+title: "参考文档: libSQL 存储 | 存储"
+description: "Mastra 中 libSQL 存储实现的文档。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# libSQL 存储
+
+[libSQL](https://docs.turso.tech/libsql) 是一个开源的、兼容 SQLite 的数据库，支持本地和远程部署。它可用于存储消息历史、工作流快照、追踪和评估分数。
+
+对于语义回忆或传统 RAG 等向量，请使用 [libSQL Vector](/reference/vectors/libsql)，它涵盖嵌入和向量搜索。
+
+## 安装
+
+存储提供商必须作为单独的包安装：
+
+```bash npm2yarn
+npm install @mastra/libsql@latest
+```
+
+## 使用方法
+
+```typescript
+import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: "file:./storage.db",
+  }),
+});
+```
+
+智能体级别的文件存储：
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const agent = new Agent({
+  id: "example-agent",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'libsql-storage',
+      url: "file:./agent.db",
+    }),
+  }),
+});
+```
+
+:::warning
+文件存储不适用于具有临时文件系统的无服务器平台。对于无服务器部署，请使用 [Turso](https://turso.tech) 或其他数据库引擎。
+:::
+
+生产环境使用远程数据库：
+
+```typescript
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: "libsql://your-db-name.aws-ap-northeast-1.turso.io",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+```
+
+对于本地开发和测试，你可以将数据存储在内存中：
+
+```typescript
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: ":memory:",
+})
+```
+
+:::warning
+内存存储会在进程变化时重置。仅适用于开发。
+:::
+
+## 选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "数据库 URL。对于内存数据库使用 `:memory:`，对于文件数据库使用 `file:filename.db`，或对于远程存储使用 libSQL 连接字符串（例如 `libsql://your-database.turso.io`）。",
+      isOptional: false,
+    },
+    {
+      name: "authToken",
+      type: "string",
+      description: "远程 libSQL 数据库的身份验证令牌。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 初始化
+
+当你将存储传递给 Mastra 类时，`init()` 会自动调用以创建[核心模式](/reference/storage/overview#core-schema)：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: 'libsql-storage',
+  url: "file:./storage.db",
+});
+
+const mastra = new Mastra({
+  storage, // init() 自动调用
+});
+```
+
+如果你在没有 Mastra 的情况下直接使用存储，请显式调用 `init()`：
+
+```typescript
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: 'libsql-storage',
+  url: "file:./storage.db",
+});
+
+await storage.init();
+
+// 通过 getStore() 访问特定领域的存储
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+## 可观察性
+
+libSQL 支持可观察性，非常适合本地开发。在调试时使用 `realtime` [追踪策略](/docs/cn/docs/observability/tracing/exporters/default#tracing-strategies) 以获得即时可见性。
+
+对于生产环境中追踪量较高的情况，请考虑使用 [PostgreSQL](/reference/storage/postgresql) 或[通过复合存储的 ClickHouse](/reference/storage/composite#specialized-storage-for-observability)。

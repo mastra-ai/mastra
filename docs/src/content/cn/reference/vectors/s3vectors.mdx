@@ -1,0 +1,396 @@
+---
+title: "参考文档: Amazon S3 Vectors 向量存储 | 向量"
+description: Mastra 中 S3Vectors 类的文档，使用 Amazon S3 Vectors（预览版）提供向量搜索。
+packages:
+  - "@mastra/s3vectors"
+---
+
+# Amazon S3 Vectors 向量存储
+
+> ⚠️ Amazon S3 Vectors 是预览版服务。
+> 预览版功能可能会在未经通知的情况下更改或移除，不受 AWS SLA 覆盖。
+> 行为、限制和区域可用性可能随时更改。
+> 本库可能会引入破坏性更改以与 AWS 保持同步。
+
+`S3Vectors` 类使用 [Amazon S3 Vectors（预览版）](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors.html) 提供向量搜索。它将向量存储在**向量存储桶**中，并在**向量索引**中执行相似性搜索，支持基于 JSON 的元数据过滤器。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/s3vectors@latest
+```
+
+## 使用示例
+
+```typescript
+import { S3Vectors } from "@mastra/s3vectors";
+
+const store = new S3Vectors({
+  vectorBucketName: process.env.S3_VECTORS_BUCKET_NAME!, // 例如 "my-vector-bucket"
+  clientConfig: {
+    region: process.env.AWS_REGION!, // 凭证使用默认 AWS 提供者链
+  },
+  // 可选：在索引创建时将大型/长文本字段标记为不可过滤
+  nonFilterableMetadataKeys: ["content"],
+});
+
+// 创建索引（名称会被标准化："_" → "-" 并转为小写）
+await store.createIndex({
+  indexName: "my_index",
+  dimension: 1536,
+  metric: "cosine", // 也支持 "euclidean"；不支持 "dotproduct"
+});
+
+// Upsert 向量（如果省略则自动生成 ID）。元数据中的日期值会被序列化为 epoch 毫秒。
+const ids = await store.upsert({
+  indexName: "my_index",
+  vectors: [
+    [0.1, 0.2 /* … */],
+    [0.3, 0.4 /* … */],
+  ],
+  metadata: [
+    {
+      text: "doc1",
+      genre: "documentary",
+      year: 2023,
+      createdAt: new Date("2024-01-01"),
+    },
+    { text: "doc2", genre: "comedy", year: 2021 },
+  ],
+});
+
+// 使用元数据过滤器查询（隐式 AND 会被规范化）
+const results = await store.query({
+  indexName: "my-index",
+  queryVector: [0.1, 0.2 /* … */],
+  topK: 10, // 服务端可能有限制（通常为 30）
+  filter: { genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } },
+  includeVector: false, // 设为 true 以包含原始向量（可能会触发二次获取）
+});
+
+// 清理资源（关闭底层 HTTP 处理程序）
+await store.disconnect();
+```
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectorBucketName",
+      type: "string",
+      description: "目标 S3 Vectors 向量存储桶名称。",
+    },
+    {
+      name: "clientConfig",
+      type: "S3VectorsClientConfig",
+      isOptional: true,
+      description: "AWS SDK v3 客户端选项（例如 `region`、`credentials`）。",
+    },
+    {
+      name: "nonFilterableMetadataKeys",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "不应可过滤的元数据键（在创建索引时应用于索引）。将此用于大型文本字段如 `content`。",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+在配置的向量存储桶中创建新的向量索引。如果索引已存在，该调用会验证模式并成为空操作（保留现有的度量和维度）。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description:
+        "逻辑索引名称。内部会进行标准化：下划线替换为连字符，名称转为小写。",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与您的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "用于相似性搜索的距离度量。S3 Vectors 不支持 `dotproduct`。",
+    },
+  ]}
+/>
+
+### upsert()
+
+添加或替换向量（完整记录写入）。如果未提供 `ids`，则生成 UUID。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要 upsert 到的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+搜索最近邻，可选择进行元数据过滤。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "S3VectorsFilter",
+      isOptional: true,
+      description:
+        "基于 JSON 的元数据过滤器，支持 `$and`、`$or`、`$eq`、`$ne`、`$gt`、`$gte`、`$lt`、`$lte`、`$in`、`$nin`、`$exists`。",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+  ]}
+/>
+
+> **评分：** 结果包含 `score = 1/(1 + distance)`，这样分数越高越好，同时保留底层距离排名。
+
+### describeIndex()
+
+返回有关索引的信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称。",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number; // 通过 ListVectors 分页计算 (O(n))
+  metric: "cosine" | "euclidean";
+}
+```
+
+### deleteIndex()
+
+删除索引及其数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引。",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+列出配置的向量存储桶中的所有索引。
+
+返回：`Promise<string[]>`
+
+### updateVector()
+
+更新索引内特定 ID 的向量或元数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引。",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要更新的 ID。",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "包含向量和/或元数据的更新数据",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "要更新的新向量数据",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "要更新的新元数据",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+按 ID 删除特定向量。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引。",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的 ID。",
+    },
+  ]}
+/>
+
+### disconnect()
+
+关闭底层 AWS SDK HTTP 处理程序以释放套接字。
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number; // 1/(1 + distance)
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 过滤器语法
+
+S3 Vectors 支持严格的运算符和值类型子集。Mastra 过滤器转换器：
+
+- **规范化隐式 AND**：`{a:1,b:2}` → `{ $and: [{a:1},{b:2}] }`。
+- **标准化日期值**为 epoch 毫秒以进行数值比较和数组元素比较。
+- **禁止日期**用于相等性位置（`field: value` 或 `$eq/$ne`）；相等性值必须是 **string | number | boolean**。
+- **拒绝** null/undefined 用于相等性；**不支持数组相等性**（使用 `$in`/`$nin`）。
+- 仅允许 **`$and` / `$or`** 作为顶级逻辑运算符。
+- 逻辑运算符必须包含**字段条件**（而非直接运算符）。
+
+**支持的运算符：**
+
+- **逻辑：** `$and`、`$or`（非空数组）
+- **基本：** `$eq`、`$ne`（string | number | boolean）
+- **数值：** `$gt`、`$gte`、`$lt`、`$lte`（number 或 `Date` → epoch 毫秒）
+- **数组：** `$in`、`$nin`（string | number | boolean 的非空数组；`Date` → epoch 毫秒）
+- **元素：** `$exists`（boolean）
+
+**不支持/禁止（拒绝）：** `$not`、`$nor`、`$regex`、`$all`、`$elemMatch`、`$size`、`$text` 等。
+
+**示例：**
+
+```typescript
+// 隐式 AND
+{ genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } }
+
+// 显式逻辑和范围
+{
+  $and: [
+    { price: { $gte: 100, $lte: 1000 } },
+    { $or: [{ stock: { $gt: 0 } }, { preorder: true }] }
+  ]
+}
+
+// 范围内的日期（转换为 epoch 毫秒）
+{ timestamp: { $gt: new Date("2024-01-01T00:00:00Z") } }
+```
+
+> **不可过滤的键：** 如果您在索引创建时设置了 `nonFilterableMetadataKeys`，这些键会被存储，但**不能**用于过滤器。
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index-name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | 等
+    console.log(error.details); // 额外的错误上下文
+  }
+}
+```
+
+## 环境变量
+
+连接应用程序时的典型环境变量：
+
+- `S3_VECTORS_BUCKET_NAME`：您的 S3 **向量存储桶**名称（用于填充 `vectorBucketName`）。
+- `AWS_REGION`：S3 Vectors 存储桶的 AWS 区域。
+- **AWS 凭证：** 通过标准 AWS SDK 提供者链（`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_PROFILE` 等）。
+
+## 最佳实践
+
+- 选择度量标准（`cosine` 或 `euclidean`）以匹配您的嵌入模型；不支持 `dotproduct`。
+- 保持**可过滤**的元数据小且结构化（string/number/boolean）。将大型文本（例如 `content`）存储为**不可过滤**。
+- 对嵌套元数据使用**点分路径**，对复杂逻辑使用显式 `$and`/`$or`。
+- 避免在热路径上调用 `describeIndex()`——`count` 是通过分页 `ListVectors` 计算的（**O(n)**）。
+- 仅在需要原始向量时使用 `includeVector: true`。
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

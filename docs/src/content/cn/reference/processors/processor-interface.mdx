@@ -1,0 +1,805 @@
+---
+title: "参考：处理器接口 | 处理器"
+description: "Mastra 中处理器接口的 API 参考，用于定义代理管道中消息转换、验证和控制的契约。"
+packages:
+  - "@mastra/core"
+---
+
+# 处理器接口
+
+`Processor` 接口定义了 Mastra 中所有处理器的契约。处理器可以实现一个或多个方法来处理代理执行管道的不同阶段。
+
+## 处理器方法的执行时机
+
+五个处理器方法在代理执行生命周期的不同点执行：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     代理执行流程                                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  用户输入                                                         │
+│      │                                                          │
+│      ▼                                                          │
+│  ┌─────────────────┐                                            │
+│  │  processInput   │  ← 在开始时运行一次                          │
+│  └────────┬────────┘                                            │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                   代理循环                                  │    │
+│  │  ┌─────────────────────┐                                │    │
+│  │  │  processInputStep   │  ← 在每一步运行                    │    │
+│  │  └──────────┬──────────┘                                │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │       LLM 执行                                          │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │  ┌──────────────────────┐                               │    │
+│  │  │ processOutputStream  │  ← 在每个流式片段上运行            │    │
+│  │  └──────────┬───────────┘                               │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │  ┌──────────────────────┐                               │    │
+│  │  │  processOutputStep   │  ← 在每个 LLM 步骤后运行          │    │
+│  │  └──────────┬───────────┘                               │    │
+│  │             │                                           │    │
+│  │             ▼                                           │    │
+│  │     工具执行（如果需要）                                     │
+│  │             │                                           │    │
+│  │             └──────── 如果调用了工具则循环回─────────────────│
+│  └─────────────────────────────────────────────────────────┘    │
+│           │                                                     │
+│           ▼                                                     │
+│  ┌─────────────────────┐                                        │
+│  │ processOutputResult │  ← 在完成后运行一次                      │
+│  └─────────────────────┘                                        │
+│           │                                                     │
+│           ▼                                                     │
+│     最终响应                                                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| 方法 | 执行时机 | 用例 |
+|--------|--------------|----------|
+| `processInput` | 在开始时运行一次，在代理循环之前 | 验证/转换初始用户输入，添加上下文 |
+| `processInputStep` | 在代理循环的每一步，在每次 LLM 调用之前 | 在步骤之间转换消息，处理工具结果 |
+| `processOutputStream` | 在 LLM 响应期间的每个流式片段上 | 过滤/修改流式内容，实时检测模式 |
+| `processOutputStep` | 在每次 LLM 响应之后，在工具执行之前 | 验证输出质量，实现带重试的护栏 |
+| `processOutputResult` | 在生成完成后运行一次 | 后处理最终响应，记录结果 |
+
+## 接口定义
+
+```typescript
+interface Processor<TId extends string = string> {
+  readonly id: TId;
+  readonly name?: string;
+
+  processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
+  processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+  processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+  processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
+  processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
+}
+```
+
+## 属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器的唯一标识符。用于跟踪和调试。",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "处理器的可选显示名称。如果未提供，回退到 id。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### processInput
+
+在消息发送到 LLM 之前处理输入消息。在代理执行开始时运行一次。
+
+```typescript
+processInput?(args: ProcessInputArgs): Promise<ProcessInputResult> | ProcessInputResult;
+```
+
+#### ProcessInputArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "要处理的用户和助手消息（不包括系统消息）。",
+      isOptional: false,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "所有系统消息（代理指令、内存上下文、用户提供的）。可以修改和返回。",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "用于高级消息管理的完整 MessageList 实例。",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never",
+      description: "中止处理的函数。抛出 TripWire 错误以停止执行。传递 `retry: true` 以请求 LLM 使用反馈重试该步骤。",
+      isOptional: false,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "处理器已触发重试此生成的次数。使用此值来限制重试尝试次数。",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "用于可观测性的追踪上下文。",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "带有执行元数据（如 threadId 和 resourceId）的请求作用域上下文。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### ProcessInputResult
+
+该方法可以返回三种类型之一：
+
+<PropertiesTable
+  content={[
+    {
+      name: "MastraDBMessage[]",
+      type: "array",
+      description: "转换后的消息数组。系统消息保持不变。",
+    },
+    {
+      name: "MessageList",
+      type: "MessageList",
+      description: "传入的相同 messageList 实例。表示您已直接变异它。",
+    },
+    {
+      name: "{ messages, systemMessages }",
+      type: "object",
+      description: "包含转换后的消息和修改后的系统消息的对象。",
+    },
+  ]}
+/>
+
+---
+
+### processInputStep
+
+在代理循环的每一步，在消息发送到 LLM 之前处理输入消息。与在开始时运行一次的 `processInput` 不同，这在每一步（包括工具调用延续）都会运行。
+
+```typescript
+processInputStep?(args: ProcessInputStepArgs): ProcessorMessageResult;
+```
+
+#### 代理循环中的执行顺序
+
+1. `processInput`（在开始时运行一次）
+2. 来自 inputProcessors 的 `processInputStep`（在每一步，在 LLM 调用之前）
+3. `prepareStep` 回调（作为 processInputStep 管道的一部分运行，在 inputProcessors 之后）
+4. LLM 执行
+5. 工具执行（如果需要）
+6. 如果调用了工具，则从步骤 2 重复
+
+#### ProcessInputStepArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "包括来自先前步骤的工具调用和结果的所有消息（只读快照）。",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "用于管理消息的 MessageList 实例。可以直接变异或在结果中返回。",
+      isOptional: false,
+    },
+    {
+      name: "stepNumber",
+      type: "number",
+      description: "当前步骤编号（从 0 开始）。步骤 0 是初始 LLM 调用。",
+      isOptional: false,
+    },
+    {
+      name: "steps",
+      type: "StepResult[]",
+      description: "先前步骤的结果，包括文本、toolCalls 和 toolResults。",
+      isOptional: false,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "所有系统消息（只读快照）。在结果中返回以替换。",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModelV2",
+      description: "当前使用的模型。在结果中返回不同的模型以切换。",
+      isOptional: false,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "当前工具选择设置（'auto'、'none'、'required' 或特定工具）。",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "当前活动的工具名称。返回过滤后的数组以限制工具。",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "此步骤当前可用的工具。在结果中返回以添加/替换工具。",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "提供者特定选项（例如 Anthropic 的 cacheControl，OpenAI 的 reasoningEffort）。",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "如 temperature、maxTokens、topP 的模型设置。",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "结构化输出配置（模式、输出模式）。在结果中返回以修改。",
+      isOptional: true,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "中止处理的函数。",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "用于可观测性的追踪上下文。",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "带有执行元数据的请求作用域上下文。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### ProcessInputStepResult
+
+该方法可以返回这些属性的任意组合：
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModelV2 | string",
+      description: "更改此步骤的模型。可以是模型实例或路由器 ID，如 'openai/gpt-4o'。",
+      isOptional: true,
+    },
+    {
+      name: "toolChoice",
+      type: "ToolChoice",
+      description: "更改此步骤的工具选择行为。",
+      isOptional: true,
+    },
+    {
+      name: "activeTools",
+      type: "string[]",
+      description: "过滤此步骤可用的工具。",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "ToolSet",
+      description: "替换或修改此步骤的工具。使用展开以合并：{ tools: { ...tools, newTool } }。",
+      isOptional: true,
+    },
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "替换所有消息。不能与 messageList 一起使用。",
+      isOptional: true,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "返回相同的 messageList 实例（表示您已变异它）。不能与 messages 一起使用。",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "仅替换此步骤的所有系统消息。",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "SharedV2ProviderOptions",
+      description: "更改此步骤的提供者特定选项。",
+      isOptional: true,
+    },
+    {
+      name: "modelSettings",
+      type: "CallSettings",
+      description: "更改此步骤的模型设置。",
+      isOptional: true,
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      description: "更改此步骤的结构化输出配置。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### 处理器链
+
+当多个处理器实现 `processInputStep` 时，它们按顺序运行，变更链式传递：
+
+```
+处理器 1：接收 { model: 'gpt-4o' } → 返回 { model: 'gpt-4o-mini' }
+处理器 2：接收 { model: 'gpt-4o-mini' } → 返回 { toolChoice: 'none' }
+最终结果：model = 'gpt-4o-mini'，toolChoice = 'none'
+```
+
+#### 系统消息隔离
+
+系统消息在每一步开始时**重置为其原始值**。在 `processInputStep` 中所做的修改仅影响当前步骤，不影响后续步骤。
+
+#### 用例
+
+- 根据步骤编号或上下文动态切换模型
+- 在一定步骤后禁用工具
+- 根据对话上下文动态添加或替换工具
+- 在提供者之间转换消息部分类型（例如，将 `reasoning` → `thinking` 用于 Anthropic）
+- 根据步骤编号或累积上下文修改消息
+- 添加步骤特定的系统指令
+- 每步调整提供者选项（例如，缓存控制）
+- 根据步骤上下文修改结构化输出模式
+
+---
+
+### processOutputStream
+
+使用内置状态管理处理流式输出片段。允许处理器累积片段并根据更大的上下文做出决策。
+
+```typescript
+processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined>;
+```
+
+#### ProcessOutputStreamArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "part",
+      type: "ChunkType",
+      description: "当前正在处理的流片段。",
+      isOptional: false,
+    },
+    {
+      name: "streamParts",
+      type: "ChunkType[]",
+      description: "到目前为止在流中看到的所有片段。",
+      isOptional: false,
+    },
+    {
+      name: "state",
+      type: "Record<string, unknown>",
+      description: "在单个流内的片段之间持久化的可变状态对象。",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "中止流的函数。",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "用于访问对话历史的 MessageList 实例。",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "用于可观测性的追踪上下文。",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "带有执行元数据的请求作用域上下文。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### 返回值
+
+- 返回 `ChunkType` 以发送它（可能是修改后的）
+- 返回 `null` 或 `undefined` 以跳过发送该片段
+
+---
+
+### processOutputResult
+
+在流式传输或生成完成后处理完整的输出结果。
+
+```typescript
+processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
+```
+
+#### ProcessOutputResultArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "生成的响应消息。",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "用于管理消息的 MessageList 实例。",
+      isOptional: false,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string) => never",
+      description: "中止处理的函数。",
+      isOptional: false,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "用于可观测性的追踪上下文。",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "带有执行元数据的请求作用域上下文。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+---
+
+### processOutputStep
+
+在代理循环中每次 LLM 响应之后，在工具执行之前处理输出。与在结束时运行一次的 `processOutputResult` 不同，这在每一步都会运行。这是实现可以触发重试的护栏的理想方法。
+
+```typescript
+processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
+```
+
+#### ProcessOutputStepArgs
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "包括最新 LLM 响应的所有消息。",
+      isOptional: false,
+    },
+    {
+      name: "messageList",
+      type: "MessageList",
+      description: "用于管理消息的 MessageList 实例。",
+      isOptional: false,
+    },
+    {
+      name: "stepNumber",
+      type: "number",
+      description: "当前步骤编号（从 0 开始）。",
+      isOptional: false,
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description: "来自 LLM 的完成原因（stop、tool-use、length 等）。",
+      isOptional: true,
+    },
+    {
+      name: "toolCalls",
+      type: "ToolCallInfo[]",
+      description: "此步骤中进行的工具调用（如果有）。",
+      isOptional: true,
+    },
+    {
+      name: "text",
+      type: "string",
+      description: "此步骤生成的文本。",
+      isOptional: true,
+    },
+    {
+      name: "systemMessages",
+      type: "CoreMessage[]",
+      description: "用于读取/修改访问的所有系统消息。",
+      isOptional: true,
+    },
+    {
+      name: "abort",
+      type: "(reason?: string, options?: { retry?: boolean; metadata?: unknown }) => never",
+      description: "中止处理的函数。传递 `retry: true` 以请求 LLM 重试该步骤。",
+      isOptional: false,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "处理器已触发重试的次数。使用此值来限制重试尝试次数。",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "用于可观测性的追踪上下文。",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "带有执行元数据的请求作用域上下文。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### 用例
+
+- 实现可以请求重试的质量护栏
+- 在工具执行之前验证 LLM 输出
+- 添加每步日志记录或指标
+- 实现带重试功能的输出审核
+
+#### 示例：带重试的质量护栏
+
+```typescript title="src/mastra/processors/quality-guardrail.ts"
+import type { Processor } from "@mastra/core";
+
+export class QualityGuardrail implements Processor {
+  id = "quality-guardrail";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const score = await evaluateResponseQuality(text);
+
+    if (score < 0.7) {
+      if (retryCount < 3) {
+        // 使用反馈请求 LLM 重试
+        abort("响应质量太低。请提供更多细节。", {
+          retry: true,
+          metadata: { qualityScore: score },
+        });
+      } else {
+        // 达到最大重试次数，阻止响应
+        abort("多次尝试后响应质量仍然太低。");
+      }
+    }
+
+    return [];
+  }
+}
+```
+
+## 处理器类型
+
+Mastra 提供类型别名以确保处理器实现所需的方法：
+
+```typescript
+// 必须实现 processInput 或 processInputStep（或两者）
+type InputProcessor = Processor & (
+  | { processInput: required }
+  | { processInputStep: required }
+);
+
+// 必须实现 processOutputStream、processOutputStep 或 processOutputResult（或任意组合）
+type OutputProcessor = Processor & (
+  | { processOutputStream: required }
+  | { processOutputStep: required }
+  | { processOutputResult: required }
+);
+```
+
+## 使用示例
+
+### 基本输入处理器
+
+```typescript title="src/mastra/processors/lowercase.ts"
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class LowercaseProcessor implements Processor {
+  id = "lowercase";
+
+  async processInput({ messages }): Promise<MastraDBMessage[]> {
+    return messages.map((msg) => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        parts: msg.content.parts?.map((part) =>
+          part.type === "text"
+            ? { ...part, text: part.text.toLowerCase() }
+            : part
+        ),
+      },
+    }));
+  }
+}
+```
+
+### 使用 processInputStep 的每步处理器
+
+```typescript title="src/mastra/processors/dynamic-model.ts"
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    steps,
+    toolChoice,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // 对初始响应使用快速模型
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // 在工具调用后切换到强大的模型
+    if (steps.length > 0 && steps[steps.length - 1].toolCalls?.length) {
+      return { model: "openai/gpt-4o" };
+    }
+
+    // 在 5 步后禁用工具以强制完成
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    return {};
+  }
+}
+```
+
+### 使用 processInputStep 的消息转换器
+
+```typescript title="src/mastra/processors/reasoning-transformer.ts"
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class ReasoningTransformer implements Processor {
+  id = "reasoning-transformer";
+
+  async processInputStep({ messages, messageList }) {
+    // 在每一步将 reasoning 部分转换为 thinking 部分
+    // 这在切换模型提供者时很有用
+    for (const msg of messages) {
+      if (msg.role === "assistant" && msg.content.parts) {
+        for (const part of msg.content.parts) {
+          if (part.type === "reasoning") {
+            (part as any).type = "thinking";
+          }
+        }
+      }
+    }
+    return messageList;
+  }
+}
+```
+
+### 混合处理器（输入和输出）
+
+```typescript title="src/mastra/processors/content-filter.ts"
+import type { Processor, MastraDBMessage, ChunkType } from "@mastra/core";
+
+export class ContentFilter implements Processor {
+  id = "content-filter";
+  private blockedWords: string[];
+
+  constructor(blockedWords: string[]) {
+    this.blockedWords = blockedWords;
+  }
+
+  async processInput({ messages, abort }): Promise<MastraDBMessage[]> {
+    for (const msg of messages) {
+      const text = msg.content.parts
+        ?.filter((p) => p.type === "text")
+        .map((p) => p.text)
+        .join(" ");
+
+      if (this.blockedWords.some((word) => text?.includes(word))) {
+        abort("在输入中检测到被阻止的内容");
+      }
+    }
+    return messages;
+  }
+
+  async processOutputStream({ part, abort }): Promise<ChunkType | null> {
+    if (part.type === "text-delta") {
+      if (this.blockedWords.some((word) => part.textDelta.includes(word))) {
+        abort("在输出中检测到被阻止的内容");
+      }
+    }
+    return part;
+  }
+}
+```
+
+### 带状态的流累加器
+
+```typescript title="src/mastra/processors/word-counter.ts"
+import type { Processor, ChunkType } from "@mastra/core";
+
+export class WordCounter implements Processor {
+  id = "word-counter";
+
+  async processOutputStream({ part, state }): Promise<ChunkType> {
+    // 在第一个片段上初始化状态
+    if (!state.wordCount) {
+      state.wordCount = 0;
+    }
+
+    // 在文本片段中计数单词
+    if (part.type === "text-delta") {
+      const words = part.textDelta.split(/\s+/).filter(Boolean);
+      state.wordCount += words.length;
+    }
+
+    // 在完成时记录单词计数
+    if (part.type === "finish") {
+      console.log(`总单词数：${state.wordCount}`);
+    }
+
+    return part;
+  }
+}
+```
+
+## 相关内容
+
+- [处理器概述](/docs/cn/docs/agents/processors) - 处理器的概念指南
+- [护栏](/docs/cn/docs/agents/guardrails) - 安全和验证处理器
+- [内存处理器](/docs/cn/docs/memory/memory-processors) - 特定于内存的处理器

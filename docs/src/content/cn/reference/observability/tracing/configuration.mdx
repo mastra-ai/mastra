@@ -1,0 +1,292 @@
+---
+title: "参考：配置 | 可观测性"
+description: "追踪配置类型和注册表函数"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 配置
+
+## ObservabilityRegistryConfig
+
+```typescript
+interface ObservabilityRegistryConfig {
+  default?: { enabled?: boolean };
+  configs?: Record<string, Omit<ObservabilityInstanceConfig, "name"> | ObservabilityInstance>;
+  configSelector?: ConfigSelector;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "default",
+      type: "{ enabled?: boolean }",
+      description: "使用 DefaultExporter 和 CloudExporter 启用默认配置",
+      required: false,
+    },
+    {
+      name: "configs",
+      type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
+      description: "命名可观测性实例配置或预实例化实例",
+      required: false,
+    },
+    {
+      name: "configSelector",
+      type: "ConfigSelector",
+      description: "运行时配置选择器函数",
+      required: false,
+    },
+  ]}
+/>
+
+## ObservabilityInstanceConfig
+
+```typescript
+interface ObservabilityInstanceConfig {
+  name: string;
+  serviceName: string;
+  sampling?: SamplingStrategy;
+  exporters?: ObservabilityExporter[];
+  spanOutputProcessors?: SpanOutputProcessor[];
+  includeInternalSpans?: boolean;
+  requestContextKeys?: string[];
+  serializationOptions?: SerializationOptions;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "name",
+      type: "string",
+      description: "配置标识符",
+      required: true,
+    },
+    {
+      name: "serviceName",
+      type: "string",
+      description: "跟踪中的服务名称",
+      required: true,
+    },
+    {
+      name: "sampling",
+      type: "SamplingStrategy",
+      description: "采样配置（默认为 ALWAYS）",
+      required: false,
+    },
+    {
+      name: "exporters",
+      type: "ObservabilityExporter[]",
+      description: "跟踪数据导出器",
+      required: false,
+    },
+    {
+      name: "spanOutputProcessors",
+      type: "SpanOutputProcessor[]",
+      description: "跨度输出处理器",
+      required: false,
+    },
+    {
+      name: "includeInternalSpans",
+      type: "boolean",
+      description: "包含 Mastra 操作内部的跨度",
+      required: false,
+    },
+    {
+      name: "requestContextKeys",
+      type: "string[]",
+      description: "作为元数据提取的 RequestContext 键（支持点表示法）",
+      required: false,
+    },
+    {
+      name: "serializationOptions",
+      type: "SerializationOptions",
+      description: "控制跨度数据序列化（输入/输出/属性）的选项",
+      required: false,
+    },
+  ]}
+/>
+
+## SerializationOptions
+
+控制跨度数据在导出前如何序列化的选项。使用这些来自定义大有效载荷的截断限制。
+
+```typescript
+interface SerializationOptions {
+  maxStringLength?: number;
+  maxDepth?: number;
+  maxArrayLength?: number;
+  maxObjectKeys?: number;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "maxStringLength",
+      type: "number",
+      description: "字符串值的最大长度（默认：1024）",
+      required: false,
+    },
+    {
+      name: "maxDepth",
+      type: "number",
+      description: "嵌套对象的最大深度（默认：6）",
+      required: false,
+    },
+    {
+      name: "maxArrayLength",
+      type: "number",
+      description: "数组中的最大项目数（默认：50）",
+      required: false,
+    },
+    {
+      name: "maxObjectKeys",
+      type: "number",
+      description: "对象中的最大键数（默认：50）",
+      required: false,
+    },
+  ]}
+/>
+
+## SamplingStrategy
+
+```typescript
+type SamplingStrategy =
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
+```
+
+## ConfigSelector
+
+```typescript
+type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
+) => string | undefined;
+```
+
+## ConfigSelectorOptions
+
+```typescript
+interface ConfigSelectorOptions {
+  requestContext?: RequestContext;
+}
+```
+
+# 注册表方法
+
+Observability 类提供管理可观测性实例的方法：
+
+## registerInstance
+
+```typescript
+registerInstance(
+  name: string,
+  instance: ObservabilityInstance,
+  isDefault?: boolean
+): void;
+```
+
+在注册表中注册可观测性实例。
+
+## getInstance
+
+```typescript
+getInstance(name: string): ObservabilityInstance | undefined;
+```
+
+按名称检索可观测性实例。
+
+## getDefaultInstance
+
+```typescript
+getDefaultInstance(): ObservabilityInstance | undefined;
+```
+
+返回默认的可观测性实例。
+
+## getSelectedInstance
+
+```typescript
+getSelectedInstance(
+  options: ConfigSelectorOptions
+): ObservabilityInstance | undefined;
+```
+
+返回由配置选择器或默认选择的可观测性实例。
+
+## listInstances
+
+```typescript
+listInstances(): ReadonlyMap<string, ObservabilityInstance>;
+```
+
+返回所有已注册的可观测性实例。
+
+## hasInstance
+
+```typescript
+hasInstance(name: string): boolean;
+```
+
+检查可观测性实例是否存在。
+
+## setConfigSelector
+
+```typescript
+setConfigSelector(selector: ConfigSelector): void;
+```
+
+设置配置选择器函数。
+
+## unregisterInstance
+
+```typescript
+unregisterInstance(name: string): boolean;
+```
+
+从注册表中移除可观测性实例。
+
+## clear
+
+```typescript
+clear(): void;
+```
+
+清除所有实例而不关闭。
+
+## shutdown
+
+```typescript
+async shutdown(): Promise<void>;
+```
+
+关闭所有可观测性实例并清除注册表。
+
+## 另请参阅
+
+### 文档
+
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 概念和使用指南
+- [采样策略](/docs/cn/docs/observability/tracing/overview#sampling-strategies) - 采样配置详情
+- [多配置设置](/docs/cn/docs/observability/tracing/overview#multi-config-setup) - 使用多个配置
+
+### 参考
+
+- [追踪类](/reference/observability/tracing/instances) - 核心追踪类
+- [接口](/reference/observability/tracing/interfaces) - 类型定义
+- [跨度参考](/reference/observability/tracing/spans) - 跨度生命周期
+
+### 导出器
+
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - 存储配置
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - 云设置
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust 集成
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse 集成
+- [LangSmith](/reference/observability/tracing/exporters/langsmith) - LangSmith 集成

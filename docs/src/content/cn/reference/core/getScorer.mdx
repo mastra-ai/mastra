@@ -1,0 +1,80 @@
+---
+title: "参考文档：getScorer() | 核心"
+description: "Mastra 中 `getScorer()` 方法的文档，用于通过注册表键检索特定的评分器。"
+packages:
+  - "@mastra/core"
+---
+
+# getScorer()
+
+`getScorer()` 方法使用注册表键检索已在 Mastra 实例中注册的特定评分器。此方法提供对评分器的类型安全访问，如果请求的评分器找不到则抛出错误。
+
+## 使用示例
+
+```typescript
+import { mastra } from "./mastra";
+
+// 按键获取特定评分器
+const relevancyScorer = mastra.getScorer("relevancyScorer");
+
+const weatherAgent = mastra.getAgent("weatherAgent");
+
+// 使用评分器评估 AI 输出
+await weatherAgent.generate("What is the weather in Rome", {
+  scorers: {
+    answerRelevancy: {
+      scorer: relevancyScorer,
+    },
+  },
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "key",
+      type: "string",
+      description:
+        "要检索的评分器的注册表键。这应与在 Mastra 构造函数中注册评分器时使用的键匹配。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorer",
+      type: "MastraScorer",
+      description:
+        "与提供的键关联的 MastraScorer 实例。",
+    },
+  ]}
+/>
+
+## 错误处理
+
+如果满足以下条件，此方法会抛出 `MastraError`：
+
+- 找不到具有指定键的评分器
+- Mastra 实例未注册任何评分器
+
+```typescript
+try {
+  const scorer = mastra.getScorer("nonExistentScorer");
+} catch (error) {
+  if (error.id === "MASTRA_GET_SCORER_NOT_FOUND") {
+    console.log("Scorer not found, using default evaluation");
+  }
+}
+```
+
+## 相关内容
+
+- [listScorers()](/reference/core/listScorers) - 获取所有已注册的评分器
+- [getScorerById()](/reference/core/getScorerById) - 通过 id 属性获取评分器
+- [自定义评分器](/docs/cn/docs/evals/custom-scorers) - 了解如何创建自定义评分器

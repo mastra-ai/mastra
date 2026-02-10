@@ -1,0 +1,167 @@
+---
+title: "参考文档：Mastra Class | 核心"
+description: "Mastra 中 `Mastra` 类的文档，这是管理智能体、工作流、MCP 服务器和服务器端点的核心入口。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
+---
+
+# Mastra Class
+
+`Mastra` 类是任何 Mastra 应用程序中的中央协调器，负责管理智能体、工作流、存储、日志、可观测性等。通常，您会创建一个 `Mastra` 实例来协调您的应用程序。
+
+可以将 `Mastra` 视为一个顶级注册表，您可以在其中注册智能体、工作流、工具和其他需要在整个应用程序中访问的组件。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherWorkflow } from "./workflows/weather-workflow";
+import { weatherAgent } from "./agents/weather-agent";
+
+export const mastra = new Mastra({
+  workflows: { weatherWorkflow },
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+## 构造函数参数
+
+有关所有可用配置选项的详细文档，请参阅[配置参考](/reference/configuration)。
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "Record<string, Agent>",
+      description: "要注册的智能体实例，以名称为键",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "tools",
+      type: "Record<string, ToolApi>",
+      description:
+        "要注册的自定义工具。结构为键值对，键为工具名称，值为工具函数。",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "storage",
+      type: "MastraCompositeStore",
+      description: "用于持久化数据的存储引擎实例",
+      isOptional: true,
+    },
+    {
+      name: "vectors",
+      type: "Record<string, MastraVector>",
+      description:
+        "向量存储实例，用于语义搜索和基于向量的工具（如 Pinecone、PgVector 或 Qdrant）",
+      isOptional: true,
+    },
+    {
+      name: "logger",
+      type: "Logger",
+      description: "使用 new PinoLogger() 创建的日志记录器实例",
+      isOptional: true,
+      defaultValue: "INFO 级别的控制台日志记录器",
+    },
+    {
+      name: "idGenerator",
+      type: "() => string",
+      description:
+        "自定义 ID 生成函数。智能体、工作流、内存和其他组件使用它来生成唯一标识符。",
+      isOptional: true,
+    },
+    {
+      name: "workflows",
+      type: "Record<string, Workflow>",
+      description:
+        "要注册的工作流。结构为键值对，键为工作流名称，值为工作流实例。",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "tts",
+      type: "Record<string, MastraVoice>",
+      isOptional: true,
+      description: "用于语音合成的文本转语音提供商",
+    },
+    {
+      name: "observability",
+      type: "ObservabilityEntrypoint",
+      isOptional: true,
+      description: "用于追踪和监控的可观测性配置",
+    },
+    {
+      name: "deployer",
+      type: "MastraDeployer",
+      isOptional: true,
+      description: "用于管理部署的 MastraDeployer 实例。",
+    },
+    {
+      name: "server",
+      type: "ServerConfig",
+      description:
+        "服务器配置，包括端口、主机、超时、API 路由、中间件、CORS 设置，以及 Swagger UI、API 请求日志和 OpenAPI 文档的构建选项。",
+      isOptional: true,
+    },
+    {
+      name: "mcpServers",
+      type: "Record<string, MCPServerBase>",
+      isOptional: true,
+      description:
+        "一个对象，键为注册表键（用于 getMCPServer()），值为 MCPServer 实例或扩展 MCPServerBase 的类的实例。每个 MCPServer 必须具有 id 属性。服务器可以通过注册表键使用 getMCPServer() 检索，也可以通过其固有的 id 使用 getMCPServerById() 检索。",
+    },
+    {
+      name: "bundler",
+      type: "BundlerConfig",
+      description:
+        "资源打包器的配置，包含 externals、sourcemap 和 transpilePackages 选项。",
+      isOptional: true,
+    },
+    {
+      name: "scorers",
+      type: "Record<string, Scorer>",
+      description:
+        "用于评估智能体响应和工作流输出的评分器",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "processors",
+      type: "Record<string, Processor>",
+      description:
+        "用于转换智能体输入和输出的输入/输出处理器",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "gateways",
+      type: "Record<string, MastraModelGateway>",
+      description:
+        "要注册的自定义模型网关，用于通过替代提供商或私有部署访问 AI 模型。结构为键值对，键为注册表键（用于 getGateway()），值为网关实例。",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+    {
+      name: "memory",
+      type: "Record<string, MastraMemory>",
+      description:
+        "要注册的内存实例。这些可以由存储的智能体引用并在运行时解析。结构为键值对，键为注册表键，值为内存实例。",
+      isOptional: true,
+      defaultValue: "{}",
+    },
+  ]}
+/>

@@ -1,0 +1,51 @@
+---
+title: "参考：Mastra.setLogger() | 核心"
+description: "Mastra 中 `Mastra.setLogger()` 方法的文档，用于为所有组件（代理、工作流等）设置日志记录器。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.setLogger()
+
+`.setLogger()` 方法用于为 Mastra 实例中的所有组件（代理、工作流等）设置日志记录器。此方法接受一个带有 logger 属性的单一对象参数。
+
+## 使用示例
+
+```typescript
+mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ logger: TLogger }",
+      description:
+        "包含要为所有组件设置的日志记录器实例的对象。",
+    },
+  ]}
+/>
+
+### 选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "logger",
+      type: "TLogger",
+      description:
+        "要为所有组件（代理、工作流等）设置的日志记录器实例。",
+    },
+  ]}
+/>
+
+## 返回值
+
+此方法不返回值。
+
+## 相关内容
+
+- [日志记录概述](/docs/cn/docs/observability/logging)
+- [日志记录器参考](/reference/logging/pino-logger)

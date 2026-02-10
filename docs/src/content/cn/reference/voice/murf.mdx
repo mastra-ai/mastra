@@ -1,0 +1,255 @@
+---
+title: "参考：Murf | 语音"
+description: "Murf 语音实现的文档，提供语音合成能力。"
+packages:
+  - "@mastra/voice-murf"
+---
+
+# Murf
+
+Mastra 中的 Murf 语音实现使用 Murf 的 AI 语音服务提供语音合成（TTS）能力。它支持多种语言的多种语音。
+
+## 使用示例
+
+```typescript
+import { MurfVoice } from "@mastra/voice-murf";
+
+// 使用默认配置初始化（使用 MURF_API_KEY 环境变量）
+const voice = new MurfVoice();
+
+// 使用自定义配置初始化
+const voice = new MurfVoice({
+  speechModel: {
+    name: "GEN2",
+    apiKey: "your-api-key",
+    properties: {
+      format: "MP3",
+      rate: 1.0,
+      pitch: 1.0,
+      sampleRate: 48000,
+      channelType: "STEREO",
+    },
+  },
+  speaker: "en-US-cooper",
+});
+
+// 使用默认设置进行语音合成
+const audioStream = await voice.speak("Hello, world!");
+
+// 使用自定义属性进行语音合成
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: "en-UK-hazel",
+  properties: {
+    format: "WAV",
+    rate: 1.2,
+    style: "casual",
+  },
+});
+
+// 获取可用的语音
+const voices = await voice.getSpeakers();
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "MurfConfig",
+      description: "语音合成功能的配置",
+      isOptional: true,
+      defaultValue: "{ name: 'GEN2' }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "用于语音合成的默认语音 ID",
+      isOptional: true,
+      defaultValue: "'en-UK-hazel'",
+    },
+  ]}
+/>
+
+### MurfConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'GEN1' | 'GEN2'",
+      description: "要使用的 Murf 模型版本",
+      isOptional: false,
+      defaultValue: "'GEN2'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Murf API 密钥。回退到 MURF_API_KEY 环境变量",
+      isOptional: true,
+    },
+    {
+      name: "properties",
+      type: "object",
+      description: "所有语音合成请求的默认属性",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 语音属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "style",
+      type: "string",
+      description: "语音的说话风格",
+      isOptional: true,
+    },
+    {
+      name: "rate",
+      type: "number",
+      description: "语速倍数",
+      isOptional: true,
+    },
+    {
+      name: "pitch",
+      type: "number",
+      description: "语音音调调整",
+      isOptional: true,
+    },
+    {
+      name: "sampleRate",
+      type: "8000 | 24000 | 44100 | 48000",
+      description: "音频采样率（Hz）",
+      isOptional: true,
+    },
+    {
+      name: "format",
+      type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+      description: "输出音频格式",
+      isOptional: true,
+    },
+    {
+      name: "channelType",
+      type: "'STEREO' | 'MONO'",
+      description: "音频通道配置",
+      isOptional: true,
+    },
+    {
+      name: "pronunciationDictionary",
+      type: "Record<string, string>",
+      description: "自定义发音映射",
+      isOptional: true,
+    },
+    {
+      name: "encodeAsBase64",
+      type: "boolean",
+      description: "是否将音频编码为 base64",
+      isOptional: true,
+    },
+    {
+      name: "variation",
+      type: "number",
+      description: "语音变体参数",
+      isOptional: true,
+    },
+    {
+      name: "audioDuration",
+      type: "number",
+      description: "目标音频时长（秒）",
+      isOptional: true,
+    },
+    {
+      name: "multiNativeLocale",
+      type: "string",
+      description: "多语言支持的区域设置",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用 Murf 的 API 将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "要转换为语音的文本。如果提供了流，将先转换为文本。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "语音合成选项",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "覆盖此请求的默认语音",
+      isOptional: true,
+    },
+    {
+      name: "options.properties",
+      type: "object",
+      description: "覆盖此请求的默认语音属性",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>`
+
+### getSpeakers()
+
+返回可用语音选项的数组，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "语音的显示名称",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "语音的语言代码",
+      isOptional: false,
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "语音的性别",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### listen()
+
+Murf 不支持此方法，会抛出错误。Murf 不提供语音识别功能。
+
+## 重要说明
+
+1. 需要 Murf API 密钥。可通过 `MURF_API_KEY` 环境变量或在构造函数中传递。
+2. 服务默认使用 GEN2 作为模型版本。
+3. 语音属性可以在构造函数级别设置，并在每个请求中覆盖。
+4. 服务支持通过属性进行广泛的音频自定义，如格式、采样率和通道类型。
+5. 不支持语音识别功能。

@@ -1,0 +1,38 @@
+---
+title: "参考文档：Mastra.getLogger() | 核心"
+description: "Mastra 中 `Mastra.getLogger()` 方法的文档，用于检索配置的日志记录器实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getLogger()
+
+`.getLogger()` 方法用于检索已在 Mastra 实例中配置的日志记录器实例。
+
+## 使用示例
+
+```typescript
+mastra.getLogger();
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "logger",
+      type: "TLogger",
+      description:
+        "配置的日志记录器实例，用于所有组件（日志、工作流等）的日志记录。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [日志概述](/docs/cn/docs/observability/logging)
+- [日志记录器参考](/reference/logging/pino-logger)

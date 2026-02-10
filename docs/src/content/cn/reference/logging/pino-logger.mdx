@@ -1,0 +1,148 @@
+---
+title: "参考：PinoLogger | 可观测性"
+description: "PinoLogger 的文档，提供在各种严重级别记录事件的方法。"
+packages:
+  - "@mastra/core"
+  - "@mastra/loggers"
+---
+
+# PinoLogger
+
+使用 `new PinoLogger()` 创建 Logger 实例，提供在各种严重级别记录事件的方法。
+
+部署到 Mastra Cloud 时，日志显示在 [Logs](/docs/cn/docs/mastra-cloud/observability#logs) 页面。在自托管或自定义环境中，日志可以根据配置的传输方式定向到文件或外部服务。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "用于分组和识别此logger日志的标签。",
+    },
+    {
+      name: "level",
+      type: `"debug" | "info" | "warn" | "error"`,
+      description:
+        "设置最小日志级别。低于此级别的消息将被忽略。",
+    },
+    {
+      name: "transports",
+      type: "Record<string, LoggerTransport>",
+      description: "用于持久化日志的传输实例映射。",
+    },
+    {
+      name: "overrideDefaultTransports",
+      type: "boolean",
+      isOptional: true,
+      description: "如果为 true，则禁用默认的控制台传输。",
+    },
+    {
+      name: "formatters",
+      type: "pino.LoggerOptions['formatters']",
+      isOptional: true,
+      description: "用于日志序列化的自定义 Pino 格式化器。",
+    },
+  ]}
+/>
+
+## 文件传输（结构化日志）
+
+使用 `FileTransport` 将结构化日志写入文件。logger 将纯消息作为第一个参数，结构化元数据作为第二个参数。这些在内部被转换为 `BaseLogMessage` 并持久化到配置的文件路径。
+
+```typescript title="src/mastra/loggers/file-transport.ts"
+import { FileTransport } from "@mastra/loggers/file";
+import { PinoLogger } from "@mastra/loggers/pino";
+
+export const fileLogger = new PinoLogger({
+  name: "Mastra",
+  transports: { file: new FileTransport({ path: "test-dir/test.log" }) },
+  level: "warn",
+});
+```
+
+### 文件传输使用
+
+```typescript
+fileLogger.warn("磁盘空间不足", {
+  destinationPath: "system",
+  type: "WORKFLOW",
+});
+```
+
+## Upstash 传输（远程日志收集）
+
+使用 `UpstashTransport` 将结构化日志流式传输到远程 Redis 列表。logger 接受字符串消息和结构化元数据对象。这为分布式环境启用集中式日志记录，支持按 `destinationPath`、`type` 和 `runId` 过滤。
+
+```typescript title="src/mastra/loggers/upstash-transport.ts"
+import { UpstashTransport } from "@mastra/loggers/upstash";
+import { PinoLogger } from "@mastra/loggers/pino";
+
+export const upstashLogger = new PinoLogger({
+  name: "Mastra",
+  transports: {
+    upstash: new UpstashTransport({
+      listName: "production-logs",
+      upstashUrl: process.env.UPSTASH_URL!,
+      upstashToken: process.env.UPSTASH_TOKEN!,
+    }),
+  },
+  level: "info",
+});
+```
+
+### Upstash 传输使用
+
+```typescript
+upstashLogger.info("用户登录", {
+  destinationPath: "auth",
+  type: "AGENT",
+  runId: "run_123",
+});
+```
+
+## 自定义传输
+
+您可以使用 `createCustomTransport` 工具创建自定义传输，以与任何日志服务或流集成。
+
+### Sentry 传输示例
+
+使用 `createCustomTransport` 创建自定义传输，并将其与第三方日志流（如 `pino-sentry-transport`）集成。这允许将日志转发到外部系统（如 Sentry）以进行高级监控和可观测性。
+
+```typescript title="src/mastra/loggers/sentry-transport.ts"
+import { createCustomTransport } from "@mastra/core/loggers";
+import { PinoLogger } from "@mastra/loggers/pino";
+import pinoSentry from "pino-sentry-transport";
+
+const sentryStream = await pinoSentry({
+  sentry: {
+    dsn: "YOUR_SENTRY_DSN",
+    _experiments: {
+      enableLogs: true,
+    },
+  },
+});
+
+const customTransport = createCustomTransport(sentryStream);
+
+export const sentryLogger = new PinoLogger({
+  name: "Mastra",
+  level: "info",
+  transports: { sentry: customTransport },
+});
+```

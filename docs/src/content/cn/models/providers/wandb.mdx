@@ -1,0 +1,205 @@
+---
+title: "Weights & Biases | 模型 | Mastra"
+description: "在 Mastra 中使用 Weights & Biases 模型。共 10 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/wandb.svg" alt="Weights & Biases logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Weights & Biases
+
+通过 Mastra 的模型路由器访问 10 个 Weights & Biases 模型。身份验证使用 `WANDB_API_KEY` 环境变量自动处理。
+
+在 [Weights & Biases 文档](https://weave-docs.wandb.ai) 中了解更多信息。
+
+```bash title=".env"
+WANDB_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [Weights & Biases 文档](https://weave-docs.wandb.ai) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "wandb/deepseek-ai/DeepSeek-R1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 161000,
+    "maxOutput": 163840,
+    "inputCost": 1.35,
+    "outputCost": 5.4
+  },
+  {
+    "model": "wandb/deepseek-ai/DeepSeek-V3-0324",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 161000,
+    "maxOutput": 8192,
+    "inputCost": 1.14,
+    "outputCost": 2.75
+  },
+  {
+    "model": "wandb/meta-llama/Llama-3.1-8B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.22,
+    "outputCost": 0.22
+  },
+  {
+    "model": "wandb/meta-llama/Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.71,
+    "outputCost": 0.71
+  },
+  {
+    "model": "wandb/meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 64000,
+    "maxOutput": 8192,
+    "inputCost": 0.17,
+    "outputCost": 0.66
+  },
+  {
+    "model": "wandb/microsoft/Phi-4-mini-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.08,
+    "outputCost": 0.35
+  },
+  {
+    "model": "wandb/moonshotai/Kimi-K2-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 1.35,
+    "outputCost": 4
+  },
+  {
+    "model": "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "model": "wandb/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "model": "wandb/Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 1,
+    "outputCost": 1.5
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.inference.wandb.ai/v1",
+    id: "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    apiKey: process.env.WANDB_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "wandb/moonshotai/Kimi-K2-Instruct"
+      : "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507";
+  }
+});
+```
+
+

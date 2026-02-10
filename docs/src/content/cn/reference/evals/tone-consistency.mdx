@@ -1,0 +1,141 @@
+---
+title: "参考：语调一致性评分器 | 评估"
+description: "Mastra 中语调一致性评分器的文档，用于评估文本中的情感语调和情感一致性。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 语调一致性评分器
+
+`createToneScorer()` 函数评估文本的情感语调和情感一致性。它可以在两种模式下运行：比较输入/输出对之间的语调，或分析单个文本内的语调稳定性。
+
+## 参数
+
+`createToneScorer()` 函数不接受任何选项。
+
+此函数返回 MastraScorer 类的实例。详见 [MastraScorer 参考](./mastra-scorer) 了解 `.run()` 方法及其输入输出的详细信息。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "带有语调指标的对象: { responseSentiment: number, referenceSentiment: number, difference: number }（比较模式）或 { avgSentiment: number, sentimentVariance: number }（稳定性模式）",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "语调一致性/稳定性分数（0-1）。",
+    },
+  ]}
+/>
+
+`.run()` 返回以下形状的结果：
+
+```typescript
+{
+  runId: string,
+  analyzeStepResult: {
+    responseSentiment?: number,
+    referenceSentiment?: number,
+    difference?: number,
+    avgSentiment?: number,
+    sentimentVariance?: number,
+  },
+  score: number
+}
+```
+
+## 评分详情
+
+评分器通过语调模式分析和特定模式评分来评估情感一致性。
+
+### 评分过程
+
+1. 分析语调模式：
+   - 提取情感特征
+   - 计算情感分数
+   - 测量语调变化
+2. 计算特定模式的分数：
+   **语调一致性**（输入和输出）：
+   - 比较文本之间的情感
+   - 计算情感差异
+   - 分数 = 1 - (sentiment_difference / max_difference)
+     **语调稳定性**（单个输入）：
+   - 分析句子之间的情感
+   - 计算情感方差
+   - 分数 = 1 - (sentiment_variance / max_variance)
+
+最终分数: `mode_specific_score * scale`
+
+### 分数解释
+
+（0 到 scale，默认 0-1）
+
+- 1.0: 完美的语调一致性/稳定性
+- 0.7-0.9: 强一致性，有轻微变化
+- 0.4-0.6: 中等一致性，有明显转变
+- 0.1-0.3: 较差的一致性，有重大语调变化
+- 0.0: 完全不一致 - 完全不同的语调
+
+### analyzeStepResult
+
+带有语调指标的对象：
+
+- **responseSentiment**: 响应的情感分数（比较模式）。
+- **referenceSentiment**: 输入/参考的情感分数（比较模式）。
+- **difference**: 情感分数之间的绝对差异（比较模式）。
+- **avgSentiment**: 跨句子的平均情感（稳定性模式）。
+- **sentimentVariance**: 跨句子的情感方差（稳定性模式）。
+
+## 示例
+
+评估相关代理响应之间的语调一致性：
+
+```typescript title="src/example-tone-consistency.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createToneScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createToneScorer();
+
+const result = await runEvals({
+  data: [
+    {
+      input: "您对我们服务的体验如何？",
+      groundTruth: "服务非常出色，超出预期！",
+    },
+    {
+      input: "告诉我客户支持的情况",
+      groundTruth: "支持团队非常友好且乐于助人。",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+## 相关内容
+
+- [内容相似度评分器](./content-similarity)
+- [毒性评分器](./toxicity)

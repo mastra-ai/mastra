@@ -1,0 +1,268 @@
+---
+title: "指南：构建 AI 厨师助手 | Mastra 代理指南"
+description: 有关在 Mastra 中创建厨师助手代理以帮助用户用可用食材烹饪膳食的指南。
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import YouTube from "@site/src/components/YouTube-player";
+
+# 构建 AI 厨师助手
+
+在本指南中，您将创建一个"厨师助手"代理，帮助用户用可用的食材烹饪膳食。
+
+您将学习如何创建代理并将其注册到 Mastra。接下来，您将通过终端与代理交互，并了解不同的响应格式。最后，您将通过 Mastra 的本地 API 端点访问代理。
+
+<YouTube id="_tZhOqHCrF0" />
+
+## 前置条件
+
+- 已安装 Node.js `v22.13.0` 或更高版本
+- 来自支持的[模型提供商](/models)的 API 密钥
+- 现有的 Mastra 项目（请遵循[安装指南](/guides/getting-started/quickstart)设置新项目）
+
+## 创建代理
+
+要在 Mastra 中创建代理，请使用 `Agent` 类来定义它，然后将其注册到 Mastra。
+
+<Steps>
+
+<StepItem>
+
+创建一个新文件 `src/mastra/agents/chefAgent.ts` 并定义您的代理：
+
+```ts title="src/mastra/agents/chefAgent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const chefAgent = new Agent({
+  id: "chef-agent",
+  name: "chef-agent",
+  instructions:
+    "You are Michel, a practical and experienced home chef" +
+    "You help people cook with whatever ingredients they have available.",
+  model: "openai/gpt-5.1",
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+在您的 `src/mastra/index.ts` 文件中，注册代理：
+
+```ts title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { chefAgent } from "./agents/chefAgent";
+
+export const mastra = new Mastra({
+  agents: { chefAgent },
+});
+```
+
+</StepItem>
+
+</Steps >
+
+## 与代理交互
+
+根据您的要求，您可以以不同的格式与代理交互并获取响应。在以下步骤中，您将学习如何生成、流式传输和获取结构化输出。
+
+<Steps>
+
+<StepItem>
+
+创建一个新文件 `src/index.ts` 并向其中添加一个 `main()` 函数。在其中，制作一个查询来询问代理并记录其响应。
+
+```ts title="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
+async function main() {
+  const query =
+    "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
+  console.log(`Query: ${query}`);
+
+  const response = await chefAgent.generate([{ role: "user", content: query }]);
+  console.log("\n👨‍🍳 Chef Michel:", response.text);
+}
+
+main();
+```
+
+之后，运行脚本：
+
+```bash
+npx bun src/index.ts
+```
+
+您应该获得类似以下的输出：
+
+```
+Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
+
+👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
+```
+
+</StepItem>
+
+<StepItem>
+
+在之前的示例中，您可能等待响应而没有任何进度指示。要在代理创建响应时显示其输出，您应该改为将响应流式传输到终端。
+
+```ts title="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
+async function main() {
+  const query =
+    "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
+  console.log(`Query: ${query}`);
+
+  const stream = await chefAgent.stream([{ role: "user", content: query }]);
+
+  console.log("\n Chef Michel: ");
+
+  for await (const chunk of stream.textStream) {
+    process.stdout.write(chunk);
+  }
+
+  console.log("\n\n✅ Recipe complete!");
+}
+
+main();
+```
+
+之后，再次运行脚本：
+
+```bash
+npx bun src/index.ts
+```
+
+您应该获得类似以下的输出。但这次您可以逐行阅读，而不是一个大块。
+
+```
+Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
+
+👨‍🍳 Chef Michel:
+Great! You can make a comforting chicken curry...
+
+✅ Recipe complete!
+```
+
+</StepItem>
+
+<StepItem>
+
+除了向人类显示代理的响应外，您可能希望将其传递到代码的另一部分。对于这些情况，您的代理应该返回[结构化输出](/docs/cn/docs/agents/overview#structured-output)。
+
+将您的 `src/index.ts` 更改为以下内容：
+
+```ts title="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+import { z } from "zod";
+
+async function main() {
+  const query =
+    "I want to make lasagna, can you generate a lasagna recipe for me?";
+  console.log(`Query: ${query}`);
+
+  // Define the Zod schema
+  const schema = z.object({
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        amount: z.string(),
+      }),
+    ),
+    steps: z.array(z.string()),
+  });
+
+  const response = await chefAgent.generate(
+    [{ role: "user", content: query }],
+    {
+      structuredOutput: {
+        schema,
+      },
+    },
+  );
+  console.log("\n👨‍🍳 Chef Michel:", response.object);
+}
+
+main();
+```
+
+再次运行脚本后，您应该获得类似以下的输出：
+
+```
+Query: I want to make lasagna, can you generate a lasagna recipe for me?
+
+👨‍🍳 Chef Michel: {
+  ingredients: [
+    { name: "Lasagna noodles", amount: "12 sheets" },
+    { name: "Ground beef", amount: "1 pound" },
+  ],
+  steps: [
+    "Preheat oven to 375°F (190°C).",
+    "Cook the lasagna noodles according to package instructions.",
+  ]
+}
+```
+
+</StepItem>
+
+</Steps >
+
+## 运行代理服务器
+
+了解如何通过 Mastra 的 API 与您的代理交互。
+
+<Steps>
+
+<StepItem>
+
+您可以使用 `mastra dev` 命令将代理作为服务运行：
+
+```bash
+mastra dev
+```
+
+这将启动一个服务器，公开与您注册的代理交互的端点。在[工作室](/docs/cn/docs/getting-started/studio)中，您可以通过 UI 测试您的代理。
+
+</StepItem>
+
+<StepItem>
+
+默认情况下，`mastra dev` 在 `http://localhost:4111` 上运行。您的厨师助手代理将在以下位置可用：
+
+```
+POST http://localhost:4111/api/agents/chefAgent/generate
+```
+
+</StepItem>
+
+<StepItem>
+
+您可以使用命令行中的 `curl` 与代理交互：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "I have eggs, flour, and milk. What can I make?"
+      }
+    ]
+  }'
+```
+
+**示例响应：**
+
+```json
+{
+  "text": "You can make delicious pancakes! Here's a simple recipe..."
+}
+```
+
+</StepItem>
+
+</Steps>

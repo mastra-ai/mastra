@@ -1,0 +1,320 @@
+---
+title: "参考文档: registerApiRoute() | 服务器"
+description: "registerApiRoute() 函数的 API 参考，用于为 Mastra 服务器定义自定义 HTTP 路由。"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# registerApiRoute()
+
+`registerApiRoute()` 函数创建与 Mastra 服务器集成的自定义 HTTP 路由。路由可以包含 OpenAPI 元数据以显示在 Swagger UI 文档中。
+
+## 导入
+
+```typescript
+import { registerApiRoute } from "@mastra/core/server";
+```
+
+## 参数
+
+### path
+
+路由的 URL 路径。支持使用 `:param` 语法的路径参数。
+
+```typescript
+registerApiRoute("/items/:itemId", { ... })
+```
+
+**注意：** 路径不能以 `/api/` 开头，因为此前缀保留给 Mastra 服务器路由。
+
+### options
+
+<PropertiesTable
+  content={[
+    {
+      name: "method",
+      type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
+      description: "路由的 HTTP 方法",
+      isOptional: false,
+    },
+    {
+      name: "handler",
+      type: "Handler",
+      description: "接收 Hono 上下文的路由处理函数。使用 `handler` 或 `createHandler` 之一，不要同时使用。",
+      isOptional: true,
+    },
+    {
+      name: "createHandler",
+      type: "(c: Context) => Promise<Handler>",
+      description: "用于创建处理函数的异步工厂函数。使用 `handler` 或 `createHandler` 之一，不要同时使用。",
+      isOptional: true,
+    },
+    {
+      name: "middleware",
+      type: "MiddlewareHandler | MiddlewareHandler[]",
+      description: "路由特定的中间件函数",
+      isOptional: true,
+    },
+    {
+      name: "openapi",
+      type: "DescribeRouteOptions",
+      description: "用于 Swagger UI 文档的 OpenAPI 元数据",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## OpenAPI 选项
+
+`openapi` 属性接受来自 [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi) 的标准 OpenAPI 3.1 操作字段。没有 `openapi` 属性的路由不会包含在 Swagger UI 中。
+
+<PropertiesTable
+  content={[
+    {
+      name: "summary",
+      type: "string",
+      description: "操作的简短摘要",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "操作的详细描述",
+      isOptional: true,
+    },
+    {
+      name: "tags",
+      type: "string[]",
+      description: "用于在 Swagger UI 中分组的标签。如果未指定，默认为 ['custom']。",
+      isOptional: true,
+    },
+    {
+      name: "deprecated",
+      type: "boolean",
+      description: "将操作标记为已废弃",
+      isOptional: true,
+    },
+    {
+      name: "parameters",
+      type: "ParameterObject[]",
+      description: "路径、查询和头参数",
+      isOptional: true,
+    },
+    {
+      name: "requestBody",
+      type: "RequestBodyObject",
+      description: "请求体规范",
+      isOptional: true,
+    },
+    {
+      name: "responses",
+      type: "ResponsesObject",
+      description: "按状态码的响应规范",
+      isOptional: true,
+    },
+    {
+      name: "security",
+      type: "SecurityRequirementObject[]",
+      description: "操作的安全要求",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+返回一个 `ApiRoute` 对象，传递给 Mastra 配置中的 `server.apiRoutes`。
+
+## 处理函数上下文
+
+处理函数接收一个 Hono `Context` 对象，可以访问以下内容：
+
+```typescript
+handler: async (c) => {
+  // 获取 Mastra 实例
+  const mastra = c.get("mastra");
+
+  // 获取请求上下文
+  const requestContext = c.get("requestContext");
+
+  // 访问路径参数
+  const itemId = c.req.param("itemId");
+
+  // 访问查询参数
+  const filter = c.req.query("filter");
+
+  // 访问请求体
+  const body = await c.req.json();
+
+  // 返回 JSON 响应
+  return c.json({ data: "value" });
+}
+```
+
+## 示例
+
+### 基本 GET 路由
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/health-check", {
+        method: "GET",
+        handler: async (c) => {
+          return c.json({ status: "ok" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### 带路径参数的路由
+
+```typescript
+registerApiRoute("/users/:userId/posts/:postId", {
+  method: "GET",
+  handler: async (c) => {
+    const userId = c.req.param("userId");
+    const postId = c.req.param("postId");
+
+    return c.json({ userId, postId });
+  },
+});
+```
+
+### 带请求体的 POST 路由
+
+```typescript
+registerApiRoute("/items", {
+  method: "POST",
+  handler: async (c) => {
+    const body = await c.req.json();
+    const mastra = c.get("mastra");
+
+    // 处理请求...
+
+    return c.json({ id: "new-id", ...body }, 201);
+  },
+});
+```
+
+### 带中间件的路由
+
+```typescript
+registerApiRoute("/protected", {
+  method: "GET",
+  middleware: [
+    async (c, next) => {
+      const token = c.req.header("Authorization");
+      if (!token) {
+        return c.json({ error: "未授权" }, 401);
+      }
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    return c.json({ data: "受保护的内容" });
+  },
+});
+```
+
+### 带 OpenAPI 文档的路由
+
+```typescript
+import { z } from "zod";
+
+const ItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  price: z.number(),
+});
+
+registerApiRoute("/items/:itemId", {
+  method: "GET",
+  openapi: {
+    summary: "按 ID 获取项目",
+    description: "通过其唯一标识符检索单个项目",
+    tags: ["Items"],
+    parameters: [
+      {
+        name: "itemId",
+        in: "path",
+        required: true,
+        description: "项目 ID",
+        schema: { type: "string" },
+      },
+    ],
+    responses: {
+      200: {
+        description: "找到项目",
+        content: {
+          "application/json": {
+            schema: ItemSchema, // Zod 模式在 OpenAPI 生成期间转换为 JSON Schema
+          },
+        },
+      },
+      404: {
+        description: "未找到项目",
+      },
+    },
+  },
+  handler: async (c) => {
+    const itemId = c.req.param("itemId");
+    return c.json({ id: itemId, name: "示例", price: 9.99 });
+  },
+});
+```
+
+### 使用 createHandler
+
+对于需要异步初始化的路由：
+
+```typescript
+registerApiRoute("/dynamic", {
+  method: "GET",
+  createHandler: async (c) => {
+    // 执行异步设置
+    const config = await loadConfig();
+
+    return async (c) => {
+      return c.json({ config });
+    };
+  },
+});
+```
+
+## 错误处理
+
+使用 Hono 的 `HTTPException` 抛出带有状态码的错误：
+
+```typescript
+import { HTTPException } from "hono/http-exception";
+
+registerApiRoute("/items/:itemId", {
+  method: "GET",
+  handler: async (c) => {
+    const itemId = c.req.param("itemId");
+    const item = await findItem(itemId);
+
+    if (!item) {
+      throw new HTTPException(404, { message: "未找到项目" });
+    }
+
+    return c.json(item);
+  },
+});
+```
+
+## 相关文档
+
+- [自定义 API 路由指南](/docs/cn/docs/server/custom-api-routes) - 包含示例的使用指南
+- [服务器中间件](/docs/cn/docs/server/middleware) - 全局中间件配置
+- [createRoute()](/reference/server/create-route) - 为服务器适配器创建类型安全的路由
+- [服务器路由](/reference/server/routes) - 内置 Mastra 服务器路由

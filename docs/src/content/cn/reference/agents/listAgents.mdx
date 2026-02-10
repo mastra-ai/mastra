@@ -1,0 +1,72 @@
+---
+title: "参考文档：Agent.listAgents() | 智能体"
+description: "Mastra 智能体中 `Agent.listAgents()` 方法的文档，用于检索智能体可以访问的子智能体。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.listAgents()
+
+`.listAgents()` 方法检索为智能体配置的子智能体，如果它们是函数则解析它们。这些子智能体使智能体能够访问其他智能体并执行复杂操作。
+
+## 使用示例
+
+```typescript
+await agent.listAgents();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "包含请求上下文的选择性配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "Promise<Record<string, Agent>>",
+      description:
+        "解析为智能体名称到其对应 Agent 实例的记录的 promise。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+import { RequestContext } from "@mastra/core/request-context";
+
+await agent.listAgents({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)

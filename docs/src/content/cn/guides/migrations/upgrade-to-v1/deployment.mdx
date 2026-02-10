@@ -1,0 +1,42 @@
+---
+title: "部署 | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移部署配置。"
+---
+
+# 部署
+
+`CloudflareDeployer` 配置已更新为使用标准的 `wrangler.json` 属性名称。
+
+## 变更
+
+### CloudflareDeployer 使用标准的 wrangler.json 属性名称
+
+`CloudflareDeployer` 构造函数现在接受标准的 `wrangler.json` 属性名称，而不是自定义的 camelCase 变体。此更改使部署器与 Cloudflare 的官方配置格式保持一致，并提供对所有 wrangler 配置选项的访问。
+
+已弃用的字段会在运行时自动迁移，并显示控制台警告，但您应该更新代码以使用新的字段名称。
+
+```diff
+  const deployer = new CloudflareDeployer({
+-   projectName: 'my-worker',
++   name: 'my-worker',
+-   d1Databases: [
++   d1_databases: [
+      {
+        binding: 'DB',
+        database_name: 'my-db',
+        database_id: 'xxx',
+      },
+    ],
+-   kvNamespaces: [
++   kv_namespaces: [
+      {
+        binding: 'KV',
+        id: 'yyy',
+      },
+    ],
+  });
+```
+
+`workerNamespace` 字段已被移除，因为它不再使用。
+
+有关所有可用配置选项，请参阅 [Wrangler 配置文档](https://developers.cloudflare.com/workers/wrangler/configuration/)。

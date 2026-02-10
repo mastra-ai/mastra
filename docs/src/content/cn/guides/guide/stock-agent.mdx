@@ -1,0 +1,183 @@
+---
+title: "指南：构建 AI 股票代理 | Mastra 代理 | 指南"
+description: 有关在 Mastra 中创建简单的股票代理以获取给定符号的上一日收盘价的指南。
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import YouTube from "@site/src/components/YouTube-player";
+
+# 构建 AI 股票代理
+
+在本指南中，您将创建一个简单的代理，用于获取给定符号的上一日收盘价。您将学习如何创建工具、将其添加到代理，以及使用代理获取股票价格。
+
+<YouTube id="rIaZ4l7y9wo" />
+
+## 前置条件
+
+- 已安装 Node.js `v22.13.0` 或更高版本
+- 来自支持的[模型提供商](/models)的 API 密钥
+- 现有的 Mastra 项目（请遵循[安装指南](/guides/getting-started/quickstart)设置新项目）
+
+## 创建代理
+
+要在 Mastra 中创建代理，请使用 `Agent` 类来定义它，然后将其注册到 Mastra。
+
+<Steps>
+
+<StepItem>
+
+创建一个新文件 `src/mastra/agents/stockAgent.ts` 并定义您的代理：
+
+```ts title="src/mastra/agents/stockAgent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const stockAgent = new Agent({
+  id: "stock-agent",
+  name: "Stock Agent",
+  instructions:
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
+  model: "openai/gpt-5.1",
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+在您的 `src/mastra/index.ts` 文件中，注册代理：
+
+```ts title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { stockAgent } from "./agents/stockAgent";
+
+export const mastra = new Mastra({
+  agents: { stockAgent },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## 创建股票价格工具
+
+到目前为止，股票代理不了解当前股票价格。要更改这一点，请创建一个工具并将其添加到代理。
+
+<Steps>
+
+<StepItem>
+
+创建一个新文件 `src/mastra/tools/stockPrices.ts`。在其中，添加一个 `stockPrices` 工具，用于获取给定符号的上一日收盘价：
+
+```ts title="src/mastra/tools/stockPrices.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getStockPrice = async (symbol: string) => {
+  const data = await fetch(
+    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
+  ).then((r) => r.json());
+  return data.prices["4. close"];
+};
+
+export const stockPrices = createTool({
+  id: "Get Stock Price",
+  inputSchema: z.object({
+    symbol: z.string(),
+  }),
+  description: `Fetches the last day's closing stock price for a given symbol`,
+  execute: async (inputData) => {
+    console.log("Using tool to fetch stock price for", inputData.symbol);
+    return {
+      symbol: inputData.symbol,
+      currentPrice: await getStockPrice(inputData.symbol),
+    };
+  },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+在 `src/mastra/agents/stockAgent.ts` 中导入您新创建的 `stockPrices` 工具并将其添加到代理：
+
+```ts title="src/mastra/agents/stockAgent.ts" {9-11}
+import { Agent } from "@mastra/core/agent";
+import { stockPrices } from "../tools/stockPrices";
+
+export const stockAgent = new Agent({
+  id: "stock-agent",
+  name: "Stock Agent",
+  instructions:
+    "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
+  model: "openai/gpt-5.1",
+  tools: {
+    stockPrices,
+  },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## 运行代理服务器
+
+了解如何通过 Mastra 的 API 与您的代理交互。
+
+<Steps>
+
+<StepItem>
+
+您可以使用 `mastra dev` 命令将代理作为服务运行：
+
+```bash
+mastra dev
+```
+
+这将启动一个服务器，公开与您注册的代理交互的端点。在[工作室](/docs/cn/docs/getting-started/studio)中，您可以通过 UI 测试您的 `stockAgent` 和 `stockPrices` 工具。
+
+</StepItem>
+
+<StepItem>
+
+默认情况下，`mastra dev` 在 `http://localhost:4111` 上运行。您的股票代理将在以下位置可用：
+
+```
+POST http://localhost:4111/api/agents/stockAgent/generate
+```
+
+</StepItem>
+
+<StepItem>
+
+您可以使用命令行中的 `curl` 与代理交互：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/stockAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "What is the current stock price of Apple (AAPL)?" }
+    ]
+  }'
+```
+
+**预期响应：**
+
+您应该收到类似以下的 JSON 响应：
+
+```json
+{
+  "text": "The current price of Apple (AAPL) is $174.55.",
+  "agent": "Stock Agent"
+}
+```
+
+这表明您的代理成功处理了请求，使用了 `stockPrices` 工具来获取股票价格，并返回了结果。
+
+</StepItem>
+
+</Steps>

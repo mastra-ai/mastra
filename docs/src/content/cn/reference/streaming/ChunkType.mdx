@@ -1,0 +1,1354 @@
+---
+title: "参考文档: ChunkType | 流处理"
+description: "Mastra 流式响应中使用的 ChunkType 类型文档，定义所有可能的块类型及其载荷。"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# ChunkType
+
+`ChunkType` 类型定义了智能体流式响应过程中可发送的流块格式。
+
+## 基础属性
+
+所有块都包含以下基础属性：
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "string",
+      description: "特定的块类型标识符",
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "此执行运行的唯一标识符",
+    },
+    {
+      name: "from",
+      type: "ChunkFrom",
+      description: "块的来源",
+      properties: [
+        {
+          type: "enum",
+          parameters: [
+            {
+              name: "AGENT",
+              type: "'AGENT'",
+              description: "来自智能体执行的块",
+            },
+            {
+              name: "USER",
+              type: "'USER'",
+              description: "来自用户输入的块",
+            },
+            {
+              name: "SYSTEM",
+              type: "'SYSTEM'",
+              description: "来自系统进程的块",
+            },
+            {
+              name: "WORKFLOW",
+              type: "'WORKFLOW'",
+              description: "来自工作流执行的块",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 文本块
+
+### text-start
+
+表示文本生成的开始。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"text-start"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "TextStartPayload",
+      description: "文本开始信息",
+      properties: [
+        {
+          type: "TextStartPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "此文本生成的唯一标识符",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### text-delta
+
+生成过程中的增量文本内容。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"text-delta"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "TextDeltaPayload",
+      description: "增量文本内容",
+      properties: [
+        {
+          type: "TextDeltaPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "此文本生成的唯一标识符",
+            },
+            {
+              name: "text",
+              type: "string",
+              description: "增量文本内容",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### text-end
+
+表示文本生成的结束。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"text-end"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "TextEndPayload",
+      description: "文本结束信息",
+      properties: [
+        {
+          type: "TextEndPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "此文本生成的唯一标识符",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 推理块
+
+### reasoning-start
+
+表示推理生成的开始（适用于支持推理的模型）。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-start"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ReasoningStartPayload",
+      description: "推理开始信息",
+      properties: [
+        {
+          type: "ReasoningStartPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "此推理生成的唯一标识符",
+            },
+            {
+              name: "signature",
+              type: "string",
+              isOptional: true,
+              description: "推理签名（如果可用）",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### reasoning-delta
+
+生成过程中的增量推理文本。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-delta"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ReasoningDeltaPayload",
+      description: "增量推理内容",
+      properties: [
+        {
+          type: "ReasoningDeltaPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "此推理生成的唯一标识符",
+            },
+            {
+              name: "text",
+              type: "string",
+              description: "增量推理文本",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### reasoning-end
+
+表示推理生成的结束。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-end"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ReasoningEndPayload",
+      description: "推理结束信息",
+      properties: [
+        {
+          type: "ReasoningEndPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "此推理生成的唯一标识符",
+            },
+            {
+              name: "signature",
+              type: "string",
+              isOptional: true,
+              description: "最终推理签名（如果可用）",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### reasoning-signature
+
+包含来自支持高级推理的模型（如 OpenAI 的 o1 系列）的推理签名。该签名表示模型内部推理过程的元数据，如推理努力级别或推理方法，但不包含实际的推理内容本身。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"reasoning-signature"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ReasoningSignaturePayload",
+      description: "模型推理过程特征的元数据",
+      properties: [
+        {
+          type: "ReasoningSignaturePayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              description: "推理会话的唯一标识符",
+            },
+            {
+              name: "signature",
+              type: "string",
+              description:
+                "描述推理方法或努力级别的签名（例如，推理努力设置）",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 工具块
+
+### tool-call
+
+正在调用工具。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ToolCallPayload",
+      description: "工具调用信息",
+      properties: [
+        {
+          type: "ToolCallPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "此工具调用的唯一标识符",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "被调用工具的名称",
+            },
+            {
+              name: "args",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "传递给工具的参数",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "提供商是否执行了工具",
+            },
+            {
+              name: "output",
+              type: "any",
+              isOptional: true,
+              description: "工具输出（如果可用）",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### tool-result
+
+工具执行的结果。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-result"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ToolResultPayload",
+      description: "工具执行结果",
+      properties: [
+        {
+          type: "ToolResultPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "工具调用的唯一标识符",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "已执行工具的名称",
+            },
+            {
+              name: "result",
+              type: "any",
+              description: "工具执行的结果",
+            },
+            {
+              name: "isError",
+              type: "boolean",
+              isOptional: true,
+              description: "结果是否为错误",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "提供商是否执行了工具",
+            },
+            {
+              name: "args",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "传递给工具的参数",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### tool-call-input-streaming-start
+
+表示流式工具调用参数的开始。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call-input-streaming-start"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ToolCallInputStreamingStartPayload",
+      description: "工具调用输入流式开始信息",
+      properties: [
+        {
+          type: "ToolCallInputStreamingStartPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "此工具调用的唯一标识符",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "被调用工具的名称",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "提供商是否执行了工具",
+            },
+            {
+              name: "dynamic",
+              type: "boolean",
+              isOptional: true,
+              description: "工具调用是否为动态的",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### tool-call-delta
+
+流式处理过程中的增量工具调用参数。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call-delta"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ToolCallDeltaPayload",
+      description: "增量工具调用参数",
+      properties: [
+        {
+          type: "ToolCallDeltaPayload",
+          parameters: [
+            {
+              name: "argsTextDelta",
+              type: "string",
+              description: "工具参数的增量文本",
+            },
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "此工具调用的唯一标识符",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              isOptional: true,
+              description: "被调用工具的名称",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### tool-call-input-streaming-end
+
+表示流式工具调用参数的结束。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-call-input-streaming-end"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ToolCallInputStreamingEndPayload",
+      description: "工具调用输入流式结束信息",
+      properties: [
+        {
+          type: "ToolCallInputStreamingEndPayload",
+          parameters: [
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "此工具调用的唯一标识符",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### tool-error
+
+工具执行过程中发生错误。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-error"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ToolErrorPayload",
+      description: "工具错误信息",
+      properties: [
+        {
+          type: "ToolErrorPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "可选标识符",
+            },
+            {
+              name: "toolCallId",
+              type: "string",
+              description: "工具调用的唯一标识符",
+            },
+            {
+              name: "toolName",
+              type: "string",
+              description: "失败工具的名称",
+            },
+            {
+              name: "args",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "传递给工具的参数",
+            },
+            {
+              name: "error",
+              type: "unknown",
+              description: "发生的错误",
+            },
+            {
+              name: "providerExecuted",
+              type: "boolean",
+              isOptional: true,
+              description: "提供商是否执行了工具",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 源和文件块
+
+### source
+
+包含内容的源信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"source"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "SourcePayload",
+      description: "源信息",
+      properties: [
+        {
+          type: "SourcePayload",
+          parameters: [
+            { name: "id", type: "string", description: "唯一标识符" },
+            {
+              name: "sourceType",
+              type: "'url' | 'document'",
+              description: "源类型",
+            },
+            {
+              name: "title",
+              type: "string",
+              description: "源的标题",
+            },
+            {
+              name: "mimeType",
+              type: "string",
+              isOptional: true,
+              description: "源的 MIME 类型",
+            },
+            {
+              name: "filename",
+              type: "string",
+              isOptional: true,
+              description: "文件名（如果适用）",
+            },
+            {
+              name: "url",
+              type: "string",
+              isOptional: true,
+              description: "URL（如果适用）",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### file
+
+包含文件数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"file"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "FilePayload",
+      description: "文件数据",
+      properties: [
+        {
+          type: "FilePayload",
+          parameters: [
+            {
+              name: "data",
+              type: "string | Uint8Array",
+              description: "文件数据",
+            },
+            {
+              name: "base64",
+              type: "string",
+              isOptional: true,
+              description: "Base64 编码数据（如果适用）",
+            },
+            {
+              name: "mimeType",
+              type: "string",
+              description: "文件的 MIME 类型",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 控制块
+
+### start
+
+表示流式处理的开始。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"start"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "StartPayload",
+      description: "开始信息",
+      properties: [
+        {
+          type: "StartPayload",
+          parameters: [
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "额外的开始数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### step-start
+
+表示处理步骤的开始。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"step-start"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "StepStartPayload",
+      description: "步骤开始信息",
+      properties: [
+        {
+          type: "StepStartPayload",
+          parameters: [
+            {
+              name: "messageId",
+              type: "string",
+              isOptional: true,
+              description: "可选的消息标识符",
+            },
+            {
+              name: "request",
+              type: "object",
+              description: "请求信息，包括主体和其他数据",
+            },
+            {
+              name: "warnings",
+              type: "LanguageModelV2CallWarning[]",
+              isOptional: true,
+              description: "来自语言模型调用的任何警告",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### step-finish
+
+表示处理步骤的完成。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"step-finish"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "StepFinishPayload",
+      description: "步骤完成信息",
+      properties: [
+        {
+          type: "StepFinishPayload",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "可选标识符",
+            },
+            {
+              name: "messageId",
+              type: "string",
+              isOptional: true,
+              description: "可选的消息标识符",
+            },
+            {
+              name: "stepResult",
+              type: "object",
+              description:
+                "包含原因、警告和继续信息的步骤执行结果",
+            },
+            {
+              name: "output",
+              type: "object",
+              description: "输出信息，包括使用统计",
+            },
+            {
+              name: "metadata",
+              type: "object",
+              description: "执行元数据，包括请求和提供商信息",
+            },
+            {
+              name: "totalUsage",
+              type: "LanguageModelV2Usage",
+              isOptional: true,
+              description: "总使用统计",
+            },
+            {
+              name: "response",
+              type: "LanguageModelV2ResponseMetadata",
+              isOptional: true,
+              description: "响应元数据",
+            },
+            {
+              name: "providerMetadata",
+              type: "SharedV2ProviderMetadata",
+              isOptional: true,
+              description: "提供商特定元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### raw
+
+包含来自提供商的原始数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"raw"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "RawPayload",
+      description: "提供商原始数据",
+      properties: [
+        {
+          type: "RawPayload",
+          parameters: [
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "来自提供商的原始数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### finish
+
+流已成功完成。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"finish"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "FinishPayload",
+      description: "完成信息",
+      properties: [
+        {
+          type: "FinishPayload",
+          parameters: [
+            {
+              name: "stepResult",
+              type: "object",
+              description: "步骤执行结果",
+            },
+            {
+              name: "output",
+              type: "object",
+              description: "输出信息，包括使用量",
+            },
+            {
+              name: "metadata",
+              type: "object",
+              description: "执行元数据",
+            },
+            {
+              name: "messages",
+              type: "object",
+              description: "消息历史",
+            },
+            {
+              name: "response",
+              type: "object",
+              description: "来自模型提供商的响应元数据和消息",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### error
+
+流式处理过程中发生错误。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"error"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ErrorPayload",
+      description: "错误信息",
+      properties: [
+        {
+          type: "ErrorPayload",
+          parameters: [
+            {
+              name: "error",
+              type: "unknown",
+              description: "发生的错误",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### abort
+
+流已中止。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"abort"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "AbortPayload",
+      description: "中止信息",
+      properties: [
+        {
+          type: "AbortPayload",
+          parameters: [
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "额外的中止数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 对象和输出块
+
+### object
+
+在使用带定义模式的输出生成时发送。包含符合指定 Zod 或 JSON 模式的 partial 或完整结构化数据。此块在某些执行上下文中通常会被跳过，用于流式生成结构化对象。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"object"',
+      description: "块类型标识符",
+    },
+    {
+      name: "object",
+      type: "Partial<OUTPUT>",
+      description:
+        "符合定义模式的 partial 或完整结构化数据。类型由 OUTPUT 模式参数决定。",
+    },
+  ]}
+/>
+
+### tool-output
+
+包含来自智能体或工作流执行的输出，主要用于跟踪使用统计和完成事件。通常包装其他块类型（如 finish 块）以提供嵌套执行上下文。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tool-output"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ToolOutputPayload",
+      description: "带有元数据的包装执行输出",
+      properties: [
+        {
+          type: "ToolOutputPayload",
+          parameters: [
+            {
+              name: "output",
+              type: "ChunkType",
+              description:
+                "嵌套块数据，通常包含带有使用统计的完成事件",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### step-output
+
+包含工作流步骤执行的输出，主要用于使用跟踪和步骤完成事件。类似于 tool-output，但专门用于单个工作流步骤。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"step-output"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "StepOutputPayload",
+      description: "工作流步骤执行输出及元数据",
+      properties: [
+        {
+          type: "StepOutputPayload",
+          parameters: [
+            {
+              name: "output",
+              type: "ChunkType",
+              description:
+                "步骤执行的嵌套块数据，通常包含完成事件或其他步骤结果",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 元数据和特殊块
+
+### response-metadata
+
+包含关于 LLM 提供商响应的元数据。由某些提供商在文本生成后发送，以提供额外上下文，如模型 ID、时间戳和响应标题。此块用于内部状态跟踪，不影响消息组装。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"response-metadata"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "ResponseMetadataPayload",
+      description: "用于跟踪和调试的提供商响应元数据",
+      properties: [
+        {
+          type: "ResponseMetadataPayload",
+          parameters: [
+            {
+              name: "signature",
+              type: "string",
+              isOptional: true,
+              description: "响应签名（如果可用）",
+            },
+            {
+              name: "[key: string]",
+              type: "any",
+              description:
+                "额外的提供商特定元数据字段（例如，id、modelId、timestamp、headers）",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### watch
+
+包含来自智能体执行的可观察性监控数据。根据使用 `stream()` 的上下文，可以包括工作流状态信息、执行进度或其他运行时详情。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"watch"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "WatchPayload",
+      description:
+        "用于可观察性和智能体执行调试的监控数据",
+      properties: [
+        {
+          type: "WatchPayload",
+          parameters: [
+            {
+              name: "workflowState",
+              type: "object",
+              isOptional: true,
+              description:
+                "当前工作流执行状态（在工作流中使用时）",
+            },
+            {
+              name: "eventTimestamp",
+              type: "number",
+              isOptional: true,
+              description: "事件发生的时间戳",
+            },
+            {
+              name: "[key: string]",
+              type: "any",
+              description: "额外的监控和执行数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### tripwire
+
+当流因内容被处理器阻止而被强制终止时发送。这是一种安全机制，用于防止有害或不适当的内容被流式传输。载荷包含关于内容被阻止的原因以及是否请求重试的信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: '"tripwire"',
+      description: "块类型标识符",
+    },
+    {
+      name: "payload",
+      type: "TripwirePayload",
+      description:
+        "关于流为何被安全机制终止的信息",
+      properties: [
+        {
+          type: "TripwirePayload",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "内容被阻止的原因（例如，\"输出处理器阻止了内容\"）",
+            },
+            {
+              name: "retry",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "处理器是否请求重试此步骤",
+            },
+            {
+              name: "metadata",
+              type: "unknown",
+              isOptional: true,
+              description:
+                "来自处理器的额外元数据（例如，分数、类别）",
+            },
+            {
+              name: "processorId",
+              type: "string",
+              isOptional: true,
+              description:
+                "触发断路器的处理器 ID",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 使用示例
+
+```typescript
+const stream = await agent.stream("Hello");
+
+for await (const chunk of stream.fullStream) {
+  switch (chunk.type) {
+    case "text-delta":
+      console.log("文本:", chunk.payload.text);
+      break;
+
+    case "tool-call":
+      console.log("调用工具:", chunk.payload.toolName);
+      break;
+
+    case "tool-result":
+      console.log("工具结果:", chunk.payload.result);
+      break;
+
+    case "reasoning-delta":
+      console.log("推理:", chunk.payload.text);
+      break;
+
+    case "finish":
+      console.log("完成:", chunk.payload.stepResult.reason);
+      console.log("使用量:", chunk.payload.output.usage);
+      break;
+
+    case "error":
+      console.error("错误:", chunk.payload.error);
+      break;
+  }
+}
+```
+
+## 相关类型
+
+- [.stream()](./agents/stream) - 返回发送这些块的方法
+- [MastraModelOutput](./agents/MastraModelOutput) - 发送这些块的对象
+- [workflow.stream()](./workflows/stream) - 返回发送这些块的方法（用于工作流）

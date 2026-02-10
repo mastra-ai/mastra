@@ -1,0 +1,139 @@
+---
+title: "参考：LaminarExporter | 可观测性"
+description: "用于追踪的 Laminar 导出器"
+packages:
+  - "@mastra/laminar"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# LaminarExporter
+
+通过 OTLP/HTTP (protobuf) 将追踪数据发送到 Laminar。
+
+## 构造函数
+
+```typescript
+new LaminarExporter(config?: LaminarExporterConfig)
+```
+
+## LaminarExporterConfig
+
+```typescript
+interface LaminarExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  endpoint?: string;
+  headers?: Record<string, string>;
+  realtime?: boolean;
+  disableBatch?: boolean;
+  batchSize?: number;
+  timeoutMillis?: number;
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Laminar 项目 API 密钥。回退到 LMNR_PROJECT_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "baseUrl",
+      type: "string",
+      description: "Laminar 基础 URL（用于追踪导出 + 评分）。回退到 LMNR_BASE_URL 环境变量（默认：https://api.lmnr.ai）。",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "OTLP/HTTP 追踪端点（以 /v1/traces 结尾）。回退到 LAMINAR_ENDPOINT 环境变量（默认：${baseUrl}/v1/traces）。",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "包含在 OTLP 请求中的附加标头（与 Authorization 合并）。",
+      required: false,
+    },
+    {
+      name: "realtime",
+      type: "boolean",
+      description: "每个跨度后刷新以立即可见（默认：false）。",
+      required: false,
+    },
+    {
+      name: "disableBatch",
+      type: "boolean",
+      description: "禁用批处理（SimpleSpanProcessor）。默认：false。",
+      required: false,
+    },
+    {
+      name: "batchSize",
+      type: "number",
+      description: "每批最大跨度数（BatchSpanProcessor）。默认：512。",
+      required: false,
+    },
+    {
+      name: "timeoutMillis",
+      type: "number",
+      description: "OTLP 导出超时时间（毫秒）。默认：30000。",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到 Laminar。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的跨度到 Laminar 而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新待处理的数据并关闭导出器。
+
+## 使用方法
+
+### 零配置（使用环境变量）
+
+```typescript
+import { LaminarExporter } from "@mastra/laminar";
+
+// 从 LMNR_PROJECT_API_KEY、LMNR_BASE_URL、LAMINAR_ENDPOINT 读取
+const exporter = new LaminarExporter();
+```
+
+### 显式配置
+
+```typescript
+import { LaminarExporter } from "@mastra/laminar";
+
+const exporter = new LaminarExporter({
+  apiKey: process.env.LMNR_PROJECT_API_KEY,
+  baseUrl: "https://api.lmnr.ai",
+  realtime: true,
+});
+```

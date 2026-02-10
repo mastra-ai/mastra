@@ -1,0 +1,44 @@
+---
+title: "参考文档：MastraJwtAuth 类 | 认证"
+description: "MastraJwtAuth 类的 API 参考，该类使用 JSON Web Tokens 对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth"
+  - "@mastra/core"
+---
+
+# MastraJwtAuth 类
+
+`MastraJwtAuth` 类使用 JSON Web Tokens (JWT) 为 Mastra 提供轻量级身份验证机制。它基于共享密钥验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraJwtAuth } from "@mastra/auth";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      secret: "<your-secret>",
+    }),
+  },
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "secret",
+      type: "string",
+      description:
+        "用于对 JSON Web Tokens (JWT) 进行签名和验证以验证传入请求的唯一字符串。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 相关内容
+
+[MastraJwtAuth](/docs/cn/docs/server/auth/jwt)

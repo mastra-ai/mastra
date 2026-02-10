@@ -1,0 +1,841 @@
+---
+title: "Chutes | 模型 | Mastra"
+description: "在 Mastra 中使用 Chutes 模型。共 63 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
+
+通过 Mastra 的模型路由器访问 63 个 Chutes 模型。身份验证使用 `CHUTES_API_KEY` 环境变量自动处理。
+
+在 [Chutes 文档](https://llm.chutes.ai) 中了解更多信息。
+
+```bash title=".env"
+CHUTES_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "chutes/MiniMaxAI/MiniMax-M2.1-TEE"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [Chutes 文档](https://llm.chutes.ai) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "chutes/chutesai/Mistral-Small-3.1-24B-Instruct-2503",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.06,
+    "outputCost": 0.18
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-R1-0528-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-R1-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3-0324-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.19,
+    "outputCost": 0.87
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3.1-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3.1-Terminus-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.23,
+    "outputCost": 0.9
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3.2-Speciale-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.27,
+    "outputCost": 0.41
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3.2-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 0.38
+  },
+  {
+    "model": "chutes/MiniMaxAI/MiniMax-M2.1-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196608,
+    "maxOutput": 65536,
+    "inputCost": 0.27,
+    "outputCost": 1.12
+  },
+  {
+    "model": "chutes/miromind-ai/MiroThinker-v1.5-235B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/mistralai/Devstral-2-123B-Instruct-2512-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.39,
+    "outputCost": 1.9
+  },
+  {
+    "model": "chutes/moonshotai/Kimi-K2-Thinking-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65535,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  },
+  {
+    "model": "chutes/moonshotai/Kimi-K2.5-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65535,
+    "inputCost": 0.6,
+    "outputCost": 3
+  },
+  {
+    "model": "chutes/NousResearch/DeepHermes-3-Mistral-24B-Preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.02,
+    "outputCost": 0.1
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4-14B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.01,
+    "outputCost": 0.05
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4-405B-FP8-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4-70B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.11,
+    "outputCost": 0.38
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4.3-36B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.1,
+    "outputCost": 0.39
+  },
+  {
+    "model": "chutes/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.06,
+    "outputCost": 0.24
+  },
+  {
+    "model": "chutes/openai/gpt-oss-120b-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.04,
+    "outputCost": 0.18
+  },
+  {
+    "model": "chutes/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.02,
+    "outputCost": 0.1
+  },
+  {
+    "model": "chutes/OpenGVLab/InternVL3-78B-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
+    "outputCost": 0.39
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-72B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.13,
+    "outputCost": 0.52
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-Coder-32B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-VL-32B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-VL-72B-Instruct-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-14B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-235B-A22B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.08,
+    "outputCost": 0.55
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.11,
+    "outputCost": 0.6
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-30B-A3B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.06,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.08,
+    "outputCost": 0.33
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-32B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.08,
+    "outputCost": 0.24
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.22,
+    "outputCost": 0.95
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-Coder-Next",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.07,
+    "outputCost": 0.3
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.1,
+    "outputCost": 0.8
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-VL-235B-A22B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/Qwen/Qwen3Guard-Gen-0.6B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.01,
+    "outputCost": 0.01
+  },
+  {
+    "model": "chutes/rednote-hilab/dots.ocr",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.01,
+    "outputCost": 0.01
+  },
+  {
+    "model": "chutes/tngtech/DeepSeek-R1T-Chimera",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/tngtech/DeepSeek-TNG-R1T2-Chimera",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.25,
+    "outputCost": 0.85
+  },
+  {
+    "model": "chutes/tngtech/TNG-R1T-Chimera-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 0.85
+  },
+  {
+    "model": "chutes/tngtech/TNG-R1T-Chimera-Turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.22,
+    "outputCost": 0.6
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-12b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.1
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 96000,
+    "maxOutput": 96000,
+    "inputCost": 0.04,
+    "outputCost": 0.15
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-4b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 96000,
+    "maxOutput": 96000,
+    "inputCost": 0.01,
+    "outputCost": 0.03
+  },
+  {
+    "model": "chutes/unsloth/Llama-3.2-1B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.01,
+    "outputCost": 0.01
+  },
+  {
+    "model": "chutes/unsloth/Mistral-Nemo-Instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.02,
+    "outputCost": 0.04
+  },
+  {
+    "model": "chutes/unsloth/Mistral-Small-24B-Instruct-2501",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/XiaomiMiMo/MiMo-V2-Flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.09,
+    "outputCost": 0.29
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.5-Air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.5-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.5-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.35,
+    "outputCost": 1.55
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.6-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 65535,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.6-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 65536,
+    "inputCost": 0.35,
+    "outputCost": 1.5
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.6V",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.7-Flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 65535,
+    "inputCost": 0.06,
+    "outputCost": 0.35
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.7-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 65535,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/zai-org/GLM-4.7-TEE",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 65535,
+    "inputCost": 0.4,
+    "outputCost": 1.5
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://llm.chutes.ai/v1",
+    id: "chutes/MiniMaxAI/MiniMax-M2.1-TEE",
+    apiKey: process.env.CHUTES_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "chutes/zai-org/GLM-4.7-TEE"
+      : "chutes/MiniMaxAI/MiniMax-M2.1-TEE";
+  }
+});
+```
+
+

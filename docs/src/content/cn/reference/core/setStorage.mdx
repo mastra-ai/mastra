@@ -1,0 +1,42 @@
+---
+title: "参考：Mastra.setStorage() | 核心"
+description: "Mastra 中 `Mastra.setStorage()` 方法的文档，用于为 Mastra 实例设置存储实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.setStorage()
+
+`.setStorage()` 方法用于为 Mastra 实例设置存储实例。此方法接受一个单一的 `MastraCompositeStore` 参数。
+
+## 使用示例
+
+```typescript
+mastra.setStorage(
+  new LibSQLStore({
+    id: 'mastra-storage',
+    url: ":memory:",
+  }),
+);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraCompositeStore",
+      description: "要为 Mastra 实例设置的存储实例。",
+    },
+  ]}
+/>
+
+## 返回值
+
+此方法不返回值。
+
+## 相关内容
+
+- [存储概述](/reference/storage/overview)
+- [存储参考](/reference/storage/libsql)

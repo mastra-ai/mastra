@@ -1,0 +1,327 @@
+---
+title: "内存处理器 | 内存"
+description: "了解如何在 Mastra 中使用内存处理器来过滤、修整和转换消息，然后将其发送到语言模型以管理上下文窗口限制。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/openai"
+  - "@mastra/pinecone"
+---
+
+# 内存处理器
+
+内存处理器在启用内存的智能体中传递时转换和过滤消息。它们管理上下文窗口限制，删除不必要的内容，并优化发送到语言模型的信息。
+
+当在智能体上启用内存时，Mastra 会将内存处理器添加到智能体的处理器管道中。这些处理器检索消息历史记录、工作内存和语义相关的消息，然后在模型响应后持久化新消息。
+
+内存处理器是专门对内存相关的消息和状态进行操作的[处理器](/docs/cn/agents/processors)。
+
+## 内置内存处理器
+
+启用内存时，Mastra 会自动添加这些处理器：
+
+### 消息历史记录
+
+检索消息历史记录并持久化新消息。
+
+**当您配置时：**
+
+```typescript
+memory: new Memory({
+  lastMessages: 10,
+});
+```
+
+**Mastra 内部：**
+
+1. 创建一个 `MessageHistory` 处理器，限制为 10
+2. 将其添加到智能体的输入处理器（在大型语言模型之前运行）
+3. 将其添加到智能体的输出处理器（在大型语言模型之后运行）
+
+**它的作用：**
+
+- **输入**：从存储中获取最后 10 条消息并将其添加到对话开头
+- **输出**：在模型响应后将新消息持久化到存储
+
+**示例：**
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  id: "test-agent",
+  name: "测试智能体",
+  instructions: "您是一位乐于助人的助手",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    lastMessages: 10, // 自动添加 MessageHistory 处理器
+  }),
+});
+```
+
+### 语义回忆
+
+根据当前输入检索语义相关的消息，并为新消息创建嵌入。
+
+**当您配置时：**
+
+```typescript
+memory: new Memory({
+  semanticRecall: { enabled: true },
+  vector: myVectorStore,
+  embedder: myEmbedder,
+});
+```
+
+**Mastra 内部：**
+
+1. 创建一个 `SemanticRecall` 处理器
+2. 将其添加到智能体的输入处理器（在大型语言模型之前运行）
+3. 将其添加到智能体的输出处理器（在大型语言模型之后运行）
+4. 需要同时配置向量存储和嵌入模型
+
+**它的作用：**
+
+- **输入**：执行向量相似性搜索以找到相关的过去消息并将其添加到对话开头
+- **输出**：为新消息创建嵌入并将其存储到向量存储中以供将来检索
+
+**示例：**
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { PineconeVector } from "@mastra/pinecone";
+import { OpenAIEmbedder } from "@mastra/openai";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "semantic-agent",
+  instructions: "您是一位具有语义记忆的乐于助人的助手",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    vector: new PineconeVector({
+      id: "memory-vector",
+      apiKey: process.env.PINECONE_API_KEY!,
+    }),
+    embedder: new OpenAIEmbedder({
+      model: "text-embedding-3-small",
+      apiKey: process.env.OPENAI_API_KEY!,
+    }),
+    semanticRecall: { enabled: true }, // 自动添加 SemanticRecall 处理器
+  }),
+});
+```
+
+### 工作内存
+
+管理跨对话的工作内存状态。
+
+**当您配置时：**
+
+```typescript
+memory: new Memory({
+  workingMemory: { enabled: true },
+});
+```
+
+**Mastra 内部：**
+
+1. 创建一个 `WorkingMemory` 处理器
+2. 将其添加到智能体的输入处理器（在大型语言模型之前运行）
+3. 需要配置存储适配器
+
+**它的作用：**
+
+- **输入**：检索当前线程的工作内存状态并将其添加到对话开头
+- **输出**：无输出处理
+
+**示例：**
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
+
+const agent = new Agent({
+  name: "working-memory-agent",
+  instructions: "您是一位具有工作内存的助手",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: "memory-store",
+      url: "file:memory.db",
+    }),
+    workingMemory: { enabled: true }, // 自动添加 WorkingMemory 处理器
+  }),
+});
+```
+
+## 手动控制和去重
+
+如果您手动将内存处理器添加到 `inputProcessors` 或 `outputProcessors`，Mastra 将**不会**自动添加它。这使您可以完全控制处理器顺序：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { MessageHistory } from "@mastra/core/processors";
+import { TokenLimiter } from "@mastra/core/processors";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
+
+// 具有不同配置的自定义 MessageHistory
+const customMessageHistory = new MessageHistory({
+  storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+  lastMessages: 20,
+});
+
+const agent = new Agent({
+  name: "custom-memory-agent",
+  instructions: "您是一位乐于助人的助手",
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    storage: new LibSQLStore({ id: "memory-store", url: "file:memory.db" }),
+    lastMessages: 10, // 这通常会添加 MessageHistory(10)
+  }),
+  inputProcessors: [
+    customMessageHistory, // 使用您的自定义版本
+    new TokenLimiter({ limit: 4000 }), // 在您的自定义 MessageHistory 之后运行
+  ],
+});
+```
+
+## 处理器执行顺序
+
+将护栏与内存结合使用时，了解执行顺序很重要：
+
+### 输入处理器
+
+```
+[内存处理器] → [您的 inputProcessors]
+```
+
+1. **内存处理器首先运行**：`WorkingMemory`、`MessageHistory`、`SemanticRecall`
+2. **您的输入处理器之后运行**：护栏、过滤器、验证器
+
+这意味着内存加载消息历史记录后，您的处理器才能验证或过滤输入。
+
+### 输出处理器
+
+```
+[您的 outputProcessors] → [内存处理器]
+```
+
+1. **您的输出处理器首先运行**：护栏、过滤器、验证器
+2. **内存处理器之后运行**：`SemanticRecall`（嵌入）、`MessageHistory`（持久化）
+
+这种排序设计为**默认安全**：如果您的输出护栏调用 `abort()`，内存处理器永远不会运行，**也不会保存任何消息**。
+
+## 护栏和内存
+
+默认执行顺序提供安全的护栏行为：
+
+### 输出护栏（推荐）
+
+输出护栏在内存保存消息**之前**运行。如果护栏中止：
+
+- 触发断路器
+- 跳过内存处理器
+- **没有消息持久化到存储**
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+
+// 阻止不当内容的输出护栏
+const contentBlocker = {
+  id: "content-blocker",
+  processOutputResult: async ({ messages, abort }) => {
+    const hasInappropriateContent = messages.some((msg) =>
+      containsBadContent(msg)
+    );
+    if (hasInappropriateContent) {
+      abort("Content blocked by guardrail");
+    }
+    return messages;
+  },
+};
+
+const agent = new Agent({
+  name: "safe-agent",
+  instructions: "您是一位乐于助人的助手",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // 您的护栏在内存保存之前运行
+  outputProcessors: [contentBlocker],
+});
+
+// 如果护栏中止，没有任何内容保存到内存
+const result = await agent.generate("Hello");
+if (result.tripwire) {
+  console.log("Blocked:", result.tripwire.reason);
+  // 内存为空 - 没有消息被持久化
+}
+```
+
+### 输入护栏
+
+输入护栏在内存处理器加载历史记录**之后**运行。如果护栏中止：
+
+- 触发断路器
+- 不会调用大型语言模型
+- 跳过输出处理器（包括内存持久化）
+- **没有消息持久化到存储**
+
+```typescript
+// 验证用户输入的输入护栏
+const inputValidator = {
+  id: "input-validator",
+  processInput: async ({ messages, abort }) => {
+    const lastUserMessage = messages.findLast((m) => m.role === "user");
+    if (isInvalidInput(lastUserMessage)) {
+      abort("Invalid input detected");
+    }
+    return messages;
+  },
+};
+
+const agent = new Agent({
+  name: "validated-agent",
+  instructions: "您是一位乐于助人的助手",
+  model: 'openai/gpt-4o',
+  memory: new Memory({ lastMessages: 10 }),
+  // 您的护栏在内存加载历史记录之后运行
+  inputProcessors: [inputValidator],
+});
+```
+
+### 总结
+
+| 护栏类型 | 运行时间 | 如果中止 |
+| -------------- | ------------ | ------------ |
+| 输入 | 内存加载历史记录后 | 未调用大型语言模型，未保存任何内容 |
+| 输出 | 内存保存之前 | 未保存到存储 |
+
+两种情况都是安全的 - 护栏防止不当内容持久化到内存
+
+## 相关文档
+
+- [处理器](/docs/cn/agents/processors) - 通用处理器概念和自定义处理器创建
+- [护栏](/docs/cn/agents/guardrails) - 安全和验证处理器
+- [内存概述](/docs/cn/memory/overview) - 内存类型和配置
+
+创建自定义处理器时，避免直接改变输入的 `messages` 数组或其对象。

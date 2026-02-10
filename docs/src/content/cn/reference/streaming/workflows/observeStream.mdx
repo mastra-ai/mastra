@@ -1,0 +1,49 @@
+---
+title: "参考文档: Run.observeStream() | 流处理"
+description: "工作流中 `Run.observeStream()` 方法的文档，该方法允许重新打开正在运行的工作流运行的流。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.observeStream()
+
+`.observeStream()` 方法向当前正在运行的工作流运行打开一个新的 `ReadableStream`，允许您在原始流不再可用时观察事件流。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+run.stream({
+  inputData: {
+    value: "初始数据",
+  },
+});
+
+const stream = await run.observeStream();
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## 返回值
+
+`ReadableStream<ChunkType>`
+
+## 流事件
+
+流在工作流执行期间会发送各种事件类型。每个事件都有一个 `type` 字段和一个包含相关数据的 `payload`：
+
+- **`workflow-start`**：工作流执行开始
+- **`workflow-step-start`**：步骤开始执行
+- **`workflow-step-output`**：步骤的自定义输出
+- **`workflow-step-result`**：步骤完成并返回结果
+- **`workflow-finish`**：工作流执行完成，包含使用统计信息
+
+## 相关文档
+
+- [工作流概述](/docs/cn/docs/workflows/overview#运行工作流)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
+- [Run.stream()](./stream)
+- [Run.resumeStream()](./resumeStream)

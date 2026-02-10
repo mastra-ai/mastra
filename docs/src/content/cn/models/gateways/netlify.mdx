@@ -1,0 +1,103 @@
+---
+title: "Netlify | 模型 | Mastra"
+description: "通过 Netlify 使用 AI 模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
+
+
+# <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
+
+Netlify AI Gateway 提供对多个提供商的统一访问，内置缓存和可观测性支持。通过 Mastra 的模型路由器访问 52 个模型。
+
+在 [Netlify 文档](https://docs.netlify.com/build/ai-gateway/overview/) 中了解更多。
+
+## 使用方法
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "netlify/anthropic/claude-3-5-haiku-20241022"
+});
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。详情请参阅 [Netlify 文档](https://docs.netlify.com/build/ai-gateway/overview/)。
+
+:::
+
+## 配置
+
+```bash
+# 使用网关 API 密钥
+NETLIFY_API_KEY=your-gateway-key
+
+# 或直接使用提供商 API 密钥
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=ant-...
+```
+
+## 可用模型
+
+| 模型 |
+|------|
+| `anthropic/claude-3-5-haiku-20241022` |
+| `anthropic/claude-3-7-sonnet-20250219` |
+| `anthropic/claude-3-haiku-20240307` |
+| `anthropic/claude-haiku-4-5` |
+| `anthropic/claude-haiku-4-5-20251001` |
+| `anthropic/claude-opus-4-1-20250805` |
+| `anthropic/claude-opus-4-20250514` |
+| `anthropic/claude-opus-4-5` |
+| `anthropic/claude-opus-4-5-20251101` |
+| `anthropic/claude-opus-4-6` |
+| `anthropic/claude-sonnet-4-0` |
+| `anthropic/claude-sonnet-4-20250514` |
+| `anthropic/claude-sonnet-4-5` |
+| `anthropic/claude-sonnet-4-5-20250929` |
+| `gemini/gemini-2.0-flash` |
+| `gemini/gemini-2.0-flash-lite` |
+| `gemini/gemini-2.5-flash` |
+| `gemini/gemini-2.5-flash-image` |
+| `gemini/gemini-2.5-flash-lite` |
+| `gemini/gemini-2.5-flash-lite-preview-09-2025` |
+| `gemini/gemini-2.5-pro` |
+| `gemini/gemini-3-flash-preview` |
+| `gemini/gemini-3-pro-image-preview` |
+| `gemini/gemini-3-pro-preview` |
+| `gemini/gemini-flash-latest` |
+| `gemini/gemini-flash-lite-latest` |
+| `openai/codex-mini-latest` |
+| `openai/gpt-4.1` |
+| `openai/gpt-4.1-mini` |
+| `openai/gpt-4.1-nano` |
+| `openai/gpt-4o` |
+| `openai/gpt-4o-mini` |
+| `openai/gpt-5` |
+| `openai/gpt-5-2025-08-07` |
+| `openai/gpt-5-codex` |
+| `openai/gpt-5-mini` |
+| `openai/gpt-5-mini-2025-08-07` |
+| `openai/gpt-5-nano` |
+| `openai/gpt-5-pro` |
+| `openai/gpt-5.1` |
+| `openai/gpt-5.1-2025-11-13` |
+| `openai/gpt-5.1-codex` |
+| `openai/gpt-5.1-codex-max` |
+| `openai/gpt-5.1-codex-mini` |
+| `openai/gpt-5.2` |
+| `openai/gpt-5.2-2025-12-11` |
+| `openai/gpt-5.2-codex` |
+| `openai/gpt-5.2-pro` |
+| `openai/gpt-5.2-pro-2025-12-11` |
+| `openai/o3` |
+| `openai/o3-mini` |
+| `openai/o4-mini` |
+

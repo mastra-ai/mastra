@@ -1,0 +1,254 @@
+---
+title: "参考文档：Agent 类 | 智能体"
+description: "Mastra 中 `Agent` 类的文档，该类提供了创建具有各种能力的 AI 智能体的基础。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent 类
+
+`Agent` 类是 Mastra 中创建 AI 智能体的基础。它提供了生成响应、流式交互和处理语音能力的方法。
+
+## 使用示例
+
+### 基本的字符串指令
+
+```typescript title="src/mastra/agents/string-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+// 字符串指令
+export const agent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
+  instructions: "You are a helpful assistant that provides concise answers.",
+  model: "openai/gpt-5.1",
+});
+
+// 系统消息对象
+export const agent2 = new Agent({
+  id: "test-agent-2",
+  name: "Test Agent 2",
+  instructions: {
+    role: "system",
+    content: "You are an expert programmer",
+  },
+  model: "openai/gpt-5.1",
+});
+
+// 系统消息数组
+export const agent3 = new Agent({
+  id: "test-agent-3",
+  name: "Test Agent 3",
+  instructions: [
+    { role: "system", content: "You are a helpful assistant" },
+    { role: "system", content: "You have expertise in TypeScript" },
+  ],
+  model: "openai/gpt-5.1",
+});
+```
+
+### 单个 CoreSystemMessage
+
+使用 CoreSystemMessage 格式来访问附加属性，如 `providerOptions` 用于特定提供商的配置：
+
+```typescript title="src/mastra/agents/core-message-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  id: "core-message-agent",
+  name: "Core Message Agent",
+  instructions: {
+    role: "system",
+    content:
+      "You are a helpful assistant specialized in technical documentation.",
+    providerOptions: {
+      openai: {
+        reasoningEffort: "low",
+      },
+    },
+  },
+  model: "openai/gpt-5.1",
+});
+```
+
+### 多个 CoreSystemMessage
+
+```typescript title="src/mastra/agents/multi-message-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+// 可以根据用户自定义
+const preferredTone = {
+  role: "system",
+  content: "Always maintain a professional and empathetic tone.",
+};
+
+export const agent = new Agent({
+  id: "multi-message-agent",
+  name: "Multi Message Agent",
+  instructions: [
+    { role: "system", content: "You are a customer service representative." },
+    preferredTone,
+    {
+      role: "system",
+      content: "Escalate complex issues to human agents when needed.",
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral" } },
+      },
+    },
+  ],
+  model: "anthropic/claude-sonnet-4-20250514",
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description:
+        "智能体的唯一标识符。如果未提供，默认为 `name`。",
+    },
+    {
+      name: "name",
+      type: "string",
+      isOptional: false,
+      description: "智能体的显示名称。如果未提供 `id`，则用作标识符。",
+    },
+    {
+      name: "description",
+      type: "string",
+      isOptional: true,
+      description:
+        "智能体用途和功能的选择性描述。",
+    },
+    {
+      name: "instructions",
+      type: "SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>",
+      isOptional: false,
+      description: `指导智能体行为的指令。可以是字符串、字符串数组、系统消息对象、
+        系统消息数组，或动态返回这些类型之一的函数。
+        SystemMessage 类型：string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]`,
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+      isOptional: false,
+      description:
+        "智能体使用的语言模型。可以静态提供或在运行时解析。",
+    },
+    {
+      name: "agents",
+      type: "Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+      isOptional: true,
+      description:
+        "智能体可以访问的子智能体。可以静态提供或动态解析。",
+    },
+    {
+      name: "tools",
+      type: "ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>",
+      isOptional: true,
+      description:
+        "智能体可以访问的工具。可以静态提供或动态解析。",
+    },
+    {
+      name: "workflows",
+      type: "Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
+      isOptional: true,
+      description:
+        "智能体可以执行的工作流。可以是静态的或动态解析的。",
+    },
+    {
+      name: "defaultOptions",
+      type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+      isOptional: true,
+      description:
+        "调用 `stream()` 和 `generate()` 时使用的默认选项。",
+    },
+    {
+      name: "defaultGenerateOptionsLegacy",
+      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      isOptional: true,
+      description: "调用 `generateLegacy()` 时使用的默认选项。",
+    },
+    {
+      name: "defaultStreamOptionsLegacy",
+      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      isOptional: true,
+      description: "调用 `streamLegacy()` 时使用的默认选项。",
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      isOptional: true,
+      description:
+        "Mastra 运行时实例的引用（自动注入）。",
+    },
+    {
+      name: "scorers",
+      type: "MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>",
+      isOptional: true,
+      description:
+        "用于运行时评估和遥测的评分配置。可以是静态的或动态提供的。",
+    },
+    {
+      name: "memory",
+      type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
+      isOptional: true,
+      description:
+        "用于存储和检索有状态上下文的内存模块。",
+    },
+    {
+      name: "voice",
+      type: "CompositeVoice",
+      isOptional: true,
+      description: "语音输入和输出的语音设置。",
+    },
+    {
+      name: "inputProcessors",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
+      isOptional: true,
+      description:
+        "可以在智能体处理消息之前修改或验证消息的输入处理器。可以是单独的 Processor 对象或使用 `createWorkflow()` 和 ProcessorStepSchema 创建的工作流。",
+    },
+    {
+      name: "outputProcessors",
+      type: "(Processor | ProcessorWorkflow)[] | ({ requestContext: RequestContext }) => (Processor | ProcessorWorkflow)[] | Promise<(Processor | ProcessorWorkflow)[]>",
+      isOptional: true,
+      description:
+        "可以在智能体发送消息给客户端之前修改或验证消息的输出处理器。可以是单独的 Processor 对象或工作流。",
+    },
+    {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "处理器可以请求重试 LLM 步骤的最大次数。",
+    },
+    {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      isOptional: true,
+      description:
+        "用于验证请求上下文值的 Zod 模式。提供后，上下文将在 generate() 或 stream() 开始时进行验证，如果验证失败则抛出 MastraError。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "Agent<TAgentId, TTools>",
+      description: "具有指定配置的新 Agent 实例。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)

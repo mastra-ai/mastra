@@ -1,0 +1,137 @@
+---
+title: "PostHog 导出器 | 追踪 | 可观测性"
+description: "将追踪发送到 PostHog 进行 AI 可观测性和分析"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/posthog"
+---
+
+# PostHog 导出器
+
+[PostHog](https://posthog.com/) 是一个具有 AI 可观测性功能的分析平台，用于监控 LLM 应用程序。PostHog 导出器将您的追踪作为结构化事件发送到 PostHog，提供对代币使用、成本、延迟和对话流程的洞察。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/posthog@latest
+```
+
+## 配置
+
+### 前提条件
+
+1. **PostHog 账户**：在 [posthog.com](https://posthog.com/) 注册
+2. **项目 API 密钥**：从 PostHog 设置 → 项目 API 密钥获取您的项目 API 密钥
+3. **环境变量**：设置您的凭据
+
+```bash title=".env"
+# 必需
+POSTHOG_API_KEY=phc_xxxxxxxxxxxxxxxx
+
+# 可选
+POSTHOG_HOST=https://us.i.posthog.com  # 或 eu.i.posthog.com 用于欧盟区域
+```
+
+### 零配置设置
+
+设置环境变量后，使用无需配置的导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { PosthogExporter } from "@mastra/posthog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: "my-service",
+        exporters: [new PosthogExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { PosthogExporter } from "@mastra/posthog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: "my-service",
+        exporters: [
+          new PosthogExporter({
+            apiKey: process.env.POSTHOG_API_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 配置选项
+
+### 完整配置
+
+```typescript
+new PosthogExporter({
+  // 必需凭据
+  apiKey: process.env.POSTHOG_API_KEY!,
+
+  // 可选设置
+  host: "https://us.i.posthog.com", // 默认：美国区域
+  // 或 "https://eu.i.posthog.com" 用于欧盟区域
+  // 或您的自托管 URL
+
+  // 批处理配置
+  flushAt: 20, // 批量大小（默认：20）
+  flushInterval: 10000, // 刷新间隔（毫秒）（默认：10000）
+  serverless: false, // 无服务器模式：flushAt=10, flushInterval=2000
+
+  // 用户识别
+  defaultDistinctId: "anonymous", // 如果元数据中没有 userId 时的回退
+
+  // 隐私设置
+  enablePrivacyMode: false, // 从生成事件中排除输入/输出
+
+  // 诊断日志记录
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+### 无服务器模式
+
+针对无服务器环境优化的批处理：
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY!,
+  serverless: true, // 配置较小的批量以更快刷新
+});
+```
+
+### 隐私模式
+
+在保留代币指标的同时，从生成事件中排除输入/输出数据：
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY!,
+  enablePrivacyMode: true, // 移除 $ai_input 和 $ai_output_choices
+});
+```
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [PostHog 文档](https://posthog.com/docs)

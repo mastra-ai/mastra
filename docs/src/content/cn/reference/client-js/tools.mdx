@@ -1,0 +1,51 @@
+---
+title: "参考文档：工具 API | 客户端 SDK"
+description: "了解如何使用 client-js SDK 与 Mastra 平台中可用的工具交互和执行。"
+packages:
+  - "@mastra/client-js"
+---
+
+# 工具 API
+
+工具 API 提供了与 Mastra 平台中可用的工具交互和执行的方法。
+
+## 获取所有工具
+
+检索所有可用工具的列表：
+
+```typescript
+const tools = await mastraClient.listTools();
+```
+
+## 使用特定工具
+
+获取特定工具的实例：
+
+```typescript
+const tool = mastraClient.getTool("tool-id");
+```
+
+## 工具方法
+
+### 获取工具详情
+
+检索工具的详细信息：
+
+```typescript
+const details = await tool.details();
+```
+
+### 执行工具
+
+使用特定参数执行工具：
+
+```typescript
+const result = await tool.execute({
+  args: {
+    param1: "value1",
+    param2: "value2",
+  },
+  threadId: "thread-1", // 可选：线程上下文
+  resourceId: "resource-1", // 可选：资源标识符
+});
+```

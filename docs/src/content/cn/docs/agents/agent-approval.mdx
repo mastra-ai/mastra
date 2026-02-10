@@ -1,0 +1,384 @@
+---
+title: "智能体审批 | 智能体"
+description: 了解如何要求审批、暂停工具执行以及在保持人类对智能体工作流控制的同时自动恢复暂停的工具。
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# 智能体审批
+
+智能体在调用处理敏感操作（如删除资源或运行长时间进程）的工具时，有时需要与工作流中相同的[人工参与](/docs/cn/workflows/human-in-the-loop)监督。通过智能体审批，您可以暂停工具调用并向用户提供反馈，或根据特定的应用条件批准或拒绝工具调用。
+
+## 工具调用审批
+
+工具调用审批可以在智能体级别启用，适用于智能体使用的每个工具，也可以在工具级别启用，对单个工具调用进行更细粒度的控制。
+
+### 存储
+
+智能体审批使用快照来捕获请求的状态。请确保在主 Mastra 实例中启用了存储提供程序。如果未启用存储，您将看到与快照未找到相关的错误。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: ":memory:"
+  })
+});
+```
+
+## 智能体级别审批
+
+使用 `.stream()` 调用智能体时，将 `requireToolApproval` 设置为 `true`，这将阻止智能体调用其配置中定义的任何工具。
+
+```typescript
+const stream = await agent.stream("伦敦的天气如何？", {
+  requireToolApproval: true
+});
+```
+
+### 批准工具调用
+
+要批准工具调用，从 `agent` 访问 `approveToolCall`，传入流的 `runId`。这将让智能体知道现在可以调用其工具了。
+
+```typescript
+const handleApproval = async () => {
+  const approvedStream = await agent.approveToolCall({ runId: stream.runId });
+
+  for await (const chunk of approvedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+### 拒绝工具调用
+
+要拒绝工具调用，从 `agent` 访问 `declineToolCall`。您将看到智能体的流式响应，但它不会调用其工具。
+
+```typescript
+const handleDecline = async () => {
+  const declinedStream = await agent.declineToolCall({ runId: stream.runId });
+
+  for await (const chunk of declinedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+## 使用 generate() 的工具审批
+
+工具审批也适用于非流式使用场景的 `generate()` 方法。当将 `generate()` 与 `requireToolApproval: true` 一起使用时，当工具需要审批时方法会立即返回，而不是执行它。
+
+### 工作原理
+
+在 `generate()` 调用期间当工具需要审批时，响应包括：
+
+- `finishReason: 'suspended'` - 表示智能体正在等待审批
+- `suspendPayload` - 包含工具调用详情（`toolCallId`、`toolName`、`args`）
+- `runId` - 批准或拒绝工具调用所需
+
+### 批准工具调用
+
+要使用 `generate()` 批准工具调用，请使用 `approveToolCallGenerate` 方法：
+
+```typescript
+const output = await agent.generate("查找用户 John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  console.log("工具需要审批：", output.suspendPayload.toolName);
+  console.log("参数：", output.suspendPayload.args);
+
+  // 批准工具调用并获取最终结果
+  const result = await agent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log("最终结果：", result.text);
+}
+```
+
+### 拒绝工具调用
+
+要拒绝工具调用，请使用 `declineToolCallGenerate` 方法：
+
+```typescript
+if (output.finishReason === "suspended") {
+  const result = await agent.declineToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  // 智能体将响应确认已拒绝的工具
+  console.log(result.text);
+}
+```
+
+### 流与生成对比
+
+| 方面 | `stream()` | `generate()` |
+|------|-----------|--------------|
+| 响应类型 | 流式块 | 完整响应 |
+| 审批检测 | `tool-call-approval` 块 | `finishReason: 'suspended'` |
+| 批准方法 | `approveToolCall({ runId })` | `approveToolCallGenerate({ runId, toolCallId })` |
+| 拒绝方法 | `declineToolCall({ runId })` | `declineToolCallGenerate({ runId, toolCallId })` |
+| 结果 | 可迭代的流 | 完整输出对象 |
+
+## 工具级别审批
+
+工具调用审批有两种类型。第一种使用 `requireApproval`，它是工具定义上的属性，而 `requireToolApproval` 是传递给 `agent.stream()` 的参数。第二种使用 `suspend`，让智能体提供上下文或确认提示，以便用户决定是否继续工具调用。
+
+### 使用 `requireToolApproval` 的工具审批
+
+在这种方法中，`requireApproval` 配置在工具定义上（如下所示），而不是在智能体上。
+
+```typescript
+export const testTool = createTool({
+  id: "test-tool",
+  description: "获取某个地点的天气",
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    weather: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  execute: async (inputData) => {
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  },
+  requireApproval: true
+});
+```
+
+当工具的 `requireApproval` 为 true 时，流将包含 `tool-call-approval` 类型的块，表示调用已暂停。要继续调用，使用所需的 `resumeSchema` 和 `runId` 调用 `resumeStream`。
+
+```typescript
+const stream = await agent.stream("伦敦的天气如何？");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-approval") {
+    console.log("需要审批。");
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+### 使用 `suspend` 的工具审批
+
+使用这种方法，智能体和工具都不使用 `requireApproval`。相反，工具实现调用 `suspend` 来暂停执行，并向用户返回上下文或确认提示。
+
+```typescript
+export const testToolB = createTool({
+  id: "test-tool-b",
+  description: "获取某个地点的天气",
+  inputSchema: z.object({
+    location: z.string()
+  }),
+  outputSchema: z.object({
+    weather: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string()
+  }),
+  execute: async (inputData, context) => {
+    const { resumeData: { approved } = {}, suspend } = context?.agent ?? {};
+
+    if (!approved) {
+      return suspend?.({ reason: "需要审批。" });
+    }
+
+    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  }
+});
+```
+
+使用这种方法，流将包含 `tool-call-suspended` 块，而 `suspendPayload` 将包含工具的 `suspendSchema` 定义的 `reason`。要继续调用，使用所需的 `resumeSchema` 和 `runId` 调用 `resumeStream`。
+
+```typescript
+const stream = await agent.stream("伦敦的天气如何？");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-suspended") {
+    console.log(chunk.payload.suspendPayload);
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+
+```
+
+## 自动工具恢复
+
+对于使用 `suspend()` 的工具，您可以启用自动恢复，使智能体根据用户的下一条消息恢复暂停的工具。这创建了一个对话式流程，用户自然地提供所需的信息，而无需您的应用程序显式调用 `resumeStream()`。
+
+### 启用自动恢复
+
+在智能体的默认选项中或将 `autoResumeSuspendedTools` 设置为 `true`：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+// 选项 1：在智能体配置中
+const agent = new Agent({
+  id: "my-agent",
+  name: "我的智能体",
+  instructions: "您是一位乐于助人的助手",
+  model: "openai/gpt-4o-mini",
+  tools: { weatherTool },
+  memory: new Memory(),
+  defaultOptions: {
+    autoResumeSuspendedTools: true,
+  },
+});
+
+// 选项 2：每次请求
+const stream = await agent.stream("天气如何？", {
+  autoResumeSuspendedTools: true,
+});
+```
+
+### 工作原理
+
+当启用 `autoResumeSuspendedTools` 时：
+
+1. 工具通过调用 `suspend()` 并携带有效载荷（例如请求更多信息）来暂停执行
+2. 暂停与对话一起持久化到内存中
+3. 当用户在同一个线程上发送下一条消息时，智能体：
+   - 从消息历史记录中检测暂停的工具
+   - 根据工具的 `resumeSchema` 从用户消息中提取 `resumeData`
+   - 使用提取的数据自动恢复工具
+
+### 示例
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "weather-info",
+  description: "获取城市的天气信息",
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    city: z.string(),
+  }),
+  execute: async (_inputData, context) => {
+    // 检查是否是带有数据的恢复
+    if (!context?.agent?.resumeData) {
+      // 首次调用 - 暂停并询问城市
+      return context?.agent?.suspend({
+        message: "您想知道哪个城市的天气？",
+      });
+    }
+
+    // 恢复调用 - 从用户消息中提取了城市
+    const { city } = context.agent.resumeData;
+    const response = await fetch(`https://wttr.in/${city}?format=3`);
+    const weather = await response.text();
+
+    return { city, weather };
+  },
+});
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "我的智能体",
+  instructions: "您是一位乐于助人的助手",
+  model: "openai/gpt-4o-mini",
+  tools: { weatherTool },
+  memory: new Memory(),
+  defaultOptions: {
+    autoResumeSuspendedTools: true,
+  },
+});
+
+const stream = await agent.stream("天气怎么样？");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "tool-call-suspended") {
+    console.log(chunk.payload.suspendPayload);
+  }
+}
+
+const handleResume = async () => {
+  const resumedStream = await agent.stream("旧金山");
+
+  for await (const chunk of resumedStream.textStream) {
+    process.stdout.write(chunk);
+  }
+  process.stdout.write("\n");
+};
+```
+
+**对话流程：**
+
+```
+用户："天气怎么样？"
+智能体："您想知道哪个城市的天气？"
+
+用户："旧金山"
+智能体："旧金山的天气是：旧金山：☀️ +72°F"
+```
+
+第二条消息自动恢复暂停的工具 - 智能体从用户消息中提取 `{ city: "旧金山" }` 并将其作为 `resumeData` 传递。
+
+### 要求
+
+要使自动工具恢复正常工作：
+
+- **配置内存**：智能体需要内存来跟踪跨消息的暂停工具
+- **同一线程**：后续消息必须使用相同的内存线程和资源标识符
+- **定义 `resumeSchema`**：工具必须定义 `resumeSchema`，以便智能体知道从用户消息中提取什么数据结构
+
+### 手动与自动恢复对比
+
+| 方法 | 用例 |
+|------|------|
+| 手动 (`resumeStream()`) | 程序化控制、webhook、按钮点击、外部触发器 |
+| 自动 (`autoResumeSuspendedTools`) | 对话式流程，用户以自然语言提供恢复数据 |
+
+两种方法都适用于相同的工具定义。自动恢复仅当消息历史记录中存在暂停的工具且用户在同一个线程上发送新消息时触发。
+
+## 相关内容
+
+- [使用工具](./using-tools)
+- [智能体概述](./overview)
+- [工具概述](../mcp/overview)
+- [智能体内存](./agent-memory)
+- [请求上下文](/docs/cn/server/request-context)

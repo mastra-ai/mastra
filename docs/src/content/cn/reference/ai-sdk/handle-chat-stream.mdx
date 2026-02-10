@@ -1,0 +1,119 @@
+---
+title: "参考文档：handleChatStream() | AI SDK"
+description: "handleChatStream() 的 API 参考，这是一个用于 AI SDK 兼容格式的流式智能体聊天的框架无关处理器。"
+packages:
+  - "@mastra/ai-sdk"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# handleChatStream()
+
+用于 AI SDK 兼容格式的流式智能体聊天的框架无关处理器。当您需要在 Hono 或 Mastra 自己的 [apiRoutes](/docs/cn/docs/server/custom-api-routes) 功能之外处理聊天流式传输时，直接使用此函数。
+
+`handleChatStream()` 返回一个 `ReadableStream`，您可以使用 [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/create-ui-message-stream-response) 包装它。
+
+如果您想在 Mastra 服务器内创建聊天路由，请使用 [`chatRoute()`](/reference/ai-sdk/chat-route)。
+
+## 使用示例
+
+Next.js App Router 示例：
+
+```typescript title="app/api/chat/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "包含已注册智能体的 Mastra 实例。",
+      isOptional: false,
+    },
+    {
+      name: "agentId",
+      type: "string",
+      description: "用于聊天的智能体 ID。",
+      isOptional: false,
+    },
+    {
+      name: "params",
+      type: "ChatStreamHandlerParams",
+      description: "聊天流的参数，包括消息和可选的恢复数据。",
+      isOptional: false,
+    },
+    {
+      name: "params.messages",
+      type: "UIMessage[]",
+      description: "对话中的消息数组。",
+      isOptional: false,
+    },
+    {
+      name: "params.resumeData",
+      type: "Record<string, any>",
+      description: "用于恢复暂停的智能体执行的数据。需要设置 `runId`。",
+      isOptional: true,
+    },
+    {
+      name: "params.runId",
+      type: "string",
+      description: "运行 ID。当提供 `resumeData` 时为必填。",
+      isOptional: true,
+    },
+    {
+      name: "params.requestContext",
+      type: "RequestContext",
+      description: "传递给智能体执行的请求上下文。",
+      isOptional: true,
+    },
+    {
+      name: "defaultOptions",
+      type: "AgentExecutionOptions",
+      description: "传递给智能体执行的默认选项。这些与 params 合并，params 优先。",
+      isOptional: true,
+    },
+    {
+      name: "sendStart",
+      type: "boolean",
+      description: "是否在流中发送开始事件。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "sendFinish",
+      type: "boolean",
+      description: "是否在流中发送完成事件。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "sendReasoning",
+      type: "boolean",
+      description: "是否在流中包含推理步骤。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "sendSources",
+      type: "boolean",
+      description: "是否在流中包含源引用。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>

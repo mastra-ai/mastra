@@ -1,0 +1,142 @@
+---
+title: "参考文档：Run.restart() | 工作流"
+description: "工作流中 `Run.restart()` 方法的文档，用于重新启动与服务器断开连接的活动工作流运行。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.restart()
+
+`.restart()` 方法重新启动与服务器断开连接的活动工作流运行，允许您从断开连接的时刻（最后一个活动步骤）继续执行。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.start({ inputData: { value: "初始数据" } });
+
+const restartedResult = await run.restart();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "恢复时要使用的请求上下文数据",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "用于创建子 span 和添加元数据的跟踪上下文。使用 Mastra 的跟踪系统时自动注入。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "用于创建子 span 和添加元数据的当前 span。使用它来创建自定义子 span 或在执行期间更新 span 属性。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "跟踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "要添加到根跟踪 span 的元数据。对于添加用户 ID、会话 ID 或功能标志等自定义属性很有用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "要提取为此跟踪元数据的附加 RequestContext 键。支持点表示法用于嵌套值（例如 'user.id'）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的跟踪 ID（1-32 个十六进制字符）。如果提供，此跟踪将是指定跟踪的一部分。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的父 span ID（1-16 个十六进制字符）。如果提供，根 span 将创建为该 span 的子 span。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "要应用于此跟踪的标签。用于分类和过滤跟踪的字符串标签。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description:
+        "解析为包含步骤输出和状态的工作流执行结果的 Promise",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "启用跟踪时与此执行关联的跟踪 ID。使用它来关联日志和调试执行流程。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [工作流概述](/docs/cn/docs/workflows/overview#running-workflows)
+- [重新启动工作流](/docs/cn/docs/workflows/overview#restarting-active-workflow-runs)
+- [Workflow.createRun()](../workflow-methods/create-run)

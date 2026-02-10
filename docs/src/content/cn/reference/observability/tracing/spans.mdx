@@ -1,0 +1,390 @@
+---
+title: "参考：跨度 | 可观测性"
+description: "跨度接口、方法和生命周期事件"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 跨度
+
+## BaseSpan
+
+所有跨度类型的基础接口。
+
+```typescript
+interface BaseSpan<TType extends SpanType> {
+  /** 唯一跨度标识符 */
+  id: string;
+
+  /** OpenTelemetry 兼容的跟踪 ID（32 个十六进制字符） */
+  traceId: string;
+
+  /** 跨度的名称 */
+  name: string;
+
+  /** 跨度的类型 */
+  type: TType;
+
+  /** 跨度开始时间 */
+  startTime: Date;
+
+  /** 跨度结束时间 */
+  endTime?: Date;
+
+  /** 类型特定属性 */
+  attributes?: SpanTypeMap[TType];
+
+  /** 用户定义的元数据 */
+  metadata?: Record<string, any>;
+
+  /** 跨度开始时传递的输入 */
+  input?: any;
+
+  /** 跨度结束时生成的输出 */
+  output?: any;
+
+  /** 跨度失败时的错误信息 */
+  errorInfo?: {
+    message: string;
+    id?: string;
+    domain?: string;
+    category?: string;
+    details?: Record<string, any>;
+  };
+
+  /** 是事件跨度吗？（发生在 startTime，没有 endTime） */
+  isEvent: boolean;
+}
+```
+
+## Span
+
+跨度接口，用于内部追踪。扩展 BaseSpan，包含生命周期方法和属性。
+
+```typescript
+interface Span<TType extends SpanType> extends BaseSpan<TType> {
+  /** 是内部跨度吗？（Mastra 操作内部的跨度） */
+  isInternal: boolean;
+
+  /** 父跨度引用（根跨度为 undefined） */
+  parent?: AnySpan;
+
+  /** 指向 ObservabilityInstance 实例的指针 */
+  observabilityInstance: ObservabilityInstance;
+}
+```
+
+### 属性
+
+```typescript
+/** 如果跨度是跟踪的根跨度则返回 TRUE */
+get isRootSpan(): boolean
+
+/** 如果跨度是有效跨度（不是 NO-OP 跨度）则返回 TRUE */
+get isValid(): boolean
+
+/** 获取最近的父跨度 ID（不包含内部跨度） */
+getParentSpanId(includeInternalSpans?: boolean): string | undefined
+
+/** 返回准备导出的轻量级跨度 */
+exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined
+```
+
+### 方法
+
+#### end
+
+```typescript
+end(options?: EndSpanOptions<TType>): void
+```
+
+结束跨度并触发导出到配置的导出器。设置 `endTime`，并可选择更新 `output`、`metadata` 和 `attributes`。
+
+<PropertiesTable
+  props={[
+    {
+      name: "output",
+      type: "any",
+      description: "操作的最终输出数据",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "要合并的附加元数据",
+      required: false,
+    },
+    {
+      name: "attributes",
+      type: "Partial<SpanTypeMap[TType]>",
+      description: "要更新的类型特定属性",
+      required: false,
+    },
+  ]}
+/>
+
+#### error
+
+```typescript
+error(options: ErrorSpanOptions<TType>): void
+```
+
+在跨度上记录错误。设置 `errorInfo` 字段，可选择结束跨度。
+
+<PropertiesTable
+  props={[
+    {
+      name: "error",
+      type: "Error",
+      description: "发生的错误",
+      required: true,
+    },
+    {
+      name: "endSpan",
+      type: "boolean",
+      description: "是否在记录错误后结束跨度",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "附加错误上下文元数据",
+      required: false,
+    },
+    {
+      name: "attributes",
+      type: "Partial<SpanTypeMap[TType]>",
+      description: "要更新的类型特定属性",
+      required: false,
+    },
+  ]}
+/>
+
+#### update
+
+```typescript
+update(options: UpdateSpanOptions<TType>): void
+```
+
+在跨度仍处于活动状态时更新跨度数据。可以修改 `input`、`output`、`metadata` 和 `attributes`。
+
+<PropertiesTable
+  props={[
+    {
+      name: "input",
+      type: "any",
+      description: "更新或设置输入数据",
+      required: false,
+    },
+    {
+      name: "output",
+      type: "any",
+      description: "更新或设置输出数据",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "与现有元数据合并",
+      required: false,
+    },
+    {
+      name: "attributes",
+      type: "Partial<SpanTypeMap[TType]>",
+      description: "要更新的类型特定属性",
+      required: false,
+    },
+  ]}
+/>
+
+#### createChildSpan
+
+```typescript
+createChildSpan<TChildType extends SpanType>(
+  options: ChildSpanOptions<TChildType>
+): Span<TChildType>
+```
+
+在此跨度下创建子跨度。子跨度跟踪子操作并继承跟踪上下文。
+
+<PropertiesTable
+  props={[
+    {
+      name: "type",
+      type: "TChildType",
+      description: "子跨度的类型",
+      required: true,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "子跨度的名称",
+      required: true,
+    },
+    {
+      name: "attributes",
+      type: "SpanTypeMap[TChildType]",
+      description: "类型特定属性",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "初始元数据",
+      required: false,
+    },
+    {
+      name: "input",
+      type: "any",
+      description: "初始输入数据",
+      required: false,
+    },
+  ]}
+/>
+
+#### createEventSpan
+
+```typescript
+createEventSpan<TChildType extends SpanType>(
+  options: ChildEventOptions<TChildType>
+): Span<TChildType>
+```
+
+在此跨度下创建事件跨度。事件跨度表示没有持续时间的点时间发生。
+
+<PropertiesTable
+  props={[
+    {
+      name: "type",
+      type: "TChildType",
+      description: "事件跨度的类型",
+      required: true,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "事件的名称",
+      required: true,
+    },
+    {
+      name: "attributes",
+      type: "SpanTypeMap[TChildType]",
+      description: "类型特定属性",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "事件元数据",
+      required: false,
+    },
+    {
+      name: "input",
+      type: "any",
+      description: "事件输入数据",
+      required: false,
+    },
+    {
+      name: "output",
+      type: "any",
+      description: "事件输出数据",
+      required: false,
+    },
+  ]}
+/>
+
+## ExportedSpan
+
+导出的跨度接口，用于追踪导出器。Span 的轻量级版本，没有方法或循环引用。
+
+```typescript
+interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
+  /** 父跨度 ID 引用（根跨度为 undefined） */
+  parentSpanId?: string;
+
+  /** 如果跨度是跟踪的根跨度则为 TRUE */
+  isRootSpan: boolean;
+}
+```
+
+## 跨度生命周期事件
+
+跨度生命周期中发出的事件。
+
+### TracingEventType
+
+```typescript
+enum TracingEventType {
+  /** 跨度创建并启动时发出 */
+  SPAN_STARTED = "span_started",
+
+  /** 跨度通过 update() 更新时发出 */
+  SPAN_UPDATED = "span_updated",
+
+  /** 跨度通过 end() 或 error() 结束时发出 */
+  SPAN_ENDED = "span_ended",
+}
+```
+
+### TracingEvent
+
+```typescript
+type TracingEvent =
+  | { type: "span_started"; exportedSpan: AnyExportedSpan }
+  | { type: "span_updated"; exportedSpan: AnyExportedSpan }
+  | { type: "span_ended"; exportedSpan: AnyExportedSpan };
+```
+
+导出器接收这些事件以处理跟踪数据并将其发送到可观测性平台。
+
+## 联合类型
+
+### AnySpan
+
+```typescript
+type AnySpan = Span<keyof SpanTypeMap>;
+```
+
+需要处理任何跨度类型的用例的联合类型。
+
+### AnyExportedSpan
+
+```typescript
+type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
+```
+
+需要处理任何导出跨度类型的用例的联合类型。
+
+## NO-OP 跨度
+
+当追踪被禁用（采样返回 false）时，返回 NO-OP 跨度：
+
+### NoOpSpan
+
+```typescript
+class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>
+```
+
+执行无操作的跨度。所有方法都是 no-ops：
+
+- `id` 返回 `'no-op'`
+- `traceId` 返回 `'no-op-trace'`
+- `isValid` 返回 `false`
+- `end()`、`error()`、`update()` 不执行任何操作
+- `createChildSpan()` 返回另一个 NO-OP 跨度
+
+## 另请参阅
+
+### 文档
+
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 概念和使用
+- [创建子跨度](/docs/cn/docs/observability/tracing/overview#creating-child-spans) - 实用示例
+- [检索跟踪 ID](/docs/cn/docs/observability/tracing/overview#retrieving-trace-ids) - 使用跟踪 ID
+
+### 参考
+
+- [追踪类](/reference/observability/tracing/instances) - 核心追踪类
+- [接口](/reference/observability/tracing/interfaces) - 完整类型参考
+- [配置](/reference/observability/tracing/configuration) - 配置选项

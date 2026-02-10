@@ -1,0 +1,99 @@
+---
+title: "Studio | 入门"
+description: "了解如何使用 Mastra Studio，这是用于在本地构建和测试智能体的交互式开发环境。"
+---
+
+import YouTube from "@site/src/components/YouTube-player";
+import { VideoPlayer } from "@site/src/components/video-player";
+
+# Studio
+
+Studio 提供了一个交互式 UI，用于构建和测试您的智能体，以及一个 REST API，将您的 Mastra 应用程序公开为本地服务。这让您可以开始构建，而无需立即担心集成问题。
+
+随着项目的发展，Studio 的开发环境可帮助您快速迭代智能体。同时，可观察性和评分器功能让您了解每个阶段的性能。
+
+要开始使用，请按照以下说明在本地运行 Studio，或[在 Mastra Cloud 中创建项目](/docs/cn/mastra-cloud/setup) 与您的团队协作。
+
+<YouTube id="ojGu6Bi4wYk" />
+
+## 启动 Studio
+
+如果您使用 `create mastra` 创建了应用程序，请使用 `dev` 脚本启动本地开发服务器。您也可以直接使用 `mastra dev` 运行它。
+
+```bash npm2yarn
+npm run dev
+```
+
+服务器运行后，您可以：
+
+- 在 [http://localhost:4111/](http://localhost:4111/) 打开 Studio UI 以交互方式测试您的智能体。
+- 访问 [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) 以发现并与底层 REST API 交互。
+
+## Studio UI
+
+Studio UI 为您提供了一个交互式开发环境，用于测试智能体、工作流和工具，实时观察每次交互下发生的情况，并随时进行调整。
+
+### 智能体
+
+直接与您的智能体聊天，动态切换[模型](/models)，并调整温度和 top-p 等设置，了解它们如何影响输出。
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
+
+当您与智能体交互时，您可以跟踪其推理的每个步骤，查看工具调用输出，并[观察](#observability)跟踪和日志以了解响应是如何生成的。您还可以附加[评分器](#scorers)来衡量和比较随时间推移的响应质量。
+
+### 工作流
+
+将您的工作流可视化为图形，并使用自定义输入逐步运行它。在执行过程中，界面会实时更新以显示活动步骤和所走的路径。
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406027/local-dev-workflows-playground_100_rbc466.mp4" />
+
+运行工作流时，您还可以查看详细的跟踪，显示工具调用、原始 JSON 输出以及一路上可能发生的任何错误。
+
+### 工具
+
+单独运行工具以观察其行为。在将它们分配给智能体之前测试它们，或将它们隔离以在出现问题时调试问题。
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4" />
+
+### MCP
+
+列出附加到 Mastra 实例的 MCP 服务器，并探索其可用的工具。
+
+![MCP 服务器 Studio](/img/local-dev/local-dev-mcp-server-playground.jpg)
+
+### 可观察性
+
+当您运行智能体或工作流时，"可观察性"选项卡会显示跟踪，突出显示关键的人工智能操作，如模型调用、工具执行和工作流步骤。跟踪这些跟踪以查看数据如何流动、时间花在哪里以及后台正在发生什么。
+
+![](https://mastra.ai/_next/image?url=%2Ftracingafter.png&w=1920&q=75)
+
+跟踪过滤掉低级别框架细节，使您的跟踪保持专注和可读。
+
+### 评分器
+
+"评分器"选项卡显示智能体的评分器运行时的结果。当消息通过智能体时，定义的评分器会异步评估每个输出并在此处呈现其结果。这使您能够了解评分器如何响应不同的交互、比较测试用例之间的性能并识别改进领域。
+
+## REST API
+
+本地开发服务器公开了一套完整的 REST API 路由，允许您在开发过程中以编程方式与智能体、工作流和工具交互。如果您计划部署 Mastra 服务器，这特别有用，因为本地开发服务器使用与 [Mastra 服务器](/docs/cn/server/mastra-server) 完全相同的 API 路由，让您能够以完全对等的方式针对它进行开发和测试。
+
+您可以在 [http://localhost:4111/openapi.json](http://localhost:4111/openapi.json) 的 OpenAPI 规范中探索所有可用的端点，其中详细介绍了每个端点及其请求和响应模式。
+
+要交互式地探索 API，请访问 [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) 的 Swagger UI。在这里，您可以发现端点并直接从浏览器测试它们。
+
+:::info
+
+默认情况下，OpenAPI 和 Swagger 端点在生产环境中是禁用的。要启用它们，请分别将 [`server.build.openAPIDocs`](/reference/configuration#serverbuild) 和 [`server.build.swaggerUI`](/reference/configuration#serverbuild) 设置为 `true`。
+
+:::
+
+## 配置
+
+默认情况下，Studio 运行在 [http://localhost:4111](http://localhost:4111)。您可以在 Mastra 服务器配置中更改 [`host`](/reference/configuration#serverhost)、[`port`](/reference/configuration#serverport) 和 [`studioBase`](/reference/configuration#serverstudiobase)。这允许您自定义 Studio 的托管位置和方式。
+
+此外，Mastra 支持通过 [`--https`](/reference/cli/mastra#--https) 标志进行本地 HTTPS 开发，该标志会自动为您的项目创建和管理证书。当您运行 `mastra dev --https` 时，会为 localhost（或您配置的主机）生成私钥和证书。访问 [HTTPS 参考](/reference/configuration#serverhttps) 了解更多信息。
+
+## 下一步
+
+- 了解更多关于 Mastra 建议的[项目结构](/docs/cn/getting-started/project-structure)。
+- 将 Mastra 与您选择的前端框架集成 - [Next.js](/guides/getting-started/next-js)、[React](/guides/getting-started/vite-react) 或 [Astro](/guides/getting-started/astro)。

@@ -1,0 +1,360 @@
+---
+title: "参考：Couchbase 向量存储 | 向量"
+description: Mastra 中 CouchbaseVector 类的文档，该类使用 Couchbase 向量搜索提供向量搜索功能。
+packages:
+  - "@mastra/couchbase"
+---
+
+# Couchbase 向量存储
+
+`CouchbaseVector` 类使用 [Couchbase 向量搜索](https://docs.couchbase.com/server/current/vector-search/vector-search.html) 提供向量搜索功能。它可以在你的 Couchbase 集合内实现高效的相似性搜索和元数据过滤。
+
+## 要求
+
+- **Couchbase Server 7.6.4+** 或兼容的 Capella 集群
+- **在你的 Couchbase 部署上启用搜索服务**
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/couchbase@latest
+```
+
+## 使用示例
+
+```typescript
+import { CouchbaseVector } from "@mastra/couchbase";
+
+const store = new CouchbaseVector({
+  id: 'couchbase-vector',
+  connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+  username: process.env.COUCHBASE_USERNAME,
+  password: process.env.COUCHBASE_PASSWORD,
+  bucketName: process.env.COUCHBASE_BUCKET,
+  scopeName: process.env.COUCHBASE_SCOPE,
+  collectionName: process.env.COUCHBASE_COLLECTION,
+});
+```
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此向量存储实例的唯一标识符",
+    },
+    {
+      name: "connectionString",
+      type: "string",
+      description: "Couchbase 连接字符串",
+    },
+    {
+      name: "username",
+      type: "string",
+      description: "Couchbase 用户名",
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "Couchbase 密码",
+    },
+    {
+      name: "bucketName",
+      type: "string",
+      description: "要使用的 Couchbase 桶名称",
+    },
+    {
+      name: "scopeName",
+      type: "string",
+      description: "要使用的 Couchbase 作用域名称",
+    },
+    {
+      name: "collectionName",
+      type: "string",
+      description: "要使用的 Couchbase 集合名称",
+    },
+    {
+      name: "options",
+      type: "CouchbaseClientOptions",
+      isOptional: true,
+      description: "可选的 Couchbase 客户端选项",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+在 Couchbase 中创建新的向量索引。
+
+> **注意：** 索引创建是异步的。调用 `createIndex` 后，请等待一段时间（小型数据集通常需要 1-5 秒，大型数据集则更久）再进行查询。在生产环境中，请实施轮询来检查索引状态，而不是使用固定延迟。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "相似性搜索的距离度量",
+    },
+  ]}
+/>
+
+### upsert()
+
+在集合中添加或更新向量及其元数据。
+
+> **注意：** 你可以在创建索引之前或之后插入数据。`upsert` 方法不需要索引存在。Couchbase 允许在同一集合上创建多个搜索索引。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+搜索相似向量。
+
+> **警告：** `filter` 和 `includeVector` 参数目前不支持。过滤必须在检索结果后在客户端执行，或者直接使用 Couchbase SDK 的搜索功能。要检索向量嵌入，请使用 Couchbase SDK 通过 ID 获取完整文档。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要搜索的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量数据",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "最小相似性分数阈值",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+返回有关索引的信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+删除索引及其所有数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+列出 Couchbase 桶中的所有向量索引。
+
+返回：`Promise<string[]>`
+
+### updateVector()
+
+通过其 ID 使用新的向量数据和/或元数据更新特定的向量条目。**注意：** 基于过滤器的更新尚未在 Couchbase 中实现。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要更新的向量条目的 ID",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "包含要更新的向量和/或元数据的对象",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+从索引中通过其 ID 删除单个向量。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+通过 ID 删除多个向量。**注意：** 基于过滤器的删除尚未在 Couchbase 中实现。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      description: "要删除的向量 ID 数组",
+    },
+  ]}
+/>
+
+### disconnect()
+
+关闭 Couchbase 客户端连接。完成使用存储后应调用此方法。
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "my_index",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  // 处理特定的错误情况
+  if (error.message.includes("Invalid index name")) {
+    console.error(
+      "索引名称必须以字母或下划线开头，并且只能包含有效字符。",
+    );
+  } else if (error.message.includes("Index not found")) {
+    console.error("指定的索引不存在");
+  } else {
+    console.error("向量存储错误：", error.message);
+  }
+}
+```
+
+## 注意事项
+
+- **索引删除注意事项：** 删除搜索索引不会删除关联 Couchbase 集合中的向量/文档。数据会保留，除非明确删除。
+- **所需权限：** Couchbase 用户必须具有连接到目标集合（`kv` 角色）以及管理搜索索引（相关桶/作用域上的 `search_admin` 角色）的读写权限。
+- **索引定义详情和文档结构：** `createIndex` 方法构建的搜索索引定义将 `embedding` 字段索引为类型 `vector`，将 `content` 字段索引为类型 `text`，针对指定 `scopeName.collectionName` 中的文档。每个文档将向量存储在 `embedding` 字段中，将元数据存储在 `metadata` 字段中。如果 `metadata` 包含 `text` 属性，其值也会复制到顶层的 `content` 字段，该字段用于文本搜索索引。
+- **复制和持久性：** 考虑使用 Couchbase 内置的复制和持久性功能来实现数据持久性。定期监控索引统计信息以确保高效搜索。
+
+## 限制
+
+- 索引创建延迟可能会影响创建后的即时查询。
+- 摄入时没有强制向量维度（维度不匹配会在查询时出错）。
+- 向量插入和索引更新最终一致；写入后不能立即保证强一致性。
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

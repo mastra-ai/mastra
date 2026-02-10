@@ -1,0 +1,59 @@
+---
+title: "参考文档：voice.close() | 语音"
+description: "语音提供者提供的 close() 方法文档，用于断开与实时语音服务的连接。"
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai-realtime"
+---
+
+# voice.close()
+
+`close()` 方法断开与实时语音服务的连接并清理资源。这对于正确结束语音会话和防止资源泄漏非常重要。
+
+## 使用示例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+// 初始化实时语音提供者
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-5.1-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// 连接到实时服务
+await voice.connect();
+
+// 开始对话
+voice.speak("您好，我是您的 AI 智能体！");
+
+// 从麦克风流式传输音频
+const microphoneStream = getMicrophoneStream();
+voice.send(microphoneStream);
+
+// 对话完成后
+setTimeout(() => {
+  // 关闭连接并清理资源
+  voice.close();
+  console.log("语音会话已结束");
+}, 60000); // 1 分钟后结束
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+此方法不返回值。
+
+## 注意事项
+
+- 完成实时语音会话后，始终调用 `close()` 以释放资源
+- 调用 `close()` 后，如果要开始新会话，需要再次调用 `connect()`
+- 此方法主要用于维护持久连接的实时语音提供者
+- 如果在不支持实时连接的语音提供者上调用，它会记录警告并什么都不做
+- 不关闭连接可能导致资源泄漏，并可能与语音服务提供者产生计费问题

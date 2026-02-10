@@ -1,0 +1,23 @@
+---
+title: "参考文档：错误处理 | 客户端 SDK"
+description: "了解 Mastra client-js SDK 中内置的重试机制和错误处理功能。"
+packages:
+  - "@mastra/client-js"
+---
+
+# 错误处理
+
+Mastra 客户端 SDK 包含内置的重试机制和错误处理功能。
+
+## 错误处理
+
+所有 API 方法都可能抛出您可以捕获和处理的错误：
+
+```typescript
+try {
+  const agent = mastraClient.getAgent("agent-id");
+  const response = await agent.generate("Hello");
+} catch (error) {
+  console.error("发生错误:", error.message);
+}
+```

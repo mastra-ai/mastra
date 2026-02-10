@@ -1,0 +1,60 @@
+---
+title: "参考：Workflow.sleep() | 工作流"
+description: "工作流中 `Workflow.sleep()` 方法的文档，用于暂停执行指定的毫秒数。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.sleep()
+
+`.sleep()` 方法暂停执行指定的毫秒数。它接受静态数字或回调函数来设置动态延迟。
+
+## 使用示例
+
+```typescript
+workflow.sleep(5000);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "milliseconds",
+      type: "number | ((context: { inputData: any }) => number | Promise<number>)",
+      description:
+        "暂停执行的毫秒数，或返回延迟的回调函数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "用于方法链的工作流实例",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleep(async ({ inputData }) => {
+    const { delayInMs } = inputData;
+    return delayInMs;
+  })
+  .then(step2)
+  .commit();
+```

@@ -1,0 +1,113 @@
+---
+title: "在 CI 中运行评分器 | 评估"
+description: "了解如何使用 runEvals 函数在 CI/CD 管道中运行评分器实验。"
+packages:
+  - "@mastra/core"
+---
+
+# 在 CI 中运行评分器
+
+在 CI 管道中运行评分器可以提供可量化的指标来衡量智能体质量。`runEvals` 函数通过您的智能体或工作流处理多个测试用例并返回聚合分数。
+
+## 基本设置
+
+您可以使用任何支持 ESM 模块的测试框架，例如 [Vitest](https://vitest.dev/)、[Jest](https://jestjs.io/) 或 [Mocha](https://mochajs.org/)。
+
+## 创建测试用例
+
+使用 `runEvals` 针对多个测试用例评估您的智能体。该函数接受数据项数组，每个数据项包含一个 `input` 和可选的 `groundTruth` 用于评分器验证。
+
+```typescript title="src/mastra/agents/weather-agent.test.ts"
+import { describe, it, expect } from 'vitest';
+import { createScorer, runEvals } from "@mastra/core/evals";
+import { weatherAgent } from "./weather-agent";
+import { locationScorer } from "../scorers/location-scorer";
+
+describe('天气智能体测试', () => {
+  it('应该正确地从查询中提取位置', async () => {
+    const result = await runEvals({
+      data: [
+        {
+          input: '柏林的天气',
+          groundTruth: { expectedLocation: '柏林', expectedCountry: 'DE' }
+        },
+        {
+          input: '马里兰州柏林的天气',
+          groundTruth: { expectedLocation: '柏林', expectedCountry: 'US' }
+        },
+        {
+          input: '俄罗斯柏林的天气',
+          groundTruth: { expectedLocation: '柏林', expectedCountry: 'RU' }
+        },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    // 断言聚合分数达到阈值
+    expect(result.scores['location-accuracy']).toBe(1);
+    expect(result.summary.totalItems).toBe(3);
+  });
+});
+```
+
+## 理解结果
+
+`runEvals` 函数返回一个包含以下内容的对象：
+
+- `scores`：所有测试用例中每个评分器的平均分数
+- `summary.totalItems`：处理的测试用例总数
+
+```typescript
+{
+  scores: {
+    'location-accuracy': 1.0,  // 所有项目的平均分数
+    'another-scorer': 0.85
+  },
+  summary: {
+    totalItems: 3
+  }
+}
+```
+
+## 多个测试场景
+
+为不同的评估场景创建单独的测试用例：
+
+```typescript title="src/mastra/agents/weather-agent.test.ts"
+describe('天气智能体测试', () => {
+  const locationScorer = createScorer({ /* ... */ });
+
+  it('应该处理位置消歧', async () => {
+    const result = await runEvals({
+      data: [
+        { input: '柏林的天气', groundTruth: { /* ... */ } },
+        { input: '马里兰州柏林的天气', groundTruth: { /* ... */ } },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    expect(result.scores['location-accuracy']).toBe(1);
+  });
+
+  it('应该处理拼写错误和打字错误', async () => {
+    const result = await runEvals({
+      data: [
+        { input: '柏林的天气', groundTruth: { expectedLocation: '柏林', expectedCountry: 'DE' } },
+        { input: '巴黎的天气', groundTruth: { expectedLocation: '巴黎', expectedCountry: 'FR' } },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    expect(result.scores['location-accuracy']).toBe(1);
+  });
+});
+```
+
+## 下一步
+
+- 了解[创建自定义评分器](/docs/cn/evals/custom-scorers)
+- 探索[内置评分器](/docs/cn/evals/built-in-scorers)
+- 阅读 [runEvals API 参考](/reference/evals/run-evals)

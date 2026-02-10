@@ -1,0 +1,163 @@
+---
+title: "概述 | 工作区"
+description: 通过工作区为代理提供文件系统和代码执行能力。
+packages:
+  - "@mastra/core"
+---
+
+# 工作区
+
+**新增于：** `@mastra/core@1.1.0`
+
+Mastra 工作区为代理提供了一个持久化环境，用于存储文件和执行命令。代理使用工作区工具来读写文件、运行 Shell 命令和搜索索引内容。
+
+工作区支持以下功能：
+
+- **[文件系统](/docs/cn/workspace/filesystem)**：文件存储（读取、写入、列出、删除）
+- **[沙箱](/docs/cn/workspace/sandbox)**：命令执行（Shell 命令）
+- **[搜索](/docs/cn/workspace/search)**：对索引内容进行 BM25、向量或混合搜索
+- **[技能](/docs/cn/workspace/skills)**：可复用的代理指令
+
+## 工作原理
+
+当你为代理分配工作区时，Mastra 会将相应的工具包含在代理的工具集中。代理可以使用这些工具与文件交互并执行命令。
+
+你可以创建具有任意组合功能的工作区。代理只会收到与配置相关的工具。
+
+## 使用方法
+
+### 创建工作区
+
+通过使用所需功能实例化 `Workspace` 类来创建工作区：
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+  skills: ['/skills'],
+});
+```
+
+`skills` 数组指定了包含技能定义的目录路径，详见[技能](/docs/cn/workspace/skills)。
+
+### 全局工作区
+
+在工作区实例上设置工作区。所有代理都会继承此工作区，除非它们定义了自己的工作区：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+});
+
+const mastra = new Mastra({
+  workspace,
+});
+```
+
+### 代理作用域工作区
+
+直接将工作区分配给代理以覆盖全局工作区：
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
+});
+
+export const myAgent = new Agent({
+  id: 'my-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+});
+```
+
+## 初始化
+
+在大多数情况下，调用 `init()` 是可选的——某些提供程序会在首次操作时初始化。当你需要在 Mastra 外部使用工作区（独立脚本、测试）或需要在代理首次交互前预配置资源时，需要手动调用 `init()`。
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+});
+
+// 可选：在首次使用前预创建目录和沙箱
+await workspace.init();
+```
+
+### init() 的作用
+
+初始化会为每个配置的提供程序运行设置逻辑：
+
+- `LocalFilesystem`：创建基础目录（如果不存在）
+- `LocalSandbox`：创建工作目录
+- `Search`（如果已配置）：从 `autoIndexPaths` 索引文件，详见[搜索与索引](/docs/cn/workspace/search)
+
+外部提供程序可能会执行额外的设置，如建立连接或身份验证。
+
+## 工具配置
+
+通过工作区上的 `tools` 选项配置工具行为。这控制哪些工具已启用以及它们的行为方式。
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    // 全局默认值
+    enabled: true,
+    requireApproval: false,
+
+    // 单个工具覆盖
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: true,
+      requireReadBeforeWrite: true,
+    },
+    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+      enabled: false,
+    },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireApproval: true,
+    },
+  },
+});
+```
+
+### 工具选项
+
+| 选项 | 类型 | 描述 |
+|------|------|------|
+| `enabled` | `boolean` | 工具是否可用（默认：`true`） |
+| `requireApproval` | `boolean` | 工具是否需要在执行前获得用户批准（默认：`false`） |
+| `requireReadBeforeWrite` | `boolean` | 对于写入工具：需要先读取文件（默认：`false`） |
+
+### 读前写
+
+当写入工具启用 `requireReadBeforeWrite` 时，代理必须在写入前读取文件。这可以防止覆盖代理尚未看到的文件：
+
+- **新文件**：无需读取即可写入（它们尚不存在）
+- **现有文件**：必须先读取
+- **外部修改的文件**：如果文件自代理读取后已更改，写入会失败
+
+## 相关内容
+
+- [文件系统](/docs/cn/workspace/filesystem)
+- [沙箱](/docs/cn/workspace/sandbox)
+- [技能](/docs/cn/workspace/skills)
+- [搜索与索引](/docs/cn/workspace/search)
+- [工作区类参考](/reference/workspace/workspace-class)

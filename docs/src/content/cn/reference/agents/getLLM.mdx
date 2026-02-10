@@ -1,0 +1,80 @@
+---
+title: "参考文档：Agent.getLLM() | 智能体"
+description: "Mastra 智能体中 `Agent.getLLM()` 方法的文档，用于检索语言模型实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getLLM()
+
+`.getLLM()` 方法检索为智能体配置的语言模型实例，如果它是函数则解析它。此方法提供对支持智能体功能的底层 LLM 的访问。
+
+## 使用示例
+
+```typescript
+await agent.getLLM();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext; model?: MastraLanguageModel | DynamicArgument<MastraLanguageModel> }",
+      isOptional: true,
+      defaultValue: "{}",
+      description:
+        "包含请求上下文和可选模型覆盖的可选配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "llm",
+      type: "MastraLLMV1 | Promise<MastraLLMV1>",
+      description:
+        "为智能体配置的语言模型实例，可以是直接实例，也可以是解析为 LLM 的 promise。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.getLLM({
+  requestContext: new RequestContext(),
+  model: "openai/gpt-5.1",
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModel | DynamicArgument<MastraLanguageModel>",
+      isOptional: true,
+      description:
+        "可选的模型覆盖。如果提供，将使用此模型而不是智能体配置的模型。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)
+- [请求上下文](/docs/cn/docs/server/request-context)

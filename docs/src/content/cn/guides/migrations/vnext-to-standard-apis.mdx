@@ -1,0 +1,365 @@
+---
+title: "迁移：从 VNext 到标准 API | 迁移指南"
+description: "了解如何从 VNext 方法迁移到 Mastra 中的新标准代理 API。"
+---
+
+# 从 VNext 迁移到标准 API
+
+自 `@mastra/core` 的 `v0.20.0` 起，以下变更适用。
+
+## 旧版 API（AI SDK v4）
+
+原始方法已重命名，并与 **AI SDK v4** 和 `v1` 模型保持向后兼容。
+
+- `.stream()` → `.streamLegacy()`
+- `.generate()` → `.generateLegacy()`
+
+## 标准 API（AI SDK v5）
+
+这些现在是当前的 API，具有完整的 **AI SDK v5** 和 `v2` 模型兼容性。
+
+- `.streamVNext()` → `.stream()`
+- `.generateVNext()` → `.generate()`
+
+## 迁移路径
+
+如果您已经在使用 `.streamVNext()` 和 `.generateVNext()`，请使用查找/替换将方法分别更改为 `.stream()` 和 `.generate()`。
+
+如果您使用的是旧的 `.stream()` 和 `.generate()`，决定是否要升级。如果不升级，请使用查找/替换更改为 `.streamLegacy()` 和 `.generateLegacy()`。
+
+选择适合您需求的迁移路径：
+
+### 继续使用 AI SDK v4 模型
+
+- 将所有 `.stream()` 和 `.generate()` 调用分别重命名为 `.streamLegacy()` 和 `.generateLegacy()`。
+
+> 无需进一步更改。
+
+### 继续使用 AI SDK v5 模型
+
+- 将所有 `.streamVNext()` 和 `.generateVNext()` 调用分别重命名为 `.stream()` 和 `.generate()`。
+
+> 无需进一步更改。
+
+### 从 AI SDK v4 升级到 v5
+
+- 将所有模型提供商包升级一个主要版本。
+
+> 这将确保它们现在都是 v5 模型。请遵循下面的指南以了解关键差异并相应地更新您的代码。
+
+## 关键差异
+
+更新后的 `.stream()` 和 `.generate()` 方法与其旧版对应方法在行为、兼容性、返回类型和可用选项方面有所不同。本节重点介绍迁移时需要理解的最重要的变更。
+
+### 模型版本支持
+
+**旧版 API**
+
+- `.generateLegacy()`
+- `.streamLegacy()`
+
+仅支持 **AI SDK v4** 模型（`specificationVersion: 'v1'`）
+
+**标准 API**
+
+- `.generate()`
+- `.stream()`
+
+仅支持 **AI SDK v5** 模型（`specificationVersion: 'v2'`）
+
+> 这在运行时强制执行，并带有清晰的错误消息。
+
+### 返回类型
+
+**旧版 API**
+
+- `.generateLegacy()`
+  返回：`GenerateTextResult` 或 `GenerateObjectResult`
+
+- `.streamLegacy()`
+  返回：`StreamTextResult` 或 `StreamObjectResult`
+
+有关更多信息，请参阅以下 API 参考：
+
+- [Agent.generateLegacy()](/reference/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
+
+**标准 API**
+
+- `.generate()`
+  - `format: 'mastra'`（默认）：返回 `MastraModelOutput.getFullOutput()`
+  - `format: 'aisdk'`：返回 `AISDKV5OutputStream.getFullOutput()`
+  - 内部调用 `.stream()` 并等待 `.getFullOutput()`
+
+- `.stream()`
+  - `format: 'mastra'`（默认）：返回 `MastraModelOutput<OUTPUT>`
+  - `format: 'aisdk'`：返回 `AISDKV5OutputStream<OUTPUT>`
+
+有关更多信息，请参阅以下 API 参考：
+
+- [Agent.generate()](/reference/agents/generate)
+- [Agent.stream()](/reference/streaming/agents/stream)
+
+### 格式控制
+
+**旧版 API**
+
+无 `format` 选项：始终返回 AI SDK v4 类型
+
+```typescript
+// Mastra 本机格式（默认）
+const result = await agent.stream(messages);
+```
+
+**标准 API**
+
+使用 `format` 选项选择输出：
+
+- `'mastra'`（默认）
+- `'aisdk'`（AI SDK v5 兼容）
+
+```typescript
+// AI SDK v5 兼容性
+const result = await agent.stream(messages, {
+  format: "aisdk",
+});
+```
+
+### 标准 API 中的新选项
+
+以下选项在标准的 `.stream()` 和 `generate()` 中可用，但在其旧版对应方法中**不可用**：
+
+- `format` - 在 'mastra' 或 'aisdk' 输出格式之间选择：
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    format: "aisdk", // 或 'mastra'（默认）
+  });
+  ```
+
+- `system` - 自定义系统消息（与指令分开）。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    system: "You are a helpful assistant",
+  });
+  ```
+
+- `structuredOutput` - 增强的结构化输出，包含模型覆盖和自定义选项。
+  - `jsonPromptInjection` - 用于覆盖将 response_format 传递给模型的默认行为。这会将上下文注入提示中，以强制模型返回结构化输出。
+  - `model` - 如果添加了模型，这将创建一个子代理来结构化主代理的响应。主代理将调用工具并返回文本，子代理将返回符合您提供的模式的对象。这是 `experimental_output` 的替代品。
+  - `errorStrategy` - 确定输出与模式不匹配时发生的情况：
+    - 'warn' - 记录警告
+    - 'error' - 抛出错误
+    - 'fallback' - 返回您提供的回退值
+
+    ```typescript
+    const result = await agent.generate(messages, {
+      structuredOutput: {
+        schema: z.object({
+          name: z.string(),
+          age: z.number(),
+        }),
+        model: "openai/gpt-5.1", // 用于结构化的可选模型覆盖
+        errorStrategy: "fallback",
+        fallbackValue: { name: "unknown", age: 0 },
+        instructions: "Extract user information", // 覆盖默认的结构化指令
+      },
+    });
+    ```
+
+- `stopWhen` - 灵活的停止条件（步骤数、令牌限制等）。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000,
+  });
+  ```
+
+- `providerOptions` - 提供商特定选项（例如，OpenAI 特定设置）
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    providerOptions: {
+      openai: {
+        store: true,
+        metadata: { userId: "123" },
+      },
+    },
+  });
+  ```
+
+- `onChunk` - 每个流块的回调。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    onChunk: (chunk) => {
+      console.log("Received chunk:", chunk);
+    },
+  });
+  ```
+
+- `onError` - 错误回调。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    onError: (error) => {
+      console.error("Stream error:", error);
+    },
+  });
+  ```
+
+- `onAbort` - 中止回调。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    onAbort: () => {
+      console.log("Stream aborted");
+    },
+  });
+  ```
+
+- `activeTools` - 指定此执行哪些工具处于活动状态。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    activeTools: ["search", "calculator"], // 只有这些工具将可用
+  });
+  ```
+
+- `abortSignal` - 用于取消的 AbortSignal。
+
+  ```typescript
+  const controller = new AbortController();
+  const result = await agent.stream(messages, {
+    abortSignal: controller.signal,
+  });
+
+  // 稍后：controller.abort();
+  ```
+
+- `prepareStep` - 多步执行前每步的回调。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    prepareStep: ({ step, state }) => {
+      console.log("About to execute step:", step);
+      return {
+        /* 修改后的状态 */
+      };
+    },
+  });
+  ```
+
+- `requireToolApproval` - 需要所有工具调用的批准。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    requireToolApproval: true,
+  });
+  ```
+
+### 移动的旧版选项
+
+- `temperature` 和其他 `modelSettings`。
+
+  统一在 `modelSettings` 中
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    modelSettings: {
+      temperature: 0.7,
+      maxTokens: 1000,
+      topP: 0.9,
+    },
+  });
+  ```
+
+- `resourceId` 和 `threadId`。
+
+  移动到内存对象中。
+
+  ```typescript
+  const result = await agent.stream(messages, {
+    memory: {
+      resource: "user-123",
+      thread: "thread-456",
+    },
+  });
+  ```
+
+### 已弃用或移除的选项
+
+- `experimental_output`
+
+  使用 `structuredOutput` 代替，以允许工具调用和对象返回。
+
+  ```typescript
+  const result = await agent.generate(messages, {
+    structuredOutput: {
+      schema: {
+        summary: z.string(),
+      },
+      model: "openai/gpt-5.1",
+    },
+  });
+  ```
+
+- `output`
+
+  `output` 属性已弃用，转而使用 `structuredOutput`，要达到相同的结果，省略模型并仅传递 `structuredOutput.schema`，如果您的模型本机不支持 `response_format`，可选择添加 `jsonPromptInjection: true`。
+
+  ```typescript
+  const result = await agent.generate(messages, {
+    structuredOutput: {
+      schema: {
+        z.object({
+          name: z.string()
+        })
+      }
+    },
+  });
+  ```
+
+- `memoryOptions`
+
+  使用 `memory` 代替。
+
+  ```typescript
+  const result = await agent.generate(messages, {
+    memory: {},
+  });
+  ```
+
+### 类型变更
+
+**旧版 API**
+
+- `CoreMessage[]`
+
+有关更多信息，请参阅以下 API 参考：
+
+- [Agent.generateLegacy()](/reference/agents/generateLegacy)
+- [Agent.streamLegacy()](/reference/streaming/agents/streamLegacy)
+
+**标准 API**
+
+- `ModelMessage[]`
+
+`toolChoice` 使用 AI SDK v5 的 `ToolChoice` 类型。
+
+```typescript
+type ToolChoice<TOOLS extends Record<string, unknown>> =
+  | "auto"
+  | "none"
+  | "required"
+  | {
+      type: "tool";
+      toolName: Extract<keyof TOOLS, string>;
+    };
+```
+
+有关更多信息，请参阅以下 API 参考：
+
+- [Agent.generate()](/reference/agents/generate)
+- [Agent.stream()](/reference/streaming/agents/stream)

@@ -1,0 +1,572 @@
+---
+title: "检索、语义搜索、重排序 | RAG"
+description: Mastra RAG 系统中检索过程指南，包括语义搜索、过滤和重排序。
+packages:
+  - "@mastra/astra"
+  - "@mastra/chroma"
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/mongodb"
+  - "@mastra/opensearch"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
+  - "@mastra/qdrant"
+  - "@mastra/rag"
+  - "@mastra/s3vectors"
+  - "@mastra/upstash"
+  - "@mastra/vectorize"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# RAG 系统中的检索
+
+存储嵌入向量后，您需要检索相关的块来回答用户查询。
+
+Mastra 提供了灵活的检索选项，支持语义搜索、过滤和重排序。
+
+## 检索工作原理
+
+1. 使用与文档嵌入相同的模型将用户查询转换为嵌入向量
+2. 使用向量相似性将此嵌入向量与存储的嵌入向量进行比较
+3. 检索最相似的块，并且可以可选地：
+
+- 按元数据过滤
+- 重排序以获得更好的相关性
+- 通过知识图谱处理
+
+## 基本检索
+
+最简单的方法是直接语义搜索。该方法使用向量相似性来查找与查询语义相似的块：
+
+```ts
+import { embed } from "ai";
+import { PgVector } from "@mastra/pg";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+// 将查询转换为嵌入向量
+const { embedding } = await embed({
+  value: "文章的主要观点是什么？",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+});
+
+// 查询向量存储
+const pgVector = new PgVector({
+  id: 'pg-vector',
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+});
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+});
+
+// 显示结果
+console.log(results);
+```
+
+`topK` 参数指定从向量搜索返回的最相似结果的最大数量。
+
+结果包括文本内容和相似性分数：
+
+```ts
+[
+  {
+    text: "气候变化带来重大挑战...",
+    score: 0.89,
+    metadata: { source: "article1.txt" },
+  },
+  {
+    text: "气温上升影响作物产量...",
+    score: 0.82,
+    metadata: { source: "article1.txt" },
+  },
+];
+```
+
+## 高级检索选项
+
+### 元数据过滤
+
+根据元数据字段过滤结果以缩小搜索空间。这种方法——结合向量相似性搜索和元数据过滤器——有时被称为混合向量搜索，因为它将语义搜索与结构化过滤标准合并。
+
+当您有来自不同来源、时间段或具有特定属性的文档时，这很有用。Mastra 提供了统一的 MongoDB 风格查询语法，可在所有支持的向量存储中工作。
+
+有关可用运算符和语法的详细信息，请参阅[元数据过滤器参考](/reference/rag/metadata-filters)。
+
+基本过滤示例：
+
+```ts
+// 简单等式过滤器
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    source: "article1.txt",
+  },
+});
+
+// 数值比较
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    price: { $gt: 100 },
+  },
+});
+
+// 多个条件
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    category: "electronics",
+    price: { $lt: 1000 },
+    inStock: true,
+  },
+});
+
+// 数组操作
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    tags: { $in: ["sale", "new"] },
+  },
+});
+
+// 逻辑运算符
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: embedding,
+  topK: 10,
+  filter: {
+    $or: [{ category: "electronics" }, { category: "accessories" }],
+    $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+  },
+});
+```
+
+元数据过滤的常见用例：
+
+- 按文档来源或类型过滤
+- 按日期范围过滤
+- 按特定类别或标签过滤
+- 按数值范围过滤（例如，价格、评分）
+- 组合多个条件进行精确查询
+- 按文档属性过滤（例如，语言、作者）
+
+### 向量查询工具
+
+有时您希望赋予智能体直接查询向量数据库的能力。向量查询工具允许您的智能体负责检索决策，根据智能体对用户需求的理解，结合语义搜索与可选的过滤和重排序。
+
+```ts
+import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+});
+```
+
+创建工具时，请特别注意工具的名称和描述——这些帮助智能体理解何时以及如何使用检索功能。例如，您可以将其命名为 "SearchKnowledgeBase" 并描述为 "搜索我们的文档以查找关于 X 主题的相关信息。"
+
+这在以下情况特别有用：
+
+- 您的智能体需要动态决定要检索哪些信息
+- 检索过程需要复杂的决策
+- 您希望智能体根据上下文结合多种检索策略
+
+#### 数据库特定配置
+
+向量查询工具支持数据库特定配置，使您能够利用不同向量存储的独特功能和优化。
+
+:::note
+这些配置用于**查询时选项**，如命名空间、性能调优和过滤——而非数据库连接设置。
+
+连接凭据（URL、身份验证令牌）在实例化向量存储类时配置（例如 `new LibSQLVector({ url: '...' })`）。
+:::
+
+```ts
+import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+// 带命名空间的 Pinecone
+const pineconeQueryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  databaseConfig: {
+    pinecone: {
+      namespace: "production", // 按环境隔离数据
+    },
+  },
+});
+
+// 带性能调优的 pgVector
+const pgVectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "postgres",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  databaseConfig: {
+    pgvector: {
+      minScore: 0.7, // 过滤低质量结果
+      ef: 200, // HNSW 搜索参数
+      probes: 10, // IVFFlat 探针参数
+    },
+  },
+});
+
+// 带高级过滤的 Chroma
+const chromaQueryTool = createVectorQueryTool({
+  vectorStoreName: "chroma",
+  indexName: "documents",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  databaseConfig: {
+    chroma: {
+      where: { category: "technical" },
+      whereDocument: { $contains: "API" },
+    },
+  },
+});
+
+// 带表特定的 LanceDB
+const lanceQueryTool = createVectorQueryTool({
+  vectorStoreName: "lance",
+  indexName: "documents",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  databaseConfig: {
+    lance: {
+      tableName: "myVectors", // 指定要查询的表
+      includeAllColumns: true, // 在结果中包含所有元数据列
+    },
+  },
+});
+```
+
+**主要优势：**
+
+- **Pinecone 命名空间**：按租户、环境或数据类型组织向量
+- **pgVector 优化**：使用 ef/probes 参数控制搜索精度和速度
+- **质量过滤**：设置最小相似性阈值以提高结果相关性
+- **LanceDB 表**：将数据分离到表中以获得更好的组织性和性能
+- **运行时灵活性**：根据上下文动态覆盖配置
+
+**常见用例：**
+
+- 使用 Pinecone 命名空间的多租户应用程序
+- 高负载场景中的性能优化
+- 环境特定配置（开发/预发布/生产）
+- 质量门控搜索结果
+- 使用 LanceDB 进行边缘部署场景的嵌入式、基于文件的向量存储
+
+您还可以使用请求上下文在运行时覆盖这些配置：
+
+```ts
+import { RequestContext } from "@mastra/core/request-context";
+
+const requestContext = new RequestContext();
+requestContext.set("databaseConfig", {
+  pinecone: {
+    namespace: "runtime-namespace",
+  },
+});
+
+await pineconeQueryTool.execute(
+  { queryText: "搜索查询" },
+  { mastra, requestContext }
+);
+```
+
+有关详细配置选项和高级用法，请参阅[向量查询工具参考](/reference/tools/vector-query-tool)。
+
+### 向量存储提示词
+
+向量存储提示词为每个向量数据库实现定义查询模式和过滤功能。实现过滤时，这些提示词需要在智能体的指令中，以指定每个向量存储实现的有效运算符和语法。
+
+<Tabs>
+  <TabItem value="pgvector" label="pgVector">
+
+```ts
+import { PGVECTOR_PROMPT } from "@mastra/pg";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${PGVECTOR_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="pinecone" label="Pinecone">
+
+```ts title="vector-store.ts"
+import { PINECONE_PROMPT } from "@mastra/pinecone";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${PINECONE_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="qdrant" label="Qdrant">
+
+```ts title="vector-store.ts"
+import { QDRANT_PROMPT } from "@mastra/qdrant";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${QDRANT_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="chroma" label="Chroma">
+
+```ts title="vector-store.ts"
+import { CHROMA_PROMPT } from "@mastra/chroma";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${CHROMA_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="astra" label="Astra">
+
+```ts title="vector-store.ts"
+import { ASTRA_PROMPT } from "@mastra/astra";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${ASTRA_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="libsql" label="libSQL">
+
+```ts title="vector-store.ts"
+import { LIBSQL_PROMPT } from "@mastra/libsql";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${LIBSQL_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="upstash" label="Upstash">
+
+```ts title="vector-store.ts"
+import { UPSTASH_PROMPT } from "@mastra/upstash";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${UPSTASH_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="vectorize" label="Vectorize">
+
+```ts title="vector-store.ts"
+import { VECTORIZE_PROMPT } from "@mastra/vectorize";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${VECTORIZE_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="mongodb" label="MongoDB">
+
+```ts title="vector-store.ts"
+import { MONGODB_PROMPT } from "@mastra/mongodb";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${MONGODB_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="opensearch" label="OpenSearch">
+
+```ts title="vector-store.ts"
+import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${OPENSEARCH_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+  <TabItem value="s3vectors" label="S3Vectors">
+
+```ts title="vector-store.ts"
+import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
+
+export const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  model: "openai/gpt-5.1",
+  instructions: `
+  使用提供的上下文处理查询。结构化响应使其简洁且相关。
+  ${S3VECTORS_PROMPT}
+  `,
+  tools: { vectorQueryTool },
+});
+```
+
+  </TabItem>
+
+</Tabs>
+
+### 重排序
+
+初始向量相似性搜索有时会错过细微的相关性。重排序是一个计算成本更高但更准确的算法，它通过以下方式改进结果：
+
+- 考虑词序和精确匹配
+- 应用更复杂的相关性评分
+- 使用一种称为查询和文档之间交叉注意力的方法
+
+以下是使用重排序的方法：
+
+```ts
+import {
+  rerankWithScorer as rerank,
+  MastraAgentRelevanceScorer
+} from "@mastra/rag";
+
+// 从向量搜索获取初始结果
+const initialResults = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryEmbedding,
+  topK: 10,
+});
+
+// 创建相关性评分器
+const relevanceProvider = new MastraAgentRelevanceScorer('relevance-scorer', "openai/gpt-5.1");
+
+// 对结果进行重排序
+const rerankedResults = await rerank({
+  results: initialResults,
+  query,
+  scorer: relevanceProvider,
+  options: {
+    weights: {
+      semantic: 0.5, // 内容在语义上与查询的匹配程度
+      vector: 0.3, // 原始向量相似性分数
+      position: 0.2, // 保留原始结果排序
+    },
+    topK: 10,
+  },
+});
+```
+
+权重控制不同因素如何影响最终排名：
+
+- `semantic`：更高的值优先考虑语义理解和与查询的相关性
+- `vector`：更高的值倾向于原始向量相似性分数
+- `position`：更高的值有助于保持结果的原始顺序
+
+:::note
+为了使重排序期间的语义评分正常工作，每个结果必须在其 `metadata.text` 字段中包含文本内容。
+:::
+
+您还可以使用其他相关性评分提供商，如 Cohere 或 ZeroEntropy：
+
+```ts
+const relevanceProvider = new CohereRelevanceScorer("rerank-v3.5");
+```
+
+```ts
+const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
+```
+
+重排序后的结果将向量相似性与语义理解相结合，以提高检索质量。
+
+有关重排序的更多详细信息，请参阅 [rerank()](/reference/rag/rerankWithScorer) 方法。
+
+有关遵循块之间连接的基于图的检索，请参阅 [GraphRAG](/docs/cn/rag/graph-rag) 文档。

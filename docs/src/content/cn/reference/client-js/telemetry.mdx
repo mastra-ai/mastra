@@ -1,0 +1,27 @@
+---
+title: "参考：遥测 API | 客户端 SDK"
+description: 了解如何使用 client-js SDK 从 Mastra 应用程序检索和分析跟踪以进行监控和调试。
+packages:
+  - "@mastra/client-js"
+---
+
+# 遥测 API
+
+遥测 API 提供了从 Mastra 应用程序检索和分析跟踪的方法。这有助于您监控和调试应用程序的行为和性能。
+
+## 获取跟踪
+
+检索带有可选过滤和分页的跟踪：
+
+```typescript
+const telemetry = await mastraClient.getTelemetry({
+  name: "trace-name", // 可选：按跟踪名称过滤
+  scope: "scope-name", // 可选：按范围过滤
+  page: 1, // 可选：分页的页码
+  perPage: 10, // 可选：每页项目数
+  attribute: {
+    // 可选：按自定义属性过滤
+    key: "value",
+  },
+});
+```

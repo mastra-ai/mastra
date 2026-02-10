@@ -1,0 +1,175 @@
+---
+title: "Datadog 导出器 | 追踪 | 可观测性"
+description: "将追踪发送到 Datadog 进行 LLM 可观测性和分析"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Datadog 导出器
+
+[Datadog](https://datadoghq.com/) 是一个具有专用 LLM 可观测性功能的综合监控平台。Datadog 导出器将您的追踪发送到 Datadog 的 LLM 可观测性产品，提供对模型性能、代币使用和对话流程的洞察。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/datadog@latest
+```
+
+## 配置
+
+### 前提条件
+
+1. **Datadog 账户**：在 [datadoghq.com](https://datadoghq.com/) 注册并启用 LLM 可观测性
+2. **API 密钥**：从 Datadog 组织设置 → API 密钥获取您的 API 密钥
+3. **环境变量**：设置您的凭据
+
+```bash title=".env"
+DD_API_KEY=your-datadog-api-key
+DD_LLMOBS_ML_APP=my-llm-app
+DD_SITE=datadoghq.com  # 可选：默认为 datadoghq.com
+DD_ENV=production      # 可选：环境名称
+```
+
+### 零配置设置
+
+设置环境变量后，使用无需配置的导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { DatadogExporter } from "@mastra/datadog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: "my-service",
+        exporters: [new DatadogExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { DatadogExporter } from "@mastra/datadog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: "my-service",
+        exporters: [
+          new DatadogExporter({
+            mlApp: process.env.DD_LLMOBS_ML_APP!,
+            apiKey: process.env.DD_API_KEY!,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 配置选项
+
+### 完整配置
+
+```typescript
+new DatadogExporter({
+  // 必需设置
+  mlApp: process.env.DD_LLMOBS_ML_APP!, //在此 ML 应用名称下分组追踪
+  apiKey: process.env.DD_API_KEY!, // 无代理模式必需（默认）
+
+  // 可选设置
+  site: "datadoghq.com", // Datadog 站点（datadoghq.eu、us3.datadoghq.com 等）
+  service: "my-service", // 服务名称（默认为 mlApp）
+  env: "production", // 环境名称
+  agentless: true, // true = 直接 HTTPS，false = 本地 Datadog Agent
+
+  // 高级设置
+  integrationsEnabled: false, // 启用 dd-trace 自动检测
+
+  // 诊断日志记录
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+### 使用本地 Datadog Agent
+
+如果您在本地运行 Datadog Agent，可以通过它路由追踪而不是直接使用 HTTPS：
+
+```typescript
+new DatadogExporter({
+  mlApp: process.env.DD_LLMOBS_ML_APP!,
+  agentless: false, // 使用本地 Datadog Agent
+  env: "production",
+});
+```
+
+注意：使用代理模式时，API 密钥从本地代理的配置中读取。
+
+## 跨度类型映射
+
+Mastra 跨度类型自动映射到 Datadog LLMObs 跨度类型：
+
+| Mastra SpanType | Datadog Kind |
+| -------------------- | ------------ |
+| `AGENT_RUN` | `agent` |
+| `MODEL_GENERATION` | `workflow` |
+| `MODEL_STEP` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_RUN` | `workflow` |
+| 其他工作流类型 | `task` |
+| `GENERIC` | `task` |
+
+其他/未来的 Mastra 跨度类型在映射时默认为 'task'，除非另有指定。
+
+## 故障排除
+
+### 原生模块 ABI 不匹配
+
+如果您看到类似错误：
+
+```
+Error: No native build was found for runtime=node abi=137 platform=linuxglibc arch=x64
+```
+
+这表示 `dd-trace` 原生模块与 Node.js 版本存在兼容性问题。这些原生模块是**可选的**，提供性能监控功能。
+
+**解决方案：**
+
+1. **使用 Node.js 22.x**：原生模块与 Node.js 22.x 兼容性最好。
+
+2. **忽略原生模块警告**：原生模块（`@datadog/native-metrics`、`@datadog/native-appsec` 等）是可选的。如果它们加载失败，核心追踪功能仍然正常工作。
+
+### 打包器外部配置
+
+当使用 esbuild、webpack 或 Mastra CLI 打包器时，您可能需要将 `dd-trace` 及其依赖项标记为外部：
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    externals: [
+      "dd-trace",
+      "@datadog/native-metrics",
+      "@datadog/native-appsec",
+      "@datadog/native-iast-taint-tracking",
+      "@datadog/pprof",
+    ],
+  },
+});
+```
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [Datadog LLM 可观测性文档](https://docs.datadoghq.com/llm_observability/)

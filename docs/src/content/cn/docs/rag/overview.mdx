@@ -1,0 +1,81 @@
+---
+title: "Mastra 中的 RAG（检索增强生成）| RAG"
+description: "Mastra 中检索增强生成（RAG）的概述，详细介绍其通过相关上下文增强大型语言模型输出的能力。"
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+  - "@mastra/rag"
+---
+
+# Mastra 中的 RAG（检索增强生成）
+
+Mastra 中的 RAG 通过从您自己的数据源合并相关上下文来帮助您增强大型语言模型输出，提高准确性并将响应锚定在实时信息中。
+
+Mastra 的 RAG 系统提供：
+
+- 用于处理和嵌入文档的标准化 API
+- 支持多个向量存储
+- 用于最优检索的分块和嵌入策略
+- 用于跟踪嵌入和检索性能的可观察性
+
+## 示例
+
+要实现 RAG，您需要将文档处理成块，创建嵌入，存储在向量数据库中，然后在查询时检索相关上下文。
+
+```ts
+import { embedMany } from "ai";
+import { PgVector } from "@mastra/pg";
+import { MDocument } from "@mastra/rag";
+import { z } from "zod";
+
+// 1. 初始化文档
+const doc = MDocument.fromText(`您的文档文本在这里...`);
+
+// 2. 创建块
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 512,
+  overlap: 50,
+});
+
+// 3. 生成嵌入；我们需要传递每个块的文本
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const { embeddings } = await embedMany({
+  values: chunks.map((chunk) => chunk.text),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small")
+});
+
+// 4. 存储到向量数据库
+const pgVector = new PgVector({
+  id: 'pg-vector',
+  connectionString: process.env.POSTGRES_CONNECTION_STRING,
+});
+await pgVector.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+}); // 使用名为 'embeddings' 的索引名称
+
+// 5. 查询相似的块
+const results = await pgVector.query({
+  indexName: "embeddings",
+  queryVector: queryVector,
+  topK: 3,
+}); // queryVector 是查询的嵌入
+
+console.log("相似的块:", results);
+```
+
+此示例展示了基本要素：初始化文档，创建块，生成嵌入，存储它们，然后查询相似内容。
+
+## 文档处理
+
+RAG 的基本构建块是文档处理。可以使用各种策略（递归、滑动窗口等）将文档分块，并用元数据丰富。请参阅[分块和嵌入文档](./chunking-and-embedding)。
+
+## 向量存储
+
+Mastra 支持多种向量存储用于嵌入持久化和相似性搜索，包括 pgvector、Pinecone、Qdrant 和 MongoDB。请参阅[向量数据库文档](./vector-databases)。
+
+## 更多资源
+
+- [思维链 RAG 示例](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag)

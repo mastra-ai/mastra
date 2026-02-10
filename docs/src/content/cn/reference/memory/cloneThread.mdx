@@ -1,0 +1,236 @@
+---
+title: "参考：Memory.cloneThread() | 内存"
+description: "Mastra 中 `Memory.cloneThread()` 方法的文档，该方法创建包含所有消息的对话线程副本。"
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.cloneThread()
+
+`.cloneThread()` 方法创建现有对话线程的副本，包括其所有消息。这允许从对话中的特定点创建分歧的对话路径。启用语义回忆时，该方法还会为克隆的消息创建向量嵌入。
+
+## 使用示例
+
+```typescript
+const { thread, clonedMessages } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "sourceThreadId",
+      type: "string",
+      description: "要克隆的线程的 ID",
+      isOptional: false,
+    },
+    {
+      name: "newThreadId",
+      type: "string",
+      description:
+        "克隆线程的可选自定义 ID。如果未提供，将自动生成。",
+      isOptional: true,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "克隆线程的可选资源 ID。默认为源线程的 resourceId。",
+      isOptional: true,
+    },
+    {
+      name: "title",
+      type: "string",
+      description:
+        "克隆线程的可选标题。默认为 '[源标题] (副本)'。",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description:
+        "要与源线程元数据合并的可选元数据。自动添加克隆元数据。",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "CloneOptions",
+      description: "克隆操作的可选过滤选项。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "messageLimit",
+      type: "number",
+      description:
+        "要克隆的最大消息数量。设置后，克隆最近的 N 条消息。",
+      isOptional: true,
+    },
+    {
+      name: "messageFilter",
+      type: "MessageFilter",
+      description: "选择要克隆的消息的过滤条件。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### MessageFilter 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "startDate",
+      type: "Date",
+      description: "仅克隆此日期或之后创建的消息。",
+      isOptional: true,
+    },
+    {
+      name: "endDate",
+      type: "Date",
+      description: "仅克隆此日期或之前创建的消息。",
+      isOptional: true,
+    },
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "仅克隆具有这些特定 ID 的消息。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "thread",
+      type: "StorageThreadType",
+      description: "新创建的带有克隆元数据的克隆线程。",
+    },
+    {
+      name: "clonedMessages",
+      type: "MastraDBMessage[]",
+      description:
+        "为新线程分配了新 ID 的克隆消息数组。",
+    },
+  ]}
+/>
+
+### 克隆元数据
+
+克隆线程的元数据包含带有以下属性的 `clone`：
+
+<PropertiesTable
+  content={[
+    {
+      name: "sourceThreadId",
+      type: "string",
+      description: "被克隆的原始线程的 ID。",
+    },
+    {
+      name: "clonedAt",
+      type: "Date",
+      description: "创建克隆时的时间戳。",
+    },
+    {
+      name: "lastMessageId",
+      type: "string",
+      description: "克隆时源线程中最后一条消息的 ID。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/test-clone.ts"
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+// 克隆包含所有消息的线程
+const { thread: fullClone } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  title: "替代对话路径",
+});
+
+// 使用自定义 ID 克隆
+const { thread: customIdClone } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  newThreadId: "my-custom-clone-id",
+});
+
+// 仅克隆最后 5 条消息
+const { thread: partialClone, clonedMessages } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  options: {
+    messageLimit: 5,
+  },
+});
+
+// 克隆特定日期范围内的消息
+const { thread: dateFilteredClone } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  options: {
+    messageFilter: {
+      startDate: new Date("2024-01-01"),
+      endDate: new Date("2024-01-31"),
+    },
+  },
+});
+
+// 在克隆的线程上继续对话
+const response = await agent.generate("让我们尝试不同的方法", {
+  threadId: fullClone.id,
+  resourceId: fullClone.resourceId,
+});
+```
+
+## 向量嵌入
+
+当 Memory 实例启用了语义回忆（配置了向量存储和嵌入模型）时，`cloneThread()` 会自动为所有克隆的消息创建向量嵌入。这确保了语义搜索在克隆的线程上正常工作。
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+
+const memory = new Memory({
+  storage: new LibSQLStore({ id: 'memory-store', url: "file:./memory.db" }),
+  vector: new LibSQLVector({ id: 'vector-store', url: "file:./vector.db" }),
+  embedder: embeddingModel,
+  options: {
+    semanticRecall: true,
+  },
+});
+
+// 克隆还会为克隆的消息创建嵌入
+const { thread } = await memory.cloneThread({
+  sourceThreadId: "original-thread",
+});
+
+// 语义搜索在克隆的线程上有效
+const results = await memory.recall({
+  threadId: thread.id,
+  vectorSearchString: "搜索查询",
+});
+```
+
+### 相关内容
+
+- [Memory 类参考](/reference/memory/memory-class)
+- [createThread](/reference/memory/createThread)
+- [克隆工具方法](/reference/memory/clone-utilities)
+- [recall](/reference/memory/recall)
+- [语义回忆](/docs/cn/docs/memory/semantic-recall)

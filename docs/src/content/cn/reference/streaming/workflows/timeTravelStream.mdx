@@ -1,0 +1,171 @@
+---
+title: "参考文档: Run.timeTravelStream() | 流处理"
+description: "用于流式传输工作流时间旅行执行的 `Run.timeTravelStream()` 方法文档。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.timeTravelStream()
+
+`.timeTravelStream()` 方法从任何特定步骤重新执行工作流，并带有流式事件。这允许您在时间旅行执行期间接收实时更新，同时保持对每个步骤进度的完全可见性。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+// 处理到达的事件
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+// 获取最终结果
+const result = await output.result;
+```
+
+## 参数
+
+所有参数与 [`Run.timeTravel()`](../../workflows/run-methods/timeTravel#参数) 相同。详细参数文档请参阅 [timeTravel 参考](../../workflows/run-methods/timeTravel#参数)。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "一个包含流和结果 Promise 的对象",
+    },
+    {
+      name: "output.fullStream",
+      type: "ReadableStream<WorkflowStreamEvent>",
+      description:
+        "一个可读流，随着执行进展发送工作流事件",
+    },
+    {
+      name: "output.result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "解析为最终工作流执行结果的 Promise",
+    },
+    {
+      name: "output.traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "启用追踪时与此执行关联的追踪 ID",
+    },
+  ]}
+/>
+
+## 流事件
+
+流在执行期间发送各种工作流事件：
+
+- `workflow-step-start`：步骤开始执行时发送
+- `workflow-step-finish`：步骤成功完成时发送
+- `workflow-step-error`：步骤遇到错误时发送
+- `workflow-step-suspended`：步骤暂停时发送
+- 根据步骤类型（智能体、工具等）的附加事件
+
+## 扩展使用示例
+
+### 在时间旅行期间处理事件
+
+```typescript
+const run = await workflow.createRun();
+
+const output = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+for await (const event of output.fullStream) {
+  switch (event.type) {
+    case "workflow-step-start":
+      console.log(`开始步骤: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-finish":
+      console.log(`完成步骤: ${event.payload.stepName}`);
+      break;
+    case "workflow-step-error":
+      console.error(`步骤错误: ${event.payload.stepName}`, event.payload.error);
+      break;
+  }
+}
+
+const result = await output.result;
+console.log("时间旅行完成:", result);
+```
+
+### 带上下文的时间旅行流
+
+```typescript
+const output = run.timeTravelStream({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  // 处理事件
+  console.log(event);
+}
+
+const result = await output.result;
+```
+
+### 带嵌套工作流的时间旅行流
+
+```typescript
+const output = run.timeTravelStream({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+
+for await (const event of output.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+const result = await output.result;
+```
+
+## 注意事项
+
+- 当时间旅行执行完成或遇到错误时，流会自动关闭
+- 您可以在工作流仍在执行时处理来自流的事件
+- `result` Promise 仅在所有步骤完成后解析
+- 流事件遵循与常规工作流流式传输相同的格式
+- 时间旅行流式传输需要配置存储，因为它依赖于持久化的工作流快照
+
+## 相关文档
+
+- [Run.timeTravel()](../../workflows/run-methods/timeTravel)
+- [时间旅行](/docs/cn/docs/workflows/time-travel)
+- [工作流流式传输](/docs/cn/docs/streaming/workflow-streaming)
+- [Run.stream()](./stream)
+- [Run.resumeStream()](./resumeStream)

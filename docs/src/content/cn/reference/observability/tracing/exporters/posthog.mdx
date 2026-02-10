@@ -1,0 +1,153 @@
+---
+title: "参考：PosthogExporter | 可观测性"
+description: "用于追踪的 PostHog 导出器"
+packages:
+  - "@mastra/posthog"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# PosthogExporter
+
+将追踪数据发送到 PostHog 用于 AI 可观测性和分析。
+
+## 构造函数
+
+```typescript
+new PosthogExporter(config: PosthogExporterConfig)
+```
+
+## PosthogExporterConfig
+
+```typescript
+interface PosthogExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  host?: string;
+  flushAt?: number;
+  flushInterval?: number;
+  serverless?: boolean;
+  defaultDistinctId?: string;
+  enablePrivacyMode?: boolean;
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "PostHog 项目 API 密钥。回退到 POSTHOG_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "host",
+      type: "string",
+      description: "PostHog 主机 URL。回退到 POSTHOG_HOST 环境变量。（默认：'https://us.i.posthog.com'）",
+      required: false,
+    },
+    {
+      name: "flushAt",
+      type: "number",
+      description: "自动刷新前的批次大小（默认：20，无服务器：10）",
+      required: false,
+    },
+    {
+      name: "flushInterval",
+      type: "number",
+      description: "刷新间隔（毫秒）（默认：10000，无服务器：2000）",
+      required: false,
+    },
+    {
+      name: "serverless",
+      type: "boolean",
+      description: "自动配置为无服务器环境（默认：false）",
+      required: false,
+    },
+    {
+      name: "defaultDistinctId",
+      type: "string",
+      description: "如果元数据中没有 userId 的回退用户标识符（默认：'anonymous'）",
+      required: false,
+    },
+    {
+      name: "enablePrivacyMode",
+      type: "boolean",
+      description: "从生成事件中排除输入/输出（默认：false）",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+      description: "日志记录器级别（默认：'info'）",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到 PostHog。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的事件到 PostHog 而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新待处理的批次事件并关闭 PostHog 客户端。
+
+## 使用方法
+
+### 零配置（使用环境变量）
+
+```typescript
+import { PosthogExporter } from "@mastra/posthog";
+
+// 从 POSTHOG_API_KEY、POSTHOG_HOST 读取
+const exporter = new PosthogExporter();
+```
+
+### 显式配置
+
+```typescript
+import { PosthogExporter } from "@mastra/posthog";
+
+const exporter = new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY!,
+  host: "https://us.i.posthog.com",
+  serverless: true,
+});
+```
+
+## 跨度类型映射
+
+| Mastra 跨度类型 | PostHog 事件类型 |
+| ------------------- | ------------------ |
+| `MODEL_GENERATION` | `$ai_generation` |
+| `MODEL_STEP` | `$ai_generation` |
+| `MODEL_CHUNK` | `$ai_span` |
+| `TOOL_CALL` | `$ai_span` |
+| `MCP_TOOL_CALL` | `$ai_span` |
+| `PROCESSOR_RUN` | `$ai_span` |
+| `AGENT_RUN` | `$ai_span` |
+| `WORKFLOW_RUN` | `$ai_span` |
+| 所有其他工作流 | `$ai_span` |
+| `GENERIC` | `$ai_span` |

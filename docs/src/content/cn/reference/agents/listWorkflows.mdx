@@ -1,0 +1,71 @@
+---
+title: "参考文档：Agent.listWorkflows() | 智能体"
+description: "Mastra 智能体中 `Agent.listWorkflows()` 方法的文档，用于检索智能体可以执行的工作流。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.listWorkflows()
+
+`.listWorkflows()` 方法检索为智能体配置的工作流，如果它们是函数则解析它们。这些工作流使智能体能够执行具有定义执行路径的复杂多步骤过程。
+
+## 使用示例
+
+```typescript
+await agent.listWorkflows();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "包含请求上下文的选择性配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Promise<Record<string, Workflow>>",
+      description:
+        "解析为工作流名称到其对应 Workflow 实例的记录的 promise。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.listWorkflows({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)
+- [工作流概述](/docs/cn/docs/workflows/overview)

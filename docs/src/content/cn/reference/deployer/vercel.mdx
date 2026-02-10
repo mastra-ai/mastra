@@ -1,0 +1,47 @@
+---
+title: "参考：VercelDeployer | 部署器"
+description: "VercelDeployer 类的文档，用于将 Mastra 应用程序部署到 Vercel。"
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-vercel"
+---
+
+# VercelDeployer
+
+`VercelDeployer` 类用于将独立的 Mastra 应用程序部署到 Vercel。它管理配置和部署过程，并扩展了基础的 [Deployer](/reference/deployer/) 类，添加了 Vercel 特定的功能。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  deployer: new VercelDeployer(),
+});
+```
+
+## 构造函数选项
+
+部署器支持一组高价值的覆盖选项，这些选项会被写入 Vercel Output API 函数配置（`.vc-config.json`）：
+
+- `maxDuration?: number` — 函数执行超时时间（秒）
+- `memory?: number` — 函数内存（MB）
+- `regions?: string[]` — 部署函数的区域（例如 `['sfo1','iad1']`）
+
+这些选项会被合并到 `.vercel/output/functions/index.func/.vc-config.json` 中，同时保留默认字段（`handler`、`launcherType`、`runtime`、`shouldAddHelpers`）。
+
+### 带覆盖选项的示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  deployer: new VercelDeployer({
+    maxDuration: 600,
+    memory: 1536,
+    regions: ["sfo1", "iad1"],
+  }),
+});
+```

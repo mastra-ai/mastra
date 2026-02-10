@@ -1,0 +1,238 @@
+---
+title: "参考文档：voice.listen() | 语音"
+description: "所有 Mastra 语音提供者提供的 listen() 方法文档，用于将语音转换为文本。"
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
+---
+
+# voice.listen()
+
+`listen()` 是所有 Mastra 语音提供者都提供的核心功能，用于将语音转换为文本。它接受音频流作为输入并返回转录的文本。
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description:
+        "要转录的音频流，可以是文件流或麦克风流。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "语音识别的提供者特定选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+返回以下之一：
+
+- `Promise<string>`：解析为转录文本的 Promise
+- `Promise<NodeJS.ReadableStream>`：解析为文本流的 Promise（用于流式转录）
+- `Promise<void>`：对于发出 'writing' 事件而非直接返回文本的实时提供者
+
+## 提供者特定选项
+
+每个语音提供者可能支持其特定实现的额外选项。以下是一些示例：
+
+### OpenAI
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.filetype",
+      type: "string",
+      description: "音频文件格式（例如 'mp3'、'wav'、'm4a'）",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+    {
+      name: "options.prompt",
+      type: "string",
+      description: "指导模型转录的文本",
+      isOptional: true,
+    },
+    {
+      name: "options.language",
+      type: "string",
+      description: "语言代码（例如 'en'、'fr'、'de'）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Google
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.stream",
+      type: "boolean",
+      description: "是否使用流式识别",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.config",
+      type: "object",
+      description:
+        "来自 Google Cloud 语音转文字 API 的识别配置",
+      isOptional: true,
+      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    },
+  ]}
+/>
+
+### Deepgram
+
+<PropertiesTable
+  content={[
+    {
+      name: "options.model",
+      type: "string",
+      description: "用于转录的 Deepgram 模型",
+      isOptional: true,
+      defaultValue: "'nova-2'",
+    },
+    {
+      name: "options.language",
+      type: "string",
+      description: "转录的语言代码",
+      isOptional: true,
+      defaultValue: "'en'",
+    },
+  ]}
+/>
+
+## 使用示例
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import { createReadStream } from "fs";
+import path from "path";
+
+// 初始化语音提供者
+const voice = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// 基本用法，使用文件流
+const audioFilePath = path.join(process.cwd(), "audio.mp3");
+const audioStream = createReadStream(audioFilePath);
+const transcript = await voice.listen(audioStream, {
+  filetype: "mp3",
+});
+console.log("转录文本：", transcript);
+
+// 使用麦克风流
+const microphoneStream = getMicrophoneStream(); // 假设此函数获取音频输入
+const transcription = await voice.listen(microphoneStream);
+
+// 使用提供者特定选项
+const transcriptWithOptions = await voice.listen(audioStream, {
+  language: "en",
+  prompt: "这是关于人工智能的对话。",
+});
+```
+
+## 与 CompositeVoice 一起使用
+
+使用 `CompositeVoice` 时，`listen()` 方法委托给配置的监听提供者：
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+const voice = new CompositeVoice({
+  input: new OpenAIVoice(),
+  output: new PlayAIVoice(),
+});
+
+// 这将使用 OpenAIVoice 提供者
+const transcript = await voice.listen(audioStream);
+```
+
+### 使用 AI SDK 模型提供者
+
+您也可以直接在 `CompositeVoice` 中使用 AI SDK 转录模型：
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { groq } from "@ai-sdk/groq";
+
+// 使用 AI SDK 转录模型
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),  // AI SDK 模型
+  output: new PlayAIVoice(),                 // Mastra 提供者
+});
+
+// 同样可以使用
+const transcript = await voice.listen(audioStream);
+
+// 可以通过提供者特定选项
+const transcriptWithOptions = await voice.listen(audioStream, {
+  providerOptions: {
+    openai: {
+      language: 'en',
+      prompt: '这是关于 AI 的内容',
+    }
+  }
+});
+```
+
+有关 AI SDK 集成的更多详细信息，请参阅 [CompositeVoice 参考文档](/reference/voice/composite-voice)。
+
+## 实时语音提供者
+
+使用 `OpenAIRealtimeVoice` 等实时语音提供者时，`listen()` 方法的行为不同：
+
+- 它不会返回转录的文本，而是发出带有转录文本的 'writing' 事件
+- 您需要注册事件监听器来接收转录结果
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+const voice = new OpenAIRealtimeVoice();
+await voice.connect();
+
+// 注册转录事件监听器
+voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+// 这将发出 'writing' 事件而不是返回文本
+const microphoneStream = getMicrophoneStream();
+await voice.listen(microphoneStream);
+```
+
+## 注意事项
+
+- 并非所有语音提供者都支持语音转文字功能（例如 PlayAI、Speechify）
+- `listen()` 的行为可能因提供者而略有不同，但所有实现都遵循相同的基本接口
+- 使用实时语音提供者时，该方法可能不会直接返回文本，而是发出 'writing' 事件
+- 支持的音频格式取决于提供者。常见格式包括 MP3、WAV 和 M4A
+- 某些提供者支持流式转录，文本会在转录时返回
+- 为获得最佳性能，请在完成后考虑关闭或结束音频流
+
+## 相关方法
+
+- [voice.speak()](./voice.speak) - 将文本转换为语音
+- [voice.send()](./voice.send) - 实时向语音提供者发送音频数据
+- [voice.on()](./voice.on) - 注册语音事件的事件监听器

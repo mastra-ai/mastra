@@ -1,0 +1,377 @@
+---
+title: "指南：使用 RAG 构建研究论文助手 | Mastra RAG 指南"
+description: 有关使用 RAG 创建可以分析和回答有关学术论文问题的 AI 研究助手的指南。
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 使用 RAG 构建研究论文助手
+
+在本指南中，您将创建一个 AI 研究助手，可以使用检索增强生成（RAG）分析学术论文并回答有关其内容的具体问题。
+
+您将使用开创性的 Transformer 论文 ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) 作为示例。数据库将使用本地 libSQL 数据库。
+
+## 前置条件
+
+- 已安装 Node.js `v22.13.0` 或更高版本
+- 来自支持的[模型提供商](/models)的 API 密钥
+- 现有的 Mastra 项目（请遵循[安装指南](/guides/getting-started/quickstart)设置新项目）
+
+## RAG 的工作原理
+
+让我们了解 RAG 的工作原理以及如何实现每个组件。
+
+### 知识存储/索引
+
+- 将文本转换为向量表示
+- 创建内容的数值表示
+- **实现**：您将使用 OpenAI 的 `text-embedding-3-small` 来创建嵌入并将其存储在 LibSQLVector 中
+
+### 检索器
+
+- 通过相似性搜索找到相关内容
+- 匹配查询嵌入与存储的向量
+- **实现**：您将使用 LibSQLVector 对存储的嵌入执行相似性搜索
+
+### 生成器
+
+- 使用 LLM 处理检索到的内容
+- 创建上下文知情的响应
+- **实现**：您将使用 GPT-4o-mini 基于检索到的内容生成答案
+
+您的实现将：
+
+1. 将 Transformer 论文处理为嵌入
+2. 将它们存储在 LibSQLVector 中以便快速检索
+3. 使用相似性搜索找到相关部分
+4. 使用检索到的上下文生成准确的响应
+
+## 创建代理
+
+让我们定义代理的行为，将其连接到您的 Mastra 项目，并创建向量存储。
+
+<Steps>
+
+<StepItem title="安装额外的依赖项">
+
+安装额外的依赖项
+
+运行[安装指南](/guides/getting-started/quickstart)后，您需要安装额外的依赖项：
+
+```bash npm2yarn
+npm install @mastra/rag@latest ai
+```
+
+</StepItem>
+
+<StepItem title="定义代理">
+
+现在您将创建支持 RAG 的研究助手。代理使用：
+
+- [向量查询工具](/reference/tools/vector-query-tool) 用于对向量存储执行语义搜索以查找论文中的相关内容
+- GPT-4o-mini 用于理解查询和生成响应
+- 自定义指令，指导代理如何分析论文、有效使用检索到的内容并承认局限性
+
+创建一个新文件 `src/mastra/agents/researchAgent.ts` 并定义您的代理：
+
+```ts title="src/mastra/agents/researchAgent.ts"
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { createVectorQueryTool } from "@mastra/rag";
+
+// Create a tool for semantic search over the paper embeddings
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "libSqlVector",
+  indexName: "papers",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+});
+
+export const researchAgent = new Agent({
+  id: "research-agent",
+  name: "Research Assistant",
+  instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
+    Use the provided vector query tool to find relevant information from your knowledge base,
+    and provide accurate, well-supported answers based on the retrieved content.
+    Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
+    Base your responses only on the content provided, not on general knowledge.`,
+  model: "openai/gpt-5.1",
+  tools: {
+    vectorQueryTool,
+  },
+});
+```
+
+</StepItem>
+
+<StepItem title="创建向量存储">
+
+在项目根目录中，使用 `pwd` 命令获取绝对路径。路径可能类似这样：
+
+```bash
+> pwd
+/Users/your-name/guides/research-assistant
+```
+
+在您的 `src/mastra/index.ts` 文件中，将以下内容添加到现有的文件和配置中：
+
+```ts title="src/mastra/index.ts" {2, 4-6, 9}
+import { Mastra } from "@mastra/core";
+import { LibSQLVector } from "@mastra/libsql";
+
+const libSqlVector = new LibSQLVector({
+  id: 'research-vectors',
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
+});
+
+export const mastra = new Mastra({
+  vectors: { libSqlVector },
+});
+```
+
+对于 `url`，使用从 `pwd` 命令获得的绝对路径。这样 `vector.db` 文件就会在项目根目录中创建。
+
+:::note
+
+本指南的目的是使用本地 libSQL 文件的硬编码绝对路径，但对于生产环境用法这不起作用。您应该使用远程持久数据库。
+
+:::
+
+</StepItem>
+
+<StepItem title="向 Mastra 注册代理">
+
+在 `src/mastra/index.ts` 文件中，将代理添加到 Mastra：
+
+```ts title="src/mastra/index.ts" {3, 10}
+import { Mastra } from "@mastra/core";
+import { LibSQLVector } from "@mastra/libsql";
+import { researchAgent } from "./agents/researchAgent";
+
+const libSqlVector = new LibSQLVector({
+  id: 'research-vectors',
+  url: "file:/Users/your-name/guides/research-assistant/vector.db",
+});
+
+export const mastra = new Mastra({
+  agents: { researchAgent },
+  vectors: { libSqlVector },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## 处理文档
+
+在以下步骤中，您将获取研究论文，将其拆分成较小的块，为它们生成嵌入，并将这些信息块存储到向量数据库中。
+
+<Steps>
+
+<StepItem title="加载和处理论文">
+
+在这一步中，通过提供 URL 获取研究论文，然后将其转换为文档对象，并将其拆分成较小的、可管理的块。通过拆分成块，处理更快、更高效。
+
+创建一个新文件 `src/store.ts` 并添加以下内容：
+
+```ts title="src/store.ts"
+import { MDocument } from "@mastra/rag";
+
+// Load the paper
+const paperUrl = "https://arxiv.org/html/1706.03762";
+const response = await fetch(paperUrl);
+const paperText = await response.text();
+
+// Create document and chunk it
+const doc = MDocument.fromText(paperText);
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  maxSize: 512,
+  overlap: 50,
+  separators: ["\n\n", "\n", " "],
+});
+
+console.log("Number of chunks:", chunks.length);
+```
+
+在终端中运行该文件：
+
+```bash
+npx bun src/store.ts
+```
+
+您应该得到此响应：
+
+```bash
+Number of chunks: 892
+```
+
+</StepItem>
+
+<StepItem title="创建和存储嵌入">
+
+最后，您将通过以下方式准备 RAG 内容：
+
+1. 为每个文本块生成嵌入
+2. 创建一个向量存储索引来保存嵌入
+3. 将嵌入和元数据（原始文本和源信息）一起存储在向量数据库中
+
+:::note
+
+此元数据至关重要，因为它允许在向量存储找到相关匹配时返回实际内容。
+
+:::
+
+这使代理能够高效地搜索和检索相关信息。
+
+打开 `src/store.ts` 文件并添加以下内容：
+
+```ts title="src/store.ts"
+import { MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
+import { mastra } from "./mastra";
+
+// Load the paper
+const paperUrl = "https://arxiv.org/html/1706.03762";
+const response = await fetch(paperUrl);
+const paperText = await response.text();
+
+// Create document and chunk it
+const doc = MDocument.fromText(paperText);
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  maxSize: 512,
+  overlap: 50,
+  separators: ["\n\n", "\n", " "],
+});
+
+// Generate embeddings
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
+});
+
+// Get the vector store instance from Mastra
+const vectorStore = mastra.getVector("libSqlVector");
+
+// Create an index for paper chunks
+await vectorStore.createIndex({
+  indexName: "papers",
+  dimension: 1536,
+});
+
+// Store embeddings
+await vectorStore.upsert({
+  indexName: "papers",
+  vectors: embeddings,
+  metadata: chunks.map((chunk) => ({
+    text: chunk.text,
+    source: "transformer-paper",
+  })),
+});
+```
+
+最后，您需要通过再次运行脚本来存储嵌入：
+
+```bash
+npx bun src/store.ts
+```
+
+如果操作成功，您应该在终端中看不到输出/错误。
+
+</StepItem>
+
+</Steps>
+
+## 测试助手
+
+现在向量数据库拥有所有嵌入，您可以用不同类型的查询测试研究助手。
+
+创建一个新文件 `src/ask-agent.ts` 并添加不同类型的查询：
+
+```ts title="src/ask-agent.ts"
+import { mastra } from "./mastra";
+const agent = mastra.getAgent("researchAgent");
+
+// Basic query about concepts
+const query1 =
+  "What problems does sequence modeling face with neural networks?";
+const response1 = await agent.generate(query1);
+console.log("\nQuery:", query1);
+console.log("Response:", response1.text);
+```
+
+运行脚本：
+
+```bash
+npx bun src/ask-agent.ts
+```
+
+您应该看到类似以下的输出：
+
+```bash
+Query: What problems does sequence modeling face with neural networks?
+Response: Sequence modeling with neural networks faces several key challenges:
+1. Vanishing and exploding gradients during training, especially with long sequences
+2. Difficulty handling long-term dependencies in the input
+3. Limited computational efficiency due to sequential processing
+4. Challenges in parallelizing computations, resulting in longer training times
+```
+
+尝试另一个问题：
+
+```ts title="src/ask-agent.ts"
+import { mastra } from "./mastra";
+const agent = mastra.getAgent("researchAgent");
+
+// Query about specific findings
+const query2 = "What improvements were achieved in translation quality?";
+const response2 = await agent.generate(query2);
+console.log("\nQuery:", query2);
+console.log("Response:", response2.text);
+```
+
+输出：
+
+```
+Query: What improvements were achieved in translation quality?
+Response: The model showed significant improvements in translation quality, achieving more than 2.0
+BLEU points improvement over previously reported models on the WMT 2014 English-to-German translation
+task, while also reducing training costs.
+```
+
+### 提供应用程序服务
+
+启动 Mastra 服务器以通过 API 公开您的研究助手：
+
+```bash
+mastra dev
+```
+
+您的研究助手将在以下位置可用：
+
+```
+http://localhost:4111/api/agents/researchAgent/generate
+```
+
+使用 curl 测试：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user", "content": "What were the main findings about model parallelization?" }
+    ]
+  }'
+```
+
+## 高级 RAG 示例
+
+探索这些示例以了解更多高级 RAG 技术：
+
+- [过滤 RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag) 使用元数据过滤结果
+- [清理 RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cleanup-rag) 优化信息密度
+- [思维链 RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag) 使用工作流进行复杂推理查询
+- [重排序 RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/rerank-rag) 改进结果相关性

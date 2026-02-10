@@ -1,0 +1,853 @@
+---
+title: "302.AI | 模型 | Mastra"
+description: "在 Mastra 中使用 302.AI 模型。共 64 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/302ai.svg" alt="302.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />302.AI
+
+通过 Mastra 的模型路由器访问 64 个 302.AI 模型。身份验证使用 `302AI_API_KEY` 环境变量自动处理。
+
+在 [302.AI 文档](https://doc.302.ai) 中了解更多信息。
+
+```bash title=".env"
+302AI_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "302ai/MiniMax-M1"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [302.AI 文档](https://doc.302.ai) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "302ai/chatgpt-4o-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 5,
+    "outputCost": 15
+  },
+  {
+    "model": "302ai/claude-haiku-4-5-20251001",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
+    "model": "302ai/claude-opus-4-1-20250805",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "302ai/claude-opus-4-1-20250805-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": 15,
+    "outputCost": 75
+  },
+  {
+    "model": "302ai/claude-opus-4-5-20251101",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "model": "302ai/claude-opus-4-5-20251101-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 5,
+    "outputCost": 25
+  },
+  {
+    "model": "302ai/claude-sonnet-4-5-20250929",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "302ai/claude-sonnet-4-5-20250929-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "302ai/deepseek-chat",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.29,
+    "outputCost": 0.43
+  },
+  {
+    "model": "302ai/deepseek-reasoner",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.29,
+    "outputCost": 0.43
+  },
+  {
+    "model": "302ai/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.29,
+    "outputCost": 0.43
+  },
+  {
+    "model": "302ai/deepseek-v3.2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.29,
+    "outputCost": 0.43
+  },
+  {
+    "model": "302ai/doubao-seed-1-6-thinking-250715",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 16000,
+    "inputCost": 0.121,
+    "outputCost": 1.21
+  },
+  {
+    "model": "302ai/doubao-seed-1-6-vision-250815",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": 0.114,
+    "outputCost": 1.143
+  },
+  {
+    "model": "302ai/doubao-seed-1-8-251215",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 224000,
+    "maxOutput": 64000,
+    "inputCost": 0.114,
+    "outputCost": 0.286
+  },
+  {
+    "model": "302ai/doubao-seed-code-preview-251028",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": 0.17,
+    "outputCost": 1.14
+  },
+  {
+    "model": "302ai/gemini-2.0-flash-lite",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 8192,
+    "inputCost": 0.075,
+    "outputCost": 0.3
+  },
+  {
+    "model": "302ai/gemini-2.5-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "302ai/gemini-2.5-flash-image",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.3,
+    "outputCost": 30
+  },
+  {
+    "model": "302ai/gemini-2.5-flash-lite-preview-09-2025",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "302ai/gemini-2.5-flash-nothink",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "302ai/gemini-2.5-flash-preview-09-2025",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 2.5
+  },
+  {
+    "model": "302ai/gemini-2.5-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
+    "inputCost": 0.5,
+    "outputCost": 3
+  },
+  {
+    "model": "302ai/gemini-3-pro-image-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 120
+  },
+  {
+    "model": "302ai/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 12
+  },
+  {
+    "model": "302ai/glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 98304,
+    "inputCost": 0.286,
+    "outputCost": 1.142
+  },
+  {
+    "model": "302ai/glm-4.5v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 16384,
+    "inputCost": 0.29,
+    "outputCost": 0.86
+  },
+  {
+    "model": "302ai/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 131072,
+    "inputCost": 0.286,
+    "outputCost": 1.142
+  },
+  {
+    "model": "302ai/glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": 0.145,
+    "outputCost": 0.43
+  },
+  {
+    "model": "302ai/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 131072,
+    "inputCost": 0.286,
+    "outputCost": 1.142
+  },
+  {
+    "model": "302ai/gpt-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": 2,
+    "outputCost": 8
+  },
+  {
+    "model": "302ai/gpt-4.1-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": 0.4,
+    "outputCost": 1.6
+  },
+  {
+    "model": "302ai/gpt-4.1-nano",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "302ai/gpt-4o",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2.5,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/gpt-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/gpt-5-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
+  },
+  {
+    "model": "302ai/gpt-5-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 272000,
+    "inputCost": 15,
+    "outputCost": 120
+  },
+  {
+    "model": "302ai/gpt-5-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/gpt-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/gpt-5.1-chat-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/gpt-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
+    "model": "302ai/gpt-5.2-chat-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
+    "model": "302ai/grok-4-1-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "302ai/grok-4-1-fast-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "302ai/grok-4-fast-non-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "302ai/grok-4-fast-reasoning",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 2000000,
+    "maxOutput": 30000,
+    "inputCost": 0.2,
+    "outputCost": 0.5
+  },
+  {
+    "model": "302ai/grok-4.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/kimi-k2-0905-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.632,
+    "outputCost": 2.53
+  },
+  {
+    "model": "302ai/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.575,
+    "outputCost": 2.3
+  },
+  {
+    "model": "302ai/kimi-k2-thinking-turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 1.265,
+    "outputCost": 9.119
+  },
+  {
+    "model": "302ai/MiniMax-M1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.132,
+    "outputCost": 1.254
+  },
+  {
+    "model": "302ai/MiniMax-M2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.33,
+    "outputCost": 1.32
+  },
+  {
+    "model": "302ai/MiniMax-M2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "302ai/ministral-14b-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.33,
+    "outputCost": 0.33
+  },
+  {
+    "model": "302ai/mistral-large-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 262144,
+    "inputCost": 1.1,
+    "outputCost": 3.3
+  },
+  {
+    "model": "302ai/qwen-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": 0.022,
+    "outputCost": 0.22
+  },
+  {
+    "model": "302ai/qwen-max-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.343,
+    "outputCost": 1.372
+  },
+  {
+    "model": "302ai/qwen-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 32768,
+    "inputCost": 0.12,
+    "outputCost": 1.2
+  },
+  {
+    "model": "302ai/qwen3-235b-a22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.29,
+    "outputCost": 2.86
+  },
+  {
+    "model": "302ai/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 65536,
+    "inputCost": 0.29,
+    "outputCost": 1.143
+  },
+  {
+    "model": "302ai/qwen3-30b-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.11,
+    "outputCost": 1.08
+  },
+  {
+    "model": "302ai/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.86,
+    "outputCost": 3.43
+  },
+  {
+    "model": "302ai/qwen3-max-2025-09-23",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 258048,
+    "maxOutput": 65536,
+    "inputCost": 0.86,
+    "outputCost": 3.43
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.302.ai/v1",
+    id: "302ai/MiniMax-M1",
+    apiKey: process.env.302AI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "302ai/qwen3-max-2025-09-23"
+      : "302ai/MiniMax-M1";
+  }
+});
+```
+
+

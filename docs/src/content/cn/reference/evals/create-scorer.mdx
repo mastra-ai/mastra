@@ -1,0 +1,544 @@
+---
+title: "参考：createScorer | 评估"
+description: "Mastra 中创建自定义评分器的文档，允许用户使用 JavaScript 函数或基于 LLM 的提示词定义自己的评估逻辑。"
+packages:
+  - "@mastra/core"
+---
+
+# createScorer
+
+Mastra 提供了一个统一的 `createScorer` 工厂，允许您定义自定义评分器来评估输入/输出对。您可以为每个评估步骤使用原生 JavaScript 函数或基于 LLM 的提示词对象。自定义评分器可以添加到代理和工作流步骤中。
+
+## 如何创建自定义评分器
+
+使用 `createScorer` 工厂，用名称、描述和可选的评判配置来定义您的评分器。然后链接步骤方法来构建您的评估管道。您必须提供至少一个 `generateScore` 步骤。
+
+**提示词对象步骤**是表达为 `description` + `createPrompt`（以及 `preprocess`/`analyze` 的 `outputSchema`）的配置步骤。这些步骤调用评判 LLM。**函数步骤**是普通函数，永远不会调用评判。
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+
+const scorer = createScorer({
+  id: "my-custom-scorer",
+  name: "My Custom Scorer", // 可选，默认为 id
+  description: "根据自定义标准评估响应",
+  type: "agent", // 可选：用于自动类型化的代理评估
+  judge: {
+    model: myModel,
+    instructions: "您是专家评估员...",
+  },
+})
+  .preprocess({
+    /* 步骤配置 */
+  })
+  .analyze({
+    /* 步骤配置 */
+  })
+  .generateScore(({ run, results }) => {
+    // 返回一个数字
+  })
+  .generateReason({
+    /* 步骤配置 */
+  });
+```
+
+## createScorer 选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: false,
+      description: "评分器的唯一标识符。如果未提供 `name`，用作名称。",
+    },
+    {
+      name: "name",
+      type: "string",
+      isOptional: true,
+      description: "评分器的名称。如果未提供，默认为 `id`。",
+    },
+    {
+      name: "description",
+      type: "string",
+      isOptional: false,
+      description: "评分器功能的描述。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      isOptional: true,
+      description:
+        "基于 LLM 步骤的可选评判配置。请参阅下面的评判对象部分。",
+    },
+    {
+      name: "type",
+      type: "string",
+      isOptional: true,
+      description:
+        "输入/输出的类型规范。对代理使用 'agent' 以获得自动代理类型。对于自定义类型，请改用泛型方法。",
+    },
+  ]}
+/>
+
+此函数返回一个评分器构建器，您可以向其链接步骤方法。请参阅 [MastraScorer 参考](./mastra-scorer) 了解 `.run()` 方法及其输入/输出的详细信息。
+
+## 评判对象
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      isOptional: false,
+      description: "用于评估的 LLM 模型实例。",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: false,
+      description: "LLM 的系统提示词/指令。",
+    },
+  ]}
+/>
+
+评判仅对定义为**提示词对象**的步骤运行（`preprocess`、`analyze`、`generateScore`、`generateReason`）。如果您仅使用函数步骤，评判永远不会被调用，也没有 LLM 输出可检查。在这种情况下，任何分数/理由必须由您的函数产生。
+
+当提示词对象步骤运行时，其结构化 LLM 输出存储在相应的结果字段中（`preprocessStepResult`、`analyzeStepResult`，或 `generateScore` 中 `calculateScore` 消耗的值）。
+
+## 类型安全
+
+在创建评分器时，您可以指定输入/输出类型以获得更好的类型推断和 IntelliSense 支持：
+
+### 代理类型快捷方式
+
+对于评估代理，使用 `type: 'agent'` 自动获取正确的代理输入/输出类型：
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+
+// 具有自动类型化的代理评分器
+const agentScorer = createScorer({
+  id: "agent-response-quality",
+  description: "评估代理响应",
+  type: "agent", // 自动提供 ScorerRunInputForAgent/ScorerRunOutputForAgent
+})
+  .preprocess(({ run }) => {
+    // run.input 自动类型化为 ScorerRunInputForAgent
+    const userMessage = run.inputData.inputMessages[0]?.content;
+    return { userMessage };
+  })
+  .generateScore(({ run, results }) => {
+    // run.output 自动类型化为 ScorerRunOutputForAgent
+    const response = run.output[0]?.content;
+    return response.length > 10 ? 1.0 : 0.5;
+  });
+```
+
+### 带泛型的自定义类型
+
+对于自定义输入/输出类型，使用泛型方法：
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+
+type CustomInput = { query: string; context: string[] };
+type CustomOutput = { answer: string; confidence: number };
+
+const customScorer = createScorer<CustomInput, CustomOutput>({
+  id: "custom-scorer",
+  description: "评估自定义数据",
+}).generateScore(({ run }) => {
+  // run.input 类型为 CustomInput
+  // run.output 类型为 CustomOutput
+  return run.output.confidence;
+});
+```
+
+### 内置代理类型
+
+- **`ScorerRunInputForAgent`** - 包含用于代理评估的 `inputMessages`、`rememberedMessages`、`systemMessages` 和 `taggedSystemMessages`
+- **`ScorerRunOutputForAgent`** - 代理响应消息数组
+
+使用这些类型提供自动补全、编译时验证和更好的评分逻辑文档。
+
+## 使用代理类型的跟踪评分
+
+当您使用 `type: 'agent'` 时，您的评分器兼容直接添加到代理和对代理交互进行评分的跟踪。评分器自动将跟踪数据转换为正确的代理输入/输出格式：
+
+```typescript
+const agentTraceScorer = createScorer({
+  id: "agent-trace-length",
+  description: "评估代理响应长度",
+  type: "agent",
+}).generateScore(({ run }) => {
+  // 跟踪数据自动转换为代理格式
+  const userMessages = run.inputData.inputMessages;
+  const agentResponse = run.output[0]?.content;
+
+  // 根据响应长度评分
+  return agentResponse?.length > 50 ? 0 : 1;
+});
+
+// 注册到 Mastra 进行跟踪评分
+const mastra = new Mastra({
+  scorers: {
+    agentTraceScorer,
+  },
+});
+```
+
+## 步骤方法签名
+
+### preprocess
+
+可选的预处理步骤，可在分析之前提取或转换数据。
+
+**函数模式：**
+函数：`({ run, results }) => any`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输入记录。如果评分器添加到代理，这将是一组用户消息，例如 `[{ role: 'user', content: 'hello world' }]`。如果评分器在工作流中使用，这将工作流的输入。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输出记录。对于代理，这通常是代理的响应。对于工作流，这是工作流的输出。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      isOptional: false,
+      description: "此评分运行的唯一标识符。",
+    },
+    {
+      name: "run.requestContext",
+      type: "object",
+      isOptional: true,
+      description:
+        "被评估的代理或工作流步骤的请求上下文（可选）。",
+    },
+    {
+      name: "results",
+      type: "object",
+      isOptional: false,
+      description: "空对象（没有先前的步骤）。",
+    },
+  ]}
+/>
+
+返回：`any`
+该方法可以返回任何值。返回的值将作为 `preprocessStepResult` 对后续步骤可用。
+
+**提示词对象模式：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      isOptional: false,
+      description: "此预处理步骤功能的描述。",
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      isOptional: false,
+      description: "预处理步骤预期输出的 Zod 模式。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      isOptional: false,
+      description:
+        "函数：`({ run, results }) => string`。返回 LLM 的提示词。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      isOptional: true,
+      description:
+        "（可选）此步骤的 LLM 评判（可覆盖主要评判）。请参阅评判对象部分。",
+    },
+  ]}
+/>
+
+### analyze
+
+可选的分析步骤，处理输入/输出和任何预处理数据。
+
+**函数模式：**
+函数：`({ run, results }) => any`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输入记录。如果评分器添加到代理，这将是一组用户消息，例如 `[{ role: 'user', content: 'hello world' }]`。如果评分器在工作流中使用，这将工作流的输入。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输出记录。对于代理，这通常是代理的响应。对于工作流，这是工作流的输出。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      isOptional: false,
+      description: "此评分运行的唯一标识符。",
+    },
+    {
+      name: "run.requestContext",
+      type: "object",
+      isOptional: true,
+      description:
+        "被评估的代理或工作流步骤的请求上下文（可选）。",
+    },
+    {
+      name: "results.preprocessStepResult",
+      type: "any",
+      isOptional: true,
+      description: "预处理步骤的结果（如果已定义）（可选）。",
+    },
+  ]}
+/>
+
+返回：`any`
+该方法可以返回任何值。返回的值将作为 `analyzeStepResult` 对后续步骤可用。
+
+**提示词对象模式：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      isOptional: false,
+      description: "此分析步骤功能的描述。",
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      isOptional: false,
+      description: "分析步骤预期输出的 Zod 模式。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      isOptional: false,
+      description:
+        "函数：`({ run, results }) => string`。返回 LLM 的提示词。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      isOptional: true,
+      description:
+        "（可选）此步骤的 LLM 评判（可覆盖主要评判）。请参阅评判对象部分。",
+    },
+  ]}
+/>
+
+### generateScore
+
+**必需**的步骤，计算最终数值分数。
+
+**函数模式：**
+函数：`({ run, results }) => number`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输入记录。如果评分器添加到代理，这将是一组用户消息，例如 `[{ role: 'user', content: 'hello world' }]`。如果评分器在工作流中使用，这将工作流的输入。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输出记录。对于代理，这通常是代理的响应。对于工作流，这是工作流的输出。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      isOptional: false,
+      description: "此评分运行的唯一标识符。",
+    },
+    {
+      name: "run.requestContext",
+      type: "object",
+      isOptional: true,
+      description:
+        "被评估的代理或工作流步骤的请求上下文（可选）。",
+    },
+    {
+      name: "results.preprocessStepResult",
+      type: "any",
+      isOptional: true,
+      description: "预处理步骤的结果（如果已定义）（可选）。",
+    },
+    {
+      name: "results.analyzeStepResult",
+      type: "any",
+      isOptional: true,
+      description: "分析步骤的结果（如果已定义）（可选）。",
+    },
+  ]}
+/>
+
+返回：`number`
+该方法必须返回一个数值分数。
+
+**提示词对象模式：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      isOptional: false,
+      description: "此评分步骤功能的描述。",
+    },
+    {
+      name: "outputSchema",
+      type: "ZodSchema",
+      isOptional: false,
+      description:
+        "generateScore 步骤预期输出的 Zod 模式。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      isOptional: false,
+      description:
+        "函数：`({ run, results }) => string`。返回 LLM 的提示词。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      isOptional: true,
+      description:
+        "（可选）此步骤的 LLM 评判（可覆盖主要评判）。请参阅评判对象部分。",
+    },
+  ]}
+/>
+
+使用提示词对象模式时，您还必须提供 `calculateScore` 函数将 LLM 输出转换为数值分数：
+
+<PropertiesTable
+  content={[
+    {
+      name: "calculateScore",
+      type: "function",
+      isOptional: false,
+      description:
+        "函数：`({ run, results, analyzeStepResult }) => number`。将 LLM 的结构化输出转换为数值分数。",
+    },
+  ]}
+/>
+
+### generateReason
+
+可选的步骤，提供对分数的解释。
+
+**函数模式：**
+函数：`({ run, results, score }) => string`
+
+<PropertiesTable
+  content={[
+    {
+      name: "run.input",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输入记录。如果评分器添加到代理，这将是一组用户消息，例如 `[{ role: 'user', content: 'hello world' }]`。如果评分器在工作流中使用，这将工作流的输入。",
+    },
+    {
+      name: "run.output",
+      type: "any",
+      isOptional: false,
+      description:
+        "提供给评分器的输出记录。对于代理，这通常是代理的响应。对于工作流，这是工作流的输出。",
+    },
+    {
+      name: "run.runId",
+      type: "string",
+      isOptional: false,
+      description: "此评分运行的唯一标识符。",
+    },
+    {
+      name: "run.requestContext",
+      type: "object",
+      isOptional: true,
+      description:
+        "被评估的代理或工作流步骤的请求上下文（可选）。",
+    },
+    {
+      name: "results.preprocessStepResult",
+      type: "any",
+      isOptional: true,
+      description: "预处理步骤的结果（如果已定义）（可选）。",
+    },
+    {
+      name: "results.analyzeStepResult",
+      type: "any",
+      isOptional: true,
+      description: "分析步骤的结果（如果已定义）（可选）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      isOptional: false,
+      description: "generateScore 步骤计算的分�的。",
+    },
+  ]}
+/>
+
+返回：`string`
+该方法必须返回一个解释分数的字符串。
+
+**提示词对象模式：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      isOptional: false,
+      description: "此推理步骤功能的描述。",
+    },
+    {
+      name: "createPrompt",
+      type: "function",
+      isOptional: false,
+      description:
+        "函数：`({ run, results, score }) => string`。返回 LLM 的提示词。",
+    },
+    {
+      name: "judge",
+      type: "object",
+      isOptional: true,
+      description:
+        "（可选）此步骤的 LLM 评判（可覆盖主要评判）。请参阅评判对象部分。",
+    },
+  ]}
+/>
+
+所有步骤函数都可以是异步的。

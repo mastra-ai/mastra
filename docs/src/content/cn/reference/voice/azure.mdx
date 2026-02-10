@@ -1,0 +1,234 @@
+---
+title: "参考文档: Azure | 语音"
+description: "AzureVoice 类的文档，提供使用 Azure 认知服务的文本转语音和语音转文本功能。"
+packages:
+  - "@mastra/voice-azure"
+---
+
+# Azure
+
+Mastra 中的 AzureVoice 类使用 Microsoft Azure 认知服务提供文本转语音和语音转文本功能。
+
+## 使用示例
+此功能需要 Azure 语音服务凭证，可以通过环境变量或直接在配置中提供：
+
+```typescript
+import { AzureVoice } from "@mastra/voice-azure";
+
+// 使用配置初始化
+const voice = new AzureVoice({
+  speechModel: {
+    apiKey: "your-azure-speech-api-key", // 或使用 AZURE_API_KEY 环境变量
+    region: "eastus", // 或使用 AZURE_REGION 环境变量
+    voiceName: "en-US-AriaNeural", // 可选：TTS 特定的语音
+  },
+  listeningModel: {
+    apiKey: "your-azure-speech-api-key", // 或使用 AZURE_API_KEY 环境变量
+    region: "eastus", // 或使用 AZURE_REGION 环境变量
+    language: "en-US", // 可选：STT 的识别语言
+  },
+  speaker: "en-US-JennyNeural", // 可选：默认语音
+});
+
+// 将文本转换为语音
+const audioStream = await voice.speak("Hello, how can I help you?", {
+  speaker: "en-US-GuyNeural", // 可选：覆盖默认语音
+});
+
+// 将语音转换为文本
+const text = await voice.listen(audioStream);
+```
+
+## 配置
+
+### 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "AzureSpeechConfig",
+      description: "文本转语音合成的配置。",
+      isOptional: true,
+    },
+    {
+      name: "listeningModel",
+      type: "AzureSpeechConfig",
+      description: "语音转文本识别的配置。",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "语音合成的默认语音 ID。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### AzureSpeechConfig
+
+用于语音合成（`speechModel`）和识别（`listeningModel`）的配置对象。
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Azure 语音服务 API 密钥（不是 Azure OpenAI 密钥）。回退到 AZURE_API_KEY 环境变量。",
+      isOptional: true,
+    },
+    {
+      name: "region",
+      type: "string",
+      description:
+        "Azure 区域（例如：'eastus'、'westeurope'）。回退到 AZURE_REGION 环境变量。",
+      isOptional: true,
+    },
+    {
+      name: "voiceName",
+      type: "string",
+      description:
+        "语音合成的语音 ID（例如：'en-US-AriaNeural'、'en-US-JennyNeural'）。仅用于 speechModel。参见下方的语音列表。",
+      isOptional: true,
+    },
+    {
+      name: "language",
+      type: "string",
+      description:
+        "识别语言代码（例如：'en-US'、'fr-FR'）。仅用于 listeningModel。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用 Azure 的神经文本转语音服务将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "要转换为语音的文本或文本流。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "用于语音合成的语音 ID（例如：'en-US-JennyNeural'）。覆盖默认语音。",
+      isOptional: true,
+      defaultValue: "构造函数的 speaker 值",
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>` - WAV 格式的音频流
+
+### listen()
+
+使用 Azure 的语音转文本服务转录音频。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "要转录的音频流。必须为 WAV 格式。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`Promise<string>` - 音频中识别的文本
+
+**注意：** 语言和识别设置在初始化时的 `listeningModel` 配置中设置，而不是作为选项传递给此方法。
+
+### getSpeakers()
+
+返回可用的语音选项数组（200+ 语音），每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description:
+        "语音的唯一标识符（例如：'en-US-JennyNeural'、'fr-FR-DeniseNeural'）",
+      isOptional: false,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "从语音 ID 提取的语言代码（例如：'en'、'fr'）",
+      isOptional: false,
+    },
+    {
+      name: "region",
+      type: "string",
+      description: "从语音 ID 提取的区域代码（例如：'US'、'GB'、'FR'）",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`Promise<Array<{ voiceId: string; language: string; region: string; }>>`
+
+## 重要说明
+
+### Azure 语音服务与 Azure OpenAI 的区别
+
+**⚠️ 重要：** 此包使用 **Azure 语音服务**，与 **Azure OpenAI 服务** 不同。
+
+- **请勿** 将您的 `AZURE_OPENAI_API_KEY` 用于此包
+- **请使用** Azure 语音服务订阅密钥（从 Azure 门户的"语音服务"获取）
+- 这些是具有不同 API 密钥和端点的独立 Azure 资源
+
+### 环境变量
+
+API 密钥和区域可以通过构造函数选项或环境变量提供：
+
+- `AZURE_API_KEY` - 您的 Azure 语音服务订阅密钥
+- `AZURE_REGION` - 您的 Azure 区域（例如：'eastus'、'westeurope'）
+
+### 语音功能
+
+- Azure 在 50+ 种语言中提供 200+ 种神经语音
+- 每个语音 ID 遵循格式：`{语言}-{区域}-{名称}Neural`（例如：'en-US-JennyNeural'）
+- 某些语音支持多语言或 HD 质量变体
+- 音频输出为 WAV 格式
+- 识别的音频输入必须为 WAV 格式
+
+## 可用语音
+
+Azure 在多种语言中提供 200+ 种神经语音。一些流行的英语语音包括：
+
+- **美式英语：**
+  - `en-US-AriaNeural`（女，默认）
+  - `en-US-JennyNeural`（女）
+  - `en-US-GuyNeural`（男）
+  - `en-US-DavisNeural`（男）
+  - `en-US-AvaNeural`（女）
+  - `en-US-AndrewNeural`（男）
+
+- **英式英语：**
+  - `en-GB-SoniaNeural`（女）
+  - `en-GB-RyanNeural`（男）
+  - `en-GB-LibbyNeural`（女）
+
+- **澳大利亚英语：**
+  - `en-AU-NatashaNeural`（女）
+  - `en-AU-WilliamNeural`（男）
+
+获取所有 200+ 语音的完整列表：
+
+```typescript
+const voices = await voice.getSpeakers();
+console.log(voices); // { voiceId, language, region } 对象的数组
+```
+
+更多信息，请参阅 [Azure 神经 TTS 文档](https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts)。

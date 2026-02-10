@@ -1,0 +1,295 @@
+---
+title: "参考文档: createGraphRAGTool() | 工具与 MCP"
+description: Mastra 中的 GraphRAG 工具文档，通过构建文档间语义关系的图谱来增强 RAG 功能。
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
+---
+
+# createGraphRAGTool()
+
+`createGraphRAGTool()` 创建一个通过构建文档间语义关系图谱来增强 RAG 的工具。它在底层使用 `GraphRAG` 系统提供基于图的检索，通过直接相似度和连接关系查找相关内容。
+
+## 使用示例
+
+```typescript
+import { createGraphRAGTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.7,
+    randomWalkSteps: 100,
+    restartProb: 0.15,
+  },
+});
+```
+
+## 参数
+
+:::note
+
+**参数要求：** 大多数字段可以在创建时设置为默认值。部分字段可以在运行时通过请求上下文或输入进行覆盖。如果必需字段在创建和运行时都缺失，则会抛出错误。请注意，`model`、`id` 和 `description` 只能在创建时设置。
+
+:::
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "工具的自定义 ID。默认值: 'GraphRAG {vectorStoreName} {indexName} Tool'。（仅在创建时设置。）",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description:
+        "工具的自定义描述。默认值: '访问和分析知识库中信息之间的关系，以回答关于连接和模式的复杂问题。'（仅在创建时设置。）",
+      isOptional: true,
+    },
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description:
+        "要查询的向量存储名称。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description:
+        "向量存储中的索引名称。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: false,
+    },
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description:
+        "用于向量搜索的嵌入模型。（仅在创建时设置。）",
+      isOptional: false,
+    },
+    {
+      name: "enableFilter",
+      type: "boolean",
+      description:
+        "根据元数据启用结果过滤。（仅在创建时设置，但如果在请求上下文中提供了过滤器，将自动启用。）",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description:
+        "在结果中包含完整的检索对象。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "graphOptions",
+      type: "GraphOptions",
+      description: "基于图检索的配置",
+      isOptional: true,
+      defaultValue: "默认图选项",
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, any>>",
+      description:
+        "嵌入模型的特定提供程序选项（例如 outputDimensionality）。**重要提示**：仅适用于 AI SDK EmbeddingModelV2 模型。对于 V1 模型，请在创建模型本身时配置选项。",
+      isOptional: true,
+    },
+    {
+      name: "vectorStore",
+      type: "MastraVector | VectorStoreResolver",
+      description:
+        "直接的向量存储实例或用于动态选择的解析器函数。对于多租户应用程序，当需要根据请求上下文选择向量存储时，请使用函数。提供后，`vectorStoreName` 变为可选。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### GraphOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "dimension",
+      type: "number",
+      description: "嵌入向量的维度",
+      isOptional: true,
+      defaultValue: "1536",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description:
+        "创建节点之间边缘的相似度阈值 (0-1)",
+      isOptional: true,
+      defaultValue: "0.7",
+    },
+    {
+      name: "randomWalkSteps",
+      type: "number",
+      description:
+        "图遍历的随机游走步数。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "restartProb",
+      type: "number",
+      description:
+        "从查询节点重新开始随机游走的概率。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: true,
+      defaultValue: "0.15",
+    },
+  ]}
+/>
+
+## 返回值
+
+该工具返回一个包含以下内容的对象：
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description:
+        "来自使用基于图排序检索的最相关文档块的组合文本",
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description:
+        "完整检索结果对象的数组。每个对象包含引用原始文档、块和相似度分数所需的全部信息。",
+    },
+  ]}
+/>
+
+### QueryResult 对象结构
+
+```typescript
+{
+  id: string;         // 唯一块/文档标识符
+  metadata: any;      // 所有元数据字段（文档 ID 等）
+  vector: number[];   // 嵌入向量（如果有）
+  score: number;      // 此检索的相似度分数
+  document: string;   // 完整的块/文档文本（如果有）
+}
+```
+
+## 默认工具描述
+
+默认描述侧重于：
+
+- 分析文档之间的关系
+- 查找模式和连接
+- 回答复杂查询
+
+## 高级示例
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.8, // 更高的相似度阈值
+    randomWalkSteps: 200, // 更多的探索步骤
+    restartProb: 0.2, // 更高的重启概率
+  },
+});
+```
+
+## 带自定义描述的示例
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: "openai/text-embedding-3-small\t",
+  description:
+    "分析文档关系以查找我们公司历史数据中的复杂模式和连接",
+});
+```
+
+此示例展示如何为特定用例自定义工具描述，同时保持其关系分析的核心目的。
+
+## 示例：使用请求上下文
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: "openai/text-embedding-3-small\t",
+});
+```
+
+使用请求上下文时，通过请求上下文在执行时提供必需的参数：
+
+```typescript
+const requestContext = new RequestContext<{
+  vectorStoreName: string;
+  indexName: string;
+  topK: number;
+  filter: any;
+}>();
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("randomWalkSteps", 100);
+requestContext.set("restartProb", 0.15);
+
+const response = await agent.generate(
+  "从知识库中查找文档。",
+  {
+    requestContext,
+  },
+);
+```
+
+有关请求上下文的更多信息，请参阅：
+
+- [代理请求上下文](/docs/cn/docs/server/request-context)
+- [请求上下文](/docs/cn/docs/server/request-context#accessing-values-with-tools)
+
+## 多租户应用程序的动态向量存储
+
+对于每个租户都有隔离数据的多租户应用程序，您可以传递一个解析器函数而不是静态向量存储：
+
+```typescript
+import { createGraphRAGTool, VectorStoreResolver } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
+
+const vectorStoreResolver: VectorStoreResolver = async ({ requestContext }) => {
+  const tenantId = requestContext?.get("tenantId");
+
+  return new PgVector({
+    id: `pg-vector-${tenantId}`,
+    connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+    schemaName: `tenant_${tenantId}`,
+  });
+};
+
+const graphTool = createGraphRAGTool({
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStore: vectorStoreResolver,
+});
+```
+
+有关更多详细信息，请参阅 [createVectorQueryTool - 动态向量存储](./vector-query-tool#dynamic-vector-store-for-multi-tenant-applications)。
+
+## 相关内容
+
+- [createVectorQueryTool](./vector-query-tool)
+- [GraphRAG](../rag/graph-rag)

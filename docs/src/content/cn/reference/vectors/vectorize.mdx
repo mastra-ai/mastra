@@ -1,0 +1,300 @@
+---
+title: "参考文档: Cloudflare 向量存储 | 向量"
+description: Mastra 中 CloudflareVector 类的文档，使用 Cloudflare Vectorize 提供向量搜索。
+packages:
+  - "@mastra/vectorize"
+---
+
+# Cloudflare 向量存储
+
+CloudflareVector 类使用 [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/) 提供向量搜索，这是一款与 Cloudflare 边缘网络集成的向量数据库服务。
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "accountId",
+      type: "string",
+      description: "Cloudflare 账户 ID",
+    },
+    {
+      name: "apiToken",
+      type: "string",
+      description: "具有 Vectorize 权限的 Cloudflare API 令牌",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与您的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "用于相似性搜索的距离度量（dotproduct 对应点积）",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要 upsert 到的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "查询的元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+返回字符串数组形式的索引名称列表。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### createMetadataIndex()
+
+在元数据字段上创建索引以启用过滤。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含元数据字段的索引名称",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "要索引的元数据字段名称",
+    },
+    {
+      name: "indexType",
+      type: "'string' | 'number' | 'boolean'",
+      description: "元数据字段的类型",
+    },
+  ]}
+/>
+
+### deleteMetadataIndex()
+
+从元数据字段中移除索引。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含元数据字段的索引名称",
+    },
+    {
+      name: "propertyName",
+      type: "string",
+      description: "要移除索引的元数据字段名称",
+    },
+  ]}
+/>
+
+### listMetadataIndexes()
+
+列出索引的所有元数据字段索引。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要列出元数据索引的索引名称",
+    },
+  ]}
+/>
+
+### updateVector()
+
+更新索引内特定 ID 的向量或元数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要更新的 ID 的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要更新的向量或元数据的唯一标识符",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "包含要更新的向量和/或元数据的对象",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+删除索引内特定 ID 的向量及其关联的元数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除的 ID 的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量和元数据的唯一标识符",
+    },
+  ]}
+/>
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[];
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | 等
+    console.log(error.details); // 额外的错误上下文
+  }
+}
+```
+
+## 环境变量
+
+必需的环境变量：
+
+- `CLOUDFLARE_ACCOUNT_ID`：您的 Cloudflare 账户 ID
+- `CLOUDFLARE_API_TOKEN`：具有 Vectorize 权限的 Cloudflare API 令牌
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

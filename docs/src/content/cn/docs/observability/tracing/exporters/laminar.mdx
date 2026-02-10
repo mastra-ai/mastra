@@ -1,0 +1,89 @@
+---
+title: "Laminar 导出器 | 追踪 | 可观测性"
+description: "将追踪发送到 Laminar 进行 LLM 可观测性、评估和分析"
+packages:
+  - "@mastra/laminar"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Laminar 导出器
+
+[Laminar](https://laminar.sh/) 是一个用于工程化 LLM 产品的开源平台。Laminar 导出器通过 OTLP/HTTP（protobuf）将您的 Mastra 追踪发送到 Laminar，并使用 Laminar 原生跨度属性进行正确渲染（路径、输入/输出、标签、元数据）。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/laminar@beta
+```
+
+## 配置
+
+### 前提条件
+
+1. **Laminar 项目**：在 Laminar 中创建/选择项目
+2. **项目 API 密钥**：从 Laminar 项目设置中复制
+3. **环境变量**：设置您的凭据
+
+```bash title=".env"
+# 必需
+LMNR_PROJECT_API_KEY=lmnr_...
+
+# 可选
+LMNR_BASE_URL=https://api.lmnr.ai
+LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
+```
+
+### 零配置设置
+
+设置环境变量后，使用无需配置的导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [new LaminarExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LaminarExporter } from "@mastra/laminar";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: "my-service",
+        exporters: [
+          new LaminarExporter({
+            apiKey: process.env.LMNR_PROJECT_API_KEY!,
+            baseUrl: process.env.LMNR_BASE_URL, // 可选
+            endpoint: process.env.LAMINAR_ENDPOINT, // 可选
+            realtime: process.env.NODE_ENV === "development", // 可选
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [Laminar 文档](https://docs.laminar.sh)

@@ -1,0 +1,267 @@
+---
+title: "Arize 导出器 | 追踪 | 可观测性"
+description: "使用 OpenTelemetry 和 OpenInference 将追踪数据发送到 Arize Phoenix 或 Arize AX"
+packages:
+  - "@mastra/arize"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Arize 导出器
+
+[Arize](https://arize.com/) 通过 [Phoenix](https://phoenix.arize.com/)（开源）和 [Arize AX](https://arize.com/generative-ai/)（企业版）为 AI 应用程序提供可观测性平台。Arize 导出器使用 OpenTelemetry 和 [OpenInference](https://github.com/Arize-ai/openinference/tree/main/spec) 语义约定发送追踪数据，兼容任何支持 OpenInference 的 OpenTelemetry 平台。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/arize@latest
+```
+
+## 配置
+
+### Phoenix 设置
+
+Phoenix 是一个可自托管或通过 Phoenix Cloud 使用的开源可观测性平台。
+
+#### 前置条件
+
+1. **Phoenix 实例**：使用 Docker 部署或在 [Phoenix Cloud](https://app.phoenix.arize.com/login) 注册
+2. **端点**：您的 Phoenix 端点 URL（以 `/v1/traces` 结尾）
+3. **API 密钥**：可选，用于未认证实例；Phoenix Cloud 需要
+4. **环境变量**：设置您的配置
+
+```bash title=".env"
+# 必填
+PHOENIX_ENDPOINT=http://localhost:6006/v1/traces  # 或您的 Phoenix Cloud URL
+
+# 可选
+PHOENIX_API_KEY=your-api-key  # 用于已认证的 Phoenix 实例
+PHOENIX_PROJECT_NAME=mastra-service  # 默认为 'mastra-service'
+```
+
+#### 零配置设置
+
+设置环境变量后，无需配置即可使用导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: "mastra-service",
+        exporters: [new ArizeExporter()],
+      },
+    },
+  }),
+});
+```
+
+#### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: process.env.PHOENIX_PROJECT_NAME || "mastra-service",
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT!,
+            apiKey: process.env.PHOENIX_API_KEY,
+            projectName: process.env.PHOENIX_PROJECT_NAME,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+:::info
+
+**Docker 快速启动**
+
+使用内存中的 Phoenix 实例在本地测试：
+
+```bash
+docker run --pull=always -d --name arize-phoenix -p 6006:6006 \
+  -e PHOENIX_SQL_DATABASE_URL="sqlite:///:memory:" \
+  arizephoenix/phoenix:latest
+```
+
+设置 `PHOENIX_ENDPOINT=http://localhost:6006/v1/traces` 并运行您的 Mastra 代理，即可在 [localhost:6006](http://localhost:6006) 查看追踪数据。
+
+:::
+
+### Arize AX 设置
+
+Arize AX 是面向生产 AI 系统的高级企业可观测性平台。
+
+#### 前置条件
+
+1. **Arize AX 账户**：在 [app.arize.com](https://app.arize.com/) 注册
+2. **Space ID**：您组织的空间标识符
+3. **API 密钥**：在 Arize AX 设置中生成
+4. **环境变量**：设置您的凭据
+
+```bash title=".env"
+# 必填
+ARIZE_SPACE_ID=your-space-id
+ARIZE_API_KEY=your-api-key
+
+# 可选
+ARIZE_PROJECT_NAME=mastra-service
+```
+
+#### 零配置设置
+
+设置环境变量后，无需配置即可使用导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: "mastra-service",
+        exporters: [new ArizeExporter()],
+      },
+    },
+  }),
+});
+```
+
+#### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      arize: {
+        serviceName: process.env.ARIZE_PROJECT_NAME || "mastra-service",
+        exporters: [
+          new ArizeExporter({
+            apiKey: process.env.ARIZE_API_KEY!,
+            spaceId: process.env.ARIZE_SPACE_ID!,
+            projectName: process.env.ARIZE_PROJECT_NAME,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 配置选项
+
+Arize 导出器支持高级配置以微调 OpenTelemetry 行为：
+
+### 完整配置
+
+```typescript
+new ArizeExporter({
+  // Phoenix 配置
+  endpoint: "https://your-collector.example.com/v1/traces", // Phoenix 必填
+
+  // Arize AX 配置
+  spaceId: "your-space-id", // Arize AX 必填
+
+  // 共享配置
+  apiKey: "your-api-key", // 已认证端点必填
+  projectName: "mastra-service", // 可选项目名称
+
+  // 可选 OTLP 设置
+  headers: {
+    "x-custom-header": "value", // OTLP 请求的附加头
+  },
+
+  // 调试和性能调优
+  logLevel: "debug", // 日志级别：debug | info | warn | error
+  batchSize: 512, // 导出 span 前的批大小
+  timeout: 30000, // 导出 span 前的超时时间（毫秒）
+
+  // 自定义资源属性
+  resourceAttributes: {
+    "deployment.environment": process.env.NODE_ENV,
+    "service.version": process.env.APP_VERSION,
+  },
+});
+```
+
+### 批处理选项
+
+控制追踪数据的批处理和导出方式：
+
+```typescript
+new ArizeExporter({
+  endpoint: process.env.PHOENIX_ENDPOINT!,
+  apiKey: process.env.PHOENIX_API_KEY,
+
+  // 批处理配置
+  batchSize: 512, // 批处理的 span 数量（默认：512）
+  timeout: 30000, // 导出前的最大等待时间（毫秒）（默认：30000）
+});
+```
+
+### 资源属性
+
+向所有导出的 span 添加自定义属性：
+
+```typescript
+new ArizeExporter({
+  endpoint: process.env.PHOENIX_ENDPOINT!,
+  resourceAttributes: {
+    "deployment.environment": process.env.NODE_ENV,
+    "service.namespace": "production",
+    "service.instance.id": process.env.HOSTNAME,
+    "custom.attribute": "value",
+  },
+});
+```
+
+### 自定义元数据
+
+非保留 span 属性会被序列化为 OpenInference `metadata` 负载，并在 Arize/Phoenix 中显示。您可以通过 `tracingOptions.metadata` 添加它们：
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      companyId: "acme-co",
+      tier: "enterprise",
+    },
+  },
+});
+```
+
+`input`、`output`、`sessionId`、线程/用户 ID 以及 OpenInference ID 等保留字段会自动排除。
+
+## OpenInference 语义约定
+
+该导出器实现了用于生成式 AI 应用程序的 [OpenInference 语义约定](https://github.com/Arize-ai/openinference/tree/main/spec)，在不同可观测性平台之间提供标准化的追踪结构。
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [Phoenix 文档](https://docs.arize.com/phoenix)
+- [Arize AX 文档](https://docs.arize.com/)
+- [OpenInference 规范](https://github.com/Arize-ai/openinference/tree/main/spec)

@@ -1,0 +1,120 @@
+---
+title: "参考：WorkspaceSandbox | 工作区"
+description: "定义命令执行操作的 WorkspaceSandbox 接口文档。"
+packages:
+  - "@mastra/core"
+---
+
+# WorkspaceSandbox
+
+**添加于：** `@mastra/core@1.1.0`
+
+`WorkspaceSandbox` 接口定义了工作区如何执行命令。
+
+## 方法
+
+### `start()`
+
+启动沙箱。由 `workspace.init()` 或第一次 `executeCommand()` 调用自动调用。
+
+```typescript
+await sandbox.start();
+```
+
+此方法准备沙箱以执行命令。
+
+### `stop()`
+
+停止沙箱。
+
+```typescript
+await sandbox.stop?.();
+```
+
+### `destroy()`
+
+清理沙箱资源。由 `workspace.destroy()` 调用。
+
+```typescript
+await sandbox.destroy();
+```
+
+### `executeCommand(command, args?, options?)`
+
+执行 shell 命令。
+
+```typescript
+const result = await sandbox.executeCommand('ls', ['-la', '/docs']);
+const result = await sandbox.executeCommand('npm', ['install', 'lodash']);
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      description: "要执行的命令",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      description: "命令参数",
+      isOptional: true,
+    },
+    {
+      name: "options.timeout",
+      type: "number",
+      description: "执行超时时间（毫秒）",
+      isOptional: true,
+    },
+    {
+      name: "options.cwd",
+      type: "string",
+      description: "命令的工作目录",
+      isOptional: true,
+    },
+    {
+      name: "options.env",
+      type: "Record<string, string>",
+      description: "附加环境变量",
+      isOptional: true,
+    },
+    {
+      name: "options.onStdout",
+      type: "(data: string) => void",
+      description: "stdout 流式传输的回调",
+      isOptional: true,
+    },
+    {
+      name: "options.onStderr",
+      type: "(data: string) => void",
+      description: "stderr 流式传输的回调",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### `getInfo()`
+
+获取沙箱状态和资源信息。
+
+```typescript
+const info = await sandbox.getInfo();
+// { status: 'running', resources: { memoryMB: 512, cpuPercent: 5 } }
+```
+
+### `getInstructions()`
+
+获取此沙箱工作原理的描述。用于工具描述中以帮助代理理解执行上下文。
+
+```typescript
+const instructions = sandbox.getInstructions?.();
+// 'Local command execution. Working directory: "/workspace".'
+```
+
+## 相关内容
+
+- [工作区类](/reference/workspace/workspace-class)
+- [文件系统接口](/reference/workspace/filesystem)

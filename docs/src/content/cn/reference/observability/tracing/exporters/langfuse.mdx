@@ -1,0 +1,184 @@
+---
+title: "参考：LangfuseExporter | 可观测性"
+description: "用于追踪的 Langfuse 导出器"
+packages:
+  - "@mastra/langfuse"
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# LangfuseExporter
+
+将追踪数据发送到 Langfuse 以进行可观测性监控。
+
+## 构造函数
+
+```typescript
+new LangfuseExporter(config: LangfuseExporterConfig)
+```
+
+## LangfuseExporterConfig
+
+```typescript
+interface LangfuseExporterConfig extends BaseExporterConfig {
+  publicKey?: string;
+  secretKey?: string;
+  baseUrl?: string;
+  realtime?: boolean;
+  options?: any;
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+<PropertiesTable
+  props={[
+    {
+      name: "publicKey",
+      type: "string",
+      description: "Langfuse API 密钥。回退到 LANGFUSE_PUBLIC_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "secretKey",
+      type: "string",
+      description: "Langfuse 密钥。回退到 LANGFUSE_SECRET_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "baseUrl",
+      type: "string",
+      description: "Langfuse 主机 URL。回退到 LANGFUSE_BASE_URL 环境变量。",
+      required: false,
+    },
+    {
+      name: "realtime",
+      type: "boolean",
+      description: "启用实时模式 - 每个事件后刷新",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "日志记录器级别（默认：'warn'）",
+      required: false,
+    },
+    {
+      name: "options",
+      type: "any",
+      description: "其他 Langfuse 客户端选项",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到 Langfuse。
+
+### export
+
+```typescript
+async export(spans: ReadOnlySpan[]): Promise<void>
+```
+
+批量导出跨度到 Langfuse。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的跨度到 Langfuse 而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新待处理的数据并关闭客户端。
+
+## 使用方法
+
+### 零配置（使用环境变量）
+
+```typescript
+import { LangfuseExporter } from "@mastra/langfuse";
+
+// 从 LANGFUSE_PUBLIC_KEY、LANGFUSE_SECRET_KEY、LANGFUSE_BASE_URL 读取
+const exporter = new LangfuseExporter();
+```
+
+### 显式配置
+
+```typescript
+import { LangfuseExporter } from "@mastra/langfuse";
+
+const exporter = new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: "https://cloud.langfuse.com",
+  realtime: true,
+});
+```
+
+## 跨度映射
+
+- 根跨度 → Langfuse 追踪
+- `MODEL_GENERATION` 跨度 → Langfuse 生成
+- 所有其他跨度 → Langfuse 跨度
+- 事件跨度 → Langfuse 事件
+
+## 提示词链接
+
+使用 `withLangfusePrompt` 帮助函数将 LLM 生成链接到 [Langfuse 提示词管理](https://langfuse.com/docs/cn/docs/prompt-management)：
+
+```typescript
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
+import { Langfuse } from "langfuse";
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+});
+
+const prompt = await langfuse.getPrompt("customer-support");
+
+const agent = new Agent({
+  name: "support-agent",
+  instructions: prompt.prompt,
+  model: "openai/gpt-4o",
+  defaultGenerateOptions: {
+    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
+  },
+});
+```
+
+### 帮助函数
+
+#### `withLangfusePrompt(prompt)`
+
+向追踪选项添加 Langfuse 提示词元数据。
+
+```typescript
+// 使用 Langfuse SDK 提示词对象
+withLangfusePrompt(prompt)
+
+// 使用手动字段
+withLangfusePrompt({ name: "my-prompt", version: 1 })
+withLangfusePrompt({ id: "prompt-uuid" })
+```
+
+当 `MODEL_GENERATION` 跨度上设置了 `metadata.langfuse.prompt` 时（单独设置 `id`，或设置 `name` + `version`），导出器会自动将生成链接到 Langfuse 中的提示词。

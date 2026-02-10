@@ -1,0 +1,77 @@
+---
+title: "参考文档：Agent.getDefaultGenerateOptionsLegacy() | 智能体"
+description: "Mastra 智能体中 `Agent.getDefaultGenerateOptionsLegacy()` 方法的文档，用于检索用于 generateLegacy 调用的默认选项。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getDefaultGenerateOptionsLegacy()
+
+:::warning
+
+**已弃用**：此方法已弃用，仅适用于 V1 模型。对于 V2 模型，请改用新的 [`.getDefaultOptions()`](./getDefaultOptions) 方法。
+
+:::
+
+可以为智能体配置默认生成选项来控制模型行为、输出格式以及工具和工作流调用。`.getDefaultGenerateOptionsLegacy()` 方法检索这些默认值，如果它们是函数则解析它们。这些选项适用于所有 `generateLegacy()` 调用，除非被覆盖，可用于检查智能体的未知默认值。
+
+## 使用示例
+
+```typescript
+await agent.getDefaultGenerateOptionsLegacy();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "包含请求上下文的可选配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      description:
+        "为智能体配置的默认生成选项，可以是直接对象，也可以是解析为选项的 promise。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.getDefaultGenerateOptionsLegacy({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体生成](/docs/cn/docs/agents/overview#generating-responses)
+- [请求上下文](/docs/cn/docs/server/request-context)

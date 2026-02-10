@@ -1,0 +1,32 @@
+---
+title: "参考：Workflow.commit() | 工作流"
+description: "工作流中 `Workflow.commit()` 方法的文档，用于完成工作流并返回最终结果。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.commit()
+
+`.commit()` 方法完成工作流并返回最终结果。
+
+## 使用示例
+
+```typescript
+workflow.then(step1).commit();
+```
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "用于方法链的工作流实例",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [控制流](/docs/cn/docs/workflows/control-flow)

@@ -1,0 +1,79 @@
+---
+title: "参考：可观测性 API | 客户端 SDK"
+description: 了解如何使用 client-js SDK 检索跟踪、监控应用程序性能以及对跟踪进行评分。
+packages:
+  - "@mastra/client-js"
+---
+
+# 可观测性 API
+
+可观测性 API 提供了检索跟踪、监控应用程序性能以及对跟踪进行评分以进行评估的方法。这有助于您了解 AI 代理和工作流的执行情况。
+
+## 获取特定跟踪
+
+通过 ID 检索特定跟踪，包括其所有跨度（span）和详细信息：
+
+```typescript
+const trace = await mastraClient.getTrace("trace-id-123");
+```
+
+## 获取带过滤的跟踪
+
+检索带有可选过滤的分页跟踪根跨度列表：
+
+```typescript
+const traces = await mastraClient.getTraces({
+  pagination: {
+    page: 1,
+    perPage: 20,
+    dateRange: {
+      start: new Date("2024-01-01"),
+      end: new Date("2024-01-31"),
+    },
+  },
+  filters: {
+    name: "weather-agent", // 按跟踪名称过滤
+    spanType: "agent", // 按跨度类型过滤
+    entityId: "weather-agent-id", // 按实体 ID 过滤
+    entityType: "agent", // 按实体类型过滤
+  },
+});
+
+console.log(`找到 ${traces.spans.length} 个根跨度`);
+console.log(`总页数: ${traces.pagination.totalPages}`);
+
+// 要获取包含所有跨度的完整跟踪，请使用 getTrace
+const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId);
+```
+
+## 对跟踪评分
+
+使用注册的评分器对特定跟踪进行评分以进行评估：
+
+```typescript
+const result = await mastraClient.score({
+  scorerName: "answer-relevancy",
+  targets: [
+    { traceId: "trace-1", spanId: "span-1" }, // 对特定跨度评分
+    { traceId: "trace-2" }, // 对特定跨度评分，默认为父跨度
+  ],
+});
+```
+
+## 按跨度获取评分
+
+检索跟踪中特定跨度的评分：
+
+```typescript
+const scores = await mastraClient.listScoresBySpan({
+  traceId: "trace-123",
+  spanId: "span-456",
+  page: 1,
+  perPage: 20,
+});
+```
+
+## 相关内容
+
+- [代理 API](./agents) - 了解生成跟踪的代理交互
+- [工作流 API](./workflows) - 了解工作流执行监控

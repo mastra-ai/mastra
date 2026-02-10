@@ -1,0 +1,185 @@
+---
+title: "参考文档：Mastra.getStoredAgentById() | 核心"
+description: "Mastra 中 `Mastra.getStoredAgentById()` 方法的文档，用于从存储中检索智能体并创建可执行的智能体实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getStoredAgentById()
+
+`.getStoredAgentById()` 方法通过 ID 从存储中检索智能体配置，并创建可执行的 `Agent` 实例。存储的智能体允许您将智能体配置持久化在数据库中，并在运行时动态加载它们。
+
+## 使用示例
+
+```typescript
+// 从存储中获取智能体实例
+const agent = await mastra.getStoredAgentById("my-stored-agent");
+
+if (agent) {
+  const response = await agent.generate("Hello");
+  console.log(response.text);
+}
+```
+
+```typescript
+// 获取原始存储数据而非智能体实例
+const storedConfig = await mastra.getStoredAgentById("my-stored-agent", { raw: true });
+
+if (storedConfig) {
+  console.log(storedConfig.instructions);
+  console.log(storedConfig.createdAt);
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "要检索的存储智能体的唯一标识符。",
+    },
+    {
+      name: "options",
+      type: "{ raw?: boolean }",
+      description:
+        "可选配置对象。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "raw",
+      type: "boolean",
+      description:
+        "当为 `true` 时，从存储返回原始 `StorageAgentType` 对象，而非创建 `Agent` 实例。用于检查存储的配置或元数据。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Agent | StorageAgentType | null",
+      description:
+        "默认返回 `Agent` 实例，或当 `raw: true` 时返回 `StorageAgentType`。如果不存在给定 ID 的智能体，则返回 `null`。",
+    },
+  ]}
+/>
+
+## 原语解析
+
+根据存储的配置创建 `Agent` 实例时，该方法会解析对注册原语的引用：
+
+- **工具**：从 Mastra 配置中注册的 `tools` 解析
+- **工作流**：从 Mastra 配置中注册的 `workflows` 解析
+- **子智能体**：从 Mastra 配置中注册的 `agents` 解析
+- **内存**：从 Mastra 配置中注册的 `memory` 解析
+- **评分器**：从 Mastra 配置中注册的 `scorers` 解析，包括采样配置
+
+如果在注册表中找不到引用的原语，则会记录警告，但智能体仍会创建。
+
+## StorageAgentType
+
+使用 `raw: true` 时，返回的对象具有以下结构：
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "智能体的唯一标识符。",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "智能体的显示名称。",
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "智能体的可选描述。",
+      isOptional: true,
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "智能体的系统指令。",
+    },
+    {
+      name: "model",
+      type: "Record<string, unknown>",
+      description: "带有提供商和名称的模型配置。",
+    },
+    {
+      name: "tools",
+      type: "Record<string, unknown>",
+      description: "要从注册表解析的工具引用。",
+      isOptional: true,
+    },
+    {
+      name: "workflows",
+      type: "Record<string, unknown>",
+      description: "要从注册表解析的工作流引用。",
+      isOptional: true,
+    },
+    {
+      name: "agents",
+      type: "Record<string, unknown>",
+      description: "要从注册表解析的子智能体引用。",
+      isOptional: true,
+    },
+    {
+      name: "memory",
+      type: "Record<string, unknown>",
+      description: "要从注册表解析的内存引用。",
+      isOptional: true,
+    },
+    {
+      name: "scorers",
+      type: "Record<string, unknown>",
+      description: "带有可选采样配置的评分器引用。",
+      isOptional: true,
+    },
+    {
+      name: "defaultOptions",
+      type: "Record<string, unknown>",
+      description: "传递给智能体执行的默认选项。",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "与智能体一起存储的自定义元数据。",
+      isOptional: true,
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "智能体创建时的时间戳。",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "智能体上次更新时的时间戳。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [Mastra.listStoredAgents()](/reference/core/listStoredAgents)
+- [存储概述](/reference/storage/overview)
+- [智能体概述](/docs/cn/docs/agents/overview)

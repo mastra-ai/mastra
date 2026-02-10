@@ -1,0 +1,310 @@
+---
+title: "参考文档：Run.timeTravel() | 工作流"
+description: "工作流中 `Run.timeTravel()` 方法的文档，用于从特定步骤重新执行工作流。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.timeTravel()
+
+`.timeTravel()` 方法重新执行工作流，从任何特定步骤开始，使用存储的快照数据或您提供的自定义上下文。这对于调试失败的工作流、使用不同输入测试单个步骤或从错误中恢复而无需重新运行整个工作流很有用。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step<string, any, TInputSchema, any, any, any, TEngineType> | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, TInputSchema, any, any, any, TEngineType>] | string | string[]",
+      description:
+        "开始执行的目标步骤。它可以是步骤实例、步骤数组（用于嵌套工作流）、步骤 ID 字符串或步骤 ID 字符串数组。对于嵌套工作流步骤，使用点表示法或数组（例如 'nestedWorkflow.step3' 或 ['nestedWorkflow', 'step3']）",
+      isOptional: false,
+    },
+    {
+      name: "inputData",
+      type: "z.infer<TInputSchema>",
+      description: "目标步骤的输入数据。必须与步骤的输入模式匹配。如果未提供，使用工作流快照中的数据",
+      isOptional: true,
+    },
+    {
+      name: "resumeData",
+      type: "any",
+      description: "如果工作流之前已暂停，要提供的恢复数据",
+      isOptional: true,
+    },
+    {
+      name: "initialState",
+      type: "z.infer<TState>",
+      description: "为工作流运行设置的初始状态。用于在执行前设置工作流级状态",
+      isOptional: true,
+    },
+    {
+      name: "context",
+      type: "TimeTravelContext<any, any, any, any>",
+      description:
+        "包含目标步骤之前步骤结果执行上下文。每个键是步骤 ID，带有包含 status、payload、output、startedAt、endedAt、suspendPayload 和 resumePayload 的 StepResult 对象",
+      isOptional: true,
+    },
+    {
+      name: "nestedStepsContext",
+      type: "Record<string, TimeTravelContext<any, any, any, any>>",
+      description:
+        "嵌套工作流步骤的上下文。按嵌套工作流 ID 键控，每个包含该嵌套工作流的步骤结果",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "时间旅行执行期间使用的请求上下文数据",
+      isOptional: true,
+    },
+    {
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "处理输出块的异步函数（按需生成）",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "用于创建子 span 和添加元数据的跟踪上下文。使用 Mastra 的跟踪系统时自动注入。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "用于创建子 span 和添加元数据的当前 span。使用它来创建自定义子 span 或在执行期间更新 span 属性。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "跟踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "要添加到根跟踪 span 的元数据。对于添加用户 ID、会话 ID 或功能标志等自定义属性很有用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "要提取为此跟踪元数据的附加 RequestContext 键。支持点表示法用于嵌套值（例如 'user.id'）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的跟踪 ID（1-32 个十六进制字符）。如果提供，此跟踪将是指定跟踪的一部分。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的父 span ID（1-16 个十六进制字符）。如果提供，根 span 将创建为该 span 的子 span。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "要应用于此跟踪的标签。用于分类和过滤跟踪的字符串标签。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "输出配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "是否在结果中包含工作流运行状态。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "includeResumeLabels",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "是否在结果中包含恢复标签。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description:
+        "解析为包含步骤输出和状态的工作流执行结果的 Promise",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "启用跟踪时与此执行关联的跟踪 ID。使用它来关联日志和调试执行流程。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+### 使用自定义上下文的时间旅行
+
+```typescript
+const result = await run.timeTravel({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+```
+
+### 时间旅行到嵌套工作流步骤
+
+```typescript
+// 使用点表示法
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
+
+// 使用步骤 ID 数组
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+});
+```
+
+### 使用初始状态的时间旅行
+
+```typescript
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+  initialState: {
+    counter: 5,
+    metadata: { source: "time-travel" },
+  },
+});
+```
+
+### 使用嵌套工作流上下文的时间旅行
+
+```typescript
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+    nestedWorkflow: {
+      status: "running",
+      payload: { step1Result: 2 },
+      startedAt: Date.now(),
+    },
+  },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+```
+
+## 注意事项
+
+- 时间旅行需要配置存储，因为它依赖于持久化的工作流快照
+- 重新执行工作流时，工作流从存储加载现有快照（如果有）
+- 目标步骤之前的步骤结果从快照或提供的上下文重建
+- 执行从指定步骤开始，使用提供或重建的输入数据
+- 工作流从该点继续执行到完成
+- 时间旅行可以通过为开始步骤提供自定义上下文或输入数据用于尚未运行的工作流。
+
+## 相关内容
+
+- [时间旅行](/docs/cn/docs/workflows/time-travel)
+- [工作流概述](/docs/cn/docs/workflows/overview#running-workflows)
+- [Workflow.createRun()](../workflow-methods/create-run)
+- [快照](/docs/cn/docs/workflows/snapshots)
+- [暂停与恢复](/docs/cn/docs/workflows/suspend-and-resume)

@@ -1,0 +1,289 @@
+---
+title: "Fireworks AI | 模型 | Mastra"
+description: "在 Mastra 中使用 Fireworks AI 模型。共 17 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Fireworks AI
+
+通过 Mastra 的模型路由器访问 17 个 Fireworks AI 模型。身份验证使用 `FIREWORKS_API_KEY` 环境变量自动处理。
+
+在 [Fireworks AI 文档](https://fireworks.ai/docs/cn/docs/) 中了解更多信息。
+
+```bash title=".env"
+FIREWORKS_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [Fireworks AI 文档](https://fireworks.ai/docs/cn/docs/) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 160000,
+    "maxOutput": 16384,
+    "inputCost": 3,
+    "outputCost": 8
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/deepseek-v3-0324",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 160000,
+    "maxOutput": 16384,
+    "inputCost": 0.9,
+    "outputCost": 0.9
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/deepseek-v3p1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.56,
+    "outputCost": 1.68
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/deepseek-v3p2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 160000,
+    "maxOutput": 160000,
+    "inputCost": 0.56,
+    "outputCost": 1.68
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/glm-4p5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.55,
+    "outputCost": 2.19
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/glm-4p5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.22,
+    "outputCost": 0.88
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/glm-4p6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 198000,
+    "maxOutput": 198000,
+    "inputCost": 0.55,
+    "outputCost": 2.19
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/glm-4p7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 198000,
+    "maxOutput": 198000,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.05,
+    "outputCost": 0.2
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/kimi-k2-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 1,
+    "outputCost": 3
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/kimi-k2p5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": 0.6,
+    "outputCost": 3
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 192000,
+    "maxOutput": 192000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/minimax-m2p1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 200000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/qwen3-235b-a22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.22,
+    "outputCost": 0.88
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32768,
+    "inputCost": 0.45,
+    "outputCost": 1.8
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.fireworks.ai/inference/v1/",
+    id: "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528",
+    apiKey: process.env.FIREWORKS_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "fireworks-ai/accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
+      : "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528";
+  }
+});
+```
+
+

@@ -1,0 +1,828 @@
+---
+title: "控制流 | 工作流"
+description: "Mastra 工作流中的控制流允许你管理分支、合并和条件，以构建满足你逻辑需求的工作流。"
+packages:
+  - "@mastra/core"
+---
+
+# 控制流
+
+工作流运行一系列预定义任务，你可以控制该流程的执行方式。任务被分为**步骤**，可以根据你的要求以不同方式执行。它们可以按顺序运行、并行运行，或根据条件遵循不同路径。
+
+每个步骤通过保持数据受控和一致的定义模式连接到工作流中的下一个步骤。
+
+## 核心原则
+
+- 第一个步骤的 `inputSchema` 必须与工作流的 `inputSchema` 匹配。
+- 最终步骤的 `outputSchema` 必须与工作流的 `outputSchema` 匹配。
+- 每个步骤的 `outputSchema` 必须与下一个步骤的 `inputSchema` 匹配。
+  - 如果不匹配，请使用[输入数据映射](#input-data-mapping)将数据转换为所需的形状。
+
+## 使用 `.then()` 链接步骤
+
+使用 `.then()` 按顺序运行步骤，允许每个步骤访问前一个步骤的结果。
+
+![使用 .then() 链接步骤](/img/workflows/workflows-control-flow-then.jpg)
+
+```typescript {27-28} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    formatted: z.string()
+  })
+});
+
+const step2 = createStep({
+  inputSchema: z.object({
+    formatted: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+## 使用 `.parallel()` 同时运行步骤
+
+使用 `.parallel()` 同时运行步骤。所有并行步骤必须在工作流继续下一步之前完成。每个步骤的 `id` 在定义后续步骤的 `inputSchema` 时使用，并成为用于访问前一个步骤值的 `inputData` 对象的键。并行步骤的输出然后可以由后续步骤引用或组合。
+
+![使用 .parallel() 并发执行步骤](/img/workflows/workflows-control-flow-parallel.jpg)
+
+```typescript {39} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "step-1",
+});
+
+const step2 = createStep({
+  id: "step-2",
+});
+
+const step3 = createStep({
+  id: "step-3",
+  inputSchema: z.object({
+    "step-1": z.object({
+      formatted: z.string()
+    }),
+    "step-2": z.object({
+      emphasized: z.string()
+    })
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { formatted } = inputData["step-1"];
+    const { emphasized } = inputData["step-2"];
+    return {
+      combined: `${formatted} | ${emphasized}`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  })
+})
+  .parallel([step1, step2])
+  .then(step3)
+  .commit();
+```
+
+> 📹 观看：如何并行运行步骤并优化你的 Mastra 工作流 → [YouTube（3分钟）](https://youtu.be/GQJxve5Hki4)
+
+### 输出结构
+
+当步骤并行运行时，输出是一个对象，其中每个键是步骤的 `id`，值是该步骤的输出。这允许你独立访问每个并行步骤的结果。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "format-step",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ formatted: z.string() }),
+  execute: async ({ inputData }) => ({
+    formatted: inputData.message.toUpperCase()
+  })
+});
+
+const step2 = createStep({
+  id: "count-step",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ count: z.number() }),
+  execute: async ({ inputData }) => ({
+    count: inputData.message.length
+  })
+});
+
+const step3 = createStep({
+  id: "combine-step",
+  // inputSchema 必须匹配并行输出的结构
+  inputSchema: z.object({
+    "format-step": z.object({ formatted: z.string() }),
+    "count-step": z.object({ count: z.number() })
+  }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async ({ inputData }) => {
+    // 通过其 id 访问每个并行步骤的输出
+    const formatted = inputData["format-step"].formatted;
+    const count = inputData["count-step"].count;
+    return {
+      result: `${formatted} (${count} characters)`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "parallel-output-example",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ result: z.string() })
+})
+  .parallel([step1, step2])
+  .then(step3)
+  .commit();
+
+// 当使用 { message: "hello" } 执行时
+// 并行输出结构将为：
+// {
+//   "format-step": { formatted: "HELLO" },
+//   "count-step": { count: 5 }
+// }
+```
+
+**关键点：**
+- 每个并行步骤的输出按其 `id` 作为键
+- 所有并行步骤同时执行
+- 下一步接收包含所有并行步骤输出的对象
+- 你必须定义后续步骤的 `inputSchema` 以匹配此结构
+
+:::info
+
+访问[选择正确的模式](#choosing-the-right-pattern)了解何时使用 `.parallel()` 与 `.foreach()`。
+
+:::
+
+## 使用 `.branch()` 的条件逻辑
+
+使用 `.branch()` 根据条件选择要运行的步骤。分支中的所有步骤需要相同的 `inputSchema` 和 `outputSchema`，因为分支需要一致的模式以便工作流可以遵循不同路径。
+
+![使用 .branch() 进行条件分支](/img/workflows/workflows-control-flow-branch.jpg)
+
+```typescript {30-33} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...})
+
+const stepA = createStep({
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
+
+const stepB = createStep({
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+})
+  .then(step1)
+  .branch([
+    [async ({ inputData: { value } }) => value > 10, stepA],
+    [async ({ inputData: { value } }) => value <= 10, stepB]
+  ])
+  .commit();
+```
+
+### 输出结构
+
+使用条件分支时，只有基于第一个求值为 `true` 的条件的分支执行。输出结构与 `.parallel()` 类似，其中结果按执行的步骤的 `id` 作为键。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "initial-step",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+  execute: async ({ inputData }) => inputData
+});
+
+const highValueStep = createStep({
+  id: "high-value-step",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async ({ inputData }) => ({
+    result: `High value: ${inputData.value}`
+  })
+});
+
+const lowValueStep = createStep({
+  id: "low-value-step",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ result: z.string() }),
+  execute: async ({ inputData }) => ({
+    result: `Low value: ${inputData.value}`
+  })
+});
+
+const finalStep = createStep({
+  id: "final-step",
+  // inputSchema 必须考虑任一分支的输出
+  inputSchema: z.object({
+    "high-value-step": z.object({ result: z.string() }).optional(),
+    "low-value-step": z.object({ result: z.string() }).optional()
+  }),
+  outputSchema: z.object({ message: z.string() }),
+  execute: async ({ inputData }) => {
+    // 只有一个分支会执行
+    const result = inputData["high-value-step"]?.result ||
+                   inputData["low-value-step"]?.result;
+    return { message: result };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "branch-output-example",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ message: z.string() })
+})
+  .then(step1)
+  .branch([
+    [async ({ inputData }) => inputData.value > 10, highValueStep],
+    [async ({ inputData }) => inputData.value <= 10, lowValueStep]
+  ])
+  .then(finalStep)
+  .commit();
+
+// 当使用 { value: 15 } 执行时
+// 只有 high-value-step 执行，输出结构：
+// {
+//   "high-value-step": { result: "High value: 15" }
+// }
+
+// 当使用 { value: 5 } 执行时
+// 只有 low-value-step 执行，输出结构：
+// {
+//   "low-value-step": { result: "Low value: 5" }
+// }
+```
+
+**关键点：**
+- 只有一个分支基于条件求值顺序执行
+- 输出按执行的步骤的 `id` 作为键
+- 后续步骤应处理所有可能的分支输出
+- 当下一步需要处理多个可能的分支时，在 `inputSchema` 中使用可选字段
+- 条件按定义的顺序求值
+
+## 输入数据映射
+
+使用 `.then()`、`.parallel()` 或 `.branch()` 时，有时需要转换前一个步骤的输出以匹配下一个步骤的输入。在这些情况下，你可以使用 `.map()` 访问 `inputData` 并将其转换，为下一步创建合适的数据形状。
+
+![使用 .map() 映射](/img/workflows/workflows-data-mapping-map.jpg)
+
+```typescript {9} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { foo } = inputData;
+    return {
+      bar: `new ${foo}`,
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
+`.map()` 方法为更复杂的映射场景提供了额外的辅助函数。
+
+**可用的辅助函数：**
+
+- [`getStepResult()`](/reference/workflows/workflow-methods/map#using-getstepresult)：访问特定步骤的完整输出
+- [`getInitData<any>()`](/reference/workflows/workflow-methods/map#using-getinitdata)：访问工作流的初始输入数据
+- [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable)：使用声明式对象语法提取和重命名字段
+
+### 并行和分支输出
+
+使用 `.parallel()` 或 `.branch()` 输出时，你可以使用 `.map()` 在将数据传递给下一步之前转换数据结构。当你需要扁平化或重组输出时，这特别有用。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({...})
+  .parallel([step1, step2])
+  .map(async ({ inputData }) => {
+    // 转换并行输出结构
+    return {
+      combined: `${inputData["step1"].value} - ${inputData["step2"].value}`
+    };
+  })
+  .then(nextStep)
+  .commit();
+```
+
+你也可以使用 `.map()` 提供的辅助函数：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({...})
+  .branch([
+    [condition1, stepA],
+    [condition2, stepB]
+  ])
+  .map(async ({ inputData, getStepResult }) => {
+    // 访问特定步骤结果
+    const stepAResult = getStepResult("stepA");
+    const stepBResult = getStepResult("stepB");
+
+    // 返回执行的分支的结果
+    return stepAResult || stepBResult;
+  })
+  .then(nextStep)
+  .commit();
+```
+
+## 循环步骤
+
+工作流支持不同的循环方法，让你重复步骤直到或当条件满足时，或遍历数组。循环可以与其他控制方法如 `.then()` 组合。
+
+### 使用 `.dountil()` 循环
+
+使用 `.dountil()` 重复运行步骤直到条件变为 true。
+
+![使用 .dountil() 重复](/img/workflows/workflows-control-flow-dountil.jpg)
+
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...});
+
+const step2 = createStep({
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({})
+  .then(step1)
+  .dountil(step2, async ({ inputData: { number } }) => number > 10)
+  .commit();
+```
+
+### 使用 `.dowhile()` 循环
+
+使用 `.dowhile()` 在条件保持为 true 时重复运行步骤。
+
+![使用 .dowhile() 重复](/img/workflows/workflows-control-flow-dowhile.jpg)
+
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...});
+
+const step2 = createStep({
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({})
+  .then(step1)
+  .dowhile(step2, async ({ inputData: { number } }) => number < 10)
+  .commit();
+```
+
+### 使用 `.foreach()` 循环
+
+使用 `.foreach()` 对数组中的每个项目运行相同的步骤。输入必须是 `array` 类型，以便循环可以遍历其值，将步骤的逻辑应用于每个值。关于何时使用 `.foreach()` 与其他方法，请参阅[选择正确的模式](#choosing-the-right-pattern)。
+
+![使用 .foreach() 重复](/img/workflows/workflows-control-flow-foreach.jpg)
+
+```typescript {15} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  inputSchema: z.string(),
+  outputSchema: z.string(),
+  execute: async ({ inputData }) => {
+    return inputData.toUpperCase();
+  }
+});
+
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(z.string())
+})
+  .foreach(step1)
+  .then(step2)
+  .commit();
+```
+
+#### 输出结构
+
+`.foreach()` 方法总是返回一个包含每次迭代输出的数组。输出的顺序与输入的顺序匹配。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const addTenStep = createStep({
+  id: "add-ten",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ value: z.number() }),
+  execute: async ({ inputData }) => ({
+    value: inputData.value + 10
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-output-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.array(z.object({ value: z.number() }))
+})
+  .foreach(addTenStep)
+  .commit();
+
+// 当使用 [{ value: 1 }, { value: 22 }, { value: 333 }] 执行时
+// 输出: [{ value: 11 }, { value: 32 }, { value: 343 }]
+```
+
+#### 并发限制
+
+使用 `concurrency` 控制同时处理的数组项数量。默认值为 `1`，即顺序运行步骤。增加该值允许 `.foreach()` 同时处理多个项目。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...})
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(step1, { concurrency: 4 })
+  .commit();
+```
+
+#### 在 `.foreach()` 之后聚合结果
+
+由于 `.foreach()` 输出一个数组，你可以使用 `.then()` 或 `.map()` 聚合或转换结果。`.foreach()` 之后的步骤将整个数组作为其输入。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const processItemStep = createStep({
+  id: "process-item",
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ processed: z.number() }),
+  execute: async ({ inputData }) => ({
+    processed: inputData.value * 2
+  })
+});
+
+const aggregateStep = createStep({
+  id: "aggregate",
+  // 输入是来自 foreach 的输出数组
+  inputSchema: z.array(z.object({ processed: z.number() })),
+  outputSchema: z.object({ total: z.number() }),
+  execute: async ({ inputData }) => ({
+    // 对所有处理后的值求和
+    total: inputData.reduce((sum, item) => sum + item.processed, 0)
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  id: "foreach-aggregate-example",
+  inputSchema: z.array(z.object({ value: z.number() })),
+  outputSchema: z.object({ total: z.number() })
+})
+  .foreach(processItemStep)
+  .then(aggregateStep)  // 接收来自 foreach 的完整数组
+  .commit();
+
+// 当使用 [{ value: 1 }, { value: 2 }, { value: 3 }] 执行时
+// foreach 之后: [{ processed: 2 }, { processed: 4 }, { processed: 6 }]
+// aggregate 之后: { total: 12 }
+```
+
+你也可以使用 `.map()` 转换数组输出：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({...})
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    // 将数组转换为不同的结构
+    values: inputData.map(item => item.processed),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+#### 链接多个 `.foreach()` 调用
+
+当你链接 `.foreach()` 调用时，每个调用对前一个步骤的数组输出进行操作。当数组中的每个项目需要按顺序由多个步骤转换时，这很有用。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const chunkStep = createStep({
+  id: "chunk",
+  // 接收文档，返回分块数组
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string() })),
+  execute: async ({ inputData }) => {
+    // 将文档分割成块
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk }));
+  }
+});
+
+const embedStep = createStep({
+  id: "embed",
+  // 接收单个分块，返回嵌入向量
+  inputSchema: z.object({ chunk: z.string() }),
+  outputSchema: z.object({ embedding: z.array(z.number()) }),
+  execute: async ({ inputData }) => ({
+    embedding: [/* 向量嵌入 */]
+  })
+});
+
+// 对于生成多个分块的单个文档：
+export const singleDocWorkflow = createWorkflow({
+  id: "single-doc-rag",
+  inputSchema: z.object({ content: z.string() }),
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .then(chunkStep)      // 返回分块数组
+  .foreach(embedStep)   // 处理每个分块 -> 嵌入向量数组
+  .commit();
+```
+
+对于处理每个生成多个分块的多个文档，你有以下选项：
+
+**选项 1：在单个步骤中处理所有文档并控制批处理**
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const downloadAndChunkStep = createStep({
+  id: "download-and-chunk",
+  inputSchema: z.array(z.string()),  // URL 数组
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData: urls }) => {
+    // 在步骤内控制批处理/并行化
+    const allChunks = [];
+    for (const url of urls) {
+      const content = await fetch(url).then(r => r.text());
+      const chunks = content.match(/.{1,100}/g) || [];
+      allChunks.push(...chunks.map(chunk => ({ chunk, source: url })));
+    }
+    return allChunks;
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({...})
+  .then(downloadAndChunkStep)  // 返回所有分块的扁平数组
+  .foreach(embedStep, { concurrency: 10 })  // 并行嵌入每个分块
+  .commit();
+```
+
+**选项 2：对文档使用 foreach，聚合分块，然后对嵌入向量使用 foreach**
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const downloadStep = createStep({
+  id: "download",
+  inputSchema: z.string(),  // 单个 URL
+  outputSchema: z.object({ content: z.string(), source: z.string() }),
+  execute: async ({ inputData: url }) => ({
+    content: await fetch(url).then(r => r.text()),
+    source: url
+  })
+});
+
+const chunkDocStep = createStep({
+  id: "chunk-doc",
+  inputSchema: z.object({ content: z.string(), source: z.string() }),
+  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+  execute: async ({ inputData }) => {
+    const chunks = inputData.content.match(/.{1,100}/g) || [];
+    return chunks.map(chunk => ({ chunk, source: inputData.source }));
+  }
+});
+
+export const multiDocWorkflow = createWorkflow({
+  id: "multi-doc-rag",
+  inputSchema: z.array(z.string()),  // URL 数组
+  outputSchema: z.array(z.object({ embedding: z.array(z.number()) }))
+})
+  .foreach(downloadStep, { concurrency: 5 })  // 并行下载文档
+  .foreach(chunkDocStep)  // 对每个文档分块 -> 分块数组数组
+  .map(async ({ inputData }) => {
+    // 扁平化嵌套数组：[[分块], [分块]] -> [分块]
+    return inputData.flat();
+  })
+  .foreach(embedStep, { concurrency: 10 })  // 嵌入所有分块
+  .commit();
+```
+
+**关于链接 `.foreach()` 的关键点：**
+- 每个 `.foreach()` 对前一个步骤的数组进行操作
+- 如果 `.foreach()` 内的步骤返回数组，输出变为数组的数组
+- 需要时使用带有 `.flat()` 的 `.map()` 扁平化嵌套数组
+- 对于复杂的 RAG 管道，选项 1（在单个步骤中处理批处理）通常提供更好的控制
+
+#### foreach 内的嵌套工作流
+
+`.foreach()` 之后的步骤仅在所有迭代完成后才执行。如果每个项目需要运行多个顺序操作，请使用嵌套工作流而不是链接多个 `.foreach()` 调用。这使每个项目的所有操作保持在一起，并使数据流更清晰。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+// 定义处理单个文档的工作流
+const processDocumentWorkflow = createWorkflow({
+  id: "process-document",
+  inputSchema: z.object({ url: z.string() }),
+  outputSchema: z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  })
+})
+  .then(downloadStep)      // 下载文档
+  .then(chunkStep)         // 分割成块
+  .then(embedChunksStep)   // 嵌入该文档的所有块
+  .then(formatResultStep)  // 格式化最终输出
+  .commit();
+
+// 在 foreach 内使用嵌套工作流
+export const batchProcessWorkflow = createWorkflow({
+  id: "batch-process-documents",
+  inputSchema: z.array(z.object({ url: z.string() })),
+  outputSchema: z.array(z.object({
+    embeddings: z.array(z.array(z.number())),
+    metadata: z.object({ url: z.string(), chunkCount: z.number() })
+  }))
+})
+  .foreach(processDocumentWorkflow, { concurrency: 3 })
+  .commit();
+
+// 每个文档在下一个文档开始之前完成所有 4 个步骤（concurrency: 1 时）
+// 使用 concurrency: 3，多达 3 个文档同时处理其完整管道
+```
+
+**为什么使用嵌套工作流：**
+- **更好的并行性**：使用 `concurrency: N`，多个项目同时运行其完整管道。链接的 `.foreach().foreach()` 处理所有项目的步骤 1，等待，然后所有项目的步骤 2 - 嵌套工作流让每个项目独立进展
+- 一个项目的所有步骤在收集结果之前一起完成
+- 比创建嵌套数组的多个 `.foreach()` 调用更简洁
+- 每个嵌套工作流执行是独立的，有自己的数据流
+- 更容易单独测试和重用每个项目的逻辑
+
+**它如何工作：**
+1. 父工作流将每个数组项传递给嵌套工作流的一个实例
+2. 每个嵌套工作流为该项目运行其完整步骤序列
+3. 使用 `concurrency > 1`，多个嵌套工作流并行执行
+4. 嵌套工作流的最终输出成为结果数组中的一个元素
+5. 所有嵌套工作流完成后，父工作流中的下一步接收完整数组
+
+## 选择正确的模式
+
+使用本节作为选择适当控制流方法的参考。
+
+### 快速参考
+
+| 方法 | 用途 | 输入 | 输出 | 并发 |
+|--------|---------|-------|--------|-------------|
+| `.then(step)` | 顺序处理 | `T` | `U` | N/A（一次一个） |
+| `.parallel([a, b])` | 对相同输入的不同操作 | `T` | `{ a: U, b: V }` | 同时运行 |
+| `.foreach(step)` | 对每个数组项的相同操作 | `T[]` | `U[]` | 可配置（默认：1） |
+| `.branch([...])` | 条件路径选择 | `T` | `{ selectedStep: U }` | 只有一个分支运行 |
+
+### `.parallel()` vs `.foreach()`
+
+**当你有一个需要不同处理的输入时使用 `.parallel()`：**
+
+```typescript
+// 相同的用户数据以不同方式并行处理
+workflow
+  .parallel([validateStep, enrichStep, scoreStep])
+  .then(combineResultsStep)
+```
+
+**当你有许多需要相同处理的输入时使用 `.foreach()`：**
+
+```typescript
+// 多个 URL 每个以相同方式处理
+workflow
+  .foreach(downloadStep, { concurrency: 5 })
+  .then(aggregateStep)
+```
+
+### 何时使用嵌套工作流
+
+**在 `.foreach()` 内部** - 当每个数组项需要多个顺序步骤时：
+
+```typescript
+// 每个文档经历完整管道
+const processDocWorkflow = createWorkflow({...})
+  .then(downloadStep)
+  .then(parseStep)
+  .then(embedStep)
+  .commit();
+
+workflow.foreach(processDocWorkflow, { concurrency: 3 })
+```
+
+这比链接 `.foreach().foreach()` 更简洁，后者会创建嵌套数组。
+
+**在 `.parallel()` 内部** - 当并行分支需要自己的多步骤管道时：
+
+```typescript
+const pipelineA = createWorkflow({...}).then(step1).then(step2).commit();
+const pipelineB = createWorkflow({...}).then(step3).then(step4).commit();
+
+workflow.parallel([pipelineA, pipelineB])
+```
+
+### 链接模式
+
+| 模式 | 发生什么 | 常见用例 |
+|---------|--------------|----------------|
+| `.then().then()` | 顺序步骤 | 简单管道 |
+| `.parallel().then()` | 并行运行，然后组合 | 扇出/扇入 |
+| `.foreach().then()` | 处理所有项，然后聚合 | Map-reduce |
+| `.foreach().foreach()` | 创建数组的数组 | 避免 - 使用嵌套工作流或带有 `.flat()` 的 `.map()` |
+| `.foreach(workflow)` | 每个项目的完整管道 | 每个数组项的多步骤处理 |
+
+### 同步：下一步何时运行
+
+`.parallel()` 和 `.foreach()` 都是同步点。工作流中的下一步仅在所有并行分支或所有数组迭代完成后才执行。
+
+```typescript
+workflow
+  .parallel([stepA, stepB, stepC])  // 所有 3 个同时运行
+  .then(combineStep)                // 等待所有 3 个完成后才运行
+  .commit();
+
+workflow
+  .foreach(processStep, { concurrency: 5 })  // 最多 5 个项目同时处理
+  .then(aggregateStep)                       // 等待所有项目完成后才运行
+  .commit();
+```
+
+这意味着：
+- `.parallel()` 将所有分支输出收集到一个对象中，然后传递给下一步
+- `.foreach()` 将所有迭代输出收集到一个数组中，然后传递给下一步
+- 无法在它们完成时"流式"结果到下一步
+
+### 并发行为
+
+| 方法 | 行为 |
+|--------|----------|
+| `.then()` | 顺序 - 一次一个步骤 |
+| `.parallel()` | 所有分支同时运行（无限制选项） |
+| `.foreach()` | 通过 `{ concurrency: N }` 控制 - 默认是 1（顺序） |
+| `.foreach()` 中的嵌套工作流 | 尊重父级的并发设置 |
+
+**性能提示：** 对于 `.foreach()` 中的 I/O 绑定操作，增加并发以并行处理项目：
+
+```typescript
+// 最多同时处理 10 个项目
+workflow.foreach(fetchDataStep, { concurrency: 10 })
+```
+
+## 循环管理
+
+根据你希望循环结束的方式，可以不同方式实现循环条件。常见模式包括检查 `inputData` 中返回的值、设置最大迭代次数，或在达到限制时中止执行。
+
+### 中止循环
+
+使用 `iterationCount` 限制循环运行次数。如果计数超过你的阈值，抛出错误以使步骤失败并停止工作流。
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .dountil(step1, async ({ inputData: { userResponse, iterationCount } }) => {
+    if (iterationCount >= 10) {
+      throw new Error("Maximum iterations reached");
+    }
+    return userResponse === "yes";
+  })
+  .commit();
+```
+
+## 相关内容
+
+- [暂停与恢复](/docs/cn/workflows/suspend-and-resume)
+- [人机交互](/docs/cn/workflows/human-in-the-loop)

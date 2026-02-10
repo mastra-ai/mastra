@@ -1,0 +1,724 @@
+---
+title: "参考文档: Agent.stream() | 流处理"
+description: "Mastra 智能体中 `Agent.stream()` 方法的文档，该方法支持具有增强功能的实时流式响应。"
+packages:
+  - "@mastra/ai-sdk"
+---
+
+import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
+
+# Agent.stream()
+
+`.stream()` 方法支持从智能体实时流式传输响应，具有增强功能和格式灵活性。该方法接受消息和可选的流处理选项，提供新一代流式处理体验，同时支持 Mastra 的原生格式和 AI SDK v5+ 兼容性。
+
+## 使用示例
+
+```ts title="index.ts"
+const stream = await agent.stream("发送给智能体的消息");
+```
+
+:::info
+
+**模型兼容性**：此方法专为 V2 模型设计。V1 模型应使用 [`.streamLegacy()`](./streamLegacy) 方法。框架会自动检测你的模型版本，如果版本不匹配会抛出错误。
+
+:::
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description: "发送给智能体的消息。可以是单个字符串、字符串数组或结构化消息对象。",
+    },
+    {
+      name: "options",
+      type: "AgentExecutionOptions<Output, Format>",
+      isOptional: true,
+      description: "流式处理过程的可选配置。",
+    },
+  ]}
+/>
+
+### 选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description: "执行期间运行的最大步数。",
+    },
+    {
+      name: "scorers",
+      type: "MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>",
+      isOptional: true,
+      description: "对执行结果运行的评估评分器。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "scorer",
+              type: "string",
+              isOptional: false,
+              description: "要使用的评分器名称。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "sampling",
+              type: "ScoringSamplingConfig",
+              isOptional: true,
+              description: "评分器的采样配置。",
+              properties: [
+                {
+                  parameters: [
+                    {
+                      name: "type",
+                      type: "'none' | 'ratio'",
+                      isOptional: false,
+                      description: "采样策略类型。使用 'none' 禁用采样，或使用 'ratio' 进行基于百分比的采样。",
+                    },
+                  ],
+                },
+                {
+                  parameters: [
+                    {
+                      name: "rate",
+                      type: "number",
+                      isOptional: true,
+                      description: "采样率（0-1）。当 type 为 'ratio' 时为必需。",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "用于跨度层次结构和元数据的追踪上下文。",
+    },
+    {
+      name: "returnScorerData",
+      type: "boolean",
+      isOptional: true,
+      description: "是否在响应中返回详细的评分数据。",
+    },
+    {
+      name: "onChunk",
+      type: "(chunk: ChunkType) => Promise<void> | void",
+      isOptional: true,
+      description: "在流式处理期间为每个块调用的回调函数。",
+    },
+    {
+      name: "onError",
+      type: "({ error }: { error: Error | string }) => Promise<void> | void",
+      isOptional: true,
+      description: "在流式处理期间发生错误时调用的回调函数。",
+    },
+    {
+      name: "onAbort",
+      type: "(event: any) => Promise<void> | void",
+      isOptional: true,
+      description: "流中止时调用的回调函数。",
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      isOptional: true,
+      description: "允许你中止智能体执行的信令对象。当信号中止时，所有正在进行的操作都将终止。",
+    },
+    {
+      name: "activeTools",
+      type: "Array<keyof ToolSet> | undefined",
+      isOptional: true,
+      description: "执行期间可以使用的活动工具名称数组。",
+    },
+    {
+      name: "prepareStep",
+      type: "PrepareStepFunction<any>",
+      isOptional: true,
+      description: "在多步执行的每一步之前调用的回调函数。",
+    },
+    {
+      name: "context",
+      type: "ModelMessage[]",
+      isOptional: true,
+      description: "提供给智能体的额外上下文消息。",
+    },
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
+      isOptional: true,
+      description: "用于微调结构化输出生成的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "schema",
+              type: "z.ZodSchema<S>",
+              isOptional: false,
+              description: "定义预期输出结构的 Zod 模式。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "model",
+              type: "MastraLanguageModel",
+              isOptional: true,
+              description: "用于结构化输出生成的语言模型。如果提供，启用智能体以多步骤响应，包括工具调用、文本和结构化输出。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "errorStrategy",
+              type: "'strict' | 'warn' | 'fallback'",
+              isOptional: true,
+              description: "处理模式验证错误的策略。'strict' 抛出错误，'warn' 记录警告，'fallback' 使用回退值。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "fallbackValue",
+              type: "<S extends ZodTypeAny>",
+              isOptional: true,
+              description: "当模式验证失败且 errorStrategy 为 'fallback' 时使用的回退值。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "instructions",
+              type: "string",
+              isOptional: true,
+              description: "结构化输出模型的额外指令。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "jsonPromptInjection",
+              type: "boolean",
+              isOptional: true,
+              description: "将系统提示注入主智能体，指示其返回结构化输出，适用于模型本身不支持结构化输出的情况。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description: "传递给内部结构化智能体的特定于提供商的选项。使用此选项来控制模型行为，如思考模型的推理努力（例如，`{ openai: { reasoningEffort: 'low' } }`）。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "覆盖在智能体上设置的输出处理器。输出处理器可以在返回给用户之前修改或验证来自智能体的消息。必须实现 `processOutputResult` 和/或 `processOutputStream` 函数。",
+    },
+    {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      description: "是否在流输出中包含原始块（并非在所有模型提供商上都可用）。",
+    },
+    {
+      name: "inputProcessors",
+      type: "Processor[]",
+      isOptional: true,
+      description: "覆盖在智能体上设置的输入处理器。输入处理器可以在智能体处理之前修改或验证消息。必须实现 `processInput` 函数。",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description: "覆盖此特定生成的智能体默认指令的自定义指令。适用于在不创建新智能体实例的情况下动态修改智能体行为。",
+    },
+    {
+      name: "system",
+      type: "string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[]",
+      isOptional: true,
+      description: "要包含在提示中的自定义系统消息。可以是单个字符串、消息对象或两者的数组。系统消息提供补充智能体主要指令的额外上下文或行为指令。",
+    },
+    {
+      name: "output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "**已弃用。** 使用不带模型的 structuredOutput 来实现相同功能。定义输出的预期结构。可以是 JSON Schema 对象或 Zod 模式。",
+    },
+    {
+      name: "memory",
+      type: "object",
+      isOptional: true,
+      description: "内存配置。这是管理内存的首选方式。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "thread",
+              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+              isOptional: false,
+              description: "对话线程，作为字符串 ID 或带有 `id` 和可选 `metadata` 的对象。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "resource",
+              type: "string",
+              isOptional: false,
+              description: "与线程关联的用户或资源的标识符。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "options",
+              type: "MemoryConfig",
+              isOptional: true,
+              description: "包括 lastMessages、readOnly、semanticRecall 和 workingMemory 的内存行为配置。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "onFinish",
+      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+      isOptional: true,
+      description: "流完成时调用的回调函数。接收最终结果。",
+    },
+    {
+      name: "onStepFinish",
+      type: "StreamTextOnStepFinishCallback<any> | never",
+      isOptional: true,
+      description: "每个执行步骤之后调用的回调函数。接收步骤详情作为 JSON 字符串。结构化输出不可用。",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "流式处理期间 OTLP 遥测收集的设置（不是追踪）。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "isEnabled",
+              type: "boolean",
+              isOptional: true,
+              description: "启用或禁用遥测。实验性期间默认为禁用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordInputs",
+              type: "boolean",
+              isOptional: true,
+              description: "启用或禁用输入记录。默认启用。你可能希望禁用输入记录以避免记录敏感信息。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordOutputs",
+              type: "boolean",
+              isOptional: true,
+              description: "启用或禁用输出记录。默认启用。你可能希望禁用输出记录以避免记录敏感信息。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "functionId",
+              type: "string",
+              isOptional: true,
+              description: "此函数的标识符。用于按函数分组遥测数据。",
+            },
+          ],
+        },
+      ],
+    },
+    MODEL_SETTINGS_OBJECT,
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "控制智能体在流式处理期间如何使用工具。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "'auto'",
+              type: "string",
+              description: "让模型决定是否使用工具（默认）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "'none'",
+              type: "string",
+              description: "不使用任何工具。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "'required'",
+              type: "string",
+              description: "要求模型至少使用一个工具。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "{ type: 'tool'; toolName: string }",
+              type: "object",
+              description: "按名称要求模型使用特定工具。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description: "在流式处理期间提供给智能体的额外工具集。",
+    },
+    {
+      name: "clientTools",
+      type: "ToolsInput",
+      isOptional: true,
+      description: "在请求的'客户端'端执行的工具。这些工具在定义中没有执行函数。",
+    },
+    {
+      name: "savePerStep",
+      type: "boolean",
+      isOptional: true,
+      description: "在每个流步骤完成后增量保存消息（默认值：false）。",
+    },
+    {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description: "当为 true 时，所有工具调用都需要在执行前明确批准。流将发出 `tool-call-approval` 块并暂停，直到调用 `approveToolCall()` 或 `declineToolCall()`。",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description: "当为 true 时，当用户在同一个线程上发送新消息时，自动恢复暂停的工具。智能体根据工具的 `resumeSchema` 从用户消息中提取 `resumeData`。需要配置内存。",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description: "同时执行的最大工具调用数。当可能需要批准时默认为 1，否则为 10。",
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, JSONValue>>",
+      isOptional: true,
+      description: "传递给底层 LLM 提供商的额外特定于提供商的选项。结构为 `{ providerName: { optionKey: value } }`。例如：`{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "openai",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "OpenAI 特定选项。例如：`{ reasoningEffort: 'high' }`",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "anthropic",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "Anthropic 特定选项。例如：`{ maxTokens: 1000 }`",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "google",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "Google 特定选项。例如：`{ safetySettings: [...] }`",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "[providerName]",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "其他特定于提供商的选项。键是提供商名称，值是特定于提供商的选项记录。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description: "此生成运行的唯一 ID。用于跟踪和调试目的。",
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      description: "用于依赖注入和上下文信息的请求上下文。",
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description: "用于创建子跨度并添加元数据的追踪上下文。使用 Mastra 的追踪系统时自动注入。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description: "用于创建子跨度并添加元数据的当前跨度。使用此选项创建自定义子跨度或在执行期间更新跨度属性。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "追踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "添加到根追踪跨度的元数据。适用于添加自定义属性，如用户 ID、会话 ID 或功能标志。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description: "作为此追踪的元数据提取的额外 RequestContext 键。支持点符号表示嵌套值（例如，'user.id'）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description: "用于此执行的追踪 ID（1-32 个十六进制字符）。如果提供，此追踪将成为指定追踪的一部分。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description: "用于此执行的父跨度 ID（1-16 个十六进制字符）。如果提供，根跨度将作为此跨度的子跨度创建。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description: "应用于此追踪的标签。用于分类和筛选追踪的字符串标签。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraModelOutput<Output>",
+      description: "返回提供对流输出访问的 MastraModelOutput 实例。",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description: "当启用追踪时，与此执行关联的追踪 ID。使用此选项关联日志并调试执行流程。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+### Mastra 格式（默认）
+
+```ts title="index.ts"
+import { stepCountIs } from "ai-v5";
+
+const stream = await agent.stream("给我讲个故事", {
+  stopWhen: stepCountIs(3), // 3 步后停止
+  modelSettings: {
+    temperature: 0.7,
+  },
+});
+
+// 访问文本流
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
+
+// 或访问完整流
+for await (const chunk of stream.fullStream) {
+  console.log(chunk);
+}
+
+// 流之后获取完整文本
+const fullText = await stream.text;
+```
+
+### AI SDK v5+ 格式
+
+要将流与 AI SDK v5（及更高版本）一起使用，你可以使用我们的实用函数 `toAISdkStream` 进行转换。
+
+```ts title="index.ts"
+import { stepCountIs, createUIMessageStreamResponse } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
+
+const stream = await agent.stream("给我讲个故事", {
+  stopWhen: stepCountIs(3), // 3 步后停止
+  modelSettings: {
+    temperature: 0.7,
+  },
+});
+
+// 在前端集成的 API 路由中
+return createUIMessageStreamResponse({
+  stream: toAISdkStream(stream, { from: "agent" }),
+})
+```
+
+### 使用回调
+
+所有回调函数现在都可以作为顶级属性使用，以获得更干净的 API 体验。
+
+```ts title="index.ts"
+const stream = await agent.stream("给我讲个故事", {
+  onFinish: (result) => {
+    console.log("流完成：", result);
+  },
+  onStepFinish: (step) => {
+    console.log("步骤完成：", step);
+  },
+  onChunk: (chunk) => {
+    console.log("收到块：", chunk);
+  },
+  onError: ({ error }) => {
+    console.error("流错误：", error);
+  },
+  onAbort: (event) => {
+    console.log("流中止：", event);
+  },
+});
+
+// 处理流
+for await (const chunk of stream.textStream) {
+  console.log(chunk);
+}
+```
+
+### 带选项的高级示例
+
+```ts title="index.ts"
+import { z } from "zod";
+import { stepCountIs } from "ai";
+
+await agent.stream("发送给智能体的消息", {
+  stopWhen: stepCountIs(3), // 3 步后停止
+  modelSettings: {
+    temperature: 0.7,
+  },
+  memory: {
+    thread: "user-123",
+    resource: "test-app",
+  },
+  toolChoice: "auto",
+  // 结构化输出带来更好的开发者体验
+  structuredOutput: {
+    schema: z.object({
+      sentiment: z.enum(["positive", "negative", "neutral"]),
+      confidence: z.number(),
+    }),
+    model: "openai/gpt-4o",
+    errorStrategy: "warn",
+  },
+  // 用于流响应验证的输出处理器
+  outputProcessors: [
+    new ModerationProcessor({ model: "openrouter/openai/gpt-oss-safeguard-20b" }),
+    new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
+  ],
+});
+```
+
+## 相关文档
+
+- [生成响应](/docs/cn/docs/agents/overview#生成响应)
+- [流式响应](/docs/cn/docs/agents/overview#生成响应)
+- [智能体审批](/docs/cn/docs/agents/agent-approval)

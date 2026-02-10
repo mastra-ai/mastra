@@ -1,0 +1,457 @@
+---
+title: "参考：.chunk() | RAG"
+description: "Mastra 中 chunk 函数的文档，用于使用各种策略将文档分割成较小的片段。"
+packages:
+  - "@mastra/rag"
+---
+
+# 参考：.chunk()
+
+`.chunk()` 函数使用各种策略和选项将文档分割成较小的片段。
+
+## 示例
+
+```typescript
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromMarkdown(`
+# 简介
+这是一个示例文档，我们想将其分割成块。
+
+## 第 1 节
+这里是第一节，包含一些内容。
+
+## 第 2 节
+这里是另一节，包含不同的内容。
+`);
+
+// 使用默认设置进行基本分块
+const chunks = await doc.chunk();
+
+// 使用标题提取进行 Markdown 特定分块
+const chunksWithMetadata = await doc.chunk({
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ],
+  extract: {
+    summary: true, // 使用默认设置提取摘要
+    keywords: true, // 使用默认设置提取关键词
+  },
+});
+```
+
+## 参数
+
+以下参数适用于所有分块策略。
+**重要提示：** 每种策略只会使用与特定用例相关的参数子集。
+
+<PropertiesTable
+  content={[
+    {
+      name: "strategy",
+      type: "'recursive' | 'character' | 'token' | 'markdown' | 'semantic-markdown' | 'html' | 'json' | 'latex' | 'sentence'",
+      isOptional: true,
+      description:
+        "要使用的分块策略。如果未指定，则根据文档类型默认值。取决于分块策略，还有额外的可选参数。默认值：.md 文件 → 'markdown'，.html/.htm → 'html'，.json → 'json'，.tex → 'latex'，其他 → 'recursive'",
+    },
+    {
+      name: "maxSize",
+      type: "number",
+      isOptional: true,
+      defaultValue: "4000",
+      description:
+        "每个块的最大大小。**注意：** 某些策略配置（带标题的 Markdown，带标题的 HTML）会忽略此参数。",
+    },
+    {
+      name: "overlap",
+      type: "number",
+      isOptional: true,
+      defaultValue: "50",
+      description: "块之间重叠的字符/令牌数量。",
+    },
+    {
+      name: "lengthFunction",
+      type: "(text: string) => number",
+      isOptional: true,
+      description:
+        "计算文本长度的函数。默认为字符计数。",
+    },
+    {
+      name: "separatorPosition",
+      type: "'start' | 'end'",
+      isOptional: true,
+      description:
+        "分隔符在块中的位置。'start' 附加到下一个块的开头，'end' 附加到当前块的末尾。如果未指定，分隔符将被丢弃。",
+    },
+    {
+      name: "addStartIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否为块添加起始索引元数据。",
+    },
+    {
+      name: "stripWhitespace",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "是否从块中去除空白。",
+    },
+    {
+      name: "extract",
+      type: "ExtractParams",
+      isOptional: true,
+      description: "元数据提取配置。",
+    },
+  ]}
+/>
+
+有关 `extract` 参数的详细信息，请参阅 [ExtractParams 参考](/reference/rag/extract-params)。
+
+## 策略特定选项
+
+策略特定选项与策略参数一起作为顶级参数传递。例如：
+
+```typescript
+// 字符策略示例
+const chunks = await doc.chunk({
+  strategy: "character",
+  separator: ".", // 字符特定选项
+  isSeparatorRegex: false, // 字符特定选项
+  maxSize: 300, // 通用选项
+});
+
+// 递归策略示例
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  separators: ["\n\n", "\n", " "], // 递归特定选项
+  language: "markdown", // 递归特定选项
+  maxSize: 500, // 通用选项
+});
+
+// 句子策略示例
+const chunks = await doc.chunk({
+  strategy: "sentence",
+  maxSize: 450, // 句子策略必需
+  minSize: 50, // 句子特定选项
+  sentenceEnders: ["."], // 句子特定选项
+  fallbackToCharacters: false, // 句子特定选项
+});
+
+// HTML 策略示例
+const chunks = await doc.chunk({
+  strategy: "html",
+  headers: [
+    ["h1", "title"],
+    ["h2", "subtitle"],
+  ], // HTML 特定选项
+});
+
+// Markdown 策略示例
+const chunks = await doc.chunk({
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ], // Markdown 特定选项
+  stripHeaders: true, // Markdown 特定选项
+});
+
+// 语义 Markdown 策略示例
+const chunks = await doc.chunk({
+  strategy: "semantic-markdown",
+  joinThreshold: 500, // 语义 Markdown 特定选项
+  modelName: "gpt-3.5-turbo", // 语义 Markdown 特定选项
+});
+
+// 令牌策略示例
+const chunks = await doc.chunk({
+  strategy: "token",
+  encodingName: "gpt2", // 令牌特定选项
+  modelName: "gpt-3.5-turbo", // 令牌特定选项
+  maxSize: 1000, // 通用选项
+});
+```
+
+以下记录的选项直接在配置对象的顶层传递，而不是嵌套在单独的对象中。
+
+### 字符
+
+<PropertiesTable
+  content={[
+    {
+      name: "separators",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "按优先级顺序尝试的分隔符数组。该策略将首先尝试在第一个分隔符上分割，然后回退到后续分隔符。",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "分隔符是否为正则表达式模式",
+    },
+  ]}
+/>
+
+### 递归
+
+<PropertiesTable
+  content={[
+    {
+      name: "separators",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "按优先级顺序尝试的分隔符数组。该策略将首先尝试在第一个分隔符上分割，然后回退到后续分隔符。",
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "分隔符是否为正则表达式模式",
+    },
+    {
+      name: "language",
+      type: "Language",
+      isOptional: true,
+      description:
+        "用于特定语言分割行为的编程或标记语言。请参阅 Language 枚举以了解支持的值。",
+    },
+  ]}
+/>
+
+### 句子
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSize",
+      type: "number",
+      description:
+        "每个块的最大大小（句子策略必需）",
+    },
+    {
+      name: "minSize",
+      type: "number",
+      isOptional: true,
+      defaultValue: "50",
+      description:
+        "每个块的最小大小。小于此值的块将在可能的情况下与相邻块合并。",
+    },
+    {
+      name: "targetSize",
+      type: "number",
+      isOptional: true,
+      description:
+        "块的首选目标大小。默认为 maxSize 的 80%。该策略将尝试创建接近此大小的块。",
+    },
+    {
+      name: "sentenceEnders",
+      type: "string[]",
+      isOptional: true,
+      defaultValue: "['.', '!', '?']",
+      description:
+        "标记分割边界的句子结尾字符数组。",
+    },
+    {
+      name: "fallbackToWords",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description:
+        "对于超过 maxSize 的句子是否回退到单词级别分割。",
+    },
+    {
+      name: "fallbackToCharacters",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description:
+        "对于超过 maxSize 的单词是否回退到字符级别分割。仅在 fallbackToWords 启用时适用。",
+    },
+  ]}
+/>
+
+### HTML
+
+<PropertiesTable
+  content={[
+    {
+      name: "headers",
+      type: "Array<[string, string]>",
+      description:
+        "[选择器，元数据键] 对的数组，用于基于标题的分割",
+    },
+    {
+      name: "sections",
+      type: "Array<[string, string]>",
+      description:
+        "[选择器，元数据键] 对的数组，用于基于部分的分割",
+    },
+    {
+      name: "returnEachLine",
+      type: "boolean",
+      isOptional: true,
+      description: "是否将每一行作为单独的块返回",
+    },
+  ]}
+/>
+
+**重要提示：** 使用 HTML 策略时，所有通用选项都会被忽略。使用 `headers` 进行基于标题的分割，或使用 `sections` 进行基于部分的分割。如果同时使用，`sections` 将被忽略。
+
+### Markdown
+
+<PropertiesTable
+  content={[
+    {
+      name: "headers",
+      type: "Array<[string, string]>",
+      isOptional: true,
+      description: "[标题级别，元数据键] 对的数组",
+    },
+    {
+      name: "stripHeaders",
+      type: "boolean",
+      isOptional: true,
+      description: "是否从输出中移除标题",
+    },
+    {
+      name: "returnEachLine",
+      type: "boolean",
+      isOptional: true,
+      description: "是否将每一行作为单独的块返回",
+    },
+  ]}
+/>
+
+**重要提示：** 使用 `headers` 选项时，Markdown 策略会忽略所有通用选项，内容基于 Markdown 标题结构进行分割。要在 Markdown 中使用基于大小的分块，请省略 `headers` 参数。
+
+### 语义 Markdown
+
+<PropertiesTable
+  content={[
+    {
+      name: "joinThreshold",
+      type: "number",
+      isOptional: true,
+      defaultValue: "500",
+      description:
+        "用于合并相关部分的最大令牌数。单独超过此限制的部分将保持不变，但较小的部分如果组合大小在此阈值内，将与兄弟部分或父部分合并。",
+    },
+    {
+      name: "modelName",
+      type: "string",
+      isOptional: true,
+      description:
+        "用于分词的模型名称。如果提供，将使用模型底层分词的 `encodingName`。",
+    },
+    {
+      name: "encodingName",
+      type: "string",
+      isOptional: true,
+      defaultValue: "cl100k_base",
+      description:
+        "要使用的令牌编码名称。如果提供了 modelName，则从中派生。",
+    },
+    {
+      name: "allowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description:
+        "分词期间允许的特殊令牌集合，或 'all' 以允许所有特殊令牌",
+    },
+    {
+      name: "disallowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      defaultValue: "all",
+      description:
+        "分词期间要禁止的特殊令牌集合，或 'all' 以禁止所有特殊令牌",
+    },
+  ]}
+/>
+
+### 令牌
+
+<PropertiesTable
+  content={[
+    {
+      name: "encodingName",
+      type: "string",
+      isOptional: true,
+      description: "要使用的令牌编码名称",
+    },
+    {
+      name: "modelName",
+      type: "string",
+      isOptional: true,
+      description: "用于分词的模型名称",
+    },
+    {
+      name: "allowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description:
+        "分词期间允许的特殊令牌集合，或 'all' 以允许所有特殊令牌",
+    },
+    {
+      name: "disallowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description:
+        "分词期间要禁止的特殊令牌集合，或 'all' 以禁止所有特殊令牌",
+    },
+  ]}
+/>
+
+### JSON
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSize",
+      type: "number",
+      description: "每个块的最大大小",
+    },
+    {
+      name: "minSize",
+      type: "number",
+      isOptional: true,
+      description: "每个块的最小大小",
+    },
+    {
+      name: "ensureAscii",
+      type: "boolean",
+      isOptional: true,
+      description: "是否确保 ASCII 编码",
+    },
+    {
+      name: "convertLists",
+      type: "boolean",
+      isOptional: true,
+      description: "是否转换 JSON 中的列表",
+    },
+  ]}
+/>
+
+### Latex
+
+Latex 策略仅使用上面列出的通用分块选项。它提供了针对数学和学术文档优化的 LaTeX 感知分割。
+
+## 返回值
+
+返回一个包含分割后文档的 `MDocument` 实例。每个块包括：
+
+```typescript
+interface DocumentNode {
+  text: string;
+  metadata: Record<string, any>;
+  embedding?: number[];
+}
+```

@@ -1,0 +1,83 @@
+---
+title: "文件系统 | 工作区"
+description: "配置文件系统提供程序以为代理提供持久性文件存储。"
+packages:
+  - "@mastra/core"
+---
+
+# 文件系统
+
+**新增于：** `@mastra/core@1.1.0`
+
+文件系统提供程序赋予代理读取、写入和管理文件的能力。当你在工作区上配置文件系统时，代理会收到用于文件操作的工具。
+
+文件系统提供程序处理工作区的所有文件操作：
+
+- **读取** - 读取文件内容
+- **写入** - 创建和更新文件
+- **列出** - 浏览目录
+- **删除** - 删除文件和目录
+- **统计** - 获取文件元数据
+
+## 支持的提供程序
+
+可用的提供程序：
+
+- [`LocalFilesystem`](/reference/workspace/local-filesystem) - 将文件存储在磁盘上的目录中
+
+:::tip
+
+`LocalFilesystem` 是最简单的入门方式，因为它不需要外部服务。
+
+:::
+
+## 基本用法
+
+创建带有文件系统的工作区并将其分配给代理。代理可以读取、写入和管理文件作为其任务的一部分：
+
+```typescript title="src/mastra/agents/file-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+});
+
+const agent = new Agent({
+  id: 'file-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful file management assistant.',
+  workspace,
+});
+
+// 代理现在可以使用文件系统工具
+const response = await agent.generate('List all files in the workspace');
+```
+
+## 只读模式
+
+要防止代理修改文件，启用只读模式：
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    // highlight-next-line
+    readOnly: true,
+  }),
+});
+```
+
+在只读模式下，写入工具（`write_file`、`edit_file`、`delete`、`mkdir`）不会添加到代理的工具集中。代理仍然可以读取和列出文件。
+
+## 代理工具
+
+当你在工作区上配置文件系统时，代理会收到用于读取、写入、列出和删除文件的工具。详情请参阅[工作区类参考](/reference/workspace/workspace-class#filesystem-tools)。
+
+## 相关内容
+
+- [LocalFilesystem 参考](/reference/workspace/local-filesystem)
+- [工作区概述](/docs/cn/workspace/overview)
+- [沙箱](/docs/cn/workspace/sandbox)

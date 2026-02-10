@@ -1,0 +1,130 @@
+---
+title: "参考文档：chatRoute() | AI SDK"
+description: "chatRoute() 的 API 参考，这是一个用于创建 AI SDK 兼容格式的流式智能体对话路由处理器的函数。"
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# chatRoute()
+
+使用 AI SDK 格式创建流式智能体对话的路由处理器。此函数注册一个 HTTP `POST` 端点，接受消息，执行智能体，并以 AI SDK 兼容格式将响应流式传输回客户端。您必须在[自定义 API 路由](/docs/cn/docs/server/custom-api-routes)中使用它。
+
+如果您需要框架无关的处理器，请使用 [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream)。
+
+## 使用示例
+
+此示例展示如何在 `/chat` 端点设置聊天路由，使用 ID 为 `weatherAgent` 的智能体。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { chatRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: "/chat",
+        agent: "weatherAgent",
+      }),
+    ],
+  },
+});
+```
+
+您还可以基于 `agentId` 使用动态智能体路由。URL `/chat/weatherAgent` 将解析为 ID 为 `weatherAgent` 的智能体。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { chatRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: "/chat/:agentId",
+      }),
+    ],
+  },
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "路由路径（例如，`/chat` 或 `/chat/:agentId`）。包含 `:agentId` 用于动态智能体路由。",
+      isOptional: false,
+      defaultValue: "'/chat/:agentId'",
+    },
+    {
+      name: "agent",
+      type: "string",
+      description: "用于此聊天路由的智能体 ID。如果路径不包含 `:agentId`，则为必填。",
+      isOptional: true,
+    },
+    {
+      name: "defaultOptions",
+      type: "AgentExecutionOptions",
+      description: "传递给智能体执行的默认选项。这些可以包括指令、内存配置、maxSteps 和其他执行设置。",
+      isOptional: true,
+    },
+    {
+      name: "sendStart",
+      type: "boolean",
+      description: "是否在流中发送开始事件。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "sendFinish",
+      type: "boolean",
+      description: "是否在流中发送完成事件。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "sendReasoning",
+      type: "boolean",
+      description: "是否在流中包含推理步骤。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "sendSources",
+      type: "boolean",
+      description: "是否在流中包含源引用。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## 附加配置
+
+您可以使用 [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) 自定义发送到聊天路由的请求，例如向智能体传递附加配置：
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/chat",
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          messages,
+          // 传递内存配置
+          memory: {
+            thread: "user-1",
+            resource: "user-1",
+          },
+        },
+      };
+    },
+  }),
+});
+```

@@ -1,0 +1,70 @@
+---
+title: "参考文档：Mastra.getMCPServer() | 核心"
+description: "Mastra 中 `Mastra.getMCPServer()` 方法的文档，用于按 ID 和可选版本检索特定的 MCP 服务器实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getMCPServer()
+
+`.getMCPServer()` 方法通过注册表键（在 `mcpServers` 配置中注册服务器时使用的键）检索 MCP 服务器实例。要通过服务器的固有的 `id` 属性检索，请改用 `.getMCPServerById()`。
+
+## 使用示例
+
+```typescript
+// 使用注册表键注册 MCP 服务器
+const myServer = new MCPServer({
+  id: 'my-mcp-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    customKey: myServer,  // 'customKey' 是注册表键
+  },
+});
+
+// 按注册表键检索
+const server = mastra.getMCPServer('customKey');
+
+// 或者，按固有 ID 检索
+const serverById = mastra.getMCPServerById('my-mcp-server');
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "registryKey",
+      type: "string",
+      description:
+        "在 mcpServers 配置对象中注册 MCP 服务器时使用的注册表键。这是键值对中的键，而不是服务器的固有 id 属性。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "server",
+      type: "MCPServerBase | undefined",
+      description:
+        "具有指定注册表键的 MCP 服务器实例，如果未找到则为 undefined。",
+    },
+  ]}
+/>
+
+## 相关方法
+
+- [Mastra.getMCPServerById()](/reference/core/getMCPServerById) - 通过其固有的 `id` 属性检索 MCP 服务器
+- [Mastra.listMCPServers()](/reference/core/listMCPServers) - 列出所有注册的 MCP 服务器
+
+## 另请参阅
+
+- [MCP 概述](/docs/cn/docs/mcp/overview)
+- [MCP 服务器参考](/reference/tools/mcp-server)

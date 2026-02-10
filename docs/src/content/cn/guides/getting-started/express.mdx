@@ -1,0 +1,128 @@
+---
+title: "Express | 框架"
+description: "开始使用 Mastra 和 Express"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 在您的 Express 项目中集成 Mastra
+
+在本指南中，您将使用 Mastra 和 Express 构建一个工具调用型 AI 代理。使用 [Express 服务器适配器](/reference/server/express-adapter)，您可以将代理公开为 HTTP 端点，而无需自行编写路由或运行独立的 Mastra 服务器。
+
+## 前置条件
+
+- 您需要一个支持的[模型提供商](/models)的 API key。如果您没有偏好，请使用 [OpenAI](/models/providers/openai)。
+- 安装 Node.js `v22.13.0` 或更高版本
+
+## 创建新的 Express 应用程序（可选）
+
+如果您已经有一个 Express 应用程序，请跳到下一步。
+
+克隆此[样板仓库](https://github.com/mastra-ai/express-ts-boilerplate)并安装依赖项：
+
+<Tabs>
+<TabItem value="https" label="HTTPS">
+
+```bash npm2yarn
+git clone https://github.com/mastra-ai/express-ts-boilerplate.git
+cd express-ts-boilerplate
+npm install
+```
+
+</TabItem>
+<TabItem value="ssh" label="SSH">
+
+```bash npm2yarn
+git clone git@github.com:mastra-ai/express-ts-boilerplate.git
+cd express-ts-boilerplate
+npm install
+```
+
+</TabItem>
+</Tabs>
+
+## 初始化 Mastra
+
+在 Express 项目目录中，运行 [`mastra init`](/reference/cli/mastra#mastra-init)。
+
+当提示时，选择一个提供商（例如 OpenAI）并输入您的 key：
+
+```bash
+npx mastra@latest init
+```
+
+这会创建一个 `src/mastra` 文件夹，其中包含一个示例天气代理以及以下文件：
+
+- `index.ts` - Mastra 配置，包括内存
+- `tools/weather-tool.ts` - 用于获取给定位置天气的工具
+- `agents/weather-agent.ts` - 一个带有使用工具提示词的天气代理
+
+稍后您会将 `src/mastra/index.ts` 文件传递给 Express 服务器适配器。
+
+## 添加服务器适配器
+
+安装 Express 服务器适配器包：
+
+```bash npm2yarn
+npm install @mastra/express@latest
+```
+
+打开 Express 入口文件 `src/index.ts`，添加所需的导入和初始化代码：
+
+```typescript {2-3,11-12} title="src/index.ts"
+import express, { type Request, type Response } from "express";
+import { MastraServer } from "@mastra/express";
+import { mastra } from "./mastra";
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// 中间件
+app.use(express.json());
+
+const server = new MastraServer({ app, mastra });
+await server.init();
+
+// 路由
+app.get("/", (_req: Request, res: Response) => {
+  res.json({ message: "Hello, World!" });
+});
+
+// 启动服务器
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
+```
+
+`MastraServer` 使用现有的 Express `app` 和根 `mastra` 实例进行初始化。调用 `init()` 会注册 Mastra 中间件并公开所有可用的 Mastra 端点。
+
+## 测试您的代理
+
+默认情况下，Mastra 的端点添加在 `/api` 子路径下，并使用您的代理/工作流 ID。由 `mastra init` 创建的默认 `weather-agent` 可在 `/api/agents/weather-agent` 访问。
+
+启动您的 Express 服务器：
+
+```bash
+npm run start
+```
+
+在单独的终端窗口中，使用 `curl` 向天气代理提问：
+
+```bash
+curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+## 后续步骤
+
+恭喜您使用 Express 构建了 Mastra 代理！🎉
+
+从这里开始，您可以使用自己的工具和逻辑扩展项目：
+
+- 了解更多关于[代理](/docs/cn/docs/agents/overview)
+- 为您的代理提供自己的[工具](/docs/cn/docs/agents/using-tools)
+- 为您的代理添加类似人类的[内存](/docs/cn/docs/agents/agent-memory)
+
+准备就绪后，阅读更多关于 Mastra 如何与 Express 集成的信息：
+
+- [服务器适配器](/docs/cn/docs/server/server-adapters)

@@ -1,0 +1,152 @@
+---
+title: "参考文档：create-mastra | CLI"
+description: "create-mastra 命令的文档，该命令用于创建具有交互式设置选项的新 Mastra 项目。"
+packages:
+  - "@mastra/create-mastra"
+---
+
+# create-mastra
+
+`create-mastra` 命令**创建**一个新的独立 Mastra 项目。使用此命令在专用目录中搭建完整的 Mastra 设置。您可以使用附加标志自定义设置过程。
+
+## 使用方法
+
+```bash npm2yarn
+npx create-mastra@latest
+```
+
+`create-mastra` 自动以_交互_模式运行，但您也可以使用命令行参数指定项目名称和模板。
+
+```bash npm2yarn
+npx create-mastra@latest my-mastra-project -- --template coding-agent
+```
+
+查看模板的[完整列表](https://mastra.ai/api/templates.json)，并使用 `slug` 作为 `--template` CLI 标志的输入。
+
+您还可以使用任何 GitHub 仓库作为模板（它必须是有效的 Mastra 项目）：
+
+```bash
+npx create-mastra@latest my-mastra-project -- --template mastra-ai/template-coding-agent
+```
+
+您可以在项目创建期间为特定智能体安装 Mastra 技能：
+
+```bash npm2yarn
+npx create-mastra@latest my-project -- --default --skills claude-code,cursor
+```
+
+## CLI 标志
+
+除了交互式提示之外，您还可以定义这些 CLI 标志。
+
+<PropertiesTable
+  content={[
+    {
+      name: "--version",
+      type: "boolean",
+      description: "输出版本号",
+      isOptional: true,
+    },
+    {
+      name: "--project-name",
+      type: "string",
+      description:
+        "将在 package.json 中使用并作为项目目录名称的项目名称",
+      isOptional: true,
+    },
+    {
+      name: "--default",
+      type: "boolean",
+      description: "使用默认设置快速开始（src、OpenAI、无示例）",
+      isOptional: true,
+    },
+    {
+      name: "--components",
+      type: "string",
+      description:
+        "组件的逗号分隔列表（agents、tools、workflows、scorers）",
+      isOptional: true,
+    },
+    {
+      name: "--llm",
+      type: "string",
+      description:
+        "默认模型提供商（openai、anthropic、groq、google 或 cerebras）",
+      isOptional: true,
+    },
+    {
+      name: "--llm-api-key",
+      type: "string",
+      description: "模型提供商的 API 密钥",
+      isOptional: true,
+    },
+    {
+      name: "--example",
+      type: "boolean",
+      description: "包含示例代码",
+      isOptional: true,
+    },
+    {
+      name: "--no-example",
+      type: "boolean",
+      description: "不包含示例代码",
+      isOptional: true,
+    },
+    {
+      name: "--template",
+      type: "string",
+      description:
+        "从模板创建项目（使用模板名称、公共 GitHub URL 或留空以从列表中选择）",
+      isOptional: true,
+    },
+    {
+      name: "--timeout",
+      type: "number",
+      description:
+        "包安装的可配置超时时间，默认为 60000 毫秒",
+      isOptional: true,
+    },
+    {
+      name: "--dir",
+      type: "string",
+      description: "Mastra 源代码的目标目录（默认：src/）",
+      isOptional: true,
+    },
+    {
+      name: "--mcp",
+      type: "string",
+      description:
+        "代码编辑器的 MCP 服务器（cursor、cursor-global、windsurf、vscode）",
+      isOptional: true,
+    },
+    {
+      name: "--skills",
+      type: "string",
+      description:
+        "要安装 Mastra 技能的智能体的逗号分隔列表（例如 claude-code,cursor,windsurf）",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "显示命令帮助",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 遥测
+
+默认情况下，Mastra 会收集有关您项目的匿名信息，如您的操作系统、Mastra 版本或 Node.js 版本。您可以阅读[源代码](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts)来查看收集的内容。
+
+您可以通过设置环境变量来选择退出 CLI 分析：
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+您也可以在使用其他 `mastra` 命令时设置此选项：
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@latest
+```

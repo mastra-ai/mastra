@@ -1,0 +1,255 @@
+---
+title: "MastraAuthAuth0 类 | 认证"
+description: "MastraAuthAuth0 类的文档，该类使用 Auth0 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-auth0"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MastraAuthAuth0 类
+
+`MastraAuthAuth0` 类使用 Auth0 为 Mastra 提供身份验证。它使用 Auth0 颁发的 JWT 令牌验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 前置条件
+
+此示例使用 Auth0 身份验证。请确保：
+
+1. 在 [auth0.com](https://auth0.com/) 创建 Auth0 账户
+2. 在 Auth0 仪表板中设置应用程序
+3. 在 Auth0 仪表板中配置具有标识符（audience）的 API
+4. 配置应用程序允许的回调 URL、Web 来源和注销 URL
+
+```env title=".env"
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_AUDIENCE=your-api-identifier
+```
+
+:::note
+
+您可以在 Auth0 仪表板的"应用程序" > "设置"下找到您的域。audience 是您在 Auth0 仪表板 > "API"中配置的 API 标识符。
+
+有关详细设置说明，请参阅针对您特定平台的 [Auth0 快速入门](https://auth0.com/docs/cn/quickstarts)。
+
+:::
+
+## 安装
+
+在使用 `MastraAuthAuth0` 类之前，您必须安装 `@mastra/auth-auth0` 包。
+
+```bash
+npm install @mastra/auth-auth0@latest
+```
+
+## 使用示例
+
+### 使用环境变量的基础用法
+
+```typescript {2,6} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthAuth0(),
+  },
+});
+```
+
+### 自定义配置
+
+```typescript {2,6-9} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE,
+    }),
+  },
+});
+```
+
+## 配置
+
+### 用户授权
+
+默认情况下，`MastraAuthAuth0` 允许所有具有指定 audience 有效 Auth0 令牌的身份验证用户。令牌验证确保：
+
+1. 令牌由 Auth0 正确签名
+2. 令牌未过期
+3. 令牌 audience 与您配置的 audience 匹配
+4. 令牌颁发者与您的 Auth0 域匹配
+
+要自定义用户授权，请提供自定义 `authorizeUser` 函数：
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+
+const auth0Provider = new MastraAuthAuth0({
+  authorizeUser: async (user) => {
+    // 自定义授权逻辑
+    return user.email?.endsWith("@yourcompany.com") || false;
+  },
+});
+```
+
+:::info
+
+访问 [MastraAuthAuth0](/reference/auth/auth0) 了解所有可用的配置选项。
+
+:::
+
+## 客户端设置
+
+使用 Auth0 身份验证时，您需要设置 Auth0 React SDK，对用户进行身份验证，并检索他们的访问令牌以传递给您的 Mastra 请求。
+
+### 设置 Auth0 React SDK
+
+首先，在您的应用程序中安装并配置 Auth0 React SDK：
+
+```bash
+npm install @auth0/auth0-react
+```
+
+```typescript title="src/auth0-provider.tsx"
+import React from 'react';
+import { Auth0Provider } from '@auth0/auth0-react';
+
+const Auth0ProviderWithHistory = ({ children }) => {
+  return (
+    <Auth0Provider
+      domain={process.env.REACT_APP_AUTH0_DOMAIN}
+      clientId={process.env.REACT_APP_AUTH0_CLIENT_ID}
+      authorizationParams={{
+        redirect_uri: window.location.origin,
+        audience: process.env.REACT_APP_AUTH0_AUDIENCE,
+        scope: "read:current_user update:current_user_metadata"
+      }}
+    >
+      {children}
+    </Auth0Provider>
+  );
+};
+
+export default Auth0ProviderWithHistory;
+```
+
+### 检索访问令牌
+
+使用 Auth0 React SDK 对用户进行身份验证并检索他们的访问令牌：
+
+```typescript title="lib/auth.ts"
+import { useAuth0 } from "@auth0/auth0-react";
+
+export const useAuth0Token = () => {
+  const { getAccessTokenSilently } = useAuth0();
+
+  const getAccessToken = async () => {
+    const token = await getAccessTokenSilently();
+    return token;
+  };
+
+  return { getAccessToken };
+};
+```
+
+:::note
+
+有关更多身份验证方法和配置选项，请参阅 [Auth0 React SDK 文档](https://auth0.com/docs/cn/libraries/auth0-react)。
+
+:::
+
+## 配置 `MastraClient`
+
+启用 `auth` 后，所有使用 `MastraClient` 发出的请求都必须在 `Authorization` 头中包含有效的 Auth0 访问令牌：
+
+```typescript title="lib/mastra/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const createMastraClient = (accessToken: string) => {
+  return new MastraClient({
+    baseUrl: "https://<mastra-api-url>",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+};
+```
+
+:::info
+
+访问令牌必须在 Authorization 头中以 `Bearer` 为前缀。
+
+访问 [Mastra Client SDK](/docs/cn/server/mastra-client) 了解更多配置选项。
+
+:::
+
+### 发出身份验证请求
+
+一旦 `MastraClient` 配置了 Auth0 访问令牌，您就可以发送身份验证请求：
+
+<Tabs>
+  <TabItem value="react" label="React">
+
+    ```tsx title="src/components/mastra-api-test.tsx"
+    import React, { useState } from 'react';
+    import { useAuth0 } from '@auth0/auth0-react';
+    import { MastraClient } from '@mastra/client-js';
+
+    export const MastraApiTest = () => {
+      const { getAccessTokenSilently } = useAuth0();
+      const [result, setResult] = useState(null);
+
+      const callMastraApi = async () => {
+        const token = await getAccessTokenSilently();
+
+        const mastra = new MastraClient({
+          baseUrl: "http://localhost:4111",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        const weatherAgent = mastra.getAgent("weatherAgent");
+        const response = await weatherAgent.generate("What's the weather like in New York");
+
+        setResult(response.text);
+      };
+
+      return (
+        <div>
+          <button onClick={callMastraApi}>
+            Test Mastra API
+          </button>
+
+          {result && (
+            <div className="result">
+              <h6>Result:</h6>
+              <pre>{result}</pre>
+            </div>
+          )}
+        </div>
+      );
+    };
+    ```
+
+  </TabItem>
+  <TabItem value="curl" label="cURL">
+
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-auth0-access-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+
+  </TabItem>
+</Tabs>

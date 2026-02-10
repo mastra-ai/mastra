@@ -1,0 +1,167 @@
+---
+title: "参考文档：Mastra 客户端 SDK | 客户端 SDK"
+description: "了解如何使用 client-js SDK 与 Mastra 交互。"
+packages:
+  - "@mastra/client-js"
+---
+
+# Mastra 客户端 SDK
+
+Mastra 客户端 SDK 提供了简单且类型安全的接口，用于从客户端环境与您的 [Mastra 服务器](/docs/cn/docs/deployment/mastra-server) 交互。
+
+## 使用示例
+
+```typescript title="lib/mastra/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: "http://localhost:4111/",
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "baseUrl",
+      type: "string",
+      description:
+        "Mastra API 的基础 URL。所有请求将相对于此 URL 发送。",
+      isOptional: false,
+    },
+    {
+      name: "retries",
+      type: "number",
+      description:
+        "请求在失败时重试的次数，抛出错误之前。",
+      isOptional: true,
+      defaultValue: "3",
+    },
+    {
+      name: "backoffMs",
+      type: "number",
+      description:
+        "重试失败请求之前的初始延迟毫秒数。此值在每次重试时加倍（指数退避）。",
+      isOptional: true,
+      defaultValue: "300",
+    },
+    {
+      name: "maxBackoffMs",
+      type: "number",
+      description:
+        "最大退避时间（毫秒）。防止重试之间等待时间过长。",
+      isOptional: true,
+      defaultValue: "5000",
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description:
+        "包含要随每个请求包含的自定义 HTTP 标头的对象。",
+      isOptional: true,
+    },
+    {
+      name: "credentials",
+      type: '"omit" | "same-origin" | "include"',
+      description:
+        "请求的凭据模式。详见 https://developer.mozilla.org/en-US/docs/cn/docs/Web/API/Request/credentials。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+<PropertiesTable
+  content={[
+    {
+      name: "listAgents()",
+      type: "Promise<Record<string, GetAgentResponse>>",
+      description: "返回所有可用的智能体实例。",
+    },
+    {
+      name: "getAgent(agentId)",
+      type: "Agent",
+      description: "通过 ID 检索特定智能体实例。",
+    },
+    {
+      name: "getMemoryThreads(params)",
+      type: "Promise<StorageThreadType[]>",
+      description:
+        "检索指定资源和智能体的内存线程。需要 `resourceId` 和 `agentId`。",
+    },
+    {
+      name: "createMemoryThread(params)",
+      type: "Promise<MemoryThread>",
+      description: "使用给定参数创建新的内存线程。",
+    },
+    {
+      name: "getMemoryThread({ threadId, agentId })",
+      type: "MemoryThread",
+      description: "通过 ID 获取特定内存线程。",
+    },
+    {
+      name: "saveMessageToMemory(params)",
+      type: "Promise<{ messages: (MastraMessageV1 | MastraDBMessage)[] }>",
+      description: "将一条或多条消息保存到内存系统。返回保存的消息。",
+    },
+    {
+      name: "getMemoryStatus()",
+      type: "Promise<MemoryStatus>",
+      description: "返回内存系统的当前状态。",
+    },
+    {
+      name: "listTools()",
+      type: "Record<string, Tool>",
+      description: "返回所有可用的工具。",
+    },
+    {
+      name: "getTool(toolId)",
+      type: "Tool",
+      description: "通过 ID 检索特定工具实例。",
+    },
+    {
+      name: "listWorkflows()",
+      type: "Record<string, Workflow>",
+      description: "返回所有可用的工作流实例。",
+    },
+    {
+      name: "getWorkflow(workflowId)",
+      type: "Workflow",
+      description: "通过 ID 检索特定工作流实例。",
+    },
+    {
+      name: "getVector(vectorName)",
+      type: "MastraVector",
+      description: "按名称返回向量存储实例。",
+    },
+    {
+      name: "listLogs(params)",
+      type: "Promise<LogEntry[]>",
+      description: "获取与提供的筛选条件匹配的系统日志。",
+    },
+    {
+      name: "getLog(params)",
+      type: "Promise<LogEntry>",
+      description: "通过 ID 或筛选条件检索特定日志条目。",
+    },
+    {
+      name: "listLogTransports()",
+      type: "string[]",
+      description: "返回配置的日志传输类型列表。",
+    },
+    {
+      name: "getTrace(traceId)",
+      type: "Promise<TraceRecord>",
+      description:
+        "通过 ID 检索特定追踪，包括其所有跨度 (spans) 和详细信息。",
+    },
+    {
+      name: "getTraces(params)",
+      type: "Promise<GetTracesResponse>",
+      description:
+        "检索带可选筛选的追踪根跨度的分页列表。使用 getTrace() 获取包含所有跨度的完整追踪。",
+    },
+  ]}
+/>

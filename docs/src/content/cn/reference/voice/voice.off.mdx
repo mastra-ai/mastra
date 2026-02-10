@@ -1,0 +1,76 @@
+---
+title: "参考文档：voice.off() | 语音"
+description: "语音提供者提供的 off() 方法文档，用于移除语音事件的事件监听器。"
+packages:
+  - "@mastra/voice-openai-realtime"
+---
+
+# voice.off()
+
+`off()` 方法移除先前使用 `on()` 方法注册的事件监听器。这对于清理资源和防止长期运行的实时语音应用程序中的内存泄漏特别有用。
+
+## 使用示例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import chalk from "chalk";
+
+// 初始化实时语音提供者
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-5.1-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// 连接到实时服务
+await voice.connect();
+
+// 定义回调函数
+const writingCallback = ({ text, role }) => {
+  if (role === "user") {
+    process.stdout.write(chalk.green(text));
+  } else {
+    process.stdout.write(chalk.blue(text));
+  }
+};
+
+// 注册事件监听器
+voice.on("writing", writingCallback);
+
+// 稍后，当您想要移除监听器时
+voice.off("writing", writingCallback);
+```
+
+## 参数
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description:
+        "要停止监听的事件名称（例如 'speaking'、'writing'、'error'）",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "function",
+      description: "与传递给 on() 相同的回调函数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+此方法不返回值。
+
+## 注意事项
+
+- 传递给 `off()` 的回调必须与传递给 `on()` 的函数引用相同
+- 如果找不到回调，该方法将无效
+- 此方法主要用于支持基于事件通信的实时语音提供者
+- 如果在不支持事件的语音提供者上调用，它会记录警告并什么都不做
+- 移除事件监听器对于防止长期运行应用程序中的内存泄漏很重要

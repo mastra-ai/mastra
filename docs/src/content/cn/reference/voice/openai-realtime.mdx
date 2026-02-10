@@ -1,0 +1,379 @@
+---
+title: "参考：OpenAI Realtime 语音 | 语音"
+description: "OpenAIRealtimeVoice 类的文档，通过 WebSocket 提供实时语音合成和语音识别能力。"
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai-realtime"
+---
+
+# OpenAI Realtime 语音
+
+OpenAIRealtimeVoice 类使用 OpenAI 基于 WebSocket 的 API 提供实时语音交互能力。它支持实时语音到语音、语音活动检测和基于事件的音频流式传输。
+
+## 使用示例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// 使用环境变量默认配置初始化
+const voice = new OpenAIRealtimeVoice();
+
+// 或使用特定配置初始化
+const voiceWithConfig = new OpenAIRealtimeVoice({
+  apiKey: "your-openai-api-key",
+  model: "gpt-5.1-realtime-preview-2024-12-17",
+  speaker: "alloy", // 默认语音
+});
+
+voiceWithConfig.updateSession({
+  turn_detection: {
+    type: "server_vad",
+    threshold: 0.6,
+    silence_duration_ms: 1200,
+  },
+});
+
+// 建立连接
+await voice.connect();
+
+// 设置事件监听器
+voice.on("speaker", ({ audio }) => {
+  // 处理音频数据（默认为 Int16Array PCM 格式）
+  playAudio(audio);
+});
+
+voice.on("writing", ({ text, role }) => {
+  // 处理转录文本
+  console.log(`${role}: ${text}`);
+});
+
+// 将文本转换为语音
+await voice.speak("Hello, how can I help you today?", {
+  speaker: "echo", // 覆盖默认语音
+});
+
+// 处理音频输入
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+
+// 完成后断开连接
+voice.connect();
+```
+
+## 配置
+
+### 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "string",
+      description: "用于实时语音交互的模型 ID。",
+      isOptional: true,
+      defaultValue: "'gpt-5.1-realtime-preview-2024-12-17'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "OpenAI API 密钥。回退到 OPENAI_API_KEY 环境变量。",
+      isOptional: true,
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "语音合成的默认语音 ID。",
+      isOptional: true,
+      defaultValue: "'alloy'",
+    },
+  ]}
+/>
+
+### 语音活动检测（VAD）配置
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "string",
+      description:
+        "要使用的 VAD 类型。服务端 VAD 提供更好的准确性。",
+      isOptional: true,
+      defaultValue: "'server_vad'",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "语音检测灵敏度（0.0-1.0）。",
+      isOptional: true,
+      defaultValue: "0.5",
+    },
+    {
+      name: "prefix_padding_ms",
+      type: "number",
+      description:
+        "在检测到语音之前要包含的音频毫秒数。",
+      isOptional: true,
+      defaultValue: "1000",
+    },
+    {
+      name: "silence_duration_ms",
+      type: "number",
+      description: "结束对话轮次前的静音毫秒数。",
+      isOptional: true,
+      defaultValue: "1000",
+    },
+  ]}
+/>
+
+## 方法
+
+### connect()
+
+建立与 OpenAI 实时服务的连接。在使用 speak、listen 或 send 函数之前必须调用。
+
+<PropertiesTable
+  content={[
+    {
+      name: "returns",
+      type: "Promise<void>",
+      description: "连接建立时解析的 Promise。",
+    },
+  ]}
+/>
+
+### speak()
+
+使用配置的语音模型发出说话事件。可以接受字符串或可读流作为输入。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "要转换为语音的文本或文本流。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "用于此特定语音请求的语音 ID。",
+      isOptional: true,
+      defaultValue: "构造函数的 speaker 值",
+    },
+  ]}
+/>
+
+返回：`Promise<void>`
+
+### listen()
+
+处理音频输入进行语音识别。接收音频数据流并发出带有转录文本的 'listening' 事件。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream",
+      description: "要转录的音频流。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`Promise<void>`
+
+### send()
+
+将音频数据实时流式传输到 OpenAI 服务，用于连续音频流场景，如实时麦克风输入。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream",
+      description: "要发送到服务的音频流。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`Promise<void>`
+
+### updateConfig()
+
+更新语音实例的会话配置。这可用于修改语音设置、对话轮次检测和其他参数。
+
+<PropertiesTable
+  content={[
+    {
+      name: "sessionConfig",
+      type: "Realtime.SessionConfig",
+      description: "要应用的新会话配置。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`void`
+
+### addTools()
+
+向语音实例添加工具集。工具允许模型在对话期间执行其他操作。当 OpenAIRealtimeVoice 添加到 Agent 时，为 Agent 配置的任何工具将自动可用于语音界面。
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description: "要配置的工具。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`void`
+
+### close()
+
+断开与 OpenAI 实时会话的连接并清理资源。使用完语音实例后应调用。
+
+返回：`void`
+
+### getSpeakers()
+
+返回可用语音说话者列表。
+
+返回：`Promise<Array<{ voiceId: string; [key: string]: any }>>`
+
+### on()
+
+为语音事件注册事件监听器。
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "要监听的事件名称。",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "事件发生时要调用的函数。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`void`
+
+### off()
+
+移除之前注册的事件监听器。
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "要停止监听的事件名称。",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "要移除的特定回调函数。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`void`
+
+## 事件
+
+OpenAIRealtimeVoice 类发出以下事件：
+
+<PropertiesTable
+  content={[
+    {
+      name: "speaking",
+      type: "event",
+      description:
+        "当从模型接收到音频数据时发出。回调接收 { audio: Int16Array }。",
+    },
+    {
+      name: "writing",
+      type: "event",
+      description:
+        "当转录文本可用时发出。回调接收 { text: string, role: string }。",
+    },
+    {
+      name: "error",
+      type: "event",
+      description:
+        "当发生错误时发出。回调接收错误对象。",
+    },
+  ]}
+/>
+
+### OpenAI Realtime 事件
+
+你也可以通过添加 'openAIRealtime:' 前缀来监听 [OpenAI Realtime 工具事件](https://github.com/openai/openai-realtime-api-beta#reference-client-utility-events)：
+
+<PropertiesTable
+  content={[
+    {
+      name: "openAIRealtime:conversation.created",
+      type: "event",
+      description: "当创建新对话时发出。",
+    },
+    {
+      name: "openAIRealtime:conversation.interrupted",
+      type: "event",
+      description: "当对话被中断时发出。",
+    },
+    {
+      name: "openAIRealtime:conversation.updated",
+      type: "event",
+      description: "当对话更新时发出。",
+    },
+    {
+      name: "openAIRealtime:conversation.item.appended",
+      type: "event",
+      description: "当项目被添加到对话时发出。",
+    },
+    {
+      name: "openAIRealtime:conversation.item.completed",
+      type: "event",
+      description: "当对话中的项目完成时发出。",
+    },
+  ]}
+/>
+
+## 可用语音
+
+以下语音选项可用：
+
+- `alloy`：中性且平衡
+- `ash`：清晰且精确
+- `ballad`：旋律流畅
+- `coral`：温暖友好
+- `echo`：共鸣深沉
+- `sage`：冷静沉思
+- `shimmer`：明亮充满活力
+- `verse`：多才多艺且富有表现力
+
+## 注意事项
+
+- API 密钥可通过构造函数选项或 `OPENAI_API_KEY` 环境变量提供
+- OpenAI Realtime 语音 API 使用 WebSocket 进行实时通信
+- 服务端语音活动检测（VAD）为语音检测提供更好的准确性
+- 所有音频数据都以 Int16Array 格式处理
+- 语音实例必须先使用 `connect()` 连接才能使用其他方法
+- 完成后始终调用 `close()` 以正确清理资源
+- 内存管理由 OpenAI Realtime API 处理

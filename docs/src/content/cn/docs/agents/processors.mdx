@@ -1,0 +1,582 @@
+---
+title: "处理器 | 智能体"
+description: "了解如何使用输入和输出处理器在 Mastra 智能体中转换、验证和控制消息。"
+packages:
+  - "@mastra/core"
+---
+
+# 处理器
+
+处理器在消息通过智能体时转换、验证或控制它们。它们在智能体执行管道的特定点运行，允许您在消息到达语言模型之前修改输入，或在响应返回给用户之前修改输出。
+
+处理器可以配置为：
+
+- **`inputProcessors`**：在消息到达语言模型之前运行。
+- **`outputProcessors`**：在语言模型生成响应之后、但在返回给用户之前运行。
+
+您可以使用单独的 `Processor` 对象，也可以使用 Mastra 的工作流原语将它们组合成工作流。工作流使您能够高级控制处理器执行顺序、并行处理和条件逻辑。
+
+有些处理器同时实现了输入和输出逻辑，可以根据转换应该发生的位置使用任一数组。
+
+## 何时使用处理器
+
+使用处理器来：
+
+- 规范化或验证用户输入
+- 为您的智能体添加护栏
+- 检测和防止提示注入或越狱尝试
+- 审核内容以确保安全或合规
+- 转换消息（例如，翻译语言、过滤工具调用）
+- 限制令牌使用或消息历史长度
+- 编辑敏感信息（PII）
+- 对消息应用自定义业务逻辑
+
+Mastra 为常见用例包含多个处理器。您也可以为特定于应用程序的要求创建自定义处理器。
+
+## 向智能体添加处理器
+
+导入并实例化处理器，然后将其传递给智能体的 `inputProcessors` 或 `outputProcessors` 数组：
+
+```typescript {2,8-14} title="src/mastra/agents/moderated-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const moderatedAgent = new Agent({
+  name: "moderated-agent",
+  instructions: "您是一位乐于助人的助手",
+  model: "openai/gpt-4o-mini",
+  inputProcessors: [
+    new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      categories: ["hate", "harassment", "violence"],
+      threshold: 0.7,
+      strategy: "block",
+    }),
+  ],
+});
+```
+
+## 执行顺序
+
+处理器按它们在数组中出现的顺序运行：
+
+```typescript
+inputProcessors: [
+  new UnicodeNormalizer(),
+  new PromptInjectionDetector(),
+  new ModerationProcessor(),
+];
+```
+
+对于输出处理器，顺序决定了应用于模型响应的转换序列。
+
+### 启用内存时
+
+当在智能体上启用内存时，内存处理器会自动添加到管道中：
+
+**输入处理器：**
+```
+[内存处理器] → [您的 inputProcessors]
+```
+内存首先加载消息历史记录，然后您的处理器运行。
+
+**输出处理器：**
+```
+[您的 outputProcessors] → [内存处理器]
+```
+您的处理器首先运行，然后内存持久化消息。
+
+此顺序确保如果您的输出护栏调用 `abort()`，内存处理器会被跳过，并且不会保存任何消息。详情请参阅[内存处理器](/docs/cn/memory/memory-processors#processor-execution-order)。
+
+## 创建自定义处理器
+
+自定义处理器实现 `Processor` 接口：
+
+### 自定义输入处理器
+
+```typescript title="src/mastra/processors/custom-input.ts"
+import type {
+  Processor,
+  MastraDBMessage,
+  RequestContext,
+} from "@mastra/core";
+
+export class CustomInputProcessor implements Processor {
+  id = "custom-input";
+
+  async processInput({
+    messages,
+    systemMessages,
+    context,
+  }: {
+    messages: MastraDBMessage[];
+    systemMessages: CoreMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
+    // 在消息到达大型语言模型之前转换消息
+    return messages.map((msg) => ({
+      ...msg,
+      content: {
+        ...msg.content,
+        content: msg.content.content.toLowerCase(),
+      },
+    }));
+  }
+}
+```
+
+`processInput` 方法接收：
+- `messages`：用户和助手消息（不是系统消息）
+- `systemMessages`：所有系统消息（智能体指令、内存上下文、用户提供的系统提示）
+- `messageList`：完整的 MessageList 实例，用于高级用例
+- `abort`：停止处理并提前返回的函数
+- `requestContext`：执行元数据，如 `threadId` 和 `resourceId`
+
+该方法可以返回：
+- `MastraDBMessage[]` — 转换后的消息数组（向后兼容）
+- `{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }` — 两条消息和修改后的系统消息
+
+框架处理两种返回格式，因此修改系统消息是可选的，现有处理器继续工作。
+
+### 修改系统消息
+
+要修改系统消息（例如，为较小的模型修整冗长的提示），返回包含 `messages` 和 `systemMessages` 的对象：
+
+```typescript title="src/mastra/processors/system-trimmer.ts"
+import type { Processor, CoreMessage, MastraDBMessage } from "@mastra/core";
+
+export class SystemTrimmer implements Processor {
+  id = "system-trimmer";
+
+  async processInput({
+    messages,
+    systemMessages,
+  }): Promise<{ messages: MastraDBMessage[]; systemMessages: CoreMessage[] }> {
+    // 为较小的模型修整系统消息
+    const trimmedSystemMessages = systemMessages.map((msg) => ({
+      ...msg,
+      content:
+        typeof msg.content === "string"
+          ? msg.content.substring(0, 500)
+          : msg.content,
+    }));
+
+    return { messages, systemMessages: trimmedSystemMessages };
+  }
+}
+```
+
+这对于以下情况很有用：
+- 为具有较小上下文窗口的模型修整冗长的系统提示
+- 过滤或修改语义回忆内容以防止"提示太长"错误
+- 根据对话动态调整系统指令
+
+### 使用 processInputStep 进行每步处理
+
+虽然 `processInput` 在智能体执行开始时运行一次，但 `processInputStep` 在智能体循环的**每个步骤**运行（包括工具调用延续）。这支持每步配置更改，如动态模型切换或工具选择修改。
+
+```typescript title="src/mastra/processors/step-processor.ts"
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
+
+export class DynamicModelProcessor implements Processor {
+  id = "dynamic-model";
+
+  async processInputStep({
+    stepNumber,
+    model,
+    toolChoice,
+    messageList,
+  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // 对初始响应使用快速模型
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+
+    // 5 步后禁用工具以强制完成
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+
+    // 其他步骤不更改
+    return {};
+  }
+}
+```
+
+`processInputStep` 方法接收：
+- `stepNumber`：智能体循环中的当前步骤（从 0 开始）
+- `steps`：之前步骤的结果
+- `messages`：当前消息快照（只读）
+- `systemMessages`：当前系统消息（只读）
+- `messageList`：完整的 MessageList 实例，用于突变
+- `model`：当前使用的模型
+- `tools`：当前可用的工具
+- `toolChoice`：当前工具选择设置
+- `activeTools`：当前活动的工具
+- `providerOptions`：提供程序特定选项
+- `modelSettings`：模型设置，如 temperature
+- `structuredOutput`：结构化输出配置
+
+该方法可以返回任意组合：
+- `model`：更改此步骤的模型
+- `tools`：替换或添加工具（使用展开合并：`{ tools: { ...tools, newTool } }`）
+- `toolChoice`：更改工具选择行为
+- `activeTools`：过滤可用的工具
+- `messages`：替换消息（应用于 messageList）
+- `systemMessages`：替换所有系统消息
+- `providerOptions`：修改提供程序选项
+- `modelSettings`：修改模型设置
+- `structuredOutput`：修改结构化输出配置
+
+#### 使用 maxSteps 确保最终响应
+
+当使用 `maxSteps` 限制智能体执行时，如果智能体在最后一步尝试工具调用，它可能返回空响应。使用 `processInputStep` 在最后一步强制文本响应：
+
+```typescript title="src/mastra/processors/ensure-final-response.ts"
+import { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core/processors";
+
+export class EnsureFinalResponseProcessor implements Processor {
+  readonly id = "ensure-final-response";
+
+  private maxSteps: number;
+
+  constructor(maxSteps: number) {
+    this.maxSteps = maxSteps;
+  }
+
+  async processInputStep({ stepNumber, systemMessages }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    // 在最后一步，阻止工具调用并指示大型语言模型总结
+    if (stepNumber === this.maxSteps - 1) {
+      return {
+        tools: {},
+        toolChoice: "none",
+        systemMessages: [
+          ...systemMessages,
+          {
+            role: "system",
+            content:
+              "您已达到最大步数。总结您目前的进展并提供最佳努力响应。如果任务未完成，请明确说明剩余待办事项。",
+          },
+        ],
+      };
+    }
+    return {};
+  }
+}
+```
+
+与您的智能体一起使用：
+
+```typescript title="src/mastra/agents/bounded-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { EnsureFinalResponseProcessor } from "../processors/ensure-final-response";
+
+const MAX_STEPS = 5;
+
+const agent = new Agent({
+  id: "bounded-agent",
+  name: "受限智能体",
+  model: "openai/gpt-4o-mini",
+  tools: { /* 您的工具 */ },
+  inputProcessors: [new EnsureFinalResponseProcessor(MAX_STEPS)],
+});
+
+// 调用 generate/stream 时传递 maxSteps
+const result = await agent.generate("您的提示", { maxSteps: MAX_STEPS });
+```
+
+这确保在最后允许的步骤（当 `maxSteps` 为 5 时是步骤 4，因为步骤从 0 开始），大型语言模型生成总结而不是尝试另一个工具调用，并明确指示任务是否未完成。
+
+#### 使用 prepareStep 回调
+
+对于更简单的每步逻辑，您可以使用 `generate()` 或 `stream()` 上的 `prepareStep` 回调，而不是创建完整的处理器：
+
+```typescript
+await agent.generate("复杂任务", {
+  prepareStep: async ({ stepNumber, model }) => {
+    if (stepNumber === 0) {
+      return { model: "openai/gpt-4o-mini" };
+    }
+    if (stepNumber > 5) {
+      return { toolChoice: "none" };
+    }
+  },
+});
+```
+
+### 自定义输出处理器
+
+```typescript title="src/mastra/processors/custom-output.ts"
+import type {
+  Processor,
+  MastraDBMessage,
+  RequestContext,
+} from "@mastra/core";
+
+export class CustomOutputProcessor implements Processor {
+  id = "custom-output";
+
+  async processOutputResult({
+    messages,
+    context,
+  }: {
+    messages: MastraDBMessage[];
+    context: RequestContext;
+  }): Promise<MastraDBMessage[]> {
+    // 在大型语言模型生成消息后转换消息
+    return messages.filter((msg) => msg.role !== "system");
+  }
+
+  async processOutputStream({
+    stream,
+    context,
+  }: {
+    stream: ReadableStream;
+    context: RequestContext;
+  }): Promise<ReadableStream> {
+    // 转换流式响应
+    return stream;
+  }
+}
+```
+
+#### 在输出处理器中添加元数据
+
+您可以在 `processOutputResult` 中向消息添加自定义元数据。此元数据可通过响应对象访问：
+
+```typescript title="src/mastra/processors/metadata-processor.ts"
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class MetadataProcessor implements Processor {
+  id = "metadata-processor";
+
+  async processOutputResult({
+    messages,
+  }: {
+    messages: MastraDBMessage[];
+  }): Promise<MastraDBMessage[]> {
+    return messages.map((msg) => {
+      if (msg.role === "assistant") {
+        return {
+          ...msg,
+          content: {
+            ...msg.content,
+            metadata: {
+              ...msg.content.metadata,
+              processedAt: new Date().toISOString(),
+              customData: "您的数据在这里",
+            },
+          },
+        };
+      }
+      return msg;
+    });
+  }
+}
+```
+
+使用 `generate()` 访问元数据：
+
+```typescript
+const result = await agent.generate("您好");
+
+// 响应包含带有处理器添加元数据的 uiMessages
+const assistantMessage = result.response?.uiMessages?.find((m) => m.role === "assistant");
+console.log(assistantMessage?.metadata?.customData);
+```
+
+流式传输时访问元数据：
+
+```typescript
+const stream = await agent.stream("您好");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "finish") {
+    // 从包含处理器添加元数据的完成块访问响应
+    const uiMessages = chunk.payload.response?.uiMessages;
+    const assistantMessage = uiMessages?.find((m) => m.role === "assistant");
+    console.log(assistantMessage?.metadata?.customData);
+  }
+}
+
+// 或通过消费流后的响应 promise
+const response = await stream.response;
+console.log(response.uiMessages);
+```
+
+## 内置实用处理器
+
+Mastra 为常见任务提供实用处理器：
+
+**有关安全和验证处理器**，请参阅[护栏](/docs/cn/agents/guardrails)页面，了解输入/输出护栏和审核处理器。
+**有关特定于内存的处理器**，请参阅[内存处理器](/docs/cn/memory/memory-processors)页面，了解处理消息历史记录、语义回忆和工作内存的处理器。
+
+### TokenLimiter
+
+当总令牌数超过指定限制时，通过删除较旧的消息来防止上下文窗口溢出。
+
+```typescript {7-10}
+import { Agent } from "@mastra/core/agent";
+import { TokenLimiter } from "@mastra/core/processors";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    // 确保总令牌数不超过 ~127k
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+`TokenLimiter` 默认使用 `o200k_base` 编码（适用于 GPT-4o）。您可以为其他模型指定其他编码：
+
+```typescript {6-9}
+import cl100k_base from "js-tiktoken/ranks/cl100k_base";
+
+const agent = new Agent({
+  name: "my-agent",
+  inputProcessors: [
+    new TokenLimiter({
+      limit: 16000, // 16k 上下文模型的示例限制
+      encoding: cl100k_base,
+    }),
+  ],
+});
+```
+
+### ToolCallFilter
+
+从发送到大型语言模型的消息中移除工具调用，通过排除可能冗长的工具交互来节省令牌。
+
+```typescript {7-16}
+import { Agent } from "@mastra/core/agent";
+import { ToolCallFilter, TokenLimiter } from "@mastra/core/processors";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    // 示例 1：移除所有工具调用/结果
+    new ToolCallFilter(),
+
+    // 示例 2：仅移除特定的工具调用
+    new ToolCallFilter({ exclude: ["generateImageTool"] }),
+
+    // 始终将 TokenLimiter 放在最后
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+:::note
+
+上面的示例为大型语言模型过滤工具调用并限制令牌，但这些过滤后的消息仍将保存到内存。要在保存到内存之前也过滤消息，请手动在实用处理器之前添加内存处理器。详情请参阅[内存处理器](/docs/cn/memory/memory-processors#manual-control-and-deduplication)。
+
+:::
+
+### ToolSearchProcessor
+
+为具有大型工具库的智能体启用动态工具发现和加载。不是预先提供所有工具，智能体按关键字搜索工具并按需加载它们，减少上下文令牌使用。
+
+```typescript {2,9-18}
+import { Agent } from "@mastra/core/agent";
+import { ToolSearchProcessor } from "@mastra/core/processors";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new ToolSearchProcessor({
+      tools: {
+        createIssue: githubTools.createIssue,
+        sendEmail: emailTools.send,
+        // ...数百个工具
+      },
+      search: { topK: 5, minScore: 0.1 },
+    }),
+  ],
+});
+```
+
+处理器为智能体提供两个元工具：`search_tools` 用于按关键字查找工具，`load_tool` 用于将工具添加到对话。加载的工具在线程内持久化。查看 [ToolSearchProcessor 参考](/reference/processors/tool-search-processor) 获取完整配置选项。
+
+## 使用工作流作为处理器
+
+您可以使用 Mastra 工作流作为处理器，创建具有并行执行、条件分支和错误处理的复杂处理管道：
+
+```typescript title="src/mastra/processors/moderation-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { ProcessorStepSchema } from "@mastra/core/processors";
+import { Agent } from "@mastra/core/agent";
+
+// 创建一个并行运行多个检查的工作流
+const moderationWorkflow = createWorkflow({
+  id: "moderation-pipeline",
+  inputSchema: ProcessorStepSchema,
+  outputSchema: ProcessorStepSchema,
+})
+  .then(createStep(new LengthValidator({ maxLength: 10000 })))
+  .parallel([
+    createStep(new PIIDetector({ strategy: "redact" })),
+    createStep(new ToxicityChecker({ threshold: 0.8 })),
+  ])
+  .commit();
+
+// 使用工作流作为输入处理器
+const agent = new Agent({
+  id: "moderated-agent",
+  name: "审核智能体",
+  model: "openai/gpt-4o",
+  inputProcessors: [moderationWorkflow],
+});
+```
+
+当智能体在 Mastra 中注册时，处理器工作流会自动注册为工作流，允许您在 [Studio](/docs/cn/getting-started/studio) 中查看和调试它们。
+
+## 重试机制
+
+处理器可以请求大型语言模型重试其响应并提供反馈。这对于实现质量检查、输出验证或迭代细化很有用：
+
+```typescript title="src/mastra/processors/quality-checker.ts"
+import type { Processor } from "@mastra/core";
+
+export class QualityChecker implements Processor {
+  id = "quality-checker";
+
+  async processOutputStep({ text, abort, retryCount }) {
+    const qualityScore = await evaluateQuality(text);
+
+    if (qualityScore < 0.7 && retryCount < 3) {
+      // 使用反馈请求大型语言模型重试
+      abort("响应质量分数太低。请提供更详细的答案。", {
+        retry: true,
+        metadata: { score: qualityScore },
+      });
+    }
+
+    return [];
+  }
+}
+
+const agent = new Agent({
+  id: "quality-agent",
+  name: "质量智能体",
+  model: "openai/gpt-4o",
+  outputProcessors: [new QualityChecker()],
+  maxProcessorRetries: 3, // 最大重试次数（默认：3）
+});
+```
+
+重试机制：
+- 仅在 `processOutputStep` 和 `processInputStep` 方法中工作
+- 重播该步骤，并将中止原因作为大型语言模型的上下文添加
+- 通过 `retryCount` 参数跟踪重试次数
+- 遵守智能体上的 `maxProcessorRetries` 限制
+
+## 相关文档
+
+- [护栏](/docs/cn/agents/guardrails) - 安全和验证处理器
+- [内存处理器](/docs/cn/memory/memory-processors) - 特定于内存的处理器和自动集成
+- [处理器接口](/reference/processors/processor-actor) - 处理器的完整 API 参考
+- [ToolSearchProcessor 参考](/reference/processors/tool-search-processor) - 动态工具搜索的 API 参考

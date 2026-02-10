@@ -1,0 +1,90 @@
+---
+title: "语音转文本 (STT) | 语音"
+description: "Mastra 中语音转文本功能的概述，包括配置、使用和与语音提供商的集成。"
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai"
+---
+
+# 语音转文本 (STT)
+
+Mastra 中的语音转文本 (STT) 为跨多个服务提供商将音频输入转换为文本提供了标准化接口。
+STT 帮助创建支持语音的应用程序，可以响应人类语音，实现免提交互、为残疾用户提供可访问性，以及更自然的人机界面。
+
+## 配置
+
+要在 Mastra 中使用 STT，你需要在初始化语音提供商时提供 `listeningModel`。这包括以下参数：
+
+- **`name`**：要使用的特定 STT 模型。
+- **`apiKey`**：用于身份验证的 API 密钥。
+- **提供商特定选项**：特定语音提供商可能需要或支持的附加选项。
+
+**注意**：所有这些参数都是可选的。你可以使用语音提供商提供的默认设置，具体取决于你使用的特定提供商。
+
+```typescript
+const voice = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// 如果使用默认设置，配置可以简化为：
+const voice = new OpenAIVoice();
+```
+
+## 可用的提供商
+
+Mastra 支持多种语音转文本提供商，每个提供商都有自己的功能和优势：
+
+- [**OpenAI**](/reference/voice/openai/) - 使用 Whisper 模型进行高准确率转录
+- [**Azure**](/reference/voice/azure/) - 微软的语音识别，具有企业级可靠性
+- [**ElevenLabs**](/reference/voice/elevenlabs/) - 支持多种语言的高级语音识别
+- [**Google**](/reference/voice/google/) - 谷歌的语音识别，支持广泛的语言
+- [**Cloudflare**](/reference/voice/cloudflare/) - 针对低延迟应用进行边缘优化的语音识别
+- [**Deepgram**](/reference/voice/deepgram/) - AI 驱动的语音识别，对各种口音具有高准确率
+- [**Sarvam**](/reference/voice/sarvam/) - 专注于印度语言和口音
+
+每个提供商都作为单独的包实现，你可以根据需要安装：
+
+```bash
+pnpm add @mastra/voice-openai@latest  # OpenAI 示例
+```
+
+## 使用 Listen 方法
+
+STT 的主要方法是 `listen()` 方法，它将语音音频转换为文本。以下是使用方法：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { getMicrophoneStream } from "@mastra/node-audio";
+
+const voice = new OpenAIVoice();
+
+const agent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that provides recommendations based on user input.",
+  model: "openai/gpt-5.1",
+  voice,
+});
+
+const audioStream = getMicrophoneStream(); // 假设此函数获取音频输入
+
+const transcript = await agent.voice.listen(audioStream, {
+  filetype: "m4a", // 可选：指定音频文件类型
+});
+
+console.log(`User said: ${transcript}`);
+
+const { text } = await agent.generate(
+  `Based on what the user said, provide them a recommendation: ${transcript}`,
+);
+
+console.log(`Recommendation: ${text}`);
+```
+
+查看[向代理添加语音](/docs/cn/agents/adding-voice)文档，了解如何在代理中使用 STT。

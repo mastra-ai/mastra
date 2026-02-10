@@ -1,0 +1,463 @@
+---
+title: "参考：DuckDB 向量存储 | 向量"
+description: Mastra 中 DuckDBVector 类的文档，该类使用带有 HNSW 索引的 DuckDB 提供嵌入式高性能向量搜索功能。
+packages:
+  - "@mastra/duckdb"
+---
+
+# DuckDB 向量存储
+
+DuckDB 存储实现使用 [DuckDB](https://duckdb.org/)（一个进程内分析数据库）提供嵌入式高性能向量搜索解决方案。它使用 VSS 扩展进行带有 HNSW 索引的向量相似性搜索，提供轻量级高效的向量数据库，无需外部服务器。
+
+它是 `@mastra/duckdb` 包的一部分，提供带有元数据过滤的高效向量相似性搜索。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/duckdb@latest
+```
+
+## 使用方法
+
+```typescript
+import { DuckDBVector } from "@mastra/duckdb";
+
+// 创建新的向量存储实例
+const store = new DuckDBVector({
+  id: "duckdb-vector",
+  path: ":memory:", // 或 './vectors.duckdb' 用于文件持久化
+});
+
+// 创建索引
+await store.createIndex({
+  indexName: "myCollection",
+  dimension: 1536,
+  metric: "cosine",
+});
+
+// 添加带有元数据的向量
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const metadata = [
+  { text: "first document", category: "A" },
+  { text: "second document", category: "B" },
+];
+await store.upsert({
+  indexName: "myCollection",
+  vectors,
+  metadata,
+});
+
+// 查询相似向量
+const queryVector = [0.1, 0.2, ...];
+const results = await store.query({
+  indexName: "myCollection",
+  queryVector,
+  topK: 10,
+  filter: { category: "A" },
+});
+
+// 清理
+await store.close();
+```
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "向量存储实例的唯一标识符",
+    },
+    {
+      name: "path",
+      type: "string",
+      isOptional: true,
+      defaultValue: "':memory:'",
+      description:
+        "数据库文件路径。使用 ':memory:' 表示内存数据库，或使用文件路径（如 './vectors.duckdb'）进行持久化。",
+    },
+    {
+      name: "dimensions",
+      type: "number",
+      isOptional: true,
+      defaultValue: "1536",
+      description: "向量嵌入的默认维度",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "相似性搜索的默认距离度量",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+创建带有可选 HNSW 索引的新向量集合，用于快速近似最近邻搜索。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度大小（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "相似性搜索的距离度量",
+    },
+  ]}
+/>
+
+### upsert()
+
+在索引中添加或更新向量及其元数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成 UUID）",
+    },
+  ]}
+/>
+
+### query()
+
+搜索相似向量，可选择进行元数据过滤。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要搜索的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Filter",
+      isOptional: true,
+      description: "使用 MongoDB 类似的查询语法的元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量数据",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+获取有关索引的信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+删除索引及其所有数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+列出数据库中的所有向量索引。
+
+返回：`Promise<string[]>`
+
+### updateVector()
+
+通过 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter`，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description:
+        "要更新的向量条目的 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description:
+        "用于识别要更新向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "包含向量和/或元数据的更新数据",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "要更新的新向量数据",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "要更新的新元数据",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+通过其 ID 从索引中删除特定的向量条目。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量条目的 ID",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+通过 ID 或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter`，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description:
+        "用于识别要删除向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+### close()
+
+关闭数据库连接并释放资源。
+
+```typescript
+await store.close();
+```
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 过滤器操作符
+
+DuckDB 向量存储支持 MongoDB 类似的过滤器操作符：
+
+| 类别 | 操作符 |
+| ---------- | ------------------------------------ |
+| 比较 | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` |
+| 逻辑 | `$and`, `$or`, `$not`, `$nor` |
+| 数组 | `$in`, `$nin` |
+| 元素 | `$exists` |
+| 文本 | `$contains` |
+
+### 过滤器示例
+
+```typescript
+// 组合操作符
+const results = await store.query({
+  indexName: "docs",
+  queryVector: [...],
+  filter: {
+    $and: [
+      { category: "electronics" },
+      { price: { $gte: 100, $lte: 500 } },
+    ],
+  },
+});
+
+// 嵌套字段访问
+const results = await store.query({
+  indexName: "docs",
+  queryVector: [...],
+  filter: { "user.profile.tier": "premium" },
+});
+```
+
+## 距离度量
+
+| 度量 | 描述 | 分数解释 | 适用于 |
+| ------------ | ----------------- | ---------------------------- | ------------------------------------- |
+| `cosine` | 余弦相似度 | 0-1（1 = 最相似） | 文本嵌入，归一化向量 |
+| `euclidean` | L2 距离 | 0-∞（0 = 最相似） | 图像嵌入，空间数据 |
+| `dotproduct` | 内积 | 越高越相似 | 当向量幅度重要时 |
+
+## 错误处理
+
+存储会针对不同的失败情况抛出特定错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "my-collection",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error.message.includes("not found")) {
+    console.error("指定的索引不存在");
+  } else if (error.message.includes("Invalid identifier")) {
+    console.error("索引名称包含无效字符");
+  } else {
+    console.error("向量存储错误：", error.message);
+  }
+}
+```
+
+常见错误情况包括：
+
+- 无效的索引名称格式
+- 索引/表未找到
+- 查询向量与索引之间的维度不匹配
+- 删除/更新操作中的空过滤器或 ID 数组
+- 互斥性违规（同时提供 `id` 和 `filter`）
+
+## 使用场景
+
+### 嵌入式语义搜索
+
+构建具有完全进程内运行的语义搜索的离线功能 AI 应用程序：
+
+```typescript
+const store = new DuckDBVector({
+  id: "offline-search",
+  path: "./search.duckdb",
+});
+```
+
+### 本地 RAG 管道
+
+在本地处理敏感文档，而无需将数据发送到云向量数据库：
+
+```typescript
+const store = new DuckDBVector({
+  id: "private-rag",
+  path: "./confidential.duckdb",
+  dimensions: 1536,
+});
+```
+
+### 开发和测试
+
+使用零基础设施快速原型化向量搜索功能：
+
+```typescript
+const store = new DuckDBVector({
+  id: "dev-store",
+  path: ":memory:", // 用于测试的快速内存模式
+});
+```
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)
+- [DuckDB 文档](https://duckdb.org/docs/cn/docs/)

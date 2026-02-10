@@ -1,0 +1,49 @@
+---
+title: "参考：Memory.getThreadById() | 内存"
+description: "Mastra 中 `Memory.getThreadById()` 方法的文档，该方法按 ID 检索特定线程。"
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.getThreadById()
+
+`.getThreadById()` 方法按 ID 检索特定线程。
+
+## 使用示例
+
+```typescript
+await memory?.getThreadById({ threadId: "thread-123" });
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "要检索的线程的 ID。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "thread",
+      type: "Promise<StorageThreadType | null>",
+      description:
+        "解析为与给定 ID 关联的线程的 promise，如果未找到则返回 null。",
+    },
+  ]}
+/>
+
+### 相关内容
+
+- [Memory 类参考](/reference/memory/memory-class)
+- [内存入门指南](/docs/cn/docs/memory/overview)（涵盖线程概念）
+- [createThread](/reference/memory/createThread)
+- [listThreads](/reference/memory/listThreads)

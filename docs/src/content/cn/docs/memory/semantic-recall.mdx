@@ -1,0 +1,267 @@
+---
+title: "语义回忆 | 内存"
+description: "了解如何在 Mastra 中使用语义回忆通过向量搜索和嵌入从过去的对话中检索相关消息。"
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
+---
+
+# 语义回忆
+
+如果您问您的朋友上周末做了什么，他们会在记忆中搜索与"上周末"相关的事件，然后告诉您他们的所作所为。这就是 Mastra 中语义回忆的工作方式。
+
+:::tip[观看 📹]
+
+什么是语义回忆、它是如何工作的以及如何在 Mastra 中配置它 → [YouTube（5 分钟）](https://youtu.be/UVZtK8cK8xQ)
+
+:::
+
+## 语义回忆的工作原理
+
+语义回忆是基于 RAG 的搜索，当消息不再在[最近消息历史记录](./message-history)范围内时，它可以帮助智能体在更长的交互中保持上下文。
+
+它使用消息的向量嵌入进行相似性搜索，与各种向量存储集成，并可配置检索消息周围的上下文窗口。
+
+![显示 Mastra 内存语义回忆的图表](/img/semantic-recall.png)
+
+启用后，新消息用于查询向量数据库以获取语义相似的消息。
+
+在从大型语言模型获得响应后，所有新消息（用户、助手和工具调用/结果）都会被插入到向量数据库中，以便在以后的交互中回忆。
+
+## 快速入门
+
+语义回忆默认启用，因此如果您给您的智能体提供记忆，它会被包含：
+
+```typescript {9}
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+const agent = new Agent({
+  id: "support-agent",
+  name: "SupportAgent",
+  instructions: "You are a helpful support agent.",
+  model: "openai/gpt-5.1",
+  memory: new Memory(),
+});
+```
+
+## 使用 recall() 方法
+
+虽然 `listMessages` 通过线程 ID 和基本分页检索消息，但 [`recall()`](/reference/memory/recall) 添加了**语义搜索**支持。当您需要按含义而不是仅按时间顺序查找消息时，使用带有 `vectorSearchString` 的 `recall()`：
+
+```typescript
+const memory = await agent.getMemory();
+
+// 基本回忆 - 类似于 listMessages
+const { messages } = await memory!.recall({
+  threadId: "thread-123",
+  perPage: 50,
+});
+
+// 语义回忆 - 按含义查找消息
+const { messages: relevantMessages } = await memory!.recall({
+  threadId: "thread-123",
+  vectorSearchString: "我们讨论了关于项目截止日期的什么内容？",
+  threadConfig: {
+    semanticRecall: true,
+  },
+});
+```
+
+## 存储配置
+
+语义回忆依赖[存储和向量数据库](/reference/memory/memory-class)来存储消息及其嵌入。
+
+```ts {8-16}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+
+const agent = new Agent({
+  memory: new Memory({
+    // 如果省略，这是默认的存储数据库
+    storage: new LibSQLStore({
+      id: 'agent-storage',
+      url: "file:./local.db",
+    }),
+    // 如果省略，这是默认的向量数据库
+    vector: new LibSQLVector({
+      id: 'agent-vector',
+      url: "file:./local.db",
+    }),
+  }),
+});
+```
+
+每个向量存储页面都包含安装说明、配置参数和使用示例：
+
+- [Astra](/reference/vectors/astra)
+- [Chroma](/reference/vectors/chroma)
+- [Cloudflare Vectorize](/reference/vectors/vectorize)
+- [Convex](/reference/vectors/convex)
+- [Couchbase](/reference/vectors/couchbase)
+- [DuckDB](/reference/vectors/duckdb)
+- [Elasticsearch](/reference/vectors/elasticsearch)
+- [LanceDB](/reference/vectors/lance)
+- [libSQL](/reference/vectors/libsql)
+- [MongoDB](/reference/vectors/mongodb)
+- [OpenSearch](/reference/vectors/opensearch)
+- [Pinecone](/reference/vectors/pinecone)
+- [PostgreSQL](/reference/vectors/pg)
+- [Qdrant](/reference/vectors/qdrant)
+- [S3 Vectors](/reference/vectors/s3vectors)
+- [Turbopuffer](/reference/vectors/turbopuffer)
+- [Upstash](/reference/vectors/upstash)
+
+## 回忆配置
+
+控制语义回忆行为的三个主要参数是：
+
+1. **topK**：检索多少条语义相似的消息
+2. **messageRange**：每次匹配周围包含多少上下文
+3. **scope**：是在当前线程内搜索还是在资源拥有的所有线程中搜索（默认是资源作用域）。
+
+```typescript {5-7}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        topK: 3, // 检索 3 条最相似的消息
+        messageRange: 2, // 每次匹配前后包含 2 条消息
+        scope: "resource", // 搜索该用户的所有线程（如果省略，这是默认设置）
+      },
+    },
+  }),
+});
+```
+
+## 嵌入模型配置
+
+语义回忆依赖[嵌入模型](/reference/memory/memory-class)将消息转换为嵌入。Mastra 支持通过使用 `provider/model` 字符串的模型路由器使用嵌入模型，或者您可以使用任何与 AI SDK 兼容的[嵌入模型](https://sdk.vercel.ai/docs/cn/ai-sdk-core/embeddings)。
+
+#### 使用模型路由器（推荐）
+
+最简单的方法是使用带有自动完成支持的 `provider/model` 字符串：
+
+```ts {7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  }),
+});
+```
+
+支持的嵌入模型：
+
+- **OpenAI**：`text-embedding-3-small`、`text-embedding-3-large`、`text-embedding-ada-002`
+- **Google**：`gemini-embedding-001`
+
+模型路由器自动处理环境变量中的 API 密钥检测（`OPENAI_API_KEY`、`GOOGLE_GENERATIVE_AI_API_KEY`）。
+
+#### 使用 AI SDK 包
+
+您也可以直接使用 AI SDK 嵌入模型：
+
+```ts {2,7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  }),
+});
+```
+
+#### 使用 FastEmbed（本地）
+
+要使用 FastEmbed（本地嵌入模型），请安装 `@mastra/fastembed`：
+
+```bash npm2yarn
+npm install @mastra/fastembed@latest
+```
+
+然后在您的记忆中配置它：
+
+```ts {3,7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { fastembed } from "@mastra/fastembed";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: fastembed,
+  }),
+});
+```
+
+## PostgreSQL 索引优化
+
+当使用 PostgreSQL 作为向量存储时，您可以通过配置向量索引来优化语义回忆性能。这对于具有数千条消息的大规模部署尤为重要。
+
+PostgreSQL 支持 IVFFlat 和 HNSW 索引。默认情况下，Mastra 创建 IVFFlat 索引，但 HNSW 索引通常提供更好的性能，特别是对于使用内积距离的 OpenAI 嵌入。
+
+```typescript {18-23}
+import { Memory } from "@mastra/memory";
+import { PgStore, PgVector } from "@mastra/pg";
+
+const agent = new Agent({
+  memory: new Memory({
+    storage: new PgStore({
+      id: 'agent-storage',
+      connectionString: process.env.DATABASE_URL,
+    }),
+    vector: new PgVector({
+      id: 'agent-vector',
+      connectionString: process.env.DATABASE_URL,
+    }),
+    options: {
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+        indexConfig: {
+          type: "hnsw", // 使用 HNSW 以获得更好的性能
+          metric: "dotproduct", // 最佳 OpenAI 嵌入
+          m: 16, // 双向链接数量（默认：16）
+          efConstruction: 64, // 构建期间的候选列表大小（默认：64）
+        },
+      },
+    },
+  }),
+});
+```
+
+有关索引配置选项和性能调整的详细信息，请参阅 [PgVector 配置指南](/reference/vectors/pg#index-configuration-guide)。
+
+## 禁用
+
+使用语义回忆会对性能产生影响。新消息会被转换为嵌入，并在将新消息发送到大型语言模型之前用于查询向量数据库。
+
+语义回忆默认启用，但可以在不需要时禁用：
+
+```typescript {4}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: false,
+    },
+  }),
+});
+```
+
+您可能希望在以下情况下禁用语义回忆：
+
+- 当消息历史记录为当前对话提供足够上下文时。
+- 在性能敏感型应用程序中，如实时双向音频，创建嵌入和运行向量查询的额外延迟很明显。
+
+## 查看回忆的消息
+
+启用跟踪时，通过语义回忆检索的任何消息将出现在智能体的跟踪输出中，以及最近的消息历史记录（如果已配置）。

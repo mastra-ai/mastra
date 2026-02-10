@@ -1,0 +1,1048 @@
+---
+title: "Mastra 中的语音功能 | 语音"
+description: "Mastra 中语音功能的概述，包括文本转语音、语音转文本和实时语音转语音交互。"
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-azure"
+  - "@mastra/voice-cloudflare"
+  - "@mastra/voice-deepgram"
+  - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-google"
+  - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-murf"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
+  - "@mastra/voice-sarvam"
+  - "@mastra/voice-speechify"
+---
+
+import { AudioPlayback } from "@site/src/components/AudioPlayback";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Mastra 中的语音
+
+Mastra 的语音系统为语音交互提供了统一的接口，使你的应用程序能够实现文本转语音 (TTS)、语音转文本 (STT) 和实时语音转语音 (STS) 功能。
+
+## 向代理添加语音
+
+要了解如何将语音功能集成到你的代理中，请查看[向代理添加语音](/docs/cn/agents/adding-voice)文档。本节介绍如何使用单一和多个语音提供商，以及实时交互。
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+// 初始化 OpenAI 语音用于 TTS
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new OpenAIVoice(),
+});
+```
+
+然后你可以使用以下语音功能：
+
+### 文本转语音 (TTS)
+
+使用 Mastra 的 TTS 功能将代理的响应转换为自然语音。从多个提供商中选择，如 OpenAI、ElevenLabs 等。
+
+有关详细的配置选项和高级功能，请查看我们的[文本转语音指南](./text-to-speech)。
+
+<Tabs>
+  <TabItem value="openai" label="OpenAI">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new OpenAIVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // 可选：指定说话者
+  responseFormat: "wav", // 可选：指定响应格式
+});
+
+playAudio(audioStream);
+```
+
+有关 OpenAI 语音提供商的更多信息，请访问 [OpenAI 语音参考](/reference/voice/openai)。
+
+  </TabItem>
+  <TabItem value="azure" label="Azure">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { AzureVoice } from "@mastra/voice-azure";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new AzureVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "en-US-JennyNeural", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 Azure 语音提供商的更多信息，请访问 [Azure 语音参考](/reference/voice/azure)。
+
+  </TabItem>
+  <TabItem value="elevenlabs" label="ElevenLabs">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new ElevenLabsVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 ElevenLabs 语音提供商的更多信息，请访问 [ElevenLabs 语音参考](/reference/voice/elevenlabs)。
+
+  </TabItem>
+  <TabItem value="playai" label="PlayAI">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new PlayAIVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 PlayAI 语音提供商的更多信息，请访问 [PlayAI 语音参考](/reference/voice/playai)。
+
+  </TabItem>
+  <TabItem value="google" label="Google">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { GoogleVoice } from "@mastra/voice-google";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new GoogleVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "en-US-Studio-O", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 Google 语音提供商的更多信息，请访问 [Google 语音参考](/reference/voice/google)。
+
+  </TabItem>
+  <TabItem value="cloudflare" label="Cloudflare">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CloudflareVoice } from "@mastra/voice-cloudflare";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new CloudflareVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 Cloudflare 语音提供商的更多信息，请访问 [Cloudflare 语音参考](/reference/voice/cloudflare)。
+
+  </TabItem>
+  <TabItem value="deepgram" label="Deepgram">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new DeepgramVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "aura-english-us", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 Deepgram 语音提供商的更多信息，请访问 [Deepgram 语音参考](/reference/voice/deepgram)。
+
+  </TabItem>
+  <TabItem value="speechify" label="Speechify">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { SpeechifyVoice } from "@mastra/voice-speechify";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new SpeechifyVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "matthew", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 Speechify 语音提供商的更多信息，请访问 [Speechify 语音参考](/reference/voice/speechify)。
+
+  </TabItem>
+  <TabItem value="sarvam" label="Sarvam">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { SarvamVoice } from "@mastra/voice-sarvam";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new SarvamVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 Sarvam 语音提供商的更多信息，请访问 [Sarvam 语音参考](/reference/voice/sarvam)。
+
+  </TabItem>
+  <TabItem value="murf" label="Murf">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MurfVoice } from "@mastra/voice-murf";
+import { playAudio } from "@mastra/node-audio";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new MurfVoice(),
+});
+
+const { text } = await voiceAgent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const audioStream = await voiceAgent.voice.speak(text, {
+  speaker: "default", // 可选：指定说话者
+});
+
+playAudio(audioStream);
+```
+
+有关 Murf 语音提供商的更多信息，请访问 [Murf 语音参考](/reference/voice/murf)。
+
+  </TabItem>
+</Tabs>
+
+### 语音转文本 (STT)
+
+使用各种提供商（如 OpenAI、ElevenLabs 等）转录口语内容。详细的配置选项和更多信息，请查看[语音转文本](./speech-to-text)。
+
+你可以从[这里](https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3)下载示例音频文件。
+
+<br/>
+<AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
+
+<Tabs>
+  <TabItem value="openai" label="OpenAI">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { createReadStream } from "fs";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new OpenAIVoice(),
+});
+
+// 使用来自 URL 的音频文件
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// 将音频转换为文本
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// 根据转录文本生成响应
+const { text } = await voiceAgent.generate(transcript);
+```
+
+有关 OpenAI 语音提供商的更多信息，请访问 [OpenAI 语音参考](/reference/voice/openai)。
+
+  </TabItem>
+  <TabItem value="azure" label="Azure">
+
+```typescript
+import { createReadStream } from "fs";
+import { Agent } from "@mastra/core/agent";
+import { AzureVoice } from "@mastra/voice-azure";
+import { createReadStream } from "fs";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new AzureVoice(),
+});
+
+// 使用来自 URL 的音频文件
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// 将音频转换为文本
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// 根据转录文本生成响应
+const { text } = await voiceAgent.generate(transcript);
+```
+
+有关 Azure 语音提供商的更多信息，请访问 [Azure 语音参考](/reference/voice/azure)。
+
+  </TabItem>
+  <TabItem value="elevenlabs" label="ElevenLabs">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { createReadStream } from "fs";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new ElevenLabsVoice(),
+});
+
+// 使用来自 URL 的音频文件
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// 将音频转换为文本
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// 根据转录文本生成响应
+const { text } = await voiceAgent.generate(transcript);
+```
+
+有关 ElevenLabs 语音提供商的更多信息，请访问 [ElevenLabs 语音参考](/reference/voice/elevenlabs)。
+
+  </TabItem>
+  <TabItem value="google" label="Google">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { GoogleVoice } from "@mastra/voice-google";
+import { createReadStream } from "fs";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new GoogleVoice(),
+});
+
+// 使用来自 URL 的音频文件
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// 将音频转换为文本
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// 根据转录文本生成响应
+const { text } = await voiceAgent.generate(transcript);
+```
+
+有关 Google 语音提供商的更多信息，请访问 [Google 语音参考](/reference/voice/google)。
+
+  </TabItem>
+  <TabItem value="cloudflare" label="Cloudflare">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { CloudflareVoice } from "@mastra/voice-cloudflare";
+import { createReadStream } from "fs";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new CloudflareVoice(),
+});
+
+// 使用来自 URL 的音频文件
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// 将音频转换为文本
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// 根据转录文本生成响应
+const { text } = await voiceAgent.generate(transcript);
+```
+
+有关 Cloudflare 语音提供商的更多信息，请访问 [Cloudflare 语音参考](/reference/voice/cloudflare)。
+
+  </TabItem>
+  <TabItem value="deepgram" label="Deepgram">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+import { createReadStream } from "fs";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new DeepgramVoice(),
+});
+
+// 使用来自 URL 的音频文件
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// 将音频转换为文本
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// 根据转录文本生成响应
+const { text } = await voiceAgent.generate(transcript);
+```
+
+有关 Deepgram 语音提供商的更多信息，请访问 [Deepgram 语音参考](/reference/voice/deepgram)。
+
+  </TabItem>
+  <TabItem value="sarvam" label="Sarvam">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { SarvamVoice } from "@mastra/voice-sarvam";
+import { createReadStream } from "fs";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new SarvamVoice(),
+});
+
+// 使用来自 URL 的音频文件
+const audioStream = await createReadStream("./how_can_i_help_you.mp3");
+
+// 将音频转换为文本
+const transcript = await voiceAgent.voice.listen(audioStream);
+console.log(`User said: ${transcript}`);
+
+// 根据转录文本生成响应
+const { text } = await voiceAgent.generate(transcript);
+```
+
+有关 Sarvam 语音提供商的更多信息，请访问 [Sarvam 语音参考](/reference/voice/sarvam)。
+
+  </TabItem>
+</Tabs>
+
+### 语音转语音 (STS)
+
+使用语音转语音功能创建对话体验。统一的 API 实现了用户和 AI 代理之间的实时语音交互。详细的配置选项和高级功能，请查看[语音转语音](./speech-to-speech)。
+
+<Tabs>
+  <TabItem value="openai" label="OpenAI">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new OpenAIRealtimeVoice(),
+});
+
+// 监听代理的音频响应
+voiceAgent.voice.on("speaker", ({ audio }) => {
+  playAudio(audio);
+});
+
+// 发起对话
+await voiceAgent.voice.speak("How can I help you today?");
+
+// 从麦克风发送连续音频
+const micStream = getMicrophoneStream();
+await voiceAgent.voice.send(micStream);
+```
+
+有关 OpenAI 语音提供商的更多信息，请访问 [OpenAI 语音参考](/reference/voice/openai-realtime)。
+
+  </TabItem>
+  <TabItem value="google" label="Google">
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+
+const voiceAgent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice: new GeminiLiveVoice({
+    // Live API 模式
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: "gemini-2.0-flash-exp",
+    speaker: "Puck",
+    debug: true,
+    // Vertex AI 替代方案：
+    // vertexAI: true,
+    // project: 'your-gcp-project',
+    // location: 'us-central1',
+    // serviceAccountKeyFile: '/path/to/service-account.json',
+  }),
+});
+
+// 在使用 speak/send 之前连接
+await voiceAgent.voice.connect();
+
+// 监听代理的音频响应
+voiceAgent.voice.on("speaker", ({ audio }) => {
+  playAudio(audio);
+});
+
+// 监听文本响应和转录
+voiceAgent.voice.on("writing", ({ text, role }) => {
+  console.log(`${role}: ${text}`);
+});
+
+// 发起对话
+await voiceAgent.voice.speak("How can I help you today?");
+
+// 从麦克风发送连续音频
+const micStream = getMicrophoneStream();
+await voiceAgent.voice.send(micStream);
+```
+
+有关 Google Gemini Live 语音提供商的更多信息，请访问 [Google Gemini Live 参考](/reference/voice/google-gemini-live)。
+
+  </TabItem>
+</Tabs>
+
+## 语音配置
+
+每个语音提供商可以使用不同的模型和选项进行配置。以下是所有受支持提供商的详细配置选项：
+
+<Tabs>
+  <TabItem value="openai" label="OpenAI">
+
+```typescript
+// OpenAI 语音配置
+const voice = new OpenAIVoice({
+  speechModel: {
+    name: "gpt-3.5-turbo", // 示例模型名称
+    apiKey: process.env.OPENAI_API_KEY,
+    language: "en-US", // 语言代码
+    voiceType: "neural", // 语音模型类型
+  },
+  listeningModel: {
+    name: "whisper-1", // 示例模型名称
+    apiKey: process.env.OPENAI_API_KEY,
+    language: "en-US", // 语言代码
+    format: "wav", // 音频格式
+  },
+  speaker: "alloy", // 示例说话者名称
+});
+```
+
+有关 OpenAI 语音提供商的更多信息，请访问 [OpenAI 语音参考](/reference/voice/openai)。
+
+  </TabItem>
+  <TabItem value="azure" label="Azure">
+
+```typescript
+// Azure 语音配置
+const voice = new AzureVoice({
+  speechModel: {
+    name: "en-US-JennyNeural", // 示例模型名称
+    apiKey: process.env.AZURE_SPEECH_KEY,
+    region: process.env.AZURE_SPEECH_REGION,
+    language: "en-US", // 语言代码
+    style: "cheerful", // 语音风格
+    pitch: "+0Hz", // 音高调整
+    rate: "1.0", // 语速
+  },
+  listeningModel: {
+    name: "en-US", // 示例模型名称
+    apiKey: process.env.AZURE_SPEECH_KEY,
+    region: process.env.AZURE_SPEECH_REGION,
+    format: "simple", // 输出格式
+  },
+});
+```
+
+有关 Azure 语音提供商的更多信息，请访问 [Azure 语音参考](/reference/voice/azure)。
+
+  </TabItem>
+  <TabItem value="elevenlabs" label="ElevenLabs">
+
+```typescript
+// ElevenLabs 语音配置
+const voice = new ElevenLabsVoice({
+  speechModel: {
+    voiceId: "your-voice-id", // 示例语音 ID
+    model: "eleven_multilingual_v2", // 示例模型名称
+    apiKey: process.env.ELEVENLABS_API_KEY,
+    language: "en", // 语言代码
+    emotion: "neutral", // 情感设置
+  },
+  // ElevenLabs 可能没有单独的监听模型
+});
+```
+
+有关 ElevenLabs 语音提供商的更多信息，请访问 [ElevenLabs 语音参考](/reference/voice/elevenlabs)。
+
+  </TabItem>
+  <TabItem value="playai" label="PlayAI">
+
+```typescript
+// PlayAI 语音配置
+const voice = new PlayAIVoice({
+  speechModel: {
+    name: "playai-voice", // 示例模型名称
+    speaker: "emma", // 示例说话者名称
+    apiKey: process.env.PLAYAI_API_KEY,
+    language: "en-US", // 语言代码
+    speed: 1.0, // 语速
+  },
+  // PlayAI 可能没有单独的监听模型
+});
+```
+
+有关 PlayAI 语音提供商的更多信息，请访问 [PlayAI 语音参考](/reference/voice/playai)。
+
+  </TabItem>
+  <TabItem value="google" label="Google">
+
+```typescript
+// Google 语音配置
+const voice = new GoogleVoice({
+  speechModel: {
+    name: "en-US-Studio-O", // 示例模型名称
+    apiKey: process.env.GOOGLE_API_KEY,
+    languageCode: "en-US", // 语言代码
+    gender: "FEMALE", // 语音性别
+    speakingRate: 1.0, // 说话速率
+  },
+  listeningModel: {
+    name: "en-US", // 示例模型名称
+    sampleRateHertz: 16000, // 采样率
+  },
+});
+```
+
+有关 Google 语音提供商的更多信息，请访问 [Google 语音参考](/reference/voice/google)。
+
+  </TabItem>
+  <TabItem value="cloudflare" label="Cloudflare">
+
+```typescript
+// Cloudflare 语音配置
+const voice = new CloudflareVoice({
+  speechModel: {
+    name: "cloudflare-voice", // 示例模型名称
+    accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+    apiToken: process.env.CLOUDFLARE_API_TOKEN,
+    language: "en-US", // 语言代码
+    format: "mp3", // 音频格式
+  },
+  // Cloudflare 可能没有单独的监听模型
+});
+```
+
+有关 Cloudflare 语音提供商的更多信息，请访问 [Cloudflare 语音参考](/reference/voice/cloudflare)。
+
+  </TabItem>
+  <TabItem value="deepgram" label="Deepgram">
+
+```typescript
+// Deepgram 语音配置
+const voice = new DeepgramVoice({
+  speechModel: {
+    name: "nova-2", // 示例模型名称
+    speaker: "aura-english-us", // 示例说话者名称
+    apiKey: process.env.DEEPGRAM_API_KEY,
+    language: "en-US", // 语言代码
+    tone: "formal", // 语调设置
+  },
+  listeningModel: {
+    name: "nova-2", // 示例模型名称
+    format: "flac", // 音频格式
+  },
+});
+```
+
+有关 Deepgram 语音提供商的更多信息，请访问 [Deepgram 语音参考](/reference/voice/deepgram)。
+
+  </TabItem>
+  <TabItem value="speechify" label="Speechify">
+
+```typescript
+// Speechify 语音配置
+const voice = new SpeechifyVoice({
+  speechModel: {
+    name: "speechify-voice", // 示例模型名称
+    speaker: "matthew", // 示例说话者名称
+    apiKey: process.env.SPEECHIFY_API_KEY,
+    language: "en-US", // 语言代码
+    speed: 1.0, // 语速
+  },
+  // Speechify 可能没有单独的监听模型
+});
+```
+
+有关 Speechify 语音提供商的更多信息，请访问 [Speechify 语音参考](/reference/voice/speechify)。
+
+  </TabItem>
+  <TabItem value="sarvam" label="Sarvam">
+
+```typescript
+// Sarvam 语音配置
+const voice = new SarvamVoice({
+  speechModel: {
+    name: "sarvam-voice", // 示例模型名称
+    apiKey: process.env.SARVAM_API_KEY,
+    language: "en-IN", // 语言代码
+    style: "conversational", // 风格设置
+  },
+  // Sarvam 可能没有单独的监听模型
+});
+```
+
+有关 Sarvam 语音提供商的更多信息，请访问 [Sarvam 语音参考](/reference/voice/sarvam)。
+
+  </TabItem>
+  <TabItem value="murf" label="Murf">
+
+```typescript
+// Murf 语音配置
+const voice = new MurfVoice({
+  speechModel: {
+    name: "murf-voice", // 示例模型名称
+    apiKey: process.env.MURF_API_KEY,
+    language: "en-US", // 语言代码
+    emotion: "happy", // 情感设置
+  },
+  // Murf 可能没有单独的监听模型
+});
+```
+
+有关 Murf 语音提供商的更多信息，请访问 [Murf 语音参考](/reference/voice/murf)。
+
+  </TabItem>
+  <TabItem value="openai-realtime" label="OpenAI Realtime">
+
+```typescript
+// OpenAI Realtime 语音配置
+const voice = new OpenAIRealtimeVoice({
+  speechModel: {
+    name: "gpt-3.5-turbo", // 示例模型名称
+    apiKey: process.env.OPENAI_API_KEY,
+    language: "en-US", // 语言代码
+  },
+  listeningModel: {
+    name: "whisper-1", // 示例模型名称
+    apiKey: process.env.OPENAI_API_KEY,
+    format: "ogg", // 音频格式
+  },
+  speaker: "alloy", // 示例说话者名称
+});
+```
+
+有关 OpenAI Realtime 语音提供商的更多信息，请参阅 [OpenAI Realtime 语音参考](/reference/voice/openai-realtime)。
+
+  </TabItem>
+  <TabItem value="google-gemini-live" label="Google Gemini Live">
+
+```typescript
+// Google Gemini Live 语音配置
+const voice = new GeminiLiveVoice({
+  speechModel: {
+    name: "gemini-2.0-flash-exp", // 示例模型名称
+    apiKey: process.env.GOOGLE_API_KEY,
+  },
+  speaker: "Puck", // 示例说话者名称
+  // Google Gemini Live 是一个实时双向 API，没有单独的语音和监听模型
+});
+```
+
+有关 Google Gemini Live 语音提供商的更多信息，请访问 [Google Gemini Live 参考](/reference/voice/google-gemini-live)。
+
+  </TabItem>
+  <TabItem value="aisdk" label="AI SDK">
+
+```typescript
+// AI SDK 语音配置
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// 直接使用 AI SDK 模型 - 无需安装单独的包
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK 转录
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK 语音
+});
+
+// 与你的代理无缝协作
+const voiceAgent = new Agent({
+  id: "aisdk-voice-agent",
+  name: "AI SDK Voice Agent",
+  instructions: "You are a helpful assistant with voice capabilities.",
+  model: "openai/gpt-5.1",
+  voice,
+});
+```
+
+  </TabItem>
+</Tabs>
+
+### 使用多个语音提供商
+
+此示例演示如何在 Mastra 中创建和使用两种不同的语音提供商：OpenAI 用于语音转文本 (STT)，PlayAI 用于文本转语音 (TTS)。
+
+首先创建语音提供商的实例，并进行任何必要的配置。
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { CompositeVoice } from "@mastra/core/voice";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// 初始化 OpenAI 语音用于 STT
+const input = new OpenAIVoice({
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// 初始化 PlayAI 语音用于 TTS
+const output = new PlayAIVoice({
+  speechModel: {
+    name: "playai-voice",
+    apiKey: process.env.PLAYAI_API_KEY,
+  },
+});
+
+// 使用 CompositeVoice 组合提供商
+const voice = new CompositeVoice({
+  input,
+  output,
+});
+
+// 使用组合语音提供商实现语音交互
+const audioStream = getMicrophoneStream(); // 假设此函数获取音频输入
+const transcript = await voice.listen(audioStream);
+
+// 记录转录的文本
+console.log("Transcribed text:", transcript);
+
+// 将文本转换为语音
+const responseAudio = await voice.speak(`You said: ${transcript}`, {
+  speaker: "default", // 可选：指定说话者
+  responseFormat: "wav", // 可选：指定响应格式
+});
+
+// 播放音频响应
+playAudio(responseAudio);
+```
+
+### 使用 AI SDK 模型提供商
+
+你也可以将 AI SDK 模型直接与 `CompositeVoice` 一起使用：
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// 直接使用 AI SDK 模型 - 无需提供商设置
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK 转录
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK 语音
+});
+
+// 与 Mastra 提供商的工作方式相同
+const audioStream = getMicrophoneStream();
+const transcript = await voice.listen(audioStream);
+
+console.log("Transcribed text:", transcript);
+
+// 将文本转换为语音
+const responseAudio = await voice.speak(`You said: ${transcript}`, {
+  speaker: "Rachel", // ElevenLabs 语音
+});
+
+playAudio(responseAudio);
+```
+
+你也可以混合使用 AI SDK 模型和 Mastra 提供商：
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { groq } from "@ai-sdk/groq";
+
+const voice = new CompositeVoice({
+  input: groq.transcription('whisper-large-v3'),  // AI SDK 用于 STT
+  output: new PlayAIVoice(),                       // Mastra 提供商用于 TTS
+});
+```
+
+有关 CompositeVoice 的更多信息，请参阅 [CompositeVoice 参考](/reference/voice/composite-voice)。
+
+## 更多资源
+
+- [CompositeVoice](/reference/voice/composite-voice)
+- [MastraVoice](/reference/voice/mastra-voice)
+- [OpenAI 语音](/reference/voice/openai)
+- [OpenAI Realtime 语音](/reference/voice/openai-realtime)
+- [Azure 语音](/reference/voice/azure)
+- [Google 语音](/reference/voice/google)
+- [Google Gemini Live 语音](/reference/voice/google-gemini-live)
+- [Deepgram 语音](/reference/voice/deepgram)
+- [PlayAI 语音](/reference/voice/playai)
+- [语音示例](https://github.com/mastra-ai/voice-examples)

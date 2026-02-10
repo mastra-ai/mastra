@@ -1,0 +1,74 @@
+---
+title: "参考文档：Mastra.listMemory() | 核心"
+description: "Mastra 中 `Mastra.listMemory()` 方法的文档，用于返回所有注册的内存实例。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# Mastra.listMemory()
+
+`.listMemory()` 方法返回在 Mastra 实例中注册的所有内存实例。
+
+## 使用示例
+
+```typescript
+const memoryInstances = mastra.listMemory();
+
+for (const [key, memory] of Object.entries(memoryInstances)) {
+  console.log(`Memory "${key}": ${memory.id}`);
+}
+```
+
+## 参数
+
+此方法不需要参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "Record<string, MastraMemory>",
+      description:
+        "包含所有已注册内存实例的对象，以注册表键为键。",
+    },
+  ]}
+/>
+
+## 示例：检查已注册的内存
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+const conversationMemory = new Memory({
+  id: "conversation-memory",
+  storage: new LibSQLStore({ id: 'conversation-store', url: ":memory:" }),
+});
+
+const analyticsMemory = new Memory({
+  id: "analytics-memory",
+  storage: new LibSQLStore({ id: 'analytics-store', url: ":memory:" }),
+});
+
+const mastra = new Mastra({
+  memory: {
+    conversationMemory,
+    analyticsMemory,
+  },
+});
+
+// 列出所有已注册的内存实例
+const allMemory = mastra.listMemory();
+console.log(Object.keys(allMemory)); // ["conversationMemory", "analyticsMemory"]
+```
+
+## 相关内容
+
+- [Mastra.getMemory()](/reference/core/getMemory)
+- [内存概述](/docs/cn/docs/memory/overview)
+- [智能体内存](/docs/cn/docs/agents/agent-memory)

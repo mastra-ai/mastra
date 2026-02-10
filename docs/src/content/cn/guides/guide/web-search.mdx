@@ -1,0 +1,293 @@
+---
+title: "指南：构建可以搜索网络的代理 | Mastra 指南"
+description: "有关创建可以搜索网络的代理的分步指南。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 构建可以搜索网络的代理
+
+在构建网络搜索代理时，您需要考虑两种主要策略：
+
+1. **LLM 的原生搜索工具**：某些语言模型提供开箱即用的集成网络搜索功能。
+2. **实现自定义搜索工具**：开发与搜索提供商 API 的自定义集成来处理查询和检索结果。
+
+## 前置条件
+
+- 已安装 Node.js `v22.13.0` 或更高版本
+- 来自支持的[模型提供商](/models)的 API 密钥
+- 现有的 Mastra 项目（请遵循[安装指南](/guides/getting-started/quickstart)设置新项目）
+
+## 使用原生搜索工具
+
+某些 LLM 提供商包含内置的网络搜索功能，可以直接使用而无需额外的 API 集成。OpenAI 的 GPT-4o-mini 和 Google 的 Gemini 2.5 Flash 都提供原生搜索工具，模型可以在生成过程中调用这些工具。
+
+<Steps>
+
+<StepItem title="安装依赖项">
+
+安装依赖项
+
+<Tabs>
+  <TabItem value="openai" label="Open AI">
+    ```bash npm2yarn
+    npm install @ai-sdk/openai
+    ```
+  </TabItem>
+  <TabItem value="gemini" label="Gemini">
+    ```bash npm2yarn
+    npm install @ai-sdk/google
+    ```
+  </TabItem>
+</Tabs>
+
+</StepItem>
+
+<StepItem title="定义代理">
+
+创建一个新文件 `src/mastra/agents/searchAgent.ts` 并定义您的代理：
+
+<Tabs>
+    <TabItem value="openai" label="Open AI">
+
+    ```ts title="src/mastra/agents/searchAgent.ts"
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "openai/gpt-5.1",
+    });
+    ```
+
+    </TabItem>
+    <TabItem value="gemini" label="Gemini">
+
+    ```ts title="src/mastra/agents/searchAgent.ts"
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "google/gemini-2.5-flash",
+    });
+    ```
+
+    </TabItem>
+
+</Tabs>
+
+</StepItem>
+
+<StepItem title="设置工具">
+
+设置工具：
+
+<Tabs>
+    <TabItem value="openai" label="Open AI">
+
+    ```ts title="src/mastra/agents/searchAgent.ts" {1,9-12}
+    import { openai } from "@ai-sdk/openai";
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "openai/gpt-5.1",
+      tools: {
+        webSearch: openai.tools.webSearch()
+      }
+    });
+    ```
+
+    </TabItem>
+    <TabItem value="gemini" label="Gemini">
+
+    ```ts title="src/mastra/agents/searchAgent.ts" {1,9-14}
+    import { google } from "@ai-sdk/google";
+    import { Agent } from "@mastra/core/agent";
+
+    export const searchAgent = new Agent({
+      id: "search-agent",
+      name: "Search Agent",
+      instructions:
+        "You are a search agent that can search the web for information.",
+      model: "google/gemini-2.5-flash",
+      tools: {
+        webSearch: google.tools.googleSearch({
+          mode: "MODE_DYNAMIC"
+        })
+      }
+    });
+    ```
+
+    </TabItem>
+
+</Tabs>
+
+</StepItem>
+
+<StepItem title="向 Mastra 注册代理">
+
+在您的 `src/mastra/index.ts` 文件中，注册代理：
+
+```ts title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { searchAgent } from "./agents/searchAgent";
+
+export const mastra = new Mastra({
+  agents: { searchAgent },
+});
+```
+
+</StepItem>
+
+<StepItem title="测试您的代理">
+
+您可以使用 `mastra dev` 命令通过[工作室](/docs/cn/docs/getting-started/studio)测试您的代理：
+
+```bash
+mastra dev
+```
+
+在工作室中，导航到**"搜索代理"**并问它："上周 AI 新闻发生了什么？"
+
+</StepItem>
+
+</Steps>
+
+## 使用搜索 API
+
+为了对搜索行为进行更多控制，您可以将外部搜索 API 集成作为自定义工具。[Exa](https://exa.ai/) 是专门为 AI 应用程序构建的搜索引擎，提供语义搜索、可配置过滤器（类别、域、日期范围）以及检索完整页面内容的能力。搜索 API 包裹在 Mastra 工具中，该工具定义了输入模式、输出格式和执行逻辑。
+
+<Steps>
+
+<StepItem title="安装依赖项">
+
+安装依赖项
+
+```bash npm2yarn
+npm install exa-js
+```
+
+</StepItem>
+
+<StepItem title="定义代理">
+
+创建一个新文件 `src/mastra/agents/searchAgent.ts` 并定义您的代理：
+
+```ts title="src/mastra/agents/searchAgent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const searchAgent = new Agent({
+  id: "search-agent",
+  name: "Search Agent",
+  instructions:
+    "You are a search agent that can search the web for information.",
+  model: "openai/gpt-5.1",
+});
+```
+
+</StepItem>
+
+<StepItem title="设置工具">
+
+设置工具
+
+```ts title="src/mastra/tools/searchTool.ts"
+import { createTool } from "@mastra/core/tools";
+import z from "zod";
+import Exa from "exa-js";
+
+export const exa = new Exa(process.env.EXA_API_KEY);
+
+export const webSearch = createTool({
+  id: "exa-web-search",
+  description: "Search the web",
+  inputSchema: z.object({
+    query: z.string().min(1).max(50).describe("The search query"),
+  }),
+  outputSchema: z.array(
+    z.object({
+      title: z.string().nullable(),
+      url: z.string(),
+      content: z.string(),
+      publishedDate: z.string().optional(),
+    }),
+  ),
+  execute: async (inputData) => {
+    const { results } = await exa.searchAndContents(inputData.query, {
+      livecrawl: "always",
+      numResults: 2,
+    });
+
+    return results.map((result) => ({
+      title: result.title,
+      url: result.url,
+      content: result.text.slice(0, 500),
+      publishedDate: result.publishedDate,
+    }));
+  },
+});
+```
+
+</StepItem>
+
+<StepItem title="添加到您的代理">
+
+添加到您的代理
+
+```ts title="src/mastra/agents/searchAgent.ts"
+import { webSearch } from "./tools/searchTool";
+
+export const searchAgent = new Agent({
+  id: "search-agent",
+  name: "Search Agent",
+  instructions:
+    "You are a search agent that can search the web for information.",
+  model: "openai/gpt-5.1",
+  tools: {
+    webSearch,
+  },
+});
+```
+
+</StepItem>
+
+<StepItem title="向 Mastra 注册代理">
+
+在您的 `src/mastra/index.ts` 文件中，注册代理：
+
+```ts title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { searchAgent } from "./agents/searchAgent";
+
+export const mastra = new Mastra({
+  agents: { searchAgent },
+});
+```
+
+</StepItem>
+
+<StepItem title="测试您的代理">
+
+您可以使用 `mastra dev` 命令通过[工作室](/docs/cn/docs/getting-started/studio)测试您的代理：
+
+```bash
+mastra dev
+```
+
+在工作室中，导航到**"搜索代理"**并问它："上周 AI 新闻发生了什么？"
+
+</StepItem>
+
+</Steps>

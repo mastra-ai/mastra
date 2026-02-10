@@ -1,0 +1,114 @@
+---
+title: "MCP | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移 MCP 相关的更改。"
+---
+
+# MCP
+
+MCP（模型上下文协议）工具执行上下文已重新组织，已弃用的客户端类已被移除。
+
+## 变更
+
+### `getMCPServers` 改为 `listMCPServers`
+
+`mastra.getMCPServers()` 方法已重命名为 `mastra.listMCPServers()`。此更改符合 API 中的命名约定，复数形式的 getter 方法使用 `list` 前缀。
+
+要迁移，请将所有对 `mastra.getMCPServers()` 的调用替换为 `mastra.listMCPServers()`。
+
+```diff
+- const servers = await mastra.getMCPServers();
++ const servers = await mastra.listMCPServers();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/mastra-plural-apis .
+```
+
+:::
+
+### `getTools` 改为 `listTools`
+
+`mcp.getTools()` 方法已重命名为 `mcp.listTools()`。此更改符合 API 中的命名约定，复数形式的 getter 方法使用 `list` 前缀。
+
+要迁移，请将所有对 `mcp.getTools()` 的调用替换为 `mcp.listTools()`。
+
+```diff
+- const tools = await mcp.getTools();
++ const tools = await mcp.listTools();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/mcp-get-tools .
+```
+
+:::
+
+### `getToolsets` 改为 `listToolsets`
+
+`mcp.getToolsets()` 方法已重命名为 `mcp.listToolsets()`。此更改符合 API 中的命名约定，复数形式的 getter 方法使用 `list` 前缀。
+
+要迁移，请将所有对 `mcp.getToolsets()` 的调用替换为 `mcp.listToolsets()`。
+
+```diff
+- const toolsets = await mcp.getToolsets();
++ const toolsets = await mcp.listToolsets();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/mcp-get-toolsets .
+```
+
+:::
+
+### MCP 工具上下文属性组织
+
+MCP 工具中的上下文属性现在在 `context.mcp` 命名空间下组织。此更改为 MCP 特定功能提供了更好的组织和更清晰的 API 表面。
+
+要迁移，通过 `context.mcp` 而不是直接从上下文参数访问 MCP 特定属性，如 `elicitation` 和 `extra`。
+
+```diff
+  createTool({
+    id: 'account-balance',
+-   execute: async ({ context, elicitation, extra }) => {
+-     await checkAuth(extra.authInfo);
+-     const result = await elicitation.sendRequest({
+-       message: `Is it ok to fetch account ${context.accountId}?`,
+-     });
+-   },
++   execute: async (inputData, context) => {
++     await checkAuth(context?.mcp?.extra.authInfo);
++     const result = await context?.mcp?.elicitation.sendRequest({
++       message: `Is it ok to fetch account ${inputData.accountId}?`,
++     });
++   },
+  });
+```
+
+## 移除
+
+### 已弃用的 MCP 客户端类
+
+`MastraMCPClient` 和相关已弃用的 API 已从 `@mastra/mcp` 中移除。此更改统一了新的 MCP 客户端 API。
+
+要迁移，请使用新的 `MCPClient` 类而不是已弃用的类。
+
+```diff
+- import { MastraMCPClient, MCPConfiguration } from '@mastra/mcp/client';
++ import { MCPClient } from '@mastra/mcp/client';
+
+- const client = new MastraMCPClient({ ... });
+- const config = new MCPConfiguration({ ... });
++ const client = new MCPClient({ ... });
+```

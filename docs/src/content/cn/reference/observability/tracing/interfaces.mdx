@@ -1,0 +1,757 @@
+---
+title: "参考：接口 | 可观测性"
+description: "追踪类型定义和接口"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 接口
+
+## 核心接口
+
+### ObservabilityInstance
+
+可观测性的主要接口。
+
+```typescript
+interface ObservabilityInstance {
+  /** 获取当前配置 */
+  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>;
+
+  /** 获取所有导出器 */
+  getExporters(): readonly ObservabilityExporter[];
+
+  /** 获取所有跨度输出处理器 */
+  getSpanOutputProcessors(): readonly SpanOutputProcessor[];
+
+  /** 获取日志记录器实例（用于导出器和其他组件） */
+  getLogger(): IMastraLogger;
+
+  /** 启动特定 SpanType 的新跨度 */
+  startSpan<TType extends SpanType>(
+    options: StartSpanOptions<TType>,
+  ): Span<TType>;
+
+  /** 刷新任何缓冲的跨度而不关闭 */
+  flush(): Promise<void>;
+
+  /** 关闭可观测性并清理资源 */
+  shutdown(): Promise<void>;
+}
+```
+
+### SpanTypeMap
+
+跨度类型到其对应属性接口的映射。
+
+```typescript
+interface SpanTypeMap {
+  AGENT_RUN: AgentRunAttributes;
+  WORKFLOW_RUN: WorkflowRunAttributes;
+  MODEL_GENERATION: ModelGenerationAttributes;
+  MODEL_STEP: ModelStepAttributes;
+  MODEL_CHUNK: ModelChunkAttributes;
+  TOOL_CALL: ToolCallAttributes;
+  MCP_TOOL_CALL: MCPToolCallAttributes;
+  PROCESSOR_RUN: ProcessorRunAttributes;
+  WORKFLOW_STEP: WorkflowStepAttributes;
+  WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes;
+  WORKFLOW_CONDITIONAL_EVAL: WorkflowConditionalEvalAttributes;
+  WORKFLOW_PARALLEL: WorkflowParallelAttributes;
+  WORKFLOW_LOOP: WorkflowLoopAttributes;
+  WORKFLOW_SLEEP: WorkflowSleepAttributes;
+  WORKFLOW_WAIT_EVENT: WorkflowWaitEventAttributes;
+  GENERIC: AIBaseAttributes;
+}
+```
+
+此映射定义了在创建或处理跨度时每个跨度类型使用的属性接口。
+
+### Span
+
+跨度接口，用于内部追踪。
+
+```typescript
+interface Span<TType extends SpanType> {
+  readonly id: string;
+  readonly traceId: string;
+  readonly type: TType;
+  readonly name: string;
+
+  /** 是内部跨度吗？（Mastra 操作内部的跨度） */
+  isInternal: boolean;
+
+  /** 父跨度引用（根跨度为 undefined） */
+  parent?: AnySpan;
+
+  /** 指向 ObservabilityInstance 实例的指针 */
+  observabilityInstance: ObservabilityInstance;
+
+  attributes?: SpanTypeMap[TType];
+  metadata?: Record<string, any>;
+  input?: any;
+  output?: any;
+  errorInfo?: any;
+
+  /** 用于分类跟踪的标签（仅在根跨度上存在） */
+  tags?: string[];
+
+  /** 结束跨度 */
+  end(options?: EndSpanOptions<TType>): void;
+
+  /** 记录跨度的错误，可选择结束跨度 */
+  error(options: ErrorSpanOptions<TType>): void;
+
+  /** 更新跨度属性 */
+  update(options: UpdateSpanOptions<TType>): void;
+
+  /** 创建子跨度 - 可以是独立于父跨度的任何跨度类型 */
+  createChildSpan<TChildType extends SpanType>(
+    options: ChildSpanOptions<TChildType>,
+  ): Span<TChildType>;
+
+  /** 创建事件跨度 - 可以是独立于父跨度的任何跨度类型 */
+  createEventSpan<TChildType extends SpanType>(
+    options: ChildEventOptions<TChildType>,
+  ): Span<TChildType>;
+
+  /** 如果跨度是跟踪的根跨度则返回 TRUE */
+  get isRootSpan(): boolean;
+
+  /** 如果跨度是有效跨度（不是 NO-OP 跨度）则返回 TRUE */
+  get isValid(): boolean;
+}
+```
+
+### ObservabilityExporter
+
+可观测性导出器的接口。
+
+```typescript
+interface ObservabilityExporter {
+  /** 导出器名称 */
+  name: string;
+
+  /** 使用追踪配置和/或访问 Mastra 初始化导出器 */
+  init?(options: InitExporterOptions): void;
+
+  /** 导出追踪事件 */
+  exportTracingEvent(event: TracingEvent): Promise<void>;
+
+  /** 向跟踪添加分数（可选） */
+  addScoreToTrace?({
+    traceId,
+    spanId,
+    score,
+    reason,
+    scorerName,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }): Promise<void>;
+
+  /** 刷新任何缓冲的跨度而不关闭 */
+  flush(): Promise<void>;
+
+  /** 关闭导出器 */
+  shutdown(): Promise<void>;
+}
+```
+
+### SpanOutputProcessor
+
+跨度输出处理器的接口。
+
+```typescript
+interface SpanOutputProcessor {
+  /** 处理器名称 */
+  name: string;
+
+  /** 在导出前处理跨度 */
+  process(span?: AnySpan): AnySpan | undefined;
+
+  /** 关闭处理器 */
+  shutdown(): Promise<void>;
+}
+```
+
+## 跨度类型
+
+### SpanType
+
+具有关联元数据的 AI 特定跨度类型。
+
+```typescript
+enum SpanType {
+  /** 代理运行 - 代理进程的根跨度 */
+  AGENT_RUN = "agent_run",
+
+  /** 自定义操作的通用跨度 */
+  GENERIC = "generic",
+
+  /** 模型调用、代币使用、提示、完成 */
+  MODEL_GENERATION = "model_generation",
+
+  /** 生成内的单个模型执行步骤（一次 API 调用） */
+  MODEL_STEP = "model_step",
+
+  /** 单个模型流式传输块/事件 */
+  MODEL_CHUNK = "model_chunk",
+
+  /** MCP（模型上下文协议）工具执行 */
+  MCP_TOOL_CALL = "mcp_tool_call",
+
+  /** 输入或输出处理器执行 */
+  PROCESSOR_RUN = "processor_run",
+
+  /** 函数/工具执行（输入、输出、错误） */
+  TOOL_CALL = "tool_call",
+
+  /** 工作流运行 - 工作流进程的根跨度 */
+  WORKFLOW_RUN = "workflow_run",
+
+  /** 工作流步骤执行（步骤状态、数据流） */
+  WORKFLOW_STEP = "workflow_step",
+
+  /** 工作流条件执行（条件评估） */
+  WORKFLOW_CONDITIONAL = "workflow_conditional",
+
+  /** 条件内的单个条件评估 */
+  WORKFLOW_CONDITIONAL_EVAL = "workflow_conditional_eval",
+
+  /** 工作流并行执行 */
+  WORKFLOW_PARALLEL = "workflow_parallel",
+
+  /** 工作流循环执行 */
+  WORKFLOW_LOOP = "workflow_loop",
+
+  /** 工作流睡眠操作 */
+  WORKFLOW_SLEEP = "workflow_sleep",
+
+  /** 工作流等待事件操作 */
+  WORKFLOW_WAIT_EVENT = "workflow_wait_event",
+}
+```
+
+### AnySpan
+
+需要处理任何跨度的用例的联合类型。
+
+```typescript
+type AnySpan = Span<keyof SpanTypeMap>;
+```
+
+## 跨度属性
+
+### AgentRunAttributes
+
+代理运行属性。
+
+```typescript
+interface AgentRunAttributes {
+  /** 代理标识符 */
+  agentId: string;
+
+  /** 代理指令 */
+  instructions?: string;
+
+  /** 代理提示 */
+  prompt?: string;
+
+  /** 此执行可用的工具 */
+  availableTools?: string[];
+
+  /** 允许的最大步骤数 */
+  maxSteps?: number;
+}
+```
+
+### ModelGenerationAttributes
+
+模型生成属性。
+
+```typescript
+interface ModelGenerationAttributes {
+  /** 模型名称（例如，'gpt-4'，'claude-3'） */
+  model?: string;
+
+  /** 模型提供商（例如，'openai'，'anthropic'） */
+  provider?: string;
+
+  /** 此模型调用产生的结果/输出类型 */
+  resultType?:
+    | "tool_selection"
+    | "response_generation"
+    | "reasoning"
+    | "planning";
+
+  /** 代币使用统计 */
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    promptCacheHitTokens?: number;
+    promptCacheMissTokens?: number;
+  };
+
+  /** 模型参数 */
+  parameters?: {
+    maxOutputTokens?: number;
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    presencePenalty?: number;
+    frequencyPenalty?: number;
+    stopSequences?: string[];
+    seed?: number;
+    maxRetries?: number;
+  };
+
+  /** 这是否是流式响应 */
+  streaming?: boolean;
+
+  /** 生成完成的原因 */
+  finishReason?: string;
+}
+```
+
+### ModelStepAttributes
+
+模型步骤属性 - 用于生成内的单个模型执行。
+
+```typescript
+interface ModelStepAttributes {
+  /** 此步骤在生成中的索引（0, 1, 2, ...） */
+  stepIndex?: number;
+
+  /** 代币使用统计 */
+  usage?: UsageStats;
+
+  /** 此步骤完成的原因（停止、工具调用、长度等） */
+  finishReason?: string;
+
+  /** 是否应该继续执行 */
+  isContinued?: boolean;
+
+  /** 结果警告 */
+  warnings?: Record<string, any>;
+}
+```
+
+### ModelChunkAttributes
+
+模型块属性 - 用于单个流式传输块/事件。
+
+```typescript
+interface ModelChunkAttributes {
+  /** 块的类型（text-delta、reasoning-delta、tool-call 等） */
+  chunkType?: string;
+
+  /** 流中此块的序列号 */
+  sequenceNumber?: number;
+}
+```
+
+### ToolCallAttributes
+
+工具调用属性。
+
+```typescript
+interface ToolCallAttributes {
+  toolId?: string;
+  toolType?: string;
+  toolDescription?: string;
+  success?: boolean;
+}
+```
+
+### MCPToolCallAttributes
+
+MCP 工具调用属性。
+
+```typescript
+interface MCPToolCallAttributes {
+  /** MCP 工具/函数的 ID */
+  toolId: string;
+
+  /** MCP 服务器标识符 */
+  mcpServer: string;
+
+  /** MCP 服务器版本 */
+  serverVersion?: string;
+
+  /** 工具执行是否成功 */
+  success?: boolean;
+}
+```
+
+### ProcessorRunAttributes
+
+处理器属性。
+
+```typescript
+interface ProcessorRunAttributes {
+  /** 处理器的名称 */
+  processorName: string;
+
+  /** 处理器类型（输入或输出） */
+  processorType: 'input' | 'output';
+
+  /** 代理中的处理器索引 */
+  processorIndex?: number;
+}
+```
+
+### WorkflowRunAttributes
+
+工作流运行属性。
+
+```typescript
+interface WorkflowRunAttributes {
+  /** 工作流标识符 */
+  workflowId: string;
+
+  /** 工作流状态 */
+  status?: WorkflowRunStatus;
+}
+```
+
+### WorkflowStepAttributes
+
+工作流步骤属性。
+
+```typescript
+interface WorkflowStepAttributes {
+  /** 步骤标识符 */
+  stepId: string;
+
+  /** 步骤状态 */
+  status?: WorkflowStepStatus;
+}
+```
+
+## 选项类型
+
+### StartSpanOptions
+
+启动新跨度的选项。
+
+```typescript
+interface StartSpanOptions<TType extends SpanType> {
+  /** 跨度类型 */
+  type: TType;
+
+  /** 跨度名称 */
+  name: string;
+
+  /** 跨度属性 */
+  attributes?: SpanTypeMap[TType];
+
+  /** 跨度元数据 */
+  metadata?: Record<string, any>;
+
+  /** 输入数据 */
+  input?: any;
+
+  /** 父跨度 */
+  parent?: AnySpan;
+
+  /** 策略级追踪配置 */
+  tracingPolicy?: TracingPolicy;
+
+  /** 使用自定义采样器策略时传递的选项 */
+  customSamplerOptions?: CustomSamplerOptions;
+}
+```
+
+### UpdateSpanOptions
+
+更新跨度的选项。
+
+```typescript
+interface UpdateSpanOptions<TType extends SpanType> {
+  /** 跨度属性 */
+  attributes?: Partial<SpanTypeMap[TType]>;
+
+  /** 跨度元数据 */
+  metadata?: Record<string, any>;
+
+  /** 输入数据 */
+  input?: any;
+
+  /** 输出数据 */
+  output?: any;
+}
+```
+
+### EndSpanOptions
+
+结束跨度的选项。
+
+```typescript
+interface EndSpanOptions<TType extends SpanType> {
+  /** 输出数据 */
+  output?: any;
+
+  /** 跨度元数据 */
+  metadata?: Record<string, any>;
+
+  /** 跨度属性 */
+  attributes?: Partial<SpanTypeMap[TType]>;
+}
+```
+
+### ErrorSpanOptions
+
+记录跨度错误的选项。
+
+```typescript
+interface ErrorSpanOptions<TType extends SpanType> {
+  /** 与问题相关的错误 */
+  error: Error;
+
+  /** 为 true 时结束跨度 */
+  endSpan?: boolean;
+
+  /** 跨度元数据 */
+  metadata?: Record<string, any>;
+
+  /** 跨度属性 */
+  attributes?: Partial<SpanTypeMap[TType]>;
+}
+```
+
+## 上下文类型
+
+### TracingContext
+
+流经工作流和代理执行的追踪上下文。
+
+```typescript
+interface TracingContext {
+  /** 用于创建子跨度和添加元数据的当前跨度 */
+  currentSpan?: AnySpan;
+}
+```
+
+### TracingProperties
+
+返回给用户用于外部处理跟踪的属性。
+
+```typescript
+type TracingProperties = {
+  /** 执行使用的跟踪 ID（如果执行被追踪） */
+  traceId?: string;
+};
+```
+
+### TracingOptions
+
+启动新的代理或工作流执行时传递的选项。
+
+```typescript
+interface TracingOptions {
+  /** 要添加到根跟踪跨度的元数据 */
+  metadata?: Record<string, any>;
+
+  /**
+   * 作为此跟踪的元数据提取的其他 RequestContext 键。
+   * 这些键被添加到 requestContextKeys 配置中。
+   * 支持嵌套值的点表示法（例如，'user.id'，'session.data.experimentId'）。
+   */
+  requestContextKeys?: string[];
+
+  /**
+   * 此执行使用的跟踪 ID（1-32 个十六进制字符）。
+   * 如果提供，此跟踪将成为指定跟踪的一部分，而不是启动新的跟踪。
+   */
+  traceId?: string;
+
+  /**
+   * 此执行使用的父跨度 ID（1-16 个十六进制字符）。
+   * 如果提供，根跨度将创建为此跨度的子跨度。
+   */
+  parentSpanId?: string;
+
+  /**
+   * 要应用于此跟踪的标签。
+   * 标签是可用于对跟踪进行分类和筛选的字符串标签
+   * 注意：标签仅应用于跟踪的根跨度。
+   */
+  tags?: string[];
+
+  /**
+   * 为 true 时，此跟踪中所有跨度的输入数据将被隐藏。
+   * 用于保护敏感数据不被记录。
+   */
+  hideInput?: boolean;
+
+  /**
+   * 为 true 时，此跟踪中所有跨度的输出数据将被隐藏。
+   * 用于保护敏感数据不被记录。
+   */
+  hideOutput?: boolean;
+}
+```
+
+### TracingPolicy
+
+创建工作流或代理时应用的策略级追踪配置。
+
+```typescript
+interface TracingPolicy {
+  /**
+   * 位选项，用于在工作流或代理执行中将不同类型的跨度设置为 Internal。
+   * 内部跨度在导出的跟踪中默认隐藏。
+   */
+  internal?: InternalSpans;
+}
+```
+
+## 配置类型
+
+### ObservabilityInstanceConfig
+
+单个可观测性实例的配置。
+
+```typescript
+interface ObservabilityInstanceConfig {
+  /** 此配置在可观测性注册表中的唯一标识符 */
+  name: string;
+
+  /** 可观测性的服务名称 */
+  serviceName: string;
+
+  /** 采样策略 - 控制是否收集追踪（默认为 ALWAYS） */
+  sampling?: SamplingStrategy;
+
+  /** 自定义导出器 */
+  exporters?: ObservabilityExporter[];
+
+  /** 自定义跨度输出处理器 */
+  spanOutputProcessors?: SpanOutputProcessor[];
+
+  /** 如果设置为 true，您将看到 Mastra 操作内部的跨度 */
+  includeInternalSpans?: boolean;
+
+  /** 自动提取为所有跨度元数据的 RequestContext 键 */
+  requestContextKeys?: string[];
+}
+```
+
+### ObservabilityRegistryConfig
+
+完整可观测性注册表配置。
+
+```typescript
+interface ObservabilityRegistryConfig {
+  /** 启用默认导出器，采样：always，以及敏感数据过滤 */
+  default?: {
+    enabled?: boolean;
+  };
+
+  /** 跟踪实例名称到其配置或预实例化实例的映射 */
+  configs?: Record<string, Omit<ObservabilityInstanceConfig, "name"> | ObservabilityInstance>;
+
+  /** 可选的选择器函数，用于选择使用哪个跟踪实例 */
+  configSelector?: ConfigSelector;
+}
+```
+
+## 采样类型
+
+### SamplingStrategy
+
+采样策略配置。
+
+```typescript
+type SamplingStrategy =
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: CustomSamplerOptions) => boolean };
+```
+
+### CustomSamplerOptions
+
+使用自定义采样器策略时传递的选项。
+
+```typescript
+interface CustomSamplerOptions {
+  requestContext?: RequestContext;
+  metadata?: Record<string, any>;
+}
+```
+
+## 配置选择器类型
+
+### ConfigSelector
+
+选择给定跨度使用哪个可观测性实例的函数。
+
+```typescript
+type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
+) => string | undefined;
+```
+
+### ConfigSelectorOptions
+
+使用自定义追踪配置选择器时传递的选项。
+
+```typescript
+interface ConfigSelectorOptions {
+  /** 请求上下文 */
+  requestContext?: RequestContext;
+}
+```
+
+## 内部跨度
+
+### InternalSpans
+
+位选项，用于在工作流或代理执行中将不同类型的跨度设置为 internal。
+
+```typescript
+enum InternalSpans {
+  /** 没有跨度被标记为内部 */
+  NONE = 0,
+
+  /** 工作流跨度被标记为内部 */
+  WORKFLOW = 1 << 0,
+
+  /** 代理跨度被标记为内部 */
+  AGENT = 1 << 1,
+
+  /** 工具跨度被标记为内部 */
+  TOOL = 1 << 2,
+
+  /** 模型跨度被标记为内部 */
+  MODEL = 1 << 3,
+
+  /** 所有跨度被标记为内部 */
+  ALL = (1 << 4) - 1,
+}
+```
+
+## 另请参阅
+
+### 文档
+
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 追踪完整指南
+- [创建子跨度](/docs/cn/docs/observability/tracing/overview#creating-child-spans) - 处理跨度层次结构
+- [添加自定义元数据](/docs/cn/docs/observability/tracing/overview#adding-custom-metadata) - 丰富跟踪
+
+### 参考
+
+- [配置](/reference/observability/tracing/configuration) - 注册表和配置
+- [追踪类](/reference/observability/tracing/instances) - 核心实现
+- [跨度参考](/reference/observability/tracing/spans) - 跨度生命周期方法

@@ -1,0 +1,367 @@
+---
+title: "参考文档: Pinecone 向量存储 | 向量"
+description: Mastra 中 PineconeVector 类的文档，提供与 Pinecone 向量数据库的接口。
+packages:
+  - "@mastra/pinecone"
+---
+
+# Pinecone 向量存储
+
+PineconeVector 类提供了与 [Pinecone](https://www.pinecone.io/) 向量数据库的接口。它提供实时向量搜索，支持混合搜索、元数据过滤和命名空间管理等功能。
+
+## 构造函数选项
+
+构造函数接受所有 [Pinecone 配置选项](https://docs.pinecone.io/reference/typescript-sdk) 以及 Mastra 特定字段。
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此向量存储实例的唯一标识符",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Pinecone API 密钥",
+    },
+    {
+      name: "controllerHostUrl",
+      type: "string",
+      isOptional: true,
+      description: "自定义 Pinecone 控制器主机 URL",
+    },
+    {
+      name: "additionalHeaders",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "要包含在请求中的额外 HTTP 头",
+    },
+    {
+      name: "sourceTag",
+      type: "string",
+      isOptional: true,
+      description: "用于请求跟踪的源标签",
+    },
+    {
+      name: "cloud",
+      type: "'aws' | 'gcp' | 'azure'",
+      isOptional: true,
+      defaultValue: "aws",
+      description: "用于创建新索引的云提供商",
+    },
+    {
+      name: "region",
+      type: "string",
+      isOptional: true,
+      defaultValue: "us-east-1",
+      description: "用于创建新索引的区域",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与您的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "用于相似性搜索的距离度量。如果您计划使用混合搜索，请使用 'dotproduct'。",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "您的 Pinecone 索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "密集嵌入向量数组",
+    },
+    {
+      name: "sparseVectors",
+      type: "{ indices: number[], values: number[] }[]",
+      isOptional: true,
+      description:
+        "用于混合搜索的稀疏向量数组。每个向量必须具有匹配的索引和值数组。",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description:
+        "用于存储向量的可选命名空间。不同命名空间中的向量相互隔离。",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "vector",
+      type: "number[]",
+      description: "用于查找相似向量的密集查询向量",
+    },
+    {
+      name: "sparseVector",
+      type: "{ indices: number[], values: number[] }",
+      isOptional: true,
+      description:
+        "用于混合搜索的可选稀疏向量。必须具有匹配的索引和值数组。",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "查询的元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description:
+        "用于查询向量的可选命名空间。仅返回指定命名空间中的结果。",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+返回字符串数组形式的索引名称列表。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### updateVector()
+
+按 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter` 中的一个，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新的向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description: "更新操作的可选命名空间",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新参数",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "要更新的新向量值",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "要更新的新元数据",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+按 ID 数组或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter` 中的一个，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除的向量的元数据过滤器（与 ids 互斥）",
+    },
+    {
+      name: "namespace",
+      type: "string",
+      isOptional: true,
+      description: "删除操作的可选命名空间",
+    },
+  ]}
+/>
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | 等
+    console.log(error.details); // 额外的错误上下文
+  }
+}
+```
+
+### 环境变量
+
+必需的环境变量：
+
+- `PINECONE_API_KEY`：您的 Pinecone API 密钥
+
+## 混合搜索
+
+Pinecone 支持通过组合密集向量和稀疏向量来实现混合搜索。要使用混合搜索：
+
+1. 使用 `metric: 'dotproduct'` 创建索引
+2. 在 upsert 时，使用 `sparseVectors` 参数提供稀疏向量
+3. 在查询时，使用 `sparseVector` 参数提供稀疏向量
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

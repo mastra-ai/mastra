@@ -1,0 +1,325 @@
+---
+title: "参考文档: DynamoDB 存储 | 存储"
+description: "Mastra 中 DynamoDB 存储实现的文档，使用带有 ElectroDB 的单表设计。"
+packages:
+  - "@mastra/dynamodb"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
+---
+
+# DynamoDB 存储
+
+DynamoDB 存储实现使用 [ElectroDB](https://electrodb.dev/) 的单表设计模式为 Mastra 提供了可扩展的高性能 NoSQL 数据库解决方案。
+
+:::warning[不支持可观察性]
+DynamoDB 存储**不支持可观察性领域**。来自 `DefaultExporter` 的追踪无法持久化到 DynamoDB，Mastra Studio 的可观察性功能无法将 DynamoDB 作为唯一的存储提供商工作。若要启用可观察性，请使用[复合存储](/reference/storage/composite#specialized-storage-for-observability) 将可观察性数据路由到支持的提供商，如 ClickHouse 或 PostgreSQL。
+:::
+
+:::warning[项目大小限制]
+DynamoDB 强制执行 **400 KB 最大项目大小限制**。在存储带有 base64 编码附件（如图像）的消息时可能会超过此限制。请参阅[处理大附件](/docs/cn/docs/memory/storage#handling-large-attachments) 了解包括将附件上传到外部存储在内的解决方案。
+:::
+
+## 功能特点
+
+- 满足所有 Mastra 存储需求的高效单表设计
+- 基于 ElectroDB 实现类型安全的 DynamoDB 访问
+- 支持 AWS 凭证、区域和端点
+- 与 AWS DynamoDB Local 兼容开发
+- 存储线程、消息、评估和工作流数据
+- 针对无服务器环境优化
+- 可配置的 TTL（生存时间）用于按实体类型自动数据过期
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/dynamodb@latest
+```
+
+## 先决条件
+
+在使用此包之前，你**必须**创建具有特定结构的 DynamoDB 表，包括主键和全局二级索引（GSI）。此适配器期望在外部预置 DynamoDB 表及其 GSI。
+
+使用 AWS CloudFormation 或 AWS CDK 设置表的详细说明可在 [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) 中找到。请确保在继续之前根据这些说明配置你的表。
+
+## 使用方法
+
+### 基本用法
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { DynamoDBStore } from "@mastra/dynamodb";
+
+// 初始化 DynamoDB 存储
+const storage = new DynamoDBStore({
+  id: "dynamodb", // 此存储实例的唯一标识符
+  config: {
+    tableName: "mastra-single-table", // 你的 DynamoDB 表名
+    region: "us-east-1", // 可选：AWS 区域，默认为 'us-east-1'
+    // endpoint: "http://localhost:8000", // 可选：用于本地 DynamoDB
+    // credentials: { accessKeyId: "YOUR_ACCESS_KEY", secretAccessKey: "YOUR_SECRET_KEY" } // 可选
+  },
+});
+
+// 示例：使用 DynamoDB 存储初始化内存
+const memory = new Memory({
+  storage,
+  options: {
+    lastMessages: 10,
+  },
+});
+```
+
+### 使用 DynamoDB Local 进行本地开发
+
+对于本地开发，你可以使用 [DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html)。
+
+1. **运行 DynamoDB Local（例如，使用 Docker）：**
+
+    ```bash
+    docker run -p 8000:8000 amazon/dynamodb-local
+    ```
+
+2. **配置 `DynamoDBStore` 使用本地端点：**
+
+    ```typescript
+    import { DynamoDBStore } from "@mastra/dynamodb";
+
+    const storage = new DynamoDBStore({
+      id: "dynamodb-local",
+      config: {
+        tableName: "mastra-single-table", // 确保此表在本地 DynamoDB 中创建
+        region: "localhost", // 本地可以使用任意字符串，通常使用 'localhost'
+        endpoint: "http://localhost:8000",
+        // 对于 DynamoDB Local，通常不需要凭证，除非已配置。
+        // 如果你配置了本地凭证：
+        // credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }
+      },
+    });
+    ```
+
+    你仍然需要在本地 DynamoDB 实例中创建表和 GSI，例如使用指向本地端点的 AWS CLI。
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此存储实例的唯一标识符。",
+      isOptional: false,
+    },
+    {
+      name: "config.tableName",
+      type: "string",
+      description: "你的 DynamoDB 表名。",
+      isOptional: false,
+    },
+    {
+      name: "config.region",
+      type: "string",
+      description: "AWS 区域。默认为 'us-east-1'。对于本地开发，可以设置为 'localhost' 或类似值。",
+      isOptional: true,
+    },
+    {
+      name: "config.endpoint",
+      type: "string",
+      description: "DynamoDB 的自定义端点（例如，'http://localhost:8000' 用于本地开发）。",
+      isOptional: true,
+    },
+    {
+      name: "config.credentials",
+      type: "object",
+      description: "带有 `accessKeyId` 和 `secretAccessKey` 的 AWS 凭证对象。如果未提供，AWS SDK 将尝试从环境变量、IAM 角色（例如用于 EC2/Lambda）或共享 AWS 凭证文件获取凭证。",
+      isOptional: true,
+    },
+    {
+      name: "config.ttl",
+      type: "object",
+      description: "用于自动数据过期的 TTL（生存时间）配置。按实体类型配置：thread、message、trace、eval、workflow_snapshot、resource、score。每个实体配置包括：enabled（布尔值）、attributeName（字符串，默认为 'ttl'）、defaultTtlSeconds（数字）。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## TTL（生存时间）配置
+
+DynamoDB TTL 允许你在指定时间段后自动删除项目。这对于以下情况很有用：
+
+- **成本优化**：自动删除旧数据以减少存储成本
+- **数据生命周期管理**：实施保留策略以符合合规性
+- **性能**：防止表无限增长
+- **隐私合规**：在指定期限后自动清除个人数据
+
+### 启用 TTL
+
+要使用 TTL，你必须：
+
+1. **在 DynamoDBStore 中配置 TTL**（如下所示）
+2. **在 DynamoDB 表上启用 TTL**，通过 AWS 控制台或 CLI，指定属性名称（默认为 `ttl`）
+
+```typescript
+import { DynamoDBStore } from "@mastra/dynamodb";
+
+const storage = new DynamoDBStore({
+  name: "dynamodb",
+  config: {
+    tableName: "mastra-single-table",
+    region: "us-east-1",
+    ttl: {
+      // 消息在 30 天后过期
+      message: {
+        enabled: true,
+        defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 天
+      },
+      // 线程在 90 天后过期
+      thread: {
+        enabled: true,
+        defaultTtlSeconds: 90 * 24 * 60 * 60, // 90 天
+      },
+      // 追踪在 7 天后过期，使用自定义属性名称
+      trace: {
+        enabled: true,
+        attributeName: "expiresAt", // 自定义 TTL 属性
+        defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 天
+      },
+      // 工作流快照不会过期
+      workflow_snapshot: {
+        enabled: false,
+      },
+    },
+  },
+});
+```
+
+### 支持的实体类型
+
+可以为这些实体类型配置 TTL：
+
+| 实体 | 描述 |
+|--------|-------------|
+| `thread` | 对话线程 |
+| `message` | 线程中的消息 |
+| `trace` | 可观察性追踪 |
+| `eval` | 评估结果 |
+| `workflow_snapshot` | 工作流状态快照 |
+| `resource` | 用户/资源数据 |
+| `score` | 评分结果 |
+
+### TTL 实体配置
+
+每个实体类型接受以下配置：
+
+<PropertiesTable
+  content={[
+    {
+      name: "enabled",
+      type: "boolean",
+      description: "是否为该实体类型启用 TTL。",
+      isOptional: false,
+    },
+    {
+      name: "attributeName",
+      type: "string",
+      description: "用于 TTL 的 DynamoDB 属性名称。必须与在 DynamoDB 表上配置的 TTL 属性匹配。默认为 'ttl'。",
+      isOptional: true,
+    },
+    {
+      name: "defaultTtlSeconds",
+      type: "number",
+      description: "从项目创建时间起的默认 TTL（秒）。项目在此持续时间后将被 DynamoDB 自动删除。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 在 DynamoDB 表上启用 TTL
+
+在代码中配置 TTL 后，你必须在 DynamoDB 表本身上启用 TTL：
+
+**使用 AWS CLI：**
+
+```bash
+aws dynamodb update-time-to-live \
+  --table-name mastra-single-table \
+  --time-to-live-specification "Enabled=true, AttributeName=ttl"
+```
+
+**使用 AWS 控制台：**
+
+1. 转到 DynamoDB 控制台
+2. 选择你的表
+3. 转到"其他设置"选项卡
+4. 在"生存时间 (TTL)"下，点击"管理 TTL"
+5. 启用 TTL 并指定属性名称（默认为 `ttl`）
+
+> **注意**：DynamoDB 在过期后 48 小时内删除过期项目。在实际删除之前，项目仍可查询。
+
+## AWS IAM 权限
+
+执行代码的 IAM 角色或用户需要适当的权限来与指定的 DynamoDB 表及其索引交互。以下是一个示例策略。将 `${YOUR_TABLE_NAME}` 替换为你的实际表名，并将 `${YOUR_AWS_REGION}` 和 `${YOUR_AWS_ACCOUNT_ID}` 替换为适当的值。
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeTable",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}",
+        "arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}/index/*"
+      ]
+    }
+  ]
+}
+```
+
+## 关键注意事项
+
+在使用 DynamoDB 存储适配器时，在深入研究架构细节之前，请记住以下关键点：
+
+- **外部表预置：** 此适配器**要求**你在使用适配器之前自行创建和配置 DynamoDB 表及其全局二级索引 (GSI)。请遵循 [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) 中的指南。
+- **单表设计：** 所有 Mastra 数据（线程、消息等）都存储在一个 DynamoDB 表中。这是一个深思熟虑的设计选择，针对 DynamoDB 进行了优化，区别于关系数据库方法。
+- **了解 GSI：** 了解 GSI 的结构（如 `TABLE_SETUP.md` 中所述）对于理解数据检索和潜在查询模式非常重要。
+- **ElectroDB：** 适配器使用 ElectroDB 来管理与 DynamoDB 的交互，在原始 DynamoDB 操作之上提供抽象层和类型安全性。
+
+## 架构方法
+
+此存储适配器利用带有 [ElectroDB](https://electrodb.dev/) 的**单表设计模式**，这是 DynamoDB 的常见且推荐方法。这在架构上不同于通常使用多个表（每个表专用于特定实体（线程、消息等））的关系数据库适配器（如 `@mastra/pg` 或 `@mastra/libsql`）。
+
+此方法的关键方面：
+
+- **DynamoDB 原生：** 单表设计针对 DynamoDB 的键值和查询功能进行了优化，与模仿关系模型相比，通常能带来更好的性能和可扩展性。
+- **外部表管理：** 与某些可能提供通过代码创建表的辅助函数的适配器不同，此适配器**期望在使
+
+用之前在外部预置 DynamoDB 表及其关联的全局二级索引 (GSI)**。请参阅 [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) 获取使用 AWS CloudFormation 或 CDK 等工具的详细说明。适配器仅专注于与预先存在的表结构交互。
+
+- **通过接口实现一致性：** 虽然底层存储模型不同，但此适配器与其他适配器遵循相同的 `MastraStorage` 接口，确保可以在 Mastra `Memory` 组件内互换使用。
+
+### 单表中的 Mastra 数据
+
+在单个 DynamoDB 表中，不同的 Mastra 数据实体（如线程、消息、追踪、评估和工作流）使用 ElectroDB 进行管理和区分。ElectroDB 为每种实体类型定义了特定模型，包括唯一的键结构和属性。这允许适配器在同一表中高效地存储和检索多种数据类型。
+
+例如，一个 `Thread` 项目的主键可能类似于 `THREAD#<threadId>`，而属于该线程的 `Message` 项目可能使用 `THREAD#<threadId>` 作为分区键，使用 `MESSAGE#<messageId>` 作为排序键。全局二级索引 (GSI)（在 `TABLE_SETUP.md` 中详细说明）经过战略设计，以支持跨这些不同实体的常见访问模式，例如获取线程的所有消息或查询与特定工作流关联的追踪。
+
+### 单表设计的优势
+
+此实现使用带有 ElectroDB 的单表设计模式，在 DynamoDB 环境中提供以下优势：
+
+1. **降低成本（潜在地）：** 更少的表可以简化读写容量单位 (RCU/WCU) 的配置和管理，尤其是使用按需容量时。
+2. **更好的性能：** 相关数据可以通过 GSI 共置或高效访问，从而能够快速查找常见访问模式。
+3. **简化的管理：** 更少的独立表需要监控、备份和管理。
+4. **减少访问模式的复杂性：** ElectroDB 有助于管理单个表上项目类型和访问模式的复杂性。
+5. **事务支持：** 如果需要，DynamoDB 事务可以跨存储在同一表中的不同"实体"类型使用。

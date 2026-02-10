@@ -1,0 +1,38 @@
+---
+title: "参考文档：Mastra.listVectors() | 核心"
+description: "Mastra 中 `Mastra.listVectors()` 方法的文档，用于检索所有已配置的向量存储。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listVectors()
+
+`.listVectors()` 方法用于检索已在 Mastra 实例中配置的所有向量存储。
+
+## 使用示例
+
+```typescript
+mastra.listVectors();
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectors",
+      type: "TVectors",
+      description:
+        "所有已配置向量存储的记录，其中键为向量存储名称，值为向量存储实例。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [向量存储概述](/docs/cn/docs/rag/vector-databases)
+- [RAG 概述](/docs/cn/docs/rag/overview)

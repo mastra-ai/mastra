@@ -1,0 +1,212 @@
+---
+title: "暂停与恢复 | 工作流"
+description: "Mastra 工作流中的暂停与恢复允许你在等待外部输入或资源时暂停执行。"
+packages:
+  - "@mastra/core"
+---
+
+# 暂停与恢复
+
+工作流可以在任何步骤暂停以收集额外数据、等待 API 回调、限制高昂操作的成本，或请求[人机交互](/docs/cn/workflows/human-in-the-loop)输入。当工作流暂停时，其当前执行状态会保存为快照。你可以稍后从[特定的步骤 ID](/docs/cn/workflows/snapshots#retrieving-snapshots)恢复工作流，恢复该快照中捕获的精确状态。[快照](/docs/cn/workflows/snapshots)存储在你配置存储提供程序中，跨部署和应用程序重启保持持久化。
+
+## 使用 `suspend()` 暂停工作流
+
+使用 `suspend()` 在特定步骤暂停工作流执行。你可以在步骤的 `execute` 块中使用 `resumeData` 中的值来定义暂停条件。
+
+- 如果条件不满足，工作流暂停并返回 `suspend()`。
+- 如果条件满足，工作流继续执行步骤中剩余的逻辑。
+
+![使用 suspend() 暂停工作流](/img/workflows/workflows-suspend.jpg)
+
+```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({
+    userEmail: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { userEmail } = inputData;
+    const { approved } = resumeData ?? {};
+
+    if (!approved) {
+      return await suspend({});
+    }
+
+    return {
+      output: `Email sent to ${userEmail}`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    userEmail: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .commit();
+```
+
+## 使用 `resume()` 重新启动工作流
+
+使用 `resume()` 从暂停的步骤重新启动暂停的工作流。传递与步骤 `resumeSchema` 匹配的 `resumeData` 以满足暂停条件并继续执行。
+
+![使用 resume() 重新启动工作流](/img/workflows/workflows-resume.jpg)
+
+```typescript
+import { step1 } from "./workflows/test-workflow";
+
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRun();
+
+await run.start({
+  inputData: {
+    userEmail: "alex@example.com"
+  }
+});
+
+const handleResume = async () => {
+  const result = await run.resume({
+    step: step1,
+    resumeData: { approved: true }
+  });
+};
+```
+
+传递 `step` 对象可以为 `resumeData` 提供完整的类型安全。或者，当 ID 来自用户输入或数据库时，你可以传递步骤 ID 以获得更大的灵活性。
+
+```typescript
+const result = await run.resume({
+  step: "step-1",
+  resumeData: { approved: true }
+});
+```
+
+如果只有一个步骤暂停，你可以完全省略步骤参数，Mastra 将恢复工作流中最后暂停的步骤。
+
+当仅使用 `runId` 恢复时，先使用 `createRun()` 创建运行实例。
+
+```typescript
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRun({ runId: "123" });
+
+const stream = run.resume({
+  resumeData: { approved: true }
+});
+```
+
+你可以从应用程序中的任何位置调用 `resume()`，包括 HTTP 端点、事件处理器、响应[人工输入](/docs/cn/workflows/human-in-the-loop)或定时器。
+
+```typescript
+const midnight = new Date();
+midnight.setUTCHours(24, 0, 0, 0);
+
+setTimeout(async () => {
+  await run.resume({
+    step: "step-1",
+    resumeData: { approved: true }
+  });
+}, midnight.getTime() - Date.now());
+```
+
+## 使用 `suspendData` 访问暂停数据
+
+当步骤暂停时，你可能希望在稍后恢复步骤时访问传递给 `suspend()` 的数据。在步骤的 execute 函数中使用 `suspendData` 参数来访问此数据。
+
+```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts"
+const approvalStep = createStep({
+  id: "user-approval",
+  inputSchema: z.object({
+    requestId: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string(),
+    requestDetails: z.string()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  }),
+  execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+    const { requestId } = inputData;
+    const { approved } = resumeData ?? {};
+
+    // 首次执行时，带上下文暂停
+    if (!approved) {
+      return await suspend({
+        reason: "User approval required",
+        requestDetails: `Request ${requestId} pending review`
+      });
+    }
+
+    // 恢复时，访问原始暂停数据
+    const suspendReason = suspendData?.reason || "Unknown";
+    const details = suspendData?.requestDetails || "No details";
+
+    return {
+      result: `${details} - ${suspendReason} - Decision: ${approved ? 'Approved' : 'Rejected'}`
+    };
+  }
+});
+```
+
+当步骤恢复时，`suspendData` 参数会自动填充，并包含原始暂停期间传递给 `suspend()` 函数的确切数据。这使你能够保留有关工作流暂停原因的信息，并在恢复过程中使用该信息。
+
+## 识别暂停的执行
+
+当工作流暂停时，它会从暂停的步骤重新启动。你可以检查工作流的 `status` 以确认它已暂停，并使用 `suspended` 来识别暂停的步骤或[嵌套工作流](/docs/cn/workflows/overview#workflows-as-steps)。
+
+```typescript {11}
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: {
+    userEmail: "alex@example.com"
+  }
+});
+
+if (result.status === "suspended") {
+  console.log(result.suspended[0]);
+  await run.resume({
+    step: result.suspended[0],
+    resumeData: { approved: true }
+  });
+}
+```
+
+**示例输出**
+
+`suspended` 数组包含运行中任何暂停的工作流和步骤的 ID。这些可以在调用 `resume()` 时传递给 `step` 参数，以定位并恢复暂停的执行路径。
+
+```typescript
+[ 'nested-workflow', 'step-1' ]
+```
+
+## 睡眠
+
+睡眠方法可用于在工作流级别暂停执行，将状态设置为 `waiting`。相比之下，`suspend()` 在特定步骤内暂停执行并将状态设置为 `suspended`。
+
+**可用的方法：**
+
+- [`.sleep()`](/reference/workflows/workflow-methods/sleep)：暂停指定的毫秒数
+- [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil)：暂停到特定日期
+
+## 相关内容
+
+- [控制流](/docs/cn/workflows/control-flow)
+- [人机交互](/docs/cn/workflows/human-in-the-loop)
+- [快照](/docs/cn/workflows/snapshots)
+- [时光旅行](/docs/cn/workflows/time-travel)

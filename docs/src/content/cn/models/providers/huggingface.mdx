@@ -1,0 +1,277 @@
+---
+title: "Hugging Face | 模型 | Mastra"
+description: "在 Mastra 中使用 Hugging Face 模型。共 16 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
+
+通过 Mastra 的模型路由器访问 16 个 Hugging Face 模型。身份验证使用 `HF_TOKEN` 环境变量自动处理。
+
+在 [Hugging Face 文档](https://huggingface.co) 中了解更多信息。
+
+```bash title=".env"
+HF_TOKEN=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "huggingface/MiniMaxAI/MiniMax-M2.1"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [Hugging Face 文档](https://huggingface.co) 了解详情。
+
+:::
+
+## 模型
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "huggingface/deepseek-ai/DeepSeek-R1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 3,
+    "outputCost": 5
+  },
+  {
+    "model": "huggingface/deepseek-ai/DeepSeek-V3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 65536,
+    "inputCost": 0.28,
+    "outputCost": 0.4
+  },
+  {
+    "model": "huggingface/MiniMaxAI/MiniMax-M2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "huggingface/moonshotai/Kimi-K2-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 1,
+    "outputCost": 3
+  },
+  {
+    "model": "huggingface/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 1,
+    "outputCost": 3
+  },
+  {
+    "model": "huggingface/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "huggingface/moonshotai/Kimi-K2.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 3
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 3
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 2,
+    "outputCost": 2
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Embedding-4B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 2048,
+    "inputCost": 0.01,
+    "outputCost": null
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Embedding-8B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 4096,
+    "inputCost": 0.01,
+    "outputCost": null
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 66536,
+    "inputCost": 0.25,
+    "outputCost": 1
+  },
+  {
+    "model": "huggingface/Qwen/Qwen3-Next-80B-A3B-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 2
+  },
+  {
+    "model": "huggingface/XiaomiMiMo/MiMo-V2-Flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "huggingface/zai-org/GLM-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
+  },
+  {
+    "model": "huggingface/zai-org/GLM-4.7-Flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://router.huggingface.co/v1",
+    id: "huggingface/MiniMaxAI/MiniMax-M2.1",
+    apiKey: process.env.HF_TOKEN,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "huggingface/zai-org/GLM-4.7-Flash"
+      : "huggingface/MiniMaxAI/MiniMax-M2.1";
+  }
+});
+```
+
+

@@ -1,0 +1,134 @@
+---
+title: "参考文档：MastraAuthWorkos 类 | 认证"
+description: "MastraAuthWorkos 类的 API 参考，该类使用 WorkOS 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-workos"
+  - "@mastra/core"
+---
+
+# MastraAuthWorkos 类
+
+`MastraAuthWorkos` 类使用 WorkOS 为 Mastra 提供身份验证。它使用 WorkOS 访问令牌验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthWorkos } from "@mastra/auth-workos";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthWorkos({
+      apiKey: process.env.WORKOS_API_KEY,
+      clientId: process.env.WORKOS_CLIENT_ID,
+    }),
+  },
+});
+```
+
+> **注意：** 如果您设置了正确命名的环境变量（`WORKOS_API_KEY` 和 `WORKOS_CLIENT_ID`），则可以省略构造函数参数。在这种情况下，只需使用不带任何参数的 `new MastraAuthWorkos()`。
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "您的 WorkOS API 密钥。这用于与 WorkOS API 进行身份验证以进行用户验证和组织管理。",
+      isOptional: true,
+      defaultValue: "process.env.WORKOS_API_KEY",
+    },
+    {
+      name: "clientId",
+      type: "string",
+      description:
+        "您的 WorkOS 客户端 ID。这在将授权码交换为访问令牌时用于标识您的应用程序。",
+      isOptional: true,
+      defaultValue: "process.env.WORKOS_CLIENT_ID",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "身份验证提供程序实例的自定义名称。",
+      isOptional: true,
+      defaultValue: '"workos"',
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: WorkosUser) => Promise<boolean> | boolean",
+      description:
+        "自定义授权函数，用于确定用户是否应该获得访问权限。在令牌验证后调用。默认情况下，检查用户在任何组织成员资格中是否具有 'admin' 角色。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 环境变量
+
+当未提供构造函数选项时，以下环境变量会自动使用：
+
+<PropertiesTable
+  content={[
+    {
+      name: "WORKOS_API_KEY",
+      type: "string",
+      description:
+        "您的 WorkOS API 密钥。可以在 WorkOS 控制台的\"API 密钥\"下找到。",
+      isOptional: true,
+    },
+    {
+      name: "WORKOS_CLIENT_ID",
+      type: "string",
+      description:
+        "您的 WorkOS 客户端 ID。可以在 WorkOS 控制台的\"应用程序\"下找到。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 默认授权行为
+
+默认情况下，`MastraAuthWorkos` 实施基于角色的授权，检查管理员访问权限：
+
+1. **令牌验证**：验证访问令牌与 WorkOS，确保其有效且未过期
+2. **用户检索**：从已验证的令牌中提取用户信息
+3. **组织成员资格检查**：系统查询 WorkOS 获取与用户 ID 关联的所有组织成员资格
+4. **角色提取**：从用户的组织成员资格中收集所有角色
+5. **管理员检查**：系统检查任何角色是否具有 'admin' 别名
+6. **授权决定**：仅当用户在至少一个组织中具有管理员角色时才授予访问权限
+
+这意味着默认情况下，只有在至少一个组织中具有管理员权限的用户才能获得授权访问您的 Mastra 端点。
+
+要实现自定义授权逻辑（例如，允许所有身份验证的用户，检查特定角色或实施自定义业务逻辑），请提供自定义 `authorizeUser` 函数。
+
+## WorkOS 用户类型
+
+`authorizeUser` 函数中使用的 `WorkosUser` 类型对应于 WorkOS 返回的 JWT 令牌有效载荷。WorkOS 允许管理员设置自定义 JWT 模板，因此确切结构可能因您的配置而异。以下是用户对象可能的外观示例：
+
+```javascript
+{
+  'urn:myapp:full_name': 'John Doe',
+  'urn:myapp:email': 'john.doe@example.com',
+  'urn:myapp:organization_tier': 'bronze',
+  'urn:myapp:user_language': 'en',
+  'urn:myapp:organization_domain': 'example.com',
+  iss: 'https://api.workos.com/user_management/client_01ABC123DEF456GHI789JKL012',
+  sub: 'user_01XYZ789ABC123DEF456GHI012',
+  sid: 'session_01PQR456STU789VWX012YZA345',
+  jti: '01MNO678PQR901STU234VWX567',
+  org_id: 'org_01DEF234GHI567JKL890MNO123',
+  role: 'member',
+  roles: [ 'member' ],
+  permissions: [],
+  exp: 1758290589,
+  iat: 1758290289
+}
+```
+
+带有 `urn:myapp:` 前缀的属性是在您的 WorkOS JWT 模板中配置的自定义声明。标准 JWT 声明包括 `sub`（用户 ID）、`iss`（签发者）、`exp`（过期时间）以及 WorkOS 特定的声明，如 `org_id`、`role` 和 `roles`。
+
+## 相关内容
+
+[MastraAuthWorkos 类](/docs/cn/docs/server/auth/workos)

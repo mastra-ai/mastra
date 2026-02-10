@@ -1,0 +1,71 @@
+---
+title: "参考文档：Agent.getMemory() | 智能体"
+description: "Mastra 智能体中 `Agent.getMemory()` 方法的文档，用于检索与智能体关联的内存系统。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getMemory()
+
+`.getMemory()` 方法检索与智能体关联的内存系统。此方法用于访问智能体的内存功能，用于跨对话存储和检索信息。
+
+## 使用示例
+
+```typescript
+await agent.getMemory();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "包含请求上下文的选择性配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "Promise<MastraMemory | undefined>",
+      description:
+        "解析为为智能体配置的内存系统的 promise，如果未配置内存系统则返回 undefined。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.getMemory({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体内存](/docs/cn/docs/agents/agent-memory)
+- [请求上下文](/docs/cn/docs/server/request-context)

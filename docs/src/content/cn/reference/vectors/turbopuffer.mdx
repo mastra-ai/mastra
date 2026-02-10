@@ -1,0 +1,325 @@
+---
+title: "参考文档: Turbopuffer 向量存储 | 向量"
+description: 将 Turbopuffer 与 Mastra 集成的文档，Turbopuffer 是一个用于高效相似性搜索的高性能向量数据库。
+packages:
+  - "@mastra/turbopuffer"
+---
+
+# Turbopuffer 向量存储
+
+TurbopufferVector 类使用 [Turbopuffer](https://turbopuffer.com/) 提供向量搜索，这是一款针对 RAG 应用优化的高性能向量数据库。Turbopuffer 提供快速向量相似性搜索，具有高级过滤功能和高效的存储管理。
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "用于向 Turbopuffer 身份验证的 API 密钥",
+    },
+    {
+      name: "baseUrl",
+      type: "string",
+      isOptional: true,
+      defaultValue: "https://api.turbopuffer.com",
+      description: "Turbopuffer API 的基础 URL",
+    },
+    {
+      name: "connectTimeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10000",
+      description:
+        "建立连接的超时时间，单位为毫秒。仅适用于 Node 和 Deno。",
+    },
+    {
+      name: "connectionIdleTimeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "60000",
+      description:
+        "套接字空闲超时时间，单位为毫秒。仅适用于 Node 和 Deno。",
+    },
+    {
+      name: "warmConnections",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description:
+        "创建新客户端时要初始打开的连接数。",
+    },
+    {
+      name: "compression",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description:
+        "是否压缩请求并接受压缩响应。",
+    },
+    {
+      name: "schemaConfigForIndex",
+      type: "function",
+      isOptional: true,
+      description:
+        "一个回调函数，接受索引名称并返回该索引的配置对象。这允许您为每个索引定义显式模式。",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与您的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "用于相似性搜索的距离度量",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "查询的元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+返回字符串数组形式的索引名称列表。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### updateVector()
+
+按 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter` 中的一个，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新的向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "包含要更新的向量和/或元数据的对象",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+按 ID 数组或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter` 中的一个，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除的向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 模式配置
+
+`schemaConfigForIndex` 选项允许您为不同的索引定义显式模式：
+
+```typescript
+schemaConfigForIndex: (indexName: string) => {
+  // Mastra 用于内存消息的默认嵌入模型和索引：
+  if (indexName === "memory_messages_384") {
+    return {
+      dimensions: 384,
+      schema: {
+        thread_id: {
+          type: "string",
+          filterable: true,
+        },
+      },
+    };
+  } else {
+    throw new Error(`TODO: add schema for index: ${indexName}`);
+  }
+};
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | 等
+    console.log(error.details); // 额外的错误上下文
+  }
+}
+```
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

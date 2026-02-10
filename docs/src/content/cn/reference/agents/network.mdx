@@ -1,0 +1,415 @@
+---
+title: "参考文档：Agent.network() | 智能体"
+description: "Mastra 智能体中 `Agent.network()` 方法的文档，用于实现多智能体协作和路由。"
+packages:
+  - "@mastra/core"
+---
+
+import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
+
+# Agent.network()
+
+`.network()` 方法实现多智能体协作和路由。此方法接受消息和可选的执行选项。
+
+## 使用示例
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { agent1, agent2 } from "./agents";
+import { workflow1 } from "./workflows";
+import { tool1, tool2 } from "./tools";
+
+const agent = new Agent({
+  id: "network-agent",
+  name: "Network Agent",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+  model: "openai/gpt-5.1",
+  agents: {
+    agent1,
+    agent2,
+  },
+  workflows: {
+    workflow1,
+  },
+  tools: {
+    tool1,
+    tool2,
+  },
+});
+
+await agent.network(`
+  Find me the weather in Tokyo.
+  Based on the weather, plan an activity for me.
+`);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description:
+        "发送给智能体的消息。可以是单个字符串、字符串数组，或结构化消息对象。",
+    },
+    {
+      name: "options",
+      type: "MultiPrimitiveExecutionOptions",
+      isOptional: true,
+      description: "网络进程的可选配置。",
+    },
+  ]}
+/>
+
+### 选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      description: "执行期间运行的最大步数。",
+    },
+    {
+      name: "memory",
+      type: "object",
+      isOptional: true,
+      description:
+        "内存配置。这是管理内存的首选方式。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "thread",
+              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+              isOptional: false,
+              description:
+                "对话线程，作为字符串 ID 或带有 `id` 和可选 `metadata` 的对象。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "resource",
+              type: "string",
+              isOptional: false,
+              description:
+                "与线程关联的用户或资源的标识符。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "options",
+              type: "MemoryConfig",
+              isOptional: true,
+              description:
+                "内存行为的配置，如消息历史和语义召回。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "用于创建子跨度并添加元数据的追踪上下文。使用 Mastra 的追踪系统时自动注入。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "用于创建子跨度并添加元数据的当前跨度。使用此功能创建自定义子跨度或在执行期间更新跨度属性。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "追踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "要添加到根追踪跨度的元数据。用于添加自定义属性，如用户 ID、会话 ID 或功能标志。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "作为此追踪的元数据提取的附加 RequestContext 键。支持点表示法获取嵌套值（例如，'user.id'）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的追踪 ID（1-32 个十六进制字符）。如果提供，此追踪将成为指定追踪的一部分。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的父跨度 ID（1-16 个十六进制字符）。如果提供，根跨度将创建为此跨度的子跨度。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "要应用于此追踪的标签。用于分类和筛选追踪的字符串标签。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description:
+        "流式传输期间 OTLP 遥测收集的设置（不是追踪）。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "isEnabled",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "启用或禁用遥测。实验性阶段默认禁用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordInputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "启用或禁用输入记录。默认启用。您可能希望禁用输入记录以避免记录敏感信息。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordOutputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "启用或禁用输出记录。默认启用。您可能希望禁用输出记录以避免记录敏感信息。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "functionId",
+              type: "string",
+              isOptional: true,
+              description:
+                "此函数的标识符。用于按函数对遥测数据进行分组。",
+            },
+          ],
+        },
+      ],
+    },
+    MODEL_SETTINGS_OBJECT,
+    {
+      name: "structuredOutput",
+      type: "StructuredOutputOptions",
+      isOptional: true,
+      description:
+        "从网络结果生成类型化结构化输出的配置。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "schema",
+              type: "ZodSchema | JSONSchema7",
+              isOptional: false,
+              description:
+                "用于验证输出的模式。可以是 Zod 模式或 JSON Schema。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "model",
+              type: "MastraModelConfig",
+              isOptional: true,
+              description:
+                "用于生成结构化输出的模型。默认为智能体的模型。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "instructions",
+              type: "string",
+              isOptional: true,
+              description:
+                "生成结构化输出的自定义指令。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description:
+        "此生成运行的唯一 ID。可用于跟踪和调试目的。",
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "启用追踪时与此执行关联的追踪 ID。使用此功能关联日志并调试执行流程。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraAgentNetworkStream<NetworkChunkType>",
+      description:
+        "扩展了 ReadableStream<NetworkChunkType> 的自定义流，具有额外的网络特定属性",
+    },
+    {
+      name: "status",
+      type: "Promise<RunStatus>",
+      description: "解析为当前工作流运行状态的 promise",
+    },
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description: "解析为最终工作流结果的 promise",
+    },
+    {
+      name: "usage",
+      type: "Promise<{ promptTokens: number; completionTokens: number; totalTokens: number }>",
+      description: "解析为 token 使用统计的 promise",
+    },
+    {
+      name: "object",
+      type: "Promise<OUTPUT | undefined>",
+      description:
+        "解析为结构化输出对象的 promise。仅在提供 structuredOutput 选项时可用。如果未指定模式，则解析为 undefined。",
+    },
+    {
+      name: "objectStream",
+      type: "ReadableStream<Partial<OUTPUT>>",
+      description:
+        "结构化输出生成期间的部分对象流。在生成时流式传输部分结果很有用。",
+    },
+  ]}
+/>
+
+## 结构化输出
+
+当您需要从网络获取类型化、经验证的结果时，请使用 `structuredOutput` 选项。网络将在任务完成后生成符合您模式的响应。
+
+```typescript
+import { z } from "zod";
+
+const resultSchema = z.object({
+  summary: z.string().describe("发现的简要总结"),
+  recommendations: z.array(z.string()).describe("建议列表"),
+  confidence: z.number().min(0).max(1).describe("置信度分数"),
+});
+
+const stream = await agent.network("研究 AI 趋势并总结", {
+  structuredOutput: {
+    schema: resultSchema,
+  },
+});
+
+// 消费流
+for await (const chunk of stream) {
+  // 处理流式事件
+}
+
+// 获取类型化结果
+const result = await stream.object;
+// result 类型为 { summary: string; recommendations: string[]; confidence: number }
+console.log(result?.summary);
+console.log(result?.recommendations);
+```
+
+### 流式部分对象
+
+您还可以在生成时流式传输部分对象：
+
+```typescript
+const stream = await agent.network("分析数据", {
+  structuredOutput: { schema: resultSchema },
+});
+
+// 流式传输部分对象
+for await (const partial of stream.objectStream) {
+  console.log("部分结果:", partial);
+}
+
+// 获取最终结果
+const final = await stream.object;
+```
+
+### 块类型
+
+使用结构化输出时，会发出额外的块类型：
+
+- `network-object`：在流式传输时与部分对象一起发出
+- `network-object-result`：与最终结构化对象一起发出

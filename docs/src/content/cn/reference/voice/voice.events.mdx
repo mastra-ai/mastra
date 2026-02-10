@@ -1,0 +1,87 @@
+---
+title: "参考文档：语音事件 | 语音"
+description: "语音提供者发出的事件文档，特别适用于实时语音交互。"
+packages:
+  - "@mastra/core"
+---
+
+# 语音事件
+
+语音提供者在实时语音交互期间发出各种事件。可以使用 [voice.on()](./voice.on) 方法监听这些事件，这对于构建交互式语音应用程序特别重要。
+
+## 常见事件
+
+这些事件在实时语音提供者中普遍实现：
+
+<PropertiesTable
+  content={[
+    {
+      name: "error",
+      type: "Error",
+      description:
+        "在语音处理期间发生错误或音频数据格式不支持时发出",
+    },
+    {
+      name: "session.created",
+      type: "object",
+      description:
+        "与 OpenAI 服务创建新会话时发出",
+    },
+    {
+      name: "session.updated",
+      type: "object",
+      description: "会话配置更新时发出",
+    },
+    {
+      name: "response.created",
+      type: "object",
+      description: "AI 助手创建新响应时发出",
+    },
+    {
+      name: "response.done",
+      type: "object",
+      description: "AI 助手完成响应时发出",
+    },
+    {
+      name: "speaker",
+      type: "StreamWithId",
+      description:
+        "发出可以管道传输到音频输出的新音频流",
+    },
+    {
+      name: "writing",
+      type: "object",
+      description:
+        "正在转录文本（用户）或生成文本（助手）时发出",
+    },
+    {
+      name: "speaking",
+      type: "object",
+      description:
+        "从语音提供者有音频数据可用时发出",
+    },
+    {
+      name: "speaking.done",
+      type: "object",
+      description: "语音提供者完成说话时发出",
+    },
+    {
+      name: "tool-call-start",
+      type: "object",
+      description: "AI 助手开始执行工具时发出",
+    },
+    {
+      name: "tool-call-result",
+      type: "object",
+      description: "工具执行完成并带有其结果时发出",
+    },
+  ]}
+/>
+
+## 注意事项
+
+- 并非所有事件都被所有语音提供者支持
+- 确切的有效载荷结构可能因提供者而异
+- 对于非实时提供者，大多数事件不会发出
+- 事件对于构建响应对话状态的交互式 UI 很有用
+- 考虑在不再需要事件监听器时使用 [voice.off()](./voice.off) 方法移除它们

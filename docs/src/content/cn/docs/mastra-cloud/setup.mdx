@@ -1,0 +1,63 @@
+---
+title: "设置 | Mastra Cloud"
+description: "将您的 Mastra 项目导入到 Mastra Cloud"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 设置
+
+将您的 Mastra 项目导入到 [Mastra Cloud](https://cloud.mastra.ai) 以使用 [Studio](/docs/cn/mastra-cloud/studio) 并可选择部署您的智能体。
+
+## 开始之前
+
+- [登录](https://cloud.mastra.ai) 到 Cloud
+- 将您的 [Mastra 项目](/docs/cn/getting-started/start) 推送到 GitHub
+
+## 选项
+
+![选择项目类型](/img/mastra-cloud/mastra-cloud-select.png)
+
+创建新项目时，您可以从三个选项中选择：
+
+1. **从 GitHub 创建** - 从 GitHub 导入 Mastra 项目
+2. **从您的服务器创建** - 将自托管的 Mastra 实例连接到 [Studio](/docs/cn/mastra-cloud/studio)
+3. **从模板创建** - 从[预构建模板](https://mastra.ai/templates)开始
+
+要从 GitHub 创建项目，请按照以下步骤操作：
+
+## 从 GitHub 创建
+
+<Steps>
+
+<StepItem>
+当提示时连接到 GitHub
+
+![部署详情](/img/mastra-cloud/mastra-cloud-connect.png)
+</StepItem>
+
+<StepItem>
+搜索您的仓库并点击**导入**
+
+![部署详情](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
+</StepItem>
+
+<StepItem>
+配置您的项目设置。Mastra Cloud 会自动检测大多数设置，但您仍然需要输入配置的[模型提供商](/models)的环境变量：
+
+![部署详情](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
+</StepItem>
+
+<StepItem>
+
+点击**创建项目**
+
+</StepItem>
+</Steps>
+
+## 下一步
+
+导入您的项目后，[Studio](/docs/cn/mastra-cloud/studio) 会自动创建一个沙箱，您可以在其中与您的智能体交互并与您的团队共享访问权限。
+
+当您准备好进入生产环境时，启用[部署](/docs/cn/mastra-cloud/deployment)设置并点击部署！

@@ -1,0 +1,253 @@
+---
+title: "Scaleway | 模型 | Mastra"
+description: "在 Mastra 中使用 Scaleway 模型。共 14 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/scaleway.svg" alt="Scaleway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Scaleway
+
+通过 Mastra 的模型路由器访问 14 个 Scaleway 模型。身份验证使用 `SCALEWAY_API_KEY` 环境变量自动处理。
+
+在 [Scaleway 文档](https://www.scaleway.com/en/docs/cn/docs/generative-apis/) 中了解更多信息。
+
+```bash title=".env"
+SCALEWAY_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "scaleway/bge-multilingual-gemma2"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [Scaleway 文档](https://www.scaleway.com/en/docs/cn/docs/generative-apis/) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "scaleway/bge-multilingual-gemma2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8191,
+    "maxOutput": 3072,
+    "inputCost": 0.13,
+    "outputCost": null
+  },
+  {
+    "model": "scaleway/deepseek-r1-distill-llama-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32000,
+    "maxOutput": 4096,
+    "inputCost": 0.9,
+    "outputCost": 0.9
+  },
+  {
+    "model": "scaleway/devstral-2-123b-instruct-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 8192,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "scaleway/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40000,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.5
+  },
+  {
+    "model": "scaleway/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "scaleway/llama-3.1-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "model": "scaleway/llama-3.3-70b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 100000,
+    "maxOutput": 4096,
+    "inputCost": 0.9,
+    "outputCost": 0.9
+  },
+  {
+    "model": "scaleway/mistral-nemo-instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "model": "scaleway/mistral-small-3.2-24b-instruct-2506",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.35
+  },
+  {
+    "model": "scaleway/pixtral-12b-2409",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.2,
+    "outputCost": 0.2
+  },
+  {
+    "model": "scaleway/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 260000,
+    "maxOutput": 8192,
+    "inputCost": 0.75,
+    "outputCost": 2.25
+  },
+  {
+    "model": "scaleway/qwen3-coder-30b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "scaleway/voxtral-small-24b-2507",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.35
+  },
+  {
+    "model": "scaleway/whisper-large-v3",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": 0.003,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.scaleway.ai/v1",
+    id: "scaleway/bge-multilingual-gemma2",
+    apiKey: process.env.SCALEWAY_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "scaleway/whisper-large-v3"
+      : "scaleway/bge-multilingual-gemma2";
+  }
+});
+```
+
+

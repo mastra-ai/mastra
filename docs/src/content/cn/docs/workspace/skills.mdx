@@ -1,0 +1,134 @@
+---
+title: "技能 | 工作区"
+description: "使用代理技能规范教代理可复用的能力。"
+packages:
+  - "@mastra/core"
+---
+
+# 工作区技能
+
+**新增于：** `@mastra/core@1.1.0`
+
+技能是可复用的指令，教代理如何执行特定任务。它们遵循[代理技能规范](https://agentskills.io) - 用于打包代理能力的开放标准。
+
+技能是一个包含以下内容的文件夹：
+
+- `SKILL.md`：代理的指令和元数据
+- `references/`：支持文档（可选）
+- `scripts/`：可执行脚本（可选）
+- `assets/`：图像和其他文件（可选）
+
+```plaintext title="文件夹结构"
+/skills
+  /code-review
+    SKILL.md
+    /references
+      style-guide.md
+      pr-checklist.md
+    /scripts
+      lint.ts
+```
+
+当技能在工作区上配置时，代理可以在对话中发现和激活它们。
+
+## SKILL.md 格式
+
+创建技能时请遵循官方[技能规范](https://agentskills.io/specification)。以下是代码审查技能的 `SKILL.md` 示例：
+
+```markdown title="SKILL.md"
+---
+name: code-review
+description: Reviews code for quality, style, and potential issues
+version: 1.0.0
+tags:
+  - development
+  - review
+---
+
+# Code Review
+
+You are a code reviewer. When reviewing code:
+
+1. Check for bugs and edge cases
+2. Verify the code follows the style guide in references/style-guide.md
+3. Suggest improvements for readability
+4. Run the linter using scripts/lint.ts
+
+## What to look out for
+
+- Unused variables and imports
+- Missing error handling
+- Security vulnerabilities
+- Performance issues
+```
+
+## 配置技能
+
+通过在工作区上设置 `skills` 选项来启用技能发现：
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+});
+```
+
+`skills` 目录相对于你的 `basePath`。你可以指定多个技能目录：
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: [
+    '/skills',      // 项目技能
+    '/team-skills', // 团队共享技能
+  ],
+});
+```
+
+## 动态技能
+
+对于基于上下文的动态技能路径，传递一个函数：
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: (context) => {
+    const paths = ['/skills'];
+    if (context.user?.role === 'developer') {
+      paths.push('/dev-skills');
+    }
+    return paths;
+  },
+});
+```
+
+## 代理如何使用技能
+
+当代理激活技能时，技能的指令会被添加到对话上下文中。然后代理可以遵循这些指令并访问技能的参考文献和脚本。
+
+在底层，这涉及：
+
+1. 在系统消息中列出可用技能
+2. 允许代理在对话期间激活技能
+3. 提供对技能参考文献和脚本的访问
+
+## 技能搜索
+
+如果在工作区上启用了 BM25 或向量搜索，技能会自动被索引。代理可以搜索技能内容以找到相关指令。
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+  // highlight-next-line
+  bm25: true,
+});
+```
+
+## 相关内容
+
+- [代理技能规范](https://agentskills.io)
+- [工作区概述](/docs/cn/workspace/overview)
+- [搜索与索引](/docs/cn/workspace/search)

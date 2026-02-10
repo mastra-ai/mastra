@@ -1,0 +1,71 @@
+---
+title: "参考文档：Agent.getDefaultOptions() | 智能体"
+description: "Mastra 智能体中 `Agent.getDefaultOptions()` 方法的文档，用于检索用于 stream 和 generate 调用的默认选项。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getDefaultOptions()
+
+可以为智能体配置用于内存使用、输出格式和迭代步骤的默认选项。`.getDefaultOptions()` 方法返回这些默认值，如果它们是函数则解析它们。这些选项适用于所有 `stream()` 和 `generate()` 调用，除非被覆盖，可用于检查智能体的未知默认值。
+
+## 使用示例
+
+```typescript
+await agent.getDefaultOptions();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "包含请求上下文的可选配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
+      description:
+        "为智能体配置的默认流式选项，可以是直接对象，也可以是解析为选项的 promise。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.getDefaultOptions({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [与智能体一起流式传输](/docs/cn/docs/streaming/overview#streaming-with-agents)
+- [请求上下文](/docs/cn/docs/server/request-context)

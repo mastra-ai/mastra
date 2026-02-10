@@ -1,0 +1,121 @@
+---
+title: "参考：Workflow.map() | 工作流"
+description: "工作流中 `Workflow.map()` 方法的文档，用于将前一步骤的输出数据映射到后续步骤的输入。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.map()
+
+`.map()` 方法将前一步骤的输出数据映射到后续步骤的输入，允许您在步骤之间转换数据。
+
+## 使用示例
+
+```typescript
+workflow.map(async ({ inputData }) => `${inputData.value} - map`
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "mappingFunction",
+      type: "(params: { inputData: any }) => any",
+      description:
+        "转换输入数据并返回映射结果的函数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "用于方法链的工作流实例",
+    },
+  ]}
+/>
+
+## 使用 `inputData`
+
+使用 `inputData` 访问前一个步骤的完整输出。
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map(({ inputData }) => {
+    console.log(inputData);
+  })
+```
+
+## 使用 `getStepResult()`
+
+使用 `getStepResult()` 通过引用步骤实例来访问特定步骤的完整输出。
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map(async ({ getStepResult }) => {
+    console.log(getStepResult(step1));
+  })
+```
+
+## 使用 `getInitData()`
+
+使用 `getInitData<typeof workflow>()` 访问提供给工作流的初始输入数据。
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map(async ({ getInitData }) => {
+      console.log(getInitData());
+  })
+```
+
+## 使用 `mapVariable()`
+
+`.map()` 的对象形式提供了另一种声明式语法来映射字段。您不需要编写函数，而是定义一个对象，其中每个键是一个新字段名，每个值使用 `mapVariable()` 从前一个步骤或工作流输入中提取数据。
+从 workflows 模块导入 `mapVariable()`：
+
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+### 从步骤输出中提取字段
+
+将 `mapVariable()` 与 `step` 一起使用，从步骤的输出中提取特定字段并将其映射到新的字段名。`path` 参数指定要提取的字段。
+在这个例子中，从 `step1` 的输出中提取 `value` 字段并映射到一个名为 `details` 的新字段：
+
+```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map({
+    details: mapVariable({
+      step: step1,
+      path: "value"
+    })
+  })
+```
+
+### 从工作流输入中提取字段
+
+将 `mapVariable()` 与 `initData` 一起使用，从工作流的初始输入数据中提取特定字段。当您需要将原始工作流输入传递给后面的步骤时，这很有用。
+在这个例子中，从工作流的输入中提取 `value` 字段并映射到一个名为 `details` 的字段：
+
+```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({...});
+
+testWorkflow
+  .then(step1)
+  .map({
+    details: mapVariable({
+      initData: testWorkflow,
+      path: "value"
+    })
+  })
+```
+
+## 相关内容
+
+- [输入数据映射](/docs/cn/docs/workflows/control-flow#input-data-mapping)

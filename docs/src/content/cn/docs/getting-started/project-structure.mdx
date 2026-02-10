@@ -1,0 +1,69 @@
+---
+title: "项目结构 | 入门"
+description: "关于在 Mastra 中组织文件夹和文件的指南，包括最佳实践和推荐结构。"
+---
+
+# 项目结构
+
+使用 `create mastra` 命令创建的新 Mastra 项目附带了一组预定义的文件和文件夹，以帮助您入门。
+
+Mastra 是一个框架，但它对您如何组织或共同放置文件是**不受约束的**。CLI 提供了一个合理的默认结构，适用于大多数项目，但您可以随意调整它以适应您的工作流程或团队约定。您甚至可以，如果您愿意，整个项目构建在单个文件中！无论您选择什么结构，都要保持一致，以确保您的代码保持可维护和易于导航。
+
+## 默认项目结构
+
+使用 `create mastra` 命令创建的项目如下所示：
+
+```
+src/
+├── mastra/
+│   ├── agents/
+│   │   └── weather-agent.ts
+│   ├── tools/
+│   │   └── weather-tool.ts
+│   ├── workflows/
+│   │   └── weather-workflow.ts
+│   ├── scorers/
+│   │   └── weather-scorer.ts
+│   └── index.ts
+├── .env.example
+├── package.json
+└── tsconfig.json
+```
+
+:::tip
+
+使用预定义的文件作为模板。复制并适应它们以快速创建您自己的智能体、工具、工作流等。
+
+:::
+
+### 文件夹
+
+文件夹组织您智能体的资源，如智能体、工具和工作流。
+
+| 文件夹 | 描述 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/mastra` | 所有 Mastra 相关代码和配置的入口点。 |
+| `src/mastra/agents` | 定义和配置您的智能体——它们的行为、目标和工具。 |
+| `src/mastra/workflows` | 定义协调智能体和工具在一起的多步骤工作流。 |
+| `src/mastra/tools` | 创建您的智能体可以调用的可重用工具 |
+| `src/mastra/mcp` | （可选）实现自定义 MCP 服务器以与外部智能体共享您的工具 |
+| `src/mastra/scorers` | （可选）定义评分器以随着时间的推移评估智能体性能 |
+| `src/mastra/public` | （可选）内容在构建过程中复制到 `.build/output` 目录，使它们在运行时可用于服务 |
+
+### 顶级文件
+
+顶级文件定义您的 Mastra 项目的配置、构建和与其环境的连接方式。
+
+| 文件 | 描述 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `src/mastra/index.ts` | 配置和初始化 Mastra 的中央入口点。 |
+| `.env.example` | 环境变量模板——复制并重命名为 `.env` 以添加您的秘密[模型提供商](/models)密钥。 |
+| `package.json` | 定义项目元数据、依赖项和可用的 npm 脚本。 |
+| `tsconfig.json` | 配置 TypeScript 选项，如路径别名、编译器设置和构建输出。 |
+
+## 下一步
+
+- 阅读更多关于 [Mastra 的功能](/docs#why-mastra)。
+- 将 Mastra 与您的前端框架集成：[Next.js](/guides/getting-started/next-js)、[React](/guides/getting-started/vite-react) 或 [Astro](/guides/getting-started/astro)。
+- 按照我们的[指南](/guides)从头开始构建智能体。
+- 在我们的 [YouTube 频道](https://www.youtube.com/@mastra-ai)上观看概念性指南并[订阅](https://www.youtube.com/@mastra-ai?sub_confirmation=1)！

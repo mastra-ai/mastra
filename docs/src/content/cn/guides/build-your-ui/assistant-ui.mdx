@@ -1,0 +1,188 @@
+---
+title: "使用 Assistant UI | 框架"
+description: "了解如何将 Assistant UI 与 Mastra 集成"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 使用 Assistant UI
+
+[Assistant UI](https://assistant-ui.com) 是用于 AI 聊天的 TypeScript/React 库。它建立在 shadcn/ui 和 Tailwind CSS 之上，使开发人员能够在几分钟内创建美观的企业级聊天体验。
+
+:::info
+
+对于 Mastra 直接在您的 Next.js API 路由中运行的全栈集成方法，请参阅 Assistant UI 文档站点上的[全栈集成指南](https://www.assistant-ui.com/docs/cn/docs/runtimes/mastra/full-stack-integration)。
+
+:::
+
+:::tip
+
+访问 Mastra 的 [**"UI Dojo"**](https://ui-dojo.mastra.ai/) 查看与 Mastra 集成的 Assistant UI 实际示例。
+
+:::
+
+## 集成指南
+
+将 Mastra 作为独立服务器运行，并将您的 Next.js 前端（带有 Assistant UI）连接到其 API 端点。
+
+<Steps>
+
+<StepItem>
+
+设置您的目录结构。可能的目录结构如下：
+
+```bash
+project-root
+├── mastra-server
+│   ├── src
+│   │   └── mastra
+│   └── package.json
+└── my-app
+    └── package.json
+```
+
+引导您的 Mastra 服务器：
+
+```bash
+npx create-mastra@latest
+```
+
+此命令将启动一个交互式向导来帮助您搭建新的 Mastra 项目，包括提示您输入项目名称和设置基本配置。按照提示创建您的服务器项目。
+
+导航到您新创建的 Mastra 服务器目录：
+
+```bash
+cd mastra-server # 替换为您提供的实际目录名称
+```
+
+现在您已准备好一个基本的 Mastra 服务器项目。您应该有以下文件和文件夹：
+
+```bash
+src
+└── mastra
+    ├── agents
+    │   └── weather-agent.ts
+    ├── scorers
+    │   └── weather-scorer.ts
+    ├── tools
+    │   └── weather-tool.ts
+    ├── workflows
+    │   └── weather-workflow.ts
+    └── index.ts
+```
+
+:::note
+
+确保您在 `.env` 文件中为您的 LLM 提供程序设置了适当的环境变量。
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+使用 `@mastra/ai-sdk` 中的 `chatRoute()` 辅助函数为 Assistant UI 前端创建聊天路由。将其添加到您的 Mastra 项目：
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest
+```
+
+在您的 `src/mastra/index.ts` 文件中，注册聊天路由：
+
+```typescript title="src/mastra/index.ts" {2,7-13}
+import { Mastra } from '@mastra/core/mastra';
+import { chatRoute } from '@mastra/ai-sdk';
+// 其余的导入...
+
+export const mastra = new Mastra({
+  // 其余的配置...
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId'
+      })
+    ]
+  }
+});
+```
+
+这将使所有代理以 AI SDK 兼容的格式可用，包括端点 `/chat/weatherAgent` 处的 `weatherAgent`。
+
+</StepItem>
+
+<StepItem>
+
+使用以下命令运行 Mastra 服务器：
+
+```bash
+npm run dev
+```
+
+默认情况下，Mastra 服务器将在 `http://localhost:4111` 上运行。保持此服务器运行以进行下一步，在那里我们将设置 Assistant UI 前端连接到它。
+
+</StepItem>
+
+<StepItem>
+
+向上移动一级到项目根目录。
+
+```bash
+cd ..
+```
+
+使用以下命令创建一个新的 `assistant-ui` 项目。
+
+```bash
+npx assistant-ui@latest create
+```
+
+:::note
+
+有关详细设置说明，包括添加 API 密钥、基本配置和手动设置步骤，请参阅 [assistant-ui 的官方文档](https://assistant-ui.com/docs)。
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+默认的 Assistant UI 设置配置聊天运行时以在 Next.js 项目内使用本地 API 路由 (`/api/chat`)。由于我们的 Mastra 代理在单独的服务器上运行，我们需要更新前端以指向该服务器的端点。
+
+打开 Assistant UI 前端项目中包含 `useChatRuntime` 钩子的文件（通常为 `app/assistant.tsx` 或 `src/app/assistant.tsx`）。找到 `useChatRuntime` 钩子并将 `api` 属性更改为您 Mastra 代理流端点的完整 URL：
+
+```tsx {8} title="app/assistant.tsx"
+"use client";
+
+// 其余的导入...
+
+export const Assistant = () => {
+  const runtime = useChatRuntime({
+    transport: new AssistantChatTransport({
+      api: "http://localhost:4111/chat/weatherAgent",
+    }),
+  });
+
+  // 其余的组件...
+};
+```
+
+现在，Assistant UI 前端将直接向您运行的 Mastra 服务器发送聊天请求。
+
+</StepItem>
+
+<StepItem>
+
+您已准备好连接各个部分！确保 Mastra 服务器和 Assistant UI 前端都在运行。启动 Next.js 开发服务器：
+
+```bash
+npm run dev
+```
+
+现在您应该能够在浏览器中与您的代理聊天。
+
+</StepItem>
+
+</Steps>
+
+恭喜！您已成功使用独立服务器方法将 Mastra 与 Assistant UI 集成。您的 Assistant UI 前端现在与独立的 Mastra 代理服务器通信。

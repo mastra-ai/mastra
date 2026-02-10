@@ -1,0 +1,430 @@
+---
+title: "参考：Convex 向量存储 | 向量"
+description: Mastra 中 ConvexVector 类的文档，该类使用 Convex 提供向量搜索功能。
+packages:
+  - "@mastra/convex"
+---
+
+# Convex 向量存储
+
+ConvexVector 类使用 [Convex](https://convex.dev) 提供向量存储和相似性搜索功能。它在 Convex 内部存储嵌入向量并执行余弦相似性搜索。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/convex@latest
+```
+
+## Convex 设置
+
+在使用 `ConvexVector` 之前，你需要设置 Convex 模式和存储处理程序。请参阅 [Convex 存储设置](../storage/convex#convex-setup) 获取设置说明。
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "deploymentUrl",
+      type: "string",
+      description: "Convex 部署 URL（例如，https://your-project.convex.cloud）",
+      isOptional: false,
+    },
+    {
+      name: "adminAuthToken",
+      type: "string",
+      description: "Convex 管理员身份验证令牌",
+      isOptional: false,
+    },
+    {
+      name: "storageFunction",
+      type: "string",
+      description: "存储变更函数的路径",
+      isOptional: true,
+      defaultValue: "mastra/storage:handle",
+    },
+  ]}
+/>
+
+## 构造函数示例
+
+### 基本配置
+
+```ts
+import { ConvexVector } from "@mastra/convex";
+
+const vectorStore = new ConvexVector({
+  id: 'convex-vectors',
+  deploymentUrl: "https://your-project.convex.cloud",
+  adminAuthToken: "your-admin-token",
+});
+```
+
+### 自定义存储函数
+
+```ts
+const vectorStore = new ConvexVector({
+  id: 'convex-vectors',
+  deploymentUrl: "https://your-project.convex.cloud",
+  adminAuthToken: "your-admin-token",
+  storageFunction: "custom/path:handler",
+});
+```
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "相似性搜索的距离度量（目前仅支持 cosine）",
+    },
+  ]}
+/>
+
+```typescript
+await vectorStore.createIndex({
+  indexName: "my_vectors",
+  dimension: 1536,
+});
+```
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入向量的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+```typescript
+await vectorStore.upsert({
+  indexName: "my_vectors",
+  vectors: [[0.1, 0.2, 0.3, ...]],
+  metadata: [{ label: "example" }],
+  ids: ["vec-1"],
+});
+```
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+  ]}
+/>
+
+```typescript
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: [0.1, 0.2, 0.3, ...],
+  topK: 5,
+  filter: { category: "documents" },
+});
+```
+
+### listIndexes()
+
+返回索引名称字符串数组。
+
+```typescript
+const indexes = await vectorStore.listIndexes();
+// ["my_vectors", "embeddings", ...]
+```
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+删除索引及其所有向量。
+
+```typescript
+await vectorStore.deleteIndex({ indexName: "my_vectors" });
+```
+
+### updateVector()
+
+通过 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter`，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "包含要更新的向量和/或元数据的对象",
+    },
+  ]}
+/>
+
+```typescript
+// 按 ID 更新
+await vectorStore.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+    metadata: { label: "updated" },
+  },
+});
+
+// 按过滤器更新
+await vectorStore.updateVector({
+  indexName: "my_vectors",
+  filter: { category: "product" },
+  update: {
+    metadata: { status: "reviewed" },
+  },
+});
+```
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+```typescript
+await vectorStore.deleteVector({ indexName: "my_vectors", id: "vector123" });
+```
+
+### deleteVectors()
+
+通过 ID 或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter`，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+```typescript
+// 按 ID 删除
+await vectorStore.deleteVectors({
+  indexName: "my_vectors",
+  ids: ["vec1", "vec2", "vec3"],
+});
+
+// 按过滤器删除
+await vectorStore.deleteVectors({
+  indexName: "my_vectors",
+  filter: { status: "archived" },
+});
+```
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 元数据过滤
+
+ConvexVector 支持带有各种操作符的元数据过滤：
+
+```typescript
+// 简单相等
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: embedding,
+  filter: { category: "documents" },
+});
+
+// 比较操作符
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: embedding,
+  filter: {
+    price: { $gt: 100 },
+    status: { $in: ["active", "pending"] },
+  },
+});
+
+// 逻辑操作符
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: embedding,
+  filter: {
+    $and: [
+      { category: "electronics" },
+      { price: { $lte: 500 } },
+    ],
+  },
+});
+```
+
+### 支持的过滤操作符
+
+| 操作符 | 描述 |
+| -------- | ----------- |
+| `$eq` | 等于 |
+| `$ne` | 不等于 |
+| `$gt` | 大于 |
+| `$gte` | 大于或等于 |
+| `$lt` | 小于 |
+| `$lte` | 小于或等于 |
+| `$in` | 在数组中 |
+| `$nin` | 不在数组中 |
+| `$and` | 逻辑与 |
+| `$or` | 逻辑或 |
+
+## 架构
+
+ConvexVector 将向量存储在 `mastra_vectors` 表中，具有以下结构：
+
+- `id`：唯一向量标识符
+- `indexName`：索引名称
+- `embedding`：向量数据（浮点数数组）
+- `metadata`：可选的 JSON 元数据
+
+向量相似性搜索使用余弦相似性执行，在 Convex 函数中计算。
+
+## 相关内容
+
+- [Convex 存储](../storage/convex)
+- [元数据过滤器](../rag/metadata-filters)
+- [Convex 文档](https://docs.convex.dev/)

@@ -1,0 +1,193 @@
+---
+title: "代理和工具 | 工作流"
+description: "了解如何从工作流步骤调用代理和工具，以及在执行函数和步骤组合之间进行选择。"
+packages:
+  - "@mastra/core"
+---
+
+# 代理和工具
+
+工作流步骤可以调用代理以利用 LLM 推理，或调用工具以获得类型安全的逻辑。你可以在步骤的 `execute` 函数中调用它们，或使用 `createStep()` 将它们直接组合为步骤。
+
+## 在工作流中使用代理
+
+当需要推理、语言生成或其他基于 LLM 的任务时，在工作流步骤中使用代理。从步骤的 `execute` 函数调用以更好地控制代理调用（例如，跟踪消息历史记录或返回结构化输出）。当不需要修改代理调用方式时，将代理组合为步骤。
+
+### 调用代理
+
+在步骤的 `execute` 函数中使用 `.generate()` 或 `.stream()` 调用代理。这允许你修改代理调用并在将其传递给下一步之前处理响应。
+
+```typescript {6-14} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({
+  execute: async ({ inputData, mastra }) => {
+    const { message } = inputData;
+
+    const testAgent = mastra.getAgent("testAgent");
+    const response = await testAgent.generate(
+      `Convert this message into bullet points: ${message}`,
+      {
+        memory: {
+          thread: "user-123",
+          resource: "test-123",
+        },
+      },
+    );
+
+    return {
+      list: response.text,
+    };
+  },
+});
+```
+
+### 代理作为步骤
+
+当不需要修改代理调用时，使用 `createStep()` 将代理组合为步骤。使用 `.map()` 将前一个步骤的输出转换为代理可以使用的 `prompt`。
+
+![代理作为步骤](/img/workflows/workflows-agent-tools-agent-step.jpg)
+
+```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
+import { testAgent } from "../agents/test-agent";
+
+const step1 = createStep(testAgent);
+
+export const testWorkflow = createWorkflow({
+})
+  .map(async ({ inputData }) => {
+    const { message } = inputData;
+    return {
+      prompt: `Convert this message into bullet points: ${message}`,
+    };
+  })
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+:::info
+
+访问[输入数据映射](./input-data-mapping)了解更多信息。
+
+:::
+
+当未提供 `structuredOutput` 选项时，Mastra 代理使用默认模式，期望 `prompt` 字符串作为输入并返回 `text` 字符串作为输出：
+
+```json
+{
+  "inputSchema": {
+    "prompt": "string"
+  },
+  "outputSchema": {
+    "text": "string"
+  }
+}
+```
+
+### 具有结构化输出的代理
+
+当需要代理返回结构化数据而不是纯文本时，将 `structuredOutput` 选项传递给 `createStep()`。步骤的输出模式将与你提供的模式匹配，从而实现到后续步骤的类型安全链式连接。
+
+```typescript {1-6,8-10} title="src/mastra/workflows/test-workflow.ts"
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+});
+
+const agentStep = createStep(testAgent, {
+  structuredOutput: { schema: articleSchema },
+});
+
+// 下一步接收类型化的结构化数据
+const processStep = createStep({
+  id: "process",
+  inputSchema: articleSchema, // 与代理的 outputSchema 匹配
+  outputSchema: z.object({ tagCount: z.number() }),
+  execute: async ({ inputData }) => ({
+    tagCount: inputData.tags.length, // 完全类型化
+  }),
+});
+
+export const testWorkflow = createWorkflow({})
+  .map(async ({ inputData }) => ({
+    prompt: `Generate an article about: ${inputData.topic}`,
+  }))
+  .then(agentStep)
+  .then(processStep)
+  .commit();
+```
+
+`structuredOutput.schema` 选项接受任何 Zod 模式。代理将生成符合此模式的输出，步骤的 `outputSchema` 将自动设置以匹配。
+
+:::info
+
+访问[结构化输出](/docs/cn/agents/structured-output)了解错误处理策略和结构化输出流式传输等更多选项。
+
+:::
+
+## 在工作流中使用工具
+
+在工作流步骤中使用工具以利用现有的工具逻辑。当需要准备上下文或处理响应时，从步骤的 `execute` 函数调用。当不需要修改工具使用方式时，将工具组合为步骤。
+
+### 调用工具
+
+在步骤的 `execute` 函数中使用 `.execute()` 调用工具。这使你可以更好地控制工具的输入上下文，或在将其传递给下一步之前处理其响应。
+
+```typescript {7-12} title="src/mastra/workflows/test-workflow.ts"
+import { testTool } from "../tools/test-tool";
+
+const step2 = createStep({
+  execute: async ({ inputData, requestContext }) => {
+    const { formatted } = inputData;
+
+    const response = await testTool.execute(
+      { text: formatted },
+      { requestContext },
+    );
+
+    return {
+      emphasized: response.emphasized,
+    };
+  },
+});
+```
+
+:::info
+
+访问[调用工具](/docs/cn/workflows/agents-and-tools#calling-tools)获取更多示例。
+
+:::
+
+### 工具作为步骤
+
+当上一个步骤的输出与工具的输入上下文匹配时，使用 `createStep()` 将工具组合为步骤。如果不匹配，可以使用 `.map()` 转换上一个步骤的输出。
+
+![工具作为步骤](/img/workflows/workflows-agent-tools-tool-step.jpg)
+
+```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
+import { testTool } from "../tools/test-tool";
+
+const step2 = createStep(testTool);
+
+export const testWorkflow = createWorkflow({})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { formatted } = inputData;
+    return {
+      text: formatted,
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
+:::info
+
+访问[输入数据映射](./input-data-mapping)了解更多信息。
+
+:::
+
+## 相关内容
+
+- [使用代理](/docs/cn/agents/overview)
+- [MCP 概述](/docs/cn/mcp/overview)

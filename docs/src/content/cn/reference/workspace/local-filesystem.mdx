@@ -1,0 +1,472 @@
+---
+title: "参考：LocalFilesystem | 工作区"
+description: "本地磁盘存储的 LocalFilesystem 提供程序文档。"
+packages:
+  - "@mastra/core"
+---
+
+# LocalFilesystem
+
+**添加于：** `@mastra/core@1.1.0`
+
+在本地文件系统的目录中存储文件。
+
+:::info
+
+有关接口详情，请参阅 [WorkspaceFilesystem 接口](/reference/workspace/filesystem)。
+
+:::
+
+## 用法
+
+将 `LocalFilesystem` 添加到工作区并将其分配给代理。代理可以读取、写入和管理文件作为其任务的一部分：
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+});
+
+const agent = new Agent({
+  id: 'file-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+});
+
+// 代理现在可以使用文件系统工具
+const response = await agent.generate('List all files in the workspace');
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "basePath",
+      type: "string",
+      description: "磁盘上的基础目录路径。所有文件路径都相对于此目录解析。",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "此文件系统实例的唯一标识符",
+      isOptional: true,
+      defaultValue: "自动生成",
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description: "为 true 时，所有写入操作都被阻止。读取操作仍被允许。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## 属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "文件系统实例标识符",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "提供程序名称（'LocalFilesystem'）",
+    },
+    {
+      name: "provider",
+      type: "string",
+      description: "提供程序标识符（'local'）",
+    },
+    {
+      name: "basePath",
+      type: "string",
+      description: "磁盘上的绝对基础路径",
+    },
+    {
+      name: "readOnly",
+      type: "boolean | undefined",
+      description: "文件系统是否处于只读模式",
+    },
+  ]}
+/>
+
+## 方法
+
+### `init()`
+
+初始化文件系统。如果不存在则创建基础目录。
+
+```typescript
+await filesystem.init();
+```
+
+由 `workspace.init()` 调用。
+
+### 延迟初始化
+
+LocalFilesystem 在首次操作时自动初始化（如果尚未初始化），自动创建基础目录。显式调用 `init()` 是可选的，但在首次操作之前预创建目录可能很有用。
+
+### `destroy()`
+
+清理文件系统资源。
+
+```typescript
+await filesystem.destroy();
+```
+
+由 `workspace.destroy()` 调用。
+
+### `readFile(path, options?)`
+
+读取文件内容。
+
+```typescript
+const content = await filesystem.readFile('/docs/cn/docs/guide.md');
+const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "相对于 basePath 的文件路径",
+    },
+    {
+      name: "options.encoding",
+      type: "'utf-8' | 'binary'",
+      description: "文本或二进制编码",
+      isOptional: true,
+      defaultValue: "'utf-8'",
+    },
+  ]}
+/>
+
+### `writeFile(path, content, options?)`
+
+将内容写入文件。
+
+```typescript
+await filesystem.writeFile('/docs/cn/docs/new.md', '# New Document');
+await filesystem.writeFile('/nested/path/file.md', content, { recursive: true });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "相对于 basePath 的文件路径",
+    },
+    {
+      name: "content",
+      type: "string | Buffer",
+      description: "文件内容",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "如果父目录不存在则创建",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "覆盖现有文件",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `appendFile(path, content)`
+
+将内容追加到现有文件。
+
+```typescript
+await filesystem.appendFile('/logs/app.log', 'New log entry\n');
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "相对于 basePath 的文件路径",
+    },
+    {
+      name: "content",
+      type: "string | Buffer",
+      description: "要追加的内容",
+    },
+  ]}
+/>
+
+### `deleteFile(path, options?)`
+
+删除文件。
+
+```typescript
+await filesystem.deleteFile('/docs/cn/docs/old.md');
+await filesystem.deleteFile('/docs/cn/docs/maybe.md', { force: true }); // 文件不存在时不抛出异常
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "文件路径",
+    },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "文件不存在时不抛出错误",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `copyFile(src, dest, options?)`
+
+将文件复制到新位置。
+
+```typescript
+await filesystem.copyFile('/docs/cn/docs/template.md', '/docs/cn/docs/new-doc.md');
+await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite: false });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "src",
+      type: "string",
+      description: "源文件路径",
+    },
+    {
+      name: "dest",
+      type: "string",
+      description: "目标文件路径",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "如果目标存在则覆盖",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `moveFile(src, dest, options?)`
+
+移动或重命名文件。
+
+```typescript
+await filesystem.moveFile('/docs/cn/docs/draft.md', '/docs/cn/docs/final.md');
+await filesystem.moveFile('/temp/upload.txt', '/files/document.txt');
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "src",
+      type: "string",
+      description: "源文件路径",
+    },
+    {
+      name: "dest",
+      type: "string",
+      description: "目标文件路径",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "如果目标存在则覆盖",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `mkdir(path, options?)`
+
+创建目录。
+
+```typescript
+await filesystem.mkdir('/docs/cn/docs/api');
+await filesystem.mkdir('/deeply/nested/path', { recursive: true });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "目录路径",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "创建父目录",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `rmdir(path, options?)`
+
+删除目录。
+
+```typescript
+await filesystem.rmdir('/docs/cn/docs/old');
+await filesystem.rmdir('/docs/cn/docs/nested', { recursive: true });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "目录路径",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "递归删除内容",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "目录不存在时不抛出错误",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `readdir(path, options?)`
+
+列出目录内容。
+
+```typescript
+const entries = await filesystem.readdir('/docs');
+// [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
+```
+
+### `exists(path)`
+
+检查路径是否存在。
+
+```typescript
+const exists = await filesystem.exists('/docs/cn/docs/guide.md');
+```
+
+### `stat(path)`
+
+获取文件或目录元数据。
+
+```typescript
+const stat = await filesystem.stat('/docs/cn/docs/guide.md');
+// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/cn/docs/guide.md' }
+```
+
+### `getInfo()`
+
+返回有关此文件系统实例的元数据。
+
+```typescript
+const info = filesystem.getInfo();
+// { id: '...', name: 'LocalFilesystem', provider: 'local', basePath: '/workspace', readOnly: false }
+```
+
+### `getInstructions()`
+
+返回此文件系统路径工作原理的描述。用于工具描述。
+
+```typescript
+const instructions = filesystem.getInstructions();
+// 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
+```
+
+## 路径解析
+
+### basePath 的工作原理
+
+`basePath` 选项为所有文件操作设置根目录。传递给 `readFile()` 等方法的文件路径相对于此基准解析：
+
+- 去除前导斜杠：`/docs/cn/docs/guide.md` → `docs/guide.md`
+- 路径被规范化并与 basePath 拼接
+- 结果：`./workspace` + `docs/guide.md` → `./workspace/docs/cn/docs/guide.md`
+
+```typescript
+const filesystem = new LocalFilesystem({
+  basePath: './workspace',
+});
+
+// 这些都解析为 ./workspace/docs/cn/docs/guide.md
+await filesystem.readFile('/docs/cn/docs/guide.md');
+await filesystem.readFile('docs/guide.md');
+```
+
+### 相对路径和执行上下文
+
+当您对 `basePath` 使用相对路径时，它从 `process.cwd()` 解析。在 Mastra 项目中，cwd 取决于您运行代码的方式：
+
+| 上下文 | 工作目录 | `./workspace` 解析为 |
+|---------|------------------|---------------------------|
+| `mastra dev` | `./src/mastra/public/` | `./src/mastra/public/workspace` |
+| `mastra start` | `./.mastra/output/` | `./.mastra/output/workspace` |
+| 直接脚本 | 运行命令的位置 | 相对于该位置 |
+
+当相同的相对路径解析到不同位置时，可能会引起混淆。
+
+### 推荐：使用绝对路径
+
+为了在所有执行上下文中保持一致的路径，请使用带有绝对路径的环境变量：
+
+```typescript
+import { LocalFilesystem } from '@mastra/core/workspace';
+
+const filesystem = new LocalFilesystem({
+  basePath: process.env.WORKSPACE_PATH!,
+});
+```
+
+在您的环境中将 `WORKSPACE_PATH` 设置为绝对路径，例如 `/home/user/my-project/workspace`。这确保了无论您如何运行代码，工作区路径都保持一致。
+
+## 相关内容
+
+- [WorkspaceFilesystem 接口](/reference/workspace/filesystem)
+- [工作区类](/reference/workspace/workspace-class)
+- [工作区概述](/docs/cn/docs/workspace/overview)

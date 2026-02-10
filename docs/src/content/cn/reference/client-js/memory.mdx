@@ -1,0 +1,230 @@
+---
+title: "参考文档：内存 API | 客户端 SDK"
+description: "了解如何使用 client-js SDK 管理 Mastra 中的对话线程和消息历史。"
+packages:
+  - "@mastra/client-js"
+---
+
+# 内存 API
+
+内存 API 提供了管理 Mastra 中对话线程和消息历史的方法。
+
+### 获取所有线程
+
+检索特定资源的所有内存线程：
+
+```typescript
+const threads = await mastraClient.getMemoryThreads({
+  resourceId: "resource-1",
+  agentId: "agent-1", // 可选 - 如果配置了存储可以省略
+});
+```
+
+当省略 `agentId` 且服务器上配置了存储时，将直接使用存储检索线程。这在多个智能体共享相同线程时很有用（例如，具有多个智能体步骤的工作流）。
+
+### 创建新线程
+
+创建新的内存线程：
+
+```typescript
+const thread = await mastraClient.createMemoryThread({
+  title: "New Conversation",
+  metadata: { category: "support" },
+  resourceId: "resource-1",
+  agentId: "agent-1",
+});
+```
+
+### 使用特定线程
+
+获取特定内存线程的实例：
+
+```typescript
+const thread = mastraClient.getMemoryThread({ threadId: "thread-id", agentId: "agent-id" });
+```
+
+## 线程方法
+
+### 获取线程详情
+
+检索特定线程的详细信息：
+
+```typescript
+const details = await thread.get();
+```
+
+### 更新线程
+
+更新线程属性：
+
+```typescript
+const updated = await thread.update({
+  title: "Updated Title",
+  metadata: { status: "resolved" },
+  resourceId: "resource-1",
+});
+```
+
+### 删除线程
+
+删除线程及其消息：
+
+```typescript
+await thread.delete();
+```
+
+### 克隆线程
+
+创建包含所有消息的线程副本：
+
+```typescript
+const { thread: clonedThread, clonedMessages } = await thread.clone();
+```
+
+带选项的克隆：
+
+```typescript
+const { thread: clonedThread, clonedMessages } = await thread.clone({
+  newThreadId: "custom-clone-id",
+  title: "Cloned Conversation",
+  metadata: { branch: "experiment-1" },
+  options: {
+    messageLimit: 10, // 仅克隆最后 10 条消息
+  },
+});
+```
+
+带消息筛选的克隆：
+
+```typescript
+const { thread: clonedThread } = await thread.clone({
+  options: {
+    messageFilter: {
+      startDate: new Date("2024-01-01"),
+      endDate: new Date("2024-01-31"),
+    },
+  },
+});
+```
+
+克隆响应包括：
+- `thread`：带有克隆元数据的新创建的克隆线程
+- `clonedMessages`：具有新 ID 的克隆消息数组
+
+## 消息操作
+
+### 保存消息
+
+将消息保存到内存：
+
+```typescript
+const result = await mastraClient.saveMessageToMemory({
+  messages: [
+    {
+      role: "user",
+      content: "Hello!",
+      id: "1",
+      threadId: "thread-1",
+      resourceId: "resource-1",
+      createdAt: new Date(),
+      format: 2,
+    },
+  ],
+  agentId: "agent-1",
+});
+
+// result.messages 包含保存的消息
+console.log(result.messages);
+```
+
+### 检索线程消息
+
+获取与内存线程关联的消息：
+
+```typescript
+// 获取线程中的所有消息（分页）
+const result = await thread.listMessages();
+console.log(result.messages); // 消息数组
+console.log(result.total); // 总数
+console.log(result.hasMore); // 是否存在更多页面
+
+// 使用分页获取消息
+const result = await thread.listMessages({
+  page: 0,
+  perPage: 20
+});
+
+// 使用排序获取消息
+const result = await thread.listMessages({
+  orderBy: { field: 'createdAt', direction: 'ASC' }
+});
+```
+
+### 删除消息
+
+从线程中删除一条或多条消息：
+
+```typescript
+// 删除单条消息
+const result = await thread.deleteMessages("message-id");
+
+// 删除多条消息
+const result = await thread.deleteMessages([
+  "message-1",
+  "message-2",
+  "message-3",
+]);
+
+// 返回：{ success: true, message: "Message deleted successfully" }
+```
+
+## 工作内存
+
+工作内存允许智能体在交互之间维护关于用户的持久信息。它可以作用域特定线程或资源的全部线程（用户）。
+
+### 获取工作内存
+
+检索线程的当前工作内存：
+
+```typescript
+const workingMemory = await mastraClient.getWorkingMemory({
+  agentId: "agent-1",
+  threadId: "thread-1",
+  resourceId: "user-123", // 可选，资源作用域内存需要
+});
+```
+
+响应包括：
+- `workingMemory`：当前工作内存内容（字符串或 null）
+- `source`：内存来自 `"thread"` 还是 `"resource"` 作用域
+- `workingMemoryTemplate`：用于工作内存的模板（如果配置）
+- `threadExists`：线程是否存在
+
+### 更新工作内存
+
+更新线程的工作内存内容：
+
+```typescript
+await mastraClient.updateWorkingMemory({
+  agentId: "agent-1",
+  threadId: "thread-1",
+  workingMemory: `# User Profile
+- Name: John Doe
+- Location: New York
+- Preferences: Prefers formal communication
+`,
+  resourceId: "user-123", // 可选，资源作用域内存需要
+});
+
+// 返回：{ success: true }
+```
+
+**注意：** 对于资源作用域的工作内存，您必须提供 `resourceId` 参数。这允许内存在该用户的所有对话线程中持久化。
+
+### 获取内存状态
+
+检查内存系统的状态：
+
+```typescript
+const status = await mastraClient.getMemoryStatus("agent-id");
+```

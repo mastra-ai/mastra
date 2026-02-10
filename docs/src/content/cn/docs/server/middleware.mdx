@@ -1,0 +1,234 @@
+---
+title: "中间件 | 服务器"
+description: "应用自定义中间件函数来拦截请求。"
+packages:
+  - "@mastra/core"
+---
+
+# 中间件
+
+Mastra 服务器可以在调用 API 路由处理程序之前或之后执行自定义中间件函数。这对于身份验证、日志记录、注入请求特定上下文或添加 CORS 标头等内容很有用。
+
+中间件接收 [Hono](https://hono.dev) `Context`（`c`）和 `next` 函数。如果它返回 `Response`，请求会被短路。调用 `next()` 继续处理下一个中间件或路由处理程序。
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      {
+        handler: async (c, next) => {
+          // 示例：添加身份验证检查
+          const authHeader = c.req.header("Authorization");
+          if (!authHeader) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+
+          await next();
+        },
+        path: "/api/*",
+      },
+      // 添加全局请求日志记录器
+      async (c, next) => {
+        console.log(`${c.req.method} ${c.req.url}`);
+        await next();
+      },
+    ],
+  },
+});
+```
+
+要将中间件附加到单个路由，请将 `middleware` 选项传递给 `registerApiRoute`：
+
+```typescript
+registerApiRoute("/my-custom-route", {
+  method: "GET",
+  middleware: [
+    async (c, next) => {
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    const mastra = c.get("mastra");
+    return c.json({ message: "Hello, world!" });
+  },
+});
+```
+
+## 常见示例
+
+### 使用 `RequestContext`
+
+您可以通过从请求中提取信息在服务器中间件中动态填充 `RequestContext`。在此示例中，`temperature-unit` 根据 Cloudflare `CF-IPCountry` 标头设置，以确保响应匹配用户的区域设置。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { RequestContext } from "@mastra/core/request-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const requestContext = context.get("requestContext");
+
+        requestContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
+### 身份验证
+
+```typescript
+{
+  handler: async (c, next) => {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    // 在此处验证令牌
+    await next();
+  },
+  path: '/api/*',
+}
+```
+
+### 授权（用户隔离）
+
+身份验证验证用户是谁。授权控制他们可以访问的内容。如果没有授权中间件，经过身份验证的用户可能通过猜测 ID 或操作 `resourceId` 参数来访问其他用户的线程。
+
+Mastra 提供保留的上下文键，当由中间件设置时，这些键优先于客户端提供的值。服务器自动在整个内存和智能体端点强制执行这些键：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { MASTRA_RESOURCE_ID_KEY } from "@mastra/core/request-context";
+
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async (token) => {
+        // 您的身份验证逻辑返回用户
+        return verifyToken(token); // { id: 'user-123', ... }
+      },
+    },
+    middleware: [
+      {
+        path: '/api/*',
+        handler: async (c, next) => {
+          const requestContext = c.get('requestContext');
+          const user = requestContext.get('user');
+
+          if (!user) {
+            return c.json({ error: 'Unauthorized' }, 401);
+          }
+
+          // 强制所有 API 操作使用此用户的 ID
+          // 这优先于任何客户端提供的 resourceId
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+
+          return next();
+        },
+      },
+    ],
+  },
+});
+```
+
+使用此中间件，服务器自动：
+- **过滤线程列表**仅返回属于用户的线程
+- **验证线程访问**如果访问其他用户的线程则返回 403
+- **强制线程创建**使用经过身份验证的用户 ID
+- **验证消息操作**包括删除，确保消息属于拥有的线程
+
+即使客户端传递 `?resourceId=other-user-id`，中间件设置的值也优先。尝试访问其他用户拥有的线程或消息将返回 403 错误。
+
+#### 使用 `MASTRA_THREAD_ID_KEY`
+
+您也可以设置 `MASTRA_THREAD_ID_KEY` 来覆盖客户端提供的线程 ID：
+
+```typescript
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
+
+// 强制操作使用特定线程
+requestContext.set(MASTRA_THREAD_ID_KEY, validatedThreadId);
+```
+
+当您想将通过其他方式验证的特定线程的操作限制为时，这很有用。
+
+### CORS 支持
+
+```typescript
+{
+  handler: async (c, next) => {
+    c.header('Access-Control-Allow-Origin', '*');
+    c.header(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, DELETE, OPTIONS',
+    );
+    c.header(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
+
+    if (c.req.method === 'OPTIONS') {
+      return new Response(null, { status: 204 });
+    }
+
+    await next();
+  },
+}
+```
+
+### 请求日志记录
+
+```typescript
+{
+  handler: async (c, next) => {
+    const start = Date.now();
+    await next();
+    const duration = Date.now() - start;
+    console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
+  },
+}
+```
+
+### 特殊 Mastra 标头
+
+与 Mastra Cloud 或自定义客户端集成时，以下标头可以由中间件检查以定制行为：
+
+```typescript
+{
+  handler: async (c, next) => {
+    const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
+    const clientType = c.req.header('x-mastra-client-type');
+    const isStudio =
+      c.req.header('x-studio') === 'true';
+
+    if (isFromMastraCloud) {
+      // 特殊处理
+    }
+    await next();
+  },
+}
+```
+
+- `x-mastra-cloud`：请求来自 Mastra Cloud
+- `x-mastra-client-type`：标识客户端 SDK，例如 `js` 或 `python`
+- `x-studio`：请求从 Studio 触发
+
+# 相关内容
+
+- [请求上下文](/docs/cn/server/request-context)
+- [保留的键](/docs/cn/server/request-context#reserved-keys)

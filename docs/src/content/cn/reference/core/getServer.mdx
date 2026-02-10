@@ -1,0 +1,38 @@
+---
+title: "参考文档：Mastra.getServer() | 核心"
+description: "Mastra 中 `Mastra.getServer()` 方法的文档，用于检索配置的服务器配置。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getServer()
+
+`.getServer()` 方法用于检索已在 Mastra 实例中配置的服务器配置。
+
+## 使用示例
+
+```typescript
+mastra.getServer();
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "server",
+      type: "ServerConfig | undefined",
+      description:
+        "配置的服务器配置，包括端口、主机、studioBase、超时、API 路由、中间件、CORS 设置和构建选项；如果未配置服务器，则为 undefined。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [服务器部署](/docs/cn/docs/deployment/mastra-server)
+- [服务器配置](/docs/cn/docs/server/custom-api-routes)

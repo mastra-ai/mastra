@@ -1,0 +1,57 @@
+---
+title: "使用 AI 构建 | 入门"
+description: "帮助 AI 智能体理解和处理 Mastra 的资源。"
+---
+
+# 使用 AI 构建
+
+AI 智能体可能没有关于 Mastra API、模式和最佳实践的最新知识。这些资源为您的 AI 工具提供对当前 Mastra 文档的直接访问，使它们能够生成准确的代码并帮助您更快地构建。
+
+## Mastra 技能
+
+智能体技能是包含指令、脚本和资源的文件夹，智能体可以发现和使用它们来更准确、高效地做事。[Mastra 技能](/docs/cn/build-with-ai/skills) 包含设置说明、最佳实践以及如何从 Mastra 文档获取最新信息的说明。
+
+```bash npm2yarn
+npx skills add mastra-ai/skills
+```
+
+阅读专用的 [Mastra 技能](/docs/cn/build-with-ai/skills) 指南，了解更多安装选项和可用技能。
+
+:::tip
+
+如果您只是想给您的智能体访问 Mastra 文档的权限，我们推荐使用**技能**。虽然 MCP 文档服务器也提供这些信息，但技能会表现更好。当您需要其工具时使用 MCP 文档服务器，例如迁移工具。
+
+:::
+
+## MCP 文档服务器
+
+除了文档访问之外，[MCP 文档服务器](/docs/cn/build-with-ai/mcp-docs-server) 还提供工具来帮助您迁移到更新版本的 Mastra 或跟随 [Mastra 101 课程](https://mastra.ai/course)。
+
+了解如何使用 [MCP 文档服务器](/docs/cn/build-with-ai/mcp-docs-server)。
+
+## 嵌入式包文档
+
+Mastra 包在 `dist/docs` 中附带嵌入式文档。当您安装 Mastra 包时，您的 AI 智能体可以直接从 `node_modules` 读取这些文件，以了解包的 API 和模式。
+
+每个 `dist/docs` 包括：
+
+- `SKILL.md`：遵循技能标准的技能文件
+- `references/`：包含与包相关的文档文件的文件夹
+- `assets/SOURCE_MAP.json`：源映射文件，将公共导出链接到它们在 `node_modules` 中的位置
+
+## 上下文文件
+
+Mastra 提供一个根 [`llms.txt`](https://mastra.ai/llms.txt) 文件，其中包含所有可用文档页面的概述。
+
+每个文档页面也有自己的 `llms.txt` 文件。这些是精简的markdown文件。在每个文档页面底部，您可以找到指向相应 `llms.txt` 文件的链接。
+
+在任何 Mastra 文档 URL 后面添加 `/llms.txt` 来访问它。您也可以通过在 URL 末尾添加 `.md` 扩展名来请求它。
+
+[介绍页面](/docs) 的示例：
+
+- [`/docs/cn/llms.txt`](https://mastra.ai/docs/cn/llms.txt)
+- [`/docs.md`](https://mastra.ai/docs.md)
+
+## Mastra 的文档
+
+除了[上下文文件](#context-files)之外，每个文档页面顶部还有一个"复制 markdown"按钮。它会将精简的 markdown 版本复制到您的剪贴板。在它旁边，您会找到一个下拉菜单，可以在 GitHub、ChatGPT、Claude 和其他平台上打开该页面。

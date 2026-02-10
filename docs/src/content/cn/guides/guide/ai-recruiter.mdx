@@ -1,0 +1,264 @@
+---
+title: "指南：构建 AI 招聘工作流 | Mastra 工作流 | 指南"
+description: 有关在 Mastra 中构建招聘工作流以使用 LLM 收集和处理候选人信息的指南。
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 构建 AI 招聘工作流
+
+在本指南中，您将学习如何使用 Mastra 构建带有 LLM 的工作流。
+
+您将创建一个工作流，从候选人的简历中收集信息，然后根据候选人的个人资料分支到技术问题或行为问题。在此过程中，您将了解如何构建工作流步骤、处理分支以及集成 LLM 调用。
+
+## 前置条件
+
+- 已安装 Node.js `v22.13.0` 或更高版本
+- 来自支持的[模型提供商](/models)的 API 密钥
+- 现有的 Mastra 项目（请遵循[安装指南](/guides/getting-started/quickstart)设置新项目）
+
+## 构建工作流
+
+设置工作流，定义步骤以提取和分类候选人数据，然后提出合适的跟进问题。
+
+<Steps>
+
+<StepItem>
+
+创建一个新文件 `src/mastra/workflows/candidate-workflow.ts` 并定义您的工作流：
+
+```ts title="src/mastra/workflows/candidate-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const candidateWorkflow = createWorkflow({
+  id: "candidate-workflow",
+  inputSchema: z.object({
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    askAboutSpecialty: z.object({
+      question: z.string(),
+    }),
+    askAboutRole: z.object({
+      question: z.string(),
+    }),
+  }),
+}).commit();
+```
+
+</StepItem>
+
+<StepItem>
+
+您想从简历文本中提取候选人详细信息，并将此人分类为"技术"或"非技术"。此步骤调用 LLM 来解析简历并返回结构化 JSON，包括姓名、技术状态、专业和原始简历文本。通过 `inputSchema` 定义，您可以在 `execute()` 中访问 `resumeText`。使用它来提示 LLM 并返回组织好的字段。
+
+在现有的 `src/mastra/workflows/candidate-workflow.ts` 文件中添加以下内容：
+
+```ts title="src/mastra/workflows/candidate-workflow.ts"
+import { Agent } from "@mastra/core/agent";
+
+const recruiter = new Agent({
+  id: "recruiter-agent",
+  name: "Recruiter Agent",
+  instructions: `You are a recruiter.`,
+  model: "openai/gpt-5.1",
+});
+
+const gatherCandidateInfo = createStep({
+  id: "gatherCandidateInfo",
+  inputSchema: z.object({
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const resumeText = inputData?.resumeText;
+
+    const prompt = `Extract details from the resume text:
+"${resumeText}"`;
+
+    const res = await recruiter.generate(prompt, {
+      structuredOutput: {
+        schema: z.object({
+          candidateName: z.string(),
+          isTechnical: z.boolean(),
+          specialty: z.string(),
+          resumeText: z.string(),
+        }),
+      },
+    });
+
+    return res.object;
+  },
+});
+```
+
+由于您在 `execute()` 内部使用了招聘代理，因此需要在步骤上方定义它并添加必要的导入。
+
+</StepItem>
+
+<StepItem>
+
+此步骤提示被识别为"技术"的候选人提供有关他们如何进入该专业的更多信息。它使用整个简历文本，以便 LLM 能够制作相关的后续问题。
+
+在现有的 `src/mastra/workflows/candidate-workflow.ts` 文件中添加以下内容：
+
+```ts title="src/mastra/workflows/candidate-workflow.ts"
+const askAboutSpecialty = createStep({
+  id: "askAboutSpecialty",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    question: z.string(),
+  }),
+  execute: async ({ inputData: candidateInfo }) => {
+    const prompt = `You are a recruiter. Given the resume below, craft a short question
+for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
+Resume: ${candidateInfo?.resumeText}`;
+    const res = await recruiter.generate(prompt);
+
+    return { question: res?.text?.trim() || "" };
+  },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+如果候选人是"非技术"的，您需要不同的后续问题。此步骤询问他们对该角色最感兴趣的地方，同样参考完整的简历文本。`execute()` 函数向 LLM 征集以角色为中心的查询。
+
+在现有的 `src/mastra/workflows/candidate-workflow.ts` 文件中添加以下内容：
+
+```ts title="src/mastra/workflows/candidate-workflow.ts"
+const askAboutRole = createStep({
+  id: "askAboutRole",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    question: z.string(),
+  }),
+  execute: async ({ inputData: candidateInfo }) => {
+    const prompt = `You are a recruiter. Given the resume below, craft a short question
+for ${candidateInfo?.candidateName} asking what interests them most about this role.
+Resume: ${candidateInfo?.resumeText}`;
+    const res = await recruiter.generate(prompt);
+
+    return { question: res?.text?.trim() || "" };
+  },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+现在，您结合这些步骤来实现基于候选人技术状态的分支逻辑。工作流首先收集候选人数据，然后根据 `isTechnical` 提出关于其专业或角色的问题。这是通过将 `gatherCandidateInfo` 与 `askAboutSpecialty` 和 `askAboutRole` 链接来完成的。
+
+在现有的 `src/mastra/workflows/candidate-workflow.ts` 文件中像这样更改 `candidateWorkflow`：
+
+```ts title="src/mastra/workflows/candidate-workflow.ts" {10-14}
+export const candidateWorkflow = createWorkflow({
+  id: "candidate-workflow",
+  inputSchema: z.object({
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    askAboutSpecialty: z.object({
+      question: z.string(),
+    }),
+    askAboutRole: z.object({
+      question: z.string(),
+    }),
+  }),
+})
+  .then(gatherCandidateInfo)
+  .branch([
+    [async ({ inputData: { isTechnical } }) => isTechnical, askAboutSpecialty],
+    [async ({ inputData: { isTechnical } }) => !isTechnical, askAboutRole],
+  ])
+  .commit();
+```
+
+</StepItem>
+
+<StepItem>
+
+在您的 `src/mastra/index.ts` 文件中，注册工作流：
+
+```ts title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { candidateWorkflow } from "./workflows/candidate-workflow";
+
+export const mastra = new Mastra({
+  workflows: { candidateWorkflow },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## 测试工作流
+
+您可以通过启动开发服务器在[工作室](/docs/cn/docs/getting-started/studio)中测试您的工作流：
+
+```bash
+mastra dev
+```
+
+在侧边栏中，导航到**工作流**并选择 **candidate-workflow**。在中间部分，您将看到工作流的图形视图，右侧边栏默认选中**运行**选项卡。在此选项卡中，您可以输入简历文本，例如：
+
+```text
+Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.
+```
+
+输入简历文本后，按**运行**按钮。您现在应该看到两个状态框（`GatherCandidateInfo` 和 `AskAboutSpecialty`），其中包含工作流步骤的输出。
+
+您还可以通过调用 [`.createRun()`](/reference/workflows/workflow-methods/create-run) 和 [`.start()`](/reference/workflows/run-methods/start) 以编程方式测试工作流。创建一个新文件 `src/test-workflow.ts` 并添加以下内容：
+
+```ts title="src/test-workflow.ts"
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("candidateWorkflow").createRun();
+
+const res = await run.start({
+  inputData: {
+    resumeText:
+      "Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.",
+  },
+});
+
+// Dump the complete workflow result (includes status, steps and result)
+console.log(JSON.stringify(res, null, 2));
+
+// Get the workflow output value
+if (res.status === "success") {
+  const question =
+    res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question;
+
+  console.log(`Output value: ${question}`);
+}
+```
+
+现在，运行工作流并在终端中获取输出：
+
+```bash
+npx tsx src/test-workflow.ts
+```
+
+您刚刚构建了一个工作流来解析简历并根据候选人的技术能力决定提出什么问题。恭喜并祝您编码愉快！

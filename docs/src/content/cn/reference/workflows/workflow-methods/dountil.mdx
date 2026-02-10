@@ -1,0 +1,54 @@
+---
+title: "参考：Workflow.dountil() | 工作流"
+description: "工作流中 `Workflow.dountil()` 方法的文档，用于创建循环直到满足条件。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.dountil()
+
+`.dountil()` 方法执行一个步骤直到满足条件。它总是在评估条件之前至少运行一次该步骤。第一次评估条件时，`iterationCount` 为 `1`。
+
+## 使用示例
+
+```typescript
+workflow.dountil(step1, async ({ inputData }) => true);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step",
+      description: "要在循环中执行的步骤实例",
+      isOptional: false,
+    },
+    {
+      name: "condition",
+      type: "(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>",
+      description:
+        "返回布尔值的函数，指示是否继续循环。该函数接收执行参数和迭代计数。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "用于方法链的工作流实例",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [控制流](/docs/cn/docs/workflows/control-flow)
+
+- [ExecuteParams](../step#executeparams)

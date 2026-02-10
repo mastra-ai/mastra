@@ -1,0 +1,243 @@
+---
+title: "Mastra 客户端 SDK | 服务器"
+description: "了解如何设置和使用 Mastra 客户端 SDK"
+packages:
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+# Mastra 客户端 SDK
+
+Mastra 客户端 SDK 为从客户端环境与您的 [Mastra 服务器](/docs/cn/server/mastra-server) 交互提供了一个简单且类型安全的接口。
+
+## 前提条件
+
+为确保本地开发顺利进行，请确保您拥有：
+
+- Node.js `v22.13.0` 或更高版本
+- TypeScript `v4.7` 或更高版本（如果使用 TypeScript）
+- 您的本地 Mastra 服务器正在运行（通常在端口 `4111` 上）
+
+## 用法
+
+Mastra 客户端 SDK 专为浏览器环境设计，使用本机 `fetch` API 向您的 Mastra 服务器发出 HTTP 请求。
+
+## 安装
+
+要使用 Mastra 客户端 SDK，请安装所需的依赖项：
+
+```bash npm2yarn
+npm install @mastra/client-js@latest
+```
+
+### 初始化 `MastraClient`
+
+使用 `baseUrl` 初始化后，`MastraClient` 暴露了一个类型安全的接口，用于调用智能体、工具和工作流。
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
+});
+```
+
+## 核心 API
+
+Mastra 客户端 SDK 公开了 Mastra 服务器提供的所有资源
+
+- **[智能体](/reference/client-js/agents)**：生成响应并流式传输对话。
+- **[内存](/reference/client-js/memory)**：管理对话线程和消息历史。
+- **[工具](/reference/client-js/tools)**：执行和管理工具。
+- **[工作流](/reference/client-js/workflows)**：触发工作流并跟踪其执行。
+- **[向量](/reference/client-js/vectors)**：使用向量嵌入进行语义搜索。
+- **[日志](/reference/client-js/logs)**：查看日志并调试系统行为。
+- **[遥测](/reference/client-js/telemetry)**：监控应用程序性能并跟踪活动。
+
+## 生成响应
+
+使用字符串提示调用 `.generate()`：
+
+```typescript
+import { mastraClient } from "lib/mastra-client";
+
+const testAgent = async () => {
+  try {
+    const agent = mastraClient.getAgent("testAgent");
+
+    const response = await agent.generate("Hello");
+
+    console.log(response.text);
+  } catch (error) {
+    return "Error occurred while generating response";
+  }
+};
+```
+
+:::info
+
+您也可以使用包含 `role` 和 `content` 的消息对象数组调用 `.generate()`。访问 [.generate() 参考](/reference/client-js/agents#generate) 了解更多信息。
+
+:::
+
+## 流式传输响应
+
+使用字符串提示的 `.stream()` 实时响应：
+
+```typescript
+import { mastraClient } from "lib/mastra-client";
+
+const testAgent = async () => {
+  try {
+    const agent = mastraClient.getAgent("testAgent");
+
+    const stream = await agent.stream("Hello");
+
+    stream.processDataStream({
+      onTextPart: (text) => {
+        console.log(text);
+      },
+    });
+  } catch (error) {
+    return "Error occurred while generating response";
+  }
+};
+```
+
+:::info
+
+您也可以使用包含 `role` 和 `content` 的消息对象数组调用 `.stream()`。访问 [.stream() 参考](/reference/client-js/agents#stream) 了解更多信息。
+
+:::
+
+## 配置选项
+
+`MastraClient` 接受可选参数，如 `retries`、`backoffMs` 和 `headers` 来控制请求行为。这些参数对于控制重试行为和包含诊断元数据很有用。
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const mastraClient = new MastraClient({
+  retries: 3,
+  backoffMs: 300,
+  maxBackoffMs: 5000,
+  headers: {
+    "X-Development": "true",
+  },
+});
+```
+
+:::info
+
+访问 [MastraClient](/reference/client-js/mastra-client) 了解更多配置选项。
+
+:::
+
+## 添加请求取消
+
+`MastraClient` 使用标准的 Node.js `AbortSignal` API 支持请求取消。对于取消进行中的请求很有用，例如当用户中止操作或清理过时的网络调用时。
+
+将 `AbortSignal` 传递给客户端构造函数以在所有请求中启用取消。
+
+```typescript {3,7} title="lib/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const controller = new AbortController();
+
+export const mastraClient = new MastraClient({
+  baseUrl: process.env.MASTRA_API_URL || "http://localhost:4111",
+  abortSignal: controller.signal,
+});
+```
+
+### 使用 `AbortController`
+
+调用 `.abort()` 将取消与该信号关联的任何正在进行请求。
+
+```typescript {4}
+import { mastraClient, controller } from "lib/mastra-client";
+
+const handleAbort = () => {
+  controller.abort();
+};
+```
+
+## 客户端工具
+
+使用 `createTool()` 函数在客户端应用程序中直接定义工具。通过 `.generate()` 或 `.stream()` 调用中的 `clientTools` 参数将它们传递给智能体。
+
+这使智能体能够触发浏览器端功能，如 DOM 操作、本地存储访问或其他 Web API，在用户环境中而不是在服务器上启用工具执行。
+
+```typescript {27}
+import { createTool } from "@mastra/client-js";
+import { z } from "zod";
+
+const handleClientTool = async () => {
+  try {
+    const agent = mastraClient.getAgent("colorAgent");
+
+    const colorChangeTool = createTool({
+      id: "color-change-tool",
+      description: "Changes the HTML background color",
+      inputSchema: z.object({
+        color: z.string(),
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+      }),
+      execute: async (inputData) => {
+        const { color } = inputData;
+
+        document.body.style.backgroundColor = color;
+        return { success: true };
+      },
+    });
+
+    const response = await agent.generate("Change the background to blue", {
+      clientTools: { colorChangeTool },
+    });
+
+    console.log(response);
+  } catch (error) {
+    console.error(error);
+  }
+};
+```
+
+### 客户端工具的智能体
+
+这是一个标准的 Mastra [智能体](../agents/overview#setting-up-agents)，配置为返回十六进制颜色代码，旨在与上面定义的基于浏览器的客户端工具配合使用。
+
+```typescript title="src/mastra/agents/color-agent"
+import { Agent } from "@mastra/core/agent";
+
+export const colorAgent = new Agent({
+  id: "color-agent",
+  name: "Color Agent",
+  instructions: `You are a helpful CSS assistant.
+  You can change the background color of web pages.
+  Respond with a hex reference for the color requested by the user`,
+  model: "openai/gpt-5.1",
+});
+```
+
+## 服务器端环境
+
+您也可以在 API 路由、无服务器函数或操作等服务器端环境中使用 `MastraClient`。用法大体上保持不变，但您可能需要向客户端重新创建响应：
+
+```typescript {8}
+export async function action() {
+  const agent = mastraClient.getAgent("testAgent");
+
+  const stream = await agent.stream("Hello");
+
+  return new Response(stream.body);
+}
+```
+
+## 最佳实践
+
+1. **错误处理**：为开发场景实施适当的[错误处理](/reference/client-js/error-handling)。
+2. **环境变量**：使用环境变量进行配置。
+3. **调试**：在需要时启用详细[日志记录](/reference/client-js/logs)。
+4. **性能**：监控应用程序性能、[遥测](/reference/client-js/telemetry)和追踪。

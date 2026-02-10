@@ -1,0 +1,170 @@
+---
+title: "参考文档: Convex 存储 | 存储"
+description: "Mastra 中 Convex 存储实现的文档。"
+packages:
+  - "@mastra/convex"
+---
+
+# Convex 存储
+
+Convex 存储实现使用 [Convex](https://convex.dev) 提供了无服务器存储解决方案，Convex 是一个具有实时同步和自动缓存功能的全栈 TypeScript 开发平台。
+
+:::warning[不支持可观察性]
+Convex 存储**不支持可观察性领域**。来自 `DefaultExporter` 的追踪无法持久化到 Convex，Mastra Studio 的可观察性功能无法将 Convex 作为唯一的存储提供商工作。若要启用可观察性，请使用[复合存储](/reference/storage/composite#specialized-storage-for-observability) 将可观察性数据路由到支持的提供商，如 ClickHouse 或 PostgreSQL。
+:::
+
+:::warning[记录大小限制]
+Convex 强制执行 **1 MiB 最大记录大小限制**。在存储带有 base64 编码附件（如图像）的消息时可能会超过此限制。请参阅[处理大附件](/docs/cn/docs/memory/storage#handling-large-attachments) 了解包括将附件上传到 S3、Cloudflare R2 或 [Convex 文件存储](https://docs.convex.dev/file-storage) 在内的解决方案。
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/convex@latest
+```
+
+## Convex 设置
+
+在使用 `ConvexStore` 之前，你需要在 Convex 项目中设置 Convex 模式和存储处理程序。
+
+### 1. 设置 Convex 模式
+
+在 `convex/schema.ts` 中：
+
+```typescript
+import { defineSchema } from 'convex/server';
+import {
+  mastraThreadsTable,
+  mastraMessagesTable,
+  mastraResourcesTable,
+  mastraWorkflowSnapshotsTable,
+  mastraScoresTable,
+  mastraVectorIndexesTable,
+  mastraVectorsTable,
+  mastraDocumentsTable,
+} from '@mastra/convex/schema';
+
+export default defineSchema({
+  mastra_threads: mastraThreadsTable,
+  mastra_messages: mastraMessagesTable,
+  mastra_resources: mastraResourcesTable,
+  mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
+  mastra_scorers: mastraScoresTable,
+  mastra_vector_indexes: mastraVectorIndexesTable,
+  mastra_vectors: mastraVectorsTable,
+  mastra_documents: mastraDocumentsTable,
+});
+```
+
+### 2. 创建存储处理程序
+
+在 `convex/mastra/storage.ts` 中：
+
+```typescript
+import { mastraStorage } from '@mastra/convex/server';
+
+export const handle = mastraStorage;
+```
+
+### 3. 部署到 Convex
+
+```bash
+npx convex dev
+# 或用于生产
+npx convex deploy
+```
+
+## 使用方法
+
+```typescript
+import { ConvexStore } from "@mastra/convex";
+
+const storage = new ConvexStore({
+  id: 'convex-storage',
+  deploymentUrl: process.env.CONVEX_URL!,
+  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "deploymentUrl",
+      type: "string",
+      description: "Convex 部署 URL（例如，https://your-project.convex.cloud）。",
+      isOptional: false,
+    },
+    {
+      name: "adminAuthToken",
+      type: "string",
+      description: "用于后端访问的 Convex 管理员身份验证令牌。",
+      isOptional: false,
+    },
+    {
+      name: "storageFunction",
+      type: "string",
+      description: "存储变异函数的路径（默认值：'mastra/storage:handle'）。",
+      isOptional: true,
+      defaultValue: "mastra/storage:handle",
+    },
+  ]}
+/>
+
+## 构造函数示例
+
+```ts
+import { ConvexStore } from "@mastra/convex";
+
+// 基本配置
+const store = new ConvexStore({
+  id: 'convex-storage',
+  deploymentUrl: "https://your-project.convex.cloud",
+  adminAuthToken: "your-admin-token",
+});
+
+// 使用自定义存储函数路径
+const storeCustom = new ConvexStore({
+  id: 'convex-storage',
+  deploymentUrl: "https://your-project.convex.cloud",
+  adminAuthToken: "your-admin-token",
+  storageFunction: "custom/path:handler",
+});
+```
+
+## 额外说明
+
+### 模式管理
+
+存储实现为每个 Mastra 领域使用类型化的 Convex 表：
+
+| 领域 | Convex 表 | 用途 |
+| -------------- | --------------------------- | -------------------- |
+| 线程 | `mastra_threads` | 对话线程 |
+| 消息 | `mastra_messages` | 聊天消息 |
+| 资源 | `mastra_resources` | 用户工作内存 |
+| 工作流 | `mastra_workflow_snapshots` | 工作流状态 |
+| 评分器 | `mastra_scorers` | 评估数据 |
+| 后备 | `mastra_documents` | 未知表 |
+
+### 架构
+
+所有类型化表包括：
+
+- 一个用于 Mastra 记录 ID 的 `id` 字段（与 Convex 自动生成的 `_id` 不同）
+- 一个用于按 Mastra ID 高效查找的 `by_record_id` 索引
+
+此设计确保与 Mastra 的存储契约的兼容性，同时利用 Convex 的自动索引和实时功能。
+
+### 环境变量
+
+为你的部署设置以下环境变量：
+
+- `CONVEX_URL` – 你的 Convex 部署 URL
+- `CONVEX_ADMIN_KEY` – 管理员身份验证令牌（从 Convex 仪表板获取）
+
+## 相关文档
+
+- [Convex 向量存储](../vectors/convex)
+- [Convex 文档](https://docs.convex.dev/)

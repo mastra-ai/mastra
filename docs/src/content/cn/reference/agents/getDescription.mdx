@@ -1,0 +1,37 @@
+---
+title: "参考文档：Agent.getDescription() | 智能体"
+description: "Mastra 智能体中 `Agent.getDescription()` 方法的文档，用于检索智能体的描述。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getDescription()
+
+`.getDescription()` 方法检索为智能体配置的描述。此方法返回描述智能体用途和能力的简单字符串描述。
+
+## 使用示例
+
+```typescript
+agent.getDescription();
+```
+
+## 参数
+
+此方法不带参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "description",
+      type: "string",
+      description:
+        "智能体的描述，如果未配置描述则返回空字符串。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)

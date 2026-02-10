@@ -1,0 +1,109 @@
+---
+title: "LucidQuery AI | 模型 | Mastra"
+description: "在 Mastra 中使用 LucidQuery AI 模型。共 2 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/lucidquery.svg" alt="LucidQuery AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LucidQuery AI
+
+通过 Mastra 的模型路由器访问 2 个 LucidQuery AI 模型。身份验证使用 `LUCIDQUERY_API_KEY` 环境变量自动处理。
+
+在 [LucidQuery AI 文档](https://lucidquery.com) 中了解更多信息。
+
+```bash title=".env"
+LUCIDQUERY_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "lucidquery/lucidnova-rf1-100b"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [LucidQuery AI 文档](https://lucidquery.com) 了解详情。
+
+:::
+
+## 模型
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "lucidquery/lucidnova-rf1-100b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 120000,
+    "maxOutput": 8000,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "model": "lucidquery/lucidquery-nexus-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 250000,
+    "maxOutput": 60000,
+    "inputCost": 2,
+    "outputCost": 5
+  }
+]}
+/>
+
+## 高级配置
+
+### 自定义请求头
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://lucidquery.com/api/v1",
+    id: "lucidquery/lucidnova-rf1-100b",
+    apiKey: process.env.LUCIDQUERY_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### 动态模型选择
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "lucidquery/lucidquery-nexus-coder"
+      : "lucidquery/lucidnova-rf1-100b";
+  }
+});
+```
+
+

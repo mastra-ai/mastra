@@ -1,0 +1,89 @@
+---
+title: "使用工具 | 工具与 MCP"
+description: "了解 Mastra 中的工具是什么，如何将它们添加到智能体，以及设计有效工具的最佳实践。"
+packages:
+  - "@mastra/core"
+---
+
+# 使用工具
+
+工具是智能体可以执行以执行特定任务或访问外部信息的函数。它们扩展了智能体的能力，使其超越简单的文本生成，允许与 API、数据库或其他系统交互。
+
+每个工具通常定义：
+
+- **输入：** 工具运行所需的信息（使用 `inputSchema` 定义，通常使用 Zod）。
+- **输出：** 工具返回的数据结构（使用 `outputSchema` 定义）。
+- **执行逻辑：** 执行工具操作的代码。
+- **描述：** 帮助智能体了解工具功能和使用时机的文本。
+
+## 创建工具
+
+在 Mastra 中，您使用 `@mastra/core/tools` 包中的 [`createTool`](/reference/tools/create-tool) 函数创建工具。
+
+```typescript title="src/mastra/tools/weatherInfo.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getWeatherInfo = async (city: string) => {
+  // 替换为对天气服务的实际 API 调用
+  console.log(`Fetching weather for ${city}...`);
+  // 示例数据结构
+  return { temperature: 20, conditions: "Sunny" };
+};
+
+export const weatherTool = createTool({
+  id: "Get Weather Information",
+  description: `Fetches the current weather information for a given city`,
+  inputSchema: z.object({
+    city: z.string().describe("City name"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async (inputData) => {
+    console.log("Using tool to fetch weather information for", inputData.city);
+    return await getWeatherInfo(inputData.city);
+  },
+});
+```
+
+此示例定义了一个 `weatherTool`，其输入模式用于城市，输出模式用于天气数据，以及一个包含工具逻辑的 `execute` 函数。
+
+创建工具时，保持工具描述简单，专注于工具**做什么**和**何时**使用它，强调其主要用例。技术细节属于参数模式，通过描述性名称、清晰描述和默认值解释来指导智能体正确使用工具。
+
+## 向智能体添加工具
+
+要使工具对智能体可用，您需要在智能体定义中配置它们。在智能体的系统提示中提及可用的工具及其一般用途也可以提高工具使用率。详细的步骤和示例，请参阅[将工具与智能体一起使用](/docs/cn/agents/using-tools#adding-tools-to-an-agent)指南。
+
+## 使用 `RequestContext`
+
+使用[请求上下文](/docs/cn/server/request-context)访问请求特定的值。这允许您根据请求的上下文有条件地调整行为。
+
+```typescript title="src/mastra/tools/test-tool.ts"
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const advancedTools = () => {};
+
+const baseTools = () => {};
+
+export const testTool = createTool({
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise" ? advancedTools : baseTools;
+  },
+});
+```
+
+:::info
+
+有关更多信息，请访问[请求上下文](/docs/cn/server/request-context)。
+
+:::
+
+## 使用 Studio 测试
+
+使用 [Studio](/docs/cn/getting-started/studio) 使用不同输入测试工具，检查执行结果，并验证工具行为。

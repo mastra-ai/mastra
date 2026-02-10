@@ -1,0 +1,253 @@
+---
+title: "参考：上下文精确度评分器 | 评估"
+description: "Mastra 中上下文精确度评分器的文档。使用平均精确度评估检索到的上下文对于生成预期输出的相关性和精确度。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 上下文精确度评分器
+
+`createContextPrecisionScorer()` 函数创建一个评分器，用于评估检索到的上下文片段对于生成预期输出的相关性和位置排序。它使用**平均精确度 (Mean Average Precision, MAP)** 来奖励将相关上下文放在序列前面的系统。
+
+它特别适用于以下场景：
+
+**RAG 系统评估**
+
+适用于评估 RAG 管道中检索到的上下文：
+
+- 上下文排序对模型性能很重要
+- 您需要衡量超越简单相关性的检索质量
+- 早期相关上下文比后期更有价值
+
+**上下文窗口优化**
+
+在优化上下文选择时使用：
+
+- 有限的上下文窗口
+- Token 预算约束
+- 多步推理任务
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "用于评估上下文相关性的语言模型",
+      required: true,
+    },
+    {
+      name: "options",
+      type: "ContextPrecisionMetricOptions",
+      description: "评分器的配置选项",
+      required: true,
+      children: [
+        {
+          name: "context",
+          type: "string[]",
+          description: "要评估相关性的上下文片段数组",
+          required: false,
+        },
+        {
+          name: "contextExtractor",
+          type: "(input, output) => string[]",
+          description:
+            "用于从运行输入和输出中动态提取上下文的函数",
+          required: false,
+        },
+        {
+          name: "scale",
+          type: "number",
+          description: "乘以最终分数的缩放因子（默认：1）",
+          required: false,
+        },
+      ],
+    },
+  ]}
+/>
+
+**注意**：必须提供 `context` 或 `contextExtractor` 之一。如果两者都提供了，`contextExtractor` 优先。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description:
+        "0 到 scale（默认 0-1）之间的平均精确度分数",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "对上下文精确度评估的人类可读解释",
+    },
+  ]}
+/>
+
+## 评分详情
+
+### 平均精确度 (MAP)
+
+上下文精确度使用**平均精确度**来评估相关性和位置：
+
+1. **上下文评估**：每个上下文片段被分类为与生成预期输出相关或不相关
+2. **精确度计算**：对于位置 `i` 的每个相关上下文，精确度 = `至今的相关项数 / (i + 1)`
+3. **平均精确度**：将所有精确度值相加，除以相关项总数
+4. **最终分数**：乘以缩放因子并四舍五入到小数点后两位
+
+### 评分公式
+
+```
+MAP = (Σ Precision@k) / R
+
+其中：
+- Precision@k =（位置 1...k 中的相关项）/ k
+- R = 相关项的总数
+- 仅在出现相关项的位置计算
+```
+
+### 分数解释
+
+- **0.9-1.0**：优秀精确度 - 所有相关上下文都在序列前面
+- **0.7-0.8**：良好精确度 - 大部分相关上下文位置得当
+- **0.4-0.6**：中等精确度 - 相关上下文与不相关上下文混合
+- **0.1-0.3**：差精确度 - 很少有相关上下文或位置不当
+- **0.0**：未找到相关上下文
+
+### 原因分析
+
+reason 字段解释：
+
+- 哪些上下文片段被认为是相关/不相关的
+- 位置如何影响 MAP 计算
+- 评估中使用的具体相关性标准
+
+### 优化洞察
+
+使用结果来：
+
+- **改进检索**：在排序前过滤掉不相关的上下文
+- **优化排序**：确保相关上下文出现在前面
+- **调整块大小**：平衡上下文细节与相关性精确度
+- **评估嵌入模型**：测试不同的嵌入模型以获得更好的检索效果
+
+### 示例计算
+
+给定上下文：`[相关, 不相关, 相关, 不相关]`
+
+- 位置 0：相关 → 精确度 = 1/1 = 1.0
+- 位置 1：跳过（不相关）
+- 位置 2：相关 → 精确度 = 2/3 = 0.67
+- 位置 3：跳过（不相关）
+
+MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
+
+## 评分器配置
+
+### 动态上下文提取
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: "openai/gpt-5.1",
+  options: {
+    contextExtractor: (input, output) => {
+      // 根据查询动态提取上下文
+      const query = input?.inputMessages?.[0]?.content || "";
+
+      // 示例：从向量数据库检索
+      const searchResults = vectorDB.search(query, { limit: 10 });
+      return searchResults.map((result) => result.content);
+    },
+    scale: 1,
+  },
+});
+```
+
+### 大上下文评估
+
+```typescript
+const scorer = createContextPrecisionScorer({
+  model: "openai/gpt-5.1",
+  options: {
+    context: [
+      // 模拟从向量数据库检索的文档
+      "文档 1：高度相关的内容...",
+      "文档 2：有些相关的内容...",
+      "文档 3：略微相关...",
+      "文档 4：不相关...",
+      "文档 5：高度相关的内容...",
+      // ... 多达数十个上下文片段
+    ],
+  },
+});
+```
+
+## 示例
+
+评估不同查询的 RAG 系统上下文检索精确度：
+
+```typescript title="src/example-context-precision.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createContextPrecisionScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createContextPrecisionScorer({
+  model: "openai/gpt-4o",
+  options: {
+    contextExtractor: (input, output) => {
+      // 从代理检索的文档中提取上下文
+      return output.metadata?.retrievedContext || [];
+    },
+  },
+});
+
+const result = await runEvals({
+  data: [
+    {
+      input: "植物的光合作用是如何工作的？",
+    },
+    {
+      input: "运动有哪些身心益处？",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+## 与上下文相关性的比较
+
+为您的需求选择正确的评分器：
+
+| 场景 | 上下文相关性 | 上下文精确度 |
+| ------------------------ | -------------------- | ------------------------- |
+| **RAG 评估** | 当使用时重要 | 当排序重要时 |
+| **上下文质量** | 细微层次 | 二元相关性 |
+| **缺失检测** | ✓ 识别差距 | ✗ 不评估 |
+| **使用跟踪** | ✓ 跟踪利用情况 | ✗ 不考虑 |
+| **位置敏感性** | ✗ 位置无关 | ✓ 奖励早期放置 |
+
+## 相关内容
+
+- [答案相关性评分器](/reference/evals/answer-relevancy) - 评估答案是否回答了问题
+- [忠实度评分器](/reference/evals/faithfulness) - 衡量答案在上下文中的 groundedness
+- [自定义评分器](/docs/cn/docs/evals/custom-scorers) - 创建您自己的评估指标

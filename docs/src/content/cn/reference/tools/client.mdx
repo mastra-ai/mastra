@@ -1,0 +1,338 @@
+---
+title: "参考：MastraMCPClient (已弃用) | 工具与 MCP"
+description: MastraMCPClient 的 API 参考文档 - 用于模型上下文协议的客户端实现。
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
+---
+
+# MastraMCPClient (已弃用)
+
+`MastraMCPClient` 类提供了与模型上下文协议 (MCP) 服务器交互的客户端实现。它处理连接管理、资源发现和通过 MCP 协议的工具执行。
+
+## 弃用通知
+
+`MastraMCPClient` 已被[`MCPClient`](./mcp-client)取代。我们建议使用管理多个 MCP 服务器的接口来管理单个 MCP 服务器，而不是维护两个不同的接口。
+
+## 构造函数
+
+创建 MastraMCPClient 的新实例。
+
+```typescript
+constructor({
+    name,
+    version = '1.0.0',
+    server,
+    capabilities = {},
+    timeout = 60000,
+}: {
+    name: string;
+    server: MastraMCPServerDefinition;
+    capabilities?: ClientCapabilities;
+    version?: string;
+    timeout?: number;
+})
+```
+
+### 参数
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "此客户端实例的名称标识符。",
+    },
+    {
+      name: "version",
+      type: "string",
+      isOptional: true,
+      defaultValue: "1.0.0",
+      description: "客户端的版本。",
+    },
+    {
+      name: "server",
+      type: "MastraMCPServerDefinition",
+      description:
+        "stdio 服务器连接或 SSE 服务器连接的配置参数。可以包含日志处理程序和服务器日志配置。",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "客户端的可选功能配置。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: 60000,
+      description:
+        "客户端工具调用的超时时间（毫秒）。",
+    },
+  ]}
+/>
+
+### MastraMCPServerDefinition
+
+可以使用此定义配置 MCP 服务器。客户端会根据提供的参数自动检测传输类型：
+
+- 如果提供了 `command`，则使用 Stdio 传输。
+- 如果提供了 `url`，则首先尝试使用 Streamable HTTP 传输，如果初始连接失败则回退到传统的 SSE 传输。
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      isOptional: true,
+      description: "对于 Stdio 服务器：要执行的命令。",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      isOptional: true,
+      description: "对于 Stdio 服务器：传递给命令的参数。",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      isOptional: true,
+      description:
+        "对于 Stdio 服务器：命令的环境变量。",
+    },
+    {
+      name: "url",
+      type: "URL",
+      isOptional: true,
+      description:
+        "对于 HTTP 服务器 (Streamable HTTP 或 SSE)：服务器的 URL。",
+    },
+    {
+      name: "requestInit",
+      type: "RequestInit",
+      isOptional: true,
+      description: "对于 HTTP 服务器：fetch API 的请求配置。",
+    },
+    {
+      name: "eventSourceInit",
+      type: "EventSourceInit",
+      isOptional: true,
+      description:
+        "对于 SSE 回退：SSE 连接的自定义 fetch 配置。使用 SSE 自定义标头时需要。",
+    },
+    {
+      name: "logger",
+      type: "LogHandler",
+      isOptional: true,
+      description: "可选的额外日志处理程序。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      description: "服务器特定的超时时间（毫秒）。",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      description: "服务器特定的功能配置。",
+    },
+    {
+      name: "enableServerLogs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "是否启用此服务器的日志记录。",
+    },
+  ]}
+/>
+
+### LogHandler
+
+`LogHandler` 函数接受一个 `LogMessage` 对象作为参数并返回 void。`LogMessage` 对象具有以下属性。`LoggingLevel` 类型是一个字符串枚举，值为：`debug`、`info`、`warn` 和 `error`。
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "level",
+      type: "LoggingLevel",
+      description: "日志级别 (debug, info, warn, error)",
+    },
+    {
+      name: "message",
+      type: "string",
+      description: "日志消息内容",
+    },
+    {
+      name: "timestamp",
+      type: "Date",
+      description: "日志生成的时间",
+    },
+    {
+      name: "serverName",
+      type: "string",
+      description: "生成日志的服务器名称",
+    },
+    {
+      name: "details",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "可选的额外日志详情",
+    },
+  ]}
+/>
+
+## 方法
+
+### connect()
+
+建立与 MCP 服务器的连接。
+
+```typescript
+async connect(): Promise<void>
+```
+
+### disconnect()
+
+关闭与 MCP 服务器的连接。
+
+```typescript
+async disconnect(): Promise<void>
+```
+
+### resources()
+
+从服务器检索可用资源的列表。
+
+```typescript
+async resources(): Promise<ListResourcesResult>
+```
+
+### tools()
+
+从服务器获取并初始化可用工具，将其转换为 Mastra 兼容的工具格式。
+
+```typescript
+async tools(): Promise<Record<string, Tool>>
+```
+
+返回将工具名称映射到其对应 Mastra 工具实现的对象。
+
+## 示例
+
+### 与 Mastra Agent 一起使用
+
+#### 使用 Stdio 服务器的示例
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MastraMCPClient } from "@mastra/mcp";
+
+// 使用 mcp/fetch 初始化 MCP 客户端作为示例 https://hub.docker.com/r/mcp/fetch
+// 访问 https://github.com/docker/mcp-servers 获取其他 Docker MCP 服务器参考
+const fetchClient = new MastraMCPClient({
+  name: "fetch",
+  server: {
+    command: "docker",
+    args: ["run", "-i", "--rm", "mcp/fetch"],
+    logger: (logMessage) => {
+      console.log(`[${logMessage.level}] ${logMessage.message}`);
+    },
+  },
+});
+
+// 创建 Mastra Agent
+const agent = new Agent({
+  name: "Fetch agent",
+  instructions:
+    "你能够按需从 URL 获取数据并与用户讨论响应数据。",
+  model: "openai/gpt-5.1",
+});
+
+try {
+  // 连接到 MCP 服务器
+  await fetchClient.connect();
+
+  // 优雅地处理进程退出，以便清理 Docker 子进程
+  process.on("exit", () => {
+    fetchClient.disconnect();
+  });
+
+  // 获取可用工具
+  const tools = await fetchClient.tools();
+
+  // 使用 MCP 工具与 Agent 交互
+  const response = await agent.generate(
+    "告诉我关于 mastra.ai/docs 的信息。告诉我这个页面大致是什么内容以及它包含的内容。",
+    {
+      toolsets: {
+        fetch: tools,
+      },
+    },
+  );
+
+  console.log("\n\n" + response.text);
+} catch (error) {
+  console.error("Error:", error);
+} finally {
+  // 完成后始终断开连接
+  await fetchClient.disconnect();
+}
+```
+
+### 使用 SSE 服务器的示例
+
+```typescript
+// 使用 SSE 服务器初始化 MCP 客户端
+const sseClient = new MastraMCPClient({
+  name: "sse-client",
+  server: {
+    url: new URL("https://your-mcp-server.com/sse"),
+    // 可选的 fetch 请求配置 - 注意：仅 requestInit 不足以支持 SSE
+    requestInit: {
+      headers: {
+        Authorization: "Bearer your-token",
+      },
+    },
+    // SSE 连接使用自定义标头时需要
+    eventSourceInit: {
+      fetch(input: Request | URL | string, init?: RequestInit) {
+        const headers = new Headers(init?.headers || {});
+        headers.set("Authorization", "Bearer your-token");
+        return fetch(input, {
+          ...init,
+          headers,
+        });
+      },
+    },
+    // 可选的额外日志配置
+    logger: (logMessage) => {
+      console.log(
+        `[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`,
+      );
+    },
+    // 禁用服务器日志
+    enableServerLogs: false,
+  },
+});
+
+// 其余用法与 stdio 示例相同
+```
+
+### 关于 SSE 身份验证的重要说明
+
+当使用带身份验证或自定义标头的 SSE 连接时，需要同时配置 `requestInit` 和 `eventSourceInit`。这是因为 SSE 连接使用浏览器的 EventSource API，该 API 不直接支持自定义标头。
+
+`eventSourceInit` 配置允许你自定义用于 SSE 连接的底层 fetch 请求，确保你的身份验证标头被正确包含。
+如果没有配置 `eventSourceInit`，`requestInit` 中指定的身份验证标头将不会包含在连接请求中，导致 401 未授权错误。
+
+## 相关信息
+
+- 要在应用程序中管理多个 MCP 服务器，请参阅 [MCPClient 文档](./mcp-client)
+- 有关模型上下文协议的更多详情，请参阅 [@modelcontextprotocol/sdk 文档](https://github.com/modelcontextprotocol/typescript-sdk)。

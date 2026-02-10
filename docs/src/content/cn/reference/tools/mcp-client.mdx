@@ -1,0 +1,1053 @@
+---
+title: "参考文档: MCPClient | 工具与 MCP"
+description: MCPClient API 参考 - 用于管理多个模型上下文协议服务器及其工具的类。
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
+---
+
+# MCPClient
+
+`MCPClient` 类提供了一种在 Mastra 应用程序中管理多个 MCP 服务器连接及其工具的方法。它处理连接生命周期、工具命名空间，并提供对所有已配置服务器的工具访问。
+
+此类已弃用旧的 [`MastraMCPClient`](/reference/tools/client)。
+
+## 构造函数
+
+创建 MCPClient 类的新实例。
+
+```typescript
+constructor({
+  id?: string;
+  servers: Record<string, MastraMCPServerDefinition>;
+  timeout?: number;
+}: MCPClientOptions)
+```
+
+### MCPClientOptions
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description:
+        "配置实例的可选唯一标识符。当使用相同配置创建多个实例时，使用此选项防止内存泄漏。",
+    },
+    {
+      name: "servers",
+      type: "Record<string, MastraMCPServerDefinition>",
+      description:
+        "服务器配置的映射，其中每个键是唯一的服务器标识符，值是服务器配置。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "60000",
+      description:
+        "所有服务器的全局超时值（毫秒），除非在单个服务器配置中覆盖。",
+    },
+  ]}
+/>
+
+### MastraMCPServerDefinition
+
+`servers` 映射中的每个服务器都使用 `MastraMCPServerDefinition` 类型进行配置。传输类型根据提供的参数自动检测：
+
+- 如果提供了 `command`，则使用 Stdio 传输。
+- 如果提供了 `url`，则首先尝试使用流式 HTTP 传输，如果初始连接失败则回退到传统的 SSE 传输。
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      isOptional: true,
+      description: "对于 Stdio 服务器：要执行的命令。",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      isOptional: true,
+      description: "对于 Stdio 服务器：传递给命令的参数。",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      isOptional: true,
+      description:
+        "对于 Stdio 服务器：要为命令设置的环境变量。",
+    },
+    {
+      name: "url",
+      type: "URL",
+      isOptional: true,
+      description:
+        "对于 HTTP 服务器（流式 HTTP 或 SSE）：服务器的 URL。",
+    },
+    {
+      name: "requestInit",
+      type: "RequestInit",
+      isOptional: true,
+      description: "对于 HTTP 服务器：fetch API 的请求配置。",
+    },
+    {
+      name: "eventSourceInit",
+      type: "EventSourceInit",
+      isOptional: true,
+      description:
+        "对于 SSE 回退：SSE 连接的自定义 fetch 配置。使用 SSE 自定义标头时需要此配置。",
+    },
+    {
+      name: "fetch",
+      type: "FetchLike",
+      isOptional: true,
+      description:
+        "对于 HTTP 服务器：用于所有网络请求的自定义 fetch 实现。提供此函数后，它将用于所有 HTTP 请求，允许您添加动态身份验证标头（例如，刷新 bearer 令牌）、自定义每个请求的行为，或拦截和修改请求/响应。提供 `fetch` 后，`requestInit`、`eventSourceInit` 和 `authProvider` 变为可选，因为您可以在自定义 fetch 函数中处理这些问题。",
+    },
+    {
+      name: "logger",
+      type: "LogHandler",
+      isOptional: true,
+      description: "可选的日志处理器。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      description: "服务器特定的超时时间（毫秒）。",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      description: "服务器特定的能力配置。",
+    },
+    {
+      name: "authProvider",
+      type: "OAuthClientProvider",
+      isOptional: true,
+      description: "对于 HTTP 服务器：用于自动令牌刷新和 OAuth 流程管理的 OAuth 身份验证提供程序。请使用 `MCPOAuthClientProvider` 获取现成的实现。",
+    },
+    {
+      name: "enableServerLogs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "是否启用此服务器的日志记录。",
+    },
+  ]}
+/>
+
+## 方法
+
+### listTools()
+
+从所有配置的服务器中检索所有工具，工具名称以服务器名称为命名空间（格式为 `serverName_toolName`）以防止冲突。
+
+用于传递给代理定义使用。
+
+```ts
+new Agent({ id: "agent", tools: await mcp.listTools() });
+```
+
+### listToolsets()
+
+返回一个对象，将命名空间的工具名称（格式为 `serverName.toolName`）映射到其工具实现。用于动态传递给 generate 或 stream 方法使用。
+
+```typescript
+const res = await agent.stream(prompt, {
+  toolsets: await mcp.listToolsets(),
+});
+```
+
+### disconnect()
+
+断开与所有 MCP 服务器的连接并清理资源。
+
+```typescript
+async disconnect(): Promise<void>
+```
+
+### `resources` 属性
+
+`MCPClient` 实例具有一个 `resources` 属性，提供对资源相关操作的访问。
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers 配置... */
+});
+
+// 通过 mcpClient.resources 访问资源方法
+const allResourcesByServer = await mcpClient.resources.list();
+const templatesByServer = await mcpClient.resources.templates();
+// 以及其他资源方法。
+```
+
+#### `resources.list()`
+
+从所有连接的 MCP 服务器检索所有可用的资源，按服务器名称分组。
+
+```typescript
+async list(): Promise<Record<string, Resource[]>>
+```
+
+示例：
+
+```typescript
+const resourcesByServer = await mcpClient.resources.list();
+for (const serverName in resourcesByServer) {
+  console.log(`来自 ${serverName} 的资源:`, resourcesByServer[serverName]);
+}
+```
+
+#### `resources.templates()`
+
+从所有连接的 MCP 服务器检索所有可用的资源模板，按服务器名称分组。
+
+```typescript
+async templates(): Promise<Record<string, ResourceTemplate[]>>
+```
+
+示例：
+
+```typescript
+const templatesByServer = await mcpClient.resources.templates();
+for (const serverName in templatesByServer) {
+  console.log(`来自 ${serverName} 的模板:`, templatesByServer[serverName]);
+}
+```
+
+#### `resources.read(serverName: string, uri: string)`
+
+从命名服务器读取特定资源的内容。
+
+```typescript
+async read(serverName: string, uri: string): Promise<ReadResourceResult>
+```
+
+- `serverName`：服务器的标识符（构造函数选项中使用的键）。
+- `uri`：要读取的资源的 URI。
+
+示例：
+
+```typescript
+const content = await mcpClient.resources.read(
+  "myWeatherServer",
+  "weather://current",
+);
+console.log("当前天气:", content.contents[0].text);
+```
+
+#### `resources.subscribe(serverName: string, uri: string)`
+
+订阅命名服务器上特定资源的更新。
+
+```typescript
+async subscribe(serverName: string, uri: string): Promise<object>
+```
+
+示例：
+
+```typescript
+await mcpClient.resources.subscribe("myWeatherServer", "weather://current");
+```
+
+#### `resources.unsubscribe(serverName: string, uri: string)`
+
+取消订阅命名服务器上特定资源的更新。
+
+```typescript
+async unsubscribe(serverName: string, uri: string): Promise<object>
+```
+
+示例：
+
+```typescript
+await mcpClient.resources.unsubscribe("myWeatherServer", "weather://current");
+```
+
+#### `resources.onUpdated(serverName: string, handler: (params: { uri: string }) => void)`
+
+设置一个通知处理器，当特定服务器上订阅的资源更新时将调用该处理器。
+
+```typescript
+async onUpdated(serverName: string, handler: (params: { uri: string }) => void): Promise<void>
+```
+
+示例：
+
+```typescript
+mcpClient.resources.onUpdated("myWeatherServer", (params) => {
+  console.log(`myWeatherServer 上的资源已更新: ${params.uri}`);
+  // 您可能希望在此重新获取资源内容
+  // await mcpClient.resources.read("myWeatherServer", params.uri);
+});
+```
+
+#### `resources.onListChanged(serverName: string, handler: () => void)`
+
+设置一个通知处理器，当特定服务器上可用资源的整体列表发生变化时将调用该处理器。
+
+```typescript
+async onListChanged(serverName: string, handler: () => void): Promise<void>
+```
+
+示例：
+
+```typescript
+mcpClient.resources.onListChanged("myWeatherServer", () => {
+  console.log("myWeatherServer 上的资源列表已更改。");
+  // 您应该重新获取资源列表
+  // await mcpClient.resources.list();
+});
+```
+
+### `elicitation` 属性
+
+`MCPClient` 实例具有一个 `elicitation` 属性，提供对征求相关操作的访问。征求允许 MCP 服务器从用户请求结构化信息。
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers 配置... */
+});
+
+// 设置征求处理器
+mcpClient.elicitation.onRequest("serverName", async (request) => {
+  // 处理来自服务器的征求请求
+  console.log("服务器请求:", request.message);
+  console.log("模式:", request.requestedSchema);
+
+  // 返回用户响应
+  return {
+    action: "accept",
+    content: { name: "John Doe", email: "john@example.com" },
+  };
+});
+```
+
+#### `elicitation.onRequest(serverName: string, handler: ElicitationHandler)`
+
+设置一个处理器函数，当任何连接的 MCP 服务器发送征求请求时将调用该函数。处理器接收请求并必须返回响应。
+
+**ElicitationHandler 函数：**
+
+处理器函数接收一个包含以下内容的请求对象：
+
+- `message`：描述需要什么信息的可读消息
+- `requestedSchema`：定义预期响应结构的 JSON 模式
+
+处理器必须返回一个包含以下内容的 `ElicitResult`：
+
+- `action`：`'accept'`、`'decline'` 或 `'cancel'` 之一
+- `content`：用户的数据（仅当 action 为 `'accept'` 时）
+
+**示例：**
+
+```typescript
+mcpClient.elicitation.onRequest("serverName", async (request) => {
+  console.log(`服务器请求: ${request.message}`);
+
+  // 示例：简单的用户输入收集
+  if (request.requestedSchema.properties.name) {
+    // 模拟用户接受并提供数据
+    return {
+      action: "accept",
+      content: {
+        name: "Alice Smith",
+        email: "alice@example.com",
+      },
+    };
+  }
+
+  // 模拟用户拒绝请求
+  return { action: "decline" };
+});
+```
+
+**完整的交互式示例：**
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+import { createInterface } from "readline";
+
+const readline = createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+function askQuestion(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    readline.question(question, (answer) => resolve(answer.trim()));
+  });
+}
+
+const mcpClient = new MCPClient({
+  servers: {
+    interactiveServer: {
+      url: new URL("http://localhost:3000/mcp"),
+    },
+  },
+});
+
+// 设置交互式征求处理器
+await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
+  console.log(`\n📋 服务器请求: ${request.message}`);
+  console.log("必需的信息:");
+
+  const schema = request.requestedSchema;
+  const properties = schema.properties || {};
+  const required = schema.required || [];
+  const content: Record<string, any> = {};
+
+  // 收集每个字段的输入
+  for (const [fieldName, fieldSchema] of Object.entries(properties)) {
+    const field = fieldSchema as any;
+    const isRequired = required.includes(fieldName);
+
+    let prompt = `${field.title || fieldName}`;
+    if (field.description) prompt += ` (${field.description})`;
+    if (isRequired) prompt += " *必填*";
+    prompt += ": ";
+
+    const answer = await askQuestion(prompt);
+
+    // 处理取消
+    if (answer.toLowerCase() === "cancel") {
+      return { action: "cancel" };
+    }
+
+    // 验证必填字段
+    if (answer === "" && isRequired) {
+      console.log(`❌ ${fieldName} 是必填的`);
+      return { action: "decline" };
+    }
+
+    if (answer !== "") {
+      content[fieldName] = answer;
+    }
+  }
+
+  // 确认提交
+  console.log("\n📝 您提供的信息:");
+  console.log(JSON.stringify(content, null, 2));
+
+  const confirm = await askQuestion(
+    "\n提交此信息吗？(yes/no/cancel): ",
+  );
+
+  if (confirm.toLowerCase() === "yes" || confirm.toLowerCase() === "y") {
+    return { action: "accept", content };
+  } else if (confirm.toLowerCase() === "cancel") {
+    return { action: "cancel" };
+  } else {
+    return { action: "decline" };
+  }
+});
+```
+
+### `prompts` 属性
+
+`MCPClient` 实例具有一个 `prompts` 属性，提供对提示词相关操作的访问。
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers 配置... */
+});
+
+// 通过 mcpClient.prompts 访问提示词方法
+const allPromptsByServer = await mcpClient.prompts.list();
+const { prompt, messages } = await mcpClient.prompts.get({
+  serverName: "myWeatherServer",
+  name: "current",
+});
+```
+
+#### `prompts.list()`
+
+从所有连接的 MCP 服务器检索所有可用的提示词，按服务器名称分组。
+
+```typescript
+async list(): Promise<Record<string, Prompt[]>>
+```
+
+示例：
+
+```typescript
+const promptsByServer = await mcpClient.prompts.list();
+for (const serverName in promptsByServer) {
+  console.log(`来自 ${serverName} 的提示词:`, promptsByServer[serverName]);
+}
+```
+
+#### `prompts.get({ serverName, name, args?, version? })`
+
+从服务器检索特定的提示词及其消息。
+
+```typescript
+async get({
+  serverName,
+  name,
+  args?,
+  version?,
+}: {
+  serverName: string;
+  name: string;
+  args?: Record<string, any>;
+  version?: string;
+}): Promise<{ prompt: Prompt; messages: PromptMessage[] }>
+```
+
+示例：
+
+```typescript
+const { prompt, messages } = await mcpClient.prompts.get({
+  serverName: "myWeatherServer",
+  name: "current",
+  args: { location: "London" },
+});
+console.log(prompt);
+console.log(messages);
+```
+
+#### `prompts.onListChanged(serverName: string, handler: () => void)`
+
+设置一个通知处理器，当特定服务器上可用提示词列表发生变化时将调用该处理器。
+
+```typescript
+async onListChanged(serverName: string, handler: () => void): Promise<void>
+```
+
+示例：
+
+```typescript
+mcpClient.prompts.onListChanged("myWeatherServer", () => {
+  console.log("myWeatherServer 上的提示词列表已更改。");
+  // 您应该重新获取提示词列表
+  // await mcpClient.prompts.list();
+});
+```
+
+### `progress` 属性
+
+`MCPClient` 实例具有一个 `progress` 属性，用于订阅 MCP 服务器在工具执行时发出的进度通知。
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      // 默认启用；设置为 false 以禁用
+      enableProgressTracking: true,
+    },
+  },
+});
+
+// 订阅特定服务器的进度更新
+await mcpClient.progress.onUpdate('myServer', (params) => {
+  console.log('📊 进度:', params.progress, '/', params.total);
+  if (params.message) console.log('消息:', params.message);
+  if (params.progressToken) console.log('令牌:', params.progressToken);
+});
+```
+
+#### `progress.onUpdate(serverName: string, handler)`
+
+注册一个处理器函数以接收来自指定服务器的进度更新。
+
+```typescript
+async onUpdate(
+  serverName: string,
+  handler: (params: {
+    progressToken: string;
+    progress: number;
+    total?: number;
+    message?: string;
+  }) => void,
+): Promise<void>
+```
+
+注意事项：
+
+- 当 `enableProgressTracking` 为 true（默认）时，工具调用包含一个 `progressToken`，以便您可以将更新关联到特定的运行。
+- 如果在执行工具时传递了 `runId`，它将被用作 `progressToken`。
+
+要禁用服务器的进度跟踪：
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      enableProgressTracking: false,
+    },
+  },
+});
+```
+
+## 征求
+
+征求是一项允许 MCP 服务器从用户请求结构化信息的功能。当服务器需要额外数据时，它可以发送一个征求请求，客户端通过提示用户来处理该请求。一个常见的示例是在工具调用期间。
+
+### 征求的工作原理
+
+1. **服务器请求**：MCP 服务器工具调用 `server.elicitation.sendRequest()` 并附带消息和模式
+2. **客户端处理器**：您的征求处理器函数被调用并接收请求
+3. **用户交互**：您的处理器收集用户输入（通过 UI、CLI 等）
+4. **响应**：您的处理器返回用户的响应（接受/拒绝/取消）
+5. **工具继续**：服务器工具接收响应并继续执行
+
+### 设置征求
+
+您必须在调用使用征求的工具之前设置征求处理器：
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+
+const mcpClient = new MCPClient({
+  servers: {
+    interactiveServer: {
+      url: new URL("http://localhost:3000/mcp"),
+    },
+  },
+});
+
+// 设置征求处理器
+mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
+  // 处理服务器对用户输入的请求
+  console.log(`服务器需要: ${request.message}`);
+
+  // 您的收集用户输入的逻辑
+  const userData = await collectUserInput(request.requestedSchema);
+
+  return {
+    action: "accept",
+    content: userData,
+  };
+});
+```
+
+### 响应类型
+
+您的征求处理器必须返回三种响应类型之一：
+
+- **接受**：用户提供了数据并确认提交
+
+  ```typescript
+  return {
+    action: "accept",
+    content: { name: "John Doe", email: "john@example.com" },
+  };
+  ```
+
+- **拒绝**：用户明确拒绝提供信息
+
+  ```typescript
+  return { action: "decline" };
+  ```
+
+- **取消**：用户 dismissal 或取消了请求
+  ```typescript
+  return { action: "cancel" };
+  ```
+
+### 基于模式的输入收集
+
+`requestedSchema` 提供服务器需要数据的结构：
+
+```typescript
+await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
+  const { properties, required = [] } = request.requestedSchema;
+  const content: Record<string, any> = {};
+
+  for (const [fieldName, fieldSchema] of Object.entries(properties || {})) {
+    const field = fieldSchema as any;
+    const isRequired = required.includes(fieldName);
+
+    // 根据字段类型和要求收集输入
+    const value = await promptUser({
+      name: fieldName,
+      title: field.title,
+      description: field.description,
+      type: field.type,
+      required: isRequired,
+      format: field.format,
+      enum: field.enum,
+    });
+
+    if (value !== null) {
+      content[fieldName] = value;
+    }
+  }
+
+  return { action: "accept", content };
+});
+```
+
+### 最佳实践
+
+- **始终处理征求**：在调用可能使用征求的工具之前设置处理器
+- **验证输入**：检查是否提供了必填字段
+- **尊重用户选择**：优雅地处理拒绝和取消响应
+- **清晰的 UI**：让用户清楚正在请求什么信息以及为什么
+- **安全性**：永远不要自动接受敏感信息的请求
+
+## OAuth 身份验证
+
+要连接需要根据 [MCP 身份验证规范](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization) 进行 OAuth 身份验证的 MCP 服务器，请使用 `MCPOAuthClientProvider`：
+
+```typescript
+import { MCPClient, MCPOAuthClientProvider } from "@mastra/mcp";
+
+// 创建 OAuth 提供程序
+const oauthProvider = new MCPOAuthClientProvider({
+  redirectUrl: "http://localhost:3000/oauth/callback",
+  clientMetadata: {
+    redirect_uris: ["http://localhost:3000/oauth/callback"],
+    client_name: "My MCP Client",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+  },
+  onRedirectToAuthorization: (url) => {
+    // 处理授权重定向（打开浏览器、重定向响应等）
+    console.log(`请访问: ${url}`);
+  },
+});
+
+// 将提供程序与 MCPClient 一起使用
+const client = new MCPClient({
+  servers: {
+    protectedServer: {
+      url: new URL("https://mcp.example.com/mcp"),
+      authProvider: oauthProvider,
+    },
+  },
+});
+```
+
+### 快速令牌提供程序
+
+用于测试或当您已经拥有有效的访问令牌时：
+
+```typescript
+import { MCPClient, createSimpleTokenProvider } from "@mastra/mcp";
+
+const provider = createSimpleTokenProvider("your-access-token", {
+  redirectUrl: "http://localhost:3000/callback",
+  clientMetadata: {
+    redirect_uris: ["http://localhost:3000/callback"],
+    client_name: "Test Client",
+  },
+});
+
+const client = new MCPClient({
+  servers: {
+    testServer: {
+      url: new URL("https://mcp.example.com/mcp"),
+      authProvider: provider,
+    },
+  },
+});
+```
+
+### 自定义令牌存储
+
+要在会话之间持久化令牌存储，实现 `OAuthStorage` 接口：
+
+```typescript
+import { MCPOAuthClientProvider, OAuthStorage } from "@mastra/mcp";
+
+class DatabaseOAuthStorage implements OAuthStorage {
+  constructor(private db: Database, private userId: string) {}
+
+  async set(key: string, value: string): Promise<void> {
+    await this.db.query(
+      "INSERT INTO oauth_tokens (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET value = ?",
+      [this.userId, key, value, value]
+    );
+  }
+
+  async get(key: string): Promise<string | undefined> {
+    const result = await this.db.query(
+      "SELECT value FROM oauth_tokens WHERE user_id = ? AND key = ?",
+      [this.userId, key]
+    );
+    return result?.[0]?.value;
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.db.query(
+      "DELETE FROM oauth_tokens WHERE user_id = ? AND key = ?",
+      [this.userId, key]
+    );
+  }
+}
+
+const provider = new MCPOAuthClientProvider({
+  redirectUrl: "http://localhost:3000/callback",
+  clientMetadata: { /* ... */ },
+  storage: new DatabaseOAuthStorage(db, "user-123"),
+});
+```
+
+## 示例
+
+### 静态工具配置
+
+对于整个应用程序只有一个 MCP 服务器连接的工具，使用 `listTools()` 并将工具传递给您的代理：
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+
+const mcp = new MCPClient({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+      log: (logMessage) => {
+        console.log(`[${logMessage.level}] ${logMessage.message}`);
+      },
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+    },
+  },
+  timeout: 30000, // 全局 30 秒超时
+});
+
+// 创建可以访问所有工具的代理
+const agent = new Agent({
+  id: "multi-tool-agent",
+  name: "Multi-tool Agent",
+  instructions: "您可以访问多个工具服务器。",
+  model: "openai/gpt-5.1",
+  tools: await mcp.listTools(),
+});
+
+// 使用资源方法的示例
+async function checkWeatherResource() {
+  try {
+    const weatherResources = await mcp.resources.list();
+    if (weatherResources.weather && weatherResources.weather.length > 0) {
+      const currentWeatherURI = weatherResources.weather[0].uri;
+      const weatherData = await mcp.resources.read(
+        "weather",
+        currentWeatherURI,
+      );
+      console.log("天气数据:", weatherData.contents[0].text);
+    }
+  } catch (error) {
+    console.error("获取天气资源时出错:", error);
+  }
+}
+checkWeatherResource();
+
+// 使用提示词方法的示例
+async function checkWeatherPrompt() {
+  try {
+    const weatherPrompts = await mcp.prompts.list();
+    if (weatherPrompts.weather && weatherPrompts.weather.length > 0) {
+      const currentWeatherPrompt = weatherPrompts.weather.find(
+        (p) => p.name === "current",
+      );
+      if (currentWeatherPrompt) {
+        console.log("天气提示词:", currentWeatherPrompt);
+      } else {
+        console.log("未找到当前天气提示词");
+      }
+    }
+  } catch (error) {
+    console.error("获取天气提示词时出错:", error);
+  }
+}
+checkWeatherPrompt();
+```
+
+### 动态工具集
+
+当您需要为每个用户创建新的 MCP 连接时，使用 `listToolsets()` 并在调用 stream 或 generate 时添加工具：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MCPClient } from "@mastra/mcp";
+
+// 首先创建代理，不带任何工具
+const agent = new Agent({
+  id: "multi-tool-agent",
+  name: "Multi-tool Agent",
+  instructions: "您可以帮助用户检查股票和天气。",
+  model: "openai/gpt-5.1",
+});
+
+// 之后使用用户特定配置配置 MCP
+const mcp = new MCPClient({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "user-123-api-key",
+      },
+      timeout: 20000, // 服务器特定超时
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer user-123-token`,
+        },
+      },
+    },
+  },
+});
+
+// 将所有工具集传递给 stream() 或 generate()
+const response = await agent.stream(
+  "AAPL 的情况如何，天气怎么样？",
+  {
+    toolsets: await mcp.listToolsets(),
+  },
+);
+```
+
+## 实例管理
+
+`MCPClient` 类包含用于管理多个实例的内置内存泄漏预防功能：
+
+1. 创建多个具有相同配置但没有 `id` 的实例将抛出错误以防止内存泄漏
+2. 如果您需要具有相同配置的多个实例，请为每个实例提供唯一的 `id`
+3. 在重新创建具有相同配置的实例之前调用 `await configuration.disconnect()`
+4. 如果您只需要一个实例，考虑将配置移到更高的作用域以避免重新创建
+
+例如，如果您尝试创建多个具有相同配置但没有 `id` 的实例：
+
+```typescript
+// 第一个实例 - 正常
+const mcp1 = new MCPClient({
+  servers: {
+    /* ... */
+  },
+});
+
+// 第二个实例，相同配置 - 将抛出错误
+const mcp2 = new MCPClient({
+  servers: {
+    /* ... */
+  },
+});
+
+// 要修复，请执行以下操作之一：
+// 1. 添加唯一 ID
+const mcp3 = new MCPClient({
+  id: "instance-1",
+  servers: {
+    /* ... */
+  },
+});
+
+// 2. 或在重新创建之前断开连接
+await mcp1.disconnect();
+const mcp4 = new MCPClient({
+  servers: {
+    /* ... */
+  },
+});
+```
+
+## 服务器生命周期
+
+MCPClient 优雅地处理服务器连接：
+
+1. 多服务器的自动连接管理
+2. 优雅的服务器关闭，防止开发过程中出现错误消息
+3. 断开连接时正确清理资源
+
+## 使用自定义 Fetch 进行动态身份验证
+
+对于 HTTP 服务器，您可以提供自定义 `fetch` 函数来处理动态身份验证、请求拦截或其他自定义行为。当您需要在每个请求上刷新令牌或自定义请求行为时，这特别有用。
+
+提供 `fetch` 后，`requestInit`、`eventSourceInit` 和 `authProvider` 变为可选，因为您可以在自定义 fetch 函数中处理这些问题。
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    apiServer: {
+      url: new URL("https://api.example.com/mcp"),
+      fetch: async (url, init) => {
+        // 在每个请求上刷新令牌
+        const token = await getAuthToken(); // 您的令牌刷新逻辑
+
+        return fetch(url, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      },
+    },
+  },
+});
+```
+
+## 使用 SSE 请求头
+
+使用传统的 SSE MCP 传输时，由于 MCP SDK 中的一个 bug，您必须同时配置 `requestInit` 和 `eventSourceInit`。或者，您可以使用自定义 `fetch` 函数，该函数将自动用于 POST 请求和 SSE 连接：
+
+```ts
+// 选项 1：使用 requestInit 和 eventSourceInit（SSE 需要）
+const sseClient = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      // 注意：仅 requestInit 不足以支持 SSE
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+      // 对于使用自定义标头的 SSE 连接，这也需要
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set("Authorization", "Bearer your-token");
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
+    },
+  },
+});
+
+// 选项 2：使用自定义 fetch（更简单，适用于流式 HTTP 和 SSE）
+const sseClientWithFetch = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      fetch: async (url, init) => {
+        const headers = new Headers(init?.headers || {});
+        headers.set("Authorization", "Bearer your-token");
+        return fetch(url, {
+          ...init,
+          headers,
+        });
+      },
+    },
+  },
+});
+```
+
+## 相关信息
+
+- 要创建 MCP 服务器，请参阅 [MCPServer 文档](./mcp-server)。
+- 有关模型上下文协议的更多信息，请参阅 [@modelcontextprotocol/sdk 文档](https://github.com/modelcontextprotocol/typescript-sdk)。

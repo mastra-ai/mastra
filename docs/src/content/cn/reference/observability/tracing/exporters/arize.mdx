@@ -1,0 +1,212 @@
+---
+title: "参考：ArizeExporter | 可观测性"
+description: "使用 OpenInference 的 Arize 追踪导出器"
+packages:
+  - "@mastra/arize"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# ArizeExporter
+
+将追踪数据发送到 Arize Phoenix、Arize AX 或任何支持 OpenInference 语义约定的 OpenTelemetry 兼容可观测性平台。
+
+## 构造函数
+
+```typescript
+new ArizeExporter(config: ArizeExporterConfig)
+```
+
+## ArizeExporterConfig
+
+```typescript
+type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
+  // Phoenix / OpenTelemetry 配置
+  endpoint?: string;
+  apiKey?: string;
+
+  // Arize AX 配置
+  spaceId?: string;
+
+  // 通用配置
+  projectName?: string;
+  headers?: Record<string, string>;
+}
+```
+
+继承自 `OtelExporterConfig`（排除 `provider`），包括：
+- `timeout?: number` - 导出超时时间（毫秒）（默认：30000）
+- `batchSize?: number` - 每批的跨度数（默认：512）
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：WARN）
+- `resourceAttributes?: Record<string, any>` - 自定义资源属性
+
+### 元数据传递
+
+非保留的跨度属性被序列化为 OpenInference `metadata` 负载。通过 `tracingOptions.metadata` 添加（例如 `companyId`、`tier`）。保留字段如 `input`、`output`、`sessionId`、线程/用户 ID 和 OpenInference ID 会自动排除。
+
+<PropertiesTable
+  props={[
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "追踪导出的收集器端点。回退到 PHOENIX_ENDPOINT 环境变量。Phoenix 必需。",
+      required: false,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "身份验证的 API 密钥。回退到 ARIZE_API_KEY 或 PHOENIX_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "spaceId",
+      type: "string",
+      description:
+        "Arize AX 空间标识符。回退到 ARIZE_SPACE_ID 环境变量。Arize AX 必需。",
+      required: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "项目名称。回退到 ARIZE_PROJECT_NAME 或 PHOENIX_PROJECT_NAME 环境变量。",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "OTLP 请求的附加标头",
+      required: false,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description:
+        "导出跨度前的超时时间（毫秒）（默认：30000）",
+      required: false,
+    },
+    {
+      name: "batchSize",
+      type: "number",
+      description: "导出前每批的跨度数（默认：512）",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "日志记录器级别（默认：'warn'）",
+      required: false,
+    },
+    {
+      name: "resourceAttributes",
+      type: "Record<string, any>",
+      description: "添加到每个跨度的自定义资源属性",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到配置的端点。
+
+### export
+
+```typescript
+async export(spans: ReadOnlySpan[]): Promise<void>
+```
+
+使用 OpenTelemetry 和 OpenInference 语义约定批量导出跨度。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的跨度到配置的端点而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新待处理的数据并关闭客户端。
+
+## 使用方法
+
+### 零配置（使用环境变量）
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+// 对于 Phoenix：设置 PHOENIX_ENDPOINT、PHOENIX_API_KEY、PHOENIX_PROJECT_NAME
+// 对于 Arize AX：设置 ARIZE_SPACE_ID、ARIZE_API_KEY、ARIZE_PROJECT_NAME
+const exporter = new ArizeExporter();
+```
+
+### Phoenix 配置
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+const exporter = new ArizeExporter({
+  endpoint: "http://localhost:6006/v1/traces",
+  apiKey: process.env.PHOENIX_API_KEY, // 本地 Phoenix 可选
+  projectName: "my-ai-project",
+});
+```
+
+### Arize AX 配置
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+const exporter = new ArizeExporter({
+  spaceId: process.env.ARIZE_SPACE_ID!,
+  apiKey: process.env.ARIZE_API_KEY!,
+  projectName: "my-ai-project",
+});
+```
+
+## OpenInference 语义约定
+
+ArizeExporter 为生成式 AI 应用程序实现了 [OpenInference 语义约定](https://github.com/Arize-ai/openinference/tree/main/spec)，在不同可观测性平台之间提供标准化的追踪结构。
+
+## 标签支持
+
+ArizeExporter 支持追踪标签用于分类和筛选。标签仅应用于根跨度，并映射到原生 OpenInference `tag.tags` 语义约定。
+
+### 使用方法
+
+```typescript
+const result = await agent.generate("Hello", {
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### 标签的存储方式
+
+标签使用 OpenInference `tag.tags` 属性存储：
+
+```json
+{
+  "tag.tags": ["production", "experiment-v2", "user-request"]
+}
+```
+
+## 相关内容
+
+- [ArizeExporter 文档](/docs/cn/docs/observability/tracing/exporters/arize)
+- [Phoenix 文档](https://docs.arize.com/phoenix)
+- [Arize AX 文档](https://docs.arize.com/)

@@ -1,0 +1,71 @@
+---
+title: "参考文档：Agent.listTools() | 智能体"
+description: "Mastra 智能体中 `Agent.listTools()` 方法的文档，用于检索智能体可以使用的工具。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.listTools()
+
+`.listTools()` 方法检索为智能体配置的工具，如果它们是函数则解析它们。这些工具扩展了智能体的能力，允许它执行特定操作或访问外部系统。
+
+## 使用示例
+
+```typescript
+await agent.listTools();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "包含请求上下文的选择性配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "TTools | Promise<TTools>",
+      description:
+        "为智能体配置的工具，可以是直接对象，也可以是解析为工具的 promise。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.listTools({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [与智能体一起使用工具](/docs/cn/docs/agents/using-tools)
+- [创建工具](/docs/cn/docs/mcp/overview)

@@ -1,0 +1,232 @@
+---
+title: "参考：Memory 类 | 内存"
+description: "Mastra 中 `Memory` 类的文档，该类提供了管理对话历史和基于线程的消息存储的强大系统。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
+---
+
+# Memory 类
+
+`Memory` 类在 Mastra 中提供了管理对话历史和基于线程的消息存储的强大系统。它支持对话的持久化存储、语义搜索功能和高效的消息检索。您必须为对话历史配置存储提供程序，如果启用语义回忆，还需要提供向量存储和嵌入模型。
+
+## 使用示例
+
+```typescript title="src/mastra/agents/test-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "test-agent",
+  instructions: "你是一个有记忆功能的智能体。",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+});
+```
+
+> 要在智能体上启用 `workingMemory`，需要在主 Mastra 实例上配置存储提供程序。详见 [Mastra 类](../core/mastra-class)。
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraCompositeStore",
+      description:
+        "用于持久化内存数据的存储实现。如果未提供，默认为 `new DefaultStorage({ config: { url: \"file:memory.db\" } })`。",
+      isOptional: true,
+    },
+    {
+      name: "vector",
+      type: "MastraVector | false",
+      description:
+        "用于语义搜索功能的向量存储。设置为 `false` 以禁用向量操作。",
+      isOptional: true,
+    },
+    {
+      name: "embedder",
+      type: "EmbeddingModel<string> | EmbeddingModelV2<string>",
+      description:
+        "用于向量嵌入的嵌入模型实例。启用语义回忆时需要此参数。",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "MemoryConfig",
+      description: "内存配置选项。",
+      isOptional: true,
+    },
+
+  ]}
+/>
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description:
+        "要检索的最近消息数量。设置为 false 以禁用。",
+      isOptional: true,
+      defaultValue: "10",
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description:
+        "为 true 时，防止内存保存新消息，并将工作内存作为只读上下文提供（不包含 updateWorkingMemory 工具）。适用于只读操作，如预览、内部路由智能体或应引用但不应修改内存的子智能体。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+      description:
+        "在消息历史中启用语义搜索。可以是布尔值或带配置选项的对象。启用时，需要同时配置向量存储和嵌入模型。默认 topK 为 4，默认 messageRange 为 {before: 1, after: 1}。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "workingMemory",
+      type: "WorkingMemory",
+      description:
+        "工作内存功能的配置。可以是 `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` 或 `{ enabled: boolean }` 以禁用。",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, template: '# 用户信息\n- **名**：\n- **姓**：\n...' }",
+    },
+    {
+      name: "observationalMemory",
+      type: "boolean | ObservationalMemoryOptions",
+      description:
+        "为长上下文智能体内存启用观察内存。设置为 `true` 使用默认值，或传递配置对象以自定义令牌预算、模型和范围。详见[观察内存参考](/reference/memory/observational-memory)了解配置详情。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "generateTitle",
+      type: "boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }",
+      description:
+        "控制从用户第一条消息自动生成线程标题。可以是布尔值或带自定义模型和指令的对象。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "Memory",
+      description: "具有指定配置的新 Memory 实例。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/test-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+
+export const agent = new Agent({
+  name: "test-agent",
+  instructions: "你是一个有记忆功能的智能体。",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'test-agent-storage',
+      url: "file:./working-memory.db",
+    }),
+    vector: new LibSQLVector({
+      id: 'test-agent-vector',
+      url: "file:./vector-memory.db",
+    }),
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+        scope: "resource",
+      },
+      workingMemory: {
+        enabled: true,
+      },
+      generateTitle: true,
+    },
+  }),
+});
+```
+
+## PostgreSQL 索引配置
+
+```typescript title="src/mastra/agents/pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { PgStore, PgVector } from "@mastra/pg";
+
+export const agent = new Agent({
+  name: "pg-agent",
+  instructions: "你是一个具有优化 PostgreSQL 内存的智能体。",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new PgStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL,
+    }),
+    vector: new PgVector({
+      id: 'pg-agent-vector',
+      connectionString: process.env.DATABASE_URL,
+    }),
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+    options: {
+      lastMessages: 20,
+      semanticRecall: {
+        topK: 5,
+        messageRange: 3,
+        scope: "resource",
+        indexConfig: {
+          type: "hnsw", // 使用 HNSW 以获得更好的性能
+          metric: "dotproduct", // 适用于 OpenAI 嵌入
+          m: 16, // 双向链接数量
+          efConstruction: 64, // 构建时候选列表大小
+        },
+      },
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+});
+```
+
+### 相关内容
+
+- [内存入门指南](/docs/cn/docs/memory/overview)
+- [语义回忆](/docs/cn/docs/memory/semantic-recall)
+- [工作内存](/docs/cn/docs/memory/working-memory)
+- [观察内存](/docs/cn/docs/memory/observational-memory)
+- [内存处理器](/docs/cn/docs/memory/memory-processors)
+- [createThread](/reference/memory/createThread)
+- [recall](/reference/memory/recall)
+- [getThreadById](/reference/memory/getThreadById)
+- [listThreads](/reference/memory/listThreads)
+- [deleteMessages](/reference/memory/deleteMessages)
+- [cloneThread](/reference/memory/cloneThread)
+- [克隆工具方法](/reference/memory/clone-utilities)

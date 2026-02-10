@@ -1,0 +1,86 @@
+---
+title: "参考：Vectors API | 客户端 SDK"
+description: 了解如何在 Mastra 中使用 client-js SDK 处理向量嵌入以进行语义搜索和相似性匹配。
+packages:
+  - "@mastra/client-js"
+---
+
+# Vectors API
+
+Vectors API 提供了在 Mastra 中处理向量嵌入以进行语义搜索和相似性匹配的方法。
+
+## 处理向量
+
+获取向量存储实例：
+
+```typescript
+const vector = mastraClient.getVector("vector-name");
+```
+
+## 向量方法
+
+### 获取向量索引详情
+
+检索特定向量索引的信息：
+
+```typescript
+const details = await vector.details("index-name");
+```
+
+### 创建向量索引
+
+创建新的向量索引：
+
+```typescript
+const result = await vector.createIndex({
+  indexName: "new-index",
+  dimension: 128,
+  metric: "cosine", // 'cosine', 'euclidean', 或 'dotproduct'
+});
+```
+
+### Upsert 向量
+
+在索引中添加或更新向量：
+
+```typescript
+const ids = await vector.upsert({
+  indexName: "my-index",
+  vectors: [
+    [0.1, 0.2, 0.3], // 第一个向量
+    [0.4, 0.5, 0.6], // 第二个向量
+  ],
+  metadata: [{ label: "first" }, { label: "second" }],
+  ids: ["id1", "id2"], // 可选：自定义 ID
+});
+```
+
+### 查询向量
+
+搜索相似向量：
+
+```typescript
+const results = await vector.query({
+  indexName: "my-index",
+  queryVector: [0.1, 0.2, 0.3],
+  topK: 10,
+  filter: { label: "first" }, // 可选：元数据过滤器
+  includeVector: true, // 可选：在结果中包含向量
+});
+```
+
+### 获取所有索引
+
+列出所有可用的索引：
+
+```typescript
+const indexes = await vector.getIndexes();
+```
+
+### 删除索引
+
+删除向量索引：
+
+```typescript
+const result = await vector.delete("index-name");
+```

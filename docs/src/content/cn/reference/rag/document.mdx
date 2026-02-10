@@ -1,0 +1,133 @@
+---
+title: "参考：MDocument | 文档处理 | RAG"
+description: "Mastra 中 MDocument 类的文档，用于处理文档和分块。"
+packages:
+  - "@mastra/rag"
+---
+
+# MDocument
+
+MDocument 类为 RAG 应用程序处理文档。主要方法是 `.chunk()` 和 `.extractMetadata()`。
+
+## 构造函数
+
+<PropertiesTable
+  content={[
+    {
+      name: "docs",
+      type: "Array<{ text: string, metadata?: Record<string, any> }>",
+      description:
+        "带有文本内容和可选元数据的文档块数组",
+    },
+    {
+      name: "type",
+      type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
+      description: "文档内容的类型",
+    },
+  ]}
+/>
+
+## 静态方法
+
+### fromText()
+
+从纯文本内容创建文档。
+
+```typescript
+static fromText(text: string, metadata?: Record<string, any>): MDocument
+```
+
+### fromHTML()
+
+从 HTML 内容创建文档。
+
+```typescript
+static fromHTML(html: string, metadata?: Record<string, any>): MDocument
+```
+
+### fromMarkdown()
+
+从 Markdown 内容创建文档。
+
+```typescript
+static fromMarkdown(markdown: string, metadata?: Record<string, any>): MDocument
+```
+
+### fromJSON()
+
+从 JSON 内容创建文档。
+
+```typescript
+static fromJSON(json: string, metadata?: Record<string, any>): MDocument
+```
+
+## 实例方法
+
+### chunk()
+
+将文档分割成块，并可选择提取元数据。
+
+```typescript
+async chunk(params?: ChunkParams): Promise<Chunk[]>
+```
+
+有关详细选项，请参阅 [chunk() 参考](./chunk)。
+
+### getDocs()
+
+返回处理后的文档块数组。
+
+```typescript
+getDocs(): Chunk[]
+```
+
+### getText()
+
+从块返回文本字符串数组。
+
+```typescript
+getText(): string[]
+```
+
+### getMetadata()
+
+从块返回元数据对象数组。
+
+```typescript
+getMetadata(): Record<string, any>[]
+```
+
+### extractMetadata()
+
+使用指定的提取器提取元数据。详细信息请参阅 [ExtractParams 参考](./extract-params)。
+
+```typescript
+async extractMetadata(params: ExtractParams): Promise<MDocument>
+```
+
+## 示例
+
+```typescript
+import { MDocument } from "@mastra/rag";
+
+// 从文本创建文档
+const doc = MDocument.fromText("您的内容在这里");
+
+// 使用元数据提取分割成块
+const chunks = await doc.chunk({
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ],
+  extract: {
+    summary: true, // 使用默认设置提取摘要
+    keywords: true, // 使用默认设置提取关键词
+  },
+});
+
+// 获取处理后的块
+const docs = doc.getDocs();
+const texts = doc.getText();
+const metadata = doc.getMetadata();
+```

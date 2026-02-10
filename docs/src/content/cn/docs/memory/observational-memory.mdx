@@ -1,0 +1,187 @@
+---
+title: "观察记忆 | 内存"
+description: "了解观察记忆如何在保持智能体上下文窗口小巧的同时，在对话之间保留长期记忆。"
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# 观察记忆
+
+**新增于：** `@mastra/memory@1.1.0`
+
+观察记忆（OM）是 Mastra 用于长上下文智能体记忆的记忆系统。两个后台智能体——**观察者**和**反思者**——观察您智能体的对话，并维护一个密集的观察日志，随着对话的增长，它会替换原始消息历史记录。
+
+## 快速入门
+
+在创建智能体时，在内存选项中启用 `observationalMemory`：
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const agent = new Agent({
+  name: "my-agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-5-mini",
+  memory: new Memory({
+    options: {
+      // highlight-next-line
+      observationalMemory: true,
+    },
+  }),
+});
+```
+
+就这样。您的智能体现在具有跨对话持久化的类人长期记忆。
+
+有关完整 API 详情，请参阅[配置选项](/reference/memory/observational-memory)。
+
+:::note
+
+OM 目前仅支持 `@mastra/pg`、`@mastra/libsql` 和 `@mastra/mongodb` 存储适配器。
+它还使用后台智能体来管理记忆。默认模型（可配置）是 `google/gemini-2.5-flash`，因为这是我们测试最多的模型。
+
+:::
+
+## 优势
+
+- **提示缓存**：OM 的上下文是稳定的——观察结果会随时间附加，而不是每次交互都动态检索。这保持了提示前缀的可缓存性，从而降低了成本。
+- **压缩**：原始消息历史记录和工具结果被压缩成密集的观察日志。更小的上下文意味着更快的响应和更长的连贯对话。
+- **零上下文腐烂**：智能体看到相关信息而不是嘈杂的工具调用和不相关的标记，因此智能体在长时间会话中保持任务专注。
+
+## 工作原理
+
+您不会记得曾经进行过的每一次对话的每一个字。您会下意识地观察发生了什么，然后您的大脑会反思——重新组织、组合并将信息压缩成长期记忆。OM 的工作方式相同。
+
+每次智能体响应时，它都会看到一个包含系统提示、最近消息历史记录和任何注入上下文的上下文窗口。上下文窗口是有限的——即使是具有大标记限制的模型，当窗口已满时性能也会下降。这会导致两个问题：
+
+- **上下文腐烂**：智能体携带的原始消息历史记录越多，其性能就越差。
+- **上下文浪费**：大部分历史记录包含的标记不再需要让智能体保持任务专注。
+
+OM 通过将旧上下文压缩成密集的观察来解决这两个问题。
+
+### 观察
+
+当消息历史记录标记超过阈值时（默认：30,000），观察者会创建观察——关于发生了什么简洁的笔记：
+
+```
+Date: 2026-01-15
+- 🔴 12:10 用户正在构建一个使用 Supabase 身份验证的 Next.js 应用，截止日期为一周（意味着 2026 年 1 月 22 日）
+  - 🔴 12:10 应用程序使用带客户端水合的服务器组件
+  - 🟡 12:12 用户询问了受保护路由的中间件配置
+  - 🔴 12:15 用户说明应用程序名称是 "Acme Dashboard"
+```
+
+压缩率通常为 5-40 倍。观察者还跟踪**当前任务**和**建议的响应**，以便智能体能够从上次停下的地方继续。
+
+例如：使用 Playwright MCP 的智能体每个页面快照可能看到 50,000+ 个标记。使用 OM 时，观察者会观察交互并创建几百个关于页面上发生了什么以及采取了哪些操作的观察标记。智能体保持任务专注，而无需携带每一个原始快照。
+
+### 反思
+
+当观察超过其阈值时（默认：40,000 个标记），反思者会压缩它们——组合相关项目并反思模式。
+
+结果是一个三层系统：
+
+1. **最近的消息**：当前任务的精确对话历史记录
+2. **观察**：观察者所见内容的日志
+3. **反思**：当记忆变得太长时压缩的观察结果
+
+## 模型
+
+观察者和反思者在后台运行。任何与 Mastra 的模型路由配合使用的模型（例如 `openai/...`、`google/...`、`deepseek/...`）都可以使用。
+
+默认是 `google/gemini-2.5-flash`——它对于观察和反思都效果很好，其 1M 标记上下文窗口为反思者提供了空间。
+
+我们还测试了 `deepseek`、`qwen3` 和 `glm-4.7` 作为观察者。对于反思者，请确保模型的上下文窗口可以容纳所有观察结果。请注意，Claude 4.5 模型目前作为观察者或反思者效果不佳。
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: "deepseek/deepseek-reasoner",
+    },
+  },
+});
+```
+
+有关每个智能体使用不同模型的配置，请参阅[模型配置](/reference/memory/observational-memory#custom-model)。
+
+## 作用域
+
+### 线程作用域（默认）
+
+每个线程都有自己的观察。
+
+```typescript
+observationalMemory: {
+  scope: "thread",
+}
+```
+
+### 资源作用域
+
+观察在资源（通常是用户）的所有线程之间共享。启用跨对话记忆。
+
+```typescript
+observationalMemory: {
+  scope: "resource",
+}
+```
+
+:::warning
+
+在资源作用域中，*所有*线程中未被观察的消息会被一起处理。对于拥有许多现有线程的用户，这可能很慢。对现有应用程序使用线程作用域。
+
+:::
+
+## 标记预算
+
+OM 使用标记阈值来决定何时观察和反思。详情请参阅[标记预算配置](/reference/memory/observational-memory#shared-token-budget)。
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        // 何时运行观察者（默认：30,000）
+        messageTokens: 30_000,
+      },
+      reflection: {
+        // 何时运行反思者（默认：40,000）
+        observationTokens: 40_000,
+      },
+      // 让消息历史记录从观察预算中借用
+      shareTokenBudget: false,
+    },
+  },
+});
+```
+
+## 迁移现有线程
+
+无需手动迁移。当超过阈值时，OM 会懒惰地读取现有消息并观察它们。
+
+- **线程作用域**：当线程第一次超过 `observation.messageTokens` 时，观察者会处理积压的工作。
+- **资源作用域**：资源的所有线程中所有未被观察的消息会被一起处理。对于拥有许多现有线程的用户，这可能需要相当长的时间。
+
+## 在 Mastra Studio 中查看
+
+Mastra Studio 在内存选项卡中实时显示 OM 状态：标记使用情况、正在运行的模型、当前观察结果和反思历史。
+
+## 与其他记忆功能的比较
+
+- **[消息历史](/docs/cn/memory/message-history)**：当前对话的高保真记录
+- **[工作内存](/docs/cn/memory/working-memory)**：小型结构化状态（JSON 或标记语言），用于用户偏好、名称、目标
+- **[语义回忆](/docs/cn/memory/semantic-recall)**：基于 RAG 的相关过去消息检索
+
+如果您使用工作内存来存储随时间增长的对话摘要或正在进行的狀態，OM 更适合。工作内存用于小型结构化数据；OM 用于长时间运行的事件日志。OM 还会自动管理消息历史记录——`messageTokens` 设置控制观察运行前保留多少原始历史记录。
+
+实际上，OM 取代了工作内存和消息历史记录，并且具有更高的准确性（和更低的成本）比语义回忆。
+
+## 相关内容
+
+- [观察记忆参考](/reference/memory/observational-memory)
+- [内存概述](/docs/cn/memory/overview)
+- [消息历史](/docs/cn/memory/message-history)
+- [内存处理器](/docs/cn/memory/memory-processors)

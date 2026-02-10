@@ -1,0 +1,488 @@
+---
+title: "请求上下文 | 服务器"
+description: "了解如何使用 Mastra 的 RequestContext 为智能体提供动态的、请求特定的配置。"
+packages:
+  - "@mastra/core"
+---
+
+# 请求上下文
+
+智能体、工具和工作流都可以接受 `RequestContext` 作为参数，使请求特定的值可用于底层原语。
+
+## 何时使用 `RequestContext`
+
+当原语的行为应该根据运行时条件改变时使用 `RequestContext`。例如，您可能根据用户属性切换模型或存储后端，或根据语言调整指令和工具选择。
+
+:::note
+
+**注意：** `RequestContext` 主要用于将数据传入特定请求。它与智能体内存不同，智能体内存处理跨多次调用的对话历史和状态持久化。
+
+:::
+
+## 设置值
+
+将 `requestContext` 传入智能体、网络、工作流或工具调用，以使值在执行期间对所有底层原语可用。使用 `.set()` 在进行调用之前定义值。
+
+`.set()` 方法接受两个参数：
+
+1. **key**：用于标识值的名称。
+2. **value**：与该键关联的数据。
+
+```typescript
+import { RequestContext } from "@mastra/core/request-context";
+
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const requestContext = new RequestContext<UserTier>();
+requestContext.set("user-tier", "enterprise");
+
+const agent = mastra.getAgent("weatherAgent");
+await agent.generate("What's the weather in London?", {
+  requestContext,
+});
+
+const routingAgent = mastra.getAgent("routingAgent");
+routingAgent.network("What's the weather in London?", {
+  requestContext,
+});
+
+const run = await mastra.getWorkflow("weatherWorkflow").createRun();
+await run.start({
+  inputData: {
+    location: "London",
+  },
+  requestContext,
+});
+await run.resume({
+  resumeData: {
+    city: "New York",
+  },
+  requestContext,
+});
+
+await weatherTool.execute(
+  { location: "London" },
+  { requestContext },
+);
+```
+
+### 根据请求标头设置值
+
+您可以通过从请求中提取信息在服务器中间件中动态填充 `requestContext`。在此示例中，`temperature-unit` 根据 Cloudflare `CF-IPCountry` 标头设置，以确保响应匹配用户的区域设置。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { RequestContext } from "@mastra/core/request-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const requestContext = context.get("requestContext");
+
+        requestContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
+:::info
+
+有关如何使用服务器中间件，请访问[中间件](/docs/cn/server/middleware)。
+
+:::
+
+## 使用智能体访问值
+
+您可以从智能体中任何支持的配置选项访问 `requestContext` 参数。这些函数可以是同步的或 `async`。使用 `.get()` 方法从 `requestContext` 读取值。
+
+```typescript title="src/mastra/agents/weather-agent.ts"
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "Weather Agent",
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {}
+  },
+  model: ({ requestContext }) => {},
+  tools: ({ requestContext }) => {},
+  memory: ({ requestContext }) => {},
+});
+```
+
+您也可以将 `requestContext` 与其他选项一起使用，如 `agents`、`workflows`、`scorers`、`inputProcessors` 和 `outputProcessors`。
+
+### 动态指令
+
+智能体指令可以作为异步函数提供，使您能够在运行时动态解析提示。结合 `requestContext`，这可以实现以下模式：
+
+- **个性化**：根据用户属性、首选项或层级定制指令
+- **本地化**：根据区域设置调整语气、语言或行为
+- **A/B 测试**：为实验提供不同的提示变体
+- **外部提示管理**：从注册表服务获取提示而无需重新部署
+
+```typescript title="src/mastra/agents/dynamic-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const dynamicAgent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext?.get("user-tier");
+    const locale = requestContext?.get("locale");
+
+    // 根据用户层级个性化
+    const basePrompt = userTier === "enterprise"
+      ? "You are a premium support agent. Provide detailed, thorough responses with technical depth."
+      : "You are a helpful assistant. Be concise and friendly.";
+
+    // 本地化行为
+    const localeInstructions = locale === "ja"
+      ? "Respond in Japanese using formal keigo."
+      : "";
+
+    return `${basePrompt} ${localeInstructions}`.trim();
+  },
+  model: "openai/gpt-5.1",
+});
+```
+
+#### 从提示注册表获取
+
+如果您的组织使用提示注册表服务进行集中提示管理，您可以在运行时获取指令。这使您能够更新提示而无需重新部署，使用变体运行实验，并跟踪智能体之间的提示使用情况。
+
+```typescript title="src/mastra/agents/registry-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+// 您的提示注册表客户端
+import { promptRegistry } from "../lib/prompt-registry";
+
+export const registryAgent = new Agent({
+  id: "registry-agent",
+  name: "Registry Agent",
+  instructions: async ({ requestContext }) => {
+    const prompt = await promptRegistry.getPrompt({
+      promptId: "customer-support-agent",
+      // 传递用于变体选择或跟踪的上下文
+      variant: requestContext?.get("experiment-variant"),
+      userId: requestContext?.get("user-id"),
+    });
+
+    return prompt.content;
+  },
+  model: "openai/gpt-5.1",
+});
+```
+
+:::info
+
+访问[智能体](/reference/agents/agent)获取配置选项的完整列表。
+
+:::
+
+## 从工作流步骤访问值
+
+您可以从工作流步骤的 `execute` 函数访问 `requestContext` 参数。此函数可以是同步的或 async。使用 `.get()` 方法从 `requestContext` 读取值。
+
+```typescript title="src/mastra/workflows/weather-workflow.ts"
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const stepOne = createStep({
+  id: "step-one",
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {}
+  },
+});
+```
+
+:::info
+
+访问 [createStep()](/reference/workflows/step) 获取配置选项的完整列表。
+
+:::
+
+## 使用工具访问值
+
+您可以从工具的 `execute` 函数访问 `requestContext` 参数。此函数是 `async`。使用 `.get()` 方法从 `requestContext` 读取值。
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("user-tier") as UserTier["user-tier"] | undefined;
+
+    if (userTier === "enterprise") {}
+  },
+});
+```
+
+:::info
+
+访问 [createTool()](/reference/tools/create-tool) 获取配置选项的完整列表。
+
+:::
+
+## 保留的键
+
+Mastra 为安全目的保留特殊的上下文键。当由中间件设置时，这些键优先于客户端提供的值。服务器自动验证所有权，并在用户尝试访问他们不拥有的资源时返回 403 错误。
+
+```typescript
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+} from "@mastra/core/request-context";
+
+// 在中间件中：强制内存操作使用经过身份验证的用户 ID
+requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+
+// 在中间件中：设置已验证的线程 ID
+requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+```
+
+| 键 | 用途 |
+|-----|---------|
+| `MASTRA_RESOURCE_ID_KEY` | 强制所有内存操作使用此资源 ID。服务器验证访问的线程是否属于此资源，如果不是则返回 403。 |
+| `MASTRA_THREAD_ID_KEY` | 强制线程操作使用此线程 ID，覆盖客户端提供的值 |
+
+这些键用于在多租户应用程序中实现用户隔离。使用示例请参阅[授权中间件](/docs/cn/server/middleware#authorization-user-isolation)。
+
+## TypeScript 支持
+
+当您向 `RequestContext` 提供类型参数时，所有方法都是完全类型化的：
+
+```typescript
+import { RequestContext } from "@mastra/core/request-context";
+
+type MyContext = {
+  userId: string;
+  maxTokens: number;
+  isPremium: boolean;
+};
+
+const ctx = new RequestContext<MyContext>();
+
+// set() 强制正确的值类型
+ctx.set("userId", "user-123");   // ✓ 有效
+ctx.set("maxTokens", 4096);      // ✓ 有效
+ctx.set("maxTokens", "wrong");   // ✗ TypeScript 错误：期望数字
+
+// get() 自动返回正确的类型
+const tokens = ctx.get("maxTokens"); // 推断为 number
+const id = ctx.get("userId");        // 推断为 string
+
+// keys() 返回类型化的键
+for (const key of ctx.keys()) {
+  // key 是 "userId" | "maxTokens" | "isPremium"
+}
+
+// entries() 支持类型收窄
+for (const [key, value] of ctx.entries()) {
+  if (key === "maxTokens") {
+    // TypeScript 知道这里的 value 是 number
+    console.log(value.toFixed(2));
+  }
+  if (key === "userId") {
+    // TypeScript 知道这里的 value 是 string
+    console.log(value.toUpperCase());
+  }
+}
+```
+
+## 模式验证
+
+使用 `requestContextSchema` 定义一个 Zod 模式，用于在运行时验证请求上下文值。这可以及早捕获缺失或无效的上下文值，提供清晰的错误消息，并在组件中为您提供类型推断。
+
+### 智能体模式验证
+
+当您在智能体上定义 `requestContextSchema` 时，上下文在 `generate()` 或 `stream()` 开始时进行验证。如果验证失败，智能体会在任何 LLM 调用之前抛出 `MastraError`。
+
+```typescript title="src/mastra/agents/validated-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { z } from "zod";
+
+export const validatedAgent = new Agent({
+  id: "validated-agent",
+  name: "Validated Agent",
+  requestContextSchema: z.object({
+    userId: z.string(),
+    apiKey: z.string(),
+  }),
+  instructions: ({ requestContext }) => {
+    // 将所有值作为类型化对象访问
+    const { userId, apiKey } = requestContext.all;
+    // { userId: string; apiKey: string }
+
+    // 或使用 .get() 检索单个值
+    const id = requestContext.get("userId");
+    // string
+
+    return `You are helping user ${userId}`;
+  },
+  model: "openai/gpt-4o",
+});
+```
+
+当验证失败时，错误包括智能体 ID 和有关哪些字段失败的详细信息：
+
+```
+Request context validation failed for agent 'validated-agent':
+- apiKey: Required
+```
+
+### 工具模式验证
+
+当您在工具上定义 `requestContextSchema` 时，上下文在 `execute()` 运行之前进行验证。与智能体不同，工具返回验证错误对象而不是抛出错误：
+
+```typescript title="src/mastra/tools/validated-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const validatedTool = createTool({
+  id: "validated-tool",
+  description: "A tool that requires authenticated context",
+  inputSchema: z.object({
+    query: z.string(),
+  }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
+  execute: async (inputData, context) => {
+    // 将所有值作为类型化对象访问
+    const { userId } = context.requestContext?.all ?? {};
+    // { userId: string }
+
+    // 或使用 .get() 检索单个值
+    const id = context.requestContext?.get("userId");
+    // string | undefined
+
+    return { result: `Processed for ${userId}` };
+  },
+});
+```
+
+当验证失败时，工具返回错误对象而不是抛出错误：
+
+```json
+{
+  "error": true,
+  "message": "Request context validation failed for validated-tool. Please fix the following errors and try again:\n- userId: Required\n\nProvided context: {}"
+}
+```
+
+### 工作流模式验证
+
+当您在工作流上定义 `requestContextSchema` 时，上下文在 `run.start()` 开始时进行验证。如果验证失败，工作流会在任何步骤执行之前抛出错误。
+
+```typescript title="src/mastra/workflows/validated-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+// 定义一次模式并在工作流和步骤之间共享
+const workflowContextSchema = z.object({
+  tenantId: z.string(),
+});
+
+const step1 = createStep({
+  id: "step-1",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  // 添加模式到步骤以进行类型推断
+  requestContextSchema: workflowContextSchema,
+  execute: async ({ inputData, requestContext }) => {
+    // 将所有值作为类型化对象访问
+    const { tenantId } = requestContext.all;
+    // { tenantId: string }
+
+    // 或使用 .get() 检索单个值
+    const id = requestContext.get("tenantId");
+    // string
+
+    return { result: `Processed for tenant ${tenantId}` };
+  },
+});
+
+export const validatedWorkflow = createWorkflow({
+  id: "validated-workflow",
+  inputSchema: z.object({ message: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  requestContextSchema: workflowContextSchema,
+})
+  .then(step1)
+  .commit();
+```
+
+当验证失败时，工作流会抛出错误：
+
+```
+Request context validation failed for workflow 'validated-workflow':
+- tenantId: Required
+```
+
+步骤也可以定义自己的 `requestContextSchema` 进行步骤级验证。步骤验证在步骤的 `execute()` 函数之前运行。
+
+### 验证行为
+
+| 组件 | 属性 | 验证时机 | 失败时 |
+|-----------|----------|-------------------|------------|
+| 智能体 | `requestContextSchema` | `generate()` / `stream()` 开始时 | 抛出 `MastraError` |
+| 工具 | `requestContextSchema` | `execute()` 之前 | 返回错误对象 |
+| 工作流 | `requestContextSchema` | `run.start()` 开始时 | 抛出 `Error` |
+| 步骤 | `requestContextSchema` | 步骤 `execute()` 之前 | 步骤失败并出错 |
+
+### 最佳实践
+
+**与您的中间件匹配**：在模式中定义中间件设置的相同必需字段。这确保了中间件和组件之间的契约是明确的并经过验证。
+
+```typescript
+// 中间件设置这些字段
+requestContext.set("userId", user.id);
+requestContext.set("tenantId", tenant.id);
+
+// 模式验证它们存在
+requestContextSchema: z.object({
+  userId: z.string(),
+  tenantId: z.string(),
+})
+```
+
+**对条件上下文使用可选字段**：对可能不总是存在的值使用 `.optional()`。
+
+```typescript
+requestContextSchema: z.object({
+  userId: z.string(),               // 始终需要
+  experimentVariant: z.string().optional(), // 可能未设置
+})
+```
+
+**处理工具验证错误**：由于工具返回错误对象而不是抛出错误，请在工具执行关键时在智能体或工作流逻辑中检查错误。
+
+## 相关内容
+
+- [智能体请求上下文](/docs/cn/agents/overview#using-requestcontext)
+- [工作流请求上下文](../workflows/overview#using-requestcontext)
+- [服务器中间件](/docs/cn/server/middleware)
+- [授权中间件](/docs/cn/server/middleware#authorization-user-isolation)

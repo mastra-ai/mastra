@@ -1,0 +1,55 @@
+---
+title: "参考文档：Mastra.listGateways() | 核心"
+description: "列出所有注册的网关"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listGateways()
+
+返回所有已注册网关的记录，按其注册表键索引。
+
+## 使用示例
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra({
+  gateways: {
+    myGateway: new MyCustomGateway(),
+    anotherGateway: new AnotherGateway(),
+  },
+});
+
+const gateways = mastra.listGateways();
+console.log(Object.keys(gateways)); // ['myGateway', 'anotherGateway']
+
+// 遍历所有网关
+for (const [key, gateway] of Object.entries(gateways)) {
+  console.log(`${key}: ${gateway.name}`);
+}
+```
+
+## 参数
+
+无。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: 'gateways',
+      type: 'Record<string, MastraModelGateway>',
+      description: '按注册表键索引的网关实例记录',
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [Mastra.getGateway()](/reference/core/getGateway) - 按注册表键获取网关
+- [Mastra.getGatewayById()](/reference/core/getGatewayById) - 按 ID 获取网关
+- [Mastra.addGateway()](/reference/core/addGateway) - 添加网关
+- [MastraModelGateway](/reference/core/mastra-model-gateway) - 网关基类
+- [自定义网关指南](/models/gateways/custom-gateways) - 创建自定义网关

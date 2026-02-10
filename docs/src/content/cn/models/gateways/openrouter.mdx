@@ -1,0 +1,226 @@
+---
+title: "OpenRouter | 模型 | Mastra"
+description: "通过 OpenRouter 使用 AI 模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+
+
+# <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
+
+OpenRouter 聚合来自多个提供商的模型，并提供速率限制和故障转移等增强功能。通过 Mastra 的模型路由器访问 176 个模型。
+
+在 [OpenRouter 文档](https://openrouter.ai/models) 中了解更多。
+
+## 使用方法
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "openrouter/allenai/molmo-2-8b:free"
+});
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。详情请参阅 [OpenRouter 文档](https://openrouter.ai/models)。
+
+:::
+
+## 配置
+
+```bash
+# 使用网关 API 密钥
+OPENROUTER_API_KEY=your-gateway-key
+
+# 或直接使用提供商 API 密钥
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=ant-...
+```
+
+## 可用模型
+
+| 模型 |
+|------|
+| `allenai/molmo-2-8b:free` |
+| `anthropic/claude-3.5-haiku` |
+| `anthropic/claude-3.7-sonnet` |
+| `anthropic/claude-haiku-4.5` |
+| `anthropic/claude-opus-4` |
+| `anthropic/claude-opus-4.1` |
+| `anthropic/claude-opus-4.5` |
+| `anthropic/claude-opus-4.6` |
+| `anthropic/claude-sonnet-4` |
+| `anthropic/claude-sonnet-4.5` |
+| `arcee-ai/trinity-large-preview:free` |
+| `arcee-ai/trinity-mini:free` |
+| `black-forest-labs/flux.2-flex` |
+| `black-forest-labs/flux.2-klein-4b` |
+| `black-forest-labs/flux.2-max` |
+| `black-forest-labs/flux.2-pro` |
+| `bytedance-seed/seedream-4.5` |
+| `cognitivecomputations/dolphin-mistral-24b-venice-edition:free` |
+| `cognitivecomputations/dolphin3.0-mistral-24b` |
+| `cognitivecomputations/dolphin3.0-r1-mistral-24b` |
+| `deepseek/deepseek-chat-v3-0324` |
+| `deepseek/deepseek-chat-v3.1` |
+| `deepseek/deepseek-r1-0528-qwen3-8b:free` |
+| `deepseek/deepseek-r1-0528:free` |
+| `deepseek/deepseek-r1-distill-llama-70b` |
+| `deepseek/deepseek-r1-distill-qwen-14b` |
+| `deepseek/deepseek-r1:free` |
+| `deepseek/deepseek-v3-base:free` |
+| `deepseek/deepseek-v3.1-terminus` |
+| `deepseek/deepseek-v3.1-terminus:exacto` |
+| `deepseek/deepseek-v3.2` |
+| `deepseek/deepseek-v3.2-speciale` |
+| `featherless/qwerky-72b` |
+| `google/gemini-2.0-flash-001` |
+| `google/gemini-2.0-flash-exp:free` |
+| `google/gemini-2.5-flash` |
+| `google/gemini-2.5-flash-lite` |
+| `google/gemini-2.5-flash-lite-preview-09-2025` |
+| `google/gemini-2.5-flash-preview-09-2025` |
+| `google/gemini-2.5-pro` |
+| `google/gemini-2.5-pro-preview-05-06` |
+| `google/gemini-2.5-pro-preview-06-05` |
+| `google/gemini-3-flash-preview` |
+| `google/gemini-3-pro-preview` |
+| `google/gemma-2-9b-it` |
+| `google/gemma-3-12b-it` |
+| `google/gemma-3-12b-it:free` |
+| `google/gemma-3-27b-it` |
+| `google/gemma-3-27b-it:free` |
+| `google/gemma-3-4b-it` |
+| `google/gemma-3-4b-it:free` |
+| `google/gemma-3n-e2b-it:free` |
+| `google/gemma-3n-e4b-it` |
+| `google/gemma-3n-e4b-it:free` |
+| `kwaipilot/kat-coder-pro:free` |
+| `liquid/lfm-2.5-1.2b-instruct:free` |
+| `liquid/lfm-2.5-1.2b-thinking:free` |
+| `meta-llama/llama-3.1-405b-instruct:free` |
+| `meta-llama/llama-3.2-11b-vision-instruct` |
+| `meta-llama/llama-3.2-3b-instruct:free` |
+| `meta-llama/llama-3.3-70b-instruct:free` |
+| `meta-llama/llama-4-scout:free` |
+| `microsoft/mai-ds-r1:free` |
+| `minimax/minimax-01` |
+| `minimax/minimax-m1` |
+| `minimax/minimax-m2` |
+| `minimax/minimax-m2.1` |
+| `mistralai/codestral-2508` |
+| `mistralai/devstral-2512` |
+| `mistralai/devstral-2512:free` |
+| `mistralai/devstral-medium-2507` |
+| `mistralai/devstral-small-2505` |
+| `mistralai/devstral-small-2505:free` |
+| `mistralai/devstral-small-2507` |
+| `mistralai/mistral-7b-instruct:free` |
+| `mistralai/mistral-medium-3` |
+| `mistralai/mistral-medium-3.1` |
+| `mistralai/mistral-nemo:free` |
+| `mistralai/mistral-small-3.1-24b-instruct` |
+| `mistralai/mistral-small-3.2-24b-instruct` |
+| `mistralai/mistral-small-3.2-24b-instruct:free` |
+| `moonshotai/kimi-dev-72b:free` |
+| `moonshotai/kimi-k2` |
+| `moonshotai/kimi-k2-0905` |
+| `moonshotai/kimi-k2-0905:exacto` |
+| `moonshotai/kimi-k2-thinking` |
+| `moonshotai/kimi-k2:free` |
+| `moonshotai/kimi-k2.5` |
+| `nousresearch/deephermes-3-llama-3-8b-preview` |
+| `nousresearch/hermes-3-llama-3.1-405b:free` |
+| `nousresearch/hermes-4-405b` |
+| `nousresearch/hermes-4-70b` |
+| `nvidia/nemotron-3-nano-30b-a3b:free` |
+| `nvidia/nemotron-nano-12b-v2-vl:free` |
+| `nvidia/nemotron-nano-9b-v2` |
+| `nvidia/nemotron-nano-9b-v2:free` |
+| `openai/gpt-4.1` |
+| `openai/gpt-4.1-mini` |
+| `openai/gpt-4o-mini` |
+| `openai/gpt-5` |
+| `openai/gpt-5-chat` |
+| `openai/gpt-5-codex` |
+| `openai/gpt-5-image` |
+| `openai/gpt-5-mini` |
+| `openai/gpt-5-nano` |
+| `openai/gpt-5-pro` |
+| `openai/gpt-5.1` |
+| `openai/gpt-5.1-chat` |
+| `openai/gpt-5.1-codex` |
+| `openai/gpt-5.1-codex-max` |
+| `openai/gpt-5.1-codex-mini` |
+| `openai/gpt-5.2` |
+| `openai/gpt-5.2-chat` |
+| `openai/gpt-5.2-codex` |
+| `openai/gpt-5.2-pro` |
+| `openai/gpt-oss-120b` |
+| `openai/gpt-oss-120b:exacto` |
+| `openai/gpt-oss-120b:free` |
+| `openai/gpt-oss-20b` |
+| `openai/gpt-oss-20b:free` |
+| `openai/gpt-oss-safeguard-20b` |
+| `openai/o4-mini` |
+| `openrouter/pony-alpha` |
+| `openrouter/sherlock-dash-alpha` |
+| `openrouter/sherlock-think-alpha` |
+| `qwen/qwen-2.5-coder-32b-instruct` |
+| `qwen/qwen-2.5-vl-7b-instruct:free` |
+| `qwen/qwen2.5-vl-32b-instruct:free` |
+| `qwen/qwen2.5-vl-72b-instruct` |
+| `qwen/qwen2.5-vl-72b-instruct:free` |
+| `qwen/qwen3-14b:free` |
+| `qwen/qwen3-235b-a22b-07-25` |
+| `qwen/qwen3-235b-a22b-07-25:free` |
+| `qwen/qwen3-235b-a22b-thinking-2507` |
+| `qwen/qwen3-235b-a22b:free` |
+| `qwen/qwen3-30b-a3b-instruct-2507` |
+| `qwen/qwen3-30b-a3b-thinking-2507` |
+| `qwen/qwen3-30b-a3b:free` |
+| `qwen/qwen3-32b:free` |
+| `qwen/qwen3-4b:free` |
+| `qwen/qwen3-8b:free` |
+| `qwen/qwen3-coder` |
+| `qwen/qwen3-coder-30b-a3b-instruct` |
+| `qwen/qwen3-coder-flash` |
+| `qwen/qwen3-coder:exacto` |
+| `qwen/qwen3-coder:free` |
+| `qwen/qwen3-max` |
+| `qwen/qwen3-next-80b-a3b-instruct` |
+| `qwen/qwen3-next-80b-a3b-instruct:free` |
+| `qwen/qwen3-next-80b-a3b-thinking` |
+| `qwq-32b:free` |
+| `rekaai/reka-flash-3` |
+| `sarvamai/sarvam-m:free` |
+| `sourceful/riverflow-v2-fast-preview` |
+| `sourceful/riverflow-v2-max-preview` |
+| `sourceful/riverflow-v2-standard-preview` |
+| `thudm/glm-z1-32b:free` |
+| `tngtech/deepseek-r1t2-chimera:free` |
+| `tngtech/tng-r1t-chimera:free` |
+| `x-ai/grok-3` |
+| `x-ai/grok-3-beta` |
+| `x-ai/grok-3-mini` |
+| `x-ai/grok-3-mini-beta` |
+| `x-ai/grok-4` |
+| `x-ai/grok-4-fast` |
+| `x-ai/grok-4.1-fast` |
+| `x-ai/grok-code-fast-1` |
+| `xiaomi/mimo-v2-flash` |
+| `z-ai/glm-4.5` |
+| `z-ai/glm-4.5-air` |
+| `z-ai/glm-4.5-air:free` |
+| `z-ai/glm-4.5v` |
+| `z-ai/glm-4.6` |
+| `z-ai/glm-4.6:exacto` |
+| `z-ai/glm-4.7` |
+| `z-ai/glm-4.7-flash` |
+

@@ -1,0 +1,61 @@
+---
+title: "参考文档：Mastra.addGateway() | 核心"
+description: "向 Mastra 实例添加网关"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.addGateway()
+
+动态向 Mastra 实例添加网关。可在初始化期间或之后使用。
+
+## 使用示例
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+const mastra = new Mastra();
+
+// 使用显式键添加
+mastra.addGateway(new MyCustomGateway(), 'myGateway');
+
+// 使用网关的 ID 作为键添加
+mastra.addGateway(new MyCustomGateway());
+// 以键 'my-custom-gateway' 存储（网关的 id）
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: 'gateway',
+      type: 'MastraModelGateway',
+      description: '要添加的网关实例',
+    },
+    {
+      name: 'key',
+      type: 'string',
+      isOptional: true,
+      description: '可选的注册表键。如果未提供，则使用 gateway.getId()',
+    },
+  ]}
+/>
+
+## 返回值
+
+无返回值。网关被添加到内部注册表。
+
+## 行为
+
+- 如果已存在具有相同键的网关，则跳过添加
+- 在开发模式下（`MASTRA_DEV=true`），自动为自定义网关触发类型生成
+- 网关立即可用于模型解析
+
+## 相关内容
+
+- [Mastra.getGateway()](/reference/core/getGateway) - 按注册表键获取网关
+- [Mastra.getGatewayById()](/reference/core/getGatewayById) - 按 ID 获取网关
+- [Mastra.listGateways()](/reference/core/listGateways) - 列出所有网关
+- [MastraModelGateway](/reference/core/mastra-model-gateway) - 网关基类
+- [自定义网关指南](/models/gateways/custom-gateways) - 创建自定义网关

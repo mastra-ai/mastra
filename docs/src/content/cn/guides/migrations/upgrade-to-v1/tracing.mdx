@@ -1,0 +1,335 @@
+---
+title: "跟踪 | v1 迁移指南"
+description: "从 otel-telemetry 或 AI 跟踪更新到新的可观测性系统的迁移指南。"
+---
+
+# 跟踪
+
+可观测性系统在 v1 中已完全重构，有专用的 `@mastra/observability` 包。本指南根据您要升级的版本涵盖两条迁移路径。
+
+## 迁移路径
+
+### 从基于 OTEL 的遥测（0.x）
+
+如果您在 Mastra 中使用旧的 `telemetry:` 配置，系统已完全重新设计。
+
+**之前（0.x 与 OTEL 遥测）：**
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  telemetry: {
+    serviceName: 'my-app',
+    enabled: true,
+    sampling: {
+      type: 'always_on',
+    },
+    export: {
+      type: 'otlp',
+      endpoint: 'http://localhost:4318',
+    },
+  },
+});
+```
+
+**之后（v1 与可观测性）：**
+
+```typescript
+import { Mastra } from '@mastra/core';
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(), // 将跟踪持久化到存储以供 Mastra Studio 使用
+          new CloudExporter(), // 发送跟踪到 Mastra Cloud（如果设置了 MASTRA_CLOUD_ACCESS_TOKEN）
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // 清除密码、令牌、密钥等敏感数据
+        ],
+      },
+    },
+  }),
+});
+```
+
+此配置包括 `DefaultExporter`、`CloudExporter` 和 `SensitiveDataFilter` 处理器。完整的配置选项请参阅[可观测性跟踪文档](/docs/cn/observability/tracing/overview)。
+
+**之后（v1 与自定义配置）：**
+
+如果您需要配置特定的导出器（如 OTLP），请安装导出器包并进行配置：
+
+```bash npm2yarn
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
+```
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { Observability } from '@mastra/observability';
+import { OtelExporter } from '@mastra/otel-exporter';
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: 'my-app',
+        sampling: { type: 'always' },
+        exporters: [
+          new OtelExporter({
+            provider: {
+              custom: {
+                endpoint: 'http://localhost:4318/v1/traces',
+                protocol: 'http/protobuf',
+              },
+            },
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+主要更改：
+1. 安装 `@mastra/observability` 包
+2. 将 `telemetry:` 替换为 `observability: new Observability()`
+3. 使用带有 `DefaultExporter`、`CloudExporter` 和 `SensitiveDataFilter` 的显式 `configs:`
+4. 导出类型从字符串字面量（`'otlp'`）更改为导出器类实例（`new OtelExporter()`）
+
+所有可用的导出器请参阅[导出器文档](/docs/cn/observability/tracing/overview#exporters)。
+
+### 从 AI 跟踪
+
+如果您已经升级到 AI 跟踪（中间系统），您需要安装新包并使用显式配置。
+
+**之前（AI 跟踪）：**
+
+```typescript
+import { Mastra } from '@mastra/core';
+
+export const mastra = new Mastra({
+  observability: {
+    default: { enabled: true },
+  },
+});
+```
+
+**之后（v1 可观测性）：**
+
+```typescript
+import { Mastra } from '@mastra/core';
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+主要更改：
+1. 安装 `@mastra/observability` 包
+2. 从 `@mastra/observability` 导入 `Observability`、导出器和处理器
+3. 使用带有 `DefaultExporter`、`CloudExporter` 和 `SensitiveDataFilter` 的显式 `configs`
+
+## 变更
+
+### 包导入路径
+
+可观测性功能已移至专用的 `@mastra/observability` 包。
+
+要迁移，请安装包并更新您的导入语句：
+
+```bash npm2yarn
+npm install @mastra/observability@latest
+```
+
+```diff
+- import { Tracing } from '@mastra/core/observability';
++ import { Observability } from '@mastra/observability';
+```
+
+### 注册表配置
+
+可观测性注册表现在使用带有显式配置的 `Observability` 类实例，而不是普通对象。
+
+要迁移，使用带有显式导出器和处理器的 `new Observability()`。
+
+```diff
++ import {
++   Observability,
++   DefaultExporter,
++   CloudExporter,
++   SensitiveDataFilter,
++ } from '@mastra/observability';
+
+  export const mastra = new Mastra({
+-   observability: {
+-     default: { enabled: true },
+-   },
++   observability: new Observability({
++     configs: {
++       default: {
++         serviceName: 'mastra',
++         exporters: [new DefaultExporter(), new CloudExporter()],
++         spanOutputProcessors: [new SensitiveDataFilter()],
++       },
++     },
++   }),
+  });
+```
+
+### 配置属性 `processors` 改为 `spanOutputProcessors`
+
+跨度处理器的配置属性已从 `processors` 重命名为 `spanOutputProcessors`。
+
+要迁移，在配置对象中重命名属性。
+
+```diff
++ import { SensitiveDataFilter } from '@mastra/observability';
+
+  export const mastra = new Mastra({
+    observability: new Observability({
+      configs: {
+        production: {
+          serviceName: 'my-app',
+-         processors: [new SensitiveDataFilter()],
++         spanOutputProcessors: [new SensitiveDataFilter()],
+          exporters: [...],
+        },
+      },
+    }),
+  });
+```
+
+### 导出器方法 `exportEvent` 改为 `exportTracingEvent`
+
+如果您构建了自定义导出器，导出器方法已从 `exportEvent` 重命名为 `exportTracingEvent`。
+
+要迁移，在自定义导出器中更新方法实现。
+
+```diff
+  export class MyExporter implements ObservabilityExporter {
+-   exportEvent(event: TracingEvent): void {
++   exportTracingEvent(event: TracingEvent): void {
+      // 导出逻辑
+    }
+  }
+```
+
+## 移除
+
+### 基于 OTEL 的 `telemetry` 配置
+
+0.x 的基于 OTEL 的 `telemetry` 配置已被移除。带有 `serviceName`、`sampling.type` 和 `export.type` 属性的旧系统不再支持。
+
+要迁移，请遵循上面的"从基于 OTEL 的遥测"部分。详细的配置选项请参阅[可观测性跟踪文档](/docs/cn/observability/tracing/overview)。
+
+### 自定义插桩文件
+
+`/mastra` 中插桩文件（带有 `.ts`、`.js` 或 `.mjs` 扩展名）的自动检测已被移除。不再支持通过单独文件进行自定义插桩。
+
+要迁移，使用内置的导出器系统或使用 `ObservabilityExporter` 接口实现自定义导出器。详细信息请参阅[导出器文档](/docs/cn/observability/tracing/overview#exporters)。
+
+### `instrumentation.mjs` 文件
+
+如果您使用 `instrumentation.mjs` 文件来初始化 OpenTelemetry 插桩（在 AWS Lambda 等部署设置中很常见），这些不再需要。新的可观测性系统直接在您的 Mastra 实例中配置。
+
+**之前（0.x）：**
+
+您需要一个插桩文件：
+```javascript
+// instrumentation.mjs
+import { NodeSDK } from '@opentelemetry/sdk-node';
+// ... OTEL 设置
+```
+
+并在启动进程时导入它：
+```bash
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+```
+
+**之后（v1）：**
+
+只需移除 `instrumentation.mjs` 文件并在您的 Mastra 实例中配置可观测性：
+
+```typescript
+// src/mastra/index.ts
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability';
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
+    },
+  }),
+});
+```
+
+正常启动进程，无需 `--import` 标志：
+```bash
+node --env-file=".env" .mastra/output/index.mjs
+```
+
+不需要单独的插桩文件或特殊的启动标志。
+
+## 提供商迁移参考
+
+如果您在 0.x 中将基于 OTEL 的遥测与特定提供商一起使用，以下是它们在 v1 中的配置方式：
+
+| 提供商 | 导出器 | 指南 | 参考 |
+|----------|----------|-------|-----------|
+| Arize AX, Arize Phoenix | **Arize** | [指南](/docs/cn/observability/tracing/exporters/arize) | [参考](/reference/cn/observability/tracing/exporters/arize) |
+| Braintrust | **Braintrust** | [指南](/docs/cn/observability/tracing/exporters/braintrust) | [参考](/reference/cn/observability/tracing/exporters/braintrust) |
+| Langfuse | **Langfuse** | [指南](/docs/cn/observability/tracing/exporters/langfuse) | [参考](/reference/cn/observability/tracing/exporters/langfuse) |
+| LangSmith | **LangSmith** | [指南](/docs/cn/observability/tracing/exporters/langsmith) | [参考](/reference/cn/observability/tracing/exporters/langsmith) |
+| Dash0, Laminar, New Relic, SigNoz, Traceloop, Custom OTEL | **OpenTelemetry** | [指南](/docs/cn/observability/tracing/exporters/otel) | [参考](/reference/cn/observability/tracing/exporters/otel) |
+| LangWatch | \<即将推出\> | - | - |
+
+### 安装
+
+**专用导出器**（Arize、Braintrust、Langfuse、LangSmith）：
+```bash npm2yarn
+npm install @mastra/[exporter-name]-exporter
+```
+
+**OpenTelemetry 导出器**（Dash0、Laminar、New Relic、SigNoz、Traceloop）：
+```bash npm2yarn
+npm install @mastra/otel-exporter@latest
+```
+
+加上您提供商所需的协议包（请参阅 [OTEL 指南](/docs/cn/observability/tracing/exporters/otel#installation)）。

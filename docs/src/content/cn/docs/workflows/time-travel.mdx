@@ -1,0 +1,317 @@
+---
+title: "时光旅行 | 工作流"
+description: "在 Mastra 中使用时光旅行调试从特定步骤重新执行工作流"
+packages:
+  - "@mastra/core"
+---
+
+# 时光旅行
+
+时光旅行允许你使用存储的快照数据或你提供的自定义上下文，从任何特定步骤重新执行工作流。这对于调试失败的工作流、使用不同输入测试单个步骤，或在不重新运行整个工作流的情况下从错误中恢复非常有用。
+你还可以使用时光旅行来执行尚未运行的工作流，从任何特定步骤开始。
+
+## 时光旅行的工作原理
+
+当你在工作流运行上调用 `timeTravel()` 时：
+
+1. 工作流从存储加载现有快照（如果可用）
+2. 目标步骤之前的结果从快照或提供的上下文重建
+3. 使用提供或重建的输入数据从指定步骤开始执行
+4. 工作流从该点继续执行至完成
+
+时光旅行需要配置存储，因为它依赖于持久化的工作流快照。
+
+## 基本用法
+
+使用 `run.timeTravel()` 从特定步骤重新执行工作流：
+
+```typescript
+import { mastra } from "./mastra";
+
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { previousStepResult: "custom value" },
+});
+```
+
+## 指定目标步骤
+
+你可以使用步骤引用或步骤 ID 来指定目标步骤：
+
+### 使用步骤引用
+
+```typescript
+const result = await run.timeTravel({
+  step: step2,
+  inputData: { value: 10 },
+});
+```
+
+### 使用步骤 ID
+
+```typescript
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+});
+```
+
+### 嵌套工作流步骤
+
+对于嵌套工作流内的步骤，使用点号表示法、步骤 ID 数组或步骤引用数组：
+
+```typescript
+// 使用点号表示法
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  inputData: { value: 10 },
+});
+
+// 使用步骤 ID 数组
+const result = await run.timeTravel({
+  step: ["nestedWorkflow", "step3"],
+  inputData: { value: 10 },
+});
+
+// 使用步骤引用数组
+const result = await run.timeTravel({
+  step: [nestedWorkflow, step3],
+  inputData: { value: 10 },
+});
+```
+
+## 提供执行上下文
+
+时光旅行时，你可以提供上下文来指定先前步骤的状态：
+
+```typescript {3-13}
+const result = await run.timeTravel({
+  step: "step2",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+  },
+});
+```
+
+上下文对象包含按步骤 ID 键入的步骤结果。每个步骤结果包括：
+
+- `status`：步骤的执行状态（`success`、`failed`、`suspended`）
+- `payload`：传递给步骤的输入数据
+- `output`：步骤的输出数据（对于成功的步骤）
+- `startedAt`：步骤开始的时间戳
+- `endedAt`：步骤结束的时间戳（对于完成的步骤）
+- `suspendPayload`：传递给 `suspend()` 的数据（对于暂停的步骤）
+- `resumePayload`：传递给 `resume()` 的数据（对于恢复的步骤）
+
+## 重新运行失败的工作流
+
+时光旅行对于调试和从失败的工作流执行中恢复特别有用：
+
+```typescript
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+
+// 初始运行在 step2 失败
+const failedResult = await run.start({
+  inputData: { value: 1 },
+});
+
+if (failedResult.status === "failed") {
+  // 使用修正的输入从 step2 重新运行
+  const recoveredResult = await run.timeTravel({
+    step: "step2",
+    inputData: { step1Result: 5 }, // 提供修正的输入
+  });
+}
+```
+
+## 时光旅行与暂停的工作流
+
+你可以时光旅行以从更早的步骤恢复暂停的工作流：
+
+```typescript
+const run = await workflow.createRun();
+
+// 启动工作流 - 在 promptAgent 步骤暂停
+const initialResult = await run.start({
+  inputData: { input: "test" },
+});
+
+if (initialResult.status === "suspended") {
+  // 时光旅行回到更早的步骤并提供恢复数据
+  const result = await run.timeTravel({
+    step: "getUserInput",
+    resumeData: {
+      userInput: "corrected input",
+    },
+  });
+}
+```
+
+## 流式时光旅行结果
+
+使用 `timeTravelStream()` 在时光旅行执行期间接收流式事件：
+
+```typescript
+const run = await workflow.createRun();
+
+const stream = run.timeTravelStream({
+  step: "step2",
+  inputData: { value: 10 },
+});
+
+for await (const event of stream.fullStream) {
+  console.log(event.type, event.payload);
+}
+
+const result = await stream.result;
+
+if (result.status === "success") {
+  console.log(result.result);
+}
+```
+
+## 时光旅行与初始状态
+
+时光旅行时可以提供初始状态以设置工作流级别的状态：
+
+```typescript
+const result = await run.timeTravel({
+  step: "step2",
+  inputData: { value: 10 },
+  initialState: {
+    counter: 5,
+    metadata: { source: "time-travel" },
+  },
+});
+```
+
+## 错误处理
+
+时光旅行在特定情况下会抛出错误：
+
+### 运行中的工作流
+
+你不能对当前正在运行的工作流进行时光旅行：
+
+```typescript
+try {
+  await run.timeTravel({ step: "step2" });
+} catch (error) {
+  // "This workflow run is still running, cannot time travel"
+}
+```
+
+### 无效的步骤 ID
+
+如果目标步骤在工作流中不存在，时光旅行会抛出错误：
+
+```typescript
+try {
+  await run.timeTravel({ step: "nonExistentStep" });
+} catch (error) {
+  // "Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path."
+}
+```
+
+### 无效的输入数据
+
+当启用 `validateInputs` 时，时光旅行会根据步骤的模式验证输入数据：
+
+```typescript
+try {
+  await run.timeTravel({
+    step: "step2",
+    inputData: { invalidField: "value" },
+  });
+} catch (error) {
+  // "Invalid inputData: \n- step1Result: Required"
+}
+```
+
+## 嵌套工作流上下文
+
+时光旅行到嵌套工作流时，你可以同时提供父工作流和嵌套工作流步骤的上下文：
+
+```typescript
+const result = await run.timeTravel({
+  step: "nestedWorkflow.step3",
+  context: {
+    step1: {
+      status: "success",
+      payload: { value: 0 },
+      output: { step1Result: 2 },
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    },
+    nestedWorkflow: {
+      status: "running",
+      payload: { step1Result: 2 },
+      startedAt: Date.now(),
+    },
+  },
+  nestedStepsContext: {
+    nestedWorkflow: {
+      step2: {
+        status: "success",
+        payload: { step1Result: 2 },
+        output: { step2Result: 3 },
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      },
+    },
+  },
+});
+```
+
+## 使用场景
+
+### 调试失败的步骤
+
+使用相同或修改后的输入重新运行失败的步骤以诊断问题：
+
+```typescript
+const result = await run.timeTravel({
+  step: failedStepId,
+  context: originalContext, // 使用失败运行中的上下文
+});
+```
+
+### 在新工作流运行上测试步骤逻辑
+
+在新工作流运行上使用特定输入测试单个步骤，这对于从开头开始工作流执行的情况下测试步骤逻辑非常有用。
+
+```typescript
+const result = await run.timeTravel({
+  step: "processData",
+  inputData: { testData: "specific test case" },
+});
+```
+
+### 从临时故障中恢复
+
+重新运行因临时问题（网络错误、速率限制）而失败的步骤：
+
+```typescript
+// 修复外部服务问题后
+const result = await run.timeTravel({
+  step: "callExternalApi",
+  inputData: savedInputData,
+});
+```
+
+## 相关内容
+
+- [快照](/docs/cn/workflows/snapshots)
+- [暂停与恢复](/docs/cn/workflows/suspend-and-resume)
+- [错误处理](/docs/cn/workflows/error-handling)
+- [控制流](/docs/cn/workflows/control-flow)

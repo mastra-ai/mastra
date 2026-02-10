@@ -1,0 +1,1564 @@
+---
+title: "使用 AI SDK UI | 框架"
+description: "了解 Mastra 如何利用 AI SDK UI 库以及如何进一步利用它"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 使用 AI SDK UI
+
+[AI SDK UI](https://sdk.vercel.ai) 是一个 React 工具和组件库，用于构建 AI 驱动的界面。在本指南中，您将学习如何使用 `@mastra/ai-sdk` 将 Mastra 的输出转换为 AI SDK 兼容的格式，从而使您能够在前端使用其钩子和组件。
+
+:::note
+
+从 AI SDK v4 迁移到 v5？请参阅[迁移指南](/guides/migrations/ai-sdk-v4-to-v5)。
+
+:::
+
+:::tip
+
+想看更多示例？访问 Mastra 的 [**UI Dojo**](https://ui-dojo.mastra.ai/) 或 [Next.js 快速入门指南](/guides/getting-started/next-js)。
+
+:::
+
+## 入门
+
+通过安装 `@mastra/ai-sdk` 包来一起使用 Mastra 和 AI SDK UI。`@mastra/ai-sdk` 为以 AI SDK 兼容格式流式传输 Mastra 内容提供自定义 API 路由和工具。这包括聊天、工作流和网络路由处理程序，以及用于 UI 集成的工具和导出的类型。
+
+`@mastra/ai-sdk` 与 AI SDK UI 的三个主要钩子集成：[`useChat()`](https://ai-sdk.dev/docs/cn/docs/ai-sdk-ui/chatbot)、[`useCompletion()`](https://ai-sdk.dev/docs/cn/docs/ai-sdk-ui/completion) 和 [`useObject()`](https://ai-sdk.dev/docs/cn/docs/ai-sdk-ui/object-generation)。
+
+安装所需的包以开始使用：
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
+```
+
+您现在可以按照下面的集成指南和示例进行操作了！
+
+## 集成指南
+
+通常，您会设置以 AI SDK 兼容格式流式传输 Mastra 内容的 API 路由，然后将这些路由用于 AI SDK UI 钩子（如 `useChat()`）。下面您将找到两种主要方法：
+
+- [Mastra 的服务器](#mastras-server)
+- [框架无关](#framework-agnostic)
+
+设置好 API 路由后，您可以在 [`useChat()`](#usechat) 钩子中使用它们。
+
+### Mastra 的服务器
+
+将 Mastra 作为独立服务器运行，并将您的前端（例如使用 Vite + React）连接到其 API 端点。您将使用 Mastra 的[自定义 API 路由](/docs/cn/docs/server/custom-api-routes)功能来实现此目的。
+
+:::info
+
+Mastra 的 [**UI Dojo**](https://ui-dojo.mastra.ai/) 是此设置的示例。
+
+:::
+
+您可以使用 [`chatRoute()`](/reference/ai-sdk/chat-route)、[`workflowRoute()`](/reference/ai-sdk/workflow-route) 和 [`networkRoute()`](/reference/ai-sdk/network-route) 来创建以 AI SDK 兼容格式流式传输 Mastra 内容的 API 路由。实现后，您可以在 [`useChat()`](#usechat) 中使用这些 API 路由。
+
+<Tabs>
+
+<TabItem value="chatRoute" label="chatRoute()">
+
+此示例显示如何在使用 ID 为 `weatherAgent` 的代理的 `/chat` 端点设置聊天路由。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { chatRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: "/chat",
+        agent: "weatherAgent",
+      }),
+    ],
+  },
+});
+```
+
+您也可以使用动态代理路由，参阅 [`chatRoute()` 参考文档](/reference/ai-sdk/chat-route) 了解更多详情。
+
+</TabItem>
+
+<TabItem value="workflowRoute" label="workflowRoute()">
+
+此示例显示在使用 ID 为 `weatherWorkflow` 的工作流的 `/workflow` 端点设置工作流路由。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: "/workflow",
+        workflow: "weatherWorkflow",
+      }),
+    ],
+  },
+});
+```
+
+您也可以使用动态工作流路由，参阅 [`workflowRoute()` 参考文档](/reference/ai-sdk/workflow-route) 了解更多详情。
+
+:::tip 工作流中的代理流式传输
+
+当工作流步骤将代理的流管道传输到工作流编写器时（例如 `await response.fullStream.pipeTo(writer)`），即使代理在工作流步骤内运行，代理的文本块和工具调用也会实时转发到 UI 流。
+
+有关更多详情，请参阅[工作流流式传输](/docs/cn/docs/streaming/workflow-streaming)。
+
+:::
+
+</TabItem>
+
+<TabItem value="networkRoute" label="networkRoute()">
+
+此示例显示在使用 ID 为 `weatherAgent` 的代理的 `/network` 端点设置网络路由。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { networkRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      networkRoute({
+        path: "/network",
+        agent: "weatherAgent",
+      }),
+    ],
+  },
+});
+```
+
+您也可以使用动态网络路由，参阅 [`networkRoute()` 参考文档](/reference/ai-sdk/network-route) 了解更多详情。
+
+</TabItem>
+
+</Tabs>
+
+### 框架无关
+
+如果您不想运行 Mastra 的服务器，而是想使用 Next.js 或 Express 等框架，您可以在自己的 API 路由处理程序中使用 [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream)、[`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream) 和 [`handleNetworkStream()`](/reference/ai-sdk/handle-network-stream) 函数。
+
+它们返回一个 `ReadableStream`，您可以用 [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/create-ui-message-stream-response) 包装它。
+
+下面的示例向您展示如何将其与 Next.js App Router 一起使用。
+
+<Tabs>
+
+<TabItem value="handleChatStream" label="handleChatStream()">
+
+此示例显示在使用 ID 为 `weatherAgent` 的代理的 `/chat` 端点设置聊天路由。
+
+```typescript title="app/chat/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+<TabItem value="handleWorkflowStream" label="handleWorkflowStream()">
+
+此示例显示在使用 ID 为 `weatherWorkflow` 的工作流的 `/workflow` 端点设置工作流路由。
+
+```typescript title="app/workflow/route.ts"
+import { handleWorkflowStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleWorkflowStream({
+    mastra,
+    workflowId: 'weatherWorkflow',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+<TabItem value="handleNetworkStream" label="handleNetworkStream()">
+
+此示例显示在使用 ID 为 `routingAgent` 的代理的 `/network` 端点设置网络路由。
+
+```typescript title="app/network/route.ts"
+import { handleNetworkStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleNetworkStream({
+    mastra,
+    agentId: 'routingAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+### `useChat()`
+
+无论您是通过 [Mastra 的服务器](#mastras-server) 创建 API 路由还是使用[您选择的框架](#framework-agnostic)，现在都可以在 `useChat()` 钩子中使用 API 端点。
+
+假设您设置了一个使用天气代理的 `/chat` 路由，您可以像下面一样向它提问。设置正确的 `api` URL 很重要。
+
+```ts {9}
+import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
+import { DefaultChatTransport } from "ai";
+
+export default function Chat() {
+  const [inputValue, setInputValue] = useState("")
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat",
+    }),
+  });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage({ text: inputValue });
+  };
+
+  return (
+    <div>
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleFormSubmit}>
+        <input value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Name of the city" />
+      </form>
+    </div>
+  );
+}
+```
+
+使用 [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) 自定义发送到聊天路由的请求，例如向代理传递其他配置。
+
+### `useCompletion()`
+
+`useCompletion()` 钩子处理前端和 Mastra 代理之间的单轮完成，允许您发送提示并通过 HTTP 接收流式响应。
+
+您的前端可能看起来像这样：
+
+```typescript title="app/page.tsx"
+import { useCompletion } from '@ai-sdk/react';
+
+export default function Page() {
+  const { completion, input, handleInputChange, handleSubmit } = useCompletion({
+    api: '/api/completion',
+  });
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        name="prompt"
+        value={input}
+        onChange={handleInputChange}
+        id="input"
+      />
+      <button type="submit">Submit</button>
+      <div>{completion}</div>
+    </form>
+  );
+}
+```
+
+以下是实现后端的两种方法：
+
+<Tabs>
+
+<TabItem value="mastra-server" label="Mastra Server">
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+import { registerApiRoute } from '@mastra/core/server';
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/completion', {
+        method: 'POST',
+        handler: async (c) => {
+          const { prompt } = await c.req.json();
+          const mastra = c.get('mastra');
+          const stream = await handleChatStream({
+            mastra,
+            agentId: 'weatherAgent',
+            params: {
+              messages: [
+                {
+                  id: "1",
+                  role: 'user',
+                  parts: [
+                    {
+                      type: 'text',
+                      text: prompt
+                    }
+                  ]
+                }
+              ],
+            }
+          })
+
+          return createUIMessageStreamResponse({ stream });
+        }
+      })
+    ]
+  }
+});
+```
+
+</TabItem>
+
+<TabItem value="nextjs" label="Next.js">
+
+```ts title="app/completion/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+// 允许流式响应最长 30 秒
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { prompt }: { prompt: string } = await req.json();
+
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params: {
+      messages: [
+        {
+          id: "1",
+          role: 'user',
+          parts: [
+            {
+              type: 'text',
+              text: prompt
+            }
+          ]
+        }
+      ],
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+## 自定义 UI
+
+自定义 UI（也称为生成式 UI）允许您根据从 Mastra 流式传输的数据呈现自定义 React 组件。您可以显示原始文本或 JSON，而是为工具输出、工作流进度、代理网络执行和自定义事件创建视觉组件。
+
+在以下情况下使用自定义 UI：
+
+- 将工具输出呈现为视觉组件（例如，天气卡片而不是 JSON）
+- 使用状态指示器显示工作流步骤进度
+- 可视化代理网络执行与逐步更新
+- 在长时间运行的操作期间显示进度指示器或状态更新
+
+### 数据部分类型
+
+Mastra 将数据作为消息中的"部分"流式传输到前端。每个部分都有一个 `type`，决定如何呈现它。`@mastra/ai-sdk` 包将 Mastra 流转换为 AI SDK 兼容的 [UI Message DataParts](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-core/ui-message#datauipart)。
+
+| 数据部分类型 | 来源 | 描述 |
+|----------------|--------|-------------|
+| `tool-{toolKey}` | AI SDK 内置 | 工具调用，状态为：`input-available`、`output-available`、`output-error` |
+| `data-workflow` | `workflowRoute()` | 工作流执行，包含步骤输入、输出和状态 |
+| `data-network` | `networkRoute()` | 代理网络执行，包含有序步骤和输出 |
+| `data-tool-agent` | 工具中的嵌套代理 | 从工具的 `execute()` 内流式传输的代理输出 |
+| `data-tool-workflow` | 工具中的嵌套工作流 | 从工具的 `execute()` 内流式传输的工作流输出 |
+| `data-tool-network` | 工具中的嵌套网络 | 从工具的 `execute()` 内流式传输的网络输出 |
+| `data-{custom}` | `writer.custom()` | 自定义事件，用于进度指示器、状态更新等 |
+
+### 呈现工具输出
+
+当代理调用工具时，AI SDK 会自动创建 `tool-{toolKey}` 部分。这些部分包括工具的状态和输出，您可以使用它们来呈现自定义组件。
+
+工具部分循环遍历状态：
+- `input-streaming`：工具输入正在流式传输（当启用工具调用流式传输时）
+- `input-available`：工具已调用并带有完整输入，等待执行
+- `output-available`：工具执行完成并带有输出
+- `output-error`：工具执行失败
+
+以下是呈现天气工具输出为自定义 `WeatherCard` 组件的示例。
+
+<Tabs>
+
+<TabItem value="backend" label="后端">
+
+定义一个带有 `outputSchema` 的工具，以便前端知道要呈现的数据形状。
+
+```typescript title="src/mastra/tools/weather-tool.ts" {10-17}
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "获取当前位置的当前天气",
+  inputSchema: z.object({
+    location: z.string().describe("要获取天气的位置"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    feelsLike: z.number(),
+    humidity: z.number(),
+    windSpeed: z.number(),
+    conditions: z.string(),
+    location: z.string(),
+  }),
+  execute: async (inputData) => {
+    const response = await fetch(
+      `https://api.weatherapi.com/v1/current.json?key=${process.env.WEATHER_API_KEY}&q=${inputData.location}`
+    );
+    const data = await response.json();
+    return {
+      temperature: data.current.temp_c,
+      feelsLike: data.current.feelslike_c,
+      humidity: data.current.humidity,
+      windSpeed: data.current.wind_kph,
+      conditions: data.current.condition.text,
+      location: data.location.name,
+    };
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="前端">
+
+检查消息中的 `tool-{toolKey}` 部分，并根据工具的状态和输出呈现自定义组件。
+
+```typescript title="src/components/chat.tsx" {24-35}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { WeatherCard } from "./weather-card";
+import { Loader } from "./loader";
+
+export function Chat() {
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat/weatherAgent",
+    }),
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            // 处理用户文本消息
+            if (part.type === "text" && message.role === "user") {
+              return <p key={index}>{part.text}</p>;
+            }
+
+            // 处理天气工具输出
+            if (part.type === "tool-weatherTool") {
+              switch (part.state) {
+                case "input-available":
+                  return <Loader key={index} />;
+                case "output-available":
+                  return <WeatherCard key={index} {...part.output} />;
+                case "output-error":
+                  return <div key={index}>Error: {part.errorText}</div>;
+                default:
+                  return null;
+              }
+            }
+
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+:::tip
+
+工具部分类型遵循模式 `tool-{toolKey}`，其中 `toolKey` 是向代理注册工具时使用的键。例如，如果您将工具注册为 `tools: { weatherTool }`，部分类型将是 `tool-weatherTool`。
+
+:::
+
+### 呈现工作流数据
+
+使用 `workflowRoute()` 或 `handleWorkflowStream()` 时，Mastra 发出 `data-workflow` 部分，其中包含工作流的执行状态，包括步骤状态和输出。
+
+<Tabs>
+
+<TabItem value="backend" label="后端">
+
+定义一个具有多个步骤的工作流，它将在执行时发出 `data-workflow` 部分。
+
+```typescript title="src/mastra/workflows/activities-workflow.ts"
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const fetchWeather = createStep({
+  id: "fetch-weather",
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    // 获取天气数据...
+    return { temperature: 22, conditions: "Sunny" };
+  },
+});
+
+const planActivities = createStep({
+  id: "plan-activities",
+  inputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+  execute: async ({ inputData, mastra }) => {
+    const agent = mastra?.getAgent("activityAgent");
+    const response = await agent?.generate(
+      `Suggest activities for ${inputData.conditions} weather at ${inputData.temperature}°C`
+    );
+    return { activities: response?.text || "" };
+  },
+});
+
+export const activitiesWorkflow = createWorkflow({
+  id: "activities-workflow",
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+})
+  .then(fetchWeather)
+  .then(planActivities);
+
+activitiesWorkflow.commit();
+```
+
+向 Mastra 注册工作流并通过 `workflowRoute()` 公开它，以将工作流事件流式传输到前端。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  workflows: { activitiesWorkflow },
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: "/workflow/activitiesWorkflow",
+        workflow: "activitiesWorkflow",
+      }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="前端">
+
+检查 `data-workflow` 部分，并使用 `WorkflowDataPart` 类型呈现每个步骤的状态和输出以确保类型安全。
+
+```typescript title="src/components/workflow-chat.tsx" {3,5,45-47}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+type StepStatus = "running" | "success" | "failed" | "suspended" | "waiting";
+
+function StepIndicator({ name, status, output }: {
+  name: string;
+  status: StepStatus;
+  output: unknown;
+}) {
+  return (
+    <div className="step">
+      <div className="step-header">
+        <span>{name}</span>
+        <span className={`status status-${status}`}>{status}</span>
+      </div>
+      {status === "success" && output && (
+        <pre>{JSON.stringify(output, null, 2)}</pre>
+      )}
+    </div>
+  );
+}
+
+export function WorkflowChat() {
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/activitiesWorkflow",
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          inputData: {
+            location: messages[messages.length - 1]?.parts[0]?.text,
+          },
+        },
+      }),
+    }),
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "data-workflow") {
+              const workflowData = part.data as WorkflowData;
+              const steps = Object.values(workflowData.steps);
+
+              return (
+                <div key={index} className="workflow-progress">
+                  <h3>Workflow: {workflowData.name}</h3>
+                  <p>Status: {workflowData.status}</p>
+                  {steps.map((step) => (
+                    <StepIndicator
+                      key={step.name}
+                      name={step.name}
+                      status={step.status}
+                      output={step.output}
+                    />
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+有关工作流流式传输的更多详情，请参阅[工作流流式传输](/docs/cn/docs/streaming/workflow-streaming)。
+
+### 呈现网络数据
+
+使用 `networkRoute()` 或 `handleNetworkStream()` 时，Mastra 发出 `data-network` 部分，其中包含代理网络的执行状态，包括调用的代理及其输出。
+
+<Tabs>
+
+<TabItem value="backend" label="后端">
+
+向 Mastra 注册代理，并通过 `networkRoute()` 公开路由代理，以将网络执行事件流式传输到前端。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { networkRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  agents: { routingAgent, researchAgent, weatherAgent },
+  server: {
+    apiRoutes: [
+      networkRoute({
+        path: "/network",
+        agent: "routingAgent",
+      }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="前端">
+
+检查 `data-network` 部分，并使用 `NetworkDataPart` 类型呈现每个代理的执行步骤以确保类型安全。
+
+```typescript title="src/components/network-chat.tsx" {3,5,42-44}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import type { NetworkDataPart } from "@mastra/ai-sdk";
+
+type NetworkData = NetworkDataPart["data"];
+
+function AgentStep({ step }: { step: NetworkData["steps"][number] }) {
+  return (
+    <div className="agent-step">
+      <div className="step-header">
+        <span className="agent-name">{step.name}</span>
+        <span className={`status status-${step.status}`}>{step.status}</span>
+      </div>
+      {step.input && (
+        <div className="step-input">
+          <strong>Input:</strong>
+          <pre>{JSON.stringify(step.input, null, 2)}</pre>
+        </div>
+      )}
+      {step.output && (
+        <div className="step-output">
+          <strong>Output:</strong>
+          <pre>{typeof step.output === "string" ? step.output : JSON.stringify(step.output, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function NetworkChat() {
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/network",
+    }),
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "data-network") {
+              const networkData = part.data as NetworkData;
+
+              return (
+                <div key={index} className="network-execution">
+                  <div className="network-header">
+                    <h3>Agent Network: {networkData.name}</h3>
+                    <span className={`status status-${networkData.status}`}>
+                      {networkData.status}
+                    </span>
+                  </div>
+                  <div className="network-steps">
+                    {networkData.steps.map((step, stepIndex) => (
+                      <AgentStep key={stepIndex} step={step} />
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+有关代理网络的更多详情，请参阅[代理网络](/docs/cn/docs/agents/networks)。
+
+### 自定义事件
+
+在工具的 `execute()` 函数中使用 `writer.custom()` 发出自定义数据部分。这对于进度指示器、状态更新或工具执行期间的任何自定义 UI 更新非常有用。
+
+自定义事件类型必须以 `data-` 开头才能被识别为数据部分。
+
+:::warning
+
+您必须 `await` `writer.custom()` 调用，否则可能会遇到 `WritableStream is locked` 错误。
+
+:::
+
+<Tabs>
+
+<TabItem value="backend" label="后端">
+
+在工具的 `execute()` 函数内使用 `writer.custom()` 在执行的不同阶段发出以 `data-` 为前缀的自定义事件。
+
+```typescript title="src/mastra/tools/task-tool.ts" {18-24,30-36}
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const taskTool = createTool({
+  id: "process-task",
+  description: "使用进度更新处理任务",
+  inputSchema: z.object({
+    task: z.string().describe("要处理的任务"),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+    status: z.string(),
+  }),
+  execute: async (inputData, context) => {
+    const { task } = inputData;
+
+    // 发出"进行中"自定义事件
+    await context?.writer?.custom({
+      type: "data-tool-progress",
+      data: {
+        status: "in-progress",
+        message: "正在收集信息...",
+      },
+    });
+
+    // 模拟工作
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // 发出"完成"自定义事件
+    await context?.writer?.custom({
+      type: "data-tool-progress",
+      data: {
+        status: "done",
+        message: `已成功处理 "${task}"`,
+      },
+    });
+
+    return {
+      result: `任务 "${task}" 已成功完成！`,
+      status: "completed",
+    };
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="前端">
+
+过滤消息部分以查找您的自定义事件类型，并呈现一个进度指示器，随着新事件的到达而更新。
+
+```typescript title="src/components/task-chat.tsx" {31-41,45}
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useMemo } from "react";
+
+type ProgressData = {
+  status: "in-progress" | "done";
+  message: string;
+};
+
+function ProgressIndicator({ progress }: { progress: ProgressData }) {
+  return (
+    <div className="progress-indicator">
+      {progress.status === "in-progress" ? (
+        <span className="spinner" />
+      ) : (
+        <span className="check-icon" />
+      )}
+      <span className={`status-${progress.status}`}>{progress.message}</span>
+    </div>
+  );
+}
+
+export function TaskChat() {
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat/taskAgent",
+    }),
+  });
+
+  // 从消息中提取最新的进度事件
+  const latestProgress = useMemo(() => {
+    const allProgressParts: ProgressData[] = [];
+    messages.forEach((message) => {
+      message.parts.forEach((part) => {
+        if (part.type === "data-tool-progress") {
+          allProgressParts.push(part.data as ProgressData);
+        }
+      });
+    });
+    return allProgressParts[allProgressParts.length - 1];
+  }, [messages]);
+
+  return (
+    <div>
+      {latestProgress && <ProgressIndicator progress={latestProgress} />}
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "text") {
+              return <p key={index}>{part.text}</p>;
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+### 工具流式传输
+
+工具也可以使用 `context.writer.write()` 进行流式传输以获得更低级控制，或将代理的流直接管道传输到工具的编写器。更多详情，请参阅[工具流式传输](/docs/cn/docs/streaming/tool-streaming)。
+
+### 示例
+
+有关自定义 UI 模式的实际示例，请访问 [Mastra's UI Dojo](https://ui-dojo.mastra.ai/)。该仓库包括以下实现：
+
+- [生成式 UI](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces.tsx) - 工具输出的自定义组件
+- [工作流](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow.tsx) - 工作流步骤可视化
+- [代理网络](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/network.tsx) - 网络执行显示
+- [自定义事件](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/generative-user-interfaces-with-custom-events.tsx) - 带自定义事件的进度指示器
+
+## 配方
+
+### 流转换
+
+要将 Mastra 的流手动转换为 AI SDK 兼容格式，请使用 [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream) 工具。请参阅[示例](/reference/ai-sdk/to-ai-sdk-stream#examples) 获取具体使用模式。
+
+### 加载历史消息
+
+从 Mastra 的内存加载消息以在聊天 UI 中显示时，使用 [`toAISdkV5Messages()`](/reference/ai-sdk/to-ai-sdk-v5-messages) 或 [`toAISdkV4Messages()`](/reference/ai-sdk/to-ai-sdk-v4-messages) 将它们转换为适合 `useChat()` 的 `initialMessages` 的 AI SDK 格式。
+
+### 传递额外数据
+
+[`sendMessage()`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/use-chat#send-message) 允许您从前端向 Mastra 传递额外数据。然后可以在服务器上将这些数据用作 [`RequestContext`](/docs/cn/docs/server/request-context)。
+
+下面是前端代码的示例：
+
+```typescript {15-25}
+import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
+import { DefaultChatTransport } from 'ai';
+
+export function ChatAdditional() {
+  const [inputValue, setInputValue] = useState('')
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat-extra',
+    }),
+  });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage({ text: inputValue }, {
+      body: {
+        data: {
+          userId: "user123",
+          preferences: {
+            language: "en",
+            temperature: "celsius"
+          }
+        }
+      }
+    });
+  };
+
+  return (
+    <div>
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleFormSubmit}>
+        <input value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="Name of the city" />
+      </form>
+    </div>
+  );
+}
+```
+
+实现后端的两个示例。
+
+<Tabs>
+
+<TabItem value="mastra-server" label="Mastra Server">
+
+像上面所示向您的 Mastra 配置添加一个 `chatRoute()`。然后，添加一个服务器级中间件：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      async (c, next) => {
+        const requestContext = c.get("requestContext");
+
+        if (c.req.method === "POST") {
+          const clonedReq = c.req.raw.clone();
+          const body = await clonedReq.json();
+
+          if (body?.data) {
+            for (const [key, value] of Object.entries(body.data)) {
+              requestContext.set(key, value);
+            }
+          }
+        }
+        await next();
+      },
+    ],
+  },
+});
+```
+
+:::info
+
+您可以通过 `requestContext` 参数在您的工具中访问此数据。请参阅[请求上下文文档](/docs/cn/docs/server/request-context)了解更多详情。
+
+:::
+
+</TabItem>
+
+<TabItem value="nextjs" label="Next.js">
+
+```typescript title="app/chat-extra/route.ts"
+import { handleChatStream } from '@mastra/ai-sdk';
+import { RequestContext } from "@mastra/core/request-context";
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const { messages, data } = await req.json();
+
+  const requestContext = new RequestContext();
+
+  if (data) {
+    for (const [key, value] of Object.entries(data)) {
+      requestContext.set(key, value);
+    }
+  }
+
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params: {
+      messages,
+      requestContext,
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+### 工作流暂停/恢复与用户批准
+
+工作流可以暂停执行并等待用户输入后再继续。这对于批准流程、确认或任何人在回路中的场景非常有用。
+
+工作流使用：
+- `suspendSchema` / `resumeSchema` - 定义暂停负载和恢复输入的数据结构
+- `suspend()` - 暂停工作流并将暂停负载发送到 UI
+- `resumeData` - 包含工作流恢复时用户的响应
+- `bail()` - 提前退出工作流（例如，当用户拒绝时）
+
+<Tabs>
+
+<TabItem value="backend" label="后端">
+
+创建一个暂停等待批准的工作流步骤。该步骤检查 `resumeData` 以确定是否正在恢复，并在第一次执行时调用 `suspend()`。
+
+```typescript title="src/mastra/workflows/approval-workflow.ts"
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const requestApproval = createStep({
+  id: "request-approval",
+  inputSchema: z.object({ requestId: z.string(), summary: z.string() }),
+  outputSchema: z.object({
+    approved: z.boolean(),
+    requestId: z.string(),
+    approvedBy: z.string().optional(),
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean(),
+    approverName: z.string().optional(),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    requestId: z.string(),
+  }),
+  execute: async ({ inputData, resumeData, suspend, bail }) => {
+    // 用户拒绝 - 跳出
+    if (resumeData?.approved === false) {
+      return bail({ message: "Request rejected" });
+    }
+    // 用户批准 - 继续
+    if (resumeData?.approved) {
+      return {
+        approved: true,
+        requestId: inputData.requestId,
+        approvedBy: resumeData.approverName || "User",
+      };
+    }
+    // 第一次执行 - 暂停并等待
+    return await suspend({
+      message: `Please approve: ${inputData.summary}`,
+      requestId: inputData.requestId,
+    });
+  },
+});
+
+export const approvalWorkflow = createWorkflow({
+  id: "approval-workflow",
+  inputSchema: z.object({ requestId: z.string(), summary: z.string() }),
+  outputSchema: z.object({
+    approved: z.boolean(),
+    requestId: z.string(),
+    approvedBy: z.string().optional(),
+  }),
+})
+  .then(requestApproval);
+
+approvalWorkflow.commit();
+```
+
+注册工作流。存储是暂停/恢复持久化状态所必需的。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  workflows: { approvalWorkflow },
+  storage: new LibSQLStore({
+    url: "file:../mastra.db",
+  }),
+  server: {
+    apiRoutes: [
+      workflowRoute({ path: "/workflow/approvalWorkflow", workflow: "approvalWorkflow" }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="前端">
+
+检测工作流何时暂停，并使用 `runId`、`step` 和 `resumeData` 发送恢复数据。
+
+```typescript title="src/components/approval-workflow.tsx"
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useMemo, useState } from "react";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+
+export function ApprovalWorkflow() {
+  const [requestId, setRequestId] = useState("");
+  const [summary, setSummary] = useState("");
+
+  const { messages, sendMessage, setMessages, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/approvalWorkflow",
+      prepareSendMessagesRequest: ({ messages }) => {
+        const lastMessage = messages[messages.length - 1];
+        const text = lastMessage.parts.find((p) => p.type === "text")?.text;
+        const metadata = lastMessage.metadata as Record<string, string>;
+
+        // 恢复：发送 runId、step 和 resumeData
+        if (text === "Approve" || text === "Reject") {
+          return {
+            body: {
+              runId: metadata.runId,
+              step: "request-approval",
+              resumeData: { approved: text === "Approve" },
+            },
+          };
+        }
+        // 开始：发送 inputData
+        return {
+          body: { inputData: { requestId: metadata.requestId, summary: metadata.summary } },
+        };
+      },
+    }),
+  });
+
+  // 查找暂停的工作流
+  const suspended = useMemo(() => {
+    for (const m of messages) {
+      for (const p of m.parts) {
+        if (p.type === "data-workflow" && (p.data as WorkflowData).status === "suspended") {
+          return { data: p.data as WorkflowData, runId: p.id };
+        }
+      }
+    }
+    return null;
+  }, [messages]);
+
+  const handleApprove = () => {
+    setMessages([]);
+    sendMessage({ text: "Approve", metadata: { runId: suspended?.runId } });
+  };
+
+  const handleReject = () => {
+    setMessages([]);
+    sendMessage({ text: "Reject", metadata: { runId: suspended?.runId } });
+  };
+
+  return (
+    <div>
+      {!suspended ? (
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          setMessages([]);
+          sendMessage({ text: "Start", metadata: { requestId, summary } });
+        }}>
+          <input value={requestId} onChange={(e) => setRequestId(e.target.value)} placeholder="Request ID" />
+          <input value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="Summary" />
+          <button type="submit" disabled={status !== "ready"}>Submit</button>
+        </form>
+      ) : (
+        <div>
+          <p>{(suspended.data.steps["request-approval"]?.suspendPayload as { message: string })?.message}</p>
+          <button onClick={handleApprove}>Approve</button>
+          <button onClick={handleReject}>Reject</button>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+关键点：
+- 暂停负载可通过 `step.suspendPayload` 访问
+- 要恢复，在请求体中发送 `runId`、`step`（步骤 ID）和 `resumeData`
+- 必须配置存储以使暂停/恢复持久化工作流状态
+
+有关完整实现，请参阅 UI Dojo 中的[工作流暂停恢复示例](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-suspend-resume.tsx)。
+
+### 工具中的嵌套代理流
+
+工具可以在内部调用代理并将代理的输出流式传输回 UI。这创建了 `data-tool-agent` 部分，可以与工具的最终输出一起呈现。
+
+该模式使用：
+- `context.mastra.getAgent()` - 从工具内部获取代理实例
+- `agent.stream()` - 流式传输代理的响应
+- `stream.fullStream.pipeTo(context.writer)` - 将代理的流管道传输到工具的编写器
+
+<Tabs>
+
+<TabItem value="backend" label="后端">
+
+创建一个调用代理并将其流管道传输到工具编写器的工具。
+
+```typescript title="src/mastra/tools/nested-agent-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const nestedAgentTool = createTool({
+  id: "nested-agent-stream",
+  description: "使用嵌套代理分析天气",
+  inputSchema: z.object({
+    city: z.string().describe("要分析的城市"),
+  }),
+  outputSchema: z.object({
+    summary: z.string(),
+  }),
+  execute: async (inputData, context) => {
+    const agent = context?.mastra?.getAgent("weatherAgent");
+    if (!agent) {
+      return { summary: "Weather agent not available" };
+    }
+
+    const stream = await agent.stream(
+      `Analyze the weather in ${inputData.city} and provide a summary.`
+    );
+
+    // 管道传输代理的流以发出 data-tool-agent 部分
+    await stream.fullStream.pipeTo(context!.writer!);
+
+    return { summary: (await stream.text) ?? "No summary available" };
+  },
+});
+```
+
+创建一个使用此工具的代理。
+
+```typescript title="src/mastra/agents/forecast-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { nestedAgentTool } from "../tools/nested-agent-tool";
+
+export const forecastAgent = new Agent({
+  id: "forecast-agent",
+  instructions: "Use the nested-agent-stream tool when asked about weather.",
+  model: "openai/gpt-4o-mini",
+  tools: { nestedAgentTool },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="前端">
+
+处理 `data-tool-agent` 部分以显示嵌套代理的流式输出。
+
+```typescript title="src/components/nested-agent-chat.tsx"
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import type { AgentDataPart } from "@mastra/ai-sdk";
+
+export function NestedAgentChat() {
+  const [input, setInput] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/chat/forecastAgent",
+    }),
+  });
+
+  return (
+    <div>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        sendMessage({ text: input });
+        setInput("");
+      }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Enter a city" />
+        <button type="submit" disabled={status !== "ready"}>Get Forecast</button>
+      </form>
+
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            if (part.type === "text") {
+              return <p key={index}>{part.text}</p>;
+            }
+            if (part.type === "data-tool-agent") {
+              const { id, data } = part as AgentDataPart;
+              return (
+                <div key={index} className="nested-agent">
+                  <strong>Nested Agent: {id}</strong>
+                  {data.text && <p>{data.text}</p>}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+关键点：
+- 将 `fullStream` 管道传输到 `context.writer` 会创建 `data-tool-agent` 部分
+- `AgentDataPart` 在部分上有 `id`，以及 `data.text`（代理的流式文本）
+- 工具在流完成后仍会返回自己的输出
+
+有关完整实现，请参阅 UI Dojo 中的[工具嵌套流示例](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/tool-nested-streams.tsx)。
+
+### 从工作流步骤流式传输代理文本
+
+工作流步骤可以通过将代理的流管道传输到步骤的 `writer` 来实时流式传输代理的文本输出。这让用户在工作流执行时可以看到代理的"思考"过程，而不是等待步骤完成。
+
+该模式使用：
+- 工作流步骤中的 `writer` - 将代理的 `fullStream` 管道传输到步骤的编写器
+- `text` 和 `data-workflow` 部分 - 前端接收流式文本以及步骤进度
+
+<Tabs>
+
+<TabItem value="backend" label="后端">
+
+通过管道传输到步骤的 `writer` 创建一个流式传输代理响应的工作流步骤。
+
+```typescript title="src/mastra/workflows/weather-workflow.ts"
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+import { weatherAgent } from "../agents/weather-agent";
+
+const analyzeWeather = createStep({
+  id: "analyze-weather",
+  inputSchema: z.object({ location: z.string() }),
+  outputSchema: z.object({ analysis: z.string(), location: z.string() }),
+  execute: async ({ inputData, writer }) => {
+    const response = await weatherAgent.stream(
+      `Analyze the weather in ${inputData.location} and provide insights.`
+    );
+
+    // 管道传输代理流到步骤编写器以进行实时文本流式传输
+    await response.fullStream.pipeTo(writer);
+
+    return {
+      analysis: await response.text,
+      location: inputData.location,
+    };
+  },
+});
+
+const calculateScore = createStep({
+  id: "calculate-score",
+  inputSchema: z.object({ analysis: z.string(), location: z.string() }),
+  outputSchema: z.object({ score: z.number(), summary: z.string() }),
+  execute: async ({ inputData }) => {
+    const score = inputData.analysis.includes("sunny") ? 85 : 50;
+    return { score, summary: `Comfort score for ${inputData.location}: ${score}/100` };
+  },
+});
+
+export const weatherWorkflow = createWorkflow({
+  id: "weather-workflow",
+  inputSchema: z.object({ location: z.string() }),
+  outputSchema: z.object({ score: z.number(), summary: z.string() }),
+})
+  .then(analyzeWeather)
+  .then(calculateScore);
+
+weatherWorkflow.commit();
+```
+
+使用 `workflowRoute()` 注册工作流。默认情况下启用文本流式传输。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  workflows: { weatherWorkflow },
+  server: {
+    apiRoutes: [
+      workflowRoute({ path: "/workflow/weather", workflow: "weatherWorkflow" }),
+    ],
+  },
+});
+```
+
+</TabItem>
+
+<TabItem value="frontend" label="前端">
+
+同时呈现 `text` 部分（流式代理输出）和 `data-workflow` 部分（步骤进度）。
+
+```typescript title="src/components/weather-workflow.tsx"
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import type { WorkflowDataPart } from "@mastra/ai-sdk";
+
+type WorkflowData = WorkflowDataPart["data"];
+
+export function WeatherWorkflow() {
+  const [location, setLocation] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "http://localhost:4111/workflow/weather",
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          inputData: {
+            location: messages[messages.length - 1].parts.find((p) => p.type === "text")?.text,
+          },
+        },
+      }),
+    }),
+  });
+
+  return (
+    <div>
+      <form onSubmit={(e) => {
+        e.preventDefault();
+        sendMessage({ text: location });
+        setLocation("");
+      }}>
+        <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Enter city" />
+        <button type="submit" disabled={status !== "ready"}>Analyze</button>
+      </form>
+
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, index) => {
+            // 流式代理文本
+            if (part.type === "text" && message.role === "assistant") {
+              return (
+                <div key={index}>
+                  {status === "streaming" && <p><em>Agent analyzing...</em></p>}
+                  <p>{part.text}</p>
+                </div>
+              );
+            }
+            // 工作流步骤进度
+            if (part.type === "data-workflow") {
+              const workflow = part.data as WorkflowData;
+              return (
+                <div key={index}>
+                  {Object.entries(workflow.steps).map(([stepId, step]) => (
+                    <div key={stepId}>
+                      <strong>{stepId}</strong>: {step.status}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+</TabItem>
+
+</Tabs>
+
+关键点：
+- 步骤的 `writer` 在 `execute` 函数中可用（不是通过 `context`）
+- `includeTextStreamParts` 在 `workflowRoute()` 上默认为 `true`，因此默认情况下文本会流式传输
+- 文本部分实时流式传输，而 `data-workflow` 部分随步骤状态更新
+
+有关完整实现，请参阅 UI Dojo 中的[工作流代理文本流示例](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-agent-text-stream.tsx)。
+
+### 具有分支工作流的多阶段进度
+
+对于具有条件分支的工作流（例如，快递与标准运输），您可以通过在自定义事件中包含标识符来跟踪不同分支的进度。
+
+UI Dojo 示例在事件数据中使用 `stage` 字段来标识哪个分支正在执行（例如 `"validation"`、`"standard-processing"`、`"express-processing"`）。前端按此字段对事件进行分组以显示管道式进度 UI。
+
+请参阅 UI Dojo 中的 [branching-workflow.ts](https://github.com/mastra-ai/ui-dojo/blob/main/src/mastra/workflows/branching-workflow.ts)（后端）和 [workflow-custom-events.tsx](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/workflow-custom-events.tsx)（前端）。
+
+### 代理网络中的进度指示器
+
+使用代理网络时，您可以从子代理使用的工具发出自定义进度事件，以显示当前活动的代理。
+
+UI Dojo 示例在事件数据中包含一个 `stage` 字段，以标识哪个子代理正在运行（例如 `"report-generation"`、`"report-review"`）。前端按此字段对事件进行分组并显示每个的最新状态。
+
+请参阅 UI Dojo 中的 [report-generation-tool.ts](https://github.com/mastra-ai/ui-dojo/blob/main/src/mastra/tools/report-generation-tool.ts)（后端）和 [agent-network-custom-events.tsx](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/agent-network-custom-events.tsx)（前端）。

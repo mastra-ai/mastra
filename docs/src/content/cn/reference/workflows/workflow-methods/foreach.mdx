@@ -1,0 +1,127 @@
+---
+title: "参考：Workflow.foreach() | 工作流"
+description: "工作流中 `Workflow.foreach()` 方法的文档，用于创建循环对数组中的每个项目执行步骤。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.foreach()
+
+`.foreach()` 方法创建一个循环，对数组中的每个项目执行一个步骤。它始终返回一个包含每次迭代输出的数组，保持原始顺序。
+
+## 使用示例
+
+```typescript
+workflow.foreach(step1, { concurrency: 2 });
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step",
+      description:
+        "要在循环中执行的步骤实例。前一个步骤必须返回数组类型。",
+      isOptional: false,
+    },
+    {
+      name: "opts",
+      type: "object",
+      description:
+        "循环的可选配置。concurrency 选项控制可以并行运行的迭代次数（默认值：1）",
+      isOptional: true,
+      properties: [
+        {
+          name: "concurrency",
+          type: "number",
+          description:
+            "允许的并发迭代次数（默认值：1）",
+          isOptional: true,
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "用于方法链的工作流实例。输出类型是步骤输出类型的数组。",
+    },
+  ]}
+/>
+
+## 行为
+
+### 执行和等待
+
+`.foreach()` 方法在下一个步骤执行之前处理所有项目。无论并发设置如何，`.foreach()` 之后的步骤只会在所有迭代完成后才运行。使用 `concurrency: 1`（默认值）时，项目按顺序处理。使用更高的并发时，项目以并行批次处理，但下一个步骤仍然等待所有批次完成。
+
+如果您需要对每个项目运行多个操作，请使用嵌套工作流作为步骤。这可以将每个项目的所有操作保持在一起，比链接多个 `.foreach()` 调用更整洁。请参阅 [foreach 内部的嵌套工作流](/docs/cn/docs/workflows/control-flow#nested-workflows-inside-foreach) 查看示例。
+
+### 输出结构
+
+`.foreach()` 始终输出一个数组。输出数组中的每个元素对应输入数组中相同索引处元素的处理结果。
+
+```typescript
+// 输入: [{ value: 1 }, { value: 2 }, { value: 3 }]
+// 步骤为每个值加 10
+// 输出: [{ value: 11 }, { value: 12 }, { value: 13 }]
+```
+
+### 在 `.foreach()` 之后使用 `.then()`
+
+当您在 `.foreach()` 之后链接 `.then()` 时，下一个步骤接收整个输出数组作为其输入。这允许您一起聚合或处理所有结果。
+
+```typescript
+workflow
+  .foreach(processItemStep)    // 输出: 已处理项目的数组
+  .then(aggregateStep)         // 输入: 整个数组
+  .commit();
+```
+
+### 在 `.foreach()` 之后使用 `.map()`
+
+使用 `.map()` 在将数组输出传递给下一个步骤之前转换它：
+
+```typescript
+workflow
+  .foreach(processItemStep)
+  .map(async ({ inputData }) => ({
+    total: inputData.reduce((sum, item) => sum + item.value, 0),
+    count: inputData.length
+  }))
+  .then(nextStep)
+  .commit();
+```
+
+### 链接多个 `.foreach()` 调用
+
+当您链接 `.foreach()` 调用时，每个调用对前一个步骤的数组进行操作：
+
+```typescript
+workflow
+  .foreach(stepA)    // 如果输入是 [a, b, c]，输出是 [A, B, C]
+  .foreach(stepB)    // 对 [A, B, C] 进行操作，输出是 [A', B', C']
+  .commit();
+```
+
+如果 `.foreach()` 内部的步骤返回数组，输出将变成数组的数组。使用 `.map()` 和 `.flat()` 来扁平化：
+
+```typescript
+workflow
+  .foreach(chunkStep)           // 输出: [[chunk1, chunk2], [chunk3, chunk4]]
+  .map(async ({ inputData }) => inputData.flat())  // 输出: [chunk1, chunk2, chunk3, chunk4]
+  .foreach(embedStep)
+  .commit();
+```
+
+## 相关内容
+
+- [使用 foreach 循环](/docs/cn/docs/workflows/control-flow#looping-with-foreach)

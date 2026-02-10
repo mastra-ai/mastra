@@ -1,0 +1,124 @@
+---
+title: "Cerebras | 模型 | Mastra"
+description: "在 Mastra 中使用 Cerebras 模型。共 3 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/cerebras.svg" alt="Cerebras logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cerebras
+
+通过 Mastra 的模型路由器访问 3 个 Cerebras 模型。身份验证使用 `CEREBRAS_API_KEY` 环境变量自动处理。
+
+在 [Cerebras 文档](https://inference-docs.cerebras.ai/models/overview) 中了解更多信息。
+
+```bash title=".env"
+CEREBRAS_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "cerebras/gpt-oss-120b"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## 模型
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "cerebras/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.25,
+    "outputCost": 0.69
+  },
+  {
+    "model": "cerebras/qwen-3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 32000,
+    "inputCost": 0.6,
+    "outputCost": 1.2
+  },
+  {
+    "model": "cerebras/zai-glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 40000,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    id: "cerebras/gpt-oss-120b",
+    apiKey: process.env.CEREBRAS_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "cerebras/zai-glm-4.7"
+      : "cerebras/gpt-oss-120b";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/cerebras) for more details.
+
+```bash npm2yarn
+npm install @ai-sdk/cerebras
+```
+
+For detailed provider-specific documentation, see the [AI SDK Cerebras provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/cerebras).

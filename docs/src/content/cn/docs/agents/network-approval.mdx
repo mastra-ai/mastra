@@ -1,0 +1,281 @@
+---
+title: "网络审批 | 智能体"
+description: 了解如何要求审批、暂停执行以及恢复暂停的网络，同时保持人类对智能体网络工作流的控制。
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# 网络审批
+
+智能体网络可以要求与单个智能体和工作流中相同的[人工参与](/docs/cn/workflows/human-in-the-loop)监督。当网络中的工具、子智能体或工作流需要审批或暂停执行时，网络会暂停并发出事件，允许您的应用程序在恢复之前收集用户输入。
+
+## 存储
+
+网络审批使用快照来捕获执行状态。确保在 Mastra 实例中启用了存储提供程序。如果未启用存储，您将看到与快照未找到相关的错误。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: ":memory:"
+  })
+});
+```
+
+## 批准网络工具调用
+
+当网络中的工具设置 `requireApproval: true` 时，网络流会发出 `agent-execution-approval` 块并暂停。要允许工具执行，请使用 `runId` 调用 `approveNetworkToolCall`。
+
+```typescript
+const stream = await routingAgent.network("处理此查询", {
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+let runId: string;
+
+for await (const chunk of stream) {
+  runId = stream.runId;
+  // 如果 requirApproval 在子智能体中的工具中，或者子智能体设置了 requireToolApproval 为 true
+  if (chunk.type === "agent-execution-approval") {
+    console.log("工具需要审批：", chunk.payload);
+  }
+
+  // 如果 requirApproval 在网络智能体直接包含的工具中
+  if (chunk.type === "tool-execution-approval") {
+    console.log("工具需要审批：", chunk.payload);
+  }
+}
+
+// 批准并恢复执行
+const approvedStream = await routingAgent.approveNetworkToolCall({
+  runId,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of approvedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+## 拒绝网络工具调用
+
+要拒绝待处理的工具调用并阻止执行，请调用 `declineNetworkToolCall`。网络将在不执行工具的情况下继续。
+
+```typescript
+const declinedStream = await routingAgent.declineNetworkToolCall({
+  runId,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of declinedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+## 恢复暂停的网络
+
+当网络中的原语调用 `suspend()` 时，流会发出包含 `suspendPayload` 的 `agent-execution-suspended`/`tool-execution-suspended`/`workflow-execution-suspended` 块，其中包含来自原语的上下文。使用 `resumeNetwork` 提供原语请求的数据并继续执行。
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const confirmationTool = createTool({
+  id: "confirmation-tool",
+  description: "在继续之前请求用户确认",
+  inputSchema: z.object({
+    action: z.string()
+  }),
+  outputSchema: z.object({
+    confirmed: z.boolean(),
+    action: z.string()
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    action: z.string()
+  }),
+  resumeSchema: z.object({
+    confirmed: z.boolean()
+  }),
+  execute: async (inputData, context) => {
+    const { resumeData, suspend } = context?.agent ?? {};
+
+    if (!resumeData?.confirmed) {
+      return suspend?.({
+        message: `请确认：${inputData.action}`,
+        action: inputData.action
+      });
+    }
+
+    return { confirmed: true, action: inputData.action };
+  }
+});
+```
+
+处理暂停并使用用户提供的恢复数据：
+
+```typescript
+const stream = await routingAgent.network("删除旧记录", {
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of stream) {
+  if (chunk.type === "workflow-execution-suspended") {
+    console.log(chunk.payload.suspendPayload);
+    // { message: "请确认：删除旧记录", action: "delete old records" }
+  }
+}
+
+// 使用用户确认恢复
+const resumedStream = await routingAgent.resumeNetwork(
+  { confirmed: true },
+  {
+    runId: stream.runId,
+    memory: {
+      thread: "user-123",
+      resource: "my-app"
+    }
+  }
+);
+
+for await (const chunk of resumedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+## 自动原语恢复
+
+对于使用 `suspend()` 的原语，您可以启用自动恢复，使网络根据用户的下一条消息恢复暂停的原语。这创建了一个对话式流程，用户自然地提供所需的信息。
+
+### 启用自动恢复
+
+在智能体的 `defaultNetworkOptions` 中或将 `autoResumeSuspendedTools` 设置为 `true`：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+// 选项 1：在智能体配置中
+const routingAgent = new Agent({
+  id: "routing-agent",
+  name: "路由智能体",
+  instructions: "您协调多个智能体之间的任务",
+  model: "openai/gpt-4o-mini",
+  tools: { confirmationTool },
+  memory: new Memory(),
+  defaultNetworkOptions: {
+    autoResumeSuspendedTools: true,
+  },
+});
+
+// 选项 2：每次请求
+const stream = await routingAgent.network("处理此请求", {
+  autoResumeSuspendedTools: true,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+```
+
+### 工作原理
+
+当启用 `autoResumeSuspendedTools` 时：
+
+1. 原语通过调用 `suspend()` 并携带有效载荷来暂停执行
+2. 暂停与对话一起持久化到内存中
+3. 当用户在同一个线程上发送下一条消息时，网络：
+   - 从消息历史记录中检测暂停的原语
+   - 根据工具的 `resumeSchema` 从用户消息中提取 `resumeData`
+   - 使用提取的数据自动恢复原语
+
+### 示例
+
+```typescript
+const stream = await routingAgent.network("删除旧记录", {
+  autoResumeSuspendedTools: true,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of stream) {
+  if (chunk.type === "workflow-execution-suspended") {
+    console.log(chunk.payload.suspendPayload);
+    // { message: "请确认：删除旧记录", action: "delete old records" }
+  }
+}
+
+// 用户在下一条消息中提供确认
+const resumedStream = await routingAgent.network("是的，已确认", {
+  autoResumeSuspendedTools: true,
+  memory: {
+    thread: "user-123",
+    resource: "my-app"
+  }
+});
+
+for await (const chunk of resumedStream) {
+  if (chunk.type === "network-execution-event-step-finish") {
+    console.log(chunk.payload.result);
+  }
+}
+```
+
+**对话流程：**
+
+```
+用户："删除旧记录"
+智能体："请确认：删除旧记录"
+
+用户："是的，已确认"
+智能体："记录删除成功"
+```
+
+### 要求
+
+要使自动工具恢复正常工作：
+
+- **配置内存**：智能体需要内存来跟踪跨消息的暂停工具
+- **同一线程**：后续消息必须使用相同的内存线程和资源标识符
+- **定义 `resumeSchema`**：工具（直接在网络智能体中或在子智能体中）/ 工作流（被暂停的步骤）必须定义 `resumeSchema`，以便智能体知道从用户消息中提取什么数据
+
+### 手动与自动恢复对比
+
+| 方法 | 用例 |
+|------|------|
+| 手动 (`resumeNetwork()`) | 程序化控制、webhook、按钮点击、外部触发器 |
+| 自动 (`autoResumeSuspendedTools`) | 对话式流程，用户以自然语言提供恢复数据 |
+
+两种方法都适用于相同的工具定义。自动恢复仅当消息历史记录中存在暂停的工具且用户在同一个线程上发送新消息时触发。
+
+## 相关内容
+
+- [智能体网络](./networks)
+- [智能体审批](./agent-approval)
+- [人工参与](/docs/cn/workflows/human-in-the-loop)
+- [智能体内存](./agent-memory)

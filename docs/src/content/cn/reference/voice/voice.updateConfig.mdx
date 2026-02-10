@@ -1,0 +1,94 @@
+---
+title: "参考文档：voice.updateConfig() | 语音"
+description: "语音提供者提供的 updateConfig() 方法文档，用于在运行时更新语音提供者的配置。"
+packages:
+  - "@mastra/voice-openai-realtime"
+---
+
+# voice.updateConfig()
+
+`updateConfig()` 方法允许您在运行时更新语音提供者的配置。这对于更改语音设置、API 密钥或其他提供者特定选项而无需创建新实例非常有用。
+
+## 使用示例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+
+// 初始化实时语音提供者
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-5.1-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy",
+});
+
+// 连接到实时服务
+await voice.connect();
+
+// 稍后，更新配置
+voice.updateConfig({
+  voice: "nova", // 更改默认语音
+  turn_detection: {
+    type: "server_vad",
+    threshold: 0.5,
+    silence_duration_ms: 1000,
+  },
+});
+
+// 下一次 speak() 调用将使用新配置
+await voice.speak("您好，使用我的新语音！");
+```
+
+## 参数
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description:
+        "要更新的配置选项。具体属性取决于语音提供者。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+此方法不返回值。
+
+## 配置选项
+
+不同的语音提供者支持不同的配置选项：
+
+### OpenAI Realtime
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "voice",
+      type: "string",
+      description:
+        "用于语音合成的语音 ID（例如 'alloy'、'echo'、'nova'）",
+      isOptional: true,
+    },
+    {
+      name: "turn_detection",
+      type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
+      description:
+        "用于检测用户何时说完话的配置",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 注意事项
+
+- 如果提供者不支持此方法，默认实现会记录警告
+- 配置更新通常应用于后续操作，而非正在进行的操作
+- 并非所有可以在构造函数中设置的属性都可以在运行时更新
+- 具体行为取决于语音提供者实现
+- 对于实时语音提供者，某些配置更改可能需要重新连接到服务

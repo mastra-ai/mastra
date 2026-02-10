@@ -1,0 +1,198 @@
+---
+title: "参考文档：Run.resume() | 工作流"
+description: "工作流中 `Run.resume()` 方法的文档，用于使用新数据恢复暂停的工作流运行。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.resume()
+
+`.resume()` 方法使用新数据恢复暂停的工作流运行，允许您从特定步骤继续执行。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.start({ inputData: { value: "初始数据" } });
+
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    resumeData: { value: "恢复数据" },
+  });
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "resumeData",
+      type: "z.infer<TResumeSchema>",
+      description: "用于恢复暂停步骤的数据",
+      isOptional: true,
+    },
+    {
+      name: "step",
+      type: "Step<string, any, any, TResumeSchema, any, TEngineType> | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>] | string | string[]",
+      description:
+        "要恢复执行的步骤。可以是步骤实例、步骤数组、步骤 ID 字符串或步骤 ID 字符串数组",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "恢复时要使用的请求上下文数据",
+      isOptional: true,
+    },
+    {
+      name: "retryCount",
+      type: "number",
+      description: "嵌套工作流执行的可选重试计数",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "用于创建子 span 和添加元数据的跟踪上下文。使用 Mastra 的跟踪系统时自动注入。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "用于创建子 span 和添加元数据的当前 span。使用它来创建自定义子 span 或在执行期间更新 span 属性。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "跟踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "要添加到根跟踪 span 的元数据。对于添加用户 ID、会话 ID 或功能标志等自定义属性很有用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "要提取为此跟踪元数据的附加 RequestContext 键。支持点表示法用于嵌套值（例如 'user.id'）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的跟踪 ID（1-32 个十六进制字符）。如果提供，此跟踪将是指定跟踪的一部分。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的父 span ID（1-16 个十六进制字符）。如果提供，根 span 将创建为该 span 的子 span。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "要应用于此跟踪的标签。用于分类和过滤跟踪的字符串标签。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "输出配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "是否在结果中包含工作流运行状态。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description:
+        "解析为包含步骤输出和状态的工作流执行结果的 Promise",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "启用跟踪时与此执行关联的跟踪 ID。使用它来关联日志和调试执行流程。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+if (result.status === "suspended") {
+  const resumedResults = await run.resume({
+    step: result.suspended[0],
+    resumeData: { value: "恢复数据" },
+  });
+}
+```
+
+> **注意**：当只有一个步骤暂停时，您可以省略 `step` 参数，工作流将自动恢复该步骤。对于具有多个暂停步骤的工作流，您必须明确指定要恢复的步骤。
+
+## 相关内容
+
+- [工作流概述](/docs/cn/docs/workflows/overview#running-workflows)
+- [Workflow.createRun()](../workflow-methods/create-run)
+- [暂停与恢复](/docs/cn/docs/workflows/suspend-and-resume)
+- [人工介入](/docs/cn/docs/workflows/human-in-the-loop)

@@ -1,0 +1,632 @@
+---
+title: "参考文档: PostgreSQL 存储 | 存储"
+description: "Mastra 中 PostgreSQL 存储实现的文档。"
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/pg"
+---
+
+# PostgreSQL 存储
+
+PostgreSQL 存储实现提供了一种使用 PostgreSQL 数据库的生产级存储解决方案。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/pg@latest
+```
+
+## 使用方法
+
+```typescript
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此存储实例的唯一标识符。",
+      isOptional: false,
+    },
+    {
+      name: "connectionString",
+      type: "string",
+      description: "PostgreSQL 连接字符串（例如，postgresql://user:pass@host:5432/dbname）。除非使用 `pool` 或基于主机的单独参数（`host`、`port`、`database`、`user`、`password`），否则为必需。",
+      isOptional: true,
+    },
+    {
+      name: "host",
+      type: "string",
+      description: "数据库服务器主机名或 IP 地址。与其他基于主机的参数一起用作 connectionString 的替代方案。",
+      isOptional: true,
+    },
+    {
+      name: "port",
+      type: "number",
+      description: "数据库服务器端口号。如果未指定，默认为 5432。",
+      isOptional: true,
+    },
+    {
+      name: "database",
+      type: "string",
+      description: "要连接的数据库名称。",
+      isOptional: true,
+    },
+    {
+      name: "user",
+      type: "string",
+      description: "用于身份验证的数据库用户。",
+      isOptional: true,
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "数据库用户的密码。",
+      isOptional: true,
+    },
+    {
+      name: "pool",
+      type: "pg.Pool",
+      description: "预先配置的 pg.Pool 实例。使用此选项可重用现有连接池。当提供此选项时，Mastra 不会创建自己的池，也不会在调用 `store.close()` 时关闭它。",
+      isOptional: true,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description: "存储要使用的模式名称。默认为 'public'。",
+      isOptional: true,
+    },
+    {
+      name: "ssl",
+      type: "boolean | ConnectionOptions",
+      description: "连接的 SSL 配置；设置为 true 使用默认 SSL，或提供 ConnectionOptions 对象以进行自定义 SSL 设置。",
+      isOptional: true,
+    },
+    {
+      name: "max",
+      type: "number",
+      description: "池中的最大连接数。默认为 20。",
+      isOptional: true,
+    },
+    {
+      name: "idleTimeoutMillis",
+      type: "number",
+      description: "连接在关闭前可以空闲的时间。默认为 30000（30 秒）。",
+      isOptional: true,
+    },
+    {
+      name: "disableInit",
+      type: "boolean",
+      description: "为 true 时，自动创建表/迁移被禁用。对于单独运行迁移的 CI/CD 管道很有用。",
+      isOptional: true,
+    },
+    {
+      name: "skipDefaultIndexes",
+      type: "boolean",
+      description: "为 true 时，初始化期间不会创建默认索引。",
+      isOptional: true,
+    },
+    {
+      name: "indexes",
+      type: "CreateIndexOptions[]",
+      description: "初始化期间要创建的自定义索引。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 构造函数示例
+
+你可以通过以下方式实例化 `PostgresStore`：
+
+```ts
+import { PostgresStore } from "@mastra/pg";
+import { Pool } from "pg";
+
+// 使用连接字符串
+const store1 = new PostgresStore({
+  id: 'pg-storage-1',
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+});
+
+// 使用带池选项的连接字符串
+const store2 = new PostgresStore({
+  id: 'pg-storage-2',
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema",
+  max: 30,                    // 最大池连接数
+  idleTimeoutMillis: 60000,   // 空闲超时
+  ssl: { rejectUnauthorized: false },
+});
+
+// 使用单独的连接参数
+const store3 = new PostgresStore({
+  id: 'pg-storage-3',
+  host: "localhost",
+  port: 5432,
+  database: "mydb",
+  user: "user",
+  password: "password",
+});
+
+// 使用预先配置的 pg.Pool（推荐用于池重用）
+const existingPool = new Pool({
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  max: 20,
+  // ... 您的自定义池配置
+});
+
+const store4 = new PostgresStore({
+  id: 'pg-storage-4',
+  pool: existingPool,
+  schemaName: "custom_schema", // 可选
+});
+```
+
+## 额外说明
+
+### 模式管理
+
+存储实现自动处理模式的创建和更新。它创建以下表：
+
+- `mastra_workflow_snapshot`：存储工作流状态和执行数据
+- `mastra_evals`：存储评估结果和元数据
+- `mastra_threads`：存储对话线程
+- `mastra_messages`：存储单个消息
+- `mastra_traces`：存储遥测和追踪数据
+- `mastra_scorers`：存储评分和评估数据
+- `mastra_resources`：存储资源工作内存数据
+
+### 可观察性
+
+PostgreSQL 支持可观察性，可以处理低追踪量。吞吐量容量取决于部署因素，如硬件、模式设计、索引和保留策略，应针对您的特定环境进行验证。对于高容量生产环境，请考虑：
+
+- 使用 `insert-only` [追踪策略](/docs/cn/docs/observability/tracing/exporters/default#tracing-strategies) 来减少数据库写入操作
+- 设置表分区以实现高效的数据保留
+- 如果需要进一步扩展，将可观察性迁移到 [通过复合存储的 ClickHouse](/reference/storage/composite#specialized-storage-for-observability)
+
+### 初始化
+
+当你将存储传递给 Mastra 类时，`init()` 会自动在任何存储操作之前调用：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+const mastra = new Mastra({
+  storage, // init() 自动调用
+});
+```
+
+如果你在没有 Mastra 的情况下直接使用存储，必须显式调用 `init()` 来创建表：
+
+```typescript
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+// 直接使用存储时需要
+await storage.init();
+
+// 通过 getStore() 访问特定领域的存储
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+:::warning
+如果未调用 `init()`，表将不会创建，存储操作将静默失败或抛出错误。
+:::
+
+### 使用现有池
+
+如果你的应用程序中已经有一个 `pg.Pool`（例如与 ORM 共享或用于行级安全性），可以直接将其传递给 `PostgresStore`：
+
+```typescript
+import { Pool } from "pg";
+import { PostgresStore } from "@mastra/pg";
+
+// 你的现有池（在整个应用程序中共享）
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 20,
+});
+
+const storage = new PostgresStore({
+  id: "shared-storage",
+  pool: pool,
+});
+```
+
+**池生命周期行为：**
+
+- 当你**提供池时**：Mastra 使用你的池，但在调用 `store.close()` 时**不会**关闭它。你管理池的生命周期。
+- 当 Mastra**创建池时**：Mastra 拥有池，并会在调用 `store.close()` 时关闭它。
+
+### 直接数据库和池访问
+
+`PostgresStore` 公开底层数据库客户端和池以用于高级用例：
+
+```typescript
+store.db;   // DbClient - 带辅助方法的查询接口（any、one、tx 等）
+store.pool; // pg.Pool - 底层连接池
+```
+
+**使用 `store.db` 进行查询：**
+
+```typescript
+// 使用辅助方法执行查询
+const users = await store.db.any("SELECT * FROM users WHERE active = $1", [true]);
+const user = await store.db.one("SELECT * FROM users WHERE id = $1", [userId]);
+const maybeUser = await store.db.oneOrNone("SELECT * FROM users WHERE email = $1", [email]);
+
+// 使用事务
+const result = await store.db.tx(async (t) => {
+  await t.none("INSERT INTO logs (message) VALUES ($1)", ["Started"]);
+  const data = await t.any("SELECT * FROM items");
+  return data;
+});
+```
+
+**直接使用 `store.pool`：**
+
+```typescript
+// 获取客户端以进行手动连接管理
+const client = await store.pool.connect();
+try {
+  await client.query("SET LOCAL app.user_id = $1", [userId]);
+  const result = await client.query("SELECT * FROM protected_table");
+  return result.rows;
+} finally {
+  client.release();
+}
+```
+
+使用这些字段时：
+
+- 你负责正确的连接和事务处理。
+- 关闭存储（`store.close()`）仅在 Mastra 创建池时才会销毁池。
+- 直接访问会绕过 PostgresStore 方法提供的任何额外逻辑或验证。
+
+此方法适用于需要低级访问的高级场景。
+
+### 与 Next.js 一起使用
+
+在 Next.js 应用程序中使用 `PostgresStore` 时，开发期间的[热模块替换（HMR）](https://nextjs.org/docs/cn/docs/architecture/fast-refresh)可能导致创建多个存储实例，从而导致以下警告：
+
+```
+WARNING: Creating a duplicate database object for the same connection.
+```
+
+为防止这种情况，将 `PostgresStore` 实例存储在全局对象上，以便它在 HMR 重新加载之间保持存在：
+
+```typescript title="src/mastra/storage.ts"
+import { PostgresStore } from "@mastra/pg";
+import { Memory } from "@mastra/memory";
+
+// 扩展全局类型以包含我们的实例
+declare global {
+  var pgStore: PostgresStore | undefined;
+  var memory: Memory | undefined;
+}
+
+// 获取或创建 PostgresStore 实例
+function getPgStore(): PostgresStore {
+  if (!global.pgStore) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL 未在环境变量中定义");
+    }
+    global.pgStore = new PostgresStore({
+      id: "pg-storage",
+      connectionString: process.env.DATABASE_URL,
+      ssl:
+        process.env.DATABASE_SSL === "true"
+          ? { rejectUnauthorized: false }
+          : false,
+    });
+  }
+  return global.pgStore;
+}
+
+// 获取或创建 Memory 实例
+function getMemory(): Memory {
+  if (!global.memory) {
+    global.memory = new Memory({
+      storage: getPgStore(),
+    });
+  }
+  return global.memory;
+}
+
+export const storage = getPgStore();
+export const memory = getMemory();
+```
+
+然后在 Mastra 配置中使用导出的实例：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { storage } from "./storage";
+
+export const mastra = new Mastra({
+  storage,
+  // ...其他配置
+});
+```
+
+此模式确保无论模块重新加载多少次，只会创建一个 `PostgresStore` 实例。相同的模式可以应用于其他存储提供商，如 `LibSQLStore`。
+
+:::tip
+此单例模式仅在带有 HMR 的本地开发期间是必要的。在生产构建中，模块只加载一次。
+:::
+
+## 使用示例
+
+### 为智能体添加内存
+
+要为智能体添加 PostgreSQL 内存，请使用 `Memory` 类并使用 `PostgresStore` 创建一个新的 `storage` 键。`connectionString` 可以是远程位置，也可以是本地数据库连接。
+
+```typescript title="src/mastra/agents/example-pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { PostgresStore } from "@mastra/pg";
+
+export const pgAgent = new Agent({
+  id: "pg-agent",
+  name: "PG 智能体",
+  instructions:
+    "你是一个具有自动回忆先前交互记忆能力的 AI 智能体。",
+  model: "openai/gpt-4o",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    options: {
+      generateTitle: true, // 显式启用自动标题生成
+    },
+  }),
+});
+```
+
+### 使用智能体
+
+使用 `memoryOptions` 来限定此请求的回忆。设置 `lastMessages: 5` 以限制基于最近性的回忆，并使用 `semanticRecall` 获取 `topK: 3` 最相关的消息，包括每个匹配的 `messageRange: 2` 个相邻消息以提供上下文。
+
+```typescript title="src/test-pg-agent.ts"
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("pg-agent");
+
+const message = await agent.stream("我的名字是 Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("我的名字是什么？", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## 索引管理
+
+PostgreSQL 存储提供索引管理以优化查询性能。
+
+### 默认索引
+
+PostgreSQL 存储在初始化期间为常见查询模式创建复合索引：
+
+- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
+- `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt DESC)
+- `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt DESC)
+- `mastra_ai_spans_name_startedat_idx`: (name, startedAt DESC)
+- `mastra_ai_spans_scope_startedat_idx`: (scope, startedAt DESC)
+- `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt DESC)
+
+这些索引提高了带排序的筛选查询的性能，包括消息查询上的 `dateRange` 筛选器。
+
+### 配置索引
+
+你可以通过构造函数选项控制索引创建：
+
+```typescript
+import { PostgresStore } from "@mastra/pg";
+
+// 跳过默认索引（单独管理索引）
+const store = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  skipDefaultIndexes: true,
+});
+
+// 在初始化期间添加自定义索引
+const storeWithCustomIndexes = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  indexes: [
+    {
+      name: "idx_threads_metadata_type",
+      table: "mastra_threads",
+      columns: ["metadata->>'type'"],
+    },
+    {
+      name: "idx_messages_status",
+      table: "mastra_messages",
+      columns: ["metadata->>'status'"],
+    },
+  ],
+});
+```
+
+对于高级索引类型，你可以指定其他选项：
+
+- `unique: true` 用于唯一约束
+- `where: 'condition'` 用于部分索引
+- `method: 'brin'` 用于时间序列数据
+- `storage: { fillfactor: 90 }` 用于更新频繁的表
+- `concurrent: true` 用于非阻塞创建（默认）
+
+### 索引选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "索引的唯一名称",
+      isOptional: false,
+    },
+    {
+      name: "table",
+      type: "string",
+      description: "表名（例如 'mastra_threads'）",
+      isOptional: false,
+    },
+    {
+      name: "columns",
+      type: "string[]",
+      description: "带可选排序顺序的列名数组（例如 ['id', 'createdAt DESC']）",
+      isOptional: false,
+    },
+    {
+      name: "unique",
+      type: "boolean",
+      description: "创建唯一约束索引",
+      isOptional: true,
+    },
+    {
+      name: "concurrent",
+      type: "boolean",
+      description: "在不锁定表的情况下创建索引（默认：true）",
+      isOptional: true,
+    },
+    {
+      name: "where",
+      type: "string",
+      description: "部分索引条件（PostgreSQL 特定）",
+      isOptional: true,
+    },
+    {
+      name: "method",
+      type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
+      description: "索引方法（默认：'btree'）",
+      isOptional: true,
+    },
+    {
+      name: "opclass",
+      type: "string",
+      description: "GIN/GIST 索引的运算符类",
+      isOptional: true,
+    },
+    {
+      name: "storage",
+      type: "Record<string, any>",
+      description: "存储参数（例如 { fillfactor: 90 }）",
+      isOptional: true,
+    },
+    {
+      name: "tablespace",
+      type: "string",
+      description: "索引放置的表空间名称",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 特定于模式的索引
+
+使用自定义模式时，索引名称以模式名称为前缀：
+
+```typescript
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  schemaName: "custom_schema",
+  indexes: [
+    {
+      name: "idx_threads_status",
+      table: "mastra_threads",
+      columns: ["status"],
+    },
+  ],
+});
+
+// 创建索引为：custom_schema_idx_threads_status
+```
+
+### 通过 SQL 管理索引
+
+对于高级索引管理（列出、删除、分析），请通过 `db` 访问器使用直接 SQL 查询：
+
+```typescript
+// 列出表的索引
+const indexes = await storage.db.any(`
+  SELECT indexname, indexdef
+  FROM pg_indexes
+  WHERE tablename = 'mastra_messages'
+`);
+
+// 删除索引
+await storage.db.none('DROP INDEX IF EXISTS idx_my_custom_index');
+
+// 分析索引使用情况
+const stats = await storage.db.one(`
+  SELECT idx_scan, idx_tup_read
+  FROM pg_stat_user_indexes
+  WHERE indexrelname = 'mastra_messages_thread_id_createdat_idx'
+`);
+```
+
+### 索引类型和用例
+
+PostgreSQL 提供针对特定场景优化的不同索引类型：
+
+| 索引类型 | 适用于 | 存储 | 速度 |
+| ------------------- | --------------------------------------- | ---------- | -------------------------- |
+| **btree**（默认） | 范围查询、排序、通用用途 | 中等 | 快 |
+| **hash** | 仅等式比较 | 小 | 对于 `=` 非常快 |
+| **gin** | JSONB、数组、全文搜索 | 大 | 对于包含操作快 |
+| **gist** | 几何数据、全文搜索 | 中等 | 对于最近邻快 |
+| **spgist** | 非平衡数据、文本模式 | 小 | 对于特定模式快 |
+| **brin** | 具有自然排序的大型表 | 非常小 | 对于范围快 |

@@ -1,0 +1,245 @@
+---
+title: "SvelteKit | 框架"
+description: "开始使用 Mastra 和 SvelteKit"
+---
+
+# 在您的 SvelteKit 项目中集成 Mastra
+
+在本指南中，您将使用 Mastra 构建一个工具调用型 AI 代理，然后通过从路由中直接导入和调用代理将其连接到 SvelteKit。
+
+您将使用 [AI SDK UI](https://ai-sdk.dev/docs/cn/docs/ai-sdk-ui/overview) 创建一个美观、交互式的聊天体验。
+
+## 前置条件
+
+- 您需要一个支持的[模型提供商](/models)的 API key。如果您没有偏好，请使用 [OpenAI](/models/providers/openai)。
+- 安装 Node.js `v22.13.0` 或更高版本
+
+## 创建新的 SvelteKit 应用程序（可选）
+
+如果您已经有一个使用 Tailwind 的 SvelteKit 应用程序，请跳到下一步。
+
+运行以下命令[创建新的 SvelteKit 应用程序](https://svelte.dev/docs/cn/docs/kit/creating-a-project)：
+
+```bash npm2yarn
+npx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install npm
+```
+
+这会创建一个名为 `mastra-svelte` 的项目，但您可以将其替换为任何您想要的名称。稍后添加了 Tailwind 用于样式设置。
+
+## 初始化 Mastra
+
+导航到您的 SvelteKit 项目：
+
+```bash
+cd mastra-svelte
+```
+
+运行 [`mastra init`](/reference/cli/mastra#mastra-init)。当提示时，选择一个提供商（例如 OpenAI）并输入您的 key：
+
+```bash npm2yarn
+npx mastra@latest init
+```
+
+这会创建一个 `src/mastra` 文件夹，其中包含一个示例天气代理以及以下文件：
+
+- `index.ts` - Mastra 配置，包括内存
+- `tools/weather-tool.ts` - 用于获取给定位置天气的工具
+- `agents/weather-agent.ts` - 一个带有使用工具提示词的天气代理
+
+在接下来的步骤中，您将从 SvelteKit 路由中调用 `weather-agent.ts`。
+
+## 安装 AI SDK UI
+
+安装 AI SDK UI 以及 Mastra 适配器：
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/svelte ai
+```
+
+## 创建聊天路由
+
+创建 `src/routes/api/chat/+server.ts`：
+
+```ts title="src/routes/api/chat/+server.ts"
+import type { RequestHandler } from "./$types";
+import { handleChatStream } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+import { createUIMessageStreamResponse } from "ai";
+import { mastra } from "../../../mastra";
+
+const THREAD_ID = "example-user-id";
+const RESOURCE_ID = "weather-chat";
+
+export const POST: RequestHandler = async ({ request }) => {
+  const params = await request.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: "weather-agent",
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
+      },
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+};
+
+export const GET: RequestHandler = async () => {
+  const memory = await mastra.getAgentById("weather-agent").getMemory();
+  let response = null;
+
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    });
+  } catch {
+    console.log("No previous messages found.");
+  }
+
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return Response.json(uiMessages);
+};
+```
+
+`POST` 路由接受提示词并将代理的响应以 AI SDK 格式流式传输回来，而 `GET` 路由从内存中获取消息历史记录，以便在客户端重新加载时填充 UI。
+
+为了调用 `GET` 处理程序，您需要创建一个 `src/routes/+page.ts` 文件。它的 `load()` 函数与 `+page.svelte` 一起运行。
+
+```ts title="src/routes/+page.ts"
+import type { UIDataTypes, UIMessage, UITools } from "ai";
+import type { PageLoad } from "./$types";
+
+export const load: PageLoad = async ({ fetch }) => {
+  const response = await fetch("/api/chat");
+  const initialMessages = (await response.json()) as UIMessage<
+    unknown,
+    UIDataTypes,
+    UITools
+  >[];
+  return { initialMessages };
+};
+```
+
+## 添加聊天 UI
+
+将 `src/routes/+page.svelte` 替换为以下内容。
+
+```html title="src/routes/+page.svelte"
+<script lang="ts">
+  import { Chat } from '@ai-sdk/svelte';
+  import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+  let input = $state('');
+  const { data } = $props();
+  let messages = $derived(data.initialMessages)
+
+  const chat = new Chat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat'
+    }),
+    get messages() {
+      return messages;
+    }
+  });
+
+  function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    chat.sendMessage({ text: input });
+    input = '';
+  }
+
+  const STATE_TO_LABEL_MAP: Record<ToolUIPart["state"], string> = {
+    "input-streaming": "Pending",
+    "input-available": "Running",
+    // @ts-expect-error - Only available in AI SDK v6
+    "approval-requested": "Awaiting Approval",
+    "approval-responded": "Responded",
+    "output-available": "Completed",
+    "output-error": "Error",
+    "output-denied": "Denied",
+  };
+</script>
+
+<main class="max-w-3xl mx-auto p-6 size-full h-screen">
+  <div class="flex flex-col h-full">
+    <div class="flex-1 min-h-0 overflow-y-auto" data-name="conversation">
+      <div data-name="conversation-content" class="flex flex-col gap-8">
+        {#each chat.messages as message, messageIndex (messageIndex)}
+          <div>
+            {#each message.parts as part, partIndex (partIndex)}
+              {#if part.type === 'text'}
+                <div data-name="message" class={[message.role === 'user' && 'ml-auto justify-end', 'group flex w-full max-w-[95%] flex-col gap-2', message.role === 'user' ? 'is-user' : 'is-assistant']}>
+                  <div data-name="message-content" class={["is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-blue-100 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      "group-[.is-assistant]:text-foreground"]}>
+                    <div data-name="message-response" class="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      {part.text}
+                    </div>
+                  </div>
+                </div>
+              {:else if part.type.startsWith('tool-')}
+                <div data-name="tool" class="not-prose mb-6 w-full rounded-lg border border-gray-300 shadow">
+                  <details data-name="tool-header" class="w-full p-3 hover:cursor-pointer">
+                    <summary class="font-medium text-sm">{(part as ToolUIPart).type.split("-").slice(1).join("-")} - {STATE_TO_LABEL_MAP[(part as ToolUIPart).state ?? 'output-available']}</summary>
+                    <div data-name="tool-content" class="">
+                      <div data-name="tool-input" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">Parameters</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).input, null, 2)}</code></pre>
+                      </div>
+                      <div data-name="tool-output" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">{(part as ToolUIPart).errorText ? 'Error' : 'Result'}</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).output, null, 2)}</code></pre>
+                        {#if (part as ToolUIPart).errorText}
+                          <div data-name="tool-error" class="text-red-600">
+                            {(part as ToolUIPart).errorText}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </div>
+    <form class="w-full grid grid-cols-[1fr_auto] gap-6 shrink-0 pt-4" onsubmit={handleSubmit} data-name="prompt-input">
+      <input name="chat-input" class="rounded-lg border border-gray-300 shadow h-10" placeholder="City name" bind:value={input} />
+      <button class="bg-blue-600 text-white shadow-lg border border-blue-400 px-4 whitespace-nowrap rounded-lg text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" type="submit">Send</button>
+    </form>
+  </div>
+</main>
+```
+
+此页面将 [`Chat`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/use-chat) 连接到 `api/chat` 端点，将提示词发送至此并将响应分块流式传输回来。
+
+它使用自定义消息和工具组件渲染响应文本。
+
+## 测试您的代理
+
+1. 使用 `npm run dev` 运行您的 SvelteKit 应用程序
+2. 在 http://localhost:5173 打开聊天
+3. 尝试询问天气。如果您的 API key 设置正确，您会得到响应
+
+## 后续步骤
+
+恭喜您使用 SvelteKit 构建了 Mastra 代理！🎉
+
+从这里开始，您可以使用自己的工具和逻辑扩展项目：
+
+- 了解更多关于[代理](/docs/cn/docs/agents/overview)
+- 为您的代理提供自己的[工具](/docs/cn/docs/agents/using-tools)
+- 为您的代理添加类似人类的[内存](/docs/cn/docs/agents/agent-memory)
+
+准备就绪后，阅读更多关于 Mastra 如何与 AI SDK UI 和 SvelteKit 集成的信息，以及如何将您的代理部署到任何地方：
+
+- 将 Mastra 与 [AI SDK UI](/guides/build-your-ui/ai-sdk-ui) 集成
+- 将您的代理部署到[任何地方](/docs/cn/docs/deployment/overview)
+- 尝试[非官方的 Svelte AI Elements](https://svelte-ai-elements.vercel.app/)

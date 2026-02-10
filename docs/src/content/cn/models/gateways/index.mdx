@@ -1,0 +1,44 @@
+---
+title: "网关"
+description: "通过网关提供商访问 AI 模型，支持缓存、速率限制和分析。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
+
+# 网关提供商
+
+网关提供商聚合多个模型提供商，并添加缓存、速率限制、分析和自动故障转移等功能。当您需要可观测性、成本管理或简化的多提供商访问时，请使用网关。
+
+## 自定义网关
+
+为私有 LLM 部署或专用提供商集成创建自定义网关。请参阅[自定义网关](/models/gateways/custom-gateways)了解实现详情。
+
+## 内置网关
+
+<CardGrid>
+    <CardGridItem
+      title="Azure OpenAI"
+      description="使用您的私有 Azure OpenAI 部署及关联的部署名称"
+      href="/models/gateways/azure-openai"
+      logo="https://models.dev/logos/azure-openai.svg"
+    />    <CardGridItem
+      title="Netlify"
+      description="52 个模型"
+      href="/models/gateways/netlify"
+      logo={<NetlifyLogo />}
+    />    <CardGridItem
+      title="OpenRouter"
+      description="176 个模型"
+      href="/models/gateways/openrouter"
+      logo="https://models.dev/logos/openrouter.svg"
+
+    />    <CardGridItem
+      title="Vercel"
+      description="189 个模型"
+      href="/models/gateways/vercel"
+      logo="https://models.dev/logos/vercel.svg"
+
+    />
+</CardGrid>

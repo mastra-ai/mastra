@@ -1,0 +1,133 @@
+---
+title: "参考：文本差异评分器 | 评估"
+description: "Mastra 中文本差异评分器的文档，使用序列匹配测量字符串之间的文本差异。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 文本差异评分器
+
+`createTextualDifferenceScorer()` 函数使用序列匹配来测量两个字符串之间的文本差异。它提供关于变化的详细信息，包括将一个文本转换为另一个文本所需的操作次数。
+
+## 参数
+
+`createTextualDifferenceScorer()` 函数不接受任何选项。
+
+此函数返回 MastraScorer 类的实例。详见 [MastraScorer 参考](./mastra-scorer) 了解 `.run()` 方法及其输入输出的详细信息。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "带有差异指标的对象: { confidence: number, changes: number, lengthDiff: number }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "相似度比率（0-1），其中 1 表示相同的文本。",
+    },
+  ]}
+/>
+
+`.run()` 返回以下形状的结果：
+
+```typescript
+{
+  runId: string,
+  analyzeStepResult: {
+    confidence: number,
+    ratio: number,
+    changes: number,
+    lengthDiff: number
+  },
+  score: number
+}
+```
+
+## 评分详情
+
+评分器计算多个指标：
+
+- **相似度比率**: 基于文本之间的序列匹配（0-1）
+- **变化**: 所需的不匹配操作计数
+- **长度差异**: 文本长度的归一化差异
+- **置信度**: 与长度差异成反比
+
+### 评分过程
+
+1. 分析文本差异：
+   - 在输入和输出之间执行序列匹配
+   - 计数所需的变化操作次数
+   - 测量长度差异
+2. 计算指标：
+   - 计算相似度比率
+   - 确定置信度分数
+   - 合并为加权分数
+
+最终分数: `(similarity_ratio * confidence) * scale`
+
+### 分数解释
+
+0 到 1 之间的文本差异分数：
+
+- **1.0**: 相同的文本 - 未检测到差异。
+- **0.7–0.9**: 微小差异 - 需要少量更改。
+- **0.4–0.6**: 中等差异 - 需要明显的更改。
+- **0.1–0.3**: 重大差异 - 需要大量更改。
+- **0.0**: 完全不同的文本。
+
+## 示例
+
+测量预期和实际代理输出之间的文本差异：
+
+```typescript title="src/example-textual-difference.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createTextualDifferenceScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createTextualDifferenceScorer();
+
+const result = await runEvals({
+  data: [
+    {
+      input: "总结递归的概念",
+      groundTruth:
+        "递归是函数通过将问题分解为更小的子问题来调用自身解决问题。",
+    },
+    {
+      input: "法国的首都是什么？",
+      groundTruth: "法国的首都是巴黎。",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      groundTruth: scorerResults[scorer.id].groundTruth,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+## 相关内容
+
+- [内容相似度评分器](./content-similarity)
+- [完整性评分器](./completeness)
+- [关键词覆盖率评分器](./keyword-coverage)

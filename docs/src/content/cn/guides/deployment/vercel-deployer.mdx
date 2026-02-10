@@ -1,0 +1,180 @@
+---
+title: "VercelDeployer | 部署"
+description: "了解如何使用 Mastra VercelDeployer 将 Mastra 应用程序部署到 Vercel"
+---
+
+# VercelDeployer
+
+`VercelDeployer` 类处理将独立的 Mastra 应用程序部署到 Vercel。它管理配置和部署，并扩展基类 [Deployer](/reference/deployer/) 以提供 Vercel 特定功能。
+
+:::warning
+
+Vercel Functions 使用临时文件系统。请从您的 Mastra 配置中移除所有使用文件 URL 的 [LibSQLStore](/reference/storage/libsql)。使用内存存储 (`:memory:`) 或外部存储提供商，如 Turso、PostgreSQL 或 Upstash。
+
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/deployer-vercel@latest
+```
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  deployer: new VercelDeployer(),
+});
+```
+
+> 有关所有可用配置选项，请参阅 [VercelDeployer](/reference/deployer/vercel) API 参考。
+
+### 可选覆盖
+
+Vercel 部署器可以将几个高价值设置写入 Vercel Output API 函数配置 (`.vc-config.json`)：
+
+- `maxDuration?: number` — 函数执行超时（秒）
+- `memory?: number` — 函数内存分配（MB）
+- `regions?: string[]` — 区域（例如 `['sfo1','iad1']`）
+
+示例：
+
+```ts title="src/mastra/index.ts"
+deployer: new VercelDeployer({
+  maxDuration: 600,
+  memory: 1536,
+  regions: ["sfo1", "iad1"],
+});
+```
+
+## 持续集成
+
+将您的 Mastra 项目的 Git 仓库连接到 Vercel 后，更新项目设置。在 Vercel 仪表板中，转到 **设置** > **构建和部署**，在 **框架设置** 下，设置以下内容：
+
+- **构建命令**：`npm run build`（可选）
+
+### 环境变量
+
+在您第一次部署之前，请确保添加应用程序使用的任何环境变量。例如，如果您使用 OpenAI 作为 LLM，您需要在 Vercel 项目设置中设置 `OPENAI_API_KEY`。
+
+> 有关更多详细信息，请参阅[环境变量](https://vercel.com/docs/cn/docs/environment-variables)。
+
+您的项目现在已配置为自动部署，每当您推送到 GitHub 仓库的配置分支时就会发生部署。
+
+## 手动部署
+
+也可以使用 [Vercel CLI](https://vercel.com/docs/cli) 进行手动部署。安装 Vercel CLI 后，从项目根目录运行以下命令来部署您的应用程序。
+
+```bash
+npm run build && vercel --prod --prebuilt --archive=tgz
+```
+
+> 您也可以从项目根目录运行 `vercel dev` 来在本地测试您的 Mastra 应用程序。
+
+## 构建输出
+
+使用 `VercelDeployer` 的 Mastra 应用程序的构建输出包括您项目中的所有代理、工具和工作流，以及在 Vercel 上运行应用程序所需的特定于 Mastra 的文件。
+
+```
+.vercel/
+├── output/
+│   ├── functions/
+│   │   └── index.func/
+│   │       └── index.mjs
+│   └── config.json
+└── package.json
+```
+
+`VercelDeployer` 自动在 `.vercel/output` 中生成 `config.json` 配置文件，包含以下设置：
+
+```json
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ]
+}
+```
+
+## 可观测性
+
+要在 Vercel 上启用可观测性，请配置外部存储（因为 Vercel 的临时文件系统不支持本地文件存储）并设置您首选的导出器。
+
+### 存储配置
+
+使用 PostgreSQL 提供商（如 [Neon](https://neon.tech) 或 [Supabase](https://supabase.com)）进行持久存储：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { PostgresStore } from "@mastra/pg";
+import { Observability, DefaultExporter, CloudExporter } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger(),
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-mastra-app",
+        exporters: [
+          // 根据您的可观测性平台选择：
+          new DefaultExporter(), // 您的存储 → Mastra Studio
+          new CloudExporter(),   // Mastra Cloud
+          // new ArizeExporter(),   // Arize
+          // new LaminarExporter(), // Laminar
+          // 等等。
+        ],
+      },
+    },
+  }),
+  // ... 代理、工具、工作流
+});
+```
+
+有关所有可用的导出器，请参阅[跟踪文档](/docs/cn/docs/observability/tracing/overview#exporters)。
+
+### 环境变量
+
+根据您的配置，将这些添加到 Vercel 项目设置中：
+
+| 变量 | 描述 |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL 连接字符串（存储必需） |
+| `MASTRA_CLOUD_ACCESS_TOKEN` | 如果使用 CloudExporter 则必需 |
+| `OPENAI_API_KEY` | 您的 LLM 提供商 API key |
+
+### 刷新跟踪
+
+在无服务器环境中，调用 `flush()` 以确保在函数完成前导出跟踪：
+
+```typescript title="app/api/chat/route.ts"
+import { mastra } from "@/mastra";
+
+export async function POST(req: Request) {
+  const { message } = await req.json();
+  const agent = mastra.getAgent("myAgent");
+
+  const result = await agent.generate([{ role: "user", content: message }]);
+
+  // 在无服务器函数完成前刷新跟踪
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+有关跟踪配置的更多详细信息，请参阅[跟踪文档](/docs/cn/docs/observability/tracing/overview)。
+
+## 后续步骤
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)

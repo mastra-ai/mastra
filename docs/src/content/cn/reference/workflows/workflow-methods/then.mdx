@@ -1,0 +1,46 @@
+---
+title: "参考：Workflow.then() | 工作流"
+description: "工作流中 `Workflow.then()` 方法的文档，用于在步骤之间创建顺序依赖。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.then()
+
+`.then()` 方法在工作流步骤之间创建顺序依赖，确保步骤按特定顺序执行。
+
+## 使用示例
+
+```typescript
+workflow.then(step1).then(step2);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step",
+      description:
+        "在前一个步骤完成后应该执行的步骤实例",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "NewWorkflow",
+      description: "用于方法链的工作流实例",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [控制流](/docs/cn/docs/workflows/control-flow)

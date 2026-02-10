@@ -1,0 +1,674 @@
+---
+title: "参考文档: createVectorQueryTool() | 工具与 MCP"
+description: Mastra 中的向量查询工具文档，提供向量存储的语义搜索功能，支持过滤和重排序。
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+  - "@mastra/rag"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# createVectorQueryTool()
+
+`createVectorQueryTool()` 函数用于创建基于向量存储的语义搜索工具。它支持过滤、重排序、数据库特定配置，并可与各种向量存储后端集成。
+
+## 基本用法
+
+```typescript
+import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+});
+```
+
+## 参数
+
+:::note
+
+**参数要求：** 大多数字段可以在创建时设置为默认值。部分字段可以在运行时通过请求上下文或输入进行覆盖。如果必需字段在创建和运行时都缺失，则会抛出错误。请注意，`model`、`id` 和 `description` 只能在创建时设置。
+
+:::
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "工具的自定义 ID。默认值: 'VectorQuery {vectorStoreName} {indexName} Tool'。（仅在创建时设置。）",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description:
+        "工具的自定义描述。默认值: '访问知识库以查找回答用户问题所需的信息'（仅在创建时设置。）",
+      isOptional: true,
+    },
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description:
+        "用于向量搜索的嵌入模型。（仅在创建时设置。）",
+      isOptional: false,
+    },
+    {
+      name: "vectorStoreName",
+      type: "string",
+      description:
+        "要查询的向量存储名称。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: false,
+    },
+    {
+      name: "indexName",
+      type: "string",
+      description:
+        "向量存储中的索引名称。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: false,
+    },
+    {
+      name: "enableFilter",
+      type: "boolean",
+      description:
+        "根据元数据启用结果过滤。（仅在创建时设置，但如果在请求上下文中提供了过滤器，将自动启用。）",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeVectors",
+      type: "boolean",
+      description:
+        "在结果中包含嵌入向量。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description:
+        "在结果中包含完整的检索对象。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "reranker",
+      type: "RerankConfig",
+      description:
+        "重排序结果的选项。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: true,
+    },
+    {
+      name: "databaseConfig",
+      type: "DatabaseConfig",
+      description:
+        "数据库特定配置选项，用于优化查询。（可以在创建时设置，也可以在运行时覆盖。）",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, any>>",
+      description:
+        "嵌入模型的特定提供程序选项（例如 outputDimensionality）。**重要提示**：仅适用于 AI SDK EmbeddingModelV2 模型。对于 V1 模型，请在创建模型本身时配置选项。",
+      isOptional: true,
+    },
+    {
+      name: "vectorStore",
+      type: "MastraVector | VectorStoreResolver",
+      description:
+        "直接的向量存储实例或用于动态选择的解析器函数。对于多租户应用程序，当需要根据请求上下文选择向量存储时，请使用函数。提供后，`vectorStoreName` 变为可选。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### DatabaseConfig
+
+`DatabaseConfig` 类型允许您指定数据库特定的配置，这些配置会自动应用于查询操作。这使您能够利用不同向量存储提供的独特功能和优化。
+
+<PropertiesTable
+  content={[
+    {
+      name: "pinecone",
+      type: "PineconeConfig",
+      description: "Pinecone 向量存储的特定配置",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "namespace",
+              description: "用于组织向量的 Pinecone 命名空间",
+              isOptional: true,
+              type: "string",
+            },
+            {
+              name: "sparseVector",
+              description: "用于混合搜索的稀疏向量",
+              isOptional: true,
+              type: "{ indices: number[]; values: number[]; }",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "pgvector",
+      type: "PgVectorConfig",
+      description:
+        "带有 pgvector 扩展的 PostgreSQL 的特定配置",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "minScore",
+              description: "结果的最小相似度分数阈值",
+              isOptional: true,
+              type: "number",
+            },
+            {
+              name: "ef",
+              description:
+                "HNSW 搜索参数 - 控制准确性与速度的权衡",
+              isOptional: true,
+              type: "number",
+            },
+            {
+              name: "probes",
+              description:
+                "IVFFlat 探针参数 - 搜索期间访问的单元数量",
+              isOptional: true,
+              type: "number",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "chroma",
+      type: "ChromaConfig",
+      description: "Chroma 向量存储的特定配置",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "where",
+              description: "元数据过滤条件",
+              isOptional: true,
+              type: "Record<string, any>",
+            },
+            {
+              name: "whereDocument",
+              description: "文档内容过滤条件",
+              isOptional: true,
+              type: "Record<string, any>",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### RerankConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel",
+      description: "用于重排序的语言模型",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "RerankerOptions",
+      description: "重排序过程的选项",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "weights",
+              description:
+                "评分组件的权重（语义: 0.4，向量: 0.4，位置: 0.2）",
+              isOptional: true,
+              type: "WeightConfig",
+            },
+            {
+              name: "topK",
+              description: "返回的顶部结果数量",
+              isOptional: true,
+              type: "number",
+              defaultValue: "3",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+该工具返回一个包含以下内容的对象：
+
+<PropertiesTable
+  content={[
+    {
+      name: "relevantContext",
+      type: "string",
+      description: "来自最相关文档块的组合文本",
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description:
+        "完整检索结果对象的数组。每个对象包含引用原始文档、块和相似度分数所需的全部信息。",
+    },
+  ]}
+/>
+
+### QueryResult 对象结构
+
+```typescript
+{
+  id: string;         // 唯一块/文档标识符
+  metadata: any;      // 所有元数据字段（文档 ID 等）
+  vector: number[];   // 嵌入向量（如果有）
+  score: number;      // 此检索的相似度分数
+  document: string;   // 完整的块/文档文本（如果有）
+}
+```
+
+## 默认工具描述
+
+默认描述侧重于：
+
+- 在存储的知识中查找相关信息
+- 回答用户问题
+- 检索事实性内容
+
+## 结果处理
+
+该工具根据用户查询确定返回结果数量，默认为 10 个结果。可以根据查询要求进行调整。
+
+## 带过滤器的示例
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  enableFilter: true,
+});
+```
+
+启用过滤后，该工具会处理查询以构建与语义搜索结合的元数据过滤器。该过程如下：
+
+1. 用户提出带有特定过滤要求的查询，例如"查找 'version' 字段大于 2.0 的内容"
+2. 代理分析查询并构建适当的过滤器：
+   ```typescript
+   {
+      "version": { "$gt": 2.0 }
+   }
+   ```
+
+这种代理驱动的方法：
+
+- 将自然语言查询处理为过滤规范
+- 实现向量存储特定的过滤器语法
+- 将查询术语翻译为过滤器运算符
+
+有关详细过滤器语法和存储特定功能，请参阅[元数据过滤器](../rag/metadata-filters)文档。
+
+有关代理驱动过滤的工作原理示例，请参阅[代理驱动元数据过滤](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag)示例。
+
+## 带重排序的示例
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "milvus",
+  indexName: "documentation",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  reranker: {
+    model: "openai/gpt-5.1",
+    options: {
+      weights: {
+        semantic: 0.5, // 语义相关性权重
+        vector: 0.3, // 向量相似度权重
+        position: 0.2, // 原始位置权重
+      },
+      topK: 5,
+    },
+  },
+});
+```
+
+重排序通过以下方式提高结果质量：
+
+- 语义相关性：使用基于 LLM 的文本相似度评分
+- 向量相似度：原始向量距离分数
+- 位置偏差：考虑原始结果排序
+- 查询分析：根据查询特征进行调整
+
+重排序器处理初始向量搜索结果并返回按相关性优化的重新排序列表。
+
+## 带自定义描述的示例
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  description:
+    "搜索文档档案以查找回答有关公司政策和程序问题的相关信息",
+});
+```
+
+此示例展示如何为特定用例自定义工具描述，同时保持其信息检索的核心目的。
+
+## 数据库特定配置示例
+
+`databaseConfig` 参数允许您利用每个向量数据库特有的独特功能和优化。这些配置在查询执行期间自动应用。
+
+<Tabs>
+  <TabItem value="pinecone" label="Pinecone">
+    ### Pinecone 配置
+
+    ```typescript
+    const pineconeQueryTool = createVectorQueryTool({
+      vectorStoreName: "pinecone",
+      indexName: "docs",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+      databaseConfig: {
+        pinecone: {
+          namespace: "production",  // 按环境组织向量
+          sparseVector: {          // 启用混合搜索
+            indices: [0, 1, 2, 3],
+            values: [0.1, 0.2, 0.15, 0.05]
+          }
+        }
+      }
+    });
+    ```
+
+    **Pinecone 功能：**
+    - **命名空间**：在同一索引中隔离不同的数据集
+    - **稀疏向量**：结合密集和稀疏嵌入以提高搜索质量
+    - **用例**：多租户应用程序、混合语义搜索
+
+  </TabItem>
+
+  <TabItem value="pgvector" label="pgVector">
+    ### pgVector 配置
+
+    ```typescript
+    const pgVectorQueryTool = createVectorQueryTool({
+      vectorStoreName: "postgres",
+      indexName: "embeddings",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+      databaseConfig: {
+        pgvector: {
+          minScore: 0.7,    // 仅返回相似度高于 70% 的结果
+          ef: 200,          // 更高的值 = 更好的准确性，更慢的搜索
+          probes: 10        // 对于 IVFFlat：更多探针 = 更好的召回率
+        }
+      }
+    });
+    ```
+
+    **pgVector 功能：**
+    - **minScore**：过滤掉低质量的匹配
+    - **ef (HNSW)**：为 HNSW 索引控制准确性与速度
+    - **probes (IVFFlat)**：为 IVFFlat 索引控制召回率与速度
+    - **用例**：性能调优、质量过滤
+
+  </TabItem>
+
+  <TabItem value="chroma" label="Chroma">
+    ### Chroma 配置
+
+    ```typescript
+    const chromaQueryTool = createVectorQueryTool({
+      vectorStoreName: "chroma",
+      indexName: "documents",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+      databaseConfig: {
+        chroma: {
+          where: {                    // 元数据过滤
+            "category": "technical",
+            "status": "published"
+          },
+          whereDocument: {            // 文档内容过滤
+            "$contains": "API"
+          }
+        }
+      }
+    });
+    ```
+
+    **Chroma 功能：**
+    - **where**：按元数据字段过滤
+    - **whereDocument**：按文档内容过滤
+    - **用例**：高级过滤、基于内容的搜索
+
+  </TabItem>
+
+  <TabItem value="multiple-configs" label="多个配置">
+    ### 多个数据库配置
+
+    ```typescript
+    // 为多个数据库配置（适用于动态存储）
+    const multiDbQueryTool = createVectorQueryTool({
+      vectorStoreName: "dynamic-store", // 将在运行时设置
+      indexName: "docs",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+      databaseConfig: {
+        pinecone: {
+          namespace: "default"
+        },
+        pgvector: {
+          minScore: 0.8,
+          ef: 150
+        },
+        chroma: {
+          where: { "type": "documentation" }
+        }
+      }
+    });
+    ```
+
+    **多配置优势：**
+    - 使用一个工具支持多个向量存储
+    - 自动应用数据库特定的优化
+    - 灵活的部署场景
+
+  </TabItem>
+</Tabs>
+
+### 运行时配置覆盖
+
+您可以在运行时覆盖数据库配置以适应不同场景：
+
+```typescript
+import { RequestContext } from "@mastra/core/request-context";
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  databaseConfig: {
+    pinecone: {
+      namespace: "development",
+    },
+  },
+});
+
+// 在运行时覆盖
+const requestContext = new RequestContext();
+requestContext.set("databaseConfig", {
+  pinecone: {
+    namespace: "production", // 切换到生产命名空间
+  },
+});
+
+const response = await agent.generate("查找部署相关信息", {
+  requestContext,
+});
+```
+
+这种方法允许您：
+
+- 在环境之间切换（开发/预发布/生产）
+- 根据负载调整性能参数
+- 为每个请求应用不同的过滤策略
+
+## 示例：使用请求上下文
+
+```typescript
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+});
+```
+
+使用请求上下文时，通过请求上下文在执行时提供必需的参数：
+
+```typescript = new RequestContext
+const requestContext<{
+  vectorStoreName: string;
+  indexName: string;
+  topK: number;
+  filter: VectorFilter;
+  databaseConfig: DatabaseConfig;
+}>();
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("databaseConfig", {
+  pinecone: { namespace: "runtime-namespace" },
+});
+requestContext.set("model", "openai/text-embedding-3-small");
+
+const response = await agent.generate(
+  "从知识库中查找文档。",
+  {
+    requestContext,
+  },
+);
+```
+
+有关请求上下文的更多信息，请参阅：
+
+- [代理请求上下文](/docs/cn/docs/server/request-context)
+- [请求上下文](/docs/cn/docs/server/request-context#accessing-values-with-tools)
+
+## 不使用 Mastra 服务器的用法
+
+该工具可以单独用于检索与查询匹配的文档：
+
+```typescript title="src/index.ts"
+import { RequestContext } from "@mastra/core/request-context";
+import { createVectorQueryTool } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
+
+const pgVector = new PgVector({
+  id: 'pg-vector',
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
+
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector", // 由于传入了存储，这是可选的
+  vectorStore: pgVector,
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+});
+
+const requestContext = new RequestContext();
+const queryResult = await vectorQueryTool.execute(
+  { queryText: "foo", topK: 1 },
+  { requestContext }
+);
+
+console.log(queryResult.sources);
+```
+
+## 多租户应用程序的动态向量存储
+
+对于每个租户都有隔离数据的多租户应用程序（例如，独立的 PostgreSQL 模式），您可以传递一个解析器函数而不是静态向量存储实例。该函数接收请求上下文并可以返回当前租户的适当向量存储：
+
+```typescript title="src/index.ts"
+import { createVectorQueryTool, VectorStoreResolver } from "@mastra/rag";
+import { PgVector } from "@mastra/pg";
+
+// 租户特定向量存储的缓存
+const vectorStoreCache = new Map<string, PgVector>();
+
+// 解析器函数，根据租户返回正确的向量存储
+const vectorStoreResolver: VectorStoreResolver = async ({ requestContext }) => {
+  const tenantId = requestContext?.get("tenantId");
+
+  if (!tenantId) {
+    throw new Error("请求上下文中需要 tenantId");
+  }
+
+  // 返回缓存的实例或创建新的
+  if (!vectorStoreCache.has(tenantId)) {
+    vectorStoreCache.set(tenantId, new PgVector({
+      id: `pg-vector-${tenantId}`,
+      connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+      schemaName: `tenant_${tenantId}`, // 每个租户有自己的模式
+    }));
+  }
+
+  return vectorStoreCache.get(tenantId)!;
+};
+
+const vectorQueryTool = createVectorQueryTool({
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  vectorStore: vectorStoreResolver, // 动态解析！
+});
+
+// 使用租户上下文
+const requestContext = new RequestContext();
+requestContext.set("tenantId", "acme-corp");
+
+const result = await vectorQueryTool.execute(
+  { queryText: "公司政策", topK: 5 },
+  { requestContext }
+);
+```
+
+此模式类似于 `Agent.memory` 支持动态配置，并支持：
+
+- **模式隔离**：每个租户的数据在独立的 PostgreSQL 模式中
+- **数据库隔离**：按租户路由到不同的数据库实例
+- **动态配置**：根据请求上下文调整向量存储设置
+
+## 工具详情
+
+该工具创建时具有：
+
+- **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
+- **输入架构**: 需要 queryText 和 filter 对象
+- **输出架构**: 返回 relevantContext 字符串
+
+## 相关内容
+
+- [rerank()](../rag/rerank)
+- [createGraphRAGTool](./graph-rag-tool)

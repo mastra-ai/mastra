@@ -1,0 +1,529 @@
+---
+title: "自定义评分器 | 评估"
+packages:
+  - "@mastra/core"
+---
+
+# 自定义评分器
+
+Mastra 提供了一个统一的 `createScorer` 工厂，允许您使用 JavaScript 函数或基于大型语言模型的提示对象来为每个步骤构建自定义评估逻辑。这种灵活性让您可以为评估管道的每个部分选择最佳方法。
+
+### 四步管道
+
+Mastra 中的所有评分器都遵循一致的四步评估管道：
+
+1. **preprocess**（可选）：准备或转换输入/输出数据
+2. **analyze**（可选）：执行评估分析并收集见解
+3. **generateScore**（必需）：将分析转换为数字分数
+4. **generateReason**（可选）：生成人类可读的解释
+
+每个步骤可以使用**函数**或**提示对象**（基于大型语言模型的评估），让您能够根据需要灵活地结合确定性算法和人工智能判断。
+
+### 函数与提示对象
+
+**函数**使用 JavaScript 进行确定性逻辑。它们适合：
+
+- 具有明确标准的算法评估
+- 性能关键场景
+- 与现有库集成
+- 一致、可重复的结果
+
+**提示对象**使用大型语言模型作为评估判断者。它们非常适合：
+
+- 需要类似人类判断的主观评估
+- 难以用算法编码的复杂标准
+- 自然语言理解任务
+- 细微的上下文评估
+
+**"提示对象"的含义：** 步骤是一个带有 `description` + `createPrompt` 的对象（对于 `preprocess`/`analyze` 还有 `outputSchema`）。该对象告诉 Mastra 为该步骤运行裁判大型语言模型，并将结构化输出存储在 `results.<step>StepResult` 中。
+
+您可以在单个评分器中混合搭配方法——例如，使用函数预处理数据，使用大型语言模型分析质量。
+
+### 初始化评分器
+
+每个评分器都从 `createScorer` 工厂函数开始，它需要 id 和描述，还可以选择接受类型规范和裁判配置。
+
+```typescript
+import { createScorer } from '@mastra/core/evals';
+
+const glutenCheckerScorer = createScorer({
+  id: 'gluten-checker',
+  description: '检查食谱是否含有麸质成分',
+  judge: {                    // 可选：用于提示对象步骤
+    model: 'openai/gpt-5.1',
+    instructions: '您是一位识别食谱中是否含有麸质的厨师。'
+  }
+})
+// 在此处链式调用步骤方法
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason(...)
+```
+
+仅当您计划在任何步骤中使用提示对象时才需要裁判配置。单个步骤可以使用自己的裁判设置覆盖此默认配置。
+
+如果所有步骤都是基于函数的，则永远不会调用裁判，也没有裁判输出。要查看大型语言模型输出，请将至少一个步骤定义为提示对象并读取相应的步骤结果（例如 `results.analyzeStepResult`）。
+
+#### 最小裁判示例（提示对象）
+
+此示例在 `analyze` 中使用提示对象，因此裁判运行，其结构化输出可用作 `results.analyzeStepResult`。
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import { z } from "zod";
+
+const quoteSourcesScorer = createScorer({
+  id: "quote-sources",
+  description: "检查响应是否包含来源",
+  judge: {
+    model: "openai/gpt-4.1-nano",
+    instructions: "您是一位严格的评估者。",
+  },
+})
+  .analyze({
+    description: "检测来源是否存在",
+    outputSchema: z.object({
+      hasSources: z.boolean(),
+      sources: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => `
+响应是否包含来源？将它们提取为列表。
+
+响应：
+${run.output}
+`,
+  })
+  .generateScore(({ results }) => (results.analyzeStepResult.hasSources ? 1 : 0));
+
+// 运行评分器并检查裁判输出
+const result = await quoteSourcesScorer.run({
+  input: "法国的首都是什么？",
+  output: "法国的首都是巴黎 [1]。来源：[1] 维基百科",
+});
+
+console.log(result.score);              // 1
+console.log(result.analyzeStepResult);  // { hasSources: true, sources: ["维基百科"] }
+```
+
+#### 智能体评估的智能体类型
+
+为了类型安全并兼容实时智能体评分和跟踪评分，在为智能体评估创建评分器时使用 `type: 'agent'`。这允许您对智能体使用相同的评分器，也可以用它来评分跟踪：
+
+```typescript
+const myScorer = createScorer({
+  type: "agent", // 自动处理智能体输入/输出类型
+}).generateScore(({ run, results }) => {
+  // run.output 自动类型化为 ScorerRunOutputForAgent
+  // run.input 自动类型化为 ScorerRunInputForAgent
+});
+```
+
+### 逐步分解
+
+#### preprocess 步骤（可选）
+
+当您需要提取特定元素、过滤内容或转换复杂数据结构时，准备输入/输出数据。
+
+**函数：** `({ run, results }) => any`
+
+```typescript
+const glutenCheckerScorer = createScorer(...)
+.preprocess(({ run }) => {
+  // 提取并清理食谱文本
+  const recipeText = run.output.text.toLowerCase();
+  const wordCount = recipeText.split(' ').length;
+
+  return {
+    recipeText,
+    wordCount,
+    hasCommonGlutenWords: /flour|wheat|bread|pasta/.test(recipeText)
+  };
+})
+```
+
+**提示对象：** 使用 `description`、`outputSchema` 和 `createPrompt` 来构建基于大型语言模型的预处理。
+
+```typescript
+const glutenCheckerScorer = createScorer(...)
+.preprocess({
+  description: '从食谱中提取配料',
+  outputSchema: z.object({
+    ingredients: z.array(z.string()),
+    cookingMethods: z.array(z.string())
+  }),
+  createPrompt: ({ run }) => `
+    从此食谱中提取所有配料和烹饪方法：
+    ${run.output.text}
+
+    返回带有配料和 cookingMethods 数组的 JSON
+  `
+})
+```
+
+**数据流：** 结果以 `results.preprocessStepResult` 的形式提供给后续步骤
+
+#### analyze 步骤（可选）
+
+执行核心评估分析，收集将决定评分决策的见解。
+
+**函数：** `({ run, results }) => any`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(({ run, results }) => {
+  const { recipeText, hasCommonGlutenWords } = results.preprocessStepResult;
+
+  // 简单的麸质检测算法
+  const glutenKeywords = ['wheat', 'flour', 'barley', 'rye', 'bread'];
+  const foundGlutenWords = glutenKeywords.filter(word =>
+    recipeText.includes(word)
+  );
+
+  return {
+    isGlutenFree: foundGlutenWords.length === 0,
+    detectedGlutenSources: foundGlutenWords,
+    confidence: hasCommonGlutenWords ? 0.9 : 0.7
+  };
+})
+```
+
+**提示对象：** 使用 `description`、`outputSchema` 和 `createPrompt` 进行基于大型语言模型的分析。
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze({
+  description: '分析食谱中的麸质含量',
+  outputSchema: z.object({
+    isGlutenFree: z.boolean(),
+    glutenSources: z.array(z.string()),
+    confidence: z.number().min(0).max(1)
+  }),
+  createPrompt: ({ run, results }) => `
+    分析此食谱中的麸质含量：
+    "${results.preprocessStepResult.recipeText}"
+
+    寻找小麦、大麦、黑麦以及酱油等隐藏来源。
+    返回带有 isGlutenFree、glutenSources 数组和 confidence (0-1) 的 JSON。
+  `
+})
+```
+
+**数据流：** 结果以 `results.analyzeStepResult` 的形式提供给后续步骤
+
+#### generateScore 步骤（必需）
+
+将分析结果转换为数字分数。这是管道中唯一的必需步骤。
+
+**函数：** `({ run, results }) => number`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(({ results }) => {
+  const { isGlutenFree, confidence } = results.analyzeStepResult;
+
+  // 无麸质返回 1，含有麸质返回 0
+  // 按置信度加权
+  return isGlutenFree ? confidence : 0;
+})
+```
+
+**提示对象：** 有关将提示对象与 generateScore 一起使用的详细信息，包括必需的 `calculateScore` 函数，请参阅 [`createScorer`](/reference/evals/create-scorer) API 参考。
+
+**数据流：** 分数作为 `score` 参数对 generateReason 可用
+
+#### generateReason 步骤（可选）
+
+生成人类可读的解释来解释分数，对于调试、透明性或用户反馈很有用。
+
+**函数：** `({ run, results, score }) => string`
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason(({ results, score }) => {
+  const { isGlutenFree, glutenSources } = results.analyzeStepResult;
+
+  if (isGlutenFree) {
+    return `分数：${score}。此食谱不含麸质，未检测到有害成分。`;
+  } else {
+    return `分数：${score}。含有以下来源的麸质：${glutenSources.join(', ')}`;
+  }
+})
+```
+
+**提示对象：** 使用 `description` 和 `createPrompt` 生成基于大型语言模型的解释。
+
+```typescript
+const glutenCheckerScorer = createScorer({...})
+.preprocess(...)
+.analyze(...)
+.generateScore(...)
+.generateReason({
+  description: '解释麸质评估',
+  createPrompt: ({ results, score }) => `
+    解释为什么此食谱获得分数 ${score}。
+    分析：${JSON.stringify(results.analyzeStepResult)}
+
+    为有饮食限制的人提供清晰的解释。
+  `
+})
+```
+
+## 示例：创建自定义评分器
+
+Mastra 中的自定义评分器使用 `createScorer`，包含四个核心组件：
+
+1. [**裁判配置**](#judge-configuration)
+2. [**分析步骤**](#analysis-step)
+3. [**分数生成**](#score-generation)
+4. [**原因生成**](#reason-generation)
+
+这些组件共同允许您使用大型语言模型作为裁判来定义自定义评估逻辑。
+
+:::info
+
+访问 [createScorer](/reference/evals/create-scorer) 获取完整的 API 和配置选项。
+
+:::
+
+```typescript title="src/mastra/scorers/gluten-checker.ts"
+import { createScorer } from "@mastra/core/evals";
+import { z } from "zod";
+
+export const GLUTEN_INSTRUCTIONS = `您是一位识别食谱中是否含有麸质的厨师。`;
+
+export const generateGlutenPrompt = ({
+  output,
+}: {
+  output: string;
+}) => `检查此食谱是否无麸质。
+
+检查以下内容：
+- 小麦
+- 大麦
+- 黑麦
+- 面粉、意大利面、面包等常见来源
+
+含有麸质的示例：
+"混合面粉和水制作面团"
+响应：{
+  "isGlutenFree": false,
+  "glutenSources": ["flour"]
+}
+
+无麸质示例：
+"混合米饭、豆类和蔬菜"
+响应：{
+  "isGlutenFree": true,
+  "glutenSources": []
+}
+
+要分析的歌谱：
+${output}
+
+按此格式返回响应：
+{
+  "isGlutenFree": boolean,
+  "glutenSources": ["含有麸质的配料列表"]
+}`;
+
+export const generateReasonPrompt = ({
+  isGlutenFree,
+  glutenSources,
+}: {
+  isGlutenFree: boolean;
+  glutenSources: string[];
+}) => `解释为什么此食谱${isGlutenFree ? "" : "不"}无麸质。
+
+${glutenSources.length > 0 ? `麸质来源：${glutenSources.join(", ")}` : "未发现含有麸质的成分"}
+
+按此格式返回响应：
+"此食谱[无麸质/含有麸质]，因为[解释]"`;
+
+export const glutenCheckerScorer = createScorer({
+  id: "gluten-checker",
+  description: "检查输出是否含有任何麸质",
+  judge: {
+    model: "openai/gpt-4.1-nano",
+    instructions: GLUTEN_INSTRUCTIONS,
+  },
+})
+  .analyze({
+    description: "分析输出中的麸质",
+    outputSchema: z.object({
+      isGlutenFree: z.boolean(),
+      glutenSources: z.array(z.string()),
+    }),
+    createPrompt: ({ run }) => {
+      const { output } = run;
+      return generateGlutenPrompt({ output: output.text });
+    },
+  })
+  .generateScore(({ results }) => {
+    return results.analyzeStepResult.isGlutenFree ? 1 : 0;
+  })
+  .generateReason({
+    description: "生成分数的原因",
+    createPrompt: ({ results }) => {
+      return generateReasonPrompt({
+        glutenSources: results.analyzeStepResult.glutenSources,
+        isGlutenFree: results.analyzeStepResult.isGlutenFree,
+      });
+    },
+  });
+```
+
+### 裁判配置
+
+设置大型语言模型模型并定义其作为领域专家的角色。
+
+```typescript
+judge: {
+  model: 'openai/gpt-4.1-nano',
+  instructions: GLUTEN_INSTRUCTIONS,
+}
+```
+
+### 分析步骤
+
+定义大型语言模型应该如何分析输入以及返回什么结构化输出。
+
+```typescript
+.analyze({
+  description: '分析输出中的麸质',
+  outputSchema: z.object({
+    isGlutenFree: z.boolean(),
+    glutenSources: z.array(z.string()),
+  }),
+  createPrompt: ({ run }) => {
+    const { output } = run;
+    return generateGlutenPrompt({ output: output.text });
+  },
+})
+```
+
+分析步骤使用提示对象来：
+
+- 提供分析任务的清晰描述
+- 使用 Zod 模式定义预期的输出结构（布尔结果和麸质来源列表）
+- 基于输入内容生成动态提示
+
+### 分数生成
+
+将大型语言模型的结构化分析转换为数字分数。
+
+```typescript
+.generateScore(({ results }) => {
+  return results.analyzeStepResult.isGlutenFree ? 1 : 0;
+})
+```
+
+分数生成函数接受分析结果并应用业务逻辑来产生分数。在这种情况下，大型语言模型直接确定食谱是否无麸质，因此我们使用该布尔结果：无麸质返回 1，含有麸质返回 0。
+
+### 原因生成
+
+使用另一个人工智能调用提供分数的人类可读解释。
+
+```typescript
+.generateReason({
+  description: '生成分数的原因',
+  createPrompt: ({ results }) => {
+    return generateReasonPrompt({
+      glutenSources: results.analyzeStepResult.glutenSources,
+      isGlutenFree: results.analyzeStepResult.isGlutenFree,
+    });
+  },
+})
+```
+
+原因生成步骤创建的解释帮助用户理解为什么分配了特定分数，同时使用布尔结果和分析步骤识别的特定麸质来源。
+
+## 无麸质示例（高分）
+
+```typescript title="src/example-high-gluten-free.ts"
+const result = await glutenCheckerScorer.run({
+  input: [{ role: 'user', content: '混合米饭、豆类和蔬菜' }],
+  output: { text: '混合米饭、豆类和蔬菜' },
+});
+
+console.log('Score:', result.score);
+console.log('Gluten sources:', result.analyzeStepResult.glutenSources);
+console.log('Reason:', result.reason);
+```
+
+### 无麸质输出（高分）
+
+```typescript
+{
+  score: 1,
+  analyzeStepResult: {
+    isGlutenFree: true,
+    glutenSources: []
+  },
+  reason: '此食谱无麸质，因为米饭、豆类和蔬菜是天然无麸质成分，对乳糜泻患者安全。'
+}
+```
+
+## 部分麸质示例
+
+```typescript title="src/example-partial-gluten.ts"
+const result = await glutenCheckerScorer.run({
+  input: [{ role: "user", content: "混合面粉和水制作面团" }],
+  output: { text: "混合面粉和水制作面团" },
+});
+
+console.log("Score:", result.score);
+console.log("Gluten sources:", result.analyzeStepResult.glutenSources);
+console.log("Reason:", result.reason);
+```
+
+### 部分麸质输出
+
+```typescript
+{
+  score: 0,
+  analyzeStepResult: {
+    isGlutenFree: false,
+    glutenSources: ['flour']
+  },
+  reason: '此食谱含有麸质，因为它含有面粉。普通面粉由小麦制成，含有麸质，对乳糜泻患者或麸质敏感者不安全。'
+}
+```
+
+## 无麸质示例（低分）
+
+```typescript title="src/example-low-gluten-free.ts"
+const result = await glutenCheckerScorer.run({
+  input: [{ role: "user", content: "添加酱油和面条" }],
+  output: { text: "添加酱油和面条" },
+});
+
+console.log("Score:", result.score);
+console.log("Gluten sources:", result.analyzeStepResult.glutenSources);
+console.log("Reason:", result.reason);
+```
+
+### 无麸质输出（低分）
+
+```typescript
+{
+  score: 0,
+  analyzeStepResult: {
+    isGlutenFree: false,
+    glutenSources: ['soy sauce', 'noodles']
+  },
+  reason: '此食谱含有麸质，因为它含有酱油、面条。普通酱油含有小麦，大多数面条由小麦面粉制成，都含有麸质，对麸质敏感者不安全。'
+}
+```
+
+**示例和资源：**
+
+- [createScorer API 参考](/reference/evals/create-scorer) - 完整的技术文档
+- [内置评分器源代码](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - 参考的实际实现

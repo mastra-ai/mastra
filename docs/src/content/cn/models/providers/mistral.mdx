@@ -1,0 +1,401 @@
+---
+title: "Mistral | 模型 | Mastra"
+description: "在 Mastra 中使用 Mistral 模型。共 26 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
+
+通过 Mastra 的模型路由器访问 26 个 Mistral 模型。身份验证使用 `MISTRAL_API_KEY` 环境变量自动处理。
+
+在 [Mistral 文档](https://docs.mistral.ai/getting-started/models/) 中了解更多信息。
+
+```bash title=".env"
+MISTRAL_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "mistral/codestral-latest"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## 模型
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "mistral/codestral-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 4096,
+    "inputCost": 0.3,
+    "outputCost": 0.9
+  },
+  {
+    "model": "mistral/devstral-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/devstral-medium-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/devstral-medium-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/devstral-small-2505",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/devstral-small-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/labs-devstral-small-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 256000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "mistral/magistral-medium-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 2,
+    "outputCost": 5
+  },
+  {
+    "model": "mistral/magistral-small",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "mistral/ministral-3b-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.04,
+    "outputCost": 0.04
+  },
+  {
+    "model": "mistral/ministral-8b-latest",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "model": "mistral/mistral-embed",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8000,
+    "maxOutput": 3072,
+    "inputCost": 0.1,
+    "outputCost": null
+  },
+  {
+    "model": "mistral/mistral-large-2411",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "mistral/mistral-large-2512",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "mistral/mistral-large-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "mistral/mistral-medium-2505",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/mistral-medium-2508",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/mistral-medium-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "mistral/mistral-nemo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "model": "mistral/mistral-small-2506",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/mistral-small-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.1,
+    "outputCost": 0.3
+  },
+  {
+    "model": "mistral/open-mistral-7b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 8000,
+    "maxOutput": 8000,
+    "inputCost": 0.25,
+    "outputCost": 0.25
+  },
+  {
+    "model": "mistral/open-mixtral-8x22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 64000,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "mistral/open-mixtral-8x7b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 32000,
+    "inputCost": 0.7,
+    "outputCost": 0.7
+  },
+  {
+    "model": "mistral/pixtral-12b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "model": "mistral/pixtral-large-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 6
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.mistral.ai/v1",
+    id: "mistral/codestral-latest",
+    apiKey: process.env.MISTRAL_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "mistral/pixtral-large-latest"
+      : "mistral/codestral-latest";
+  }
+});
+```
+
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@ai-sdk/mistral) for more details.
+
+```bash npm2yarn
+npm install @ai-sdk/mistral
+```
+
+For detailed provider-specific documentation, see the [AI SDK Mistral provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/mistral).

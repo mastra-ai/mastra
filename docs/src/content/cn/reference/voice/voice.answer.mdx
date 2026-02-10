@@ -1,0 +1,73 @@
+---
+title: "参考文档：voice.answer() | 语音"
+description: "实时语音提供者提供的 answer() 方法文档，用于触发语音提供者生成响应。"
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
+---
+
+# voice.answer()
+
+`answer()` 方法用于实时语音提供者中触发 AI 生成响应。此方法在语音到语音对话中特别有用，您需要在收到用户输入后明确信号让 AI 响应。
+
+## 使用示例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { getMicrophoneStream } from "@mastra/node-audio";
+import Speaker from "@mastra/node-speaker";
+
+const speaker = new Speaker({
+  sampleRate: 24100, // 音频采样率（Hz）- MacBook Pro 高品质音频的标准
+  channels: 1, // 单声道音频输出（立体声为 2）
+  bitDepth: 16, // 音频位深度 - CD 质量标准（16位分辨率）
+});
+
+// 初始化实时语音提供者
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-5.1",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy", // 默认语音
+});
+// 连接到实时服务
+await voice.connect();
+// 注册响应事件监听器
+voice.on("speaker", (stream) => {
+  // 处理音频响应
+  stream.pipe(speaker);
+});
+// 发送用户音频输入
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+// 触发 AI 响应
+await voice.answer();
+```
+
+## 参数
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "响应的提供者特定选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+返回 `Promise<void>`，在响应被触发时解析。
+
+## 注意事项
+
+- 此方法仅由支持语音到语音功能的实时语音提供者实现
+- 如果在不支持此功能的语音提供者上调用，它会记录警告并立即解析
+- 响应音频通常通过 'speaking' 事件发出，而不是直接返回
+- 对于支持此功能的提供者，您可以使用此方法发送特定响应而不是让 AI 生成
+- 此方法通常与 `send()` 结合使用以创建对话流程

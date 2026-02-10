@@ -1,0 +1,239 @@
+---
+title: "流式传输事件 | 流式传输"
+description: "了解 Mastra 中不同类型的流式传输事件，包括文本增量、工具调用、步骤事件，以及如何在应用程序中处理它们。"
+packages:
+  - "@mastra/core"
+---
+
+# 流式传输事件
+
+从智能体或工作流流式传输可以实时了解 LLM 的输出或工作流运行的状态。这种反馈可以直接传递给用户，或在应用程序内用于更有效地处理工作流状态，创造更流畅、响应更快的体验。
+
+从智能体或工作流发出的事件代表生成和执行的不同阶段，例如运行何时开始、何时生成文本，或何时调用工具。
+
+## 事件类型
+
+以下是 `.stream()` 发出的事件的完整列表。根据您是从**智能体**还是**工作流**流式传输，只会发生这些事件的子集：
+
+- **start**：标记智能体或工作流运行的开始。
+- **step-start**：表示工作流步骤已开始执行。
+- **text-delta**：LLM 生成时的增量文本块。
+- **tool-call**：当智能体决定使用工具时，包括工具名称和参数。
+- **tool-result**：从工具执行返回的结果。
+- **step-finish**：确认特定步骤已完全最终确定，可能包括该步骤的完成原因等元数据。
+- **finish**：当智能体或工作流完成时，包括使用统计信息。
+
+## 网络事件类型
+
+当使用 `agent.network()` 进行多智能体协作时，会发出其他事件类型以跟踪编排流程：
+
+- **routing-agent-start**：路由智能体开始分析任务以决定委托给哪个原语（智能体/工作流/工具）。
+- **routing-agent-text-delta**：路由智能体处理所选原语的响应时的增量文本。
+- **routing-agent-end**：路由智能体完成其选择，包括所选原语和选择原因。
+- **agent-execution-start**：委托的智能体开始执行。
+- **agent-execution-end**：委托的智能体完成执行。
+- **agent-execution-event-\***：委托智能体执行的事件（例如，`agent-execution-event-text-delta`）。
+- **workflow-execution-start**：委托的工作流开始执行。
+- **workflow-execution-end**：委托的工作流完成执行。
+- **workflow-execution-event-\***：委托工作流执行的事件。
+- **tool-execution-start**：委托的工具开始执行。
+- **tool-execution-end**：委托的工具完成执行。
+- **network-execution-event-step-finish**：网络迭代步骤完成。
+- **network-execution-event-finish**：整个网络执行完成。
+
+## 检查智能体流
+
+使用 `for await` 循环迭代 `stream` 以检查所有发出的事件块。
+
+```typescript
+const testAgent = mastra.getAgent("testAgent");
+
+const stream = await testAgent.stream([
+  { role: "user", content: "Help me organize my day" },
+]);
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+访问 [Agent.stream()](/reference/streaming/agents/stream) 了解更多信息。
+
+:::
+
+### 智能体输出示例
+
+以下是可能发出的事件示例。每个事件始终包含一个 `type`，可以包含 `from` 和 `payload` 等附加字段。
+
+```typescript {2,7,15}
+{
+  type: 'start',
+  from: 'AGENT',
+  // ..
+}
+{
+  type: 'step-start',
+  from: 'AGENT',
+  payload: {
+    messageId: 'msg-cdUrkirvXw8A6oE4t5lzDuxi',
+    // ...
+  }
+}
+{
+  type: 'tool-call',
+  from: 'AGENT',
+  payload: {
+    toolCallId: 'call_jbhi3s1qvR6Aqt9axCfTBMsA',
+    toolName: 'testTool'
+    // ..
+  }
+}
+```
+
+## 检查工作流流
+
+使用 `for await` 循环迭代 `stream` 以检查所有发出的事件块。
+
+```typescript {5,11}
+const testWorkflow = mastra.getWorkflow("testWorkflow");
+
+const run = await testWorkflow.createRun();
+
+const stream = await run.stream({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+### 工作流输出示例
+
+以下是可能发出的事件示例。每个事件始终包含一个 `type`，可以包含 `from` 和 `payload` 等附加字段。
+
+```typescript {2,8,11}
+{
+  type: 'workflow-start',
+  runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
+  from: 'WORKFLOW',
+  // ...
+}
+{
+  type: 'workflow-step-start',
+  runId: '221333ed-d9ee-4737-922b-4ab4d9de73e6',
+  from: 'WORKFLOW',
+  payload: {
+    stepName: 'step-1',
+    args: { value: 'initial data' },
+    stepCallId: '9e8c5217-490b-4fe7-8c31-6e2353a3fc98',
+    startedAt: 1755269732792,
+    status: 'running'
+  }
+}
+```
+
+## 检查智能体网络
+
+当使用 `agent.network()` 进行多智能体协作时，迭代流以跟踪任务如何在不同智能体、工作流和工具之间委托和执行。
+
+```typescript {3,5}
+const networkAgent = mastra.getAgent("networkAgent");
+
+const networkStream = await networkAgent.network(
+  "Research dolphins then write a report",
+);
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+访问 [Agent.network()](/reference/agents/network) 了解更多信息。
+
+:::
+
+### 网络输出示例
+
+网络流发出跟踪编排流程的事件。每次迭代从路由开始，然后执行所选的原语。
+
+```typescript {3,13,22,31}
+// 路由智能体决定做什么
+{
+  type: 'routing-agent-start',
+  from: 'NETWORK',
+  runId: '7a3b9c2d-1e4f-5a6b-8c9d-0e1f2a3b4c5d',
+  payload: {
+    agentId: 'routing-agent',
+    // ...
+  }
+}
+// 路由智能体做出选择
+{
+  type: 'routing-agent-end',
+  from: 'NETWORK',
+  runId: '7a3b9c2d-1e4f-5a6b-8c9d-0e1f2a3b4c5d',
+  payload: {
+    // ...
+  }
+}
+// 委托的智能体开始执行
+{
+  type: 'agent-execution-start',
+  from: 'NETWORK',
+  runId: '8b4c0d3e-2f5a-6b7c-9d0e-1f2a3b4c5d6e',
+  payload: {
+    // ...
+  }
+}
+// 委托智能体执行的事件
+{
+  type: 'agent-execution-event-text-delta',
+  from: 'NETWORK',
+  runId: '8b4c0d3e-2f5a-6b7c-9d0e-1f2a3b4c5d6e',
+  payload: {
+    type: 'text-delta',
+    payload: {
+      // ...
+    }
+  }
+}
+```
+
+### 过滤网络事件
+
+您可以按类型过滤事件以跟踪网络执行的特定方面：
+
+```typescript {5-8,11-13,16-18}
+const networkStream = await networkAgent.network(
+  "Analyze data and create visualization",
+);
+
+for await (const chunk of networkStream) {
+  // 跟踪路由决策
+  if (chunk.type === "routing-agent-end") {
+    console.log(
+      "Selected:",
+      chunk.payload.resourceType,
+      chunk.payload.resourceId,
+    );
+    console.log("Reason:", chunk.payload.selectionReason);
+  }
+
+  // 跟踪智能体委托
+  if (chunk.type === "agent-execution-start") {
+    console.log("Delegating to agent:", chunk.payload.agentId);
+  }
+
+  // 跟踪工作流委托
+  if (chunk.type === "workflow-execution-start") {
+    console.log("Executing workflow:", chunk.payload.name);
+  }
+}
+```

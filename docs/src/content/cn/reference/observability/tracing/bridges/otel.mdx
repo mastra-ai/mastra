@@ -1,0 +1,181 @@
+---
+title: "参考：OtelBridge | 可观测性"
+description: "用于追踪的 OpenTelemetry 桥接器"
+packages:
+  - "@mastra/core"
+  - "@mastra/langfuse"
+  - "@mastra/observability"
+  - "@mastra/otel-bridge"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# OtelBridge
+
+:::warning
+
+OpenTelemetry 桥接器目前处于**实验性**状态。API 和配置选项可能在未来版本中发生变化。
+
+:::
+
+启用 Mastra 追踪与 OpenTelemetry 基础设施之间的双向集成。为 Mastra 操作创建原生 OTEL 跨度，并从活动的 OTEL 跨度继承上下文。
+
+## 构造函数
+
+```typescript
+new OtelBridge()
+```
+
+## 方法
+
+### executeInContext
+
+```typescript
+executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T>
+```
+
+在 Mastra 跨度的 OTEL 上下文中执行异步函数。在函数内运行的 OTEL 检测代码将具有正确的父级关系。
+
+<PropertiesTable
+  props={[
+    {
+      name: "spanId",
+      type: "string",
+      description: "用作上下文的 Mastra 跨度的 ID",
+      required: true,
+    },
+    {
+      name: "fn",
+      type: "() => Promise<T>",
+      description: "在跨度上下文中执行的异步函数",
+      required: true,
+    },
+  ]}
+/>
+
+**返回：** `Promise<T>` - 函数执行的结果。
+
+### executeInContextSync
+
+```typescript
+executeInContextSync<T>(spanId: string, fn: () => T): T
+```
+
+在 Mastra 跨度的 OTEL 上下文中执行同步函数。
+
+<PropertiesTable
+  props={[
+    {
+      name: "spanId",
+      type: "string",
+      description: "用作上下文的 Mastra 跨度的 ID",
+      required: true,
+    },
+    {
+      name: "fn",
+      type: "() => T",
+      description: "在跨度上下文中执行的同步函数",
+      required: true,
+    },
+  ]}
+/>
+
+**返回：** `T` - 函数执行的结果。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+关闭桥接器并清理资源。结束任何未正确关闭的跨度。
+
+## 使用示例
+
+### 基本用法
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelBridge } from "@mastra/otel-bridge";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        bridge: new OtelBridge(),
+      },
+    },
+  }),
+  agents: { myAgent },
+});
+```
+
+### 与导出器结合使用
+
+桥接器可以与导出器一起使用。桥接器处理 OTEL 上下文，而导出器将数据发送到其他目的地：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability, DefaultExporter } from "@mastra/observability";
+import { OtelBridge } from "@mastra/otel-bridge";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        bridge: new OtelBridge(), // 处理 OTEL 上下文
+        exporters: [
+          new DefaultExporter(), // Studio 访问
+          new LangfuseExporter({
+            // 附加目的地
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+            secretKey: process.env.LANGFUSE_SECRET_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## OpenTelemetry 设置要求
+
+OtelBridge 需要活动的 OpenTelemetry SDK 才能工作。桥接器从 OTEL 的环境上下文读取。
+
+有关完整的设置说明，包括如何配置 OTEL 检测和运行您的应用程序，请参阅 [OtelBridge 指南](/docs/cn/docs/observability/tracing/bridges/otel#configuration)。
+
+## 标签支持
+
+OtelBridge 支持追踪标签用于分类和筛选。标签仅应用于根跨度，并作为原生 OTEL 跨度上的 `mastra.tags` 属性包含。
+
+### 使用方法
+
+```typescript
+const result = await agent.generate("Hello", {
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### 标签的存储方式
+
+标签以 JSON 字符串化数组的形式存储在 `mastra.tags` 跨度属性中：
+
+```json
+{
+  "mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
+}
+```
+
+此格式确保与所有 OTEL 兼容的后端和收集器的兼容性。
+
+## 相关内容
+
+- [OtelBridge 指南](/docs/cn/docs/observability/tracing/bridges/otel) - 带示例的设置指南
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 一般追踪概念
+- [OtelExporter 参考](/reference/observability/tracing/exporters/otel) - 用于发送追踪的 OTEL 导出器

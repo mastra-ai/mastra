@@ -1,0 +1,68 @@
+---
+title: "沙箱 | 工作区"
+description: "配置沙箱提供程序以为代理提供命令执行能力。"
+packages:
+  - "@mastra/core"
+---
+
+# 沙箱
+
+**新增于：** `@mastra/core@1.1.0`
+
+沙箱提供程序赋予代理执行 Shell 命令的能力。当你在工作区上配置沙箱时，代理可以作为其任务的一部分运行命令。
+
+沙箱提供程序在受控环境中执行命令：
+
+- **命令执行** - 运行带有参数的 Shell 命令
+- **工作目录** - 命令从特定目录运行
+- **环境变量** - 控制哪些变量可用
+- **超时** - 防止长时间运行的命令挂起
+- **隔离** - 可选的操作系统级沙箱以提高安全性
+
+当你将带有沙箱的工作区分配给代理时，Mastra 会自动将 `execute_command` 工具包含在代理的工具集中。
+
+## 支持的提供程序
+
+可用的提供程序：
+
+- [`LocalSandbox`](/reference/workspace/local-sandbox) - 在本地机器上执行命令
+
+## 基本用法
+
+创建带有沙箱的工作区并将其分配给代理。代理可以执行 Shell 命令：
+
+```typescript title="src/mastra/agents/dev-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+});
+
+const agent = new Agent({
+  id: 'dev-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful development assistant.',
+  workspace,
+});
+
+// 代理现在可以使用 execute_command 工具
+const response = await agent.generate('Run `ls -la` in the workspace directory');
+```
+
+有关环境隔离和原生操作系统沙箱的配置选项，请参阅 [`LocalSandbox` 参考](/reference/workspace/local-sandbox)。
+
+## 代理工具
+
+当你在工作区上配置沙箱时，代理会收到 `execute_command` 工具用于运行 Shell 命令。详情请参阅[工作区类参考](/reference/workspace/workspace-class#sandbox-tools)。
+
+## 相关内容
+
+- [`LocalSandbox` 参考](/reference/workspace/local-sandbox)
+- [工作区概述](/docs/cn/workspace/overview)
+- [文件系统](/docs/cn/workspace/filesystem)

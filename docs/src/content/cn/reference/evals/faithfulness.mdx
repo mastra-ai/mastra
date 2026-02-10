@@ -1,0 +1,171 @@
+---
+title: "参考：忠实度评分器 | 评估"
+description: "Mastra 中忠实度评分器的文档，用于评估 LLM 输出与提供上下文相比的事实准确性。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 忠实度评分器
+
+`createFaithfulnessScorer()` 函数评估 LLM 输出与提供上下文相比的事实准确性。它从输出中提取声明并根据上下文验证它们，这对于衡量 RAG 管道响应的可靠性至关重要。
+
+## 参数
+
+`createFaithfulnessScorer()` 函数接受一个包含以下属性的选项对象：
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "用于评估忠实度的模型配置。",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      required: true,
+      description:
+        "用于验证输出声明的上下文块数组。",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description:
+        "最大分数值。最终分数将标准化到此范围。",
+    },
+  ]}
+/>
+
+此函数返回 MastraScorer 类的实例。`.run()` 方法接受与其他评分器相同的输入（请参阅 [MastraScorer 参考](./mastra-scorer)），但返回值包含 LLM 特定的字段，如下所述。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "string[]",
+      description: "从输出中提取的声明数组。",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于预处理步骤的提示词（可选）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "包含判决的对象: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于分析步骤的提示词（可选）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "0 到配置范围之间的分数，表示被上下文支持的声明比例。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "对分数的详细解释，包括哪些声明被支持、矛盾或标记为不确定。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于生成理由步骤的提示词（可选）。",
+    },
+  ]}
+/>
+
+## 评分详情
+
+评分器通过根据提供上下文声明验证来评估忠实度。
+
+### 评分过程
+
+1. 分析声明和上下文：
+   - 提取所有声明（事实性和推测性）
+   - 根据上下文验证每个声明
+   - 分配三种判决之一：
+     - "yes" - 声明被上下文支持
+     - "no" - 声明与上下文矛盾
+     - "unsure" - 声明无法验证
+2. 计算忠实度分数：
+   - 计算支持的声明数
+   - 除以声明总数
+   - 缩放到配置范围
+
+最终分数：`(支持的声明 / 总声明数) * scale`
+
+### 分数解释
+
+0 到 1 之间的忠实度分数：
+
+- **1.0**：所有声明都准确并直接由上下文支持。
+- **0.7–0.9**：大多数声明正确，有小添加或遗漏。
+- **0.4–0.6**：一些声明被支持，但其他无法验证。
+- **0.1–0.3**：大部分内容不准确或不支持。
+- **0.0**：所有声明都与上下文矛盾或不准确。
+
+## 示例
+
+评估代理响应对提供上下文的忠实度：
+
+```typescript title="src/example-faithfulness.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+// 上下文通常从代理工具调用或 RAG 检索填充
+const scorer = createFaithfulnessScorer({
+  model: "openai/gpt-4o",
+});
+
+const result = await runEvals({
+  data: [
+    {
+      input: "告诉我关于特斯拉 Model 3 的信息。",
+    },
+    {
+      input: "这辆电动车的主要特点是什么？",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+## 相关内容
+
+- [答案相关性评分器](./answer-relevancy)
+- [幻觉评分器](./hallucination)

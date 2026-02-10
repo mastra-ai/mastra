@@ -1,0 +1,634 @@
+---
+title: "参考文档: Google Gemini Live Voice | 语音"
+description: "GeminiLiveVoice 类的文档，提供使用 Google Gemini Live API 的实时多模态语音交互功能，支持 Gemini API 和 Vertex AI 两种身份验证方式。"
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-google-gemini-live"
+---
+
+# Google Gemini Live Voice
+
+GeminiLiveVoice 类使用 Google 的 Gemini Live API 提供实时语音交互功能。它支持双向音频流、工具调用、会话管理，以及标准 Google API 和 Vertex AI 身份验证方法。
+
+## 使用示例
+
+```typescript
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+// 使用 Gemini API 初始化（使用 API 密钥）
+const voice = new GeminiLiveVoice({
+  apiKey: process.env.GOOGLE_API_KEY, // Gemini API 必需
+  model: "gemini-2.0-flash-exp",
+  speaker: "Puck", // 默认语音
+  debug: true,
+});
+
+// 或使用 Vertex AI 初始化（使用 OAuth）
+const voiceWithVertexAI = new GeminiLiveVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1",
+  serviceAccountKeyFile: "/path/to/service-account.json",
+  model: "gemini-2.0-flash-exp",
+  speaker: "Puck",
+});
+
+// 或使用 VoiceConfig 模式（推荐以与其他提供商保持一致）
+const voiceWithConfig = new GeminiLiveVoice({
+  speechModel: {
+    name: "gemini-2.0-flash-exp",
+    apiKey: process.env.GOOGLE_API_KEY,
+  },
+  speaker: "Puck",
+  realtimeConfig: {
+    model: "gemini-2.0-flash-exp",
+    apiKey: process.env.GOOGLE_API_KEY,
+    options: {
+      debug: true,
+      sessionConfig: {
+        interrupts: { enabled: true },
+      },
+    },
+  },
+});
+
+// 建立连接（使用其他方法前必需）
+await voice.connect();
+
+// 设置事件监听器
+voice.on("speaker", (audioStream) => {
+  // 处理音频流 (NodeJS.ReadableStream)
+  playAudio(audioStream);
+});
+
+voice.on("writing", ({ text, role }) => {
+  // 处理转录文本
+  console.log(`${role}: ${text}`);
+});
+
+voice.on("turnComplete", ({ timestamp }) => {
+  // 处理轮次完成
+  console.log("Turn completed at:", timestamp);
+});
+
+// 将文本转换为语音
+await voice.speak("Hello, how can I help you today?", {
+  speaker: "Charon", // 覆盖默认语音
+  responseModalities: ["AUDIO", "TEXT"],
+});
+
+// 处理音频输入
+const microphoneStream = getMicrophoneStream();
+await voice.send(microphoneStream);
+
+// 更新会话配置
+await voice.updateSessionConfig({
+  speaker: "Kore",
+  instructions: "Be more concise in your responses",
+});
+
+// 完成后，断开连接
+await voice.disconnect();
+// 或使用同步包装器
+voice.close();
+```
+
+## 配置
+
+### 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "用于 Gemini API 身份验证的 Google API 密钥。除非使用 Vertex AI，否则为必需。",
+      isOptional: true,
+    },
+    {
+      name: "model",
+      type: "GeminiVoiceModel",
+      description: "用于实时语音交互的模型 ID。",
+      isOptional: true,
+      defaultValue: "'gemini-2.0-flash-exp'",
+    },
+    {
+      name: "speaker",
+      type: "GeminiVoiceName",
+      description: "语音合成的默认语音 ID。",
+      isOptional: true,
+      defaultValue: "'Puck'",
+    },
+    {
+      name: "vertexAI",
+      type: "boolean",
+      description: "使用 Vertex AI 而不是 Gemini API 进行身份验证。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "project",
+      type: "string",
+      description: "Google Cloud 项目 ID（Vertex AI 必需）。",
+      isOptional: true,
+    },
+    {
+      name: "location",
+      type: "string",
+      description: "Vertex AI 的 Google Cloud 区域。",
+      isOptional: true,
+      defaultValue: "'us-central1'",
+    },
+    {
+      name: "serviceAccountKeyFile",
+      type: "string",
+      description:
+        "用于 Vertex AI 身份验证的服务账户 JSON 密钥文件路径。",
+      isOptional: true,
+    },
+    {
+      name: "serviceAccountEmail",
+      type: "string",
+      description:
+        "用于模拟的服务账户邮箱（密钥文件的替代方案）。",
+      isOptional: true,
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "模型的系统指令。",
+      isOptional: true,
+    },
+    {
+      name: "sessionConfig",
+      type: "GeminiSessionConfig",
+      description:
+        "包括中断和上下文设置的会话配置。",
+      isOptional: true,
+    },
+    {
+      name: "debug",
+      type: "boolean",
+      description: "启用调试日志用于故障排除。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### 会话配置
+
+<PropertiesTable
+  content={[
+    {
+      name: "interrupts",
+      type: "object",
+      description: "中断处理配置。",
+      isOptional: true,
+    },
+    {
+      name: "interrupts.enabled",
+      type: "boolean",
+      description: "启用中断处理。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "interrupts.allowUserInterruption",
+      type: "boolean",
+      description: "允许用户中断模型响应。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "contextCompression",
+      type: "boolean",
+      description: "启用自动上下文压缩。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## 方法
+
+### connect()
+
+建立与 Gemini Live API 的连接。在使用 speak、listen 或 send 方法之前必须调用。
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "object",
+      description: "连接的可选请求上下文。",
+      isOptional: true,
+    },
+    {
+      name: "returns",
+      type: "Promise<void>",
+      description: "连接建立时解析的 Promise。",
+    },
+  ]}
+/>
+
+### speak()
+
+将文本转换为语音并发送到模型。可以接受字符串或可读流作为输入。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "要转换为语音的文本或文本流。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "GeminiLiveVoiceOptions",
+      description: "可选的语音配置。",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "GeminiVoiceName",
+      description: "用于此特定语音请求的语音 ID。",
+      isOptional: true,
+      defaultValue: "构造函数的 speaker 值",
+    },
+    {
+      name: "options.languageCode",
+      type: "string",
+      description: "响应的语言代码。",
+      isOptional: true,
+    },
+    {
+      name: "options.responseModalities",
+      type: "('AUDIO' | 'TEXT')[]",
+      description: "从模型接收的响应模态。",
+      isOptional: true,
+      defaultValue: "['AUDIO', 'TEXT']",
+    },
+  ]}
+/>
+
+返回：`Promise<void>`（响应通过 `speaker` 和 `writing` 事件发出）
+
+### listen()
+
+处理音频输入进行语音识别。获取音频数据的可读流并返回转录文本。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "要转录的音频流。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "GeminiLiveVoiceOptions",
+      description: "可选的听写配置。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`Promise<string>` - 转录文本
+
+### send()
+
+实时向 Gemini 服务流式传输音频数据，适用于实时麦克风输入等连续音频流场景。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioData",
+      type: "NodeJS.ReadableStream | Int16Array",
+      description: "要发送到服务的音频流或缓冲区。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`Promise<void>`
+
+### updateSessionConfig()
+
+动态更新会话配置。可用于修改语音设置、说话者选择和其他运行时配置。
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "Partial<GeminiLiveVoiceConfig>",
+      description: "要应用的配置更新。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`Promise<void>`
+
+### addTools()
+
+向语音实例添加一组工具。工具允许模型在对话期间执行其他操作。当 GeminiLiveVoice 添加到 Agent 时，为 Agent 配置的任何工具将自动对语音界面可用。
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description: "要配备的工具配置。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`void`
+
+### addInstructions()
+
+添加或更新模型的系统指令。
+
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string",
+      description: "要设置的系统指令。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`void`
+
+### answer()
+
+触发模型的响应。此方法主要在集成到 Agent 时在内部使用。
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Record<string, unknown>",
+      description: "响应请求的可选参数。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`Promise<void>`
+
+### getSpeakers()
+
+返回 Gemini Live API 的可用语音说话者列表。
+
+返回：`Promise<Array<{ voiceId: string; description?: string }>>`
+
+### disconnect()
+
+断开与 Gemini Live 会话的连接并清理资源。这是正确处理清理的异步方法。
+
+返回：`Promise<void>`
+
+### close()
+
+disconnect() 的同步包装器。内部调用 disconnect() 而不等待。
+
+返回：`void`
+
+### on()
+
+为语音事件注册事件监听器。
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "要监听的事件名称。",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "事件发生时要调用的函数。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`void`
+
+### off()
+
+移除之前注册的事件监听器。
+
+<PropertiesTable
+  content={[
+    {
+      name: "event",
+      type: "string",
+      description: "要停止监听的事件名称。",
+      isOptional: false,
+    },
+    {
+      name: "callback",
+      type: "Function",
+      description: "要移除的特定回调函数。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+返回：`void`
+
+## 事件
+
+GeminiLiveVoice 类发出以下事件：
+
+<PropertiesTable
+  content={[
+    {
+      name: "speaker",
+      type: "event",
+      description:
+        "从模型收到音频数据时发出。回调接收 NodeJS.ReadableStream。",
+    },
+    {
+      name: "speaking",
+      type: "event",
+      description:
+        "伴随音频元数据发出。回调接收 { audioData?: Int16Array, sampleRate?: number }。",
+    },
+    {
+      name: "writing",
+      type: "event",
+      description:
+        "转录文本可用时发出。回调接收 { text: string, role: 'assistant' | 'user' }。",
+    },
+    {
+      name: "session",
+      type: "event",
+      description:
+        "会话状态变化时发出。回调接收 { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated', config?: object }。",
+    },
+    {
+      name: "turnComplete",
+      type: "event",
+      description:
+        "对话轮次完成时发出。回调接收 { timestamp: number }。",
+    },
+    {
+      name: "toolCall",
+      type: "event",
+      description:
+        "模型请求工具调用时发出。回调接收 { name: string, args: object, id: string }。",
+    },
+    {
+      name: "usage",
+      type: "event",
+      description:
+        "伴随令牌使用信息发出。回调接收 { inputTokens: number, outputTokens: number, totalTokens: number, modality: string }。",
+    },
+    {
+      name: "error",
+      type: "event",
+      description:
+        "发生错误时发出。回调接收 { message: string, code?: string, details?: unknown }。",
+    },
+
+    {
+      name: "interrupt",
+      type: "event",
+      description:
+        "中断事件。回调接收 { type: 'user' | 'model', timestamp: number }。",
+    },
+
+]}
+/>
+
+## 可用模型
+
+以下 Gemini Live 模型可用：
+
+- `gemini-2.0-flash-exp` (默认)
+- `gemini-2.0-flash-exp-image-generation`
+- `gemini-2.0-flash-live-001`
+- `gemini-live-2.5-flash-preview-native-audio`
+- `gemini-2.5-flash-exp-native-audio-thinking-dialog`
+- `gemini-live-2.5-flash-preview`
+- `gemini-2.6.flash-preview-tts`
+
+## 可用语音
+
+以下语音选项可用：
+
+- `Puck` (默认)：对话式、友好
+- `Charon`：深沉、权威
+- `Kore`：中性、专业
+- `Fenrir`：温暖、平易近人
+
+## 身份验证方法
+
+### Gemini API（开发）
+
+使用来自 [Google AI Studio](https://makersuite.google.com/app/apikey) 的 API 密钥的最简单方法：
+
+```typescript
+const voice = new GeminiLiveVoice({
+  apiKey: "your-api-key", // Gemini API 必需
+  model: "gemini-2.0-flash-exp",
+});
+```
+
+### Vertex AI（生产）
+
+使用 OAuth 身份验证和 Google Cloud Platform 的生产环境：
+
+```typescript
+// 使用服务账户密钥文件
+const voice = new GeminiLiveVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1",
+  serviceAccountKeyFile: "/path/to/service-account.json",
+});
+
+// 使用应用程序默认凭证
+const voice = new GeminiLiveVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1",
+});
+
+// 使用服务账户模拟
+const voice = new GeminiLiveVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1",
+  serviceAccountEmail: "service-account@project.iam.gserviceaccount.com",
+});
+```
+
+## 高级功能
+
+### 会话管理
+
+Gemini Live API 支持会话恢复以处理网络中断：
+
+```typescript
+voice.on("sessionHandle", ({ handle, expiresAt }) => {
+  // 存储会话句柄以供恢复
+  saveSessionHandle(handle, expiresAt);
+});
+
+// 恢复之前的会话
+const voice = new GeminiLiveVoice({
+  sessionConfig: {
+    enableResumption: true,
+    maxDuration: "2h",
+  },
+});
+```
+
+### 工具调用
+
+启用模型在对话期间调用函数：
+
+```typescript
+import { z } from "zod";
+
+voice.addTools({
+  weather: {
+    description: "获取天气信息",
+    parameters: z.object({
+      location: z.string(),
+    }),
+    execute: async ({ location }) => {
+      const weather = await getWeather(location);
+      return weather;
+    },
+  },
+});
+
+voice.on("toolCall", ({ name, args, id }) => {
+  console.log(`Tool called: ${name} with args:`, args);
+});
+```
+
+## 说明
+
+- Gemini Live API 使用 WebSocket 进行实时通信
+- 音频处理为输入 16kHz PCM16 和输出 24kHz PCM16
+- 语音实例必须先使用 `connect()` 连接才能使用其他方法
+- 完成后始终调用 `close()` 以正确清理资源
+- Vertex AI 身份验证需要适当的 IAM 权限（`aiplatform.user` 角色）
+- 会话恢复允许从网络中断中恢复
+- API 支持与文本和音频的实时交互

@@ -1,0 +1,187 @@
+---
+title: "参考：Memory.recall() | 内存"
+description: "Mastra 中 `Memory.recall()` 方法的文档，该方法从特定线程检索消息，支持分页、过滤选项和语义搜索。"
+packages:
+  - "@mastra/ai-sdk"
+---
+
+# Memory.recall()
+
+`.recall()` 方法从特定线程检索消息，支持分页、过滤选项和语义搜索。
+
+## 使用示例
+
+```typescript
+await memory?.recall({ threadId: "user-123" });
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "要从中检索消息的线程的唯一标识符",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "拥有线程的资源 ID。如果提供，则验证线程所有权",
+      isOptional: true,
+    },
+    {
+      name: "vectorSearchString",
+      type: "string",
+      description:
+        "用于查找语义相似消息的搜索字符串。需要在线程配置中启用语义回忆。",
+      isOptional: true,
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description:
+        "每页检索的消息数量。设置为 false 以获取所有消息而不分页。如果未提供，默认为 threadConfig.lastMessages。",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description:
+        "用于分页的零基页码。与 perPage 一起使用以批量检索消息。",
+      isOptional: true,
+    },
+    {
+      name: "include",
+      type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
+      description:
+        "要包含的特定消息 ID 数组，以及可选的上下文消息。每个项目有 `id`（必需）、可选的 `threadId`（默认为主线程 ID）、`withPreviousMessages`（之前的消息数量，默认为向量搜索 2，否则为 0）和 `withNextMessages`（之后的消息数量，默认为向量搜索 2，否则为 0）。",
+      isOptional: true,
+    },
+    {
+      name: "filter",
+      type: "{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }",
+      description:
+        "消息检索的过滤选项。目前支持 `dateRange` 按创建日期过滤消息。使用 `startExclusive` 或 `endExclusive` 排除边界日期（适用于基于游标的分页）。",
+      isOptional: true,
+    },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
+      description:
+        "检索消息的排序顺序。默认为按创建日期降序。",
+      isOptional: true,
+    },
+    {
+      name: "threadConfig",
+      type: "MemoryConfig",
+      description:
+        "消息检索和语义搜索的配置选项",
+      isOptional: true,
+    },
+
+  ]}
+/>
+
+### threadConfig 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description:
+        "要检索的最近消息数量。设置为 false 以禁用。当未显式提供 perPage 时，此值用作默认值。",
+      isOptional: true,
+      defaultValue: "10",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+      description:
+        "在消息历史中启用语义搜索。可以是布尔值或带配置选项的对象。启用时，需要同时配置向量存储和嵌入模型。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "workingMemory",
+      type: "WorkingMemory",
+      description:
+        "工作内存功能的配置。可以是 `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` 或 `{ enabled: boolean }` 以禁用。",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, template: '# 用户信息\n- **名**：\n- **姓**：\n...' }",
+    },
+    {
+      name: "threads",
+      type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
+      description:
+        "与内存线程创建相关的设置。`generateTitle` 控制从用户第一条消息自动生成线程标题。可以是布尔值或带自定义模型和指令的对象。",
+      isOptional: true,
+      defaultValue: "{ generateTitle: false }",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "以数据库格式检索的消息数组",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/test-memory.ts"
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+// 使用分页检索消息
+const { messages } = await memory!.recall({
+  threadId: "thread-123",
+  perPage: 50,
+  vectorSearchString: "有哪些消息？",
+  include: [
+    {
+      id: "msg-123",
+    },
+    {
+      id: "msg-456",
+      withPreviousMessages: 3,
+      withNextMessages: 1,
+    },
+  ],
+  threadConfig: {
+    semanticRecall: true,
+  },
+});
+
+console.log(messages); // MastraDBMessage[]
+
+// 不使用分页获取所有消息
+const allMessages = await memory!.recall({
+  threadId: "thread-123",
+  perPage: false, // 获取全部
+});
+
+// 如果需要，转换为 AI SDK 格式
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+const uiMessages = toAISdkV5Messages(messages);
+```
+
+### 相关内容
+
+- [Memory 类参考](/reference/memory/memory-class)
+- [内存入门指南](/docs/cn/docs/memory/overview)
+- [语义回忆](/docs/cn/docs/memory/semantic-recall)
+- [createThread](/reference/memory/createThread)

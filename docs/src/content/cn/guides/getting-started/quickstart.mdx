@@ -1,0 +1,62 @@
+---
+title: "快速入门"
+description: "使用 create mastra CLI 开始使用 Mastra，构建包含代理、工作流和工具的服务器。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import { VideoPlayer } from "@site/src/components/video-player";
+
+# Mastra 快速入门
+
+`create mastra` CLI 命令是开始使用 Mastra 最快的方式。它会引导您完成设置，并创建示例代理、工作流和工具，您可以在本地运行或进行适配。
+
+如果您需要更多地控制设置，请参阅[手动安装指南](/docs/cn/docs/getting-started/manual-install)。您也可以对现有项目使用 [`mastra init`](/reference/cli/mastra#mastra-init)。
+
+## 前置条件
+
+- 您需要一个支持的[模型提供商](/models)的 API key。如果您没有偏好，请使用 [OpenAI](/models/providers/openai)。
+
+## 初始化 Mastra
+
+您可以在机器上的任何位置运行 `create mastra`。
+
+当提示时，选择一个提供商（例如 OpenAI）并输入您的 key：
+
+```bash npm2yarn
+npm create mastra@latest
+```
+
+这会创建一个新的项目目录，其中包含一个 `src/mastra` 文件夹，其中包含一个示例天气代理以及以下文件：
+
+- `index.ts`：所有 Mastra 相关代码和配置的入口点
+- `agents/weather-agent.ts`：一个带有使用工具提示词的天气代理
+- `tools/weather-tool.ts`：用于获取给定位置天气的工具
+- `workflows/weather-workflow.ts`：运行天气代理的工作流
+- `scorers/weather-scorer.ts`：用于评估天气代理响应的评分器
+
+根据您的选择，您可能还会安装 [Mastra Skills](/docs/cn/docs/build-with-ai/skills) 或 [MCP Docs Server](/docs/cn/docs/build-with-ai/mcp-docs-server)。
+
+:::tip
+
+您可以将[标志](/reference/cli/create-mastra#cli-flags)与 `create mastra` 一起使用，例如 `--no-example` 跳过示例天气代理，或 `--template` 从特定的[模板](https://mastra.ai/templates)开始。
+
+:::
+
+## 测试您的代理
+
+设置完成后，按照终端中的说明启动 Mastra 开发服务器，然后在 [localhost:4111](http://localhost:4111) 打开 Studio。
+
+尝试询问天气。如果您的 API key 设置正确，您会得到响应：
+
+<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
+
+[Studio](/docs/cn/docs/getting-started/studio) 让您无需构建 UI 即可快速构建和原型化代理。准备就绪后，您可以使用以下指南将 Mastra 代理集成到您的应用程序中。
+
+## 后续步骤
+
+- 将 Mastra 与您的前端框架集成：[Next.js](/guides/getting-started/next-js)、[React](/guides/getting-started/vite-react) 或 [Astro](/guides/getting-started/astro)
+- 了解更多关于 [Mastra 的功能](/docs#why-mastra)
+- 了解如何[使用 AI 构建 Mastra](/docs/cn/docs/getting-started/build-with-ai)
+- 按照我们的[指南](/guides)从零开始构建代理
+- 在我们的 [YouTube 频道](https://www.youtube.com/@mastra-ai)上观看概念指南并[订阅](https://www.youtube.com/@mastra-ai?sub_confirmation=1)

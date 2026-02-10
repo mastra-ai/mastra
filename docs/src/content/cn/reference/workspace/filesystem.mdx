@@ -1,0 +1,287 @@
+---
+title: "参考：WorkspaceFilesystem | 工作区"
+description: "定义文件存储操作的 WorkspaceFilesystem 接口文档。"
+packages:
+  - "@mastra/core"
+---
+
+# WorkspaceFilesystem
+
+**添加于：** `@mastra/core@1.1.0`
+
+`WorkspaceFilesystem` 接口定义了工作区如何与文件存储交互。
+
+## 方法
+
+### `readFile(path, options?)`
+
+读取文件内容。
+
+```typescript
+const content = await filesystem.readFile('/docs/cn/docs/guide.md');
+const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "相对于 basePath 的文件路径",
+    },
+    {
+      name: "options.encoding",
+      type: "'utf-8' | 'binary'",
+      description: "文本或二进制编码",
+      isOptional: true,
+      defaultValue: "'utf-8'",
+    },
+  ]}
+/>
+
+**返回值：** `Promise<string | Buffer>`
+
+### `writeFile(path, content, options?)`
+
+写入文件内容。
+
+```typescript
+await filesystem.writeFile('/docs/cn/docs/new.md', '# New Document');
+await filesystem.writeFile('/nested/path/file.md', content, { recursive: true });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "相对于 basePath 的文件路径",
+    },
+    {
+      name: "content",
+      type: "string | Buffer",
+      description: "文件内容",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "如果父目录不存在则创建",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.overwrite",
+      type: "boolean",
+      description: "覆盖现有文件",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+### `deleteFile(path, options?)`
+
+删除文件。
+
+```typescript
+await filesystem.deleteFile('/docs/cn/docs/old.md');
+await filesystem.deleteFile('/docs/cn/docs/maybe.md', { force: true }); // 文件不存在时不抛出异常
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "文件路径",
+    },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "文件不存在时不抛出错误",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `readdir(path, options?)`
+
+列出目录内容。
+
+```typescript
+const entries = await filesystem.readdir('/docs');
+// [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
+```
+
+**返回值：** `Promise<FileEntry[]>`
+
+```typescript
+interface FileEntry {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modifiedAt?: Date;
+}
+```
+
+### `mkdir(path, options?)`
+
+创建目录。
+
+```typescript
+await filesystem.mkdir('/docs/cn/docs/api');
+await filesystem.mkdir('/deeply/nested/path', { recursive: true });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "目录路径",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "创建父目录",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `rmdir(path, options?)`
+
+删除目录。
+
+```typescript
+await filesystem.rmdir('/docs/cn/docs/old');
+await filesystem.rmdir('/docs/cn/docs/nested', { recursive: true });
+```
+
+**参数：**
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "目录路径",
+    },
+    {
+      name: "options.recursive",
+      type: "boolean",
+      description: "递归删除内容",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "options.force",
+      type: "boolean",
+      description: "目录不存在时不抛出错误",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+### `exists(path)`
+
+检查路径是否存在。
+
+```typescript
+const exists = await filesystem.exists('/docs/cn/docs/guide.md');
+```
+
+**返回值：** `Promise<boolean>`
+
+### `stat(path)`
+
+获取文件或目录元数据。
+
+```typescript
+const stat = await filesystem.stat('/docs/cn/docs/guide.md');
+// { type: 'file', size: 1234, modifiedAt: Date, createdAt: Date, path: '/docs/cn/docs/guide.md' }
+```
+
+**返回值：** `Promise<FileStat>`
+
+```typescript
+interface FileStat {
+  type: 'file' | 'directory';
+  size: number;
+  modifiedAt: Date;
+  createdAt: Date;
+  path: string;
+}
+```
+
+## 可选方法
+
+### `init()`
+
+初始化文件系统。由 `workspace.init()` 调用。
+
+```typescript
+await filesystem.init?.();
+```
+
+### `destroy()`
+
+清理资源。由 `workspace.destroy()` 调用。
+
+```typescript
+await filesystem.destroy?.();
+```
+
+### `getInfo()`
+
+获取文件系统元数据。
+
+```typescript
+const info = await filesystem.getInfo?.();
+// { id, name, provider, basePath, readOnly, status, storage? }
+```
+
+**返回值：** `Promise<FilesystemInfo>`
+
+```typescript
+interface FilesystemInfo {
+  id: string;
+  name: string;
+  provider: string;
+  basePath?: string;
+  readOnly?: boolean;
+  status?: string;
+  storage?: {
+    totalBytes?: number;
+    usedBytes?: number;
+    availableBytes?: number;
+  };
+}
+```
+
+### `getInstructions()`
+
+获取此文件系统工作原理的描述。用于工具描述中以帮助代理理解路径语义。
+
+```typescript
+const instructions = filesystem.getInstructions?.();
+// 'Local filesystem at "/workspace". Files at workspace path "/foo" are stored at "/workspace/foo" on disk.'
+```
+
+**返回值：** `string`
+
+## 相关内容
+
+- [工作区类](/reference/workspace/workspace-class)
+- [沙箱接口](/reference/workspace/sandbox)

@@ -1,0 +1,64 @@
+---
+title: "参考：CloudflareDeployer | 部署器"
+description: "CloudflareDeployer 类的文档，用于将 Mastra 应用程序部署到 Cloudflare Workers。"
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-cloudflare"
+---
+
+# CloudflareDeployer
+
+`CloudflareDeployer` 类用于将独立的 Mastra 应用程序部署到 Cloudflare Workers。它管理配置和部署过程，并扩展了基础的 [Deployer](/reference/deployer/) 类，添加了 Cloudflare 特定的功能。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  deployer: new CloudflareDeployer({
+    name: "hello-mastra",
+    routes: [
+      {
+        pattern: "example.com/*",
+        zone_name: "example.com",
+        custom_domain: true
+      }
+    ],
+    vars: {
+      NODE_ENV: "production",
+      API_KEY: "<api-key>"
+    },
+    d1_databases: [
+      {
+        binding: "DB",
+        database_name: "my-database",
+        database_id: "d1-database-id",
+        preview_database_id: "your-preview-database-id"
+      }
+    ],
+    kv_namespaces: [
+      {
+        binding: "CACHE",
+        id: "kv-namespace-id"
+      }
+    ]
+  })
+});
+```
+
+## 构造函数选项
+
+`CloudflareDeployer` 构造函数接受与 `wrangler.json` 相同的配置选项。请参阅 [Wrangler 配置文档](https://developers.cloudflare.com/workers/wrangler/configuration/) 获取所有可用选项。
+
+### 从早期版本迁移
+
+以下字段已弃用，应替换为标准的 `wrangler.json` 等效字段：
+
+| 弃用字段 | 替代方案 |
+|------------|-------------|
+| `projectName` | `name` |
+| `d1Databases` | `d1_databases` |
+| `kvNamespaces` | `kv_namespaces` |
+| `workerNamespace` | *(已移除，不再使用)* |

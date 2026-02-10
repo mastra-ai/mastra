@@ -1,0 +1,140 @@
+---
+title: "参考文档: LanceDB 存储 | 存储"
+description: "Mastra 中 LanceDB 存储实现的文档。"
+packages:
+  - "@mastra/core"
+  - "@mastra/lance"
+---
+
+# LanceDB 存储
+
+LanceDB 存储实现使用 LanceDB 数据库系统提供了高性能存储解决方案，该系统在处理传统数据存储和向量操作方面表现出色。
+
+:::warning[不支持可观察性]
+LanceDB 存储**不支持可观察性领域**。来自 `DefaultExporter` 的追踪无法持久化到 LanceDB，Mastra Studio 的可观察性功能无法将 LanceDB 作为唯一的存储提供商工作。若要启用可观察性，请使用[复合存储](/reference/storage/composite#specialized-storage-for-observability) 将可观察性数据路由到支持的提供商，如 ClickHouse 或 PostgreSQL。
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/lance@latest
+```
+
+## 使用方法
+
+### 基本存储用法
+
+```typescript
+import { LanceStorage } from "@mastra/lance";
+
+// 连接到本地数据库
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+// 连接到 LanceDB 云数据库
+const storage = await LanceStorage.create("my-storage", "db://host:port");
+
+// 使用自定义选项连接到云数据库
+const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
+  storageOptions: { timeout: "60s" },
+});
+```
+
+## 参数
+
+### LanceStorage.create()
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "存储实例的名称标识符",
+      isOptional: false,
+    },
+    {
+      name: "uri",
+      type: "string",
+      description: "连接到 LanceDB 数据库的 URI。可以是本地路径、云数据库 URL 或 S3 存储桶 URL",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "ConnectionOptions",
+      description: "LanceDB 的连接选项，如超时设置、身份验证等。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 额外说明
+
+### 模式管理
+
+LanceStorage 实现自动处理模式的创建和更新。它将 Mastra 的模式类型映射到 LanceDB 内部使用的 Apache Arrow 数据类型：
+
+- `text`、`uuid` → Utf8
+- `int`、`integer` → Int32
+- `float` → Float32
+- `jsonb`、`json` → Utf8（序列化）
+- `binary` → Binary
+
+### 初始化
+
+当你将存储传递给 Mastra 类时，`init()` 会自动在任何存储操作之前调用：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LanceStorage } from "@mastra/lance";
+
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+const mastra = new Mastra({
+  storage, // init() 自动调用
+});
+```
+
+如果你在没有 Mastra 的情况下直接使用存储，必须显式调用 `init()` 来创建表：
+
+```typescript
+import { LanceStorage } from "@mastra/lance";
+
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+// 直接使用存储时需要
+await storage.init();
+
+// 通过 getStore() 访问特定领域的存储
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+:::warning
+如果未调用 `init()`，表将不会创建，存储操作将静默失败或抛出错误。
+:::
+
+### 部署选项
+
+LanceDB 存储可以针对不同的部署场景进行配置：
+
+- **本地开发**：使用本地文件路径进行开发和测试
+  ```
+  /path/to/db
+  ```
+- **云部署**：连接到托管的 LanceDB 实例
+  ```
+  db://host:port
+  ```
+- **S3 存储**：使用 Amazon S3 进行可扩展云存储
+  ```
+  s3://bucket/db
+  ```
+
+### 表管理
+
+LanceStorage 提供用于管理表的方法：
+
+- 使用自定义模式创建表
+- 删除表
+- 清除表（删除所有记录）
+- 按键加载记录
+- 插入单条和批量记录

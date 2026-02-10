@@ -1,0 +1,198 @@
+---
+title: "Sentry 导出器 | 追踪 | 可观测性"
+description: "将追踪发送到 Sentry 进行 AI 追踪和监控"
+packages:
+  - "@mastra/sentry"
+  - "@mastra/observability"
+---
+
+# Sentry 导出器
+
+[Sentry](https://sentry.io/) 是一个具有 AI 特定追踪能力的应用程序监控平台。Sentry 导出器使用 OpenTelemetry 语义约定将您的追踪发送到 Sentry，提供对模型性能、代币使用和工具执行的洞察。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/sentry@beta
+```
+
+## 配置
+
+### 前提条件
+
+1. **Sentry 账户**：在 [sentry.io](https://sentry.io/) 注册
+2. **DSN**：从项目设置 → 客户端密钥获取您的[数据源名称](https://docs.sentry.io/concepts/key-terms/dsn-explainer/)
+3. **环境变量**：设置您的配置
+
+```bash title=".env"
+SENTRY_DSN=https://...@...sentry.io/...
+
+# 可选
+SENTRY_ENVIRONMENT=production
+SENTRY_RELEASE=1.0.0
+```
+
+### 零配置设置
+
+设置环境变量后，使用无需配置的导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { SentryExporter } from "@mastra/sentry";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      sentry: {
+        serviceName: "my-service",
+        exporters: [new SentryExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { SentryExporter } from "@mastra/sentry";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      sentry: {
+        serviceName: "my-service",
+        exporters: [
+          new SentryExporter({
+            dsn: process.env.SENTRY_DSN!,
+            environment: "production",
+            tracesSampleRate: 1.0, // 发送 100% 的事务到 Sentry
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 配置选项
+
+### 完整配置
+
+```typescript
+new SentryExporter({
+  // 必需设置
+  dsn: process.env.SENTRY_DSN!, // 数据源名称 - 告诉 SDK 在哪里发送事件
+
+  // 可选设置
+  environment: "production", // 部署环境（启用按环境过滤问题和警报）
+  tracesSampleRate: 1.0, // 发送到 Sentry 的事务百分比（0.0 = 0%，1.0 = 100%）
+  release: "1.0.0", // 您的代码部署版本（有助于识别回归并跟踪部署）
+
+  // 高级 Sentry 选项
+  options: {
+    // 任何其他 Sentry.NodeOptions
+    integrations: [],
+    beforeSend: (event) => event,
+    // ... 其他 Sentry SDK 选项
+  },
+
+  // 诊断日志记录
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+### 采样配置
+
+控制发送到 Sentry 的事务百分比。这对于高容量应用程序很有用：
+
+```typescript
+new SentryExporter({
+  dsn: process.env.SENTRY_DSN!,
+  tracesSampleRate: 0.1, // 发送 10% 的事务到 Sentry（推荐用于高负载后端）
+});
+```
+
+:::tip
+对于开发环境设置为 `1.0`（100%），对于生产高负载应用程序设置为 `0.1` 到 `0.2`（10-20%）。要完全禁用追踪，完全不要设置 `tracesSampleRate`，而不是将其设置为 `0`。
+:::
+
+## 跨度类型映射
+
+Mastra 跨度类型自动映射到 Sentry 操作：
+
+| Mastra SpanType | Sentry 操作 | 备注 |
+| --------------------------- | ---------------------- | ------------------------------------------------ |
+| `AGENT_RUN` | `gen_ai.invoke_agent` | 包含来自子 MODEL_GENERATION 跨度的代币 |
+| `MODEL_GENERATION` | `gen_ai.chat` | 包括使用统计、流式数据 |
+| `MODEL_STEP` | _(跳过)_ | 跳过以简化追踪层次结构 |
+| `MODEL_CHUNK` | _(跳过)_ | 数据聚合在 MODEL_GENERATION 中 |
+| `TOOL_CALL` | `gen_ai.execute_tool` | 带有输入/输出的工具执行 |
+| `MCP_TOOL_CALL` | `gen_ai.execute_tool` | MCP 工具执行 |
+| `WORKFLOW_RUN` | `workflow.run` | |
+| `WORKFLOW_STEP` | `workflow.step` | |
+| `WORKFLOW_CONDITIONAL` | `workflow.conditional` | |
+| `WORKFLOW_CONDITIONAL_EVAL` | `workflow.conditional` | |
+| `WORKFLOW_PARALLEL` | `workflow.parallel` | |
+| `WORKFLOW_LOOP` | `workflow.loop` | |
+| `WORKFLOW_SLEEP` | `workflow.sleep` | |
+| `WORKFLOW_WAIT_EVENT` | `workflow.wait` | |
+| `PROCESSOR_RUN` | `ai.processor` | |
+| `GENERIC` | `ai.span` | |
+
+## OpenTelemetry 语义约定
+
+导出器使用标准的 GenAI 语义约定以及 Sentry 特定属性：
+
+**对于 MODEL_GENERATION 跨度：**
+
+- `gen_ai.system`：模型提供商（例如 `openai`、`anthropic`）
+- `gen_ai.request.model`：模型标识符（例如 `gpt-4`）
+- `gen_ai.response.model`：响应模型
+- `gen_ai.response.text`：输出文本响应
+- `gen_ai.response.tool_calls`：生成期间进行的工具调用（JSON 数组）
+- `gen_ai.usage.input_tokens`：输入代币计数
+- `gen_ai.usage.output_tokens`：输出代币计数
+- `gen_ai.request.temperature`：温度参数
+- `gen_ai.request.stream`：是否请求了流式传输
+- `gen_ai.request.messages`：输入消息/提示（JSON）
+- `gen_ai.completion_start_time`：第一个代币到达的时间
+
+**对于 TOOL_CALL 跨度：**
+
+- `gen_ai.tool.name`：工具标识符
+- `gen_ai.tool.type`：`function`
+- `gen_ai.tool.call.id`：工具调用 ID
+- `gen_ai.tool.input`：工具输入（JSON）
+- `gen_ai.tool.output`：工具输出（JSON）
+- `tool.success`：工具调用是否成功
+
+**对于 AGENT_RUN 跨度：**
+
+- `gen_ai.agent.name`：智能体标识符
+- `gen_ai.pipeline.name`：智能体名称（用于 Sentry AI 视图）
+- `gen_ai.agent.instructions`：智能体指令
+- `gen_ai.response.model`：来自子代生成的模型
+- `gen_ai.response.text`：来自子代生成的输出文本
+- `gen_ai.usage.*`：来自子代生成的代币使用
+
+## 功能
+
+- **层级追踪**：维护父子关系
+- **代币跟踪**：自动跟踪生成的代币使用情况
+- **工具调用跟踪**：捕获带有输入/输出的工具执行
+- **流式传输支持**：聚合流式传输响应
+- **错误跟踪**：自动错误状态和异常捕获
+- **工作流支持**：追踪工作流执行步骤
+- **简化层次结构**：跳过 MODEL_STEP 和 MODEL_CHUNK 跨度以减少噪音
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [Sentry 文档](https://docs.sentry.io/)
+- [OpenTelemetry 语义约定](https://opentelemetry.io/docs/concepts/semantic-conventions/)

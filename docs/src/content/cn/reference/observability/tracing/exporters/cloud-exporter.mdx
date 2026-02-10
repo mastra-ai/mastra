@@ -1,0 +1,193 @@
+---
+title: "参考：CloudExporter | 可观测性"
+description: "CloudExporter 的 API 参考"
+packages:
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# CloudExporter
+
+将跟踪发送到 Mastra Cloud 以进行在线可视化和监控。
+
+## 构造函数
+
+```typescript
+new CloudExporter(config?: CloudExporterConfig)
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "config",
+      type: "CloudExporterConfig",
+      description: "配置选项",
+      required: false,
+    },
+  ]}
+/>
+
+## CloudExporterConfig
+
+```typescript
+interface CloudExporterConfig extends BaseExporterConfig {
+  /** 每批的最大跨度数。默认值：1000 */
+  maxBatchSize?: number;
+
+  /** 刷新前的最大等待时间（毫秒）。默认值：5000 */
+  maxBatchWaitMs?: number;
+
+  /** 最大重试次数。默认值：3 */
+  maxRetries?: number;
+
+  /** 云访问令牌（来自环境变量或配置） */
+  accessToken?: string;
+
+  /** 云可观测性端点 */
+  endpoint?: string;
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+## 环境变量
+
+如果配置中未提供，导出器会读取以下环境变量：
+
+- `MASTRA_CLOUD_ACCESS_TOKEN` - 身份验证的访问令牌
+- `MASTRA_CLOUD_TRACES_ENDPOINT` - 自定义端点（默认为 `https://api.mastra.ai/ai/spans/publish`）
+
+## 属性
+
+```typescript
+readonly name = 'mastra-cloud-observability-exporter';
+```
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+处理追踪事件。仅将 SPAN_ENDED 事件导出到 Cloud。
+
+<PropertiesTable
+  props={[
+    {
+      name: "event",
+      type: "TracingEvent",
+      description: "要导出的追踪事件",
+      required: true,
+    },
+  ]}
+/>
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的事件到 Mastra Cloud 而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新剩余的事件并执行清理。
+
+## 行为
+
+### 身份验证
+
+如果未通过配置或环境变量提供访问令牌，导出器：
+
+- 记录带有注册信息的警告
+- 作为 no-op 操作（丢弃所有事件）
+
+### 批处理
+
+导出器批处理跨度以实现高效的网络使用：
+
+- 当批次大小达到 `maxBatchSize` 时刷新
+- 当自批次中第一个跨度以来经过 `maxBatchWaitMs` 时刷新
+- 在 `shutdown()` 时刷新
+
+### 错误处理
+
+- 使用指数退避重试，`maxRetries` 次尝试
+- 所有重试失败后丢弃批次
+- 记录错误但继续处理新事件
+
+### 事件处理
+
+- 仅处理 `SPAN_ENDED` 事件
+- 忽略 `SPAN_STARTED` 和 `SPAN_UPDATED` 事件
+- 将跨度格式化为 MastraCloudSpanRecord 格式
+
+## MastraCloudSpanRecord
+
+云跨度的内部格式：
+
+```typescript
+interface MastraCloudSpanRecord {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  spanType: string;
+  attributes: Record<string, any> | null;
+  metadata: Record<string, any> | null;
+  startedAt: Date;
+  endedAt: Date | null;
+  input: any;
+  output: any;
+  error: any;
+  isEvent: boolean;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+```
+
+## 使用方法
+
+```typescript
+import { CloudExporter } from "@mastra/observability";
+
+// 使用环境变量获取令牌
+const exporter = new CloudExporter();
+
+// 显式配置
+const customExporter = new CloudExporter({
+  accessToken: "your-token",
+  maxBatchSize: 500,
+  maxBatchWaitMs: 2000,
+  logLevel: 'debug'
+});
+```
+
+## 另请参阅
+
+### 文档
+
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 完整指南
+- [导出器](/docs/cn/docs/observability/tracing/overview#exporters) - 导出器概念
+
+### 其他导出器
+
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - 存储持久化
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - 调试输出
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse 集成
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust 集成
+
+### 参考
+
+- [配置](/reference/observability/tracing/configuration) - 配置选项
+- [接口](/reference/observability/tracing/interfaces) - 类型定义

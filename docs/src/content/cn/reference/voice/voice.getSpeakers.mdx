@@ -1,0 +1,294 @@
+---
+title: "参考文档：Run.getSpeakers() | 语音提供者"
+description: "语音提供者提供的 getSpeakers() 方法文档，用于获取可用的语音选项。"
+packages:
+  - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-openai"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# voice.getSpeakers()
+
+`getSpeakers()` 方法从语音提供者获取可用语音选项（说话者）的列表。这允许应用程序向用户呈现语音选择，或以编程方式为不同上下文选择最合适的语音。
+
+## 使用示例
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+
+// 初始化语音提供者
+const openaiVoice = new OpenAIVoice();
+const elevenLabsVoice = new ElevenLabsVoice({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+});
+
+// 从 OpenAI 获取可用的说话者
+const openaiSpeakers = await openaiVoice.getSpeakers();
+console.log("OpenAI 语音：", openaiSpeakers);
+// 示例输出：[{ voiceId: "alloy" }, { voiceId: "echo" }, { voiceId: "fable" }, ...]
+
+// 从 ElevenLabs 获取可用的说话者
+const elevenLabsSpeakers = await elevenLabsVoice.getSpeakers();
+console.log("ElevenLabs 语音：", elevenLabsSpeakers);
+// 示例输出：[{ voiceId: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, ...]
+
+// 使用特定语音进行语音合成
+const text = "您好，这是不同语音的测试。";
+await openaiVoice.speak(text, { speaker: openaiSpeakers[2].voiceId });
+await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "Promise<Array<{ voiceId: string } & TSpeakerMetadata>>",
+      type: "Promise",
+      description:
+        "解析为语音选项数组的 Promise，每个选项至少包含 voiceId 属性，可能还包括提供程序特定的附加元数据。",
+    },
+  ]}
+/>
+
+## 提供者特定元数据
+
+不同的语音提供者为其语音返回不同的元数据：
+
+<Tabs>
+  <TabItem value="OpenAI">
+    <PropertiesTable
+      content={[
+        {
+          name: "voiceId",
+          type: "string",
+          description: "语音的唯一标识符（例如 'alloy'、'echo'、'fable'、'onyx'、'nova'、'shimmer'）",
+        }
+      ]}
+    />
+  </TabItem>
+
+<TabItem value="OpenAI Realtime">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description:
+          "语音的唯一标识符（例如 'alloy'、'echo'、'fable'、'onyx'、'nova'、'shimmer'）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="Deepgram">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "语音的唯一标识符",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "语音 ID 中嵌入的语言代码（例如 'en'）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="ElevenLabs">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "语音的唯一标识符",
+      },
+      {
+        name: "name",
+        type: "string",
+        description: "语音的人类可读名称",
+      },
+      {
+        name: "category",
+        type: "string",
+        description: "语音的类别（例如 'premade'、'cloned'）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="Google">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "语音的唯一标识符",
+      },
+      {
+        name: "languageCodes",
+        type: "string[]",
+        description:
+          "语音支持的语言代码数组（例如 ['en-US']）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="Azure">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "语音的唯一标识符",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "从语音 ID 提取的语言代码（例如 'en'）",
+      },
+      {
+        name: "region",
+        type: "string",
+        description: "从语音 ID 提取的区域代码（例如 'US'）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="Murf">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "语音的唯一标识符",
+      },
+      {
+        name: "name",
+        type: "string",
+        description: "语音名称（与 voiceId 相同）",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "从语音 ID 提取的语言代码（例如 'en'）",
+      },
+      {
+        name: "gender",
+        type: "string",
+        description:
+          "语音的性别（当前实现中始终为 'neutral'）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="PlayAI">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description:
+          "语音的唯一标识符（指向 manifest.json 的 S3 URL）",
+      },
+      {
+        name: "name",
+        type: "string",
+        description:
+          "语音的人类可读名称（例如 'Angelo'、'Arsenio'）",
+      },
+      {
+        name: "accent",
+        type: "string",
+        description:
+          "语音的口音（例如 'US'、'Irish'、'US African American'）",
+      },
+      {
+        name: "gender",
+        type: "string",
+        description: "语音的性别（'M' 或 'F'）",
+      },
+      {
+        name: "age",
+        type: "string",
+        description: "语音的年龄类别（例如 'Young'、'Middle'）",
+      },
+      {
+        name: "style",
+        type: "string",
+        description: "语音的说话风格（例如 'Conversational'）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="Speechify">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "语音的唯一标识符",
+      },
+      {
+        name: "name",
+        type: "string",
+        description: "语音的人类可读名称",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "语音的语言代码（例如 'en-US'）",
+      },
+    ]}
+  />
+</TabItem>
+
+<TabItem value="Sarvam">
+    <PropertiesTable
+      content={[
+        {
+          name: "voiceId",
+          type: "string",
+          description: "语音的唯一标识符",
+        },
+        {
+          name: "name",
+          type: "string",
+          description: "语音的人类可读名称",
+        },
+        {
+          name: "language",
+          type: "string",
+          description: "语音的语言（例如 'english'、'hindi'）",
+        },
+        {
+          name: "gender",
+          type: "string",
+          description: "语音的性别（'male' 或 'female'）",
+        }
+      ]}
+    />
+  </TabItem>
+</Tabs>
+
+## 注意事项
+
+- 可用语音因提供者而异很大
+- 某些提供者可能需要身份验证才能获取完整的语音列表
+- 如果提供者不支持此方法，默认实现返回空数组
+- 出于性能原因，如果您需要频繁显示列表，请考虑缓存结果
+- `voiceId` 属性保证对所有提供者都存在，但附加元数据各不相同

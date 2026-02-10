@@ -1,0 +1,86 @@
+---
+title: "服务器概述 | 服务器"
+description: "Mastra 服务器概述，涵盖 HTTP 端点、中间件、身份验证和客户端集成。"
+packages:
+  - "@mastra/core"
+---
+
+# 服务器概述
+
+Mastra 作为 HTTP 服务器运行，将您的智能体、工作流和其他功能公开为 API 端点。服务器处理请求路由、中间件执行、身份验证和流式传输响应。
+
+:::info
+
+本页涵盖传递给 `Mastra` 构造函数的 [`server`](/reference/configuration#server-options) 配置选项。要使用您自己的 HTTP 服务器（Hono、Express 等）运行 Mastra，请访问[服务器适配器](/docs/cn/server/server-adapters)。
+
+:::
+
+## 服务器架构
+
+Mastra 使用 [Hono](https://hono.dev) 作为其底层 HTTP 服务器框架。当您使用 `mastra build` 构建 Mastra 应用程序时，它会在 `.mastra` 目录中生成一个基于 Hono 的 HTTP 服务器。
+
+服务器提供：
+
+- 所有注册的智能体和工作流的 API 端点
+- 自定义 API 路由和中间件
+- 多提供商身份验证
+- 用于动态配置的请求上下文
+- 用于安全响应的流数据编辑
+
+## 配置
+
+通过将 `server` 对象传递给 `Mastra` 构造函数来配置服务器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    port: 3000, // 默认为 4111
+    host: "0.0.0.0", // 默认为 'localhost'
+  },
+});
+```
+
+:::info
+
+访问[配置参考](/reference/configuration#server-options)获取可用服务器选项的完整列表。
+
+:::
+
+## 服务器功能
+
+- **[中间件](/docs/cn/server/middleware)**：拦截请求以进行身份验证、日志记录、CORS 或注入请求特定的上下文。
+- **[自定义 API 路由](/docs/cn/server/custom-api-routes)**：使用可以访问 Mastra 实例的自己的 HTTP 端点扩展服务器。
+- **[请求上下文](/docs/cn/server/request-context)**：根据运行时条件将请求特定的值传递给智能体、工具和工作流。
+- **[服务器适配器](/docs/cn/server/server-adapters)**：使用 Express、Hono 或您自己的 HTTP 服务器而不是生成的服务器运行 Mastra。
+- **[自定义适配器](/docs/cn/server/custom-adapters)**：为官方不支持的框架构建适配器。
+- **[Mastra 客户端 SDK](/docs/cn/server/mastra-client)**：用于从浏览器或服务器环境调用智能体、工作流和工具的类型安全客户端。
+- **[身份验证](/docs/cn/server/auth)**：使用 JWT、Clerk、Supabase、Firebase、Auth0 或 WorkOS 保护端点。
+
+## 流数据编辑
+
+在流式传输智能体响应时，HTTP 层会在将每个块发送到客户端之前，从系统提示、工具定义、API 密钥和类似数据中编辑数据。这默认启用。
+
+此行为只能通过使用[服务器适配器](/docs/cn/server/server-adapters#stream-data-redaction)来配置。对于服务器适配器，流数据编辑也默认启用。
+
+## TypeScript 配置
+
+Mastra 需要与现代 Node.js 兼容的 `module` 和 `moduleResolution` 设置。不支持像 `CommonJS` 或 `node` 这样的旧选项。
+
+```json {4-5} title="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
+}
+```

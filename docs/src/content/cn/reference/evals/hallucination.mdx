@@ -1,0 +1,292 @@
+---
+title: "参考：幻觉评分器 | 评估"
+description: "Mastra 中幻觉评分器的文档，通过识别与提供上下文的矛盾来评估 LLM 输出的事实正确性。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 幻觉评分器
+
+`createHallucinationScorer()` 函数通过将 LLM 输出与提供上下文进行比较来评估 LLM 是否生成事实正确的信息。此评分器通过识别上下文与输出之间的直接矛盾来衡量幻觉。
+
+## 参数
+
+`createHallucinationScorer()` 函数接受一个包含以下属性的选项对象：
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description:
+        "用于评估幻觉的模型配置。",
+    },
+    {
+      name: "options.scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "最大分数值。",
+    },
+    {
+      name: "options.context",
+      type: "string[]",
+      required: false,
+      description: "用作幻觉检测事实依据的静态上下文字符串。",
+    },
+    {
+      name: "options.getContext",
+      type: "(params: GetContextParams) => string[] | Promise<string[]>",
+      required: false,
+      description: "在运行时动态解析上下文的钩子。优先于静态上下文。对于实时评分很有用，其中上下文（如工具结果）仅在评分器运行时才可用。",
+    },
+  ]}
+/>
+
+此函数返回 MastraScorer 类的实例。`.run()` 方法接受与其他评分器相同的输入（请参阅 [MastraScorer 参考](./mastra-scorer)），但返回值包含 LLM 特定的字段，如下所述。
+
+### GetContextParams
+
+`getContext` 钩子接收以下参数：
+
+<PropertiesTable
+  content={[
+    {
+      name: "run",
+      type: "GetContextRun",
+      description: "包含输入、输出、runId、requestContext 和 tracingContext 的评分器运行。",
+    },
+    {
+      name: "results",
+      type: "Record<string, any>",
+      description: "先前步骤累积的结果（例如，带有提取声明的 preprocessStepResult）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      required: false,
+      description: "计算出的分数。仅在从 generateReason 步骤调用时存在。",
+    },
+    {
+      name: "step",
+      type: "'analyze' | 'generateReason'",
+      description: "调用钩子的步骤。对于在调用之间缓存上下文很有用。",
+    },
+  ]}
+/>
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "包含提取声明的对象: { claims: string[] }",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于预处理步骤的提示词（可选）。",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "包含判决的对象: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于分析步骤的提示词（可选）。",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "幻觉分数 (0 到 scale，默认 0-1)。",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "对分数和识别的矛盾的详细解释。",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description:
+        "发送给 LLM 用于生成理由步骤的提示词（可选）。",
+    },
+  ]}
+/>
+
+## 评分详情
+
+评分器通过矛盾检测和 unsupported 声明分析来评估幻觉。
+
+### 评分过程
+
+1. 分析事实内容：
+   - 从上下文中提取陈述
+   - 识别数值和日期
+   - 映射陈述关系
+2. 分析输出中的幻觉：
+   - 与上下文陈述比较
+   - 将直接冲突标记为幻觉
+   - 将 unsupported 声明标记为幻觉
+   - 评估数值准确性
+   - 考虑近似上下文
+3. 计算幻觉分数：
+   - 计算幻觉陈述数（矛盾和 unsupported 声明）
+   - 除以总陈述数
+   - 缩放到配置范围
+
+最终分数：`(幻觉陈述 / 总陈述数) * scale`
+
+### 重要注意事项
+
+- 上下文中不存在的声明被视为幻觉
+- 主观声明除非明确支持，否则是幻觉
+- 允许关于上下文中事实的推测性语言（"might"、"possibly"）
+- 关于不在上下文中的事实的推测性语言被视为幻觉
+- 空输出导致零幻觉
+- 数值评估考虑：
+  - 适当的精度规模
+  - 上下文近似
+  - 明确的精度指标
+
+### 分数解释
+
+0 到 1 之间的幻觉分数：
+
+- **0.0**：无幻觉 - 所有声明都与上下文匹配。
+- **0.3–0.4**：低幻觉 - 一些矛盾。
+- **0.5–0.6**：混合幻觉 - 几个矛盾。
+- **0.7–0.8**：高幻觉 - 许多矛盾。
+- **0.9–1.0**：完全幻觉 - 大部分或所有声明与上下文矛盾。
+
+**注意**：分数代表幻觉程度 - 较低分数表示与提供上下文的事实对齐更好
+
+## 示例
+
+### 静态上下文
+
+当您有已知的事实真相可以比较时使用静态上下文：
+
+```typescript title="src/example-static-context.ts"
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createHallucinationScorer({
+  model: "openai/gpt-4o",
+  options: {
+    context: [
+      "第一款 iPhone 于 2007 年 1 月 9 日宣布。",
+      "它于 2007 年 6 月 29 日发布。",
+      "史蒂夫·乔布斯在 Macworld 上发布了它。",
+    ],
+  },
+});
+```
+
+### 使用 getContext 的动态上下文
+
+对于上下文来自动态工具结果的实时评分场景使用 `getContext`：
+
+```typescript title="src/example-dynamic-context.ts"
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+import { extractToolResults } from "@mastra/evals/scorers";
+
+const scorer = createHallucinationScorer({
+  model: "openai/gpt-4o",
+  options: {
+    getContext: ({ run, step }) => {
+      // 将工具结果提取为上下文
+      const toolResults = extractToolResults(run.output);
+      return toolResults.map((t) =>
+        JSON.stringify({ tool: t.toolName, result: t.result })
+      );
+    },
+  },
+});
+```
+
+### 实时评分与代理
+
+附加评分器到代理进行实时评估：
+
+```typescript title="src/example-live-scoring.ts"
+import { Agent } from "@mastra/core/agent";
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+import { extractToolResults } from "@mastra/evals/scorers";
+
+const hallucinationScorer = createHallucinationScorer({
+  model: "openai/gpt-4o",
+  options: {
+    getContext: ({ run }) => {
+      const toolResults = extractToolResults(run.output);
+      return toolResults.map((t) =>
+        JSON.stringify({ tool: t.toolName, result: t.result })
+      );
+    },
+  },
+});
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  instructions: "您是一个有帮助的助手。",
+  evals: {
+    scorers: [hallucinationScorer],
+  },
+});
+```
+
+### 使用 runEvals 的批量评估
+
+```typescript title="src/example-batch-evals.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createHallucinationScorer({
+  model: "openai/gpt-4o",
+  options: {
+    context: ["已知事实 1", "已知事实 2"],
+  },
+});
+
+const result = await runEvals({
+  data: [
+    { input: "告诉我关于主题 A 的信息" },
+    { input: "告诉我关于主题 B 的信息" },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+## 相关内容
+
+- [忠实度评分器](./faithfulness)
+- [答案相关性评分器](./answer-relevancy)

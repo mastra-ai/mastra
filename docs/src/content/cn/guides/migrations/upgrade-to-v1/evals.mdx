@@ -1,0 +1,260 @@
+---
+title: "Evals & Scorers | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移评估和评分器的更改。"
+---
+
+# 评估和评分器
+
+评估 API 已在新的评分器系统上进行了整合，更新了命名约定和配置要求。
+
+## 变更
+
+### `getScorers` 改为 `listScorers`
+
+`getScorers()` 方法已重命名为 `listScorers()`。此更改符合 API 中的命名约定，复数形式的 getter 方法使用 `list` 前缀。
+
+要迁移，请将所有对 `getScorers()` 的调用替换为 `listScorers()`。
+
+```diff
+- const scorers = mastra.getScorers();
++ const scorers = mastra.listScorers();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/mastra-plural-apis .
+```
+
+:::
+
+### `runExperiment` 改为 `runEvals`
+
+`runExperiment()` 函数已重命名为 `runEvals()`。此更改提供了更清晰的命名，更好地描述了评估功能。
+
+要迁移，将函数调用从 `runExperiment` 更新为 `runEvals`。
+
+```diff
+- import { createScorer, runExperiment } from '@mastra/core/evals';
++ import { createScorer, runEvals } from '@mastra/core/evals';
+  import { myAgent } from './agents/my-agent';
+
+  const scorer = createScorer({
+    id: 'helpfulness-scorer',
+    // ...
+  });
+
+- const result = await runExperiment({ target: myAgent, scorers: [scorer], data: inputs });
++ const result = await runEvals({ target: myAgent, scorers: [scorer], data: inputs });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/evals-run-experiment .
+```
+
+:::
+
+### `getScorerByName` 改为 `getScorerById`
+
+`getScorerByName()` 方法已重命名为 `getScorerById()`。评分器现在需要 `id` 字段而不是 `name`。此更改符合更广泛的 API 模式，即使用 `id` 进行实体标识。
+
+要迁移，更新方法调用和评分器配置以使用 `id` 而不是 `name`。
+
+```diff
+  const scorer = createScorer({
+-   name: 'helpfulness-scorer',
++   id: 'helpfulness-scorer',
+    // ...
+  });
+
+- const scorer = mastra.getScorerByName('helpfulness-scorer');
++ const scorer = mastra.getScorerById('helpfulness-scorer');
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/evals-scorer-by-name .
+```
+
+:::
+
+### 评分器配置从 `name` 改为 `id`
+
+评分器现在需要 `id` 字段而不是 `name`。`name` 字段现在是可选的。此更改提供了与其他 Mastra 实体的一致性。
+
+要迁移，更新评分器定义以使用 `id` 作为必需字段。
+
+```diff
+  const scorer = createScorer({
+-   name: 'helpfulness-scorer',
++   id: 'helpfulness-scorer',
++   name: 'Helpfulness Scorer', // 可选
+    // ...
+  });
+```
+
+### 存储评分 API 改为 `listScoresBy*` 模式
+
+评分存储 API 已重命名以遵循 `listScoresBy*` 模式。此更改符合更广泛的存储 API 命名约定。
+
+要迁移，更新评分查询方法以使用新的命名模式。
+
+```diff
+- const scores = await storage.getScores({ scorerName: 'helpfulness-scorer' });
++ const scores = await storage.listScoresByScorerId({
++   scorerId: 'helpfulness-scorer',
++ });
+
+// 同样可用：
+// - listScoresByRunId
+// - listScoresByEntityId
+// - listScoresBySpan
+```
+
+### 预构建评分器导入到 `scorers/prebuilt` 路径
+
+预构建评分器导入已合并到单个 `@mastra/evals/scorers/prebuilt` 路径下，而不是单独的 `scorers/llm` 和 `scorers/code` 路径。此更改简化了导入并提供了更清晰的预构建评分器组织。
+
+要迁移，更新导入语句以使用新的 `scorers/prebuilt` 路径。
+
+```diff
+  // 基于 LLM 的评分器
+- import { createHallucinationScorer } from '@mastra/evals/scorers/llm';
+- import { createFaithfulnessScorer } from '@mastra/evals/scorers/llm';
++ import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
++ import { createFaithfulnessScorer } from '@mastra/evals/scorers/prebuilt';
+
+  // 基于代码的评分器
+- import { createContentSimilarityScorer } from '@mastra/evals/scorers/code';
+- import { createCompletenessScorer } from '@mastra/evals/scorers/code';
++ import { createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
++ import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/evals-prebuilt-imports .
+```
+
+:::
+
+### 评分器消息类型从 `UIMessage` 改为 `MastraDBMessage`
+
+评分器输入和输出类型现在使用 `MastraDBMessage[]` 而不是 `UIMessage`。此更改使评分器与框架中保持一致的数据库持久化消息格式保持一致。
+
+要迁移，更新评分器实现以使用 `MastraDBMessage` 类型并通过嵌套的 `content` 结构访问消息内容。
+
+```diff
+  import type {
+    ScorerRunInputForAgent,
+    ScorerRunOutputForAgent
+  } from '@mastra/core/evals';
+
+- // ScorerRunInputForAgent 使用 UIMessage[]
+- const inputMessages: UIMessage[] = run.input.inputMessages;
++ // ScorerRunInputForAgent 现在使用 MastraDBMessage[]
++ import type { MastraDBMessage } from '@mastra/core/agent';
++ const inputMessages: MastraDBMessage[] = run.input.inputMessages;
+```
+
+### 消息内容结构改为嵌套格式
+
+工具调用和文本内容现在通过嵌套的 `content` 对象结构访问，而不是作为消息的平面属性。此更改提供了更好的类型安全性，并与数据库消息格式保持一致。
+
+要迁移，通过 `message.content.toolInvocations` 访问工具调用，通过 `message.content.content` 或使用 `getTextContentFromMastraDBMessage()` 辅助函数访问文本。
+
+```diff
++ import { getTextContentFromMastraDBMessage } from '@mastra/evals';
+
+  const run = await scorer.run(testRun);
+
+  // 访问文本内容
+- const text = message.content;
++ const text = getTextContentFromMastraDBMessage(message);
++ // 或直接：message.content.content
+
+  // 访问工具调用
+- const toolCalls = message.toolInvocations;
++ const toolCalls = message.content.toolInvocations;
+```
+
+## 移除
+
+### 旧版评估代码
+
+旧版评估代码已从 `@mastra/core` 中移除。这包括旧版评估指标、评分器/判断器模块以及基于钩子的自动评估代码。此更改通过删除过时的评估方法来简化代码库。
+
+要迁移，请使用 `@mastra/core/evals` 或 `@mastra/evals` 中的新评估/评分器 API。
+
+```diff
+- // 旧版评估 API
++ import { createScorer, runEvals } from '@mastra/core/evals';
++
++ const scorer = createScorer({
++   id: 'my-scorer',
++   // 使用新的评分器 API
++ });
+```
+
+### Agent `TMetrics` 泛型参数
+
+`AgentConfig` 和 `Agent` 构造函数中的 `TMetrics` 泛型参数已被移除。指标/评分器现在使用评分器 API 配置，而不是作为 Agent 类型系统的一部分。此更改简化了 Agent 类型签名。
+
+要迁移，移除 `TMetrics` 泛型参数并使用评分器 API 配置评分器。
+
+```diff
+- const agent = new Agent<AgentId, Tools, Metrics>({
++ const agent = new Agent<AgentId, Tools>({
+    // ...
+  });
+```
+
+### 评估相关类型导出
+
+多个评估相关类型导出已被移除，包括 `DeprecatedOutputOptions`、`Metric` 和处理器选项类型。这些类型现在是内部的或已被新的评分器 API 取代。此更改减少了 API 表面积。
+
+要迁移，移除对这些已移除类型的引用并使用新的评分器 API。
+
+```diff
+- import type {
+-   DeprecatedOutputOptions,
+-   Metric,
+-   LanguageDetectorOptions,
+-   ModerationOptions,
+- } from '@mastra/core';
++ // 使用新的评分器 API 类型
++ import type { Scorer } from '@mastra/core/evals';
+```
+
+### `createUIMessage` 测试辅助函数
+
+`createUIMessage()` 测试辅助函数已被移除，替换为 `createTestMessage()`。新的辅助函数创建具有嵌套内容结构的 `MastraDBMessage` 对象，并支持可选的工具调用。此更改使测试实用程序与新的消息格式保持一致。
+
+要迁移，将 `createUIMessage()` 调用替换为 `createTestMessage()` 并更新以使用 `MastraDBMessage` 类型。
+
+```diff
+- import { createUIMessage } from '@mastra/evals';
++ import { createTestMessage } from '@mastra/evals';
+
+  // 创建测试消息
+- const message = createUIMessage({
+-   id: 'test-1',
++ const message = createTestMessage({
++   id: 'test-1', // 可选，默认为 'test-message'
+    role: 'user',
+    content: 'Hello',
+    toolInvocations: [], // 可选
+  });
+```

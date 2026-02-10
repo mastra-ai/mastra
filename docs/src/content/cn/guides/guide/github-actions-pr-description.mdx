@@ -1,0 +1,243 @@
+---
+title: "指南：在 GitHub Actions 中自动化多语言 PR 描述 | Mastra | 指南"
+description: 使用 GitHub Actions 工作流自动化多语言拉取请求描述，该工作流使用 Mastra 读取差异并生成简洁的 PR 描述。
+---
+
+# 为 GitHub Actions 构建 PR 描述代理
+
+在本指南中，您将构建一个 [GitHub Action](https://docs.github.com/en/actions)，它使用 Mastra 代理读取拉取请求差异，生成多语言摘要，并直接将其写入 GitHub UI 中的 PR 描述。该操作在创建或更新拉取请求时运行，并随着差异的变化重新生成描述。
+
+这种方法类似于 AI 驱动的 PR 工具，如 [CodeRabbit](https://coderabbit.ai/) 和 [Greptile](https://www.greptile.com/)，但使用原生 GitHub Actions 工作流和 Mastra 代理构建。
+
+该设置由三部分组成：
+
+- 生成描述的 Mastra 代理
+- 在拉取请求上触发的 GitHub Actions 工作流
+- 将工作流连接到代理的 Node.js 脚本
+
+完成的操作会写入包含英语、西班牙语和日语摘要的描述，每个都用旗帜表情符号标记以便轻松扫描。例如：
+
+```text
+🇬🇧 English
+This PR integrates Astro into the project, adding configuration files and updating scripts to support Astro development.
+
+🇪🇸 Español
+Este PR integra Astro en el proyecto, añadiendo archivos de configuración y actualizando scripts para soportar el desarrollo con Astro.
+
+🇯🇵 日本語
+このPRは、Astroをプロジェクトに統合し、Astro開発をサポートするための設定ファイルを追加し、スクリプトを更新します。
+```
+
+
+## 开始之前
+
+- 一个 Mastra 项目（请参阅[快速入门](/guides/getting-started/quickstart)）
+- 来自支持的[模型提供商](/models)的 API 密钥。如果您没有偏好，请使用 [OpenAI](/models/providers/openai)
+- Node.js `v22.13.0` 或更高版本
+
+### 设置仓库密钥
+
+工作流需要访问您的模型提供商 API 密钥。将其作为仓库密钥添加到 GitHub：
+
+1. 转到 GitHub 上的您的仓库
+2. 导航到 **Settings** > **Secrets and variables** > **Actions**
+3. 点击 **New repository secret**
+4. 使用名称 `OPENAI_API_KEY` 添加您的 API 密钥（或您提供商的相应密钥）
+
+    ![Screenshot of repository secrets in GitHub UI](/img/guides/github-action-repository-secrets.jpg)
+
+工作流将此密钥引用为 `${{ secrets.OPENAI_API_KEY }}` 并在运行时使其对 Mastra 代理可用。
+
+## 创建描述代理
+
+PR 描述代理负责将 git 差异转换为清晰、对审查者友好的拉取请求描述。
+
+此代理接收来自拉取请求的原始差异。它以配置的语言生成描述，并使用表情符号标志格式化输出，以便 PR 中的每个语言部分都易于扫描。
+
+```ts title="src/mastra/agents/description-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+export const descriptionAgent = new Agent({
+  id: "description-agent",
+  name: "PR Description Agent",
+  instructions: `You are a helpful assistant that creates clear, concise PR descriptions.
+
+When given a git diff of changed files, you will:
+1. Analyze the changes to understand what was modified
+2. Write a brief summary and list of changes
+3. Output the same content in English, Spanish, and Japanese
+
+Guidelines:
+- Be concise but informative
+- Focus on the "what" and "why" of changes
+- Use technical terms appropriately
+- Keep bullet points short and scannable
+- Each language section should contain the same information, naturally translated
+
+Output format:
+
+### 🇬🇧 English
+
+[1-2 sentence summary]
+
+- [Change 1]
+- [Change 2]
+- [Change 3]
+
+---
+
+### 🇪🇸 Español
+
+[Same summary in Spanish]
+
+- [Same changes in Spanish]
+
+---
+
+### 🇯🇵 日本語
+
+[Same summary in Japanese]
+
+- [Same changes in Japanese]
+`,
+  model: "openai/gpt-4o"
+});
+```
+
+### 本地测试代理
+
+在部署工作流之前，您可以在 [Mastra Studio](/docs/cn/docs/getting-started/studio) 中测试代理，验证它是否正确生成描述。
+
+1. 通过在 PR URL 后附加 `.diff` 从任何公共 GitHub PR 获取差异：
+
+    ```
+    https://github.com/owner/repo/pull/123.diff
+    ```
+
+2. 在工作室中打开 PR 描述代理，并使用以下提示粘贴差异内容：
+
+"Please create a PR description for the following changes. `<paste the diff content here>`"
+
+代理将返回包含英语、西班牙语和日语部分的格式化描述。
+
+## GitHub Actions
+
+GitHub Actions 在 GitHub 基础设施上的短期环境中运行您的工作流。每次运行都从干净的虚拟机开始，检出您的代码，安装依赖项，运行工作流步骤，然后关闭。除非您明确将其保存为工件或缓存，否则不会在运行之间保留任何内容。
+
+### 创建工作流
+
+GitHub Actions 工作流位于 `.github/workflows` 目录中。在项目根目录中创建一个 `.github` 目录，然后在其中创建一个 `workflows` 目录。添加一个名为 `pr-description.yml` 的文件。
+
+此工作流在打开或更新拉取请求时运行。它为 PR 生成差异，调用 Mastra 代理来描述更改，并将描述直接写入 GitHub UI 中的 PR。
+
+```yaml title=".github/workflows/pr-description.yml"
+name: PR Description Generator
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  PR_DIFF_FILE: /tmp/pr_diff.txt
+  PR_DESCRIPTION_FILE: /tmp/pr_description.md
+
+jobs:
+  generate-description:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - id: pr
+        run: |
+          BASE_REF=$(gh pr view ${{ github.event.pull_request.number }} --json baseRefName -q '.baseRefName')
+          git fetch origin $BASE_REF
+          git diff origin/$BASE_REF...HEAD -- . ':!package-lock.json' > $PR_DIFF_FILE
+
+      - run: npx tsx .github/scripts/generate-description.ts
+
+      - run: gh pr edit ${{ github.event.pull_request.number }} --body-file $PR_DESCRIPTION_FILE
+```
+
+#### 工作流解释
+
+- **`on: pull_request`**：在打开或更新拉取请求时运行。
+- **`permissions: pull-requests: write`**：允许工作流更新 PR 描述。
+- **`env`**：定义跨步骤使用的共享文件路径，并从仓库密钥读取必需的值，包括 Mastra 代理使用的模型 API 密钥。
+- **`actions/checkout@v4` + git 命令**：检出完整的仓库历史记录，获取 PR 基础分支，并将 PR 差异写入 `/tmp/pr_diff.txt`。
+- **`actions/setup-node@v4`**：设置工作流使用的 Node.js 运行时。
+- **`npm ci`**：从 lockfile 安装仓库的 Node.js 依赖项。
+- **`generate-description.ts`**：读取 `/tmp/pr_diff.txt`，调用 Mastra 代理，并将生成的描述写入 `/tmp/pr_description.md`。
+- **`gh pr edit`**：使用 `/tmp/pr_description.md` 的内容更新拉取请求描述。
+
+:::note
+
+工作流在生成差异时排除 `package-lock.json`。Lockfile 通常很大且嘈杂，包含它们可能会使代理的上下文窗口过载，并使生成的描述更难推理。
+
+:::
+
+### 创建工作流脚本
+
+在 `.github` 内创建一个 `scripts` 目录，并添加一个名为 `generate-description.ts` 的文件。
+
+此脚本从 `PR_DIFF_FILE` 读取 PR 差异，使用 Mastra 代理生成描述，并将结果写入 `PR_DESCRIPTION_FILE` 以便工作流发布到拉取请求。
+
+```typescript title=".github/scripts/generate-description.ts"
+import { readFileSync, writeFileSync } from "fs";
+import { mastra } from "../../src/mastra";
+
+const agent = mastra.getAgent("descriptionAgent");
+
+await agent.generate(
+  `Please create a PR description for the following changes.
+
+Git diff:
+\`\`\`diff
+${readFileSync(process.env.PR_DIFF_FILE!, "utf-8")}
+\`\`\``,
+  {
+    onError: () => {
+      writeFileSync(
+        process.env.PR_DESCRIPTION_FILE!,
+        "This PR diff is too large to generate a description automatically."
+      );
+    },
+    onFinish: (result) => {
+      writeFileSync(process.env.PR_DESCRIPTION_FILE!, result.text);
+    }
+  }
+);
+```
+
+#### 工作流脚本解释
+
+- **`mastra.getAgent("descriptionAgent")`**：获取生成 PR 描述的 Mastra 代理。
+- **`agent.generate(...)`**：从 `PR_DIFF_FILE` 读取拉取请求差异，并要求代理编写 PR 描述。
+- **`onError` 回调**：在差异太大无法处理时向 `PR_DESCRIPTION_FILE` 写入回退消息。
+- **`onFinish` 回调**：将生成的 PR 描述写入 `PR_DESCRIPTION_FILE`。
+
+## 后续步骤
+
+您现在有了一个使用 Mastra 代理生成多语言 PR 描述的 GitHub Actions。一旦工作流和支持文件合并到您的主分支，代理将在下次创建或更新拉取请求时自动运行。您可以在仓库的 **Actions** 选项卡中监控运行情况。
+
+从这里，您可以自定义代理指令、更改输出语言，或扩展工作流以处理其他事件。
+
+要了解更多信息：
+
+- 阅读[代理](/docs/cn/docs/agents/overview)文档
+- 为您的代理提供[工具](/docs/cn/docs/tools-mcp/overview)以获取额外上下文
+- 探索其他 [GitHub Actions 触发器](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows)，如问题评论或发布

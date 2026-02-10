@@ -1,0 +1,224 @@
+---
+title: "MastraAuthWorkos 类 | Auth"
+description: "MastraAuthWorkos 类的文档，该类使用 WorkOS 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-workos"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# MastraAuthWorkos 类
+
+`MastraAuthWorkos` 类使用 WorkOS 为 Mastra 提供身份验证。它使用 WorkOS 访问令牌验证传入的请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 先决条件
+
+此示例使用 WorkOS 身份验证。请确保：
+
+1. 在 [workos.com](https://workos.com/) 创建 WorkOS 账户
+2. 在 WorkOS 仪表板中设置应用程序
+3. 配置重定向 URI 和允许的来源
+4. 设置组织并根据需要配置用户角色
+
+```env title=".env"
+WORKOS_API_KEY=sk_live_...
+WORKOS_CLIENT_ID=client_...
+```
+
+:::note
+
+您可以在 WorkOS 仪表板中的"API 密钥"和"应用程序"下分别找到您的 API 密钥和客户端 ID。
+
+有关详细的设置说明，请参阅您特定平台的 [WorkOS 文档](https://workos.com/docs)。
+
+:::
+
+## 安装
+
+在使用 `MastraAuthWorkos` 类之前，您必须安装 `@mastra/auth-workos` 包。
+
+```bash
+npm install @mastra/auth-workos@latest
+```
+
+## 使用示例
+
+### 使用环境变量的基本用法
+
+```typescript {2,6} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthWorkos } from "@mastra/auth-workos";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthWorkos(),
+  },
+});
+```
+
+### 自定义配置
+
+```typescript {2,6-9} title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthWorkos } from "@mastra/auth-workos";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthWorkos({
+      apiKey: process.env.WORKOS_API_KEY,
+      clientId: process.env.WORKOS_CLIENT_ID,
+    }),
+  },
+});
+```
+
+## 配置
+
+### 用户授权
+
+默认情况下，`MastraAuthWorkos` 检查经过身份验证的用户在其任何组织成员资格中是否具有 'admin' 角色。授权过程：
+
+1. 使用用户 ID 检索用户的组织成员资格
+2. 从其成员资格中提取所有角色
+3. 检查任何角色是否具有 slug 'admin'
+4. 仅当用户在至少一个组织中具有管理员角色时才授予访问权限
+
+要自定义用户授权，请提供自定义 `authorizeUser` 函数：
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthWorkos } from "@mastra/auth-workos";
+
+const workosAuth = new MastraAuthWorkos({
+  apiKey: process.env.WORKOS_API_KEY,
+  clientId: process.env.WORKOS_CLIENT_ID,
+  authorizeUser: async (user) => {
+    return !!user;
+  },
+});
+```
+
+:::info
+
+访问 [MastraAuthWorkos](/reference/auth/workos) 了解所有可用的配置选项。
+
+:::
+
+## 客户端设置
+
+使用 WorkOS 身份验证时，您需要实现 WorkOS 身份验证流程，将授权码交换为访问令牌，然后将该令牌与您的 Mastra 请求一起使用。
+
+### 安装 WorkOS SDK
+
+首先，在您的应用程序中安装 WorkOS SDK：
+
+```bash
+npm install @workos-inc/node
+```
+
+### 将代码交换为访问令牌
+
+用户完成 WorkOS 身份验证流程并返回授权码后，将其交换为访问令牌：
+
+```typescript title="lib/auth.ts"
+import { WorkOS } from "@workos-inc/node";
+
+const workos = new WorkOS(process.env.WORKOS_API_KEY);
+
+export const authenticateWithWorkos = async (
+  code: string,
+  clientId: string,
+) => {
+  const authenticationResponse =
+    await workos.userManagement.authenticateWithCode({
+      code,
+      clientId,
+    });
+
+  return authenticationResponse.accessToken;
+};
+```
+
+:::note
+
+有关更多身份验证方法和配置选项，请参阅 [WorkOS 用户管理文档](https://workos.com/docs/cn/authkit/vanilla/nodejs)。
+
+:::
+
+## 配置 `MastraClient`
+
+启用 `auth` 后，使用 `MastraClient` 发出的所有请求必须在 `Authorization` 标头中包含有效的 WorkOS 访问令牌：
+
+```typescript title="lib/mastra/mastra-client.ts"
+import { MastraClient } from "@mastra/client-js";
+
+export const createMastraClient = (accessToken: string) => {
+  return new MastraClient({
+    baseUrl: "https://<mastra-api-url>",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+};
+```
+
+:::info
+
+访问令牌必须在 Authorization 标头中以 `Bearer` 为前缀。
+
+访问 [Mastra 客户端 SDK](/docs/cn/server/mastra-client) 了解更多配置选项。
+
+:::
+
+### 发出经过身份验证的请求
+
+一旦 `MastraClient` 配置了 WorkOS 访问令牌，您就可以发送经过身份验证的请求：
+
+<Tabs>
+  <TabItem value="react" label="React">
+
+    ```typescript title="src/api/agents.ts"
+    import { WorkOS } from '@workos-inc/node';
+    import { MastraClient } from '@mastra/client-js';
+
+    const workos = new WorkOS(process.env.WORKOS_API_KEY);
+
+    export const callMastraWithWorkos = async (code: string, clientId: string) => {
+      const authenticationResponse = await workos.userManagement.authenticateWithCode({
+        code,
+        clientId,
+      });
+
+      const token = authenticationResponse.accessToken;
+
+      const mastra = new MastraClient({
+        baseUrl: "http://localhost:4111",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const weatherAgent = mastra.getAgent("weatherAgent");
+      const response = await weatherAgent.generate("内罗毕的天气怎么样");
+
+      return response.text;
+    };
+    ```
+
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-workos-access-token>" \
+      -d '{
+        "messages": "伦敦天气"
+      }'
+    ```
+
+  </TabItem>
+</Tabs>

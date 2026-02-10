@@ -1,0 +1,38 @@
+---
+title: "参考文档：Mastra.getDeployer() | 核心"
+description: "Mastra 中 `Mastra.getDeployer()` 方法的文档，用于检索配置的部署器实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getDeployer()
+
+`.getDeployer()` 方法用于检索已在 Mastra 实例中配置的部署器实例。
+
+## 使用示例
+
+```typescript
+mastra.getDeployer();
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "deployer",
+      type: "MastraDeployer | undefined",
+      description:
+        "配置的部署器实例；如果未配置部署器，则为 undefined。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [部署概述](/docs/cn/docs/deployment/overview)
+- [部署器参考](/reference/deployer/)

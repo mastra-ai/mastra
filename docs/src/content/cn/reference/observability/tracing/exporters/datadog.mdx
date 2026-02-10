@@ -1,0 +1,172 @@
+---
+title: "参考：DatadogExporter | 可观测性"
+description: "用于追踪的 Datadog LLM 可观测性导出器"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# DatadogExporter
+
+将追踪数据发送到 Datadog 的 LLM 可观测性产品以进行监控和分析。
+
+## 构造函数
+
+```typescript
+new DatadogExporter(config: DatadogExporterConfig)
+```
+
+## DatadogExporterConfig
+
+```typescript
+interface DatadogExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  mlApp?: string;
+  site?: string;
+  service?: string;
+  env?: string;
+  agentless?: boolean;
+  integrationsEnabled?: boolean;
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Datadog API 密钥。无代理模式必需。回退到 DD_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "mlApp",
+      type: "string",
+      description: "用于分组的 ML 应用程序名称。必需。回退到 DD_LLMOBS_ML_APP 环境变量。",
+      required: false,
+    },
+    {
+      name: "site",
+      type: "string",
+      description: "Datadog 站点（例如：'datadoghq.com'、'datadoghq.eu'、'us3.datadoghq.com'）。回退到 DD_SITE 环境变量。默认：'datadoghq.com'。",
+      required: false,
+    },
+    {
+      name: "service",
+      type: "string",
+      description: "应用程序的服务名称。默认为 mlApp 值。",
+      required: false,
+    },
+    {
+      name: "env",
+      type: "string",
+      description: "环境名称（例如：'production'、'staging'）。回退到 DD_ENV 环境变量。",
+      required: false,
+    },
+    {
+      name: "agentless",
+      type: "boolean",
+      description: "使用直接 HTTPS 摄入（true）或本地 Datadog Agent（false）。默认：true。",
+      required: false,
+    },
+    {
+      name: "integrationsEnabled",
+      type: "boolean",
+      description: "启用 dd-trace 自动集成。默认：false。",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到 Datadog LLM 可观测性。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的跨度到 Datadog 而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新待处理的数据并关闭导出器。取消任何待处理的清理计时器并禁用 LLM 可观测性。
+
+## 使用方法
+
+### 零配置（使用环境变量）
+
+```typescript
+import { DatadogExporter } from "@mastra/datadog";
+
+// 从 DD_LLMOBS_ML_APP、DD_API_KEY、DD_SITE、DD_ENV 读取
+const exporter = new DatadogExporter();
+```
+
+### 显式配置
+
+```typescript
+import { DatadogExporter } from "@mastra/datadog";
+
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  apiKey: process.env.DD_API_KEY,
+  site: "datadoghq.com",
+  env: "production",
+});
+```
+
+### 使用本地 Datadog Agent
+
+```typescript
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  agentless: false, // 使用本地 Datadog Agent
+  env: "production",
+});
+```
+
+## 跨度映射
+
+Mastra 跨度类型映射到 Datadog LLMObs 跨度种类：
+
+| Mastra SpanType | Datadog Kind |
+|-----------------|--------------|
+| `AGENT_RUN` | `agent` |
+| `MODEL_GENERATION` | `workflow` |
+| `MODEL_STEP` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_RUN` | `workflow` |
+| 所有其他类型 | `task` |
+
+所有未映射的跨度类型（包括 `MODEL_CHUNK`、`WORKFLOW_STEP`、`GENERIC` 和未来的跨度类型）自动默认为 `task`。
+
+## 环境变量
+
+导出器从以下环境变量读取配置：
+
+| 变量 | 描述 |
+|----------|-------------|
+| `DD_API_KEY` | Datadog API 密钥 |
+| `DD_LLMOBS_ML_APP` | ML 应用程序名称 |
+| `DD_SITE` | Datadog 站点 |
+| `DD_ENV` | 环境名称 |
+| `DD_LLMOBS_AGENTLESS_ENABLED` | 设置为 'false' 或 '0' 以使用本地代理 |

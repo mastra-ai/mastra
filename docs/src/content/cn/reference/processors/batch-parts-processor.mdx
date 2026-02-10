@@ -1,0 +1,118 @@
+---
+title: "参考：Batch Parts Processor | 处理器"
+description: "Mastra 中 BatchPartsProcessor 的文档，用于批量处理多个流片段以减少发送频率。"
+packages:
+  - "@mastra/core"
+---
+
+# BatchPartsProcessor
+
+`BatchPartsProcessor` 是一个**输出处理器**，用于将多个流片段批量处理在一起，以减少流式传输过程中的发送频率。此处理器对于减少网络开销、通过合并小文本块来改善用户体验，以及通过控制何时向客户端发送片段来优化流式传输性能非常有用。
+
+## 使用示例
+
+```typescript
+import { BatchPartsProcessor } from "@mastra/core/processors";
+
+const processor = new BatchPartsProcessor({
+  batchSize: 5,
+  maxWaitTime: 100,
+  emitOnNonText: true
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "批量处理流片段的配置选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "batchSize",
+      type: "number",
+      description: "在发送之前批量处理在一起的片段数量",
+      isOptional: true,
+      default: "5",
+    },
+    {
+      name: "maxWaitTime",
+      type: "number",
+      description: "发送批次前的最大等待时间（毫秒）。如果设置，即使未达到 batchSize 也会发送当前批次",
+      isOptional: true,
+      default: "undefined（无超时）",
+    },
+    {
+      name: "emitOnNonText",
+      type: "boolean",
+      description: "遇到非文本片段时是否立即发送",
+      isOptional: true,
+      default: "true",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'batch-parts'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "可选的处理器显示名称",
+      isOptional: true,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
+      description: "处理流式输出片段以将它们批量处理在一起",
+      isOptional: false,
+    },
+    {
+      name: "flush",
+      type: "(state?: BatchPartsState) => ChunkType | null",
+      description: "在流结束时强制刷新任何剩余的批量片段",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/batched-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "batched-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-5.1",
+  outputProcessors: [
+    new BatchPartsProcessor({
+      batchSize: 5,
+      maxWaitTime: 100,
+      emitOnNonText: true
+    })
+  ]
+});
+```
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

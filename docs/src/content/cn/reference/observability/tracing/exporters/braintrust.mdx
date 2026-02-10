@@ -1,0 +1,136 @@
+---
+title: "参考：BraintrustExporter | 可观测性"
+description: "用于追踪的 Braintrust 导出器"
+packages:
+  - "@mastra/braintrust"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# BraintrustExporter
+
+将追踪数据发送到 Braintrust 用于评估和可观测性。
+
+## 构造函数
+
+```typescript
+new BraintrustExporter(config: BraintrustExporterConfig)
+```
+
+## BraintrustExporterConfig
+
+```typescript
+interface BraintrustExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  endpoint?: string;
+  projectName?: string;
+  tuningParameters?: Record<string, any>;
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Braintrust API 密钥。回退到 BRAINTRUST_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "自定义 Braintrust 端点。回退到 BRAINTRUST_ENDPOINT 环境变量。",
+      required: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "项目名称（默认：'mastra-tracing'）",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "日志记录器级别（默认：'warn'）",
+      required: false,
+    },
+    {
+      name: "tuningParameters",
+      type: "Record<string, any>",
+      description: "Braintrust 的调优参数",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到 Braintrust。
+
+### export
+
+```typescript
+async export(spans: ReadOnlySpan[]): Promise<void>
+```
+
+批量导出跨度到 Braintrust。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何缓冲的跨度到 Braintrust 而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+刷新待处理的数据并关闭客户端。
+
+## 使用方法
+
+### 零配置（使用环境变量）
+
+```typescript
+import { BraintrustExporter } from "@mastra/braintrust";
+
+// 从 BRAINTRUST_API_KEY、BRAINTRUST_ENDPOINT 读取
+const exporter = new BraintrustExporter();
+```
+
+### 显式配置
+
+```typescript
+import { BraintrustExporter } from "@mastra/braintrust";
+
+const exporter = new BraintrustExporter({
+  apiKey: process.env.BRAINTRUST_API_KEY,
+  projectName: "my-ai-project",
+});
+```
+
+## 跨度类型映射
+
+| 跨度类型 | Braintrust 类型 |
+| --------------------------- | --------------- |
+| `MODEL_GENERATION` | `llm` |
+| `MODEL_CHUNK` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_CONDITIONAL_EVAL` | `function` |
+| `WORKFLOW_WAIT_EVENT` | `function` |
+| 所有其他类型 | `task` |

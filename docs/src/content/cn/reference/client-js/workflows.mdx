@@ -1,0 +1,220 @@
+---
+title: "参考文档：工作流 API | 客户端 SDK"
+description: "了解如何使用 client-js SDK 与 Mastra 中的自动化工作流交互和执行。"
+packages:
+  - "@mastra/client-js"
+---
+
+# 工作流 API
+
+工作流 API 提供了与 Mastra 中的自动化工作流交互和执行的方法。
+
+## 获取所有工作流
+
+检索所有可用工作流的列表：
+
+```typescript
+const workflows = await mastraClient.listWorkflows();
+```
+
+## 使用特定工作流
+
+通过 ID 获取特定工作流的实例：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({
+  id: "city-workflow",
+});
+```
+
+```typescript
+const workflow = mastraClient.getWorkflow("city-workflow");
+```
+
+## 工作流方法
+
+### details()
+
+检索工作流的详细信息：
+
+```typescript
+const details = await workflow.details();
+```
+
+### createRun()
+
+创建新的工作流运行实例：
+
+```typescript
+const run = await workflow.createRun();
+
+// 或使用现有的 runId
+const run = await workflow.createRun({ runId: "existing-run-id" });
+
+// 或使用 resourceId 将运行与特定资源关联
+const run = await workflow.createRun({
+  runId: "my-run-id",
+  resourceId: "user-123"
+});
+```
+
+`resourceId` 参数将工作流运行与特定资源（例如，用户 ID、租户 ID）关联。此值与运行一起持久化，可用于以后筛选和查询运行。
+
+### startAsync()
+
+启动工作流运行并等待完整结果：
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+});
+```
+
+您还可以传递 `initialState` 来设置工作流状态的起始值：
+
+```typescript
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+  initialState: {
+    count: 0,
+    items: [],
+  },
+});
+```
+
+`initialState` 对象应与工作流 `stateSchema` 中定义的结构匹配。详见[工作流状态](/docs/cn/docs/workflows/workflow-state)。
+
+要将运行与特定资源关联，将 `resourceId` 传递给 `createRun()`：
+
+```typescript
+const run = await workflow.createRun({ resourceId: "user-123" });
+
+const result = await run.startAsync({
+  inputData: {
+    city: "New York",
+  },
+});
+```
+
+### start()
+
+启动工作流运行而不等待完成：
+
+```typescript
+const run = await workflow.createRun();
+
+await run.start({
+  inputData: {
+    city: "New York",
+  },
+});
+
+// 稍后轮询结果
+const result = await workflow.runById(run.runId);
+```
+
+这对于长时间运行的工作流很有用，您希望启动执行并稍后检查结果。
+
+### resumeAsync()
+
+恢复暂停的工作流步骤并等待完整结果：
+
+```typescript
+const run = await workflow.createRun({ runId: prevRunId });
+
+const result = await run.resumeAsync({
+  step: "step-id",
+  resumeData: { key: "value" },
+});
+```
+
+### resume()
+
+恢复暂停的工作流步骤而不等待完成：
+
+```typescript
+const run = await workflow.createRun({ runId: prevRunId });
+
+await run.resume({
+  step: "step-id",
+  resumeData: { key: "value" },
+});
+```
+
+### cancel()
+
+取消正在运行的工作流：
+
+```typescript
+const run = await workflow.createRun({ runId: existingRunId });
+
+const result = await run.cancel();
+// 返回：{ message: 'Workflow run canceled' }
+```
+
+此方法停止任何正在运行的步骤并阻止后续步骤执行。检查 `abortSignal` 参数的步骤可以通过清理资源（超时、网络请求等）来响应取消。
+
+详见 [Run.cancel()](/reference/workflows/run-methods/cancel) 参考，了解取消工作原理以及如何编写响应取消的步骤的详细信息。
+
+### stream()
+
+流式传输工作流执行以获取实时更新：
+
+```typescript
+const run = await workflow.createRun();
+
+const stream = await run.stream({
+  inputData: {
+    city: "New York",
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(JSON.stringify(chunk, null, 2));
+}
+```
+
+### runById()
+
+获取工作流运行的执行结果：
+
+```typescript
+const result = await workflow.runById(runId);
+
+// 或使用性能优化的选项：
+const result = await workflow.runById(runId, {
+  fields: ['status', 'result'],  // 仅获取特定字段
+  withNestedWorkflows: false,    // 跳过昂贵的嵌套工作流数据
+  requestContext: { userId: 'user-123' }, // 可选请求上下文
+});
+```
+
+<h3>运行结果格式</h3>
+
+工作流运行结果产生以下内容：
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "此工作流运行实例的唯一标识符",
+    },
+    {
+      name: "eventTimestamp",
+      type: "Date",
+      description: "事件的时间戳",
+    },
+    {
+      name: "payload",
+      type: "object",
+      description: "包含 currentStep（id、status、output、payload）和 workflowState（status、steps record）",
+    },
+  ]}
+/>

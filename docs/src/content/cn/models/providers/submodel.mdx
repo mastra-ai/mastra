@@ -1,0 +1,193 @@
+---
+title: "submodel | 模型 | Mastra"
+description: "在 Mastra 中使用 submodel 模型。共 9 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/submodel.svg" alt="submodel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />submodel
+
+通过 Mastra 的模型路由器访问 9 个 submodel 模型。身份验证使用 `SUBMODEL_INSTAGEN_ACCESS_KEY` 环境变量自动处理。
+
+在 [submodel 文档](https://submodel.gitbook.io) 中了解更多信息。
+
+```bash title=".env"
+SUBMODEL_INSTAGEN_ACCESS_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [submodel 文档](https://submodel.gitbook.io) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "submodel/deepseek-ai/DeepSeek-R1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 75000,
+    "maxOutput": 163840,
+    "inputCost": 0.5,
+    "outputCost": 2.15
+  },
+  {
+    "model": "submodel/deepseek-ai/DeepSeek-V3-0324",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 75000,
+    "maxOutput": 163840,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "submodel/deepseek-ai/DeepSeek-V3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 75000,
+    "maxOutput": 163840,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "submodel/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
+    "model": "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.2,
+    "outputCost": 0.3
+  },
+  {
+    "model": "submodel/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
+    "model": "submodel/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  },
+  {
+    "model": "submodel/zai-org/GLM-4.5-Air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
+    "model": "submodel/zai-org/GLM-4.5-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.2,
+    "outputCost": 0.8
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://llm.submodel.ai/v1",
+    id: "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    apiKey: process.env.SUBMODEL_INSTAGEN_ACCESS_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "submodel/zai-org/GLM-4.5-FP8"
+      : "submodel/Qwen/Qwen3-235B-A22B-Instruct-2507";
+  }
+});
+```
+
+

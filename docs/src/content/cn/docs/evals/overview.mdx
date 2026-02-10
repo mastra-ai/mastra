@@ -1,0 +1,138 @@
+---
+title: "评分器概述 | 评估"
+description: "Mastra 中评分器的概述，详细介绍其评估 AI 输出和衡量性能的能力。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 评分器概述
+
+虽然传统软件测试有明确的通过/失败条件，但 AI 输出是不确定的——它们可能随相同输入而变化。**评分器**通过提供可量化的指标来帮助弥合这一差距，用于衡量智能体质量。
+
+评分器是使用模型评分、基于规则和统计方法评估智能体输出的自动化测试。评分器返回**分数**：数值（通常在 0 到 1 之间），量化输出符合您评估标准的程度。这些分数使您能够客观地跟踪性能、比较不同方法并识别 AI 系统的改进领域。评分器可以使用您自己的提示和评分函数进行自定义。
+
+评分器可以在云端运行，捕获实时结果。但评分器也可以成为您 CI/CD 管道的一部分，允许您随着时间的推移测试和监控您的智能体。
+
+## 评分器类型
+
+有不同类型的评分器，每种都有特定的用途。以下是一些常见类型：
+
+1. **文本评分器**：评估智能体响应的准确性、可靠性和上下文理解
+2. **分类评分器**：衡量基于预定义类别对数据进行分类的准确性
+3. **提示工程评分器**：探索不同指令和输入格式的影响
+
+## 安装
+
+要访问 Mastra 的评分器功能，请安装 `@mastra/evals` 包。
+
+```bash npm2yarn
+npm install @mastra/evals@latest
+```
+
+## 实时评估
+
+**实时评估**允许您在智能体和工作流运行时自动实时评分 AI 输出。评分器不是手动或批量运行评估，而是与您的 AI 系统异步运行，提供持续的质量监控。
+
+### 向智能体添加评分器
+
+您可以向智能体添加内置评分器以自动评估其输出。请参阅[内置评分器完整列表](/docs/cn/evals/built-in-scorers)了解所有可用选项。
+
+```typescript title="src/mastra/agents/evaluated-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import {
+  createAnswerRelevancyScorer,
+  createToxicityScorer,
+} from "@mastra/evals/scorers/prebuilt";
+
+export const evaluatedAgent = new Agent({
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" }),
+      sampling: { type: "ratio", rate: 0.5 },
+    },
+    safety: {
+      scorer: createToxicityScorer({ model: "openai/gpt-4.1-nano" }),
+      sampling: { type: "ratio", rate: 1 },
+    },
+  },
+});
+```
+
+### 向工作流步骤添加评分器
+
+您还可以向单个工作流步骤添加评分器，以在流程的特定点评估输出：
+
+```typescript title="src/mastra/workflows/content-generation.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+import { customStepScorer } from "../scorers/custom-step-scorer";
+
+const contentStep = createStep({
+  scorers: {
+    customStepScorer: {
+      scorer: customStepScorer(),
+      sampling: {
+        type: "ratio",
+        rate: 1, // 对每次步骤执行进行评分
+      }
+    }
+  },
+});
+
+export const contentWorkflow = createWorkflow({ ... })
+  .then(contentStep)
+  .commit();
+```
+
+### 实时评估的工作原理
+
+**异步执行**：实时评估在后台运行，不会阻止您的智能体响应或工作流执行。这确保您的 AI 系统在仍被监控的同时保持其性能。
+
+**采样控制**：`sampling.rate` 参数 (0-1) 控制获得评分的输出百分比：
+
+- `1.0`：对每个响应进行评分（100%）
+- `0.5`：对一半的响应进行评分（50%）
+- `0.1`：对 10% 的响应进行评分
+- `0.0`：禁用评分
+
+**自动存储**：所有评分结果自动存储在您配置的数据库中的 `mastra_scorers` 表中，允许您随着时间的推移分析性能趋势。
+
+## 跟踪评估
+
+除了实时评估之外，您还可以使用评分器来评估来自智能体交互和工作流的历史跟踪。这对于分析过去性能、调试问题或运行批量评估特别有用。
+
+:::info
+
+**需要可观察性**
+
+要评分跟踪，您必须首先在 Mastra 实例中配置可观察性以收集跟踪数据。请参阅[追踪文档](../observability/tracing/overview)了解设置说明。
+
+:::
+
+### 使用 Studio 对跟踪进行评分
+
+要对跟踪进行评分，您首先需要向 Mastra 实例注册您的评分器：
+
+```typescript
+const mastra = new Mastra({
+  scorers: {
+    answerRelevancy: myAnswerRelevancyScorer,
+    responseQuality: myResponseQualityScorer,
+  },
+});
+```
+
+注册后，您可以在 Studio 的可观察性部分内对历史跟踪交互式评分。这提供了一个用户友好的界面，用于对历史跟踪运行评分器。
+
+## 本地测试评分器
+
+Mastra 提供 CLI 命令 `mastra dev` 来测试您的评分器。Studio 包含一个评分器部分，您可以在其中针对测试输入运行单个评分器并查看详细结果。
+
+更多详情，请参阅 [Studio](/docs/cn/getting-started/studio) 文档。
+
+## 下一步
+
+- 了解如何在[创建自定义评分器](/docs/cn/evals/custom-scorers)指南中创建您自己的评分器
+- 探索[内置评分器](/docs/cn/evals/built-in-scorers)部分中的内置评分器
+- 使用 [Studio](/docs/cn/getting-started/studio) 测试评分器

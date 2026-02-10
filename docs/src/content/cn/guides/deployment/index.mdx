@@ -1,0 +1,34 @@
+---
+title: "云提供商 | 部署"
+description: "将您的 Mastra 应用程序部署到流行的云提供商。"
+---
+
+# 云提供商
+
+独立的 Mastra 应用程序可以部署到流行的云提供商，请参阅以下指南之一了解更多信息：
+
+- [Amazon EC2](/guides/deployment/amazon-ec2)
+- [AWS Lambda](/guides/deployment/aws-lambda)
+- [Azure 应用服务](/guides/deployment/azure-app-services)
+- [Cloudflare](/guides/deployment/cloudflare-deployer)
+- [Digital Ocean](/guides/deployment/digital-ocean)
+- [Netlify](/guides/deployment/netlify-deployer)
+- [Vercel](/guides/deployment/vercel-deployer)
+
+有关自托管 Node.js 服务器部署，请参阅[创建 Mastra 服务器](/docs/cn/docs/deployment/mastra-server) 指南。
+
+## 前置条件
+
+在部署到云提供商之前，请确保您已具备：
+
+- [Mastra 应用程序](/guides/getting-started/quickstart)
+- Node.js `v22.13.0` 或更高版本
+- 您的应用程序的 GitHub 仓库（大多数 CI/CD 设置需要）
+- 域名管理访问权限（用于 SSL 和 HTTPS）
+- 服务器设置的基本知识（例如 Nginx、环境变量）
+
+:::warning
+
+`LibSQLStore` 写入本地文件系统，这在使用临时文件系统的云环境中不支持。如果您要部署到 AWS Lambda、Netlify、Azure App Services 或 Digital Ocean App Platform 等平台，您必须移除所有使用文件 URL 的 [LibSQLStore](/reference/storage/libsql)。使用内存存储 (`:memory:`) 或外部存储提供商，如 Turso、PostgreSQL 或 Upstash。
+
+:::

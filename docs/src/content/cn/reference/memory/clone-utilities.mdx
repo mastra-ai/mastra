@@ -1,0 +1,344 @@
+---
+title: "参考：克隆工具方法 | 内存"
+description: "Mastra 内存中用于处理克隆线程的工具方法文档。"
+packages:
+  - "@mastra/memory"
+---
+
+# 克隆工具方法
+
+Memory 类提供了用于处理克隆线程的工具方法。这些方法帮助您检查克隆状态、检索克隆元数据、导航克隆关系和跟踪克隆历史。
+
+## isClone()
+
+检查一个线程是否是另一个线程的克隆。
+
+### 使用方法
+
+```typescript
+const isClonedThread = memory.isClone(thread);
+```
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "thread",
+      type: "StorageThreadType",
+      description: "要检查的线程对象。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "isClone",
+      type: "boolean",
+      description: "如果是克隆线程则为 true，否则为 false。",
+    },
+  ]}
+/>
+
+### 示例
+
+```typescript
+const thread = await memory.getThreadById({ threadId: "some-thread-id" });
+
+if (memory.isClone(thread)) {
+  console.log("此线程是从另一个线程克隆的");
+} else {
+  console.log("这是原始线程");
+}
+```
+
+---
+
+## getCloneMetadata()
+
+如果存在，从线程中检索克隆元数据。
+
+### 使用方法
+
+```typescript
+const metadata = memory.getCloneMetadata(thread);
+```
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "thread",
+      type: "StorageThreadType",
+      description: "要从中提取克隆元数据的线程对象。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### 返回值
+
+返回 `ThreadCloneMetadata | null`：
+
+<PropertiesTable
+  content={[
+    {
+      name: "sourceThreadId",
+      type: "string",
+      description: "被克隆的原始线程的 ID。",
+    },
+    {
+      name: "clonedAt",
+      type: "Date",
+      description: "创建克隆时的时间戳。",
+    },
+    {
+      name: "lastMessageId",
+      type: "string",
+      description: "克隆时源线程中最后一条消息的 ID。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 示例
+
+```typescript
+const thread = await memory.getThreadById({ threadId: "cloned-thread-id" });
+const cloneInfo = memory.getCloneMetadata(thread);
+
+if (cloneInfo) {
+  console.log(`克隆自: ${cloneInfo.sourceThreadId}`);
+  console.log(`克隆时间: ${cloneInfo.clonedAt}`);
+}
+```
+
+---
+
+## getSourceThread()
+
+检索创建克隆线程的原始源线程。
+
+### 使用方法
+
+```typescript
+const sourceThread = await memory.getSourceThread(threadId);
+```
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "克隆线程的 ID。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "sourceThread",
+      type: "StorageThreadType | null",
+      description:
+        "源线程（如果找到），如果线程不是克隆或源线程不再存在则为 null。",
+    },
+  ]}
+/>
+
+### 示例
+
+```typescript
+const sourceThread = await memory.getSourceThread("cloned-thread-id");
+
+if (sourceThread) {
+  console.log(`原始线程标题: ${sourceThread.title}`);
+  console.log(`原始线程创建时间: ${sourceThread.createdAt}`);
+}
+```
+
+---
+
+## listClones()
+
+列出从特定源线程克隆的所有线程。
+
+### 使用方法
+
+```typescript
+const clones = await memory.listClones(sourceThreadId);
+```
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "sourceThreadId",
+      type: "string",
+      description: "要查找克隆的源线程的 ID。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "clones",
+      type: "StorageThreadType[]",
+      description:
+        "从指定源线程克隆的线程数组。",
+    },
+  ]}
+/>
+
+### 示例
+
+```typescript
+const clones = await memory.listClones("original-thread-id");
+
+console.log(`找到 ${clones.length} 个克隆`);
+for (const clone of clones) {
+  console.log(`- ${clone.id}: ${clone.title}`);
+}
+```
+
+---
+
+## getCloneHistory()
+
+检索线程的完整克隆历史链，追溯到原始线程。
+
+### 使用方法
+
+```typescript
+const history = await memory.getCloneHistory(threadId);
+```
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "要获取克隆历史的线程 ID。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "history",
+      type: "StorageThreadType[]",
+      description:
+        "表示克隆链的线程数组，从原始根线程到当前线程排序。",
+    },
+  ]}
+/>
+
+### 示例
+
+```typescript
+// 如果 thread-c 是从 thread-b 克隆的，而 thread-b 是从 thread-a 克隆的
+const history = await memory.getCloneHistory("thread-c");
+
+// history = [thread-a, thread-b, thread-c]
+console.log(`克隆深度: ${history.length - 1}`);
+console.log(`原始线程: ${history[0].id}`);
+console.log(`当前线程: ${history[history.length - 1].id}`);
+
+// 显示克隆链
+for (let i = 0; i < history.length; i++) {
+  const prefix = i === 0 ? "原始" : `克隆 ${i}`;
+  console.log(`${prefix}: ${history[i].title}`);
+}
+```
+
+---
+
+## 完整示例
+
+```typescript title="src/clone-management.ts"
+import { mastra } from "./mastra";
+
+async function manageClones() {
+  const agent = mastra.getAgent("agent");
+  const memory = await agent.getMemory();
+
+  // 创建原始对话
+  const originalThread = await memory.createThread({
+    resourceId: "user-123",
+    title: "原始对话",
+  });
+
+  // 进行对话...
+  await agent.generate("你好！让我们讨论项目选项。", {
+    threadId: originalThread.id,
+    resourceId: "user-123",
+  });
+
+  // 创建多个分支（克隆）来探索不同路径
+  const { thread: optionA } = await memory.cloneThread({
+    sourceThreadId: originalThread.id,
+    title: "选项 A - 保守方案",
+  });
+
+  const { thread: optionB } = await memory.cloneThread({
+    sourceThreadId: originalThread.id,
+    title: "选项 B - 激进方案",
+  });
+
+  // 检查克隆状态
+  console.log(memory.isClone(originalThread)); // false
+  console.log(memory.isClone(optionA)); // true
+  console.log(memory.isClone(optionB)); // true
+
+  // 获取克隆元数据
+  const metadataA = memory.getCloneMetadata(optionA);
+  console.log(metadataA?.sourceThreadId); // originalThread.id
+
+  // 列出原始线程的所有克隆
+  const allClones = await memory.listClones(originalThread.id);
+  console.log(`总备选方案: ${allClones.length}`); // 2
+
+  // 从克隆获取源线程
+  const source = await memory.getSourceThread(optionA.id);
+  console.log(source?.id === originalThread.id); // true
+
+  // 创建更深的克隆链
+  const { thread: optionA2 } = await memory.cloneThread({
+    sourceThreadId: optionA.id,
+    title: "选项 A - 变体 2",
+  });
+
+  // 获取完整历史
+  const history = await memory.getCloneHistory(optionA2.id);
+  // history = [originalThread, optionA, optionA2]
+  console.log(`克隆深度: ${history.length - 1}`); // 2
+}
+```
+
+### 相关内容
+
+- [cloneThread](/reference/memory/cloneThread)
+- [Memory 类参考](/reference/memory/memory-class)
+- [getThreadById](/reference/memory/getThreadById)
+- [listThreads](/reference/memory/listThreads)

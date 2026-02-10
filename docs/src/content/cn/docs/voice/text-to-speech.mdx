@@ -1,0 +1,93 @@
+---
+title: "文本转语音 (TTS) | 语音"
+description: "Mastra 中文本转语音功能的概述，包括配置、使用和与语音提供商的集成。"
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai"
+---
+
+# 文本转语音 (TTS)
+
+Mastra 中的文本转语音 (TTS) 为使用各种提供商合成语音音频提供了统一的 API。
+通过将 TTS 纳入你的应用程序，你可以增强自然语音交互的用户体验，为视力障碍用户改善可访问性，并创建更引人入胜的多模态接口。
+
+TTS 是任何语音应用程序的核心组件。结合 STT（语音转文本），它构成了语音交互系统的基础。较新的模型支持 STS（[语音到语音](./speech-to-speech)），可用于实时交互，但成本较高（$）。
+
+## 配置
+
+要在 Mastra 中使用 TTS，你需要在初始化语音提供商时提供 `speechModel`。这包括以下参数：
+
+- **`name`**：要使用的特定 TTS 模型。
+- **`apiKey`**：用于身份验证的 API 密钥。
+- **提供商特定选项**：特定语音提供商可能需要或支持的附加选项。
+
+**`speaker`** 选项允许你为语音合成选择不同的声音。每个提供商提供各种声音选项，具有不同的**声音多样性**、**质量**、**声音个性**和**多语言支持**特点。
+
+**注意**：所有这些参数都是可选的。你可以使用语音提供商提供的默认设置，具体取决于你使用的特定提供商。
+
+```typescript
+const voice = new OpenAIVoice({
+  speechModel: {
+    name: "tts-1-hd",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+  speaker: "alloy",
+});
+
+// 如果使用默认设置，配置可以简化为：
+const voice = new OpenAIVoice();
+```
+
+## 可用的提供商
+
+Mastra 支持广泛的文本转语音提供商，每个提供商都有自己独特的功能和声音选项。你可以选择最适合你的应用程序需求的提供商：
+
+- [**OpenAI**](/reference/voice/openai/) - 具有自然语调和表达的高质量声音
+- [**Azure**](/reference/voice/azure/) - 微软的语音服务，提供广泛的声音和语言
+- [**ElevenLabs**](/reference/voice/elevenlabs/) - 带有情感和细粒度控制的超真实声音
+- [**PlayAI**](/reference/voice/playai/) - 专注于具有各种风格的自然声音
+- [**Google**](/reference/voice/google/) - 谷歌的语音合成，支持多语言
+- [**Cloudflare**](/reference/voice/cloudflare/) - 针对低延迟应用进行边缘优化的语音合成
+- [**Deepgram**](/reference/voice/deepgram/) - 具有高准确率的 AI 驱动语音技术
+- [**Speechify**](/reference/voice/speechify/) - 针对可读性和可访问性优化的文本转语音
+- [**Sarvam**](/reference/voice/sarvam/) - 专注于印度语言和口音
+- [**Murf**](/reference/voice/murf/) - 具有可自定义参数的录音室品质配音
+
+每个提供商都作为单独的包实现，你可以根据需要安装：
+
+```bash
+pnpm add @mastra/voice-openai@latest  # OpenAI 示例
+```
+
+## 使用 Speak 方法
+
+TTS 的主要方法是 `speak()` 方法，它将文本转换为语音。此方法可以接受选项，允许你指定说话者和其他提供商特定的选项。以下是使用方法：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+const voice = new OpenAIVoice();
+
+const agent = new Agent({
+  id: "voice-agent",
+  name: "Voice Agent",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
+  model: "openai/gpt-5.1",
+  voice,
+});
+
+const { text } = await agent.generate("What color is the sky?");
+
+// 将文本转换为语音到音频流
+const readableStream = await voice.speak(text, {
+  speaker: "default", // 可选：指定说话者
+  properties: {
+    speed: 1.0, // 可选：调整语速
+    pitch: "default", // 可选：指定音高（如果支持）
+  },
+});
+```
+
+查看[向代理添加语音](/docs/cn/agents/adding-voice)文档，了解如何在代理中使用 TTS。

@@ -1,0 +1,168 @@
+---
+title: "参考文档: Deepgram | 语音"
+description: "Deepgram 语音实现的文档，提供使用 Deepgram API 的文本转语音和语音转文本功能，支持多种语音模型和语言。"
+packages:
+  - "@mastra/voice-deepgram"
+---
+
+# Deepgram
+
+Mastra 中的 Deepgram 语音实现使用 Deepgram 的 API 提供文本转语音（TTS）和语音转文本（STT）功能。它支持多种语音模型和语言，并提供语音合成和转录的可配置选项。
+
+## 使用示例
+
+```typescript
+import { DeepgramVoice } from "@mastra/voice-deepgram";
+
+// 使用默认配置初始化（使用 DEEPGRAM_API_KEY 环境变量）
+const voice = new DeepgramVoice();
+
+// 使用自定义配置初始化
+const voice = new DeepgramVoice({
+  speechModel: {
+    name: "aura",
+    apiKey: "your-api-key",
+  },
+  listeningModel: {
+    name: "nova-2",
+    apiKey: "your-api-key",
+  },
+  speaker: "asteria-en",
+});
+
+// 文本转语音
+const audioStream = await voice.speak("Hello, world!");
+
+// 语音转文本
+const transcript = await voice.listen(audioStream);
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "DeepgramVoiceConfig",
+      description: "文本转语音功能的配置。",
+      isOptional: true,
+      defaultValue: "{ name: 'aura' }",
+    },
+    {
+      name: "listeningModel",
+      type: "DeepgramVoiceConfig",
+      description: "语音转文本功能的配置。",
+      isOptional: true,
+      defaultValue: "{ name: 'nova' }",
+    },
+    {
+      name: "speaker",
+      type: "DeepgramVoiceId",
+      description: "文本转语音的默认语音",
+      isOptional: true,
+      defaultValue: "'asteria-en'",
+    },
+  ]}
+/>
+
+### DeepgramVoiceConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "DeepgramModel",
+      description: "要使用的 Deepgram 模型",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Deepgram API 密钥。回退到 DEEPGRAM_API_KEY 环境变量",
+      isOptional: true,
+    },
+    {
+      name: "properties",
+      type: "Record<string, any>",
+      description: "传递给 Deepgram API 的附加属性",
+      isOptional: true,
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "模型的语言代码",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用配置的语音模型和语音将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "要转换为语音的文本。如果提供了流，会先转换为文本。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "语音合成的附加选项",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "覆盖此请求的默认说话者",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+使用配置的听写模型将语音转换为文本。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "要转录的音频流",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "传递给 Deepgram API 的附加选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+返回：`Promise<string>`
+
+### getSpeakers()
+
+返回可用语音选项列表。
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符",
+      isOptional: false,
+    },
+  ]}
+/>

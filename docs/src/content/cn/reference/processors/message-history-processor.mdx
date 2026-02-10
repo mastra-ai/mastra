@@ -1,0 +1,134 @@
+---
+title: "参考：消息历史处理器 | 处理器"
+description: "Mastra 中 MessageHistory 处理器的文档，用于处理对话历史的检索和持久化。"
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+---
+
+# MessageHistory
+
+`MessageHistory` 是一个**混合处理器**，负责消息历史的检索和持久化。在输入时，它从存储中获取历史消息并将其添加到对话开头。在输出时，它将新消息持久化到存储中。
+
+## 使用示例
+
+```typescript
+import { MessageHistory } from "@mastra/core/processors";
+
+const processor = new MessageHistory({
+  storage: memoryStorage,
+  lastMessages: 50,
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "MessageHistoryOptions",
+      description: "消息历史处理器的配置选项",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MemoryStorage",
+      description: "用于检索和持久化消息的存储实例",
+      isOptional: false,
+    },
+    {
+      name: "lastMessages",
+      type: "number",
+      description: "要检索的最大历史消息数量。如果未指定，检索所有消息",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'message-history'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "处理器显示名称，设置为 'MessageHistory'",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "从存储中获取历史消息并将其添加到消息列表",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList>",
+      description: "将新消息（用户输入和助手响应）持久化到存储，不包括系统消息",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/memory-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { MessageHistory } from "@mastra/core/processors";
+import { PostgresStorage } from "@mastra/pg";
+
+const storage = new PostgresStorage({
+  connectionString: process.env.DATABASE_URL,
+});
+
+export const agent = new Agent({
+  name: "memory-agent",
+  instructions: "你是一个具有对话记忆的有用助手",
+  model: "openai:gpt-4o",
+  inputProcessors: [
+    new MessageHistory({
+      storage,
+      lastMessages: 100,
+    }),
+  ],
+  outputProcessors: [
+    new MessageHistory({
+      storage,
+    }),
+  ],
+});
+```
+
+## 行为
+
+### 输入处理
+1. 从请求上下文中检索 `threadId`
+2. 从存储中获取历史消息（按创建日期降序排列）
+3. 过滤掉系统消息（它们不应存储在数据库中）
+4. 将历史消息与传入消息合并，按 ID 避免重复
+5. 添加带有 `source: 'memory'` 标签的历史消息
+
+### 输出处理
+1. 从请求上下文中检索 `threadId`
+2. 如果内存配置中设置了 `readOnly`，则跳过持久化
+3. 从消息中过滤掉不完整的工具调用
+4. 将新的用户输入和助手响应消息持久化到存储
+5. 更新线程的 `updatedAt` 时间戳
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

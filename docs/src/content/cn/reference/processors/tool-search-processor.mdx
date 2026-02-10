@@ -1,0 +1,173 @@
+---
+title: "参考：工具搜索处理器 | 处理器"
+description: "Mastra 中 ToolSearchProcessor 的文档，用于为具有大型工具库的代理启用动态工具发现和加载。"
+packages:
+  - "@mastra/core"
+---
+
+# ToolSearchProcessor
+
+`ToolSearchProcessor` 是一个**输入处理器**，用于启用动态工具发现和加载。它不是预先向代理提供所有工具，而是给代理两个元工具（`search_tools` 和 `load_tool`），让它按需查找和加载工具。这在使用大型工具库时可以减少上下文令牌使用量。
+
+## 使用示例
+
+```typescript
+import { ToolSearchProcessor } from "@mastra/core/processors";
+
+const toolSearch = new ToolSearchProcessor({
+  tools: {
+    createIssue: githubTools.createIssue,
+    sendEmail: emailTools.send,
+    getWeather: weatherTools.forecast,
+    // ... 更多工具
+  },
+  search: {
+    topK: 5,
+    minScore: 0.1,
+  },
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "ToolSearchProcessorOptions",
+      description: "工具搜索处理器的配置选项",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "可以动态搜索和加载的所有工具。这些工具不会立即对代理可用——必须通过搜索发现并按需加载。",
+      isOptional: false,
+    },
+    {
+      name: "search",
+      type: "{ topK?: number; minScore?: number }",
+      description: "搜索行为的配置。",
+      isOptional: true,
+    },
+    {
+      name: "search.topK",
+      type: "number",
+      description: "在搜索结果中返回的最大工具数量。",
+      isOptional: true,
+      default: "5",
+    },
+    {
+      name: "search.minScore",
+      type: "number",
+      description: "在搜索结果中包含工具的最小相关性分数（0-1）。",
+      isOptional: true,
+      default: "0",
+    },
+    {
+      name: "ttl",
+      type: "number",
+      description: "线程状态的生命周期（毫秒）。在此不活动持续时间后，线程状态将被清理。设置为 0 以禁用清理。",
+      isOptional: true,
+      default: "3600000",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'tool-search'",
+      isOptional: false,
+    },
+    {
+      name: "Name",
+      type: "string",
+      description: "处理器显示名称，设置为 'Tool Search Processor'",
+      isOptional: false,
+    },
+    {
+      name: "processInputStep",
+      type: "(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>",
+      description: "处理每个步骤，将搜索/加载元工具和任何先前加载的工具注入到代理的工具集中。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/dynamic-tools-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { ToolSearchProcessor } from "@mastra/core/processors";
+
+// 来自各种集成的工具
+import { githubTools } from "./tools/github";
+import { slackTools } from "./tools/slack";
+import { dbTools } from "./tools/database";
+
+const toolSearch = new ToolSearchProcessor({
+  tools: {
+    ...githubTools,  // createIssue, listPRs, mergePR, ...
+    ...slackTools,   // sendMessage, createChannel, ...
+    ...dbTools,      // query, insert, update, ...
+  },
+  search: {
+    topK: 5,
+    minScore: 0.1,
+  },
+});
+
+const agent = new Agent({
+  name: "dynamic-tools-agent",
+  instructions: "你是一个可以访问许多工具的有用助手。使用 search_tools 查找相关工具，然后使用 load_tool 使它们可用。",
+  model: "openai/gpt-4o",
+  inputProcessors: [toolSearch],
+});
+```
+
+代理的工作流程是：
+1. 代理收到用户消息
+2. 代理使用关键词调用 `search_tools`（例如 "github issue"）
+3. 代理查看结果并使用工具名称调用 `load_tool`
+4. 加载的工具在下一轮变得可用
+5. 代理正常加载的工具
+
+## 与其他处理器结合使用
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import {
+  ToolSearchProcessor,
+  TokenLimiter,
+} from "@mastra/core/processors";
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  inputProcessors: [
+    new ToolSearchProcessor({
+      tools: allTools,
+      search: { topK: 5 },
+    }),
+    // 将 TokenLimiter 放在最后以确保上下文适合
+    new TokenLimiter(127000),
+  ],
+});
+```
+
+## 相关内容
+
+- [处理器](/docs/cn/docs/agents/processors)
+- [使用工具](/docs/cn/docs/agents/using-tools)

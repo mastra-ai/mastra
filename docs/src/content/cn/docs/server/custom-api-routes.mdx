@@ -1,0 +1,272 @@
+---
+title: "自定义 API 路由 | 服务器"
+description: "从您的 Mastra 服务器公开其他 HTTP 端点。"
+packages:
+  - "@mastra/core"
+---
+
+# 自定义 API 路由
+
+默认情况下，Mastra 通过其服务器自动公开注册的智能体和工作流。对于其他行为，您可以定义自己的 HTTP 路由。
+
+路由使用来自 `@mastra/core/server` 的辅助函数 `registerApiRoute()` 提供。路由可以与 `Mastra` 实例位于同一文件中，但将它们分开有助于保持配置简洁。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
+        handler: async (c) => {
+          const mastra = c.get("mastra");
+          const agent = await mastra.getAgent("my-agent");
+
+          return c.json({ message: "Custom route" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+注册后，自定义路由将从服务器根目录访问。例如：
+
+```bash
+curl http://localhost:4111/my-custom-route
+```
+
+每个路由的处理程序接收 Hono `Context`。在处理程序内，您可以访问 `Mastra` 实例以获取或调用智能体和工作流。
+
+## 中间件
+
+要添加特定于路由的中间件，请在调用 `registerApiRoute()` 时传递 `middleware` 数组。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
+        middleware: [
+          async (c, next) => {
+            console.log(`${c.req.method} ${c.req.url}`);
+            await next();
+          },
+        ],
+        handler: async (c) => {
+          return c.json({ message: "Custom route with middleware" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+## OpenAPI 文档
+
+自定义路由可以包含 OpenAPI 元数据，以在 Swagger UI 中与 Mastra 服务器路由一起显示。传递带有标准 OpenAPI 操作字段的 `openapi` 选项。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { z } from "zod";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/items/:itemId", {
+        method: "GET",
+        openapi: {
+          summary: "Get item by ID",
+          description: "Retrieves a single item by its unique identifier",
+          tags: ["Items"],
+          parameters: [
+            {
+              name: "itemId",
+              in: "path",
+              required: true,
+              description: "The item ID",
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Item found",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      name: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            404: {
+              description: "Item not found",
+            },
+          },
+        },
+        handler: async (c) => {
+          const itemId = c.req.param("itemId");
+          return c.json({ id: itemId, name: "Example Item" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### 使用 Zod 模式
+
+当生成 OpenAPI 文档时，`openapi` 配置中的 Zod 模式会转换为 JSON Schema：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { z } from "zod";
+
+const ItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  price: z.number(),
+});
+
+const CreateItemSchema = z.object({
+  name: z.string().min(1),
+  price: z.number().positive(),
+});
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/items", {
+        method: "POST",
+        openapi: {
+          summary: "Create a new item",
+          tags: ["Items"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: CreateItemSchema,
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: "Item created",
+              content: {
+                "application/json": {
+                  schema: ItemSchema,
+                },
+              },
+            },
+          },
+        },
+        handler: async (c) => {
+          const body = await c.req.json();
+          return c.json({ id: "new-id", ...body }, 201);
+        },
+      }),
+    ],
+  },
+});
+```
+
+### 在 Swagger UI 中查看
+
+在开发模式（`mastra dev`）下运行或构建选项中设置 `swaggerUI: true` 时，您的自定义路由会出现在 `/swagger-ui` 的 Swagger UI 中。
+
+```typescript
+export const mastra = new Mastra({
+  server: {
+    build: {
+      swaggerUI: true, // 在生产构建中启用
+    },
+    apiRoutes: [
+      // 您的路由...
+    ],
+  },
+});
+```
+
+## 身份验证
+
+当在您的 Mastra 服务器上配置身份验证时，自定义 API 路由默认需要身份验证。要使路由公开可访问，请设置 `requiresAuth: false`：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { MastraJwtAuth } from "@mastra/auth";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      secret: process.env.MASTRA_JWT_SECRET,
+    }),
+    apiRoutes: [
+      // 受保护的路由（默认行为）
+      registerApiRoute("/protected-data", {
+        method: "GET",
+        handler: async (c) => {
+          // 从请求上下文访问经过身份验证的用户
+          const user = c.get("requestContext").get("user");
+          return c.json({ message: "Authenticated user", user });
+        },
+      }),
+
+      // 公共路由（无需身份验证）
+      registerApiRoute("/webhooks/github", {
+        method: "POST",
+        requiresAuth: false, // 明确选择退出身份验证
+        handler: async (c) => {
+          const payload = await c.req.json();
+          // 无需身份验证处理 webhook
+          return c.json({ received: true });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### 身份验证行为
+
+- **未配置身份验证**：所有路由（内置和自定义）都是公开的
+- **已配置身份验证**：
+  - Mastra 提供的路由（`/api/agents/*`、`/api/workflows/*` 等）需要身份验证
+  - 自定义路由默认需要身份验证
+  - 自定义路由可以使用 `requiresAuth: false` 选择退出
+
+### 访问用户信息
+
+当请求经过身份验证时，用户对象在请求上下文中可用：
+
+```typescript
+registerApiRoute("/user-profile", {
+  method: "GET",
+  handler: async (c) => {
+    const requestContext = c.get("requestContext");
+    const user = requestContext.get("user");
+
+    return c.json({ user });
+  },
+})
+```
+
+有关身份验证提供商的更多信息，请参阅[身份验证文档](/docs/cn/server/auth)。
+
+## 相关内容
+
+- [registerApiRoute() 参考](/reference/server/register-api-route) - 完整的 API 参考
+- [服务器中间件](/docs/cn/server/middleware) - 全局中间件配置
+- [Mastra 服务器](/docs/cn/server/mastra-server) - 服务器配置选项

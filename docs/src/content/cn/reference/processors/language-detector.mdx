@@ -1,0 +1,168 @@
+---
+title: "参考：语言检测器 | 处理器"
+description: "Mastra 中 LanguageDetector 的文档，用于检测语言并在 AI 响应中翻译内容。"
+packages:
+  - "@mastra/core"
+---
+
+# LanguageDetector
+
+`LanguageDetector` 是一个**输入处理器**，用于识别输入文本的语言，并可选择地将其翻译成目标语言以进行一致的处理。此处理器通过检测传入消息的语言并提供处理多语言内容的灵活策略来帮助保持语言一致性，包括自动翻译以确保所有内容都以目标语言处理。
+
+## 使用示例
+
+```typescript
+import { LanguageDetector } from "@mastra/core/processors";
+
+const processor = new LanguageDetector({
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
+  targetLanguages: ["English", "en"],
+  threshold: 0.8,
+  strategy: "translate"
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "语言检测和翻译的配置选项",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "检测/翻译代理的模型配置",
+      isOptional: false,
+    },
+    {
+      name: "targetLanguages",
+      type: "string[]",
+      description: "项目的目标语言。如果检测到不同语言的内容，可能会被翻译。可以是语言名称（'English'）或 ISO 代码（'en'）",
+      isOptional: true,
+      default: "['English', 'en']",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "语言检测的置信度阈值（0-1）。仅当检测置信度超过此阈值时才处理",
+      isOptional: true,
+      default: "0.7",
+    },
+    {
+      name: "strategy",
+      type: "'detect' | 'translate' | 'block' | 'warn'",
+      description: "检测到非目标语言时的策略：'detect' 仅检测语言，'translate' 自动翻译成目标语言，'block' 拒绝非目标语言的内容，'warn' 记录警告但允许通过",
+      isOptional: true,
+      default: "'detect'",
+    },
+    {
+      name: "preserveOriginal",
+      type: "boolean",
+      description: "是否在消息元数据中保留原始内容。对于审计跟踪和调试很有用",
+      isOptional: true,
+      default: "true",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "代理的自定义检测说明。如果未提供，使用默认说明",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "minTextLength",
+      type: "number",
+      description: "执行检测的最小文本长度。短文本通常对语言检测不可靠",
+      isOptional: true,
+      default: "10",
+    },
+    {
+      name: "includeDetectionDetails",
+      type: "boolean",
+      description: "是否在日志中包含详细的检测信息",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "translationQuality",
+      type: "'speed' | 'quality' | 'balanced'",
+      description: "翻译质量偏好：'speed' 优先快速翻译，'quality' 优先准确性，'balanced' 在速度和质量之间取得平衡",
+      isOptional: true,
+      default: "'quality'",
+    },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "传递给内部检测代理的提供者特定选项。使用此选项来控制模型行为，如思考模型的推理努力（例如，`{ openai: { reasoningEffort: 'low' } }`）",
+      isOptional: true,
+      default: "undefined",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'language-detector'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "可选的处理器显示名称",
+      isOptional: true,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>",
+      description: "处理输入消息以检测语言，并在发送到 LLM 之前可选择地翻译内容",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/multilingual-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { LanguageDetector } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  id: "multilingual-agent",
+  name: "multilingual-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-5.1",
+  inputProcessors: [
+    new LanguageDetector({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      targetLanguages: ["English", "en"],
+      threshold: 0.8,
+      strategy: "translate",
+      preserveOriginal: true,
+      instructions: "检测语言并将非英语内容翻译成英语，同时保留原始意图",
+      minTextLength: 10,
+      includeDetectionDetails: true,
+      translationQuality: "quality"
+    })
+  ]
+});
+```
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

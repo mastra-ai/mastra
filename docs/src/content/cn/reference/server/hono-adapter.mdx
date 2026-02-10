@@ -1,0 +1,211 @@
+---
+title: "参考文档: Hono 适配器 | 服务器"
+description: "@mastra/hono 服务器适配器的 API 参考。"
+packages:
+  - "@mastra/hono"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Hono 适配器
+
+`@mastra/hono` 包提供了使用 [Hono](https://hono.dev) 运行 Mastra 的服务器适配器。
+
+:::info
+
+关于通用适配器概念（构造函数选项、初始化流程等），请参阅[服务器适配器](/docs/cn/docs/server/server-adapters)。
+
+:::
+
+## 安装
+
+安装 Hono 适配器和 Hono 框架：
+
+```bash npm2yarn
+npm install @mastra/hono@latest hono
+```
+
+## 使用示例
+
+```typescript title="server.ts"
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+import { mastra } from './mastra';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+export default app;
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Hono",
+      description: "Hono 应用实例",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra 实例",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "路由路径前缀（例如 `/api/v2`）",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "提供 OpenAPI 规范的路径（例如 `/openapi.json`）",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "{ maxSize: number, onError: (err) => unknown }",
+      description: "请求体大小限制",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "{ redact?: boolean }",
+      description: "流重写配置。为 true 时，从流中删除敏感数据。",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "按路由的认证覆盖。键为 `METHOD:PATH`（例如 `GET:/api/health`）。值 `false` 使路由公开，`true` 需要认证。",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "服务器可用的工具",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "用于 A2A（智能体到智能体）操作的任务存储",
+      isOptional: true,
+    },
+    {
+      name: "mcpOptions",
+      type: "MCPOptions",
+      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+      description: "MCP 传输选项。对于 Cloudflare Workers 或 Vercel Edge 等无状态环境，设置 `serverless: true`。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+## 添加自定义路由
+
+直接将路由添加到 Hono 应用：
+
+```typescript title="server.ts"
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+const server = new MastraServer({ app, mastra });
+
+// init 之前 - 在 Mastra 中间件之前运行
+app.get('/early-health', (c) => c.json({ status: 'ok' }));
+
+await server.init();
+
+// init 之后 - 可以访问 Mastra 上下文
+app.get('/custom', (c) => {
+  const mastraInstance = c.get('mastra');
+  return c.json({ agents: Object.keys(mastraInstance.listAgents()) });
+});
+```
+
+:::tip
+
+在 `init()` 之前添加的路由没有 Mastra 上下文。在 `init()` 之后添加路由以访问 Mastra 实例和请求上下文。
+
+:::
+
+## 访问上下文
+
+在 Hono 中间件和路由处理函数中，通过 `c.get()` 访问 Mastra 上下文：
+
+```typescript
+app.get('/custom', async (c) => {
+  const mastra = c.get('mastra');
+  const requestContext = c.get('requestContext');
+  const abortSignal = c.get('abortSignal');
+
+  const agent = mastra.getAgent('myAgent');
+  return c.json({ agent: agent.name });
+});
+```
+
+可用的上下文键：
+
+| 键 | 描述 |
+|-----|------|
+| `mastra` | Mastra 实例 |
+| `requestContext` | 请求上下文映射 |
+| `abortSignal` | 请求取消信号 |
+| `tools` | 可用工具 |
+| `taskStore` | 用于 A2A 操作的任务存储 |
+| `customRouteAuthConfig` | 按路由的认证覆盖 |
+| `user` | 已认证用户（如果配置了认证） |
+
+## 添加中间件
+
+在 `init()` 之前或之后添加 Hono 中间件：
+
+```typescript title="server.ts"
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+
+// init 之前的中间件
+app.use('*', async (c, next) => {
+  console.log(`${c.req.method} ${c.req.url}`);
+  await next();
+});
+
+const server = new MastraServer({ app, mastra });
+await server.init();
+
+// init 之后的中间件可以访问 Mastra 上下文
+app.use('*', async (c, next) => {
+  const mastra = c.get('mastra');
+  await next();
+});
+```
+
+## 手动初始化
+
+对于自定义中间件顺序，单独调用每个方法而不是 `init()`。有关详细信息，请参阅[手动初始化](/docs/cn/docs/server/server-adapters#manual-initialization)。
+
+## 示例
+
+- [Hono 适配器](https://github.com/mastra-ai/mastra/tree/main/examples/server-hono-adapter) - 基本 Hono 服务器设置
+
+## 相关文档
+
+- [服务器适配器](/docs/cn/docs/server/server-adapters) - 共享适配器概念
+- [MastraServer 参考](/reference/server/mastra-server) - 完整 API 参考
+- [createRoute() 参考](/reference/server/create-route) - 创建类型安全的自定义路由

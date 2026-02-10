@@ -1,0 +1,106 @@
+---
+title: "参考文档: Cloudflare 存储 | 存储"
+description: "Mastra 中 Cloudflare KV 存储实现的文档。"
+packages:
+  - "@mastra/cloudflare"
+---
+
+# Cloudflare 存储
+
+Cloudflare KV 存储实现使用 Cloudflare Workers KV 提供了一个全球分布式的无服务器键值存储解决方案。
+
+:::warning[不支持可观察性]
+Cloudflare KV 存储**不支持可观察性领域**。来自 `DefaultExporter` 的追踪无法持久化到 KV，Mastra Studio 的可观察性功能无法将 Cloudflare KV 作为唯一的存储提供商工作。若要启用可观察性，请使用[复合存储](/reference/storage/composite#specialized-storage-for-observability) 将可观察性数据路由到支持的提供商，如 ClickHouse 或 PostgreSQL。
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/cloudflare@latest
+```
+
+## 使用方法
+
+```typescript
+import { CloudflareStore } from "@mastra/cloudflare";
+
+// --- 示例 1：使用 Workers 绑定 ---
+const storageWorkers = new CloudflareStore({
+  id: "cloudflare-workers-storage",
+  bindings: {
+    threads: THREADS_KV, // 线程表的 KVNamespace 绑定
+    messages: MESSAGES_KV, // 消息表的 KVNamespace 绑定
+    // 根据需要添加其他表
+  },
+  keyPrefix: "dev_", // 可选：按环境隔离键
+});
+
+// --- 示例 2：使用 REST API ---
+const storageRest = new CloudflareStore({
+  id: "cloudflare-rest-storage",
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare 账户 ID
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API 令牌
+  namespacePrefix: "dev_", // 可选：按环境隔离命名空间
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此存储实例的唯一标识符。",
+      isOptional: false,
+    },
+    {
+      name: "bindings",
+      type: "Record<string, KVNamespace>",
+      description: "Cloudflare Workers KV 绑定（用于 Workers 运行时）",
+      isOptional: true,
+    },
+    {
+      name: "accountId",
+      type: "string",
+      description: "Cloudflare 账户 ID（用于 REST API）",
+      isOptional: true,
+    },
+    {
+      name: "apiToken",
+      type: "string",
+      description: "Cloudflare API 令牌（用于 REST API）",
+      isOptional: true,
+    },
+    {
+      name: "namespacePrefix",
+      type: "string",
+      description: "所有命名空间名称的可选前缀（用于环境隔离）",
+      isOptional: true,
+    },
+    {
+      name: "keyPrefix",
+      type: "string",
+      description: "所有键的可选前缀（用于环境隔离）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+#### 额外说明
+
+### 模式管理
+
+存储实现自动处理模式的创建和更新。它创建以下表：
+
+- `threads`：存储对话线程
+- `messages`：存储单个消息
+- `metadata`：存储线程和消息的额外元数据
+
+### 一致性和传播
+
+Cloudflare KV 是一个最终一致的存储，意味着写入后数据可能不会立即在所有区域可用。
+
+### 键结构和命名空间
+
+Cloudflare KV 中的键配置为可配置前缀和特定于表的格式的组合（例如 `threads:threadId`）。对于 Workers 部署，`keyPrefix` 用于在命名空间内隔离数据；对于 REST API 部署，`namespacePrefix` 用于在环境或应用程序之间隔离整个命名空间。

@@ -1,0 +1,121 @@
+---
+title: "Upstage | 模型 | Mastra"
+description: "在 Mastra 中使用 Upstage 模型。共 3 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/upstage.svg" alt="Upstage logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Upstage
+
+通过 Mastra 的模型路由器访问 3 个 Upstage 模型。身份验证使用 `UPSTAGE_API_KEY` 环境变量自动处理。
+
+在 [Upstage 文档](https://developers.upstage.ai) 中了解更多信息。
+
+```bash title=".env"
+UPSTAGE_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "upstage/solar-mini"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [Upstage 文档](https://developers.upstage.ai) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "upstage/solar-mini",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "model": "upstage/solar-pro2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.25
+  },
+  {
+    "model": "upstage/solar-pro3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.25,
+    "outputCost": 0.25
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.upstage.ai/v1/solar",
+    id: "upstage/solar-mini",
+    apiKey: process.env.UPSTAGE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "upstage/solar-pro3"
+      : "upstage/solar-mini";
+  }
+});
+```
+
+

@@ -1,0 +1,37 @@
+---
+title: "参考文档：Mastra.listAgents() | 核心"
+description: "Mastra 中 `Mastra.listAgents()` 方法的文档，用于检索所有已配置的智能体。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listAgents()
+
+`.listAgents()` 方法用于检索已在 Mastra 实例中配置的所有智能体。
+
+## 使用示例
+
+```typescript
+mastra.listAgents();
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "TAgents",
+      description:
+        "所有已配置智能体的记录，其中键为智能体名称，值为智能体实例。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)

@@ -1,0 +1,136 @@
+---
+title: "参考文档：MastraAuthFirebase 类 | 认证"
+description: "MastraAuthFirebase 类的 API 参考，该类使用 Firebase 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-firebase"
+  - "@mastra/core"
+---
+
+# MastraAuthFirebase 类
+
+`MastraAuthFirebase` 类使用 Firebase 身份验证为 Mastra 提供身份验证。它使用 Firebase ID 令牌验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 使用示例
+
+### 使用环境变量的基本用法
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
+
+// 自动使用 FIREBASE_SERVICE_ACCOUNT 和 FIRESTORE_DATABASE_ID 环境变量
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthFirebase(),
+  },
+});
+```
+
+### 自定义配置
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthFirebase } from "@mastra/auth-firebase";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthFirebase({
+      serviceAccount: "/path/to/service-account-key.json",
+      databaseId: "your-database-id",
+    }),
+  },
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "serviceAccount",
+      type: "string",
+      description:
+        "Firebase 服务账户 JSON 文件的路径。此文件包含在服务器端验证 Firebase ID 令牌所需的凭据。",
+      isOptional: true,
+      defaultValue: "process.env.FIREBASE_SERVICE_ACCOUNT",
+    },
+    {
+      name: "databaseId",
+      type: "string",
+      description:
+        "要使用的 Firestore 数据库 ID。通常默认数据库使用 '(default)'。",
+      isOptional: true,
+      defaultValue:
+        "process.env.FIRESTORE_DATABASE_ID || process.env.FIREBASE_DATABASE_ID",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "身份验证提供程序实例的自定义名称。",
+      isOptional: true,
+      defaultValue: '"firebase"',
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: FirebaseUser) => Promise<boolean> | boolean",
+      description:
+        "自定义授权函数，用于确定用户是否应该获得访问权限。在令牌验证后调用。默认情况下，检查是否存在以用户 UID 为键的 'user_access' 集合中的文档。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 环境变量
+
+当未提供构造函数选项时，以下环境变量会自动使用：
+
+<PropertiesTable
+  content={[
+    {
+      name: "FIREBASE_SERVICE_ACCOUNT",
+      type: "string",
+      description:
+        "Firebase 服务账户 JSON 文件的路径。如果未提供 serviceAccount 选项，则使用此变量。",
+      isOptional: true,
+    },
+    {
+      name: "FIRESTORE_DATABASE_ID",
+      type: "string",
+      description:
+        "Firestore 数据库 ID。用于数据库配置的主要环境变量。",
+      isOptional: true,
+    },
+    {
+      name: "FIREBASE_DATABASE_ID",
+      type: "string",
+      description:
+        "Firestore 数据库 ID 的替代环境变量。如果未设置 FIRESTORE_DATABASE_ID，则使用此变量。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 默认授权行为
+
+默认情况下，`MastraAuthFirebase` 使用 Firestore 管理用户访问权限：
+
+1. 成功验证 Firebase ID 令牌后，调用 `authorizeUser` 方法
+2. 检查 'user_access' 集合中是否存在以用户 UID 为文档 ID 的文档
+3. 如果文档存在，则用户获得授权；否则拒绝访问
+4. 使用的 Firestore 数据库由 `databaseId` 参数或环境变量决定
+
+## Firebase 用户类型
+
+`authorizeUser` 函数中使用的 `FirebaseUser` 类型对应于 Firebase 的 `DecodedIdToken` 接口，包括：
+
+- `uid`：用户的唯一标识符
+- `email`：用户的电子邮件地址（如果可用）
+- `email_verified`：电子邮件是否已验证
+- `name`：用户的显示名称（如果可用）
+- `picture`：用户个人资料图片的 URL（如果可用）
+- `auth_time`：用户身份验证的时间
+- 及其他标准 JWT 声明
+
+## 相关内容
+
+[MastraAuthFirebase 类](/docs/cn/docs/server/auth/firebase)

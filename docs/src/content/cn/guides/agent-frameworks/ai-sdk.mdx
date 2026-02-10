@@ -1,0 +1,131 @@
+---
+title: "AI SDK | 代理框架"
+description: "将 Mastra 处理器和内存与 Vercel AI SDK 结合使用"
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# AI SDK
+
+如果您已经在直接使用 [Vercel AI SDK](https://sdk.vercel.ai)，并且想在不切换到完整 Mastra 代理 API 的情况下添加 Mastra 功能，如[处理器](/docs/cn/docs/agents/processors)或[内存](/docs/cn/docs/memory/memory-processors)，[`withMastra()`](/reference/ai-sdk/with-mastra) 允许您使用这些功能包装任何 AI SDK 模型。当您想保留现有的 AI SDK 代码但添加输入/输出处理、对话持久性或内容过滤时，这非常有用。
+
+:::tip
+
+如果您想将 Mastra 与 AI SDK UI（例如 `useChat()`）一起使用，请访问 [AI SDK UI 指南](/guides/build-your-ui/ai-sdk-ui)。
+
+:::
+
+## 安装
+
+安装 `@mastra/ai-sdk` 以开始使用 `withMastra()` 函数。
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest
+```
+
+## 示例
+
+### 使用处理器
+
+处理器允许您在消息发送到模型之前转换消息 (`processInput`)，并在收到响应后转换响应 (`processOutputResult`)。
+
+这个示例创建了一个日志处理器，用于在每个阶段记录消息计数，然后使用它包装一个 OpenAI 模型。
+
+```typescript title="src/example.ts"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { Processor } from '@mastra/core/processors';
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages');
+    return messages;
+  },
+  async processOutputResult({ messages }) {
+    console.log('Output:', messages.length, 'messages');
+    return messages;
+  },
+};
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [loggingProcessor],
+  outputProcessors: [loggingProcessor],
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+});
+```
+
+### 使用内存
+
+内存会自动在 LLM 调用之前从存储加载以前的消息，并在之后保存新消息。这个示例配置了一个 libSQL 存储后端来持久化对话历史，加载最后 10 条消息作为上下文。
+
+```typescript title="src/memory-example.ts"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({
+  id: 'my-app',
+  url: 'file:./data.db',
+});
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  memory: {
+    storage,
+    threadId: 'user-thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What did we talk about earlier?',
+});
+```
+
+### 同时使用处理器和内存
+
+您可以将处理器和内存结合使用。输入处理器在内存加载历史消息后运行，输出处理器在内存保存响应之前运行。
+
+```typescript title="src/combined-example.ts"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({ id: 'my-app', url: 'file:./data.db' });
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [myGuardProcessor],
+  outputProcessors: [myLoggingProcessor],
+  memory: {
+    storage,
+    threadId: 'thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'Hello!',
+});
+```
+
+## 相关内容
+
+- [`withMastra()`](/reference/ai-sdk/with-mastra) - `withMastra()` 的 API 参考
+- [处理器](/docs/cn/docs/agents/processors) - 了解输入和输出处理器
+- [内存](/docs/cn/docs/memory/overview) - Mastra 内存系统概述
+- [AI SDK UI](/guides/build-your-ui/ai-sdk-ui) - 将 AI SDK UI 钩子与 Mastra 代理、工作流和网络结合使用

@@ -1,0 +1,228 @@
+---
+title: "参考文档: Express 适配器 | 服务器"
+description: "@mastra/express 服务器适配器的 API 参考。"
+packages:
+  - "@mastra/express"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Express 适配器
+
+`@mastra/express` 包提供了使用 [Express](https://expressjs.com) 运行 Mastra 的服务器适配器。
+
+:::info
+
+关于通用适配器概念（构造函数选项、初始化流程等），请参阅[服务器适配器](/docs/cn/docs/server/server-adapters)。
+
+:::
+
+## 安装
+
+安装 Express 适配器和 Express 框架：
+
+```bash npm2yarn
+npm install @mastra/express@latest express
+```
+
+## 使用示例
+
+```typescript title="server.ts"
+import express from 'express';
+import { MastraServer } from '@mastra/express';
+import { mastra } from './mastra';
+
+const app = express();
+app.use(express.json()); // 需要用于解析请求体
+
+const server = new MastraServer({ app, mastra });
+await server.init();
+
+app.listen(4111, () => {
+  console.log('服务器运行在端口 4111');
+});
+```
+
+:::note
+
+Express 需要 `express.json()` 中间件来解析 JSON 请求体。请在创建 `MastraServer` 之前添加它。
+
+:::
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Application",
+      description: "Express 应用实例",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra 实例",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "路由路径前缀（例如 `/api/v2`）",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "提供 OpenAPI 规范的路径（例如 `/openapi.json`）",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "{ maxSize: number, onError: (err) => unknown }",
+      description: "请求体大小限制",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "{ redact?: boolean }",
+      description: "流重写配置。为 true 时，从流中删除敏感数据。",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "按路由的认证覆盖。键为 `METHOD:PATH`（例如 `GET:/api/health`）。值 `false` 使路由公开，`true` 需要认证。",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "服务器可用的工具",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "用于 A2A（智能体到智能体）操作的任务存储",
+      isOptional: true,
+    },
+    {
+      name: "mcpOptions",
+      type: "MCPOptions",
+      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+      description: "MCP 传输选项。对于 Cloudflare Workers 或 Vercel Edge 等无状态环境，设置 `serverless: true`。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 与 Hono 的差异
+
+| 方面 | Express | Hono |
+|------|---------|------|
+| 请求体解析 | 需要 `express.json()` | 由框架处理 |
+| 上下文存储 | `res.locals` | `c.get()` / `c.set()` |
+| 中间件签名 | `(req, res, next)` | `(c, next)` |
+| 流处理 | `res.write()` / `res.end()` | `stream()` 辅助函数 |
+| AbortSignal | 从 `req.on('close')` 创建 | `c.req.raw.signal` |
+
+## 添加自定义路由
+
+直接将路由添加到 Express 应用：
+
+```typescript title="server.ts"
+const app = express();
+app.use(express.json());
+
+const server = new MastraServer({ app, mastra });
+
+// init 之前 - 在 Mastra 中间件之前运行
+app.get('/early-health', (req, res) => res.json({ status: 'ok' }));
+
+await server.init();
+
+// init 之后 - 可以访问 Mastra 上下文
+app.get('/custom', (req, res) => {
+  const mastraInstance = res.locals.mastra;
+  res.json({ agents: Object.keys(mastraInstance.listAgents()) });
+});
+
+app.listen(4111);
+```
+
+:::tip
+
+在 `init()` 之前添加的路由没有 Mastra 上下文。在 `init()` 之后添加路由以访问 Mastra 实例和请求上下文。
+
+:::
+
+## 访问上下文
+
+在 Express 中间件和路由中，通过 `res.locals` 访问 Mastra 上下文：
+
+```typescript
+app.get('/custom', (req, res) => {
+  const mastra = res.locals.mastra;
+  const requestContext = res.locals.requestContext;
+  const abortSignal = res.locals.abortSignal;
+
+  const agent = mastra.getAgent('myAgent');
+  res.json({ agent: agent.name });
+});
+```
+
+`res.locals` 上可用的属性：
+
+| 键 | 描述 |
+|-----|------|
+| `mastra` | Mastra 实例 |
+| `requestContext` | 请求上下文映射 |
+| `abortSignal` | 请求取消信号 |
+| `tools` | 可用工具 |
+| `taskStore` | 用于 A2A 操作的任务存储 |
+| `customRouteAuthConfig` | 按路由的认证覆盖 |
+| `user` | 已认证用户（如果配置了认证） |
+
+## 添加中间件
+
+在 `init()` 之前或之后添加 Express 中间件：
+
+```typescript title="server.ts"
+const app = express();
+app.use(express.json());
+
+// init 之前的中间件
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
+const server = new MastraServer({ app, mastra });
+await server.init();
+
+// init 之后的中间件可以访问 Mastra 上下文
+app.use((req, res, next) => {
+  const mastra = res.locals.mastra;
+  next();
+});
+```
+
+## 手动初始化
+
+对于自定义中间件顺序，单独调用每个方法而不是 `init()`。有关详细信息，请参阅[手动初始化](/docs/cn/docs/server/server-adapters#manual-initialization)。
+
+## 示例
+
+- [Express 适配器](https://github.com/mastra-ai/mastra/tree/main/examples/server-express-adapter) - 基本 Express 服务器设置
+
+## 相关文档
+
+- [服务器适配器](/docs/cn/docs/server/server-adapters) - 共享适配器概念
+- [MastraServer 参考](/reference/server/mastra-server) - 完整 API 参考
+- [createRoute() 参考](/reference/server/create-route) - 创建类型安全的自定义路由

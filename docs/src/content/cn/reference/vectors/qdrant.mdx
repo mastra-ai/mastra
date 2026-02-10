@@ -1,0 +1,414 @@
+---
+title: "参考文档: Qdrant 向量存储 | 向量"
+description: 将 Qdrant 与 Mastra 集成的文档，Qdrant 是一个用于管理向量和有效负载的向量相似性搜索引擎。
+packages:
+  - "@mastra/qdrant"
+---
+
+# Qdrant 向量存储
+
+QdrantVector 类使用 [Qdrant](https://qdrant.tech/) 提供向量搜索，这是一款向量相似性搜索引擎。它提供生产级服务，具有便捷的 API，可存储、搜索和管理向量，并支持额外的有效负载和扩展过滤功能。
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "Qdrant 实例的 REST URL。例如 https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description: "可选的 Qdrant API 密钥",
+    },
+    {
+      name: "https",
+      type: "boolean",
+      description:
+        "建立连接时是否使用 TLS。建议启用。",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与您的嵌入模型匹配）。单向量集合必需。",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "用于相似性搜索的距离度量",
+    },
+    {
+      name: "namedVectors",
+      type: "Record<string, { size: number; distance: 'cosine' | 'euclidean' | 'dotproduct' }>",
+      isOptional: true,
+      description: "命名向量空间的配置。提供后，创建具有多个命名向量字段的集合。",
+    },
+  ]}
+/>
+
+#### 创建命名向量集合
+
+```typescript
+// 创建具有多个命名向量空间的集合
+await store.createIndex({
+  indexName: "multi_modal",
+  dimension: 768, // 默认值
+  namedVectors: {
+    text: { size: 768, distance: "cosine" },
+    image: { size: 512, distance: "euclidean" },
+  },
+});
+```
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要 upsert 到的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+    {
+      name: "vectorName",
+      type: "string",
+      isOptional: true,
+      description: "使用命名向量时要 upsert 到的向量空间名称。",
+    },
+  ]}
+/>
+
+#### Upsert 到命名向量空间
+
+```typescript
+// Upsert 到 "text" 向量空间
+await store.upsert({
+  indexName: "multi_modal",
+  vectors: textEmbeddings,
+  metadata: textMetadata,
+  vectorName: "text",
+});
+
+// Upsert 到 "image" 向量空间
+await store.upsert({
+  indexName: "multi_modal",
+  vectors: imageEmbeddings,
+  metadata: imageMetadata,
+  vectorName: "image",
+});
+```
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "查询的元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+    {
+      name: "using",
+      type: "string",
+      isOptional: true,
+      description: "使用命名向量时要查询的向量字段名称。当集合具有多个命名向量字段时使用此参数。",
+    },
+  ]}
+/>
+
+#### 命名向量
+
+Qdrant 支持[命名向量](https://qdrant.tech/documentation/concepts/vectors/#named-vectors)，允许每个集合有多个向量字段。使用 `using` 参数指定要查询的命名向量：
+
+```typescript
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: embedding,
+  topK: 10,
+  using: "title_embedding", // 查询特定的命名向量
+});
+```
+
+### listIndexes()
+
+返回字符串数组形式的索引名称列表。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### updateVector()
+
+按 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter` 中的一个，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要更新的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新的向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "包含要更新的向量和/或元数据的对象",
+    },
+  ]}
+/>
+
+更新指定索引中的向量和/或其元数据。如果同时提供了向量和元数据，两者都将被更新。如果只提供一个，则只更新该部分。
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要从中删除向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+从指定索引中按 ID 删除向量。
+
+### deleteVectors()
+
+按 ID 数组或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter` 中的一个，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除的向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+### createPayloadIndex()
+
+在集合字段上创建有效负载（元数据）索引以启用高效过滤。这对于 Qdrant Cloud 和任何设置了 `strict_mode_config = true` 的 Qdrant 实例是**必需**的。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要在其上创建有效负载索引的集合名称",
+    },
+    {
+      name: "fieldName",
+      type: "string",
+      description: "要索引的有效负载字段名称",
+    },
+    {
+      name: "fieldSchema",
+      type: "'keyword' | 'integer' | 'float' | 'geo' | 'text' | 'bool' | 'datetime' | 'uuid'",
+      description: "有效负载字段的模式类型",
+    },
+    {
+      name: "wait",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "是否等待操作完成",
+    },
+  ]}
+/>
+
+```typescript
+// 创建用于按源过滤的关键字索引
+await store.createPayloadIndex({
+  indexName: "my_index",
+  fieldName: "source",
+  fieldSchema: "keyword",
+});
+
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: queryVector,
+  filter: { source: "document-a" },
+});
+```
+
+### deletePayloadIndex()
+
+从集合字段中移除有效负载索引。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要从中删除有效负载索引的集合名称",
+    },
+    {
+      name: "fieldName",
+      type: "string",
+      description: "要删除的有效负载字段索引名称",
+    },
+    {
+      name: "wait",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "是否等待操作完成",
+    },
+  ]}
+/>
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | 等
+    console.log(error.details); // 额外的错误上下文
+  }
+}
+```
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

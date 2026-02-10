@@ -1,0 +1,67 @@
+---
+title: "参考文档：handleNetworkStream() | AI SDK"
+description: "handleNetworkStream() 的 API 参考，这是一个用于 AI SDK 兼容格式的流式网络执行的框架无关处理器。"
+packages:
+  - "@mastra/ai-sdk"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# handleNetworkStream()
+
+用于 AI SDK 兼容格式的流式网络执行的框架无关处理器。当您需要在 Hono 或 Mastra 自己的 [apiRoutes](/docs/cn/docs/server/custom-api-routes) 功能之外处理网络流式传输时，直接使用此函数。
+
+`handleNetworkStream()` 返回一个 `ReadableStream`，您可以使用 [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/create-ui-message-stream-response) 包装它。
+
+如果您想在 Mastra 服务器内创建网络路由，请使用 [`networkRoute()`](/reference/ai-sdk/network-route)。
+
+## 使用示例
+
+Next.js App Router 示例：
+
+```typescript title="app/api/network/route.ts"
+import { handleNetworkStream } from '@mastra/ai-sdk';
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/src/mastra';
+
+export async function POST(req: Request) {
+  const params = await req.json();
+  const stream = await handleNetworkStream({
+    mastra,
+    agentId: 'routingAgent',
+    params,
+  });
+  return createUIMessageStreamResponse({ stream });
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "用于智能体查找和执行的 Mastra 实例。",
+      isOptional: false,
+    },
+    {
+      name: "agentId",
+      type: "string",
+      description: "作为网络执行的路由智能体 ID。",
+      isOptional: false,
+    },
+    {
+      name: "params",
+      type: "NetworkStreamHandlerParams",
+      description: "包含消息和执行选项的请求参数。包括 `messages`（必填）和任何 AgentExecutionOptions，如 `memory`、`maxSteps`、`runId` 等。",
+      isOptional: false,
+    },
+    {
+      name: "defaultOptions",
+      type: "AgentExecutionOptions",
+      description: "传递给智能体执行的默认选项。这些与 params 合并，params 优先。",
+      isOptional: true,
+    },
+  ]}
+/>

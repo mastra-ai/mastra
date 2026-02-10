@@ -1,0 +1,145 @@
+---
+title: "参考文档：Run.startAsync() | 工作流"
+description: "工作流中 `Run.startAsync()` 方法的文档，用于启动工作流运行而不等待完成（触发后即忘）。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.startAsync()
+
+`.startAsync()` 方法启动工作流运行而不等待完成。它立即返回 `runId`，允许工作流在后台执行。这对于长时间运行的工作流、计划任务或当您希望避免阻塞工作流完成时很有用。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+// 触发后即忘 - 立即返回
+const { runId } = await run.startAsync({
+  inputData: {
+    value: "初始数据",
+  },
+});
+
+// 可选，稍后轮询完成情况
+const result = await workflow.getWorkflowRunExecutionResult(runId);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "与工作流输入模式匹配的输入数据",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "工作流执行期间使用的请求上下文数据",
+      isOptional: true,
+    },
+    {
+      name: "initialState",
+      type: "z.infer<TState>",
+      description: "用于工作流执行的初始状态",
+      isOptional: true,
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "跟踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "要添加到根跟踪 span 的元数据。对于添加用户 ID、会话 ID 或功能标志等自定义属性很有用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的跟踪 ID（1-32 个十六进制字符）。如果提供，此跟踪将是指定跟踪的一部分。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "输出配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "是否在结果中包含工作流运行状态。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description:
+        "此工作流运行的唯一标识符。使用它来检查状态或稍后检索结果。",
+    },
+  ]}
+/>
+
+## 何时使用 startAsync()
+
+在以下情况下使用 `startAsync()` 而不是 `start()`：
+
+- **长时间运行的工作流**：工作流可能需要几分钟或几小时才能完成
+- **计划/ cron 触发器**：您希望触发工作流而不阻塞调度器
+- **避免轮询失败**：对于 Inngest 工作流，`start()` 会轮询完成情况，这可能失败并导致重试。`startAsync()` 避免了这个问题
+- **后台处理**：您希望排队工作并异步处理结果
+
+## 检查工作流状态
+
+调用 `startAsync()` 后，您可以使用以下方法检查工作流状态：
+
+```typescript
+// 获取执行结果（包括步骤输出）
+const result = await workflow.getWorkflowRunExecutionResult(runId);
+
+if (result?.status === 'success') {
+  console.log('工作流完成：', result.steps);
+} else if (result?.status === 'failed') {
+  console.log('工作流失败：', result.error);
+} else if (result?.status === 'running') {
+  console.log('工作流仍在运行...');
+}
+```
+
+## 相关内容
+
+- [Run.start()](./start) - 启动工作流并等待完成
+- [工作流概述](/docs/cn/docs/workflows/overview)
+- [Workflow.createRun()](../workflow-methods/create-run)

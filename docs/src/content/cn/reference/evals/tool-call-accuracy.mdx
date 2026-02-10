@@ -1,0 +1,575 @@
+---
+title: "参考：工具调用准确性评分器 | 评估"
+description: "Mastra 中工具调用准确性评分器的文档，用于评估 LLM 输出是否从可用选项中调用了正确的工具。"
+packages:
+  - "@mastra/evals"
+---
+
+# 工具调用准确性评分器
+
+Mastra 提供了两个工具调用准确性评分器，用于评估 LLM 是否从可用选项中选择了正确的工具：
+
+1. **基于代码的评分器** - 使用精确工具匹配进行确定性评估
+2. **基于 LLM 的评分器** - 使用 AI 进行语义评估以评估适当性
+
+## 选择评分器
+
+### 在以下情况使用基于代码的评分器：
+
+- 您需要**确定性的、可重复的**结果
+- 您想测试**精确工具匹配**
+- 您需要验证**特定的工具序列**
+- 速度和成本是优先考虑因素（无需 LLM 调用）
+- 您正在运行自动化测试
+
+### 在以下情况使用基于 LLM 的评分器：
+
+- 您需要**语义理解**适当性
+- 工具选择取决于**上下文和意图**
+- 您想处理**边缘情况**如澄清请求
+- 您需要**评分决策的解释**
+- 您正在评估**生产代理行为**
+
+## 基于代码的工具调用准确性评分器
+
+`createToolCallAccuracyScorerCode()` 函数来自 `@mastra/evals/scorers/prebuilt`，基于精确工具匹配提供确定性二元评分，支持严格和宽松评估模式以及工具调用顺序验证。
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "expectedTool",
+      type: "string",
+      description:
+        "给定任务应该调用的工具名称。提供 expectedToolOrder 时忽略此参数。",
+      required: false,
+    },
+    {
+      name: "strictMode",
+      type: "boolean",
+      description:
+        "控制评估严格程度。对于单工具模式：只接受精确的单工具调用。对于顺序检查模式：工具必须完全匹配，不允许额外工具。",
+      required: false,
+      default: "false",
+    },
+    {
+      name: "expectedToolOrder",
+      type: "string[]",
+      description:
+        "按预期调用顺序排列的工具名称数组。提供此参数时启用顺序检查模式并忽略 expectedTool 参数。",
+      required: false,
+    },
+  ]}
+/>
+
+此函数返回 MastraScorer 类的实例。详见 [MastraScorer 参考](./mastra-scorer) 了解 `.run()` 方法及其输入输出的详细信息。
+
+### 评估模式
+
+基于代码的评分器有两种不同的模式：
+
+#### 单工具模式
+
+未提供 `expectedToolOrder` 时，评分器评估单个工具选择：
+
+- **标准模式 (strictMode: false)**: 如果调用了预期工具则返回 `1`，无论其他工具
+- **严格模式 (strictMode: true)**: 仅当恰好调用一个工具且与预期工具匹配时才返回 `1`
+
+#### 顺序检查模式
+
+提供了 `expectedToolOrder` 时，评分器验证工具调用序列：
+
+- **严格顺序 (strictMode: true)**: 工具必须按完全指定的顺序调用，不允许额外工具
+- **灵活顺序 (strictMode: false)**: 预期工具必须以正确的相对顺序出现（允许额外工具）
+
+## 基于代码的评分详情
+
+- **二元评分**: 始终返回 0 或 1
+- **确定性**: 相同输入始终产生相同输出
+- **快速**: 无外部 API 调用
+
+### 基于代码的评分器选项
+
+```typescript
+// 标准模式 - 如果调用了预期工具则通过
+const lenientScorer = createCodeScorer({
+  expectedTool: "search-tool",
+  strictMode: false,
+});
+
+// 严格模式 - 只有恰好调用一个工具才通过
+const strictScorer = createCodeScorer({
+  expectedTool: "search-tool",
+  strictMode: true,
+});
+
+// 带严格模式的顺序检查
+const strictOrderScorer = createCodeScorer({
+  expectedTool: "step1-tool",
+  expectedToolOrder: ["step1-tool", "step2-tool", "step3-tool"],
+  strictMode: true, // 不允许额外工具
+});
+```
+
+### 基于代码的评分器结果
+
+```typescript
+{
+  runId: string,
+  preprocessStepResult: {
+    expectedTool: string,
+    actualTools: string[],
+    strictMode: boolean,
+    expectedToolOrder?: string[],
+    hasToolCalls: boolean,
+    correctToolCalled: boolean,
+    correctOrderCalled: boolean | null,
+    toolCallInfos: ToolCallInfo[]
+  },
+  score: number // 始终为 0 或 1
+}
+```
+
+## 基于代码的评分器示例
+
+基于代码的评分器提供基于精确工具匹配的确定性二元评分（0 或 1）。
+
+### 正确的工具选择
+
+```typescript title="src/example-correct-tool.ts"
+const scorer = createToolCallAccuracyScorerCode({
+  expectedTool: "weather-tool",
+});
+
+// 模拟带工具调用的 LLM 输入和输出
+const inputMessages = [
+  createTestMessage({
+    content: "今天纽约天气如何？",
+    role: "user",
+    id: "input-1",
+  }),
+];
+
+const output = [
+  createTestMessage({
+    content: "让我帮你查看天气。",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-123",
+        toolName: "weather-tool",
+        args: { location: "New York" },
+        result: { temperature: "72°F", condition: "sunny" },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result.score); // 1
+console.log(result.preprocessStepResult?.correctToolCalled); // true
+```
+
+### 严格模式评估
+
+只有恰好调用一个工具才通过：
+
+```typescript title="src/example-strict-mode.ts"
+const strictScorer = createToolCallAccuracyScorerCode({
+  expectedTool: "weather-tool",
+  strictMode: true,
+});
+
+// 调用了多个工具 - 严格模式下失败
+const output = [
+  createTestMessage({
+    content: "让我帮你。",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-1",
+        toolName: "search-tool",
+        args: {},
+        result: {},
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-2",
+        toolName: "weather-tool",
+        args: { location: "New York" },
+        result: { temperature: "20°C" },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const result = await strictScorer.run(run);
+console.log(result.score); // 0 - 因为调用了多个工具而失败
+```
+
+### 工具顺序验证
+
+验证工具是否按特定序列调用：
+
+```typescript title="src/example-order-validation.ts"
+const orderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: "auth-tool", // 指定顺序时忽略
+  expectedToolOrder: ["auth-tool", "fetch-tool"],
+  strictMode: true, // 不允许额外工具
+});
+
+const output = [
+  createTestMessage({
+    content: "我将进行身份验证并获取数据。",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-1",
+        toolName: "auth-tool",
+        args: { token: "abc123" },
+        result: { authenticated: true },
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-2",
+        toolName: "fetch-tool",
+        args: { endpoint: "/data" },
+        result: { data: ["item1"] },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const result = await orderScorer.run(run);
+console.log(result.score); // 1 - 顺序正确
+```
+
+### 灵活顺序模式
+
+只要预期工具保持相对顺序，允许额外工具：
+
+```typescript title="src/example-flexible-order.ts"
+const flexibleOrderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: "auth-tool",
+  expectedToolOrder: ["auth-tool", "fetch-tool"],
+  strictMode: false, // 允许额外工具
+});
+
+const output = [
+  createTestMessage({
+    content: "执行综合操作。",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-1",
+        toolName: "auth-tool",
+        args: { token: "abc123" },
+        result: { authenticated: true },
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-2",
+        toolName: "log-tool", // 额外工具 - 灵活模式下允许
+        args: { message: "开始获取" },
+        result: { logged: true },
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-3",
+        toolName: "fetch-tool",
+        args: { endpoint: "/data" },
+        result: { data: ["item1"] },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const result = await flexibleOrderScorer.run(run);
+console.log(result.score); // 1 - auth-tool 在 fetch-tool 之前
+```
+
+## 基于 LLM 的工具调用准确性评分器
+
+`createToolCallAccuracyScorerLLM()` 函数来自 `@mastra/evals/scorers/prebuilt`，使用 LLM 评估代理调用的工具是否适合给定的用户请求，提供语义评估而非精确匹配。
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "用于评估工具适当性的 LLM 模型",
+      required: true,
+    },
+    {
+      name: "availableTools",
+      type: "Array<{name: string, description: string}>",
+      description:
+        "包含其描述的可用工具列表作为上下文",
+      required: true,
+    },
+  ]}
+/>
+
+### 特性
+
+基于 LLM 的评分器提供：
+
+- **语义评估**: 理解上下文和用户意图
+- **适当性评估**: 区分"有用"和"适当"的工具
+- **澄清处理**: 识别代理何时适当地要求澄清
+- **缺失工具检测**: 识别应该调用的工具
+- **推理生成**: 为评分决策提供解释
+
+### 评估过程
+
+1. **提取工具调用**: 识别代理输出中提到的工具
+2. **分析适当性**: 根据用户请求评估每个工具
+3. **生成评分**: 根据适当工具与总工具调用的比例计算评分
+4. **生成推理**: 提供人类可读的解释
+
+## 基于 LLM 的评分详情
+
+- **分数评分**: 返回 0.0 到 1.0 之间的值
+- **上下文感知**: 考虑用户意图和适当性
+- **解释性**: 为评分提供推理
+
+### 基于 LLM 的评分器选项
+
+```typescript
+// 基本配置
+const basicLLMScorer = createLLMScorer({
+  model: 'openai/gpt-5.1',
+  availableTools: [
+    { name: 'tool1', description: '描述 1' },
+    { name: 'tool2', description: '描述 2' }
+  ]
+});
+
+// 使用不同模型
+const customModelScorer = createLLMScorer({
+  model: 'openai/gpt-5', // 更强大的模型用于复杂评估
+  availableTools: [...]
+});
+```
+
+### 基于 LLM 的评分器结果
+
+```typescript
+{
+  runId: string,
+  score: number,  // 0.0 到 1.0
+  reason: string, // 人类可读的解释
+  analyzeStepResult: {
+    evaluations: Array<{
+      toolCalled: string,
+      wasAppropriate: boolean,
+      reasoning: string
+    }>,
+    missingTools?: string[]
+  }
+}
+```
+
+## 基于 LLM 的评分器示例
+
+基于 LLM 的评分器使用 AI 评估工具选择是否适合用户的请求。
+
+### 基本 LLM 评估
+
+```typescript title="src/example-llm-basic.ts"
+const llmScorer = createToolCallAccuracyScorerLLM({
+  model: "openai/gpt-5.1",
+  availableTools: [
+    {
+      name: "weather-tool",
+      description: "获取任何位置的当前天气信息",
+    },
+    {
+      name: "calendar-tool",
+      description: "检查日历事件和日程安排",
+    },
+    {
+      name: "search-tool",
+      description: "在网络上搜索一般信息",
+    },
+  ],
+});
+
+const inputMessages = [
+  createTestMessage({
+    content: "今天旧金山天气如何？",
+    role: "user",
+    id: "input-1",
+  }),
+];
+
+const output = [
+  createTestMessage({
+    content: "让我帮你查看当前天气。",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-123",
+        toolName: "weather-tool",
+        args: { location: "San Francisco", date: "today" },
+        result: { temperature: "68°F", condition: "foggy" },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 1.0 - 适当的工具使用
+console.log(result.reason); // "代理正确使用 weather-tool 来回答用户关于天气信息的请求。"
+```
+
+### 处理不适当的工具使用
+
+```typescript title="src/example-llm-inappropriate.ts"
+const inputMessages = [
+  createTestMessage({
+    content: "东京天气如何？",
+    role: "user",
+    id: "input-1",
+  }),
+];
+
+const inappropriateOutput = [
+  createTestMessage({
+    content: "让我搜索那个信息。",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-456",
+        toolName: "search-tool", // 不如 weather-tool 适当
+        args: { query: "Tokyo weather" },
+        result: { results: ["Tokyo weather data..."] },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const run = createAgentTestRun({ inputMessages, output: inappropriateOutput });
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 0.5 - 部分适当
+console.log(result.reason); // "代理使用 search-tool，而对于直接天气查询，weather-tool 会更合适。"
+```
+
+### 评估澄清请求
+
+LLM 评分器识别代理何时适当地要求澄清：
+
+```typescript title="src/example-llm-clarification.ts"
+const vagueInput = [
+  createTestMessage({
+    content: '我需要帮助做一些事情',
+    role: 'user',
+    id: 'input-1'
+  })
+];
+
+const clarificationOutput = [
+  createTestMessage({
+    content: '我很乐意帮助！您能提供更多关于需要什么帮助的细节吗？',
+    role: 'assistant',
+    id: 'output-1',
+    // 未调用工具 - 而是要求澄清
+  })
+];
+
+const run = createAgentTestRun({
+  inputMessages: vagueInput,
+  output: clarificationOutput
+});
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 1.0 - 适当地要求澄清
+console.log(result.reason); // "代理在没有足够信息的情况下适当地要求澄清而不是调用工具。"
+```
+
+## 两种评分器比较
+
+以下是在相同数据上使用两种评分器的示例：
+
+```typescript title="src/example-comparison.ts"
+import {
+  createToolCallAccuracyScorerCode as createCodeScorer,
+  createToolCallAccuracyScorerLLM as createLLMScorer
+} from "@mastra/evals/scorers/prebuilt";
+
+// 设置两个评分器
+const codeScorer = createCodeScorer({
+  expectedTool: "weather-tool",
+  strictMode: false,
+});
+
+const llmScorer = createLLMScorer({
+  model: "openai/gpt-5.1",
+  availableTools: [
+    { name: "weather-tool", description: "获取天气信息" },
+    { name: "search-tool", description: "在网上搜索" },
+  ],
+});
+
+// 测试数据
+const run = createAgentTestRun({
+  inputMessages: [
+    createTestMessage({
+      content: "天气如何？",
+      role: "user",
+      id: "input-1",
+    }),
+  ],
+  output: [
+    createTestMessage({
+      content: "让我查找那个信息。",
+      role: "assistant",
+      id: "output-1",
+      toolInvocations: [
+        createToolInvocation({
+          toolCallId: "call-1",
+          toolName: "search-tool",
+          args: { query: "weather" },
+          result: { results: ["weather data"] },
+          state: "result",
+        }),
+      ],
+    }),
+  ],
+});
+
+// 运行两个评分器
+const codeResult = await codeScorer.run(run);
+const llmResult = await llmScorer.run(run);
+
+console.log("代码评分器:", codeResult.score); // 0 - 错误的工具
+console.log("LLM 评分器:", llmResult.score); // 0.3 - 部分适当
+console.log("LLM 原因:", llmResult.reason); // 解释为什么 search-tool 不太合适
+```
+
+## 相关内容
+
+- [答案相关性评分器](./answer-relevancy)
+- [完整性评分器](./completeness)
+- [忠实度评分器](./faithfulness)
+- [自定义评分器](/docs/cn/docs/evals/custom-scorers)

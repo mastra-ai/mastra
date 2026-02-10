@@ -1,0 +1,509 @@
+---
+title: "参考：Chroma 向量存储 | 向量"
+description: Mastra 中 ChromaVector 类的文档，该类使用 ChromaDB 提供向量搜索功能。
+packages:
+  - "@mastra/chroma"
+---
+
+# Chroma 向量存储
+
+ChromaVector 类使用 [Chroma](https://docs.trychroma.com/docs/cn/docs/overview/getting-started) 提供向量搜索功能，Chroma 是一个开源的嵌入数据库。它提供带有元数据过滤和混合搜索功能的高效向量搜索。
+
+:::info
+
+<b>Chroma Cloud</b>
+
+    Chroma Cloud 提供无服务器向量和全文搜索。它非常快速、成本效益高、可扩展且无痛。创建一个数据库，在 30 秒内用 5 美元的免费额度试用。
+
+    [开始使用 Chroma Cloud](https://trychroma.com/signup)
+
+:::
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "host",
+      type: "string",
+      isOptional: true,
+      description:
+        "Chroma 服务器的宿主地址。默认为 'localhost'",
+    },
+    {
+      name: "port",
+      type: "number",
+      isOptional: true,
+      description: "Chroma 服务器的端口号。默认为 8000",
+    },
+    {
+      name: "ssl",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "是否使用 SSL/HTTPS 进行连接。默认为 false",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      isOptional: true,
+      description: "Chroma Cloud API 密钥",
+    },
+    {
+      name: "tenant",
+      type: "string",
+      isOptional: true,
+      description:
+        "要连接的 Chroma 服务器中的租户名称。对于单节点 Chroma 默认为 'default_tenant'。Chroma Cloud 用户会根据提供的 API 密钥自动解析",
+    },
+    {
+      name: "database",
+      type: "string",
+      isOptional: true,
+      description:
+        "要连接的数据库名称。对于单节点 Chroma 默认为 'default_database'。Chroma Cloud 用户会根据提供的 API 密钥自动解析",
+    },
+    {
+      name: "headers",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "随请求发送的额外 HTTP 标头",
+    },
+    {
+      name: "fetchOptions",
+      type: "RequestInit",
+      isOptional: true,
+      description: "HTTP 请求的额外 fetch 选项",
+    },
+  ]}
+/>
+
+## 运行 Chroma 服务器
+
+如果你使用 Chroma Cloud，只需向 `ChromaVector` 构造函数提供你的 API 密钥、租户和数据库名称即可。
+
+安装 `@mastra/chroma` 包后，你可以访问 [Chroma CLI](https://docs.trychroma.com/docs/cli/db)，它可以为你设置这些环境变量：`chroma db connect [DB-NAME] --env-file`。
+
+否则，你有几个选项来设置单节点 Chroma 服务器：
+
+- 使用 Chroma CLI 在本地运行：`chroma run`。你可以在 [Chroma 文档](https://docs.trychroma.com/docs/cli/run) 中找到更多配置选项。
+- 使用官方 Chroma 镜像在 [Docker](https://docs.trychroma.com/guides/deploy/docker) 上运行。
+- 在你选择的提供商上部署你自己的 Chroma 服务器。Chroma 为 [AWS](https://docs.trychroma.com/guides/deploy/aws)、[Azure](https://docs.trychroma.com/guides/deploy/azure) 和 [GCP](https://docs.trychroma.com/guides/deploy/gCP) 提供了示例模板。
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "相似性搜索的距离度量",
+    },
+  ]}
+/>
+
+### forkIndex()
+
+注意：分叉仅在 Chroma Cloud 上支持，或者如果你部署了自己的 OSS **分布式** Chroma。
+
+`forkIndex` 让你瞬间分叉一个现有的 Chroma 索引。对分叉索引的操作不会影响原始索引。在 [Chroma 文档](https://docs.trychroma.com/cloud/collection-forking) 中了解更多信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要分叉的索引名称",
+    },
+    {
+      name: "newIndexName",
+      type: "string",
+      description: "分叉索引的名称",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+    {
+      name: "documents",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "Chroma 特有：与向量关联的原始文本文档",
+    },
+  ]}
+/>
+
+### query()
+
+使用 `queryVector` 查询索引。返回一个按与 `queryVector` 距离排序的语义相似记录数组。每条记录的形状如下：
+
+```typescript
+{
+  id: string;
+  score: number;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+你还可以为 `query` 调用提供元数据的形状以进行类型推断：`query<T>()`。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "查询的元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Chroma 特有：要应用于文档内容的过滤器",
+    },
+  ]}
+/>
+
+### get()
+
+通过 ID、元数据和文档过滤器从 Chroma 索引获取记录。它返回形状如下的记录数组：
+
+```typescript
+{
+  id: string;
+  document?: string;
+  metadata?: Record<string, string | number | boolean>;
+  embedding?: number[]
+}
+```
+
+你还可以为 `get` 调用提供元数据的形状以进行类型推断：`get<T>()`。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description:
+        "要返回的记录 ID 列表。如果未提供，则返回所有记录。",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "元数据过滤器。",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Chroma 特有：要应用于文档内容的过滤器",
+    },
+    {
+      name: "limit",
+      type: "number",
+      isOptional: true,
+      defaultValue: 100,
+      description: "要返回的最大记录数",
+    },
+    {
+      name: "offset",
+      type: "number",
+      isOptional: true,
+      defaultValue: 0,
+      description:
+        "返回记录的偏移量。与 `limit` 一起使用以分页结果。",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+返回索引名称字符串数组。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### updateVector()
+
+通过 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter`，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要更新向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新参数",
+    },
+  ]}
+/>
+
+`update` 对象可以包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "vector",
+      type: "number[]",
+      isOptional: true,
+      description: "用于替换现有向量的新向量",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于替换现有元数据的新元数据",
+    },
+  ]}
+/>
+
+示例：
+
+```typescript
+// 按 ID 更新
+await vectorStore.updateVector({
+  indexName: 'docs',
+  id: 'vec_123',
+  update: { metadata: { status: 'reviewed' } }
+});
+
+// 按过滤器更新
+await vectorStore.updateVector({
+  indexName: 'docs',
+  filter: { source_id: 'manual.pdf' },
+  update: { metadata: { version: 2 } }
+});
+```
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+通过 ID 或元数据过滤器删除多个向量。此方法支持批量删除和基于源的向量管理。必须提供 `ids` 或 `filter`，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+示例：
+
+```typescript
+// 删除文档中的所有分块
+await vectorStore.deleteVectors({
+  indexName: 'docs',
+  filter: { source_id: 'manual.pdf' }
+});
+
+// 按 ID 删除多个向量
+await vectorStore.deleteVectors({
+  indexName: 'docs',
+  ids: ['vec_1', 'vec_2', 'vec_3']
+});
+
+// 删除旧的临时文档
+await vectorStore.deleteVectors({
+  indexName: 'docs',
+  filter: {
+    $and: [
+      { bucket: 'temp' },
+      { indexed_at: { $lt: '2025-01-01' } }
+    ]
+  }
+});
+```
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  document?: string; // Chroma 特有：如果存储了原始文档
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
+    console.log(error.details); // 额外的错误上下文
+  }
+}
+```
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

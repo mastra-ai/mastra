@@ -1,0 +1,170 @@
+---
+title: "参考：Embed | RAG"
+description: "使用 AI SDK 在 Mastra 中嵌入功能的文档。"
+packages:
+  - "@mastra/core"
+---
+
+# Embed
+
+Mastra 使用 AI SDK 的 `embed` 和 `embedMany` 函数为文本输入生成向量嵌入，从而实现相似性搜索和 RAG 工作流程。
+
+## 单个嵌入
+
+`embed` 函数为单个文本输入生成向量嵌入：
+
+```typescript
+import { embed } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const result = await embed({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  value: "您要嵌入的文本",
+  maxRetries: 2, // 可选，默认为 2
+});
+```
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description:
+        "要使用的嵌入模型（例如 openai.embedding('text-embedding-3-small')）",
+    },
+    {
+      name: "value",
+      type: "string | Record<string, any>",
+      description: "要嵌入的文本内容或对象",
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      description:
+        "每次嵌入调用的最大重试次数。设置为 0 以禁用重试。",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      description: "用于取消请求的可选中止信号",
+      isOptional: true,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description:
+        "请求的附加 HTTP 标头（仅适用于基于 HTTP 的提供者）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "embedding",
+      type: "number[]",
+      description: "输入的嵌入向量",
+    },
+  ]}
+/>
+
+## 多个嵌入
+
+要一次嵌入多个文本，请使用 `embedMany` 函数：
+
+```typescript
+import { embedMany } from "ai";
+
+const result = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: ["第一个文本", "第二个文本", "第三个文本"],
+  maxRetries: 2, // 可选，默认为 2
+});
+```
+
+### 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "EmbeddingModel",
+      description:
+        "要使用的嵌入模型（例如 openai.embedding('text-embedding-3-small')）",
+    },
+    {
+      name: "values",
+      type: "string[] | Record<string, any>[]",
+      description: "要嵌入的文本内容或对象数组",
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      description:
+        "每次嵌入调用的最大重试次数。设置为 0 以禁用重试。",
+      isOptional: true,
+      defaultValue: "2",
+    },
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      description: "用于取消请求的可选中止信号",
+      isOptional: true,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description:
+        "请求的附加 HTTP 标头（仅适用于基于 HTTP 的提供者）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "embeddings",
+      type: "number[][]",
+      description:
+        "与输入值对应的嵌入向量数组",
+    },
+  ]}
+/>
+
+## 使用示例
+
+```typescript
+import { embed, embedMany } from "ai";
+
+// 单个嵌入
+const singleResult = await embed({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  value: "生命的意义是什么？",
+});
+
+// 多个嵌入
+const multipleResult = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: [
+    "关于生命的第一个问题",
+    "关于宇宙的第二个问题",
+    "关于万物的第三个问题",
+  ],
+});
+```
+
+有关 AI SDK 中嵌入的更多详细信息，请参阅：
+
+- [AI SDK 嵌入概述](https://sdk.vercel.ai/docs/cn/docs/ai-sdk-core/embeddings)
+- [embed()](https://sdk.vercel.ai/docs/cn/docs/reference/ai-sdk-core/embed)
+- [embedMany()](https://sdk.vercel.ai/docs/cn/docs/reference/ai-sdk-core/embed-many)

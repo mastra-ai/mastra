@@ -1,0 +1,196 @@
+---
+title: "参考：上下文相关性评分器 | 评估"
+description: "Mastra 中上下文相关性评分器的文档。使用加权相关性评分评估提供的上下文对于生成代理响应的相关性和实用性。"
+packages:
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 上下文相关性评分器
+
+`createContextRelevanceScorerLLM()` 函数创建一个评分器，用于评估提供的上下文对于生成代理响应的相关性和实用性。它使用加权相关性级别，并对未使用的高相关性上下文和缺失信息应用惩罚。
+
+它特别适用于以下场景：
+
+**内容生成评估**
+
+最适合评估上下文质量：
+
+- 上下文使用重要的聊天系统
+- 需要细微相关性评估的 RAG 管道
+- 缺失上下文影响质量的系统
+
+**上下文选择优化**
+
+在优化以下方面时使用：
+
+- 全面的上下文覆盖
+- 有效的上下文利用
+- 识别上下文差距
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "用于评估上下文相关性的语言模型",
+      required: true,
+    },
+    {
+      name: "options",
+      type: "ContextRelevanceOptions",
+      description: "评分器的配置选项",
+      required: true,
+      children: [
+        {
+          name: "context",
+          type: "string[]",
+          description: "要评估相关性的上下文片段数组",
+          required: false,
+        },
+        {
+          name: "contextExtractor",
+          type: "(input, output) => string[]",
+          description:
+            "用于从运行输入和输出中动态提取上下文的函数",
+          required: false,
+        },
+        {
+          name: "scale",
+          type: "number",
+          description: "乘以最终分数的缩放因子（默认：1）",
+          required: false,
+        },
+        {
+          name: "penalties",
+          type: "object",
+          description: "评分的可配置惩罚设置",
+          required: false,
+          children: [
+            {
+              name: "unusedHighRelevanceContext",
+              type: "number",
+              description:
+                "每个未使用的高相关性上下文的惩罚（默认：0.1）",
+              required: false,
+            },
+            {
+              name: "missingContextPerItem",
+              type: "number",
+              description: "每个缺失上下文项的惩罚（默认：0.15）",
+              required: false,
+            },
+            {
+              name: "maxMissingContextPenalty",
+              type: "number",
+              description:
+                "缺失上下文惩罚的最大总量（默认：0.5）",
+              required: false,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+注意：必须提供 `context` 或 `contextExtractor` 之一。如果两者都提供了，`contextExtractor` 优先。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "0 到 scale（默认 0-1）之间的加权相关性分数",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "对上下文相关性评估的人类可读解释",
+    },
+  ]}
+/>
+
+## 评分详情
+
+### 加权相关性评分
+
+上下文相关性使用复杂的评分算法，考虑：
+
+1. **相关性级别**：每个上下文片段被分类为加权值：
+   - `high` = 1.0（直接回答查询）
+   - `medium` = 0.7（支持性信息）
+   - `low` = 0.3（略微相关）
+   - `none` = 0.0（完全无关）
+
+2. **使用检测**：跟踪相关上下文是否在响应中实际使用
+
+3. **应用惩罚**（通过 `penalties` 选项配置）：
+   - **未使用的高相关性**：`unusedHighRelevanceContext` 每个未使用的高相关性上下文的惩罚（默认：0.1）
+   - **缺失上下文**：最多 `maxMissingContextPenalty` 用于识别的缺失信息（默认：0.5）
+
+### 评分公式
+
+```
+基础分数 = Σ(相关性权重) / (上下文数量 × 1.0)
+使用惩罚 = 未使用的高相关性数量 × unusedHighRelevanceContext
+缺失惩罚 = min(缺失上下文数量 × missingContextPerItem, maxMissingContextPenalty)
+
+最终分数 = max(0, 基础分数 - 使用惩罚 - 缺失惩罚) × scale
+```
+
+**默认值**：
+
+- `unusedHighRelevanceContext` = 0.1（每个未使用的高相关性上下文 10% 惩罚）
+- `missingContextPerItem` = 0.15（每个缺失上下文项 15% 惩罚）
+- `maxMissingContextPenalty` = 0.5（缺失上下文最多 50% 惩罚）
+- `scale` = 1
+
+### 分数解释
+
+- **0.9-1.0**：优秀 - 所有上下文高度相关且被使用
+- **0.7-0.8**：良好 - 大部分相关，有小缺口
+- **0.4-0.6**：混合 - 大量无关或未使用的上下文
+- **0.2-0.3**：差 - 大部分无关上下文
+- **0.0-0.1**：很差 - 未找到相关上下文
+
+### 原因分析
+
+reason 字段提供以下洞察：
+
+- 每个上下文片段的相关性级别（高/中/低/无）
+- 哪些上下文在响应中实际使用
+- 对未使用的高相关性上下文应用的惩罚（可通过 `unusedHighRelevanceContext` 配置）
+- 缺失的上下文（可通过 `missingContextPerItem` 惩罚，最高到 `maxMissingContextPenalty`）
+
+### 优化策略
+
+使用结果来改进您的系统：
+
+- **过滤无关上下文**：在处理前删除低/无相关性的片段
+- **确保上下文使用**：确保纳入高相关性上下文
+- **填补上下文差距**：添加评分器识别的缺失信息
+- **平衡上下文大小**：找到最佳相关性的最佳上下文量
+- **调整惩罚灵敏度**：根据应用程序对未使用或缺失上下文的容忍度调整 `unusedHighRelevanceContext`、`missingContextPerItem` 和 `maxMissingContextPenalty`
+
+### 与上下文精确度的区别
+
+| 方面 | 上下文相关性 | 上下文精确度 |
+| ------------- | -------------------------------------- | ---------------------------------- |
+| **算法** | 带惩罚的加权级别 | 平均精确度 (MAP) |
+| **相关性** | 多级别（高/中/低/无） | 二元（是/否） |
+| **位置** | 不考虑 | 关键（奖励早期放置） |
+| **使用** | 跟踪并惩罚未使用的上下文 | 不考虑 |
+| **缺失** | 识别并惩罚差距 | 不评估 |
+
+## 相关内容
+
+- [上下文精确度评分器](/reference/evals/context-precision) - 使用 MAP 评估上下文排序
+- [忠实度评分器](/reference/evals/faithfulness) - 衡量答案在上下文中的 groundedness
+- [自定义评分器](/docs/cn/docs/evals/custom-scorers) - 创建您自己的评估指标

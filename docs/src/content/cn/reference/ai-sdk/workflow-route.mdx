@@ -1,0 +1,113 @@
+---
+title: "参考文档：workflowRoute() | AI SDK"
+description: "workflowRoute() 的 API 参考，这是一个用于创建 AI SDK 兼容格式的流式工作流执行路由处理器的函数。"
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# workflowRoute()
+
+使用 AI SDK 格式创建流式工作流执行的路由处理器。此函数注册一个 HTTP `POST` 端点，接受输入数据，执行工作流，并以 AI SDK 兼容格式将响应流式传输回客户端。您必须在[自定义 API 路由](/docs/cn/docs/server/custom-api-routes)中使用它。
+
+如果您需要框架无关的处理器，请使用 [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream)。
+
+:::tip 工作流中的智能体流式传输
+
+当工作流步骤将智能体的流传输到工作流写入器时（例如 `await response.fullStream.pipeTo(writer)`），即使智能体在工作流步骤内运行，智能体的文本块和工具调用也会实时转发到 UI 流。
+
+详情请参阅[工作流流式传输](/docs/cn/docs/streaming/workflow-streaming)。
+
+:::
+
+## 使用示例
+
+此示例展示如何在 `/workflow` 端点设置工作流路由，使用 ID 为 `weatherWorkflow` 的工作流。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: "/workflow",
+        workflow: "weatherWorkflow",
+      }),
+    ],
+  },
+});
+```
+
+您还可以基于 `workflowId` 使用动态工作流路由。URL `/workflow/weatherWorkflow` 将解析为 ID 为 `weatherWorkflow` 的工作流。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: "/workflow/:workflowId",
+      }),
+    ],
+  },
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "path",
+      type: "string",
+      description: "路由路径（例如，`/workflow` 或 `/workflow/:workflowId`）。包含 `:workflowId` 用于动态工作流路由。",
+      isOptional: true,
+      defaultValue: "'/api/workflows/:workflowId/stream'",
+    },
+    {
+      name: "workflow",
+      type: "string",
+      description: "不使用动态路由时的固定工作流 ID。",
+      isOptional: true,
+      defaultValue: "undefined",
+    },
+    {
+      name: "includeTextStreamParts",
+      type: "boolean",
+      description: "是否在输出中包含文本流部分。",
+      isOptional: true,
+      defaultValue: "true",
+    },
+  ]}
+/>
+
+## 附加配置
+
+您可以使用 [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) 自定义发送到工作流路由的请求，例如向工作流传递附加配置：
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/workflow",
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          inputData: {
+            city: messages[messages.length - 1].parts[0].text,
+          },
+          // 或使用 resumeData 恢复暂停的工作流
+          resumeData: {
+            confirmation: messages[messages.length - 1].parts[0].text
+          }
+        },
+      };
+    },
+  }),
+});
+```

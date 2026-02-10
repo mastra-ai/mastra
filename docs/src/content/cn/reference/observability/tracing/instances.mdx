@@ -1,0 +1,165 @@
+---
+title: "参考：追踪 | 可观测性"
+description: "核心追踪类和方法"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# 可观测性实例
+
+## DefaultObservabilityInstance
+
+ObservabilityInstance 接口的默认实现。
+
+### 构造函数
+
+```typescript
+new DefaultObservabilityInstance(config: ObservabilityInstanceConfig)
+```
+
+使用指定配置创建新的 DefaultObservabilityInstance。
+
+### 属性
+
+从 BaseObservabilityInstance 继承所有属性和方法。
+
+## BaseObservabilityInstance
+
+自定义 ObservabilityInstance 实现的基础类。
+
+### 方法
+
+#### getConfig
+
+```typescript
+getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
+```
+
+返回当前可观测性配置。
+
+#### getExporters
+
+```typescript
+getExporters(): readonly ObservabilityExporter[]
+```
+
+返回所有配置的导出器。
+
+#### getSpanOutputProcessors
+
+```typescript
+getSpanOutputProcessors(): readonly SpanOutputProcessor[]
+```
+
+返回所有配置的跨度输出处理器。
+
+#### getLogger
+
+```typescript
+getLogger(): IMastraLogger
+```
+
+返回导出器和其他组件的日志记录器实例。
+
+#### startSpan
+
+```typescript
+startSpan<TType extends SpanType>(
+  options: StartSpanOptions<TType>
+): Span<TType>
+```
+
+启动特定 SpanType 的新跨度。如果未提供父跨度，则创建跟踪的根跨度。
+
+<PropertiesTable
+  props={[
+    {
+      name: "type",
+      type: "SpanType",
+      description: "要创建的跨度类型",
+      required: true,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "跨度的名称",
+      required: true,
+    },
+    {
+      name: "parent",
+      type: "AnySpan",
+      description: "父跨度（如果不是根）",
+      required: false,
+    },
+    {
+      name: "attributes",
+      type: "SpanTypeMap[TType]",
+      description: "类型特定属性",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "用户定义的元数据",
+      required: false,
+    },
+    {
+      name: "input",
+      type: "any",
+      description: "初始输入数据",
+      required: false,
+    },
+    {
+      name: "customSamplerOptions",
+      type: "CustomSamplerOptions",
+      description: "自定义采样器选项",
+      required: false,
+    },
+  ]}
+/>
+
+#### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+关闭所有导出器和处理器，清理资源。
+
+## 自定义实现
+
+要创建自定义 ObservabilityInstance 实现，请扩展 BaseObservabilityInstance：
+
+```typescript
+class CustomObservabilityInstance extends BaseObservabilityInstance {
+  constructor(config: ObservabilityInstanceConfig) {
+    super(config);
+    // 自定义初始化
+  }
+
+  // 根据需要覆盖方法
+  startSpan<TType extends SpanType>(
+    options: StartSpanOptions<TType>,
+  ): Span<TType> {
+    // 自定义跨度创建逻辑
+    return super.startSpan(options);
+  }
+}
+```
+
+## 另请参阅
+
+### 文档
+
+- [追踪概述](/docs/cn/docs/observability/tracing/overview) - 概念和使用指南
+- [配置参考](/reference/observability/tracing/configuration) - 配置选项
+- [接口参考](/reference/observability/tracing/interfaces) - 类型定义
+- [跨度参考](/reference/observability/tracing/spans) - 跨度生命周期和方法
+
+### 导出器
+
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - 存储持久化
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud 集成
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - 调试输出

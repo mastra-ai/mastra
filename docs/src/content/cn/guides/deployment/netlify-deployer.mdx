@@ -1,0 +1,122 @@
+---
+title: "NetlifyDeployer | 部署"
+description: "了解如何使用 Mastra NetlifyDeployer 将 Mastra 应用程序部署到 Netlify"
+---
+
+# NetlifyDeployer
+
+`NetlifyDeployer` 类处理将独立的 Mastra 应用程序部署到 Netlify。它管理配置和部署，并扩展基类 [Deployer](/reference/deployer/) 以提供 Netlify 特定功能。
+
+:::warning
+
+Netlify Functions 使用临时文件系统。请从您的 Mastra 配置中移除所有使用文件 URL 的 [LibSQLStore](/reference/storage/libsql)。使用内存存储 (`:memory:`) 或外部存储提供商，如 Turso、PostgreSQL 或 Upstash。
+
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/deployer-netlify@latest
+```
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  deployer: new NetlifyDeployer(),
+});
+```
+
+> 有关所有可用配置选项，请参阅 [NetlifyDeployer](/reference/deployer/netlify) API 参考。
+
+## 持续集成
+
+将您的 Mastra 项目的 Git 仓库连接到 Netlify 后，更新项目设置。在 Netlify 仪表板中，转到 **项目配置** > **构建和部署** > **持续部署**，在 **构建设置** 下，设置以下内容：
+
+- **构建命令**：`npm run build`（可选）
+
+### 环境变量
+
+在您第一次部署之前，请确保添加应用程序使用的任何环境变量。例如，如果您使用 OpenAI 作为 LLM，您需要在 Netlify 项目设置中设置 `OPENAI_API_KEY`。
+
+> 有关更多详细信息，请参阅[环境变量概述](https://docs.netlify.com/environment-variables/overview/)。
+
+您的项目现在已配置为自动部署，每当您推送到 GitHub 仓库的配置分支时就会发生部署。
+
+## 手动部署
+
+也可以使用 [Netlify CLI](https://docs.netlify.com/cli/get-started/) 进行手动部署。安装 Netlify CLI 后，从项目根目录运行以下命令来部署您的应用程序。您也可以从项目根目录运行 `netlify dev` 来在本地测试您的 Mastra 应用程序。
+
+```bash
+netlify deploy --prod
+```
+
+:::warning
+
+当使用 `netlify deploy` 而不是持续集成时，您需要创建一个包含以下内容的 `netlify.toml` 文件：
+
+```toml
+[build]
+  command = "npm run build"
+  publish = ".netlify/v1/functions"
+
+[functions]
+  directory = ".netlify/v1/functions"
+  node_bundler = "none"
+  included_files = [".netlify/v1/functions/**"]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "22.13.0"
+```
+
+根据您的项目调整 `build.command`。
+
+:::
+
+## 构建输出
+
+使用 `NetlifyDeployer` 的 Mastra 应用程序的构建输出包括您项目中的所有代理、工具和工作流，以及在 Netlify 上运行应用程序所需的特定于 Mastra 的文件。
+
+```bash
+your-project/
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.js
+                ├── package.json
+                └── node_modules/
+```
+
+`NetlifyDeployer` 自动在 `.netlify/v1` 中生成 `config.json` 配置文件，包含以下设置：
+
+```json
+{
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [".netlify/v1/functions/**"]
+  },
+  "redirects": [
+    {
+      "force": true,
+      "from": "/*",
+      "to": "/.netlify/functions/api/:splat",
+      "status": 200
+    }
+  ]
+}
+```
+
+## 后续步骤
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)

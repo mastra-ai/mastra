@@ -1,0 +1,354 @@
+---
+title: "参考：DatabaseConfig | RAG"
+description: "Mastra RAG 系统中与向量查询工具一起使用的特定数据库配置类型的 API 参考。"
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# DatabaseConfig
+
+`DatabaseConfig` 类型允许您在使用向量查询工具时指定特定于数据库的配置。这些配置使您能够利用不同向量存储提供的独特功能和优化。
+
+## 类型定义
+
+```typescript
+export type DatabaseConfig = {
+  pinecone?: PineconeConfig;
+  pgvector?: PgVectorConfig;
+  chroma?: ChromaConfig;
+  [key: string]: any; // 可扩展以支持未来数据库
+};
+```
+
+## 特定数据库类型
+
+### PineconeConfig
+
+Pinecone 向量存储特有的配置选项。
+
+<PropertiesTable
+  content={[
+    {
+      name: "namespace",
+      type: "string",
+      description:
+        "用于在同一索引内组织和隔离向量的 Pinecone 命名空间。对于多租户或环境分离非常有用。",
+      isOptional: true,
+    },
+    {
+      name: "sparseVector",
+      type: "{ indices: number[]; values: number[]; }",
+      description:
+        "用于混合搜索的稀疏向量，结合密集和稀疏嵌入。为基于关键字的查询提供更好的搜索质量。indices 和 values 数组必须具有相同的长度。",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "indices",
+              description: "稀疏向量组件的索引数组",
+              isOptional: false,
+              type: "number[]",
+            },
+            {
+              name: "values",
+              description: "与索引对应的值数组",
+              isOptional: false,
+              type: "number[]",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+**用例：**
+
+- 多租户应用程序（每个租户独立的命名空间）
+- 环境隔离（开发/预发布/生产命名空间）
+- 结合语义和关键字匹配的混合搜索
+
+### PgVectorConfig
+
+带有 pgvector 扩展的 PostgreSQL 特有的配置选项。
+
+<PropertiesTable
+  content={[
+    {
+      name: "minScore",
+      type: "number",
+      description:
+        "结果的最小相似度分数阈值。只有相似度分数高于此值的向量才会被返回。",
+      isOptional: true,
+    },
+    {
+      name: "ef",
+      type: "number",
+      description:
+        "HNSW 搜索参数，控制搜索期间动态候选列表的大小。较高的值以速度为代价提高准确性。通常设置为 topK 和 200 之间。",
+      isOptional: true,
+    },
+    {
+      name: "probes",
+      type: "number",
+      description:
+        "IVFFlat 探测参数，指定搜索期间要访问的索引单元格数量。较高的值以速度为代价提高召回率。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**性能指南：**
+
+- **ef**：从 topK 值的 2-4 倍开始，增加以提高准确性
+- **probes**：从 1-10 开始，增加以提高召回率
+- **minScore**：根据质量要求使用 0.5-0.9 之间的值
+
+**用例：**
+
+- 高负载场景的性能优化
+- 质量过滤以移除不相关的结果
+- 微调搜索准确性 vs 速度权衡
+
+### ChromaConfig
+
+Chroma 向量存储特有的配置选项。
+
+<PropertiesTable
+  content={[
+    {
+      name: "where",
+      type: "Record<string, any>",
+      description:
+        "使用 MongoDB 风格查询语法的元数据过滤条件。根据元数据字段过滤结果。",
+      isOptional: true,
+    },
+    {
+      name: "whereDocument",
+      type: "Record<string, any>",
+      description:
+        "文档内容过滤条件。允许根据实际文档文本内容进行过滤。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**过滤语法示例：**
+
+```typescript
+// 简单相等
+where: { "category": "technical" }
+
+// 操作符
+where: { "price": { "$gt": 100 } }
+
+// 多个条件
+where: {
+  "category": "electronics",
+  "inStock": true
+}
+
+// 文档内容过滤
+whereDocument: { "$contains": "API 文档" }
+```
+
+**用例：**
+
+- 高级元数据过滤
+- 基于内容的文档过滤
+- 复杂查询组合
+
+## 使用示例
+
+<Tabs>
+  <TabItem value="basic-usage" label="基本用法">
+    ### 基本数据库配置
+
+    ```typescript
+    import { createVectorQueryTool } from '@mastra/rag';
+
+    const vectorTool = createVectorQueryTool({
+      vectorStoreName: 'pinecone',
+      indexName: 'documents',
+      model: embedModel,
+      databaseConfig: {
+        pinecone: {
+          namespace: 'production'
+        }
+      }
+    });
+    ```
+
+  </TabItem>
+
+  <TabItem value="runtime-override" label="运行时覆盖">
+    ### 运行时配置覆盖
+
+    ```typescript
+    import { RequestContext } from '@mastra/core/request-context';
+
+    // 初始配置
+    const vectorTool = createVectorQueryTool({
+      vectorStoreName: 'pinecone',
+      indexName: 'documents',
+      model: embedModel,
+      databaseConfig: {
+        pinecone: {
+          namespace: 'development'
+        }
+      }
+    });
+
+    // 在运行时覆盖
+    const requestContext = new RequestContext();
+    requestContext.set('databaseConfig', {
+      pinecone: {
+        namespace: 'production'
+      }
+    });
+
+    await vectorTool.execute(
+      { queryText: '搜索查询' },
+      { mastra, requestContext }
+    );
+    ```
+
+  </TabItem>
+
+  <TabItem value="multi-database" label="多数据库">
+    ### 多数据库配置
+
+    ```typescript
+    const vectorTool = createVectorQueryTool({
+      vectorStoreName: 'dynamic', // 将在运行时确定
+      indexName: 'documents',
+      model: embedModel,
+      databaseConfig: {
+        pinecone: {
+          namespace: 'default'
+        },
+        pgvector: {
+          minScore: 0.8,
+          ef: 150
+        },
+        chroma: {
+          where: { 'type': 'documentation' }
+        }
+      }
+    });
+    ```
+
+    :::note
+
+    **多数据库支持**：当您配置多个数据库时，只有与实际使用的向量存储匹配的配置才会被应用。
+
+    :::
+
+  </TabItem>
+
+  <TabItem value="performance-tuning" label="性能调优">
+    ### 性能调优
+
+    ```typescript
+    // 高准确性配置
+    const highAccuracyTool = createVectorQueryTool({
+      vectorStoreName: 'postgres',
+      indexName: 'embeddings',
+      model: embedModel,
+      databaseConfig: {
+        pgvector: {
+          ef: 400,        // 高准确性
+          probes: 20,     // 高召回率
+          minScore: 0.85  // 高质量阈值
+        }
+      }
+    });
+
+    // 高速配置
+    const highSpeedTool = createVectorQueryTool({
+      vectorStoreName: 'postgres',
+      indexName: 'embeddings',
+      model: embedModel,
+      databaseConfig: {
+        pgvector: {
+          ef: 50,         // 较低准确性，速度更快
+          probes: 3,      // 较低召回率，速度更快
+          minScore: 0.6   // 较低质量阈值
+        }
+      }
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## 可扩展性
+
+`DatabaseConfig` 类型设计为可扩展。要添加对新向量数据库的支持：
+
+```typescript
+// 1. 定义配置接口
+export interface NewDatabaseConfig {
+  customParam1?: string;
+  customParam2?: number;
+}
+
+// 2. 扩展 DatabaseConfig 类型
+export type DatabaseConfig = {
+  pinecone?: PineconeConfig;
+  pgvector?: PgVectorConfig;
+  chroma?: ChromaConfig;
+  newdatabase?: NewDatabaseConfig;
+  [key: string]: any;
+};
+
+// 3. 在向量查询工具中使用
+const vectorTool = createVectorQueryTool({
+  vectorStoreName: "newdatabase",
+  indexName: "documents",
+  model: embedModel,
+  databaseConfig: {
+    newdatabase: {
+      customParam1: "value",
+      customParam2: 42,
+    },
+  },
+});
+```
+
+## 最佳实践
+
+1. **环境配置**：对不同环境使用不同的命名空间或配置
+2. **性能调优**：从默认值开始，根据您的具体需求进行调整
+3. **质量过滤**：使用 minScore 过滤掉低质量结果
+4. **运行时灵活性**：在动态场景中覆盖配置
+5. **文档记录**：为团队成员记录您特定的配置选择
+
+## 迁移指南
+
+现有的向量查询工具无需更改即可继续工作。要添加数据库配置：
+
+```diff
+const vectorTool = createVectorQueryTool({
+  vectorStoreName: 'pinecone',
+  indexName: 'documents',
+  model: embedModel,
++ databaseConfig: {
++   pinecone: {
++     namespace: 'production'
++   }
++ }
+});
+```
+
+## 相关内容
+
+- [createVectorQueryTool()](/reference/tools/vector-query-tool)
+- [混合向量搜索](/docs/cn/docs/rag/retrieval#metadata-filtering)
+- [元数据过滤器](/reference/rag/metadata-filters)

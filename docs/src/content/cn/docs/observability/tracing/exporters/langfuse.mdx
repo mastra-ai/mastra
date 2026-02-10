@@ -1,0 +1,205 @@
+---
+title: "Langfuse 导出器 | 追踪 | 可观测性"
+description: "将追踪发送到 Langfuse 进行 LLM 可观测性和分析"
+packages:
+  - "@mastra/core"
+  - "@mastra/langfuse"
+  - "@mastra/observability"
+---
+
+# Langfuse 导出器
+
+[Langfuse](https://langfuse.com/) 是专门为 LLM 应用程序设计的开源可观测性平台。Langfuse 导出器将您的追踪发送到 Langfuse，提供对模型性能、代币使用和对话流程的详细洞察。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/langfuse@latest
+```
+
+## 配置
+
+### 前提条件
+
+1. **Langfuse 账户**：在 [cloud.langfuse.com](https://cloud.langfuse.com) 注册或部署自托管版本
+2. **API 密钥**：在 Langfuse 设置 → API 密钥中创建公钥/密钥对
+3. **环境变量**：设置您的凭据
+
+```bash title=".env"
+LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxx
+LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxx
+LANGFUSE_BASE_URL=https://cloud.langfuse.com  # 或您的自托管 URL
+```
+
+### 零配置设置
+
+设置环境变量后，使用无需配置的导出器：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langfuse: {
+        serviceName: "my-service",
+        exporters: [new LangfuseExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 显式配置
+
+您也可以直接传递凭据（优先于环境变量）：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langfuse: {
+        serviceName: "my-service",
+        exporters: [
+          new LangfuseExporter({
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+            secretKey: process.env.LANGFUSE_SECRET_KEY!,
+            baseUrl: process.env.LANGFUSE_BASE_URL,
+            options: {
+              environment: process.env.NODE_ENV,
+            },
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 配置选项
+
+### 实时模式 vs 批量模式
+
+Langfuse 导出器支持两种发送追踪的模式：
+
+#### 实时模式（开发）
+
+追踪立即出现在 Langfuse 仪表板中，适合调试：
+
+```typescript
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  realtime: true, // 每个事件后刷新
+});
+```
+
+#### 批量模式（生产）
+
+通过自动批处理获得更好的性能：
+
+```typescript
+new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  realtime: false, // 默认 - 批量追踪
+});
+```
+
+### 完整配置
+
+```typescript
+new LangfuseExporter({
+  // 必需凭据
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+
+  // 可选设置
+  baseUrl: process.env.LANGFUSE_BASE_URL, // 默认：https://cloud.langfuse.com
+  realtime: process.env.NODE_ENV === "development", // 动态模式选择
+  logLevel: "info", // 诊断日志记录：debug | info | warn | error
+
+  // Langfuse 特定选项
+  options: {
+    environment: process.env.NODE_ENV, // 在 UI 中显示用于过滤
+    version: process.env.APP_VERSION, // 跟踪不同版本
+    release: process.env.GIT_COMMIT, // Git 提交哈希
+  },
+});
+```
+
+## 提示词链接
+
+您可以将 LLM 生成链接到存储在 [Langfuse 提示词管理](https://langfuse.com/docs/cn/prompt-management) 中的提示词。这可以为您的提示词启用版本跟踪和指标。
+
+### 使用辅助函数（推荐）
+
+将 `withLangfusePrompt` 与 `buildTracingOptions` 一起使用以获得最简洁的 API：
+
+```typescript title="src/agents/support-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
+import { Langfuse } from "langfuse";
+
+// 从 LANGFUSE_SECRET_KEY、LANGFUSE_PUBLIC_KEY、LANGFUSE_BASE_URL 环境变量读取凭据
+const langfuse = new Langfuse();
+
+// 从 Langfuse 提示词管理获取提示词
+const prompt = await langfuse.getPrompt("customer-support");
+
+export const supportAgent = new Agent({
+  name: "support-agent",
+  instructions: prompt.prompt, // 使用来自 Langfuse 的提示词文本
+  model: "openai/gpt-4o",
+  defaultGenerateOptions: {
+    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
+  },
+});
+```
+
+`withLangfusePrompt` 辅助函数自动从 Langfuse 提示词对象中提取 `name`、`version` 和 `id`。
+
+### 手动字段
+
+如果您没有使用 Langfuse SDK，也可以传递手动字段：
+
+```typescript
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt({ name: "my-prompt", version: 1 }),
+);
+
+// 或仅使用 ID
+const tracingOptions = buildTracingOptions(
+  withLangfusePrompt({ id: "prompt-uuid-12345" }),
+);
+```
+
+### 提示词对象字段
+
+提示词对象支持以下字段：
+
+| 字段 | 类型 | 描述 |
+|-------|------|-------------|
+| `name` | string | Langfuse 中的提示词名称 |
+| `version` | number | 提示词版本号 |
+| `id` | string | 用于直接链接的提示词 UUID |
+
+您可以使用以下任一方式链接提示词：
+- 仅使用 `id`（UUID 唯一标识提示词版本）
+- `name` + `version` 一起使用
+- 所有三个字段
+
+当在 `MODEL_GENERATION` 跨度上设置时，Langfuse 导出器会自动将生成链接到相应的提示词。
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [Langfuse 文档](https://langfuse.com/docs)
+- [Langfuse 提示词管理](https://langfuse.com/docs/cn/prompt-management)

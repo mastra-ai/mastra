@@ -1,0 +1,54 @@
+---
+title: "内存概述 | 内存"
+description: "了解 Mastra 的内存系统如何与工作内存、消息历史、语义记忆和观察记忆配合工作。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# 内存
+
+内存使您的智能体能够跨交互记住用户消息、智能体回复和工具结果，为其提供保持一致、维护对话流程并随着时间的推移产生更好答案所需的上下文。
+
+Mastra 支持四种互补的内存类型：
+
+- [**消息历史**](/docs/cn/memory/message-history) - 保留当前对话中的最近消息，以便可以在 UI 中渲染它们并用于在交换内保持短期连续性。
+- [**工作内存**](/docs/cn/memory/working-memory) - 存储持久化的结构化用户数据，如姓名、偏好和目标。
+- [**语义记忆**](/docs/cn/memory/semantic-recall) - 根据语义含义而不是精确关键词从旧对话中检索相关消息，模拟人类通过联想回忆信息的方式。需要[向量数据库](/docs/cn/memory/semantic-recall#storage-configuration)和[嵌入模型](/docs/cn/memory/semantic-recall#embedder-configuration)。
+- [**观察记忆**](/docs/cn/memory/observational-memory) - 使用后台观察者和反思智能体来维护密集的观察日志，随着其增长替换原始消息历史，保持上下文窗口小，同时保留跨对话的长期记忆。
+
+如果组合内存超过模型的上下文限制，[内存处理器](/docs/cn/memory/memory-processors)可以过滤、修剪或优先处理内容，以保留最相关的信息。
+
+## 入门
+
+选择一个内存选项开始：
+
+- [消息历史](/docs/cn/memory/message-history)
+- [工作内存](/docs/cn/memory/working-memory)
+- [语义记忆](/docs/cn/memory/semantic-recall)
+- [观察记忆](/docs/cn/memory/observational-memory)
+
+## 存储
+
+在启用内存之前，您必须首先配置存储适配器。Mastra 支持多个数据库，包括 PostgreSQL、MongoDB、libSQL 以及[更多](/docs/cn/memory/storage#supported-providers)。
+
+存储可以在[实例级别](/docs/cn/memory/storage#instance-level-storage)（在所有智能体之间共享）或[智能体级别](/docs/cn/memory/storage#agent-level-storage)（每个智能体专用）配置。
+
+对于语义记忆，您可以像主存储一样使用单独的向量数据库（如 Pinecone）。
+
+有关配置选项、支持提供程序和示例，请参阅[存储](/docs/cn/memory/storage)文档。
+
+## 调试内存
+
+当[追踪](/docs/cn/observability/tracing/overview)启用时，您可以准确检查智能体在每个请求中用于上下文的消息。追踪输出显示智能体上下文窗口中包含的所有内存 - 最近的 message history 和通过语义记忆回忆的消息。
+
+![显示智能体请求中包含的内存上下文的追踪输出](https://mastra.ai/_next/image?url=%2Ftracingafter.png&w=1920&q=75)
+
+这种可见性帮助您理解智能体为什么做出特定决策，并验证内存检索是否按预期工作。
+
+## 下一步
+
+- 了解有关[存储](/docs/cn/memory/storage)提供程序和配置选项的更多信息
+- 添加[消息历史](/docs/cn/memory/message-history)、[工作内存](/docs/cn/memory/working-memory)、[语义记忆](/docs/cn/memory/semantic-recall)或[观察记忆](/docs/cn/memory/observational-memory)
+- 访问[内存配置参考](/reference/memory/memory-class)了解所有可用选项

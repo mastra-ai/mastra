@@ -1,0 +1,697 @@
+---
+title: "参考文档：PG 向量存储 | 向量"
+description: "Mastra 中 PgVector 类的文档，该类使用带有 pgvector 扩展的 PostgreSQL 提供向量搜索。"
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/pg"
+---
+
+# PG 向量存储
+
+PgVector 类使用带有 [pgvector](https://github.com/pgvector/pgvector) 扩展的 [PostgreSQL](https://www.postgresql.org/) 提供向量搜索。它在你的现有 PostgreSQL 数据库内提供强大的向量相似性搜索功能。
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description: "PostgreSQL 连接 URL",
+      isOptional: true,
+    },
+    {
+      name: "host",
+      type: "string",
+      description: "PostgreSQL 服务器主机",
+      isOptional: true,
+    },
+    {
+      name: "port",
+      type: "number",
+      description: "PostgreSQL 服务器端口",
+      isOptional: true,
+    },
+    {
+      name: "database",
+      type: "string",
+      description: "PostgreSQL 数据库名称",
+      isOptional: true,
+    },
+    {
+      name: "user",
+      type: "string",
+      description: "PostgreSQL 用户",
+      isOptional: true,
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "PostgreSQL 密码",
+      isOptional: true,
+    },
+    {
+      name: "ssl",
+      type: "boolean | ConnectionOptions",
+      description: "启用 SSL 或提供自定义 SSL 配置",
+      isOptional: true,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description:
+        "你希望向量存储使用的 schema 名称。如果未提供，将使用默认 schema。",
+      isOptional: true,
+    },
+    {
+      name: "max",
+      type: "number",
+      description: "连接池最大连接数（默认值：20）",
+      isOptional: true,
+    },
+    {
+      name: "idleTimeoutMillis",
+      type: "number",
+      description: "空闲连接超时时间（毫秒）（默认值：30000）",
+      isOptional: true,
+    },
+    {
+      name: "pgPoolOptions",
+      type: "PoolConfig",
+      description: "额外的 pg 连接池配置选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 构造函数示例
+
+### 连接字符串
+
+```ts
+import { PgVector } from "@mastra/pg";
+
+const vectorStore = new PgVector({
+  id: 'pg-vector',
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+});
+```
+
+### 主机/端口/数据库配置
+
+```ts
+const vectorStore = new PgVector({
+  id: 'pg-vector',
+  host: "localhost",
+  port: 5432,
+  database: "mydb",
+  user: "postgres",
+  password: "password",
+});
+```
+
+### 高级配置
+
+```ts
+const vectorStore = new PgVector({
+  id: 'pg-vector',
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema",
+  max: 30,
+  idleTimeoutMillis: 60000,
+  pgPoolOptions: {
+    connectionTimeoutMillis: 5000,
+    allowExitOnIdle: true,
+  },
+});
+```
+
+## 方法
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的索引名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "用于相似性搜索的距离度量",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      isOptional: true,
+      defaultValue: "{ type: 'ivfflat' }",
+      description: "索引配置",
+    },
+    {
+      name: "buildIndex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "是否构建索引",
+    },
+  ]}
+/>
+
+#### IndexConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "type",
+      type: "'flat' | 'hnsw' | 'ivfflat'",
+      description: "索引类型",
+      defaultValue: "ivfflat",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "flat",
+              type: "flat",
+              description:
+                "顺序扫描（无索引）执行穷举搜索。",
+            },
+            {
+              name: "ivfflat",
+              type: "ivfflat",
+              description:
+                "将向量聚类到列表中以进行近似搜索。",
+            },
+            {
+              name: "hnsw",
+              type: "hnsw",
+              description:
+                "基于图的索引，提供快速搜索时间和高召回率。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "ivf",
+      type: "IVFConfig",
+      isOptional: true,
+      description: "IVF 配置",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "lists",
+              type: "number",
+              description:
+                "列表数量。如果未指定，将根据数据集大小自动计算。（最小值 100，最大值 4000）",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "hnsw",
+      type: "HNSWConfig",
+      isOptional: true,
+      description: "HNSW 配置",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "m",
+              type: "number",
+              description:
+                "每个节点的最大连接数（默认值：8）",
+              isOptional: true,
+            },
+            {
+              name: "efConstruction",
+              type: "number",
+              description: "构建时间复杂度（默认值：32）",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+#### 内存要求
+
+HNSW 索引在构建过程中需要大量共享内存。对于 100K 向量：
+
+- 小维度（64d）：默认设置下约 60MB
+- 中等维度（256d）：默认设置下约 180MB
+- 大维度（384d+）：默认设置下约 250MB+
+
+更高的 M 值或 efConstruction 值会显著增加内存要求。如有需要，请调整系统的共享内存限制。
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入向量的索引名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要查询的索引名称",
+    },
+    {
+      name: "vector",
+      type: "number[]",
+      description: "查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "元数据过滤器",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "最小相似度分数阈值",
+    },
+    {
+      name: "options",
+      type: "{ ef?: number; probes?: number }",
+      isOptional: true,
+      description: "HNSW 和 IVF 索引的额外选项",
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "ef",
+              type: "number",
+              description: "HNSW 搜索参数",
+              isOptional: true,
+            },
+            {
+              name: "probes",
+              type: "number",
+      描述: "IVF 搜索参数",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+### listIndexes()
+
+返回包含索引名称的字符串数组。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的索引名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface PGIndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+  type: "flat" | "hnsw" | "ivfflat";
+  config: {
+    m?: number;
+    efConstruction?: number;
+    lists?: number;
+    probes?: number;
+  };
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的索引名称",
+    },
+  ]}
+/>
+
+### updateVector()
+
+通过 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter` 之一，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新的向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "包含要更新的向量和/或元数据的对象",
+    },
+  ]}
+/>
+
+通过 ID 或过滤器更新现有向量。更新对象中必须至少提供向量或元数据之一。
+
+```typescript
+// 按 ID 更新
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+    metadata: { label: "updated" },
+  },
+});
+
+// 按过滤器更新
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  filter: { category: "product" },
+  update: {
+    metadata: { status: "reviewed" },
+  },
+});
+```
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的索引名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量 ID",
+    },
+  ]}
+/>
+
+从指定索引中按 ID 删除单个向量。
+
+```typescript
+await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
+```
+
+### deleteVectors()
+
+通过 ID 或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter` 之一，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的索引名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除的向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+### disconnect()
+
+关闭数据库连接池。完成使用存储后应调用此方法。
+
+### buildIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要定义的索引名称",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "用于相似性搜索的距离度量",
+    },
+    {
+      name: "indexConfig",
+      type: "IndexConfig",
+      description: "索引类型和参数配置",
+    },
+  ]}
+/>
+
+使用指定的度量和配置构建或重建索引。在创建新索引之前会删除任何现有索引。
+
+```typescript
+// 定义 HNSW 索引
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "hnsw",
+  hnsw: {
+    m: 8,
+    efConstruction: 32,
+  },
+});
+
+// 定义 IVF 索引
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "ivfflat",
+  ivf: {
+    lists: 100,
+  },
+});
+
+// 定义 flat 索引
+await pgVector.buildIndex("my_vectors", "cosine", {
+  type: "flat",
+});
+```
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "index_name",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  if (error instanceof VectorStoreError) {
+    console.log(error.code); // 'connection_failed' | 'invalid_dimension' | 等
+    console.log(error.details); // 额外错误上下文
+  }
+}
+```
+
+## 索引配置指南
+
+### 性能优化
+
+#### IVFFlat 调优
+
+- **lists 参数**：设置为 `sqrt(n) * 2`，其中 n 是向量数量
+- 更多的列表 = 更好的准确性但更长的构建时间
+- 更少的列表 = 更快的构建但可能较低的准确性
+
+#### HNSW 调优
+
+- **m 参数**：
+  - 8-16：中等准确性，较低内存
+  - 16-32：高准确性，中等内存
+  - 32-64：非常高准确性，高内存
+- **efConstruction**：
+  - 32-64：快速构建，良好质量
+  - 64-128：较慢构建，更好的质量
+  - 128-256：最慢的构建，最好的质量
+
+### 索引重建行为
+
+系统会自动检测配置变化，仅在必要时重建索引：
+
+- 相同配置：保留索引（不重建）
+- 配置更改：删除并重建索引
+- 这避免了不必要的索引重建带来的性能问题
+
+## 最佳实践
+
+- 定期评估你的索引配置以确保最佳性能。
+- 根据数据集大小和查询要求调整 `lists` 和 `m` 等参数。
+- **使用 `describeIndex()` 监控索引性能**以跟踪使用情况
+- 定期重建索引以保持效率，尤其是在重大数据更改之后
+
+## 直接连接池访问
+
+`PgVector` 类将其底层 PostgreSQL 连接池公开为公共字段：
+
+```typescript
+pgVector.pool; // pg.Pool 的实例
+```
+
+这支持高级用法，例如运行直接 SQL 查询、管理事务或监控连接池状态。使用连接池时：
+
+- 你负责在使用后释放客户端（`client.release()`）
+- 调用 `disconnect()` 后连接池仍然可访问，但新查询将失败
+- 直接访问会绕过 PgVector 方法提供的任何验证或事务逻辑
+
+此设计支持高级用例，但需要用户仔细管理资源。
+
+## 使用示例
+
+### 使用 fastembed 的本地嵌入
+
+嵌入是内存的 `semanticRecall` 用来根据含义（而非关键词）检索相关消息的数值向量。此设置使用 `@mastra/fastembed` 生成向量嵌入。
+
+安装 `fastembed` 开始使用：
+
+```bash npm2yarn
+npm install @mastra/fastembed@latest
+```
+
+将以下内容添加到你的代理中：
+
+```typescript title="src/mastra/agents/example-pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { fastembed } from "@mastra/fastembed";
+
+export const pgAgent = new Agent({
+  id: "pg-agent",
+  name: "PG Agent",
+  instructions:
+    "你是一个能够自动回忆先前交互记忆的 AI 代理。",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    vector: new PgVector({
+      id: 'pg-agent-vector',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+    },
+  }),
+});
+```
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

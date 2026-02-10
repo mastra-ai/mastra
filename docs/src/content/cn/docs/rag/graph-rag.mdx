@@ -1,0 +1,223 @@
+---
+title: "GraphRAG | RAG"
+description: "Mastra RAG 系统中用于具有复杂关系的文档的基于图的检索指南。"
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
+---
+
+# GraphRAG
+
+基于图的检索通过跟踪信息块之间的关系来增强传统向量搜索。当信息分布在多个文档中或文档相互引用时，这种方法很有用。
+
+## 何时使用 GraphRAG
+
+GraphRAG 在以下情况下特别有效：
+
+- 信息分布在多个文档中
+- 文档相互引用
+- 您需要遍历关系以找到完整的答案
+- 理解概念之间的连接很重要
+- 简单的向量相似性会错过重要的上下文关系
+
+对于不使用关系遍历的简单语义搜索，请使用[标准检索方法](/docs/cn/rag/retrieval)。
+
+## GraphRAG 的工作原理
+
+GraphRAG 将向量相似性与知识图谱遍历相结合：
+
+1. 初始向量搜索根据语义相似性检索相关块
+2. 从检索到的块构建知识图谱
+3. 遍历图谱以查找连接的信息
+4. 结果包括直接相关的块和相关内容
+
+这个过程有助于发现可能与查询在语义上不相似但通过连接在上下文上相关的信息。
+
+## 创建图查询工具
+
+图查询工具为智能体提供执行基于图的检索的能力：
+
+```ts
+import { createGraphRAGTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const graphQueryTool = createGraphRAGTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  graphOptions: {
+    threshold: 0.7,
+  },
+});
+```
+
+### 配置选项
+
+`graphOptions` 参数控制知识图谱的构建和遍历方式：
+
+- `threshold`：用于确定哪些块相关的相似性阈值（0-1）。更高的值创建更稀疏的图，具有更强的连接；更低的值创建更密集的图，具有更多的潜在关系。
+- `dimension`：向量嵌入维度。必须与嵌入模型的输出维度匹配（例如，OpenAI 的 text-embedding-3-small 为 1536）。
+
+```ts
+const graphQueryTool = createGraphRAGTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  graphOptions: {
+    dimension: 1536,
+    threshold: 0.7,
+  },
+});
+```
+
+## 将 GraphRAG 与智能体一起使用
+
+将图查询工具与智能体集成以启用基于图的检索：
+
+```ts
+import { Agent } from "@mastra/core/agent";
+
+const ragAgent = new Agent({
+  id: "rag-agent",
+  name: "GraphRAG Agent",
+  instructions: `您是一个有帮助的助手，根据提供的上下文回答问题。
+回答问题时，使用图查询工具查找相关信息和关系。
+根据工具提供的上下文作答，如果上下文没有包含足够的信息，请明确说明。`,
+  model: "openai/gpt-5.1",
+  tools: {
+    graphQueryTool,
+  },
+});
+```
+
+## 文档处理和存储
+
+在使用基于图的检索之前，将文档处理成块并存储它们的嵌入向量：
+
+```ts
+import { MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+// 创建文档并进行分块
+const doc = MDocument.fromText("您的文档内容在这里...");
+
+const chunks = await doc.chunk({
+  strategy: "recursive",
+  size: 512,
+  overlap: 50,
+  separator: "\n",
+});
+
+// 生成嵌入向量
+const { embeddings } = await embedMany({
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
+});
+
+// 存储到向量数据库
+const vectorStore = mastra.getVector("pgVector");
+await vectorStore.createIndex({
+  indexName: "embeddings",
+  dimension: 1536,
+});
+await vectorStore.upsert({
+  indexName: "embeddings",
+  vectors: embeddings,
+  metadata: chunks?.map((chunk) => ({ text: chunk.text })),
+});
+```
+
+## 使用 GraphRAG 进行查询
+
+配置完成后，智能体可以执行基于图的查询：
+
+```ts
+const query = "基础设施变化对当地企业的影响是什么？";
+const response = await ragAgent.generate(query);
+console.log(response.text);
+```
+
+智能体使用图查询工具来：
+
+1. 将查询转换为嵌入向量
+2. 在向量存储中查找语义相似的块
+3. 从相关块构建知识图谱
+4. 遍历图谱以查找连接的信息
+5. 返回用于生成响应的综合上下文
+
+## 选择正确的阈值
+
+阈值参数会显著影响检索质量：
+
+- **高阈值 (0.8-0.9)**：严格的连接，更少的关系，更精确但可能不完整的结果
+- **中阈值 (0.6-0.8)**：平衡的方法，适用于大多数用例
+- **低阈值 (0.4-0.6)**：更多的连接，更广泛的上下文，包含不太相关信息的风险
+
+从 0.7 开始，并根据您的特定用例进行调整：
+
+```ts
+// 用于精确答案的严格连接
+const strictGraphTool = createGraphRAGTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  graphOptions: {
+    threshold: 0.85,
+  },
+});
+
+// 用于探索性查询的更广泛连接
+const broadGraphTool = createGraphRAGTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  graphOptions: {
+    threshold: 0.5,
+  },
+});
+```
+
+## 与其他检索方法结合使用
+
+GraphRAG 可以与其他检索方法一起使用：
+
+```ts
+import { createVectorQueryTool } from "@mastra/rag";
+
+const vectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+});
+
+const graphQueryTool = createGraphRAGTool({
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  graphOptions: {
+    threshold: 0.7,
+  },
+});
+
+const agent = new Agent({
+  id: "rag-agent",
+  name: "RAG Agent",
+  instructions: `对简单的查找事实的查询使用向量搜索。
+当您需要理解关系或查找连接的信息时使用图搜索。`,
+  model: "openai/gpt-5.1",
+  tools: {
+    vectorQueryTool,
+    graphQueryTool,
+  },
+});
+```
+
+这使智能体能够根据查询灵活选择适当的检索方法。
+
+## 参考
+
+有关详细的 API 文档，请参阅：
+
+- [GraphRAG 类](/reference/rag/graph-rag)
+- [createGraphRAGTool()](/reference/tools/graph-rag-tool)

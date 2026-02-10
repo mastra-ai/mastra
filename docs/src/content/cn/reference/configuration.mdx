@@ -1,0 +1,787 @@
+---
+title: "参考文档：配置"
+description: "Mastra 配置选项的参考文档"
+packages:
+  - "@mastra/core"
+---
+
+# 配置
+
+以下参考涵盖了 Mastra 中所有支持的选项。您可以通过实例化 [`Mastra` 类](/reference/core/mastra-class) 来初始化和配置 Mastra。
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // 您的选项...
+});
+```
+
+## 顶级选项
+
+### agents
+
+**类型：** `Record<string, Agent>`
+
+按名称键控的智能体实例记录。智能体是能够使用 AI 模型、工具和内存做出决策并采取行动的自主系统。
+
+了解更多，请访问[智能体文档](/docs/cn/docs/agents/overview)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+
+export const mastra = new Mastra({
+  agents: {
+    weatherAgent: new Agent({
+      id: "weather-agent",
+      name: "Weather Agent",
+      instructions: "You help with weather information",
+      model: "openai/gpt-4o",
+    }),
+  },
+});
+```
+
+### deployer
+
+**类型：** `MastraDeployer`
+
+用于将应用程序发布到云平台的部署提供商。
+
+了解更多，请访问[部署文档](/docs/cn/docs/deployment/overview)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    scope: "your-team",
+    siteId: "your-site-id",
+  }),
+});
+```
+
+### events
+
+**类型：** `Record<string, EventHandler | EventHandler[]>`
+
+内部发布/订阅系统的事件处理程序。将事件主题映射到在事件发布到这些主题时调用的处理函数。
+
+:::warning
+这是 Mastra 工作流引擎内部使用的。大多数用户不需要配置此选项。
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  events: {
+    "my-topic": async (event) => {
+      console.log("Event received:", event);
+    },
+  },
+});
+```
+
+### gateways
+
+**类型：** `Record<string, MastraModelGateway>`
+
+用于访问 LLM 提供商的自定义模型路由器网关。网关处理特定于提供商的认证、URL 构造和模型解析。使用此选项添加对自定义或自托管 LLM 提供商的支持。
+
+了解更多，请访问[自定义网关文档](/models/gateways/custom-gateways)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MyPrivateGateway } from "./gateways";
+
+export const mastra = new Mastra({
+  gateways: {
+    private: new MyPrivateGateway(),
+  },
+});
+```
+
+### idGenerator
+
+**类型：** `() => string`
+**默认值：** `crypto.randomUUID()`
+
+用于创建唯一标识符的自定义 ID 生成函数。
+
+:::warning
+
+这是 Mastra 内部用于为工作流运行、智能体对话和其他资源创建 ID 的。大多数用户不需要配置此选项。
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { nanoid } from "nanoid";
+
+export const mastra = new Mastra({
+  idGenerator: () => nanoid(),
+});
+```
+
+### logger
+
+**类型：** `IMastraLogger | false`
+**默认值：** 开发环境为 `INFO` 级别的 `ConsoleLogger`，生产环境为 `WARN`
+
+用于应用程序日志记录和调试的日志实现。设置为 `false` 可完全禁用日志记录。
+
+了解更多，请访问[日志文档](/docs/cn/docs/observability/logging)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({ name: "MyApp", level: "debug" }),
+});
+```
+
+### mcpServers
+
+**类型：** `Record<string, MCPServerBase>`
+
+MCP（Model Context Protocol）服务器，将 Mastra 工具、智能体、工作流和资源暴露给 MCP 兼容的客户端。使用此选项创作可以被任何支持该协议的系统消耗的您自己的 MCP 服务器。
+
+了解更多，请访问 [MCP 概述](/docs/cn/docs/mcp/overview)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MCPServer } from "@mastra/mcp";
+
+const mcpServer = new MCPServer({
+  id: "my-mcp-server",
+  name: "My MCP Server",
+  version: "1.0.0",
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    myServer: mcpServer,
+  },
+});
+```
+
+### memory
+
+**类型：** `Record<string, MastraMemory>`
+
+可供智能体引用的内存实例注册表。内存通过保留过去对话中的相关信息，为智能体提供跨交互的一致性。Mastra 支持三种类型的内存：用于最近消息的消息历史、用于持久化用户特定详情的工作内存，以及用于根据相关性检索旧消息的语义回忆。
+
+了解更多，请访问[内存文档](/docs/cn/docs/memory/overview)。
+
+:::note
+
+大多数用户直接在智能体上配置内存。此顶级配置用于定义可跨多个智能体共享的可重用内存实例。
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: ":memory:",
+  }),
+  memory: {
+    chatMemory: new Memory({
+      options: {
+        lastMessages: 20,
+      },
+    }),
+  },
+});
+```
+
+### observability
+
+**类型：** `ObservabilityEntrypoint`
+
+Mastra 为 AI 应用程序提供可观测性功能。监控 LLM 操作、追踪智能体决策，并使用理解 AI 特定模式的工具调试复杂工作流。追踪捕获模型交互、智能体执行路径、工具调用和工作流步骤。
+
+了解更多，请访问[可观测性文档](/docs/cn/docs/observability/overview)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+import { Observability, DefaultExporter } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: "file:./mastra.db",
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-app",
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+### processors
+
+**类型：** `Record<string, Processor>`
+
+用于转换智能体输入和输出的输入/输出处理器。处理器在智能体执行管道的特定点运行，允许您在输入到达语言模型之前修改输入，或在输出返回之前修改输出。使用处理器添加护栏、检测提示注入、审核内容或应用自定义业务逻辑。
+
+了解更多，请访问[处理器文档](/docs/cn/docs/agents/processors)。
+
+:::note
+
+大多数用户直接在智能体上配置处理器。此顶级配置用于定义可跨多个智能体共享的可重用处理器实例。
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const mastra = new Mastra({
+  processors: {
+    moderation: new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      categories: ["hate", "harassment", "violence"],
+    }),
+  },
+});
+```
+
+### pubsub
+
+**类型：** `PubSub`
+**默认值：** `EventEmitterPubSub`
+
+用于组件之间事件驱动通信的发布/订阅系统。Mastra 内部将其用于工作流事件处理和组件通信。
+
+:::warning
+这是 Mastra 内部使用的。大多数用户不需要配置此选项。
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { CustomPubSub } from "./pubsub";
+
+export const mastra = new Mastra({
+  pubsub: new CustomPubSub(),
+});
+```
+
+### scorers
+
+**类型：** `Record<string, Scorer>`
+
+评分器评估智能体响应和工作流输出的质量。它们提供可量化的指标，使用基于模型评分、基于规则和统计方法来衡量智能体质量。使用评分器跟踪性能、比较方法并识别改进领域。
+
+了解更多，请访问[评分器文档](/docs/cn/docs/evals/overview)。
+
+:::note
+
+大多数用户直接在智能体上配置评分器。此顶级配置用于定义可跨多个智能体共享的可重用评分器实例。
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { createToxicityScorer } from "@mastra/evals/scorers/prebuilt";
+
+export const mastra = new Mastra({
+  scorers: {
+    toxicity: createToxicityScorer({ model: "openai/gpt-4.1-nano" }),
+  },
+});
+```
+
+### storage
+
+**类型：** `MastraCompositeStore`
+
+用于持久化应用程序数据的存储提供商。内存、工作流、追踪和其他需要持久化的组件使用它。Mastra 支持多种数据库后端，包括 PostgreSQL、MongoDB、libSQL 等。
+
+了解更多，请访问[存储文档](/docs/cn/docs/memory/storage)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+### tools
+
+**类型：** `Record<string, Tool>`
+
+智能体可用于与外部系统交互的可重用函数。每个工具定义输入、输出和执行逻辑。
+
+了解更多，请访问[工具文档](/docs/cn/docs/tools-mcp/overview)。
+
+:::note
+
+大多数用户直接在智能体上配置工具。此顶级配置用于定义可跨多个智能体共享的可重用工具。
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const weatherTool = createTool({
+  id: "get-weather",
+  description: "Fetches weather for a city",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  execute: async () => {
+    return { temperature: 20, conditions: "Sunny" };
+  },
+});
+
+export const mastra = new Mastra({
+  tools: {
+    weather: weatherTool,
+  },
+});
+```
+
+### tts
+
+**类型：** `Record<string, MastraVoice>`
+
+用于语音合成功能的文本转语音提供商。注册语音提供商以使智能体能够将文本响应转换为语音音频。
+
+了解更多，请访问[语音文档](/docs/cn/docs/voice/overview)。
+
+:::note
+
+大多数用户直接在智能体上配置语音。此顶级配置用于定义可跨多个智能体共享的可重用语音提供商。
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+export const mastra = new Mastra({
+  tts: {
+    openai: new OpenAIVoice(),
+  },
+});
+```
+
+### vectors
+
+**类型：** `Record<string, MastraVector>`
+
+用于语义搜索和嵌入的向量存储。在 RAG 管道、相似性搜索和其他基于嵌入的功能中使用。Mastra 支持多种向量数据库，包括 Pinecone、带有 pgvector 的 PostgreSQL、MongoDB 等。
+
+了解更多，请访问 [RAG 文档](/docs/cn/docs/rag/overview)。
+
+:::note
+
+大多数用户在构建 RAG 管道时直接创建向量存储。此顶级配置用于定义可跨应用程序共享的可重用向量存储实例。
+
+:::
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PineconeVector } from "@mastra/pinecone";
+
+export const mastra = new Mastra({
+  vectors: {
+    pinecone: new PineconeVector({
+      id: 'pinecone-vector',
+      apiKey: process.env.PINECONE_API_KEY,
+    }),
+  },
+});
+```
+
+### workflows
+
+**类型：** `Record<string, Workflow>`
+
+工作流定义具有类型安全输入和输出的基于步骤的执行管道。对于涉及多个步骤且具有特定执行顺序的任务使用工作流，让您可以控制数据如何在步骤之间流动。
+
+了解更多，请访问[工作流文档](/docs/cn/docs/workflows/overview)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { testWorkflow } from "./workflows/test-workflow";
+
+export const mastra = new Mastra({
+  workflows: {
+    testWorkflow,
+  },
+});
+```
+
+### workspace
+
+**类型：** `Workspace`
+
+Mastra 工作区为智能体提供用于存储文件和执行命令的持久环境。智能体继承 `Mastra` 类上的全局工作区，除非它们配置了自己的工作区。
+
+有关实现详情，请参阅[工作区文档](/docs/cn/docs/workspace/overview)。
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+});
+
+const mastra = new Mastra({
+  workspace,
+});
+```
+
+## 打包器选项
+
+### bundler.externals
+
+**类型：** `boolean | string[]`
+**默认值：** `true`
+
+当运行 `mastra build` 时，Mastra 会将您的项目打包到 `.mastra/output` 目录。此选项控制哪些包被排除在打包之外（标记为"外部的"）并通过包管理器单独安装。当内部 Mastra 打包器（[Rollup](https://rollupjs.org/configuration-options/#external)）在打包某些包时遇到困难时，这很有用。
+
+默认情况下，`mastra build` 将此选项设置为 `true`。如果您将项目部署到 [Mastra Cloud](/docs/cn/docs/mastra-cloud/overview)，它也会将此选项设置为 `true`。
+
+以下概述了不同值的含义：
+
+- `true`：项目 `package.json` 中列出的所有依赖项都标记为外部
+- `false`：没有依赖项标记为外部；所有内容打包在一起
+- `string[]`：要标记为外部的包名称数组，其余将打包在一起
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["some-package", "another-package"],
+  },
+});
+```
+
+### bundler.sourcemap
+
+**类型：** `boolean`
+**默认值：** `false`
+
+为打包输出启用源映射生成。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    sourcemap: true,
+  },
+});
+```
+
+### bundler.transpilePackages
+
+**类型：** `string[]`
+**默认值：** `[]`
+
+在构建过程中应该通过 esbuild 转译的包列表。对于包含 TypeScript 或其他需要在打包之前编译的代码的依赖项使用此选项。
+
+仅当您直接导入未编译的源代码时才需要此选项。如果您的包已经编译为 CommonJS 或 ESM，则不需要在此处列出。
+
+Mastra 会自动检测 monorepo 设置中的工作区包并将它们添加到此列表，因此您通常只需要指定需要转译的外部包。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  bundler: {
+    transpilePackages: ["@my-org/shared-utils"],
+  },
+});
+```
+
+## 服务器选项
+
+### server.apiRoutes
+
+**类型：** `ApiRoute[]`
+
+Mastra 通过其服务器自动暴露注册的智能体和工作流。您可以为额外的行为定义自己的 HTTP 路由。
+
+了解更多，请访问[自定义 API 路由](/docs/cn/docs/server/custom-api-routes)文档。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
+        handler: async (c) => {
+          return c.json({ message: "Custom route" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### server.auth
+
+**类型：** `MastraAuthConfig | MastraAuthProvider`
+
+服务器的认证配置。Mastra 支持多种认证提供商，包括 JWT、Clerk、Supabase、Firebase、WorkOS 和 Auth0。
+
+了解更多，请访问[认证文档](/docs/cn/docs/server/auth)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraJwtAuth } from "@mastra/auth";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      secret: process.env.MASTRA_JWT_SECRET,
+    }),
+  },
+});
+```
+
+### server.bodySizeLimit
+
+**类型：** `number`
+**默认值：** `4_718_592`（4.5 MB）
+
+请求体的最大字节数。如果您的应用程序需要处理更大的有效载荷，请增加此限制。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    bodySizeLimit: 10 * 1024 * 1024, // 10mb
+  },
+});
+```
+
+### server.build
+
+服务器功能的构建时配置。这些选项控制开发工具如 Swagger UI 和请求日志，默认在本地开发时启用，但在生产环境中默认禁用。
+
+| 属性 | 类型 | 默认值 | 描述 |
+|----------|------|---------|-------------|
+| `swaggerUI` | `boolean` | `false` | 在 `/swagger-ui` 启用 Swagger UI 以进行交互式 API 探索（需要 `openAPIDocs` 为 `true`） |
+| `apiReqLogs` | `boolean` | `false` | 启用 API 请求日志到控制台 |
+| `openAPIDocs` | `boolean` | `false` | 在 `/openapi.json` 启用 OpenAPI 规范 |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    build: {
+      swaggerUI: true,
+      apiReqLogs: true,
+      openAPIDocs: true,
+    },
+  },
+});
+```
+
+### server.cors
+
+**类型：** `CorsOptions | false`
+
+服务器的 CORS（跨域资源共享）配置。设置为 `false` 可完全禁用 CORS。
+
+| 属性 | 类型 | 默认值 | 描述 |
+|----------|------|---------|-------------|
+| `origin` | `string \| string[]` | `'*'` | CORS 请求的来源 |
+| `allowMethods` | `string[]` | `['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']` | HTTP 方法 |
+| `allowHeaders` | `string[]` | `['Content-Type', 'Authorization', 'x-mastra-client-type']` | 请求头 |
+| `exposeHeaders` | `string[]` | `['Content-Length', 'X-Requested-With']` | 浏览器头 |
+| `credentials` | `boolean` | `false` | 凭据（cookie、授权头） |
+| `maxAge` | `number` | `3600` | 预检请求缓存持续时间（秒） |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    cors: {
+      origin: ["https://example.com"],
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
+      credentials: false,
+    },
+  },
+});
+```
+
+### server.host
+
+**类型：** `string`
+**默认值：** `localhost`
+
+Mastra 开发服务器绑定的主机地址。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    host: "0.0.0.0",
+  },
+});
+```
+
+### server.https
+
+**类型：** `{ key: Buffer; cert: Buffer }`
+
+使用 TLS 运行开发服务器的 HTTPS 配置。Mastra 通过 `mastra dev --https` 标志支持本地 HTTPS 开发，该标志会自动创建和管理证书。对于自定义证书管理，请提供您自己的密钥和证书文件：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import fs from "node:fs";
+
+export const mastra = new Mastra({
+  server: {
+    https: {
+      key: fs.readFileSync("path/to/key.pem"),
+      cert: fs.readFileSync("path/to/cert.pem"),
+    },
+  },
+});
+```
+
+### server.middleware
+
+**类型：** `Middleware | Middleware[]`
+
+在路由处理程序之前或之后拦截请求的自定义中间件函数。中间件可用于认证、日志、注入请求特定上下文或添加头。每个中间件接收 Hono `Context` 和 `next` 函数。返回 `Response` 以短路请求，或调用 `next()` 继续处理。
+
+了解更多，请访问[中间件文档](/docs/cn/docs/server/middleware)。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    middleware: [
+      {
+        handler: async (c, next) => {
+          const authHeader = c.req.header("Authorization");
+          if (!authHeader) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+          await next();
+        },
+        path: "/api/*",
+      },
+    ],
+  },
+});
+```
+
+### server.onError
+
+**类型：** `(err: Error, c: Context) => Response | Promise<Response>`
+
+在发生未处理错误时调用的自定义错误处理程序。使用此自定义化错误响应、将错误记录到 Sentry 等外部服务，或实现自定义错误格式。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import * as Sentry from "@sentry/node";
+
+export const mastra = new Mastra({
+  server: {
+    onError: (err, c) => {
+      Sentry.captureException(err);
+
+      return c.json({
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      }, 500);
+    },
+  },
+});
+```
+
+### server.port
+
+**类型：** `number`
+**默认值：** `4111`（或如果设置了 `PORT` 环境变量）
+
+Mastra 开发服务器绑定的端口。如果设置了 `PORT` 环境变量，它优先于默认值。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    port: 8080,
+  },
+});
+```
+
+### server.studioBase
+
+**类型：** `string`
+**默认值：** `/`
+
+用于托管 Mastra Studio 的基础路径。使用此选项在现有应用程序的子路径而不是根路径上托管 Studio。
+
+这在集成到现有应用程序、使用像 Cloudflare Zero Trust 这样受益于共享域名的认证工具，或管理单个域名下的多个服务时很有用。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    studioBase: "/my-mastra-studio",
+  },
+});
+```
+
+**示例 URL：**
+- 默认：`http://localhost:4111/`（Studio 在根路径）
+- 使用 `studioBase`：`http://localhost:4111/my-mastra-studio/`（Studio 在子路径）
+
+### server.timeout
+
+**类型：** `number`
+**默认值：** `180000`（3 分钟）
+
+请求超时时间（毫秒）。超过此持续时间的请求将被终止。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    timeout: 30000, // 30 秒
+  },
+});
+```

@@ -1,0 +1,367 @@
+---
+title: "错误处理 | 工作流"
+description: "了解如何使用步骤重试、条件分支和监控来处理 Mastra 工作流中的错误。"
+packages:
+  - "@mastra/core"
+---
+
+# 错误处理
+
+Mastra 工作流支持通过执行后的结果状态检查、瞬态失败的重试策略以及用于集中错误日志记录或警报的生命周期回调来处理错误。
+
+## 处理工作流结果
+
+运行工作流时，结果对象包含状态和发生的任何错误。
+
+### 检查结果状态
+
+```typescript title="src/run-workflow.ts"
+import { mastra } from "./mastra";
+
+const workflow = mastra.getWorkflow("myWorkflow");
+const run = await workflow.createRun();
+const result = await run.start({ inputData: { value: "test" } });
+
+switch (result.status) {
+  case 'success':
+    console.log('Workflow completed:', result.result);
+    break;
+  case 'failed':
+    console.error('Workflow failed:', result.error);
+    break;
+  case 'suspended':
+    console.log('Workflow suspended, waiting for resume');
+    break;
+}
+```
+
+### 结果对象结构
+
+结果对象包含：
+
+- `status` - 工作流状态：`'success'`、`'failed'`、`'suspended'` 或 `'tripwire'`
+- `result` - 工作流输出（当状态为 `'success'` 时）
+- `error` - 错误详情（当状态为 `'failed'` 时）
+- `steps` - 带有状态和输出的各个步骤结果
+
+### 访问步骤结果
+
+你可以检查各个步骤的结果以了解失败发生的位置：
+
+```typescript title="src/run-workflow.ts"
+const result = await run.start({ inputData: { value: "test" } });
+
+if (result.status === 'failed') {
+  // 找出哪个步骤失败了
+  for (const [stepId, stepResult] of Object.entries(result.steps)) {
+    if (stepResult.status === 'failed') {
+      console.error(`Step ${stepId} failed:`, stepResult.error);
+    }
+  }
+}
+```
+
+## 生命周期回调
+
+对于需要处理工作流完成而不等待结果的场景——如后台任务、触发后不管的工作流或集中日志记录——你可以使用生命周期回调。
+
+### onFinish
+
+当工作流以任何状态完成时调用（success、failed、suspended 或 tripwire）：
+
+```typescript {8-17} title="src/mastra/workflows/order-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const orderWorkflow = createWorkflow({
+  id: 'order-processing',
+  inputSchema: z.object({ orderId: z.string() }),
+  outputSchema: z.object({ orderId: z.string(), status: z.string() }),
+  options: {
+    onFinish: async (result) => {
+      if (result.status === 'success') {
+        await db.updateOrderStatus(result.result.orderId, result.status);
+      }
+      await analytics.track('workflow_completed', {
+        workflowId: 'order-processing',
+        status: result.status,
+      });
+    },
+  },
+});
+```
+
+`onFinish` 回调接收：
+
+- `status` - 工作流状态
+- `result` - 工作流输出（成功时）
+- `error` - 错误详情（失败时）
+- `steps` - 各个步骤结果
+- `tripwire` - 断路器信息（如果状态是 `'tripwire'`）
+- `runId` - 此工作流运行的唯一标识符
+- `workflowId` - 工作流的标识符
+- `resourceId` - 可选资源标识符（如果在创建运行时提供）
+- `getInitData<any>()` - 返回初始输入数据的函数
+- `mastra` - Mastra 实例（如果工作流已向 Mastra 注册）
+- `requestContext` - 请求作用域的上下文数据
+- `logger` - 工作流的记录器实例
+- `state` - 工作流的当前状态对象
+
+### onError
+
+仅当工作流失败时调用（状态是 `'failed'` 或 `'tripwire'`）：
+
+```typescript {8-14} title="src/mastra/workflows/payment-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const paymentWorkflow = createWorkflow({
+  id: 'payment-processing',
+  inputSchema: z.object({ amount: z.number() }),
+  outputSchema: z.object({ transactionId: z.string() }),
+  options: {
+    onError: async (errorInfo) => {
+      await alertService.notify({
+        channel: 'payments-alerts',
+        message: `Payment workflow failed: ${errorInfo.error?.message}`,
+      });
+      await errorTracker.capture(errorInfo.error);
+    },
+  },
+});
+```
+
+`onError` 回调接收：
+
+- `status` - `'failed'` 或 `'tripwire'`
+- `error` - 错误详情
+- `steps` - 各个步骤结果
+- `tripwire` - 断路器信息（如果状态是 `'tripwire'`）
+- `runId` - 此工作流运行的唯一标识符
+- `workflowId` - 工作流的标识符
+- `resourceId` - 可选资源标识符（如果在创建运行时提供）
+- `getInitData<any>()` - 返回初始输入数据的函数
+- `mastra` - Mastra 实例（如果工作流已向 Mastra 注册）
+- `requestContext` - 请求作用域的上下文数据
+- `logger` - 工作流的记录器实例
+- `state` - 工作流的当前状态对象
+
+### 同时使用两个回调
+
+你可以同时使用两个回调：
+
+```typescript {8-16} title="src/mastra/workflows/pipeline-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const pipelineWorkflow = createWorkflow({
+  id: 'data-pipeline',
+  inputSchema: z.object({ source: z.string() }),
+  outputSchema: z.object({ recordsProcessed: z.number() }),
+  options: {
+    onFinish: async (result) => {
+      // 始终记录完成情况
+      await logger.info('Pipeline completed', { status: result.status });
+    },
+    onError: async (errorInfo) => {
+      // 失败时发出警报
+      await pagerDuty.alert('Data pipeline failed', errorInfo.error);
+    },
+  },
+});
+```
+
+### 回调中的错误处理
+
+回调中抛出的错误会被捕获并记录——它们不会影响工作流结果或导致其失败。这确保回调问题不会在生产环境中破坏你的工作流。
+
+```typescript
+options: {
+  onFinish: async (result) => {
+    // 如果这抛出了错误，它会被记录但工作流结果不变
+    await externalService.notify(result);
+  },
+}
+```
+
+## 重试
+
+Mastra 有一个重试机制，用于因瞬态错误而失败的工作流或步骤，例如当步骤与可能暂时不可用的外部服务或资源交互时。
+
+## 使用 `retryConfig` 的工作流级别配置
+
+你可以在工作流级别配置重试，这适用于工作流中的所有步骤：
+
+```typescript {7-10} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  retryConfig: {
+    attempts: 5,
+    delay: 2000
+  }
+})
+  .then(step1)
+  .commit();
+```
+
+## 使用 `retries` 的步骤级别配置
+
+你可以使用 `retries` 属性为各个步骤配置重试。这会覆盖该特定步骤的工作流级别重试配置：
+
+```typescript {16} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  execute: async () => {
+    const response = await fetch('example-url');
+
+    if (!response.ok) {
+      throw new Error('Error');
+    }
+
+    return {
+      value: ""
+    };
+  },
+  retries: 3
+});
+```
+
+## 条件分支
+
+你可以使用条件逻辑基于先前步骤的成功或失败创建替代工作流路径：
+
+```typescript {14,18,29-32} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  execute: async () => {
+    try {
+      const response = await fetch('example-url');
+
+      if (!response.ok) {
+        throw new Error('error');
+      }
+
+      return {
+        status: "ok"
+      };
+    } catch (error) {
+      return {
+        status: "error"
+      };
+    }
+  }
+});
+
+const step2 = createStep({...});
+const fallback = createStep({...});
+
+export const testWorkflow = createWorkflow({})
+  .then(step1)
+  .branch([
+    [async ({ inputData: { status } }) => status === "ok", step2],
+    [async ({ inputData: { status } }) => status === "error", fallback]
+  ])
+  .commit();
+```
+
+## 检查先前步骤结果
+
+使用 `getStepResult()` 检查先前步骤的结果。
+
+```typescript {8} title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+
+const step2 = createStep({
+  execute: async ({ getStepResult }) => {
+    const step1Result = getStepResult(step1);
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
+## 使用 `bail()` 提前退出
+
+在步骤中使用 `bail()` 以成功结果提前退出。这将提供的负载作为步骤输出返回并结束工作流执行。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: 'step1',
+  execute: async ({ bail }) => {
+    return bail({ result: 'bailed' });
+  },
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+## 使用 `Error()` 提前退出
+
+在步骤中使用 `throw new Error()` 以错误退出。
+
+```typescript {7} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  id: 'step1',
+  execute: async () => {
+    throw new Error('error');
+  },
+  inputSchema: z.object({ value: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+## 使用 `stream()` 监控错误
+
+你可以使用 `stream` 监控工作流错误：
+
+```typescript {11} title="src/test-workflow.ts"
+import { mastra } from "../src/mastra";
+
+const workflow = mastra.getWorkflow("testWorkflow");
+
+const run = await workflow.createRun();
+
+const stream = await run.stream({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+for await (const chunk of stream.stream) {
+  console.log(chunk.payload.output.stats);
+}
+```
+
+## 相关内容
+
+- [控制流](/docs/cn/workflows/control-flow)
+- [暂停与恢复](/docs/cn/workflows/suspend-and-resume)
+- [时光旅行](/docs/cn/workflows/time-travel)
+- [人机交互](/docs/cn/workflows/human-in-the-loop)

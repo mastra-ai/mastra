@@ -1,0 +1,44 @@
+---
+title: "认证概述 | 认证"
+description: "了解 Mastra 应用程序的不同认证选项"
+packages:
+  - "@mastra/auth"
+---
+
+# 认证概述
+
+Mastra 允许您选择处理身份验证的方式，以便使用适合您技术栈的身份系统来保护应用程序端点的访问。
+
+您可以从简单的共享密钥 JWT 身份验证开始，当需要更高级的身份功能时，切换到 Supabase、Firebase Auth、Auth0、Clerk 或 WorkOS 等提供程序。
+
+## 默认行为
+
+身份验证在 Mastra 中是可选的。当您配置身份验证时：
+
+- **所有内置 API 路由**（`/api/agents/*`、`/api/workflows/*` 等）默认需要身份验证
+- **自定义 API 路由**默认也需要身份验证
+- **公共访问**可以在自定义路由上使用 `requiresAuth: false` 启用
+
+如果未配置身份验证，所有路由都可以公开访问。
+
+有关控制自定义端点上的身份验证，请参阅[自定义 API 路由](/docs/cn/server/custom-api-routes#authentication)。
+
+## 可用的提供程序
+
+### 内置
+
+- [简单身份验证](/docs/cn/server/auth/simple-auth) - 用于开发和 API 密钥的令牌到用户映射
+- [JSON Web Token (JWT)](/docs/cn/server/auth/jwt) - HMAC 签名的 JWT 验证
+
+### 第三方集成
+
+- [Clerk](/docs/cn/server/auth/clerk)
+- [Supabase](/docs/cn/server/auth/supabase)
+- [Firebase](/docs/cn/server/auth/firebase)
+- [WorkOS](/docs/cn/server/auth/workos)
+- [Auth0](/docs/cn/server/auth/auth0)
+
+### 高级
+
+- [组合身份验证](/docs/cn/server/auth/composite-auth) - 组合多个身份验证提供程序
+- [自定义身份验证提供程序](/docs/cn/server/auth/custom-auth-provider) - 构建您自己的提供程序

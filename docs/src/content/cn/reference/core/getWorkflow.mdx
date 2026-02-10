@@ -1,0 +1,69 @@
+---
+title: "参考文档：Mastra.getWorkflow() | 核心"
+description: "Mastra 中 `Mastra.getWorkflow()` 方法的文档，用于按 ID 检索工作流。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getWorkflow()
+
+`.getWorkflow()` 方法用于通过注册表键检索工作流。此方法为工作流输入和输出模式提供完整的 TypeScript 类型推断。
+
+## 使用示例
+
+```typescript
+// 通过注册表键检索工作流（推荐以获得类型推断）
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRun();
+
+// TypeScript 将正确推断输入模式类型
+await run.startAsync({
+  inputData: { /* 正确类型 */ }
+});
+```
+
+## 类型推断
+
+要获得最佳的 TypeScript 支持，请将 `getWorkflow()` 与工作流的**注册表键**一起使用（将工作流添加到 Mastra 时使用的键）。这提供完整的类型推断：
+- 输入数据模式
+- 输出数据模式
+- 步骤结果
+
+如果您需要通过工作流的 `id` 属性（而非注册表键）检索工作流，可以使用 `getWorkflowById()`，但请注意类型推断不会那么精确。
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "TWorkflowId extends keyof TWorkflows",
+      description:
+        "要检索的工作流 ID。必须是存在于 Mastra 配置中的有效工作流 ID。",
+    },
+    {
+      name: "options",
+      type: "{ serialized?: boolean }",
+      description:
+        "可选配置对象。当 `serialized` 为 true 时，仅返回工作流名称而非完整的工作流实例。",
+      optional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "TWorkflows[TWorkflowId]",
+      description:
+        "具有指定 ID 的工作流实例。如果找不到工作流，则抛出错误。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [工作流概述](/docs/cn/docs/workflows/overview)

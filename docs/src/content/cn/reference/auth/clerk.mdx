@@ -1,0 +1,76 @@
+---
+title: "参考文档：MastraAuthClerk 类 | 认证"
+description: "MastraAuthClerk 类的 API 参考，该类使用 Clerk 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-clerk"
+  - "@mastra/core"
+---
+
+# MastraAuthClerk 类
+
+`MastraAuthClerk` 类使用 Clerk 为 Mastra 应用程序提供身份验证。它使用 Clerk 颁发的 JWT 令牌验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthClerk } from "@mastra/auth-clerk";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthClerk({
+      jwksUri: process.env.CLERK_JWKS_URI,
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+    }),
+  },
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "publishableKey",
+      type: "string",
+      description:
+        "您的 Clerk 可发布密钥。可以在 Clerk 控制台的\"API 密钥\"下找到。",
+      isOptional: true,
+      defaultValue: "process.env.CLERK_PUBLISHABLE_KEY",
+    },
+    {
+      name: "secretKey",
+      type: "string",
+      description:
+        "您的 Clerk 密钥。用于服务器端身份验证和令牌验证。",
+      isOptional: true,
+      defaultValue: "process.env.CLERK_SECRET_KEY",
+    },
+    {
+      name: "jwksUri",
+      type: "string",
+      description:
+        "来自您的 Clerk 应用程序的 JWKS URI。用于验证 JWT 签名。",
+      isOptional: true,
+      defaultValue: "process.env.CLERK_JWKS_URI",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "身份验证提供程序实例的自定义名称。",
+      isOptional: true,
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: User, request: HonoRequest) => Promise<boolean> | boolean",
+      description:
+        "自定义授权函数，用于确定用户是否应该获得访问权限。在令牌验证后调用。默认情况下，允许所有身份验证的用户。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 相关内容
+
+[MastraAuthClerk 类](/docs/cn/docs/server/auth/clerk)

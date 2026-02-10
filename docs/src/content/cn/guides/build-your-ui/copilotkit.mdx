@@ -1,0 +1,224 @@
+---
+title: "使用 CopilotKit | 框架"
+description: "了解如何将 CopilotKit 与 Mastra 集成"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 使用 CopilotKit
+
+[CopilotKit](https://www.copilotkit.ai/) 提供 React 组件，可快速将可定制的 AI 副驾驶集成到您的应用程序中。结合 Mastra，您可以构建具有双向状态同步和交互式 UI 的复杂 AI 应用程序。
+
+访问 [CopilotKit 文档](https://docs.copilotkit.ai/) 了解更多关于 CopilotKit 概念、组件和高级使用模式的信息。
+
+:::info
+
+对于 Mastra 直接在您的 Next.js API 路由中运行的全栈集成方法，请参阅 [CopilotKit 快速入门](https://docs.copilotkit.ai/mastra/quickstart) 指南。
+
+:::
+
+:::tip
+
+访问 Mastra 的 [**"UI Dojo"**](https://ui-dojo.mastra.ai/) 查看与 Mastra 集成的 CopilotKit 实际示例。
+
+:::
+
+## 集成指南
+
+将 Mastra 作为独立服务器运行，并将您的 Next.js 前端（带有 CopilotKit）连接到其 API 端点。
+
+<Steps>
+
+<StepItem>
+
+设置您的目录结构。可能的目录结构如下：
+
+```bash
+project-root
+├── mastra-server
+│   ├── src
+│   │   └── mastra
+│   └── package.json
+└── my-copilot-app
+    └── package.json
+```
+
+引导您的 Mastra 服务器：
+
+```bash npm2yarn
+npx create-mastra@latest
+```
+
+此命令将启动一个交互式向导来帮助您搭建新的 Mastra 项目，包括提示您输入项目名称和设置基本配置。按照提示创建您的服务器项目。
+
+导航到您新创建的 Mastra 服务器目录：
+
+```bash
+cd mastra-server # 替换为您提供的实际目录名称
+```
+
+现在您已准备好一个基本的 Mastra 服务器项目。您应该有以下文件和文件夹：
+
+```bash
+src
+└── mastra
+    ├── agents
+    │   └── weather-agent.ts
+    ├── scorers
+    │   └── weather-scorer.ts
+    ├── tools
+    │   └── weather-tool.ts
+    ├── workflows
+    │   └── weather-workflow.ts
+    └── index.ts
+```
+
+:::note
+
+确保您在 `.env` 文件中为您的 LLM 提供程序设置了适当的环境变量。
+
+:::
+
+</StepItem>
+
+<StepItem>
+
+使用 `@ag-ui/mastra` 中的 `registerCopilotKit()` 辅助函数为 CopilotKit 前端创建聊天路由。将其添加到您的 Mastra 项目（及其对等依赖项）：
+
+```bash npm2yarn
+npm install @ag-ui/mastra @mastra/client-js @mastra/core @ag-ui/core @ag-ui/client @copilotkit/runtime
+```
+
+在您的 `src/mastra/index.ts` 文件中，注册聊天路由：
+
+```typescript title="src/mastra/index.ts" {2,7-19}
+import { Mastra } from '@mastra/core/mastra';
+import { registerCopilotKit } from '@ag-ui/mastra/copilotkit';
+// 其余的导入...
+
+export const mastra = new Mastra({
+  // 其余的配置...
+  server: {
+    cors: {
+      origin: "*",
+      allowMethods: ["*"],
+      allowHeaders: ["*"],
+    },
+    apiRoutes: [
+      registerCopilotKit({
+        path: '/chat',
+        resourceId: 'weatherAgent'
+      })
+    ]
+  }
+});
+```
+
+这将使 `weatherAgent` 以 CopilotKit 兼容的格式在 `/chat` 处可用。您必须添加 CORS 配置以允许 CopilotKit 前端访问 Mastra 服务器。对于生产部署，请确保将 CORS 来源限制为您的前端域。
+
+</StepItem>
+
+<StepItem>
+
+使用以下命令运行 Mastra 服务器：
+
+```bash npm2yarn
+npm run dev
+```
+
+默认情况下，Mastra 服务器将在 `http://localhost:4111` 上运行。保持此服务器运行以进行下一步，在那里我们将设置 CopilotKit 前端连接到它。
+
+</StepItem>
+
+<StepItem>
+
+向上移动一级到项目根目录。
+
+```bash
+cd ..
+```
+
+使用名称 `my-copilot-app` 创建一个新的 Next.js 项目：
+
+```bash npm2yarn
+npx create-next-app@latest my-copilot-app
+```
+
+导航到您新创建的 Next.js 项目目录：
+
+```bash
+cd my-copilot-app
+```
+
+</StepItem>
+
+<StepItem>
+
+安装 CopilotKit UI 包，您将使用它们来显示聊天界面：
+
+```bash npm2yarn
+npm install @copilotkit/react-ui @copilotkit/react-core
+```
+
+打开 Next.js 应用程序的主页路由（通常为 `app/page.tsx` 或 `src/app/page.tsx`），并用以下代码替换现有内容以设置基本的 CopilotKit 聊天界面：
+
+```typescript title="app/page.tsx"
+import { CopilotChat } from "@copilotkit/react-ui";
+import { CopilotKit } from "@copilotkit/react-core";
+import "@copilotkit/react-ui/styles.css";
+
+export default function Home() {
+  return (
+    <CopilotKit
+      runtimeUrl="http://localhost:4111/chat"
+      agent="weatherAgent"
+    >
+      <CopilotChat
+        labels={{
+          title: "Weather Agent",
+          initial: "Hi! 👋 Ask me about the weather, forecasts, and climate.",
+        }}
+      />
+    </CopilotKit>
+  );
+}
+```
+
+</StepItem>
+
+<StepItem>
+
+您已准备好连接各个部分！确保 Mastra 服务器和 CopilotKit 前端都在运行。启动 Next.js 开发服务器：
+
+```bash npm2yarn
+npm run dev
+```
+
+现在您应该能够在浏览器中与您的代理聊天。
+
+</StepItem>
+
+</Steps>
+
+恭喜！您已成功使用独立服务器方法将 Mastra 与 CopilotKit 集成。您的 CopilotKit 前端现在与独立的 Mastra 代理服务器通信。
+
+## 部署
+
+使用 CopilotKit 部署 Mastra 服务器时，必须将 `@copilotkit/runtime` 从包中排除。此包包含与打包不兼容的依赖项，如果包含会导致 500 错误。
+
+:::note
+
+在开发中使用 `mastra dev` 时不会出现此问题，因为它不需要打包。但是，任何运行 `mastra build` 进行部署的人都会遇到此问题。
+
+:::
+
+将 `@copilotkit/runtime` 包添加到您的打包器外部配置：
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    externals: ['@copilotkit/runtime'],
+  },
+});
+```

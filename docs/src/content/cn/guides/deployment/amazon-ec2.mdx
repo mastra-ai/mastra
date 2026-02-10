@@ -1,0 +1,137 @@
+---
+title: "Amazon EC2 | 部署"
+description: "将您的 Mastra 应用程序部署到 Amazon EC2。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Amazon EC2
+
+将您的 Mastra 应用程序部署到 Amazon EC2（弹性云计算）。
+
+:::note
+
+本指南假设您的 Mastra 应用程序已使用默认的 `npx create-mastra@latest` 命令创建。
+
+有关如何创建新的 Mastra 应用程序的更多信息，请参阅我们的[快速入门指南](/guides/getting-started/quickstart)。
+
+:::
+
+## 前置条件
+
+- 具有 [EC2](https://aws.amazon.com/ec2/) 访问权限的 AWS 账户
+- 运行 Ubuntu 24+ 或 Amazon Linux 的 EC2 实例
+- 指向您实例的 A 记录域名
+- 配置的反向代理（例如，使用 [nginx](https://nginx.org/)）
+- 配置的 SSL 证书（例如，使用 [Let's Encrypt](https://letsencrypt.org/)）
+- 在实例上安装 Node.js 22.13.0 或更高版本
+
+## 部署步骤
+
+<Steps>
+
+<StepItem>
+
+连接到您的 EC2 实例并克隆您的仓库：
+
+<Tabs>
+  <TabItem value="public" label="公共仓库">
+
+```bash
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+
+  <TabItem value="private" label="私有仓库">
+
+```bash
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+</Tabs>
+
+导航到仓库目录：
+
+```bash
+cd "<your-repository>"
+```
+
+</StepItem>
+
+<StepItem>
+
+安装依赖：
+
+```bash npm2yarn
+npm install
+```
+
+</StepItem>
+
+<StepItem>
+
+创建 `.env` 文件并添加您的环境变量：
+
+```bash
+touch .env
+```
+
+编辑 `.env` 文件并添加您的环境变量：
+
+```bash
+OPENAI_API_KEY=<your-openai-api-key>
+# 添加其他必需的环境变量
+```
+
+</StepItem>
+
+<StepItem>
+
+构建应用程序：
+
+```bash
+npm run build
+```
+
+</StepItem>
+
+<StepItem>
+
+运行应用程序：
+
+```bash
+node --env-file=".env" .mastra/output/index.mjs
+```
+
+:::note
+
+您的 Mastra 应用程序默认将在端口 4111 上运行。确保您的反向代理配置为将请求转发到此端口。
+
+:::
+
+</StepItem>
+
+</Steps>
+
+## 连接到您的 Mastra 服务器
+
+现在，您可以使用 `@mastra/client-js` 包中的 `MastraClient` 从您的客户端应用程序连接到 Mastra 服务器。
+
+有关更多信息，请参阅 [`MastraClient` 文档](/reference/client-js/mastra-client)。
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-domain-name>",
+});
+```
+
+## 后续步骤
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)

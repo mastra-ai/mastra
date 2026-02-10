@@ -1,0 +1,344 @@
+---
+title: "参考文档: Google | 语音"
+description: "Google 语音实现的文档，提供文本转语音和语音转文本功能，支持 API 密钥和 Vertex AI 两种身份验证方式。"
+packages:
+  - "@mastra/voice-google"
+---
+
+# Google
+
+Mastra 中的 Google 语音实现使用 Google Cloud 服务提供文本转语音（TTS）和语音转文本（STT）功能。它支持多种语音、语言、高级音频配置选项，以及标准 API 密钥身份验证和用于企业部署的 Vertex AI 模式。
+
+## 使用示例
+
+```typescript
+import { GoogleVoice } from "@mastra/voice-google";
+
+// 使用默认配置初始化（使用 GOOGLE_API_KEY 环境变量）
+const voice = new GoogleVoice();
+
+// 文本转语音
+const audioStream = await voice.speak("Hello, world!", {
+  languageCode: "en-US",
+  audioConfig: {
+    audioEncoding: "LINEAR16",
+  },
+});
+
+// 语音转文本
+const transcript = await voice.listen(audioStream, {
+  config: {
+    encoding: "LINEAR16",
+    languageCode: "en-US",
+  },
+});
+
+// 获取特定语言的可用语音
+const voices = await voice.getSpeakers({ languageCode: "en-US" });
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "GoogleModelConfig",
+      description: "文本转语音功能的配置",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "listeningModel",
+      type: "GoogleModelConfig",
+      description: "语音转文本功能的配置",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "文本转语音的默认语音 ID",
+      isOptional: true,
+      defaultValue: "'en-US-Casual-K'",
+    },
+    {
+      name: "vertexAI",
+      type: "boolean",
+      description:
+        "为企业部署启用 Vertex AI 模式。使用基于项目的身份验证而不是 API 密钥。需要设置 'project'。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "project",
+      type: "string",
+      description:
+        "Google Cloud 项目 ID（vertexAI 为 true 时必需）。回退到 GOOGLE_CLOUD_PROJECT 环境变量。",
+      isOptional: true,
+    },
+    {
+      name: "location",
+      type: "string",
+      description:
+        "Vertex AI 的 Google Cloud 区域。回退到 GOOGLE_CLOUD_LOCATION 环境变量。",
+      isOptional: true,
+      defaultValue: "'us-central1'",
+    },
+  ]}
+/>
+
+### GoogleModelConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Google Cloud API 密钥。回退到 GOOGLE_API_KEY 环境变量。vertexAI 为 true 时不使用。",
+      isOptional: true,
+    },
+    {
+      name: "keyFilename",
+      type: "string",
+      description:
+        "服务账户 JSON 密钥文件路径。回退到 GOOGLE_APPLICATION_CREDENTIALS 环境变量。",
+      isOptional: true,
+    },
+    {
+      name: "credentials",
+      type: "object",
+      description:
+        "内存中的服务账户凭证对象，包含 client_email 和 private_key 属性。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用 Google Cloud 文本转语音服务将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "要转换为语音的文本。如果提供了流，会先转换为文本。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "语音合成选项",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "此请求要使用的语音 ID",
+      isOptional: true,
+    },
+    {
+      name: "options.languageCode",
+      type: "string",
+      description:
+        "语音的语言代码（例如：'en-US'）。默认为说话者 ID 中的语言代码或 'en-US'",
+      isOptional: true,
+    },
+    {
+      name: "options.audioConfig",
+      type: "ISynthesizeSpeechRequest['audioConfig']",
+      description:
+        "来自 Google Cloud 文本转语音 API 的音频配置选项",
+      isOptional: true,
+      defaultValue: "{ audioEncoding: 'LINEAR16' }",
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+使用 Google Cloud 语音转文本服务将语音转换为文本。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "要转录的音频流",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "识别选项",
+      isOptional: true,
+    },
+    {
+      name: "options.stream",
+      type: "boolean",
+      description: "是否使用流式识别",
+      isOptional: true,
+    },
+    {
+      name: "options.config",
+      type: "IRecognitionConfig",
+      description:
+        "来自 Google Cloud 语音转文本 API 的识别配置",
+      isOptional: true,
+      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    },
+  ]}
+/>
+
+返回：`Promise<string>`
+
+### getSpeakers()
+
+返回可用语音选项数组，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符",
+      isOptional: false,
+    },
+    {
+      name: "languageCodes",
+      type: "string[]",
+      description: "此语音支持的语言代码列表",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### isUsingVertexAI()
+
+检查是否启用了 Vertex AI 模式。
+
+返回：`boolean` - 如果使用 Vertex AI 则为 `true`，否则为 `false`
+
+### getProject()
+
+获取配置的 Google Cloud 项目 ID。
+
+返回：`string | undefined` - 项目 ID 或未设置时为 `undefined`
+
+### getLocation()
+
+获取配置的 Google Cloud 位置/区域。
+
+返回：`string` - 位置（默认值：`'us-central1'`）
+
+## 身份验证
+
+Google 语音提供商支持两种身份验证方法：
+
+### 标准模式（API 密钥）
+
+使用 Google Cloud API 密钥进行身份验证。适用于开发和简单用例。
+
+```typescript
+// 使用环境变量 (GOOGLE_API_KEY)
+const voice = new GoogleVoice();
+
+// 使用显式 API 密钥
+const voice = new GoogleVoice({
+  speechModel: { apiKey: "your-api-key" },
+  listeningModel: { apiKey: "your-api-key" },
+  speaker: "en-US-Casual-K",
+});
+```
+
+### Vertex AI 模式（服务账户）
+
+使用具有服务账户的 Google Cloud 基于项目的身份验证。推荐用于生产环境和企业部署。
+
+**优势：**
+- 更好的安全性（代码中无 API 密钥）
+- 基于 IAM 的访问控制
+- 项目级计费和配额
+- 审计日志
+- 企业功能
+
+**配置选项：**
+
+```typescript
+// 使用应用程序默认凭证 (ADC)
+// 设置 GOOGLE_APPLICATION_CREDENTIALS 和 GOOGLE_CLOUD_PROJECT 环境变量
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  location: "us-central1", // 可选，默认为 'us-central1'
+});
+
+// 使用服务账户密钥文件
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+  listeningModel: {
+    keyFilename: "/path/to/service-account.json",
+  },
+});
+
+// 使用内存中的凭证
+const voice = new GoogleVoice({
+  vertexAI: true,
+  project: "your-gcp-project",
+  speechModel: {
+    credentials: {
+      client_email: "service-account@project.iam.gserviceaccount.com",
+      private_key: "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    },
+  },
+});
+```
+
+**所需权限：**
+
+**IAM 角色：**
+
+对于文本转语音：
+- `roles/texttospeech.admin` - 文本转语音管理员（完全访问权限）
+- `roles/texttospeech.editor` - 文本转语音编辑器（创建和管理）
+- `roles/texttospeech.viewer` - 文本转语音查看器（只读）
+
+对于语音转文本：
+- `roles/speech.client` - 语音转文本客户端
+
+**OAuth 范围：**
+
+对于同步文本转语音合成：
+- `https://www.googleapis.com/auth/cloud-platform` - 对 Google Cloud Platform 服务的完全访问权限
+
+对于长音频文本转语音操作：
+- `locations.longAudioSynthesize` - 创建长音频合成操作
+- `operations.get` - 获取操作状态
+- `operations.list` - 列出操作
+
+## 重要说明
+
+1. **身份验证**：需要 Google Cloud API 密钥（标准模式）或服务账户凭证（Vertex AI 模式）。
+2. **环境变量**：
+   - `GOOGLE_API_KEY` - 标准模式的 API 密钥
+   - `GOOGLE_CLOUD_PROJECT` - Vertex AI 模式的项目 ID
+   - `GOOGLE_CLOUD_LOCATION` - Vertex AI 模式的位置（默认为 'us-central1'）
+   - `GOOGLE_APPLICATION_CREDENTIALS` - 服务账户密钥文件路径
+3. 默认语音设置为 `'en-US-Casual-K'`。
+4. 文本转语音和语音转文本服务都使用 LINEAR16 作为默认音频编码。
+5. `speak()` 方法支持通过 Google Cloud 文本转语音 API 进行高级音频配置。
+6. `listen()` 方法支持通过 Google Cloud 语音转文本 API 进行各种识别配置。
+7. 可以使用 `getSpeakers()` 方法按语言代码过滤可用语音。
+8. Vertex AI 模式提供企业功能，包括 IAM 控制、审计日志和项目级计费。

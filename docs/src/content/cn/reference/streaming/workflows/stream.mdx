@@ -1,0 +1,208 @@
+---
+title: "参考文档: Run.stream() | 流处理"
+description: "工作流中 `Run.stream()` 方法的文档，该方法支持实时流式传输响应。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.stream()
+
+`.stream()` 方法支持从工作流实时流式传输响应。它直接返回一个事件的 `ReadableStream`。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const stream = await run.stream({
+  inputData: {
+    value: "初始数据",
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "与工作流输入模式匹配的输入数据",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "工作流执行期间使用的请求上下文数据",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "用于创建子跨度并添加元数据的追踪上下文。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "用于创建子跨度并添加元数据的当前跨度。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "追踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description: "添加到根追踪跨度的元数据。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "作为此追踪的元数据提取的额外 RequestContext 键。支持点符号表示嵌套值（例如，'user.id'）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的追踪 ID（1-32 个十六进制字符）。如果提供，此追踪将成为指定追踪的一部分。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的父跨度 ID（1-16 个十六进制字符）。如果提供，根跨度将作为此跨度的子跨度创建。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "应用于此追踪的标签。用于分类和筛选追踪的字符串标签。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "closeOnSuspend",
+      type: "boolean",
+      description:
+        "当工作流暂停时是否关闭流，还是保持流打开直到工作流完成（成功或错误）。默认值为 true。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+返回一个 `WorkflowRunOutput` 对象，该对象实现了异步可迭代接口（可直接在 `for await...of` 循环中使用），并提供对流和工作流执行结果的访问。
+
+<PropertiesTable
+  content={[
+    {
+      name: "fullStream",
+      type: "ReadableStream<WorkflowStreamEvent>",
+      description:
+        "工作流事件的 ReadableStream，您可以迭代它以实时跟踪进度。您也可以直接迭代 WorkflowRunOutput 对象。",
+    },
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>",
+      description: "解析为最终工作流结果的 Promise",
+    },
+    {
+      name: "status",
+      type: "WorkflowRunStatus",
+      description: "当前工作流运行状态（'running'、'suspended'、'success'、'failed'、'canceled' 或 'tripwire'）",
+    },
+    {
+      name: "usage",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cachedInputTokens?: number }>",
+      description: "解析为 token 使用统计的 Promise",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const stream = run.stream({
+  inputData: {
+    value: "初始数据",
+  },
+});
+
+// 迭代流事件（可以直接迭代 stream 或使用 stream.fullStream）
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+
+// 获取最终结果
+const result = await stream.result;
+console.log("最终结果:", result);
+
+// 获取 token 使用量
+const usage = await stream.usage;
+console.log("Token 使用量:", usage);
+
+// 检查当前状态
+console.log("状态:", stream.status);
+```
+
+## 流事件
+
+流在工作流执行期间会发送各种事件类型。每个事件都有一个 `type` 字段和一个包含相关数据的 `payload`：
+
+- **`workflow-start`**：工作流执行开始
+- **`workflow-step-start`**：步骤开始执行
+- **`workflow-step-output`**：步骤的自定义输出
+- **`workflow-step-result`**：步骤完成并返回结果
+- **`workflow-finish`**：工作流执行完成，包含使用统计信息
+
+## 相关文档
+
+- [工作流概述](/docs/cn/docs/workflows/overview#运行工作流)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
+- [Run.resumeStream()](./resumeStream)

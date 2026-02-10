@@ -1,0 +1,416 @@
+---
+title: "Agent 类 | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移 Agent 类的更改。"
+---
+
+# Agent 类
+
+Agent 类已更新，语音方法重新组织，属性访问模式更新，流式 API 简化。
+
+## 变更
+
+### `getAgents` 改为 `listAgents`
+
+`mastra.getAgents()` 方法已重命名为 `mastra.listAgents()`。此更改符合 API 中的命名约定，复数形式的 getter 方法使用 `list` 前缀。
+
+要迁移，请将所有对 `mastra.getAgents()` 的调用替换为 `mastra.listAgents()`。
+
+```diff
+- const agents = mastra.getAgents();
++ const agents = mastra.listAgents();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash npm2yarn
+npx @mastra/codemod@latest v1/mastra-plural-apis .
+```
+
+:::
+
+### `RuntimeContext` 改为 `RequestContext`
+
+`RuntimeContext` 类在整个代码库中已重命名为 `RequestContext`。此更改提供了更清晰的命名，更好地描述了它作为请求特定数据的用途，并与 Web 框架约定保持一致。
+
+要迁移，请将所有导入和参数名称从 `RuntimeContext`/`runtimeContext` 更新为 `RequestContext`/`requestContext`。
+
+```diff
+- import { RuntimeContext } from '@mastra/core/runtime-context';
++ import { RequestContext } from '@mastra/core/request-context';
+
+- const runtimeContext = new RuntimeContext();
+- runtimeContext.set('userTier', 'enterprise');
++ const requestContext = new RequestContext();
++ requestContext.set('userTier', 'enterprise');
+
+- await agent.generate(messages, { runtimeContext });
++ await agent.generate(messages, { requestContext });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/runtime-context .
+```
+
+:::
+
+### 直接属性访问改为 getter 方法
+
+直接访问 `agent.llm`、`agent.tools` 和 `agent.instructions` 属性已被弃用。此更改提供了更好的封装，并与更广泛的 API 设计保持一致。
+
+要迁移，请将属性访问替换为相应的 getter 方法。
+
+```diff
+- const llm = agent.llm;
+- const tools = agent.tools;
+- const instructions = agent.instructions;
++ const llm = agent.getLLM();
++ const tools = agent.getTools();
++ const instructions = agent.getInstructions();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/agent-property-access .
+```
+
+:::
+
+### 语音方法移至 `agent.voice` 命名空间
+
+语音相关方法已从 Agent 类移至 `agent.voice` 命名空间。此更改提供了更好的组织和更清晰的职责分离。
+
+要迁移，请更新语音方法调用以使用 `agent.voice` 命名空间。
+
+```diff
+- await agent.speak('Hello');
+- await agent.listen();
+- const speakers = agent.getSpeakers();
++ await agent.voice.speak('Hello');
++ await agent.voice.listen();
++ const speakers = agent.voice.getSpeakers();
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/agent-voice .
+```
+
+:::
+
+### `agent.fetchMemory()` 改为 `(await agent.getMemory()).recall()`
+
+`fetchMemory()` 方法已被更明确的 API 取代。此更改提供了对内存访问的异步性质更好的清晰度。
+
+要迁移，请将 `fetchMemory()` 调用替换为新的 API。
+
+```diff
+- const messages = await agent.fetchMemory({ threadId: 'thread-123' });
++ const memory = await agent.getMemory();
++ const result = await memory.recall({ threadId: 'thread-123' });
++ const messages = result.messages;
+```
+
+### 处理器方法名从 `get*` 改为 `list*`
+
+Agent 处理器方法已从 `get*` 重命名为 `list*` 模式，以与更广泛的 API 保持一致。此更改符合 `list*` 方法返回集合的约定。
+
+要迁移，请更新处理器方法名称。
+
+```diff
+- const inputProcessors = await agent.getInputProcessors(runtimeContext);
+- const outputProcessors = await agent.getOutputProcessors(runtimeContext);
++ const inputProcessors = await agent.listInputProcessors(requestContext);
++ const outputProcessors = await agent.listOutputProcessors(requestContext);
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/agent-processor-methods .
+```
+
+:::
+
+### AI SDK 版本的默认选项方法重命名
+
+默认选项方法已重命名，以区分（旧版 AI SDK v4）与新的（AI SDK v5+）API。此更改帮助开发者了解他们正在针对哪个 AI SDK 版本。
+
+要迁移，请根据您使用的 AI SDK 版本更新方法名称。
+
+```diff
+  // 对于旧版 AI SDK v4
+- const options = await agent.getDefaultGenerateOptions();
+- const streamOptions = await agent.getDefaultStreamOptions();
++ const options = await agent.getDefaultGenerateOptionsLegacy();
++ const streamOptions = await agent.getDefaultStreamOptionsLegacy();
+
+  // 对于新的 AI SDK v5+（默认）
+  const streamOptions = await agent.getDefaultStreamOptions();
+```
+
+### `modelSettings.abortSignal` 移至顶层 `abortSignal`
+
+`abortSignal` 选项已从 `modelSettings` 移至流式生成/选项的顶层。此更改在模型特定设置和执行控制之间提供了更清晰的分离。
+
+要迁移，请将 `abortSignal` 从 `modelSettings` 移至顶层。
+
+```diff
+  agent.stream('Hello', {
+-   modelSettings: {
+-     abortSignal: abortController.signal,
+-   },
++   abortSignal: abortController.signal,
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/agent-abort-signal .
+```
+
+:::
+
+### `output` 改为 `structuredOutput.schema`
+
+已弃用的 `output` 和 `experimental_output` 选项已被移除。此更改统一使用单一的、稳定的结构化输出 API。
+
+要迁移，请将 `output` 或 `experimental_output` 更新为 `structuredOutput.schema`。
+
+```diff
+  agent.stream('Hello', {
+-   output: z.object({ result: z.string() }),
++   structuredOutput: {
++     schema: z.object({ result: z.string() }),
++   },
+  });
+```
+
+### Agent `id` 字段现在为必需
+
+创建 Agent 时现在需要 `id` 字段。以前，Agent 可以在没有显式 ID 的情况下创建，但不再支持此方式。
+
+要迁移，请为所有 Agent 配置添加 `id` 字段。
+
+```diff
+  const agent = new Agent({
++   id: 'my-agent',
+    name: 'My Agent',
+    instructions: 'You are a helpful assistant',
+    model: 'openai/gpt-4',
+  });
+```
+
+`id` 可以与 `name` 相同，也可以使用不同的标识符。ID 将用于调用 `mastra.getAgentById()`，并且在您的 Mastra 实例中必须唯一。
+
+```typescript
+// 向 Mastra 注册 agent
+const mastra = new Mastra({
+  agents: {
+    myAgent: agent, // 键可以与 id 不同
+  },
+});
+
+// 按 ID 检索
+const agent = mastra.getAgentById('my-agent');
+```
+
+### 流式 API 响应现在会隐藏敏感数据
+
+Mastra 服务器现在会自动从代理流响应中隐藏敏感信息。这可以防止在 `step-start`、`step-finish` 和 `finish` 流块中意外暴露系统提示、工具定义和 API 密钥。
+
+**被隐藏的内容：**
+- 包含 LLM 请求负载（系统提示、工具模式）的 `request.body`
+- 步骤结果中的 `metadata.request`
+- 嵌套步骤数据中的 `output.steps[].request`
+
+此行为默认启用。如果您需要访问完整的请求数据（例如用于调试或内部服务），可以直接在使用服务器适配器时禁用隐藏（例如 `@mastra/hono` 或 `@mastra/express`）。
+
+## 移除
+
+### `generateVNext` 和 `streamVNext` 方法
+
+已弃用的 `generateVNext()` 和 `streamVNext()` 方法已被移除。这些方法以前用于 AI SDK v5+ 兼容性，但现在已是标准实现。
+
+要迁移，请使用标准的 `generate()` 和 `stream()` 方法。
+
+```diff
+- const result = await agent.generateVNext('Hello');
+- const stream = await agent.streamVNext('Hello');
++ const result = await agent.generate('Hello');
++ const stream = await agent.stream('Hello');
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/agent-generate-stream-v-next .
+```
+
+:::
+
+### 从 `stream()` 和 `generate()` 中移除 `format` 参数
+
+`format` 参数已从 `agent.stream()` 和 `agent.generate()` 方法中移除。AI SDK 流转换现在由 `@mastra/ai-sdk` 包处理。此更改通过将 AI SDK 特定代码移至专用包来改进摇树优化。
+
+要迁移，请使用 `@mastra/ai-sdk` 中的 `toAISdkStream()` 函数进行 AI SDK 格式转换。
+
+```diff
+- const stream = await agent.stream(messages, {
+-   format: 'aisdk',
+- });
+
++ import { toAISdkStream } from '@mastra/ai-sdk';
++
++ const stream = await agent.stream(messages);
++ const aiSdkStream = toAISdkStream(stream, { from: 'agent' });
+```
+
+### `agent.toStep()` 方法
+
+`toStep()` 方法已从 Agent 类中移除。Agent 现在可以直接添加到工作流步骤中，无需显式转换。
+
+要迁移，请将 agent 直接添加到工作流步骤中。工作流会自动处理转换。
+
+```diff
+- const step = agent.toStep();
+- const workflow = new Workflow({
+-   steps: [step],
+- });
+
++ const workflow = new Workflow({
++   steps: [agent],
++ });
+```
+
+### 从 Agent 中移除 `TMetrics` 泛型参数
+
+`AgentConfig` 和 `Agent` 构造函数中的 `TMetrics` 泛型参数已被移除。指标/评分器现在使用评分器 API 配置，而不是作为 Agent 类型系统的一部分。
+
+要迁移，请移除 `TMetrics` 泛型参数并使用新 API 配置评分器。
+
+```diff
+- const agent = new Agent<AgentId, Tools, Metrics>({
++ const agent = new Agent<AgentId, Tools>({
+    // ...
+  });
+```
+
+### 断路器响应格式更改
+
+断路器响应格式已从单独的 `tripwire` 和 `tripwireReason` 字段更改为包含所有相关数据的单个 `tripwire` 对象。
+
+要迁移，更新您的代码以从新的对象结构访问断路器数据。
+
+```diff
+  const result = await agent.generate('Hello');
+
+- if (result.tripwire) {
+-   console.log(result.tripwireReason);
+- }
++ if (result.tripwire) {
++   console.log(result.tripwire.reason);
++   // 新增字段可用：
++   // result.tripwire.retry - 此步骤是否应重试
++   // result.tripwire.metadata - 来自处理器的附加元数据
++   // result.tripwire.processorId - 哪个处理器触发了断路器
++ }
+```
+
+对于流式响应：
+
+```diff
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'tripwire') {
+-     console.log(chunk.payload.tripwireReason);
++     console.log(chunk.payload.reason);
++     // 新增字段可用：
++     // chunk.payload.retry
++     // chunk.payload.metadata
++     // chunk.payload.processorId
+    }
+  }
+```
+
+步骤结果现在也包含断路器信息：
+
+```diff
+  const result = await agent.generate('Hello');
+
+  for (const step of result.steps) {
+-   // 步骤上没有断路器信息
++   if (step.tripwire) {
++     console.log('步骤被阻止:', step.tripwire.reason);
++   }
+  }
+```
+
+### `prepareStep` 消息格式
+
+`prepareStep` 回调现在接收 `MastraDBMessage` 格式的消息，而不是 AI SDK v5+ 模型消息格式。此更改统一了 `prepareStep` 与新的 `processInputStep` 处理器方法，后者在代理循环的每个步骤运行。
+
+如果您需要旧的 AI SDK v5+ 格式，请使用 `messageList.get.all.aiV5.model()`：
+
+```diff
+  agent.generate('Hello', {
+    prepareStep: async ({ messages, messageList }) => {
+-     // messages 是 AI SDK v5+ ModelMessage 格式
+-     console.log(messages[0].content);
++     // messages 现在是 MastraDBMessage 格式
++     // 如果需要，使用 messageList 获取 AI SDK v5+ 格式：
++     const aiSdkMessages = messageList.get.all.aiV5.model();
+
+      return { toolChoice: 'auto' };
+    },
+  });
+```
+
+### `threadId` 和 `resourceId` 改为 `memory` 选项
+
+`threadId` 和 `resourceId` 选项已从 `agent.stream()` 和 `agent.generate()` 中移除。改用 `memory` 选项，它提供了更干净的内存配置 API。
+
+要迁移，请将 `threadId` 和 `resourceId` 移入 `memory` 选项：
+
+```diff
+  await agent.stream('Hello', {
+-   threadId: 'thread-123',
+-   resourceId: 'user-456',
++   memory: {
++     thread: 'thread-123',
++     resource: 'user-456',
++   },
+  });
+```
+
+`memory` 选项还支持在创建新线程时传递线程元数据：
+
+```typescript
+await agent.stream('Hello', {
+  memory: {
+    thread: {
+      id: 'thread-123',
+      title: 'Support conversation',
+      metadata: { category: 'billing' },
+    },
+    resource: 'user-456',
+  },
+});
+```

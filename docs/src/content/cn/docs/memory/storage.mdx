@@ -1,0 +1,289 @@
+---
+title: "存储 | 内存"
+description: "为 Mastra 的内存系统配置存储以持久化对话、工作流和追踪。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 存储
+
+为了让智能体记住之前的交互，Mastra 需要一个数据库。为[支持的数据库](#supported-providers)之一使用存储适配器，并将其传递给您的 Mastra 实例。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+:::tip[与 Mastra Studio 共享数据库]
+当与应用程序（例如 Next.js）一起运行 `mastra dev` 时，使用绝对路径以确保两个进程访问相同的数据库：
+
+```typescript
+url: "file:/absolute/path/to/your/project/mastra.db"
+```
+
+像 `file:./mastra.db` 这样的相对路径基于每个进程的工作目录解析，这可能不同。
+:::
+
+这配置了实例级存储，所有智能体默认共享。您也可以为隔离的数据边界配置[智能体级存储](#agent-level-storage)。
+
+Mastra 在第一次交互时自动创建必要的表。请参阅[核心模式](/reference/storage/overview#core-schema)了解创建的内容的详细信息，包括消息、线程、资源、工作流、追踪和评估数据集的表。
+
+## 支持的提供程序
+
+每个提供程序页面包括安装说明、配置参数和使用示例：
+
+- [libSQL](/reference/storage/libsql)
+- [PostgreSQL](/reference/storage/postgresql)
+- [MongoDB](/reference/storage/mongodb)
+- [Upstash](/reference/storage/upstash)
+- [Cloudflare D1](/reference/storage/cloudflare-d1)
+- [Cloudflare Durable Objects](/reference/storage/cloudflare)
+- [Convex](/reference/storage/convex)
+- [DynamoDB](/reference/storage/dynamodb)
+- [LanceDB](/reference/storage/lance)
+- [Microsoft SQL Server](/reference/storage/mssql)
+
+:::tip
+libSQL 是最简单的入门方式，因为它不需要运行单独的数据库服务器。
+:::
+
+## 配置范围
+
+存储可以在实例级别（所有智能体共享）或智能体级别（隔离到特定智能体）配置。
+
+### 实例级存储
+
+将存储添加到您的 Mastra 实例，以便所有智能体、工作流、可观测性追踪和评分共享相同的内存提供程序：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PostgresStore } from "@mastra/pg";
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+  }),
+});
+
+// 两个智能体都从上面的 Mastra 实例继承存储
+const agent1 = new Agent({ id: "agent-1", memory: new Memory() });
+const agent2 = new Agent({ id: "agent-2", memory: new Memory() });
+```
+
+当所有原语共享相同的存储后端并具有相似的性能、扩展和运营要求时，这很有用。
+
+#### 复合存储
+
+[复合存储](/reference/storage/composite)是配置实例级存储的替代方法。使用 `MastraCompositeStore` 将 `memory` 域（以及您需要的任何其他[域](/reference/storage/composite#storage-domains)）设置为不同的存储提供程序。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraCompositeStore } from "@mastra/core/storage";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { WorkflowsPG } from "@mastra/pg";
+import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: "composite",
+    domains: {
+      // highlight-next-line
+      memory: new MemoryLibSQL({ url: "file:./memory.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      observability: new ObservabilityStorageClickhouse({
+        url: process.env.CLICKHOUSE_URL,
+        username: process.env.CLICKHOUSE_USERNAME,
+        password: process.env.CLICKHOUSE_PASSWORD,
+      }),
+    },
+  }),
+});
+```
+
+当不同类型的数据具有不同的性能或运营要求时，这很有用，例如用于内存的低延迟存储、用于工作流的持久存储以及用于可观测性的高吞吐量存储。
+
+### 智能体级存储
+
+智能体级存储覆盖在实例级别配置的存储。当您需要数据边界或合规性要求时，将存储添加到特定智能体：
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { PostgresStore } from "@mastra/pg";
+
+export const agent = new Agent({
+  id: "agent",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'agent-storage',
+      connectionString: process.env.AGENT_DATABASE_URL,
+    }),
+  }),
+});
+```
+
+:::warning
+[Mastra Cloud Store](/docs/cn/mastra-cloud/deployment#using-mastra-cloud-store) 不支持智能体级存储。
+:::
+
+## 线程和资源
+
+Mastra 使用两个标识符组织对话：
+
+- **Thread** - 包含一系列消息的对话会话。
+- **Resource** - 拥有线程的实体，例如用户、组织、项目或应用程序中的任何其他域实体。
+
+智能体存储信息需要这两个标识符：
+
+<Tabs>
+  <TabItem value="generate" label="生成">
+
+```typescript
+const response = await agent.generate("hello", {
+  memory: {
+    thread: "conversation-abc-123",
+    resource: "user_123",
+  },
+});
+```
+
+  </TabItem>
+  <TabItem value="stream" label="流式传输">
+
+```typescript
+const stream = await agent.stream("hello", {
+  memory: {
+    thread: "conversation-abc-123",
+    resource: "user_123",
+  },
+});
+```
+
+  </TabItem>
+</Tabs>
+
+:::note
+[Studio](/docs/cn/getting-started/studio) 自动为您生成线程和资源 ID。当您自己调用 `stream()` 或 `generate()` 时，请记住显式提供这些标识符。
+:::
+
+### 线程标题生成
+
+当启用 `generateTitle` 时，Mastra 可以根据用户的第一条消息自动生成描述性线程标题。
+
+在实现类似 ChatGPT 的聊天界面时使用此选项，以在对话列表中（例如在侧边栏中）每个线程旁边呈现一个标题，该标题源自线程的初始用户消息。
+
+```typescript title="src/mastra/agents/my-agent.ts"
+export const agent = new Agent({
+  id: "agent",
+  memory: new Memory({
+    options: {
+      generateTitle: true,
+    },
+  }),
+});
+```
+
+标题生成在智能体响应后异步运行，不影响响应时间。
+
+要优化成本或行为，请提供较小的 [`model`](/models) 和自定义 `instructions`：
+
+```typescript title="src/mastra/agents/my-agent.ts"
+export const agent = new Agent({
+  id: "agent",
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        model: "openai/gpt-4o-mini",
+        instructions: "Generate a 1 word title",
+      },
+    },
+  }),
+});
+```
+
+## 语义记忆
+
+语义记忆有不同的存储要求 - 除了标准存储适配器外，它还需要向量数据库。请参阅[语义记忆](/docs/cn/memory/semantic-recall)了解设置和支持的向量提供程序。
+
+## 处理大附件
+
+某些存储提供程序强制执行记录大小限制，base64 编码的文件附件（如图像）可能超过该限制：
+
+| 提供程序 | 记录大小限制 |
+| -------- | ----------------- |
+| [DynamoDB](/reference/storage/dynamodb) | 400 KB |
+| [Convex](/reference/storage/convex) | 1 MiB |
+| [Cloudflare D1](/reference/storage/cloudflare-d1) | 1 MiB |
+
+PostgreSQL、MongoDB 和 libSQL 具有更高的限制，通常不受影响。
+
+为避免这种情况，请使用输入处理器将附件上传到外部存储（S3、R2、GCS、[Convex 文件存储](https://docs.convex.dev/file-storage) 等）并在持久化之前用 URL 引用替换它们。
+
+```typescript title="src/mastra/processors/attachment-uploader.ts"
+import type { Processor } from "@mastra/core/processors";
+import type { MastraDBMessage } from "@mastra/core/memory";
+
+export class AttachmentUploader implements Processor {
+  id = "attachment-uploader";
+
+  async processInput({ messages }: { messages: MastraDBMessage[] }) {
+    return Promise.all(messages.map((msg) => this.processMessage(msg)));
+  }
+
+  async processMessage(msg: MastraDBMessage) {
+    const attachments = msg.content.experimental_attachments;
+    if (!attachments?.length) return msg;
+
+    const uploaded = await Promise.all(
+      attachments.map(async (att) => {
+        // 如果已经是 URL，跳过
+        if (!att.url?.startsWith("data:")) return att;
+
+        // 上传 base64 数据并替换为 URL
+        const url = await this.upload(att.url, att.contentType);
+        return { ...att, url };
+      })
+    );
+
+    return { ...msg, content: { ...msg.content, experimental_attachments: uploaded } };
+  }
+
+  async upload(dataUri: string, contentType?: string): Promise<string> {
+    const base64 = dataUri.split(",")[1];
+    const buffer = Buffer.from(base64, "base64");
+
+    // 替换为您的存储提供程序（S3、R2、GCS、Convex 等）
+    // return await s3.upload(buffer, contentType);
+    throw new Error("Implement upload() with your storage provider");
+  }
+}
+```
+
+与您的智能体一起使用处理器：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { AttachmentUploader } from "./processors/attachment-uploader";
+
+const agent = new Agent({
+  id: "my-agent",
+  memory: new Memory({ storage: yourStorage }),
+  inputProcessors: [new AttachmentUploader()],
+});
+```

@@ -1,0 +1,224 @@
+---
+title: "参考：SentryExporter | 可观测性"
+description: "用于追踪的 Sentry AI 监控导出器"
+packages:
+  - "@mastra/sentry"
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# SentryExporter
+
+使用 OpenTelemetry 语义约定将追踪数据发送到 Sentry 用于 AI 追踪和监控。
+
+## 构造函数
+
+```typescript
+new SentryExporter(config: SentryExporterConfig)
+```
+
+## SentryExporterConfig
+
+```typescript
+interface SentryExporterConfig extends BaseExporterConfig {
+  dsn?: string;
+  environment?: string;
+  tracesSampleRate?: number;
+  release?: string;
+  options?: Partial<Sentry.NodeOptions>;
+}
+```
+
+扩展 `BaseExporterConfig`，包括：
+- `logger?: IMastraLogger` - 日志记录器实例
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - 日志级别（默认：INFO）
+
+<PropertiesTable
+  props={[
+    {
+      name: "dsn",
+      type: "string",
+      description: "数据源名称 - 告诉 SDK 在哪里发送事件。必须设置此参数或 SENTRY_DSN 环境变量。回退到 SENTRY_DSN 环境变量。",
+      required: false,
+    },
+    {
+      name: "environment",
+      type: "string",
+      description: "部署环境（启用按环境筛选问题和警报）。回退到 SENTRY_ENVIRONMENT 环境变量。默认：'production'。",
+      required: false,
+    },
+    {
+      name: "tracesSampleRate",
+      type: "number",
+      description: "发送到 Sentry 的事务百分比（0.0 = 0%，1.0 = 100%）。默认：1.0。",
+      required: false,
+    },
+    {
+      name: "release",
+      type: "string",
+      description: "部署的代码版本（帮助识别回归并跟踪部署）。回退到 SENTRY_RELEASE 环境变量。",
+      required: false,
+    },
+    {
+      name: "options",
+      type: "Partial<Sentry.NodeOptions>",
+      description: "附加 Sentry SDK 选项（集成、beforeSend 等）。有关可用选项，请参阅 Sentry SDK 文档。",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到 Sentry。处理 SPAN_STARTED、SPAN_UPDATED 和 SPAN_ENDED 事件。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何待处理的跨度到 Sentry 而不关闭导出器。最多等待 2 秒以发送待处理的数据。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+结束所有活动跨度，清除内部状态，并关闭 Sentry 连接。最多等待 2 秒以发送待处理的数据。
+
+## 使用方法
+
+### 零配置（使用环境变量）
+
+```typescript
+import { SentryExporter } from "@mastra/sentry";
+
+// 从 SENTRY_DSN、SENTRY_ENVIRONMENT、SENTRY_RELEASE 读取
+const exporter = new SentryExporter();
+```
+
+### 显式配置
+
+```typescript
+import { SentryExporter } from "@mastra/sentry";
+
+const exporter = new SentryExporter({
+  dsn: process.env.SENTRY_DSN,
+  environment: "production",
+  tracesSampleRate: 1.0,
+  release: "1.0.0",
+});
+```
+
+### 使用采样
+
+```typescript
+const exporter = new SentryExporter({
+  dsn: process.env.SENTRY_DSN,
+  environment: "production",
+  tracesSampleRate: 0.1, // 发送 10% 的事务到 Sentry（建议用于高负载后端）
+});
+```
+
+### 使用自定义 Sentry 选项
+
+```typescript
+const exporter = new SentryExporter({
+  dsn: process.env.SENTRY_DSN,
+  environment: "production",
+  options: {
+    integrations: [
+      // 自定义 Sentry 集成
+    ],
+    beforeSend: (event) => {
+      // 自定义事件处理
+      return event;
+    },
+  },
+});
+```
+
+## 跨度映射
+
+Mastra 跨度类型映射到 Sentry 操作：
+
+| Mastra SpanType | Sentry Operation |
+| --------------------------- | ---------------------- |
+| `AGENT_RUN` | `gen_ai.invoke_agent` |
+| `MODEL_GENERATION` | `gen_ai.chat` |
+| `MODEL_STEP` | （跳过） |
+| `MODEL_CHUNK` | （跳过） |
+| `TOOL_CALL` | `gen_ai.execute_tool` |
+| `MCP_TOOL_CALL` | `gen_ai.execute_tool` |
+| `WORKFLOW_RUN` | `workflow.run` |
+| `WORKFLOW_STEP` | `workflow.step` |
+| `WORKFLOW_CONDITIONAL` | `workflow.conditional` |
+| `WORKFLOW_CONDITIONAL_EVAL` | `workflow.conditional` |
+| `WORKFLOW_PARALLEL` | `workflow.parallel` |
+| `WORKFLOW_LOOP` | `workflow.loop` |
+| `WORKFLOW_SLEEP` | `workflow.sleep` |
+| `WORKFLOW_WAIT_EVENT` | `workflow.wait` |
+| `PROCESSOR_RUN` | `ai.processor` |
+| `GENERIC` | `ai.span` |
+
+MODEL_STEP 和 MODEL_CHUNK 跨度会被跳过以简化追踪层次结构。它们的聚合到 MODEL_GENERATION 跨度中。
+
+## 环境变量
+
+导出器从以下环境变量读取配置：
+
+| 变量 | 描述 |
+| --------------------- | ---------------------------------------------------- |
+| `SENTRY_DSN` | 数据源名称 - 告诉 SDK 在哪里发送事件 |
+| `SENTRY_ENVIRONMENT` | 部署环境名称 |
+| `SENTRY_RELEASE` | 部署的代码版本 |
+
+## OpenTelemetry 属性
+
+导出器设置以下标准 OpenTelemetry 属性：
+
+**通用属性（所有跨度）：**
+- `sentry.origin`: `auto.ai.mastra`（标识来自 Mastra 的跨度）
+- `ai.span.type`: Mastra 跨度类型
+
+**MODEL_GENERATION 跨度：**
+- `gen_ai.operation.name`: `chat`
+- `gen_ai.system`: 模型提供商
+- `gen_ai.request.model`: 模型标识符
+- `gen_ai.request.messages`: 输入消息/提示（JSON）
+- `gen_ai.response.model`: 响应模型
+- `gen_ai.response.text`: 输出文本
+- `gen_ai.response.tool_calls`: 生成过程中进行的工具调用（JSON 数组）
+- `gen_ai.usage.input_tokens`: 输入令牌数
+- `gen_ai.usage.output_tokens`: 输出令牌数
+- `gen_ai.usage.total_tokens`: 总令牌数
+- `gen_ai.request.stream`: 流式标志
+- `gen_ai.request.temperature`: 温度参数
+- `gen_ai.completion_start_time`: 第一个令牌时间
+
+**TOOL_CALL 跨度：**
+- `gen_ai.operation.name`: `execute_tool`
+- `gen_ai.tool.name`: 工具标识符
+- `gen_ai.tool.type`: `function`
+- `gen_ai.tool.call.id`: 工具调用 ID
+- `gen_ai.tool.input`: 工具输入
+- `gen_ai.tool.output`: 工具输出
+- `tool.success`: 成功标志
+
+**AGENT_RUN 跨度：**
+- `gen_ai.operation.name`: `invoke_agent`
+- `gen_ai.agent.name`: 代理标识符
+- `gen_ai.pipeline.name`: 代理名称
+- `gen_ai.agent.instructions`: 代理指令
+- `gen_ai.response.model`: 来自子生成的模型
+- `gen_ai.response.text`: 来自子生成的输出
+- `gen_ai.usage.*`: 来自子生成的令牌使用情况

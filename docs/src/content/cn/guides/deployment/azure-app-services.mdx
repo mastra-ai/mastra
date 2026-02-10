@@ -1,0 +1,168 @@
+---
+title: "Azure 应用服务 | 部署"
+description: "将您的 Mastra 应用程序部署到 Azure 应用服务。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Azure 应用服务
+
+将您的 Mastra 应用程序部署到 Azure 应用服务。
+
+:::note
+
+本指南假设您的 Mastra 应用程序已使用默认的 `npx create-mastra@latest` 命令创建。
+
+有关如何创建新的 Mastra 应用程序的更多信息，请参阅我们的[快速入门指南](/guides/getting-started/quickstart)
+
+:::
+
+:::warning
+
+Azure 应用服务对某些定价层使用临时文件系统。请从您的 Mastra 配置中移除所有使用文件 URL 的 [LibSQLStore](/reference/storage/libsql)。使用内存存储 (`:memory:`) 或外部存储提供商，如 Turso、PostgreSQL 或 Upstash。
+
+:::
+
+## 前置条件
+
+- 具有有效订阅的 [Azure 账户](https://azure.microsoft.com/)
+- 包含您的 Mastra 应用程序的 [GitHub 仓库](https://github.com/)
+- 您的 Mastra 应用程序应使用 `npx create-mastra@latest` 创建
+
+## 部署步骤
+
+<Steps>
+
+<StepItem>
+
+创建新的应用服务：
+
+- 登录 [Azure 门户](https://portal.azure.com)
+- 导航到 **[应用服务](https://docs.microsoft.com/en-us/azure/app-service/)** 或在顶部搜索栏中搜索
+- 点击 **创建** 以创建新的应用服务
+- 在下拉菜单中选择 **Web 应用**
+
+</StepItem>
+
+<StepItem>
+
+配置应用服务设置：
+
+- **订阅**：选择您的 Azure 订阅
+- **资源组**：创建新的资源组或选择现有的
+- **实例名称**：输入您的应用唯一名称（这将成为 URL 的一部分）
+- **发布**：选择 **代码**
+- **运行时堆栈**：选择 **Node 22 LTS**
+- **操作系统**：选择 **Linux**
+- **区域**：选择靠近用户的位置
+- **Linux 计划**：根据您选择的区域，您可能可以选择计划，请根据您的需求选择合适的计划
+- 点击 **查看 + 创建**
+- 等待验证完成，然后点击 **创建**
+
+</StepItem>
+
+<StepItem>
+
+等待部署完成：
+
+- 等待部署完成
+- 完成后，点击下一步部分的 **转到资源**
+
+</StepItem>
+
+<StepItem>
+
+在设置部署之前，配置您的环境变量：
+
+- 导航到左侧边栏中的 **设置** > **环境变量**
+- 添加您所需的环境变量，例如：
+  - 模型提供商 API key（例如，`OPENAI_API_KEY`）
+  - 数据库连接字符串
+  - 您的 Mastra 应用程序所需的任何其他配置值
+- 点击 **应用** 保存更改
+
+</StepItem>
+
+<StepItem>
+
+设置 GitHub 部署：
+
+- 导航到左侧边栏中的 **部署中心**
+- 选择 **GitHub** 作为源
+- 如果您尚未使用 Azure 进行身份验证，请登录 GitHub
+- 在本例中，我们将保留 [GitHub Actions](https://docs.github.com/en/actions) 作为我们的提供商
+- 选择您的组织、仓库和分支
+- Azure 将生成 GitHub 工作流文件，您可以在继续之前预览它
+- 点击 **保存**（保存按钮位于页面顶部）
+
+</StepItem>
+
+<StepItem>
+
+在 Azure 创建工作流后，它将触发 GitHub Actions 运行并将工作流文件合并到您的分支中。**取消此初始运行**，因为它缺少必要的修改将会失败。
+
+:::warning
+
+Azure 生成默认工作流对于 Mastra 应用程序将会失败，需要进行修改。
+
+:::
+
+将最新更改拉取到本地仓库并修改生成的工作流文件（`.github/workflows/main_<your-app-name>.yml`）：
+
+1. **更新构建步骤**：找到名为 "npm install, build, and test" 的步骤并：
+   - 将步骤名称更改为 "npm install and build"
+   - 如果您没有在 Mastra 应用程序中设置适当的测试，请从运行部分中移除 `npm test` 命令，因为默认测试脚本将会失败并中断部署。如果您有可用的测试，可以保留测试命令。
+
+2. **更新 zip 构件步骤**：找到 "Zip artifact for deployment" 步骤，并用以下内容替换 zip 命令：
+
+   ```yaml
+   run: (cd .mastra/output && zip ../../release.zip -r .)
+   ```
+
+   这确保部署包中只包含来自 `.mastra/output` 的构建输出。
+
+</StepItem>
+
+<StepItem>
+
+部署您的更改：
+
+- 提交并推送您的工作流修改
+- 构建将自动在 Azure 仪表板的 **部署中心** 中触发
+- 监控部署进度直到成功完成
+
+</StepItem>
+
+<StepItem>
+
+访问您部署的应用程序：
+
+- 构建成功后，等待应用程序启动
+- 使用 Azure 门户中 **概述** 选项卡中提供的默认 URL 访问您部署的应用程序
+- 您的应用程序将在 `https://<your-app-name>.azurewebsites.net` 上可用
+
+</StepItem>
+
+</Steps>
+
+## 连接到您的 Mastra 服务器
+
+现在，您可以使用 `@mastra/client-js` 包中的 `MastraClient` 从客户端应用程序连接到 Mastra 服务器。
+
+有关更多信息，请参阅 [`MastraClient` 文档](/reference/client-js/mastra-client)。
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-app-name>.azurewebsites.net",
+});
+```
+
+## 后续步骤
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)
+- [配置自定义域](https://docs.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain)
+- [启用 HTTPS](https://docs.microsoft.com/en-us/azure/app-service/configure-ssl-bindings)
+- [Azure 应用服务文档](https://docs.microsoft.com/en-us/azure/app-service/)

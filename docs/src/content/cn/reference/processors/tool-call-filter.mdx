@@ -1,0 +1,127 @@
+---
+title: "参考：工具调用过滤器 | 处理器"
+description: "Mastra 中 ToolCallFilter 处理器的文档，用于从消息中过滤工具调用和结果。"
+packages:
+  - "@mastra/core"
+---
+
+# ToolCallFilter
+
+`ToolCallFilter` 是一个**输入处理器**，在发送到模型之前从消息历史中过滤工具调用及其结果。当您想要从上下文中排除特定的工具交互或完全移除所有工具调用时，这非常有用。
+
+## 使用示例
+
+```typescript
+import { ToolCallFilter } from "@mastra/core/processors";
+
+// 排除所有工具调用
+const filterAll = new ToolCallFilter();
+
+// 按名称排除特定工具
+const filterSpecific = new ToolCallFilter({
+  exclude: ["searchDatabase", "sendEmail"],
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "工具调用过滤器的配置选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "exclude",
+      type: "string[]",
+      description: "要排除的特定工具名称列表。如果未提供或未定义，则排除所有工具调用",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'tool-call-filter'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "处理器显示名称，设置为 'ToolCallFilter'",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
+      description: "根据配置处理输入消息以过滤工具调用及其结果",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript title="src/mastra/agents/filtered-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { ToolCallFilter } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "filtered-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai:gpt-4o",
+  tools: {
+    searchDatabase,
+    sendEmail,
+    getWeather,
+  },
+  inputProcessors: [
+    // 从上下文中过滤掉数据库搜索工具调用
+    // 以减少令牌使用量，同时保留其他工具交互
+    new ToolCallFilter({
+      exclude: ["searchDatabase"],
+    }),
+  ],
+});
+```
+
+## 过滤所有工具调用
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { ToolCallFilter } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "no-tools-context-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai:gpt-4o",
+  tools: {
+    searchDatabase,
+    sendEmail,
+  },
+  inputProcessors: [
+    // 从消息历史中移除所有工具调用
+    // 代理仍然可以使用工具，但之前的工具交互
+    // 不会包含在上下文中
+    new ToolCallFilter(),
+  ],
+});
+```
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

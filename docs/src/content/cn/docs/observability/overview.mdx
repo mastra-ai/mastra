@@ -1,0 +1,84 @@
+---
+title: "可观察性概述 | 可观察性"
+description: "使用 Mastra 的可观察性功能监控和调试应用程序。"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
+  - "@mastra/observability"
+---
+
+# 可观察性概述
+
+Mastra 为 AI 应用程序提供可观察性功能。使用了解 AI 特定模式的工具监控大型语言模型操作，跟踪智能体决策，并调试复杂工作流。
+
+## 主要功能
+
+### 跟踪
+
+专门针对 AI 操作的跟踪，捕获：
+
+- **模型交互**：令牌使用、延迟、提示和完成
+- **智能体执行**：决策路径、工具调用和内存操作
+- **工作流步骤**：分支逻辑、并行执行和步骤输出
+- **自动检测**：使用装饰器进行跟踪
+
+## 存储要求
+
+`DefaultExporter` 将跟踪持久化到您配置的后端存储。并非所有存储提供商都支持可观察性——完整列表请参阅[存储提供商支持](/docs/cn/observability/tracing/exporters/default#storage-provider-support)。
+
+对于高流量的生产环境，我们建议通过[复合存储](/reference/storage/composite)为可观察性域使用 **ClickHouse**。详细信息请参阅[生产建议](/docs/cn/observability/tracing/exporters/default#production-recommendations)。
+
+## 快速开始
+
+在您的 Mastra 实例中配置可观察性：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger(),
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db", // 存储是跟踪所必需的
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(), // 将跟踪持久化到存储以供 Mastra Studio 使用
+          new CloudExporter(), // 向 Mastra Cloud 发送跟踪（如果设置了 MASTRA_CLOUD_ACCESS_TOKEN）
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // 编辑敏感数据，如密码、令牌、密钥
+        ],
+      },
+    },
+  }),
+});
+```
+
+:::note[无服务器环境]
+
+`file:./mastra.db` 存储 URL 使用本地文件系统，这在 Vercel、AWS Lambda 或 Cloudflare Workers 等无服务器环境中不起作用。对于无服务器部署，请使用外部存储。完整示例请参阅 [Vercel 部署指南](/guides/deployment/vercel-deployer#observability)。
+
+:::
+
+通过此基本设置，您将在 Studio 和 Mastra Cloud 中看到跟踪和日志。
+
+我们还支持各种外部跟踪提供商，如 MLflow、Langfuse、Braintrust 以及任何与 OpenTelemetry 兼容的平台（Datadog、New Relic、SigNoz 等）。在[跟踪](/docs/cn/observability/tracing/overview)文档中了解更多。
+
+## 下一步
+
+- **[设置跟踪](/docs/cn/observability/tracing/overview)**: 为您的应用程序配置跟踪
+- **[配置日志记录](/docs/cn/observability/logging)**: 添加结构化日志
+- **[API 参考](/reference/observability/tracing/instances)**: 详细配置选项

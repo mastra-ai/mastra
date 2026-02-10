@@ -1,0 +1,364 @@
+---
+title: "参考：评分器工具函数 | 评估"
+description: "用于从评分器运行输入和输出中提取数据的工具函数，包括文本内容、推理、系统消息和工具调用。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 评分器工具函数
+
+Mastra 提供了工具函数来帮助从评分器运行输入和输出中提取和处理数据。这些工具函数在自定义评分器的 `preprocess` 步骤中特别有用。
+
+## 导入
+
+```typescript
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getSystemMessagesFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+  extractInputMessages,
+  extractAgentResponseMessages,
+} from "@mastra/evals/scorers/utils";
+```
+
+## 消息提取
+
+### getAssistantMessageFromRunOutput
+
+从运行输出中提取第一条助手消息的文本内容。
+
+```typescript
+const scorer = createScorer({
+  id: "my-scorer",
+  description: "我的评分器",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { response };
+  })
+  .generateScore(({ results }) => {
+    return results.preprocessStepResult?.response ? 1 : 0;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "评分器运行输出（MastraDBMessage 数组）",
+    },
+  ]}
+/>
+
+**返回:** `string | undefined` - 助手消息文本，如果未找到助手消息则返回 undefined。
+
+### getUserMessageFromRunInput
+
+从运行输入中提取第一条用户消息的文本内容。
+
+```typescript
+.preprocess(({ run }) => {
+  const userMessage = getUserMessageFromRunInput(run.input);
+  return { userMessage };
+})
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "ScorerRunInputForAgent",
+      isOptional: true,
+      description: "包含输入消息的评分器运行输入",
+    },
+  ]}
+/>
+
+**返回:** `string | undefined` - 用户消息文本，如果未找到用户消息则返回 undefined。
+
+### extractInputMessages
+
+从所有输入消息中提取文本内容作为数组。
+
+```typescript
+.preprocess(({ run }) => {
+  const allUserMessages = extractInputMessages(run.input);
+  return { conversationHistory: allUserMessages.join("\n") };
+})
+```
+
+**返回:** `string[]` - 每个输入消息的文本字符串数组。
+
+### extractAgentResponseMessages
+
+从所有助手响应消息中提取文本内容作为数组。
+
+```typescript
+.preprocess(({ run }) => {
+  const allResponses = extractAgentResponseMessages(run.output);
+  return { allResponses };
+})
+```
+
+**返回:** `string[]` - 每个助手消息的文本字符串数组。
+
+## 推理提取
+
+### getReasoningFromRunOutput
+
+从运行输出中提取推理文本。这对于评估来自 `deepseek-reasoner` 等推理模型的响应特别有用，这些模型会产生思维链推理。
+
+推理可以存储在两个位置：
+1. `content.reasoning` - 消息内容上的字符串字段
+2. `content.parts` - 作为带有 `type: 'reasoning'` 的部分，包含 `details`
+
+```typescript
+import {
+  getReasoningFromRunOutput,
+  getAssistantMessageFromRunOutput
+} from "@mastra/evals/scorers/utils";
+
+const reasoningQualityScorer = createScorer({
+  id: "reasoning-quality",
+  name: "推理质量",
+  description: "评估模型推理的质量",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { reasoning, response };
+  })
+  .analyze(({ results }) => {
+    const { reasoning } = results.preprocessStepResult || {};
+    return {
+      hasReasoning: !!reasoning,
+      reasoningLength: reasoning?.length || 0,
+      hasStepByStep: reasoning?.includes("step") || false,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) return 0;
+    // 根据推理长度评分（归一化到 0-1）
+    return Math.min(reasoningLength / 500, 1);
+  })
+  .generateReason(({ results, score }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) {
+      return "模型未提供推理。";
+    }
+    return `模型提供了 ${reasoningLength} 个字符的推理。评分: ${score}`;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "评分器运行输出（MastraDBMessage 数组）",
+    },
+  ]}
+/>
+
+**返回:** `string | undefined` - 推理文本，如果不存在推理则返回 undefined。
+
+## 系统消息提取
+
+### getSystemMessagesFromRunInput
+
+从运行输入中提取所有系统消息，包括标准系统消息和标记的系统消息（如记忆指令等专业提示）。
+
+```typescript
+.preprocess(({ run }) => {
+  const systemMessages = getSystemMessagesFromRunInput(run.input);
+  return {
+    systemPromptCount: systemMessages.length,
+    systemPrompts: systemMessages
+  };
+})
+```
+
+**返回:** `string[]` - 系统消息字符串数组。
+
+### getCombinedSystemPrompt
+
+将所有系统消息组合成单个提示字符串，用双换行符连接。
+
+```typescript
+.preprocess(({ run }) => {
+  const fullSystemPrompt = getCombinedSystemPrompt(run.input);
+  return { fullSystemPrompt };
+})
+```
+
+**返回:** `string` - 组合的系统提示字符串。
+
+## 工具调用提取
+
+### extractToolCalls
+
+从运行输出中提取所有工具调用的信息，包括工具名称、调用 ID 以及它们在消息数组中的位置。
+
+```typescript
+const toolUsageScorer = createScorer({
+  id: "tool-usage",
+  description: "评估工具使用模式",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+    return {
+      toolsUsed: tools,
+      toolCount: tools.length,
+      toolDetails: toolCallInfos,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { toolCount } = results.preprocessStepResult || {};
+    // 根据适当的工具使用评分
+    return toolCount > 0 ? 1 : 0;
+  });
+```
+
+**返回:**
+
+```typescript
+{
+  tools: string[];           // 工具名称数组
+  toolCallInfos: ToolCallInfo[];  // 详细的工具调用信息
+}
+```
+
+其中 `ToolCallInfo` 为：
+
+```typescript
+type ToolCallInfo = {
+  toolName: string;      // 工具名称
+  toolCallId: string;    // 唯一调用标识符
+  messageIndex: number;  // 在输出数组中的索引
+  invocationIndex: number; // 消息工具调用中的索引
+};
+```
+
+## 测试工具函数
+
+这些工具函数有助于创建评分器开发的测试数据。
+
+### createTestMessage
+
+创建用于测试目的的 `MastraDBMessage` 对象。
+
+```typescript
+import { createTestMessage } from "@mastra/evals/scorers/utils";
+
+const userMessage = createTestMessage({
+  content: "天气如何？",
+  role: "user",
+});
+
+const assistantMessage = createTestMessage({
+  content: "天气是晴天。",
+  role: "assistant",
+  toolInvocations: [
+    {
+      toolCallId: "call-1",
+      toolName: "weatherTool",
+      args: { location: "London" },
+      result: { temp: 20 },
+      state: "result",
+    },
+  ],
+});
+```
+
+### createAgentTestRun
+
+创建完整的测试运行对象用于测试评分器。
+
+```typescript
+import { createAgentTestRun, createTestMessage } from "@mastra/evals/scorers/utils";
+
+const testRun = createAgentTestRun({
+  inputMessages: [
+    createTestMessage({ content: "你好", role: "user" }),
+  ],
+  output: [
+    createTestMessage({ content: "你好！", role: "assistant" }),
+  ],
+});
+
+// 使用测试数据运行评分器
+const result = await myScorer.run({
+  input: testRun.input,
+  output: testRun.output,
+});
+```
+
+## 完整示例
+
+以下是展示如何一起使用多个工具函数的完整示例：
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+} from "@mastra/evals/scorers/utils";
+
+const comprehensiveScorer = createScorer({
+  id: "comprehensive-analysis",
+  name: "综合分析",
+  description: "分析代理响应的各个方面",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    // 提取所有相关数据
+    const userMessage = getUserMessageFromRunInput(run.input);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const systemPrompt = getCombinedSystemPrompt(run.input);
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+
+    return {
+      userMessage,
+      response,
+      reasoning,
+      systemPrompt,
+      toolsUsed: tools,
+      toolCount: tools.length,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+
+    let score = 0;
+    if (response && response.length > 0) score += 0.4;
+    if (reasoning) score += 0.3;
+    if (toolCount > 0) score += 0.3;
+
+    return score;
+  })
+  .generateReason(({ results, score }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+
+    const parts = [];
+    if (response) parts.push("提供了响应");
+    if (reasoning) parts.push("包含了推理");
+    if (toolCount > 0) parts.push(`使用了 ${toolCount} 个工具`);
+
+    return `评分: ${score}。代理${parts.join("，")}。`;
+  });
+```

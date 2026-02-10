@@ -1,0 +1,158 @@
+---
+title: "参考：完整性评分器 | 评估"
+description: "Mastra 中完整性评分器的文档，用于评估 LLM 输出对输入中关键元素的覆盖程度。"
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
+---
+
+# 完整性评分器
+
+`createCompletenessScorer()` 函数评估 LLM 输出对输入中关键元素的覆盖程度。它分析名词、动词、主题和术语以确定覆盖率，并提供详细的完整性分数。
+
+## 参数
+
+`createCompletenessScorer()` 函数不接受任何选项。
+
+此函数返回 MastraScorer 类的实例。请参阅 [MastraScorer 参考](./mastra-scorer) 了解 `.run()` 方法及其输入/输出的详细信息。
+
+## .run() 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "运行的 ID（可选）。",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description:
+        "包含提取的元素和覆盖率详情的对象: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "完整性分数 (0-1)，表示输出中覆盖的输入元素比例。",
+    },
+  ]}
+/>
+
+`.run()` 方法返回以下形状的结果：
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: { input: number, output: number }
+  },
+  score: number
+}
+```
+
+## 元素提取详情
+
+评分器提取和分析几种类型的元素：
+
+- 名词：关键对象、概念和实体
+- 动词：动作和状态（转换为不定式形式）
+- 主题：主要主题
+- 术语：单个重要词汇
+
+提取过程包括：
+
+- 文本标准化（删除变音符号，转换为小写）
+- 拆分 camelCase 词汇
+- 处理词汇边界
+- 特殊处理短词（3 个字符或更少）
+- 元素去重
+
+### extractStepResult
+
+从 `.run()` 方法中，您可以获取 `extractStepResult` 对象，具有以下属性：
+
+- **inputElements**：输入中找到的关键元素（例如名词、动词、主题、术语）。
+- **outputElements**：输出中找到的关键元素。
+- **missingElements**：输出中未找到的输入元素。
+- **elementCounts**：输入和输出中的元素数量。
+
+## 评分详情
+
+评分器通过语言元素覆盖率分析来评估完整性。
+
+### 评分过程
+
+1. 提取关键元素：
+   - 名词和命名实体
+   - 动作动词
+   - 主题特定术语
+   - 标准化的词形
+2. 计算输入元素的覆盖率：
+   - 短词（≤3 个字符）的精确匹配
+   - 长词的大部分重叠（>60%）
+
+最终分数：`(覆盖的元素 / 总输入元素) * scale`
+
+### 分数解释
+
+0 到 1 之间的完整性分数：
+
+- **1.0**：全面回答查询的所有方面，包含详细内容。
+- **0.7–0.9**：涵盖大多数重要方面，细节良好，有小缺口。
+- **0.4–0.6**：回答了一些关键点，但缺少重要方面或缺乏细节。
+- **0.1–0.3**：仅部分回答查询，存在显著缺口。
+- **0.0**：未能回答查询或提供无关信息。
+
+## 示例
+
+评估不同查询复杂度下代理响应的完整性：
+
+```typescript title="src/example-completeness.ts"
+import { runEvals } from "@mastra/core/evals";
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
+import { myAgent } from "./agent";
+
+const scorer = createCompletenessScorer();
+
+const result = await runEvals({
+  data: [
+    {
+      input:
+        "解释光合作用的过程，包括输入、输出和涉及的阶段。",
+    },
+    {
+      input:
+        "远程工作对员工和雇主有哪些利弊？",
+    },
+    {
+      input:
+        "从成本、环境影响和可持续性方面比较可再生能源和不可再生能源。",
+    },
+  ],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+    });
+  },
+});
+
+console.log(result.scores);
+```
+
+有关 `runEvals` 的更多详情，请参阅 [runEvals 参考](/reference/evals/run-evals)。
+
+要将此评分器添加到代理，请参阅 [评分器概述](/docs/cn/docs/evals/overview#adding-scorers-to-agents) 指南。
+
+## 相关内容
+
+- [答案相关性评分器](./answer-relevancy)
+- [内容相似度评分器](./content-similarity)
+- [文本差异评分器](./textual-difference)
+- [关键词覆盖率评分器](./keyword-coverage)

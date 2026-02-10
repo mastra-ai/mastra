@@ -1,0 +1,38 @@
+---
+title: "参考文档：Mastra.getTelemetry() | 核心"
+description: "Mastra 中 `Mastra.getTelemetry()` 方法的文档，用于检索配置的遥测实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getTelemetry()
+
+`.getTelemetry()` 方法用于检索已在 Mastra 实例中配置的遥测实例。
+
+## 使用示例
+
+```typescript
+mastra.getTelemetry();
+```
+
+## 参数
+
+此方法不接受任何参数。
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "telemetry",
+      type: "Telemetry | undefined",
+      description:
+        "配置的遥测实例，用于所有组件的追踪和可观测性；如果未配置遥测，则为 undefined。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [追踪](/docs/cn/docs/observability/tracing/overview)
+- [可观测性配置](/reference/observability/tracing/configuration)

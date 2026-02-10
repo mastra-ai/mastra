@@ -1,0 +1,315 @@
+---
+title: "敏感数据过滤器 | 处理器 | 可观察性"
+description: "使用自动数据编辑保护跟踪中的敏感信息"
+packages:
+  - "@mastra/observability"
+---
+
+# 敏感数据过滤器
+
+敏感数据过滤器是一个跨度处理器，在导出之前的处理管道中从跟踪中编辑敏感信息。这确保密码、API 密钥、令牌和其他机密数据永远不会离开您的应用程序或存储在可观察性平台中。
+
+## 默认配置
+
+敏感数据过滤器包含在推荐的可观察性配置中：
+
+```ts title="src/mastra/index.ts"
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(),
+          new CloudExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // 在导出之前编辑敏感字段
+        ],
+      },
+    },
+  }),
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+使用默认配置，过滤器会编辑这些常见的敏感字段名称：
+
+- `password`
+- `token`
+- `secret`
+- `key`
+- `apikey`
+- `auth`
+- `authorization`
+- `bearer`
+- `bearertoken`
+- `jwt`
+- `credential`
+- `clientsecret`
+- `privatekey`
+- `refresh`
+- `ssn`
+
+:::note
+
+字段匹配不区分大小写并规范化分隔符。例如，`api-key`、`api_key` 和 `Api Key` 都被视为 `apikey`。
+
+:::
+
+## 工作原理
+
+敏感数据过滤器在跨度发送到导出器之前处理它们，扫描：
+
+- **属性** - 跨度元数据和属性
+- **元数据** - 附加到跨度的自定义元数据
+- **输入** - 发送到智能体、工具和大型语言模型的数据
+- **输出** - 响应和结果
+- **错误信息** - 堆栈跟踪和错误详情
+
+检测到敏感字段时，其值默认替换为 `[REDACTED]`。过滤器安全地处理嵌套对象、数组和循环引用。
+
+## 自定义配置
+
+您可以自定义编辑哪些字段以及编辑的外观：
+
+```ts title="src/mastra/index.ts"
+import { SensitiveDataFilter, DefaultExporter, Observability } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: "my-service",
+        exporters: [new DefaultExporter()],
+        spanOutputProcessors: [
+          new SensitiveDataFilter({
+            // 添加自定义敏感字段
+            sensitiveFields: [
+              // 默认字段
+              "password",
+              "token",
+              "secret",
+              "key",
+              "apikey",
+              // 您应用程序的自定义字段
+              "creditCard",
+              "bankAccount",
+              "routingNumber",
+              "email",
+              "phoneNumber",
+              "dateOfBirth",
+            ],
+            // 自定义编辑令牌
+            redactionToken: "***SENSITIVE***",
+            // 编辑样式
+            redactionStyle: "full", // 或 'partial'
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 编辑样式
+
+过滤器支持两种编辑样式：
+
+### 完全编辑（默认）
+
+用固定令牌替换整个值：
+
+```json
+// 之前
+{
+  "apiKey": "sk-abc123xyz789def456",
+  "userId": "user_12345"
+}
+
+// 之后
+{
+  "apiKey": "[REDACTED]",
+  "userId": "user_12345"
+}
+```
+
+### 部分编辑
+
+显示前 3 个和后 3 个字符，对调试有用而不暴露完整值：
+
+```ts
+new SensitiveDataFilter({
+  redactionStyle: "partial",
+});
+```
+
+```json
+// 之前
+{
+  "apiKey": "sk-abc123xyz789def456",
+  "creditCard": "4111111111111111"
+}
+
+// 之后
+{
+  "apiKey": "sk-…456",
+  "creditCard": "411…111"
+}
+```
+
+短于 7 个字符的值会被完全编辑以防止信息泄露。
+
+## 字段匹配规则
+
+过滤器使用智能字段匹配：
+
+1. **不区分大小写**：`APIKey`、`apikey` 和 `ApiKey` 都匹配
+2. **分隔符无关**：`api-key`、`api_key` 和 `apiKey` 被同等对待
+3. **精确匹配**：规范化后，字段必须完全匹配
+   - `token` 匹配 `token`、`Token`、`TOKEN`
+   - `token` 不匹配 `promptTokens` 或 `tokenCount`
+
+## 嵌套对象处理
+
+过滤器递归处理嵌套结构：
+
+```json
+// 之前
+{
+  "user": {
+    "id": "12345",
+    "credentials": {
+      "password": "SuperSecret123!",
+      "apiKey": "sk-production-key"
+    }
+  },
+  "config": {
+    "auth": {
+      "jwt": "eyJhbGciOiJIUzI1NiIs..."
+    }
+  }
+}
+
+// 之后
+{
+  "user": {
+    "id": "12345",
+    "credentials": {
+      "password": "[REDACTED]",
+      "apiKey": "[REDACTED]"
+    }
+  },
+  "config": {
+    "auth": {
+      "jwt": "[REDACTED]"
+    }
+  }
+}
+```
+
+## 性能注意事项
+
+敏感数据过滤器被设计为轻量级且高效的：
+
+- **同步处理**：无异步操作，最小延迟影响
+- **循环引用处理**：安全处理复杂对象图
+- **错误恢复**：如果过滤失败，字段替换为错误标记而不是崩溃
+
+## 禁用过滤器
+
+如果您需要禁用敏感数据过滤（不建议用于生产）：
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      debug: {
+        serviceName: "debug-service",
+        spanOutputProcessors: [], // 无处理器，包括无 SensitiveDataFilter
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+:::warning
+
+仅在受控环境中禁用敏感数据过滤。永远不会在将跟踪发送到外部服务或共享存储时禁用它。
+
+:::
+
+## 常见用例
+
+### 医疗保健应用程序
+
+```ts
+new SensitiveDataFilter({
+  sensitiveFields: [
+    // HIPAA 相关字段
+    "ssn",
+    "socialSecurityNumber",
+    "medicalRecordNumber",
+    "mrn",
+    "healthInsuranceNumber",
+    "diagnosisCode",
+    "icd10",
+    "prescription",
+    "medication",
+  ],
+});
+```
+
+### 金融服务
+
+```ts
+new SensitiveDataFilter({
+  sensitiveFields: [
+    // PCI 合规字段
+    "creditCard",
+    "ccNumber",
+    "cardNumber",
+    "cvv",
+    "cvc",
+    "securityCode",
+    "expirationDate",
+    "expiry",
+    "bankAccount",
+    "accountNumber",
+    "routingNumber",
+    "iban",
+    "swift",
+  ],
+});
+```
+
+## 错误处理
+
+如果过滤器在处理字段时遇到错误，它会将字段替换为安全的错误标记：
+
+```json
+{
+  "problematicField": {
+    "error": {
+      "processor": "sensitive-data-filter"
+    }
+  }
+}
+```
+
+这确保处理错误不会阻止跟踪被导出或导致应用程序崩溃。
+
+## 相关内容
+
+- [SensitiveDataFilter API](/reference/observability/tracing/processors/sensitive-data-filter)

@@ -1,0 +1,80 @@
+---
+title: "参考文档：getScorerById() | 核心"
+description: "Mastra 中 `getScorerById()` 方法的文档，用于通过 id 属性而非注册表键检索评分器。"
+packages:
+  - "@mastra/core"
+---
+
+# getScorerById()
+
+`getScorerById()` 方法通过搜索其 `id` 属性（或 `name` 属性作为回退）而非注册表键来检索评分器。当您知道评分器的 id 但不一定知道它如何在 Mastra 实例中注册时，这很有用。
+
+## 使用示例
+
+```typescript
+import { mastra } from "./mastra";
+
+// 通过其 id 属性获取评分器
+const relevancyScorer = mastra.getScorerById("answer-relevancy-scorer");
+
+const weatherAgent = mastra.getAgent("weatherAgent");
+
+// 使用评分器评估 AI 输出
+await weatherAgent.generate("What is the weather in Rome", {
+  scorers: {
+    answerRelevancy: {
+      scorer: relevancyScorer,
+    },
+  },
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "要检索的评分器的 id 属性。这应与使用 createScorer() 创建评分器时指定的 'id' 字段匹配。该方法还将搜索 'name' 属性作为回退。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorer",
+      type: "MastraScorer",
+      description:
+        "具有匹配 id（或 name）属性的 MastraScorer 实例。",
+    },
+  ]}
+/>
+
+## 错误处理
+
+如果满足以下条件，此方法会抛出 `MastraError`：
+
+- 找不到具有指定 id 的评分器
+- Mastra 实例未注册任何评分器
+
+```typescript
+try {
+  const scorer = mastra.getScorerById("non-existent-scorer");
+} catch (error) {
+  if (error.id === "MASTRA_GET_SCORER_BY_ID_NOT_FOUND") {
+    console.log("Scorer with that id not found");
+  }
+}
+```
+
+## 相关内容
+
+- [getScorer()](/reference/core/getScorer) - 通过注册表键获取评分器
+- [listScorers()](/reference/core/listScorers) - 获取所有已注册的评分器
+- [createScorer()](/reference/evals/create-scorer) - 了解如何创建带 id 的评分器

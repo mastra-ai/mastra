@@ -1,0 +1,109 @@
+---
+title: "输入数据映射 | 工作流"
+description: "了解如何在 Mastra 工作流中使用工作流输入映射创建更动态的数据流。"
+packages:
+  - "@mastra/core"
+---
+
+# 输入数据映射
+
+输入数据映射允许显式映射下一个步骤输入的值。这些值可以来自多种来源：
+
+- 前一个步骤的输出
+- 请求上下文
+- 常量值
+- 工作流的初始输入
+
+## 使用 `.map()` 映射
+
+在这个例子中，`step1` 的 `output` 被转换以匹配 `step2` 所需的 `inputSchema`。来自 `step1` 的值可以使用 `.map` 函数的 `inputData` 参数获取。
+
+![使用 .map() 映射](/img/workflows/workflows-data-mapping-map.jpg)
+
+```typescript {9} title="src/mastra/workflows/test-workflow.ts"
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { value } = inputData;
+    return {
+      output: `new ${value}`
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
+## 使用 `inputData`
+
+使用 `inputData` 访问前一个步骤的完整输出：
+
+```typescript {3} title="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map(({ inputData }) => {
+    console.log(inputData);
+  })
+```
+
+## 使用 `getStepResult()`
+
+使用 `getStepResult` 通过引用步骤的实例来访问特定步骤的完整输出：
+
+```typescript {3} title="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map(async ({ getStepResult }) => {
+    console.log(getStepResult(step1));
+  })
+```
+
+## 使用 `getInitData<any>()`
+
+使用 `getInitData<any>` 访问提供给工作流的初始输入数据：
+
+```typescript {3} title="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map(async ({ getInitData }) => {
+      console.log(getInitData<any>());
+  })
+```
+
+## 使用 `mapVariable()`
+
+要使用 `mapVariable`，请从 workflows 模块导入必要的函数：
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+### 使用 `mapVariable()` 重命名步骤
+
+你可以使用 `.map()` 中的对象语法重命名步骤输出。在下面的例子中，`step1` 的 `value` 输出被重命名为 `details`：
+
+```typescript {3-6} title="src/mastra/workflows/test-workflow.ts"
+  .then(step1)
+  .map({
+    details: mapVariable({
+      step: step,
+      path: "value"
+    })
+  })
+```
+
+### 使用 `mapVariable()` 重命名工作流
+
+你可以使用**引用组合**重命名工作流输出。这涉及将工作流实例作为 `initData` 传递。
+
+```typescript {6-9} title="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({...});
+
+testWorkflow
+  .then(step1)
+  .map({
+    details: mapVariable({
+      initData: testWorkflow,
+      path: "value"
+    })
+  })
+```

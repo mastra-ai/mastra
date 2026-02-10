@@ -1,0 +1,140 @@
+---
+title: "部署 Mastra 服务器 | 部署"
+description: "了解如何构建和部署 Mastra 服务器。"
+packages:
+  - "@mastra/deployer"
+---
+
+# 部署 Mastra 服务器
+
+Mastra 将您的应用程序编译成独立的 Node.js 服务器，可以在任何支持 Node.js、Bun 或 Deno 的平台上运行。
+
+:::tip
+
+本指南涵盖部署由 `mastra build` 生成的独立服务器。如果您需要将 Mastra 集成到现有的 Express 或 Hono 应用程序中，请改参阅[服务器适配器](/docs/cn/server/server-adapters)。
+
+:::
+
+## 构建应用程序
+
+从项目根目录运行构建命令：
+
+```bash
+mastra build
+```
+
+这会创建一个包含生产就绪服务器的 `.mastra` 目录。
+
+:::info
+
+阅读 [`mastra build`](/reference/cli/mastra#mastra-build) 参考了解所有可用的标志。
+
+:::
+
+## 构建输出
+
+构建后，Mastra 创建以下结构：
+
+```
+.mastra/
+├── .build/                # 中间构建产物（模块映射、分析）
+└── output/
+    ├── index.mjs          # 服务器入口点
+    ├── mastra.mjs         # 您的捆绑 Mastra 配置
+    ├── tools.mjs          # 聚合的工具导出
+    ├── tools/             # 单个工具包
+    ├── package.json       # 生产依赖
+    ├── node_modules/      # 已安装的依赖
+    ├── .npmrc             # 从您的项目复制（如果存在）
+    ├── public/            # 静态资产（如果 src/mastra/public 存在）
+    └── playground/        # Studio UI（如果使用了 --studio 标志）
+```
+
+`output` 目录是独立的。您可以将其复制到任何服务器并直接运行。
+
+## 运行服务器
+
+使用 Mastra CLI 启动服务器：
+
+```bash
+mastra start
+```
+
+或者直接使用 Node.js 运行：
+
+```bash
+node .mastra/output/index.mjs
+```
+
+`mastra start` 命令提供附加功能：
+- 从 `.env.production` 和 `.env` 加载环境变量
+- 为缺失的模块提供有用的错误消息
+- 处理进程信号以实现优雅关闭
+
+:::info
+
+阅读 [`mastra start`](/reference/cli/mastra#mastra-start) 参考了解所有可用的标志。
+
+:::
+
+## 构建配置
+
+### public 文件夹
+
+如果您的 Mastra 目录中存在 `public` 文件夹（`src/mastra/public`），其内容会在构建过程中复制到输出目录。这些文件由服务器作为静态资产提供。
+
+### Mastra 配置
+
+构建过程尊重 Mastra 实例中的配置。关于服务器行为（如 CORS、超时和中间件），请参阅[服务器概述](/docs/cn/server/mastra-server)。关于所有可用选项，请参阅[配置参考](/reference/configuration)。
+
+## 构建过程
+
+构建遵循以下步骤：
+
+1. **定位入口文件**：在 Mastra 目录中查找 `index.ts` 或 `index.js`。
+2. **发现工具**：扫描匹配 `{mastraDir}/tools/**/*.{js,ts}` 的工具文件，排除测试文件。
+3. **分析依赖项**：确定哪些包需要捆绑，哪些需要外部安装。
+4. **捆绑代码**：使用带有摇树和可选源映射的 Rollup。
+5. **生成服务器**：创建基于 Hono 的 HTTP 服务器作为 `index.mjs`。
+6. **安装依赖项**：在输出目录中运行 `npm install`。
+7. **复制资产**：如果存在，复制 `public` 文件夹和 `.npmrc`。
+
+## 环境变量
+
+| 变量 | 描述 |
+|----------|-------------|
+| `PORT` | 服务器端口（默认：`4111`） |
+| `MASTRA_STUDIO_PATH` | Studio 构建目录路径（默认：`./playground`） |
+| `MASTRA_SKIP_DOTENV` | 设置时跳过加载 `.env` 文件 |
+| `NODE_OPTIONS` | Node.js 选项（例如，用于构建内存问题的 `--max-old-space-size=4096`） |
+
+## 服务器端点
+
+构建的服务器公开用于健康检查、智能体、工作流等的端点：
+
+| 端点 | 描述 |
+|----------|-------------|
+| `GET /health` | 健康检查端点，返回 `200 OK` |
+| `GET /openapi.json` | OpenAPI 规范（如果启用了 `server.build.openAPIDocs`） |
+| `GET /swagger-ui` | 交互式 API 文档（如果启用了 `server.build.swaggerUI`） |
+
+此列表并非详尽无遗。要查看所有端点，运行 `mastra dev` 并访问 `http://localhost:4111/swagger-ui`。
+
+要添加您自己的端点，请参阅[自定义 API 路由](/docs/cn/server/custom-api-routes)。
+
+## 故障排除
+
+### 构建期间的内存错误
+
+如果您遇到 `JavaScript heap out of memory` 错误：
+
+```bash
+NODE_OPTIONS="--max-old-space-size=4096" mastra build
+```
+
+## 相关内容
+
+- [服务器概述](/docs/cn/server/mastra-server) - 配置服务器行为、中间件和身份验证
+- [服务器适配器](/docs/cn/server/server-adapters) - 使用 Express 或 Hono 代替 `mastra build`
+- [自定义 API 路由](/docs/cn/server/custom-api-routes) - 添加自定义 HTTP 端点
+- [配置参考](/reference/configuration) - 完整配置选项

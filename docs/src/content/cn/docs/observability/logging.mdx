@@ -1,0 +1,111 @@
+---
+title: "日志 | 可观测性"
+description: "了解如何在 Mastra 中使用日志来监控执行、捕获应用程序行为并提高 AI 应用程序的准确性。"
+packages:
+  - "@mastra/core"
+  - "@mastra/loggers"
+---
+
+# 日志记录
+
+Mastra 的日志系统以结构化格式捕获函数执行、输入数据和输出响应。
+
+部署到 Mastra Cloud 时，日志显示在[日志页面](/docs/cn/mastra-cloud/observability)中。在自托管或自定义环境中，日志可以根据配置的传输方式定向到文件或外部服务。
+
+## 使用 PinoLogger 配置日志
+
+使用 CLI [初始化新的 Mastra 项目](/guides/getting-started/quickstart)时，默认包含 `PinoLogger`。
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+
+export const mastra = new Mastra({
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+:::info
+
+访问 [PinoLogger](/reference/logging/pino-logger) 了解所有可用的配置选项。
+
+:::
+
+## 自定义日志
+
+Mastra 通过 `mastra.getLogger()` 方法提供对日志记录器实例的访问，该方法在工作流步骤和工具中均可用。日志记录器支持标准严重级别：`debug`、`info`、`warn` 和 `error`。
+
+### 从工作流步骤记录日志
+
+在工作流步骤中，可以通过 `execute` 函数内的 `mastra` 参数访问日志记录器。这允许您记录与步骤执行相关的消息。
+
+```typescript {6-7} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  execute: async ({ mastra }) => {
+    const logger = mastra.getLogger();
+    logger.info("workflow info log");
+
+    return {
+      output: ""
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```
+
+### 从工具记录日志
+
+类似地，工具可以通过 `mastra` 参数访问日志记录器实例。在执行过程中使用此功能记录工具特定的活动。
+
+```typescript {6-7} title="src/mastra/tools/test-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  execute: async (inputData, context) => {
+    const logger = context?.mastra.getLogger();
+    logger?.info("tool info log");
+
+    return {
+      output: "",
+    };
+  },
+});
+```
+
+### 使用附加数据记录日志
+
+日志记录器方法接受可选的第二个参数用于附加数据。这可以是任何值，如对象、字符串或数字。
+
+在此示例中，日志消息包含一个对象，其键为 `agent`，值为 `testAgent` 实例。
+
+```typescript {9} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({
+  execute: async ({ mastra }) => {
+    const testAgent = mastra.getAgent("testAgent");
+    const logger = mastra.getLogger();
+
+    logger.info("workflow info log", { agent: testAgent });
+
+    return {
+      output: ""
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .commit();
+```

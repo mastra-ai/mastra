@@ -1,0 +1,183 @@
+---
+title: "参考：令牌限制处理器 | 处理器"
+description: "Mastra 中 TokenLimiterProcessor 的文档，用于限制消息中的令牌数量。"
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# TokenLimiterProcessor
+
+`TokenLimiterProcessor` 限制消息中的令牌数量。它可以作为输入和输出处理器使用：
+
+- **输入处理器**：过滤历史消息以适应上下文窗口，优先处理最近的消息
+- **输出处理器**：通过流式或非流式方式限制生成的响应令牌，并提供可配置的策略来处理超出限制的情况
+
+## 使用示例
+
+```typescript
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+
+const processor = new TokenLimiterProcessor({
+  limit: 1000,
+  strategy: "truncate",
+  countMode: "cumulative"
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "number | Options",
+      description: "可以是简单的令牌限制数字，或配置选项对象",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "limit",
+      type: "number",
+      description: "响应中允许的最大令牌数",
+      isOptional: false,
+    },
+    {
+      name: "encoding",
+      type: "TiktokenBPE",
+      description: "可选的编码方式。默认为 o200k_base（gpt-5.1 使用的编码）",
+      isOptional: true,
+      default: "o200k_base",
+    },
+    {
+      name: "strategy",
+      type: "'truncate' | 'abort'",
+      description: "达到令牌限制时的策略：'truncate' 停止发送片段，'abort' 调用 abort() 停止流",
+      isOptional: true,
+      default: "'truncate'",
+    },
+    {
+      name: "countMode",
+      type: "'cumulative' | 'part'",
+      description: "是从流的开头计数令牌还是仅计算当前部分：'cumulative' 从头开始计数所有令牌，'part' 仅计算当前部分中的令牌",
+      isOptional: true,
+      default: "'cumulative'",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'token-limiter'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "可选的处理器显示名称",
+      isOptional: true,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
+      description: "过滤输入消息以适应令牌限制，优先保留最近的消息同时保留系统消息",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
+      description: "处理流式输出片段以在流式传输过程中限制令牌计数",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
+      description: "处理最终输出结果以在非流式场景中限制令牌计数",
+      isOptional: false,
+    },
+    {
+      name: "getMaxTokens",
+      type: "() => number",
+      description: "获取最大令牌限制",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 错误行为
+
+当用作输入处理器时，`TokenLimiterProcessor` 在以下情况下抛出 `TripWire` 错误：
+
+- **空消息**：如果没有要处理的消息，会抛出 TripWire，因为无法发送没有消息的 LLM 请求。
+- **系统消息超出限制**：如果系统消息单独超出令牌限制，会抛出 TripWire，因为无法发送只有系统消息而没有用户/助手消息的 LLM 请求。
+
+```typescript
+import { TripWire } from "@mastra/core/agent";
+
+try {
+  await agent.generate("Hello");
+} catch (error) {
+  if (error instanceof TripWire) {
+    console.log("Token limit error:", error.message);
+  }
+}
+```
+
+## 扩展使用示例
+
+### 作为输入处理器（限制上下文窗口）
+
+使用 `inputProcessors` 来限制发送到模型的历史消息，这有助于保持在上下文窗口限制内：
+
+```typescript title="src/mastra/agents/context-limited-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "context-limited-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-4o",
+  memory: new Memory({ /* ... */ }),
+  inputProcessors: [
+    new TokenLimiterProcessor({ limit: 4000 }) // 将历史消息限制为约 4000 个令牌
+  ]
+});
+```
+
+### 作为输出处理器（限制响应长度）
+
+使用 `outputProcessors` 来限制生成响应的长度：
+
+```typescript title="src/mastra/agents/response-limited-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "response-limited-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new TokenLimiterProcessor({
+      limit: 1000,
+      strategy: "truncate",
+      countMode: "cumulative"
+    })
+  ]
+});
+```
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

@@ -1,0 +1,142 @@
+---
+title: "发布 MCP 服务器 | MCP"
+description: 使用 stdio 传输设置和构建 Mastra MCP 服务器并将其发布到 NPM 的指南。
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 发布 MCP 服务器
+
+本指南将带您了解使用 stdio 传输设置基本的 Mastra MCPServer、构建它并准备将其发布到 NPM 的过程。
+
+## 安装依赖
+
+安装必要的包：
+
+```bash
+pnpm add @mastra/mcp @mastra/core tsup
+```
+
+## 设置 MCP 服务器
+
+<Steps>
+
+<StepItem>
+
+为您的 stdio 服务器创建一个文件，例如 `/src/mastra/stdio.ts`。
+
+</StepItem>
+
+<StepItem>
+
+将以下代码添加到文件中。请记得导入您实际的 Mastra 工具并适当命名服务器。
+
+```typescript title="src/mastra/stdio.ts"
+#!/usr/bin/env node
+import { MCPServer } from "@mastra/mcp";
+import { weatherTool } from "./tools";
+
+const server = new MCPServer({
+  name: "my-mcp-server",
+  version: "1.0.0",
+  tools: { weatherTool },
+});
+
+server.startStdio().catch((error) => {
+  console.error("Error running MCP server:", error);
+  process.exit(1);
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+更新您的 `package.json`，包含指向构建服务器文件的 `bin` 条目，以及一个使用 ESM 和 CJS 输出构建服务器的脚本。
+
+```json title="package.json"
+{
+  "bin": "dist/stdio.mjs",
+  "scripts": {
+    "build:mcp": "tsup src/mastra/stdio.ts --format esm,cjs --no-splitting --dts && echo '#!/usr/bin/env node' | cat - dist/stdio.mjs > temp && mv temp dist/stdio.mjs && chmod +x dist/stdio.mjs"
+  }
+}
+```
+
+构建命令生成 ESM（`.mjs`）和 CJS（`.cjs`）输出以获得最大的兼容性。shebang（`#!/usr/bin/env node`）被预置到 ESM 产物中以使其可直接执行，而 `bin` 条目指向此文件。
+
+</StepItem>
+
+<StepItem>
+
+运行构建命令：
+
+```bash
+pnpm run build:mcp
+```
+
+这会将您的服务器代码编译成 ESM 和 CJS 两种格式，并使 ESM 输出文件可执行。在类 Unix 系统上，`chmod +x` 步骤使文件可直接执行。Windows 用户可能需要使用 WSL 或直接通过 Node.js 处理执行。
+
+</StepItem>
+
+</Steps>
+
+## 发布到 NPM
+
+要使您的 MCP 服务器可供他人（或您自己）通过 `npx` 或作为依赖使用，您可以将其发布到 NPM。
+
+<Steps>
+
+<StepItem>
+
+确保您拥有 NPM 账户并已登录（`npm login`）。
+
+</StepItem>
+
+<StepItem>
+
+确保您的 `package.json` 中的包名称是唯一的且可用的。
+
+</StepItem>
+
+<StepItem>
+
+构建后，从项目根目录运行发布命令：
+
+```bash
+npm publish --access public
+```
+
+有关发布包的更多详细信息，请参阅 [NPM 文档](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)。
+
+</StepItem>
+
+</Steps>
+
+## 使用已发布的 MCP 服务器
+
+发布后，您的 MCP 服务器可以通过指定运行您的包的命令由 `MCPClient` 使用。您还可以使用任何其他 MCP 客户端，如 Claude 桌面版、Cursor 或 Windsurf。
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+
+const mcp = new MCPClient({
+  servers: {
+    // 给这个 MCP 服务器实例命名
+    yourServerName: {
+      command: "npx",
+      args: ["-y", "@your-org-name/your-package-name@latest"], // 替换为您的包名称
+    },
+  },
+});
+
+//然后您可以从此配置获取工具或工具集以在智能体中使用
+const tools = await mcp.listTools();
+const toolsets = await mcp.listToolsets();
+```
+
+注意：如果您没有使用组织范围发布，`args` 可能只是 `["-y", "your-package-name@latest"]`。

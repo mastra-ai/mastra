@@ -1,0 +1,123 @@
+---
+title: "参考文档：MastraAuthAuth0 类 | 认证"
+description: "MastraAuthAuth0 类的 API 参考，该类使用 Auth0 身份验证对 Mastra 应用程序进行身份验证。"
+packages:
+  - "@mastra/auth-auth0"
+  - "@mastra/core"
+---
+
+# MastraAuthAuth0 类
+
+`MastraAuthAuth0` 类使用 Auth0 为 Mastra 提供身份验证。它使用 Auth0 颁发的 JWT 令牌验证传入请求，并使用 `auth` 选项与 Mastra 服务器集成。
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthAuth0({
+      domain: process.env.AUTH0_DOMAIN,
+      audience: process.env.AUTH0_AUDIENCE,
+    }),
+  },
+});
+```
+
+> **注意：** 如果您设置了正确命名的环境变量（`AUTH0_DOMAIN` 和 `AUTH0_AUDIENCE`），则可以省略构造函数参数。在这种情况下，只需使用不带任何参数的 `new MastraAuthAuth0()`。
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "domain",
+      type: "string",
+      description:
+        "您的 Auth0 域（例如 your-tenant.auth0.com）。这用于验证您的 Auth0 租户颁发的 JWT 令牌。",
+      isOptional: true,
+      defaultValue: "process.env.AUTH0_DOMAIN",
+    },
+    {
+      name: "audience",
+      type: "string",
+      description:
+        "您的 Auth0 API 标识符/受众。这确保令牌针对您的特定 API。",
+      isOptional: true,
+      defaultValue: "process.env.AUTH0_AUDIENCE",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "身份验证提供程序实例的自定义名称。",
+      isOptional: true,
+      defaultValue: '"auth0"',
+    },
+    {
+      name: "authorizeUser",
+      type: "(user: Auth0User) => Promise<boolean> | boolean",
+      description:
+        "自定义授权函数，用于确定用户是否应该获得访问权限。在令牌验证后调用。默认情况下，允许所有持有有效令牌的身份验证用户。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 环境变量
+
+当未提供构造函数选项时，以下环境变量会自动使用：
+
+<PropertiesTable
+  content={[
+    {
+      name: "AUTH0_DOMAIN",
+      type: "string",
+      description:
+        "您的 Auth0 域。可以在 Auth0 控制台的\"应用程序\" > \"设置\"下找到。",
+      isOptional: true,
+    },
+    {
+      name: "AUTH0_AUDIENCE",
+      type: "string",
+      description:
+        "您的 Auth0 API 标识符。这是在 Auth0 控制台创建 API 时设置的标识符。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 默认授权行为
+
+默认情况下，`MastraAuthAuth0` 验证 Auth0 JWT 令牌并允许所有身份验证用户访问：
+
+1. **令牌验证**：使用 Auth0 的公钥（JWKS）验证 JWT 令牌
+2. **签名验证**：确保令牌由您的 Auth0 租户签名
+3. **过期检查**：验证令牌是否已过期
+4. **受众验证**：确认令牌是针对您的特定 API（受众）颁发的
+5. **签发者验证**：确保令牌由您的 Auth0 域签发
+
+如果所有验证通过，则认为用户已获授权。要实现自定义授权逻辑（例如，基于角色的访问控制），请提供自定义 `authorizeUser` 函数。
+
+## Auth0 用户类型
+
+`authorizeUser` 函数中使用的 `Auth0User` 类型对应于解码的 JWT 令牌有效载荷，通常包括：
+
+- `sub`：用户的唯一标识符（主题）
+- `email`：用户的电子邮件地址（如果包含在令牌中）
+- `email_verified`：电子邮件是否已验证
+- `name`：用户的显示名称（如果可用）
+- `picture`：用户个人资料图片的 URL（如果可用）
+- `iss`：令牌签发者（您的 Auth0 域）
+- `aud`：令牌受众（您的 API 标识符）
+- `iat`：令牌签发时间戳
+- `exp`：令牌过期时间戳
+- `scope`：令牌的授权范围
+- 在您的 Auth0 租户中配置的自定义声明和应用元数据
+
+可用的确切属性取决于您的 Auth0 配置、请求的范围以及您配置的任何自定义声明。
+
+## 相关内容
+
+[MastraAuthAuth0 类](/docs/cn/docs/server/auth/auth0)

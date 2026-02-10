@@ -1,0 +1,324 @@
+---
+title: "参考文档：CLI 命令 | CLI"
+description: "用于开发、构建和启动项目的 Mastra CLI 文档。"
+packages:
+  - "@mastra/core"
+---
+
+# CLI 命令
+
+您可以使用 Mastra 提供的命令行界面 (CLI) 来开发、构建和启动您的 Mastra 项目。
+
+## `mastra dev`
+
+启动一个服务器，公开您智能体、工具和工作流的 [Studio](/docs/cn/docs/getting-started/studio) 和 REST 端点。一旦 `mastra dev` 运行，您可以访问 [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) 查看所有可用端点的概览。
+
+您还可以[配置服务器](/docs/cn/docs/getting-started/studio#configuration)。
+
+### 标志
+
+该命令接受[通用标志][common-flags]和以下附加标志：
+
+#### `--https`
+
+启用本地 HTTPS 支持。[了解更多](/reference/configuration#serverhttps)。
+
+#### `--inspect`
+
+以检查模式启动开发服务器，有助于调试。可选择指定自定义主机和端口（例如，用于 Docker 的 `--inspect=0.0.0.0:9229`）。这不能与 `--inspect-brk` 一起使用。
+
+#### `--inspect-brk`
+
+以检查模式启动开发服务器并在脚本开头断点。可选择指定自定义主机和端口（例如 `--inspect-brk=0.0.0.0:9229`）。这不能与 `--inspect` 一起使用。
+
+#### `--custom-args`
+
+传递给开发服务器的自定义参数的逗号分隔列表。您可以向 Node.js 进程传递参数，例如 `--experimental-transform-types`。
+
+### 配置
+
+您可以设置某些环境变量来修改 `mastra dev` 的行为。
+
+#### 跳过同行依赖检查
+
+设置 `MASTRA_SKIP_PEERDEP_CHECK=1` 以在启动时跳过同行依赖版本不匹配检查：
+
+```bash
+MASTRA_SKIP_PEERDEP_CHECK=1 mastra dev
+```
+
+这在 monorepo 开发期间很有用，当同行依赖可能已升级但包尚未发布时。
+
+#### 禁用构建缓存
+
+设置 `MASTRA_DEV_NO_CACHE=1` 以强制完全重建而不是使用 `.mastra/` 下的缓存资产：
+
+```bash
+MASTRA_DEV_NO_CACHE=1 mastra dev
+```
+
+这在调试捆绑插件或怀疑有过时输出时很有帮助。
+
+#### 限制并行度
+
+`MASTRA_CONCURRENCY` 限制同时运行的高成本操作数量（主要是构建和评估步骤）。例如：
+
+```bash
+MASTRA_CONCURRENCY=4 mastra dev
+```
+
+不设置此选项，让 CLI 为机器选择合理的默认值。
+
+#### 自定义提供商端点
+
+当使用 Vercel AI SDK 支持的提供商时，您可以通过设置基础 URL 将请求重定向到代理或内部网关。对于 OpenAI：
+
+```bash
+OPENAI_API_KEY=<your-api-key> \
+OPENAI_BASE_URL=https://openrouter.example/v1 \
+mastra dev
+```
+
+对于 Anthropic：
+
+```bash
+ANTHROPIC_API_KEY=<your-api-key> \
+ANTHROPIC_BASE_URL=https://anthropic.internal \
+mastra dev
+```
+
+这些被转发到 Mastra 模型路由器，并将与任何 `"openai/..."` 或 `"anthropic/..."` 模型选择一起工作。
+
+## `mastra build`
+
+`mastra build` 命令将您的 Mastra 项目捆绑到生产就绪的 Hono 服务器中。[Hono](https://hono.dev/) 是一个轻量级、类型安全的 Web 框架，可以轻松地将 Mastra 智能体部署为具有中间件支持的 HTTP 端点。
+
+在底层，Mastra 的 Rollup 服务器会找到您的 Mastra 入口文件并将其捆绑到生产就绪的 Hono 服务器。在捆绑过程中，它会对您的代码进行摇树优化并生成用于调试的源映射。
+
+`.mastra` 中的输出可以使用 [`mastra start`](#mastra-start) 部署到任何云服务器。
+
+如果您要部署到[无服务器平台](/guides/deployment)，则需要安装正确的部署程序以在 `.mastra` 中获得正确的输出。
+
+它接受[通用标志][common-flags]。
+
+### 标志
+
+#### `--studio`
+
+将 Studio UI 与构建一起捆绑。
+
+### 配置
+
+您可以设置某些环境变量来修改 `mastra build` 的行为。
+
+#### 跳过同行依赖检查
+
+设置 `MASTRA_SKIP_PEERDEP_CHECK=1` 以跳过同行依赖版本不匹配检查：
+
+```bash
+MASTRA_SKIP_PEERDEP_CHECK=1 mastra build
+```
+
+#### 限制并行度
+
+对于 CI 或在资源受限的环境中运行时，您可以通过设置 `MASTRA_CONCURRENCY` 来限制同时运行的高成本任务数量。
+
+```bash
+MASTRA_CONCURRENCY=2 mastra build
+```
+
+## `mastra start`
+
+:::info
+
+在使用 `mastra start` 之前，您需要运行 `mastra build`。
+
+:::
+
+启动本地服务器以生产模式提供您构建的 Mastra 应用程序。默认情况下，[OTEL 追踪](/docs/cn/docs/observability/tracing/overview) 已启用。
+
+### 标志
+
+该命令接受[通用标志][common-flags]和以下附加标志：
+
+#### `--dir`
+
+您构建的 Mastra 输出目录的路径。默认为 `.mastra/output`。
+
+#### `--no-telemetry`
+
+禁用 [OTEL 追踪](/docs/cn/docs/observability/tracing/overview)。
+
+## `mastra studio`
+
+启动 [Mastra Studio](/docs/cn/docs/getting-started/studio) 作为静态服务器。启动后，您可以输入 Mastra 实例 URL（例如 `http://localhost:4111`）将 Studio 连接到您的 Mastra 后端。
+
+### 标志
+
+该命令接受[通用标志][common-flags]和以下附加标志：
+
+#### `--port`
+
+运行 Studio 的端口。默认为 `3000`。
+
+#### `--server-host`
+
+要连接的 Mastra API 服务器的主机。默认为 `localhost`。
+
+#### `--server-port`
+
+要连接的 Mastra API 服务器的端口。默认为 `4111`。
+
+#### `--server-protocol`
+
+要连接的 Mastra API 服务器的协议。默认为 `http`。
+
+## `mastra lint`
+
+`mastra lint` 命令验证您的 Mastra 项目的结构和代码，确保其遵循最佳实践且无错误。
+
+它接受[通用标志][common-flags]。
+
+## `mastra scorers`
+
+`mastra scorers` 命令提供评估评分器的管理功能，用于衡量 AI 生成输出的质量、准确性和性能。
+
+阅读[评分器概述](/docs/cn/docs/evals/overview)以了解更多。
+
+### `add`
+
+向您的项目添加新的评分器。您可以使用交互式提示：
+
+```bash
+mastra scorers add
+```
+
+或直接提供评分器名称：
+
+```bash
+mastra scorers add answer-relevancy
+```
+
+使用 [`list`](#list) 命令获取正确的 ID。
+
+### `list`
+
+列出所有可用的评分器模板。使用 `add` 命令的 ID。
+
+## `mastra init`
+
+`mastra init` 命令在现有项目中初始化 Mastra。使用此命令搭建必要的文件夹和配置，而无需从头生成新项目。
+
+### 标志
+
+该命令接受以下附加标志：
+
+#### `--default`
+
+使用 OpenAI 在 `src` 内创建文件。它还用示例代码填充 `src/mastra` 文件夹。
+
+#### `--dir`
+
+保存 Mastra 文件的目录。默认为 `src`。
+
+#### `--components`
+
+要添加的组件的逗号分隔列表。每个组件将创建一个新文件夹。选择来自：`"agents" | "tools" | "workflows" | "scorers"`。默认为 `['agents', 'tools', 'workflows']`。
+
+#### `--llm`
+
+默认模型提供商。选择来自：`"openai" | "anthropic" | "groq" | "google" | "cerebras" | "mistral"`。
+
+#### `--llm-api-key`
+
+您所选模型提供商的 API 密钥。将写入环境变量文件（`.env`）。
+
+#### `--example`
+
+如果启用，示例代码将写入组件列表（例如示例智能体代码）。
+
+#### `--no-example`
+
+不包含示例代码。在使用 `--default` 标志时很有用。
+
+#### `--mcp`
+
+使用 Mastra 的 MCP 服务器配置您的代码编辑器。选择来自：`"cursor" | "cursor-global" | "windsurf" | "vscode"`。
+
+## `mastra migrate`
+
+运行数据库迁移以更新您的存储架构。当升级包含存储架构更改的 Mastra 版本时，此命令很有用。
+
+该命令捆绑您的项目，连接到配置的存储后端，并执行任何待处理的迁移。当前支持：
+
+- **重复跨度迁移**：删除重复的 `(traceId, spanId)` 条目并添加唯一约束以确保数据完整性。
+
+```bash
+mastra migrate
+```
+
+有关何时需要迁移的详细信息，请参阅[存储迁移指南](/guides/migrations/upgrade-to-v1/storage#duplicate-spans-migration)。
+
+它接受[通用标志][common-flags]。
+
+## 通用标志
+
+### `--dir`
+
+**可用于：** `dev`、`build`、`lint`、`migrate`
+
+您的 Mastra 文件夹的路径。默认为 `src/mastra`。
+
+### `--debug`
+
+**可用于：** `dev`、`build`、`migrate`
+
+启用 Mastra 内部的详细日志记录。默认为 `false`。
+
+### `--env`
+
+**可用于：** `dev`、`start`、`studio`、`migrate`
+
+要包含的自定义环境变量文件。默认包含 `.env.development`、`.env.local` 和 `.env`。
+
+### `--root`
+
+**可用于：** `dev`、`build`、`lint`、`migrate`
+
+根文件夹的路径。默认为 `process.cwd()`。
+
+### `--tools`
+
+**可用于：** `dev`、`build`、`lint`
+
+要包含的工具路径的逗号分隔列表。默认为 `src/mastra/tools`。
+
+## 全局标志
+
+使用这些标志获取有关 `mastra` CLI 的信息。
+
+### `--version`
+
+打印 Mastra CLI 版本并退出。
+
+### `--help`
+
+打印帮助消息并退出。
+
+## 遥测
+
+默认情况下，Mastra 会收集有关您项目的匿名信息，如您的操作系统、Mastra 版本或 Node.js 版本。您可以阅读[源代码](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts)来查看收集的内容。
+
+您可以通过设置环境变量来选择退出 CLI 分析：
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+您也可以在使用其他 `mastra` 命令时设置此选项：
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 mastra dev
+```
+
+[common-flags]: #common-flags

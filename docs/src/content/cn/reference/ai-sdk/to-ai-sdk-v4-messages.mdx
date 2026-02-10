@@ -1,0 +1,130 @@
+---
+title: "参考文档：toAISdkV4Messages() | AI SDK"
+description: "toAISdkV4Messages() 的 API 参考，这是一个用于将 Mastra 消息转换为 AI SDK v4 UI 消息的函数。"
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# toAISdkV4Messages()
+
+将各种输入格式的消息转换为 AI SDK V4 UI 消息格式。此函数接受多种格式的消息（字符串、AI SDK V4/V5 消息、Mastra DB 消息等）并将它们规范化为 AI SDK V4 `UIMessage` 格式，适用于与 `useChat()` 等 AI SDK UI 组件一起使用。
+
+## 使用示例
+
+```typescript title="app/chat/page.tsx"
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+import { useChat } from "ai/react"; // AI SDK V4
+
+// 从您的数据库、内存或 API 存储的消息
+const storedMessages = [
+  { id: "1", role: "user", parts: [{ type: "text", text: "Hello" }] },
+  { id: "2", role: "assistant", parts: [{ type: "text", text: "Hi there!" }] }
+];
+
+export default function Chat() {
+  const { messages } = useChat({
+    initialMessages: toAISdkV4Messages(storedMessages)
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.role}: {message.content}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MessageListInput",
+      description: "要转换的消息。可以是字符串、字符串数组、单个消息对象或任何支持格式的消息对象数组。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+返回具有以下结构的 AI SDK V4 `UIMessage` 对象数组：
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "唯一消息标识符。",
+    },
+    {
+      name: "role",
+      type: "'user' | 'assistant' | 'system'",
+      description: "消息发送者的角色。",
+    },
+    {
+      name: "content",
+      type: "string",
+      description: "消息的文本内容。",
+    },
+    {
+      name: "parts",
+      type: "UIMessagePart[]",
+      description: "UI 部分数组，包括文本、工具调用、文件、推理、来源和步骤标记。",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "消息创建时间戳。",
+    },
+    {
+      name: "toolInvocations",
+      type: "ToolInvocation[]",
+      description: "助手消息的工具调用数组。",
+      isOptional: true,
+    },
+    {
+      name: "experimental_attachments",
+      type: "Attachment[]",
+      description: "消息上的文件附件。",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "附加到消息的自定义元数据。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 示例
+
+### 转换简单的文本消息
+
+```typescript
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+
+const messages = toAISdkV4Messages(["Hello", "How can I help you today?"]);
+// 返回带有用户角色和内容字符串的 UIMessage 对象数组
+```
+
+### 使用 Mastra 客户端加载消息
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+import { toAISdkV4Messages } from "@mastra/ai-sdk";
+
+const client = new MastraClient();
+
+const { messages } = await client.listThreadMessages("thread-id", { agentId: "myAgent" });
+const uiMessages = toAISdkV4Messages(messages);
+```

@@ -1,0 +1,238 @@
+---
+title: "参考文档: Cloudflare D1 存储 | 存储"
+description: "Mastra 中 Cloudflare D1 SQL 存储实现的文档。"
+packages:
+  - "@mastra/cloudflare-d1"
+  - "@mastra/core"
+---
+
+# Cloudflare D1 存储
+
+Cloudflare D1 存储实现使用 Cloudflare D1 提供了一个无服务器 SQL 数据库解决方案，支持关系操作和事务一致性。
+
+:::warning[不支持可观察性]
+Cloudflare D1 存储**不支持可观察性领域**。来自 `DefaultExporter` 的追踪无法持久化到 D1，Mastra Studio 的可观察性功能无法将 D1 作为唯一的存储提供商工作。若要启用可观察性，请使用[复合存储](/reference/storage/composite#specialized-storage-for-observability) 将可观察性数据路由到支持的提供商，如 ClickHouse 或 PostgreSQL。
+:::
+
+:::warning[行大小限制]
+Cloudflare D1 强制执行 **1 MiB 最大行大小限制**。在存储带有 base64 编码附件（如图像）的消息时可能会超过此限制。请参阅[处理大附件](/docs/cn/docs/memory/storage#handling-large-attachments) 了解包括将附件上传到外部存储在内的解决方案。
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/cloudflare-d1@latest
+```
+
+## 使用方法
+
+### 与 Cloudflare Workers 一起使用
+
+在 Cloudflare Worker 中使用 D1Store 时，你需要在运行时从工人的 `env` 参数访问 D1 绑定。你的类型定义中的 `D1Database` 仅用于 TypeScript 类型检查——实际的绑定由 Workers 运行时提供。
+
+```typescript
+import { D1Store } from "@mastra/cloudflare-d1";
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+type Env = {
+  D1Database: D1Database; // TypeScript 类型定义
+};
+
+// 工厂函数，用于使用 D1 绑定创建 Mastra
+function createMastra(env: Env) {
+  const storage = new D1Store({
+    binding: env.D1Database, // ✅ 从 env 访问实际的绑定
+    tablePrefix: "dev_", // 可选：按环境隔离表
+  });
+
+  return new Mastra({
+    storage,
+    deployer: new CloudflareDeployer({
+      name: "my-worker",
+      d1_databases: [
+        {
+          binding: "D1Database", // 必须与 Env 类型中的属性名匹配
+          database_name: "your-database-name",
+          database_id: "your-database-id"
+        }
+      ],
+    }),
+  });
+}
+
+// Cloudflare Worker 导出
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const mastra = createMastra(env);
+
+    // 你的处理逻辑在这里
+    return new Response("Hello from Mastra with D1!");
+  }
+};
+```
+
+:::tip[重要：了解 D1 绑定]
+在 `Env` 类型定义中，`D1Database: D1Database` 有两个用途：
+- **属性名**（`D1Database`）必须与你的 `wrangler.toml` 中的 `binding` 名称匹配
+- **类型**（`: D1Database`）来自 `@cloudflare/workers-types` 用于 TypeScript 类型检查
+
+在运行时，Cloudflare Workers 通过 `env.D1Database` 提供实际的 D1 数据库实例。你无法在 Worker 的上下文之外直接使用 `D1Database`。
+:::
+
+### 与 REST API 一起使用
+
+对于非 Workers 环境（Node.js、无服务器函数等），请使用 REST API 方法：
+
+```typescript
+import { D1Store } from "@mastra/cloudflare-d1";
+
+const storage = new D1Store({
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare 账户 ID
+  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 数据库 ID
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API 令牌
+  tablePrefix: "dev_", // 可选：按环境隔离表
+});
+```
+
+### Wrangler 配置
+
+将 D1 数据库绑定添加到你的 `wrangler.toml`：
+
+```toml
+[[d1_databases]]
+binding = "D1Database"  # 必须与你的 Env 类型中的属性名匹配
+database_name = "your-database-name"
+database_id = "your-database-id"
+```
+
+或在 `wrangler.jsonc` 中：
+
+```jsonc
+{
+  "d1_databases": [
+    {
+      "binding": "D1Database",
+      "database_name": "your-database-name",
+      "database_id": "your-database-id"
+    }
+  ]
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "binding",
+      type: "D1Database",
+      description: "Cloudflare D1 Workers 绑定（用于 Workers 运行时）",
+      isOptional: true,
+    },
+    {
+      name: "accountId",
+      type: "string",
+      description: "Cloudflare 账户 ID（用于 REST API）",
+      isOptional: true,
+    },
+    {
+      name: "databaseId",
+      type: "string",
+      description: "Cloudflare D1 数据库 ID（用于 REST API）",
+      isOptional: true,
+    },
+    {
+      name: "apiToken",
+      type: "string",
+      description: "Cloudflare API 令牌（用于 REST API）",
+      isOptional: true,
+    },
+    {
+      name: "tablePrefix",
+      type: "string",
+      description: "所有表名的可选前缀（用于环境隔离）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 额外说明
+
+### 模式管理
+
+存储实现自动处理模式的创建和更新。它创建以下表：
+
+- `threads`：存储对话线程
+- `messages`：存储单个消息
+- `metadata`：存储线程和消息的额外元数据
+
+### 初始化
+
+当你将存储传递给 Mastra 类时，`init()` 会自动在任何存储操作之前调用：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { D1Store } from "@mastra/cloudflare-d1";
+
+type Env = {
+  D1Database: D1Database;
+};
+
+// 在 Cloudflare Worker 中
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const storage = new D1Store({
+      binding: env.D1Database, // ✅ 使用 env.D1Database
+    });
+
+    const mastra = new Mastra({
+      storage, // init() 自动调用
+    });
+
+    // 你的处理逻辑在这里
+    return new Response("Success");
+  }
+};
+```
+
+如果你在没有 Mastra 的情况下直接使用存储，必须显式调用 `init()` 来创建表：
+
+```typescript
+import { D1Store } from "@mastra/cloudflare-d1";
+
+type Env = {
+  D1Database: D1Database;
+};
+
+// 在 Cloudflare Worker 中
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const storage = new D1Store({
+      id: 'd1-storage',
+      binding: env.D1Database, // ✅ 使用 env.D1Database
+    });
+
+    // 直接使用存储时需要
+    await storage.init();
+
+    // 通过 getStore() 访问特定领域的存储
+    const memoryStore = await storage.getStore('memory');
+    const thread = await memoryStore?.getThreadById({ threadId: "..." });
+
+    return new Response("Success");
+  }
+};
+```
+
+:::warning
+如果未调用 `init()`，表将不会创建，存储操作将静默失败或抛出错误。
+:::
+
+### 事务和一致性
+
+Cloudflare D1 为单行操作提供事务保证。这意味着多个操作可以作为单一的、全有或全无的工作单元执行。
+
+### 表创建和迁移
+
+表在存储初始化时自动创建（可以使用 `tablePrefix` 选项按环境隔离），但高级模式更改——如添加列、更改数据类型或修改索引——需要手动迁移和仔细规划以避免数据丢失。

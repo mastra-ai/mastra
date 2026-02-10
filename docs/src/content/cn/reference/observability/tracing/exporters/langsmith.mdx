@@ -1,0 +1,193 @@
+---
+title: "参考：LangSmithExporter | 可观测性"
+description: "用于追踪的 LangSmith 导出器"
+packages:
+  - "@mastra/langsmith"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# LangSmithExporter
+
+将追踪数据发送到 LangSmith 以进行可观测性监控。
+
+## 构造函数
+
+```typescript
+new LangSmithExporter(config: LangSmithExporterConfig)
+```
+
+## LangSmithExporterConfig
+
+```typescript
+interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
+  client?: Client;
+  projectName?: string;
+```
+
+同时扩展 `ClientConfig`（来自 LangSmith SDK）和 `BaseExporterConfig`：
+- 来自 `BaseExporterConfig`：`logger?: IMastraLogger`、`logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'`
+- 来自 `ClientConfig`：`apiKey`、`apiUrl`、`callerOptions`、`hideInputs`、`hideOutputs` 等
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "LangSmith API 密钥。默认为 LANGSMITH_API_KEY 环境变量。",
+      required: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "发送追踪到的 LangSmith 项目。覆盖 LANGCHAIN_PROJECT 环境变量。默认为 'default'。",
+      required: false,
+    },
+    {
+      name: "apiUrl",
+      type: "string",
+      description: "LangSmith API URL",
+      required: false,
+    },
+    {
+      name: "callerOptions",
+      type: "object",
+      description: "HTTP 客户端配置选项",
+      required: false,
+    },
+    {
+      name: "hideInputs",
+      type: "boolean",
+      description: "在 LangSmith UI 中隐藏输入数据",
+      required: false,
+    },
+    {
+      name: "hideOutputs",
+      type: "boolean",
+      description: "在 LangSmith UI 中隐藏输出数据",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "日志记录器级别（默认：'warn'）",
+      required: false,
+    },
+    {
+      name: "client",
+      type: "Client",
+      description: "预配置的 LangSmith 客户端实例",
+      required: false,
+    },
+  ]}
+/>
+
+## 方法
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+将追踪事件导出到 LangSmith。
+
+### flush
+
+```typescript
+async flush(): Promise<void>
+```
+
+强制刷新任何待处理的跨度到 LangSmith 而不关闭导出器。在无服务器环境中很有用，您需要确保在运行时终止前导出跨度。
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+结束所有活动跨度并清除追踪映射。
+
+## 使用方法
+
+```typescript
+import { LangSmithExporter } from "@mastra/langsmith";
+
+const exporter = new LangSmithExporter({
+  apiKey: process.env.LANGSMITH_API_KEY,
+  projectName: "my-project", // 可选：指定发送追踪的项目
+  apiUrl: "https://api.smith.langchain.com",
+  logLevel: "info",
+});
+```
+
+## 环境变量
+
+| 变量 | 描述 |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | 您的 LangSmith API 密钥 |
+| `LANGCHAIN_PROJECT` | 追踪的默认项目名称（如果未指定 `projectName` 则使用） |
+| `LANGSMITH_BASE_URL` | 自托管实例的 API URL |
+
+## 跨度类型映射
+
+| 跨度类型 | LangSmith 类型 |
+| ------------------ | -------------- |
+| `MODEL_GENERATION` | `llm`          |
+| `MODEL_CHUNK`      | `llm`          |
+| `TOOL_CALL`        | `tool`         |
+| `MCP_TOOL_CALL`    | `tool`         |
+| 所有其他类型        | `chain`        |
+
+## withLangsmithMetadata
+
+帮助函数，用于向追踪选项添加 LangSmith 特定的元数据。
+
+```typescript
+function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptionsUpdater
+```
+
+### LangSmithMetadataInput
+
+<PropertiesTable
+  props={[
+    {
+      name: "projectName",
+      type: "string",
+      description: "覆盖此跨度及其子跨度的项目名称",
+      required: false,
+    },
+    {
+      name: "sessionId",
+      type: "string",
+      description: "用于分组相关追踪的会话 ID",
+      required: false,
+    },
+    {
+      name: "sessionName",
+      type: "string",
+      description: "会话的显示名称",
+      required: false,
+    },
+  ]}
+/>
+
+### 使用方法
+
+```typescript
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangsmithMetadata } from "@mastra/langsmith";
+
+// 路由到特定项目
+const tracingOptions = buildTracingOptions(
+  withLangsmithMetadata({ projectName: "my-project" }),
+);
+
+// 设置多个字段
+const tracingOptions = buildTracingOptions(
+  withLangsmithMetadata({
+    projectName: "my-project",
+    sessionId: "user-123",
+  }),
+);
+```

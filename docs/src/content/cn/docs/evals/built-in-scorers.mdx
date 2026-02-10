@@ -1,0 +1,54 @@
+---
+title: "内置评分器 | 评估"
+description: "Mastra 即用型评分器概述，用于评估 AI 输出的质量、安全性和性能维度。"
+packages:
+  - "@mastra/evals"
+---
+
+# 内置评分器
+
+Mastra 提供了一套全面的内置评分器来评估 AI 输出。这些评分器针对常见的评估场景进行了优化，可以在您的智能体和工作流中直接使用。
+
+要创建您自己的评分器，请参阅[自定义评分器](/docs/cn/evals/custom-scorers)指南。
+
+## 可用评分器
+
+### 准确性和可靠性
+
+这些评分器评估您的智能体答案的正确性、真实性和完整性：
+
+- [`answer-relevancy`](/reference/evals/answer-relevancy)：评估响应如何解决输入查询（`0-1`，越高越好）
+- [`answer-similarity`](/reference/evals/answer-similarity)：使用语义分析将智能体输出与真实答案进行比较，用于 CI/CD 测试（`0-1`，越高越好）
+- [`faithfulness`](/reference/evals/faithfulness)：测量响应如何准确表示提供的上下文（`0-1`，越高越好）
+- [`hallucination`](/reference/evals/hallucination)：检测事实矛盾和未经支持的声明（`0-1`，越低越好）
+- [`completeness`](/reference/evals/completeness)：检查响应是否包含所有必要信息（`0-1`，越高越好）
+- [`content-similarity`](/reference/evals/content-similarity)：使用字符级匹配测量文本相似度（`0-1`，越高越好）
+- [`textual-difference`](/reference/evals/textual-difference)：测量字符串之间的文本差异（`0-1`，越高越相似）
+- [`tool-call-accuracy`](/reference/evals/tool-call-accuracy)：评估大型语言模型是否从可用选项中选择了正确的工具（`0-1`，越高越好）
+- [`prompt-alignment`](/reference/evals/prompt-alignment)：测量智能体响应与用户提示意图、要求、完整性和格式的对齐程度（`0-1`，越高越好）
+
+### 上下文质量
+
+这些评分器评估生成响应所使用的上下文的质量和相关性：
+
+- [`context-precision`](/reference/evals/context-precision)：使用平均精确度评估上下文相关性和排名，奖励相关上下文的早期放置（`0-1`，越高越好）
+- [`context-relevance`](/reference/evals/context-relevance)：测量上下文效用，具有细微的相关性级别、使用跟踪和缺失上下文检测（`0-1`，越高越好）
+
+> 提示 上下文评分器选择
+>
+>- 当上下文顺序重要且您需要标准信息检索指标时使用**上下文精确度**（适合 RAG 排名评估）
+>- 当您需要详细的相关性评估并想跟踪上下文使用情况并识别差距时使用**上下文相关性**
+>
+>两种上下文评分器都支持：
+>
+>- **静态上下文**：预定义的上下文数组
+>- **动态上下文提取**：使用自定义函数从运行中提取上下文（适合 RAG 系统、向量数据库等）
+
+### 输出质量
+
+这些评分器评估对格式、样式和安全要求的遵守情况：
+
+- [`tone-consistency`](/reference/evals/tone-consistency)：测量形式、复杂性和样式的一致性（`0-1`，越高越好）
+- [`toxicity`](/reference/evals/toxicity)：检测有害或不适当的内容（`0-1`，越低越好）
+- [`bias`](/reference/evals/bias)：检测输出中的潜在偏见（`0-1`，越低越好）
+- [`keyword-coverage`](/reference/evals/keyword-coverage)：评估技术术语使用情况（`0-1`，越高越好）

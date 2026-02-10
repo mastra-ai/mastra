@@ -1,0 +1,160 @@
+---
+title: "Mastra 类 | v1 迁移指南"
+description: "了解在升级到 v1 时如何迁移 Mastra 类的更改。"
+---
+
+# Mastra 类
+
+Mastra 类已重构，限制了顶层导入，并用 getter 方法替换了直接属性访问。
+
+## 变更
+
+### 顶层导入改为子路径导入
+
+主 `@mastra/core` 索引文件现在只导出 `Mastra` 和 `Config`。所有其他导出已移至子路径导入。此更改通过允许打包器消除未使用的代码来改进摇树优化并减少包大小。
+
+要迁移，请更新所有从 `@mastra/core` 的导入以使用适当的子路径。
+
+```diff
+- import { Mastra, Agent, Workflow, createTool } from '@mastra/core';
++ import { Mastra, type Config } from '@mastra/core';
++ import { Agent } from '@mastra/core/agent';
++ import { Workflow } from '@mastra/core/workflows';
++ import { createTool } from '@mastra/core/tools';
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/mastra-core-imports .
+```
+
+:::
+
+### `experimental_auth` 改为 `auth`
+
+实验性 auth 配置已提升为稳定版。此更改反映了 auth API 现在已稳定并可用于生产。
+
+要迁移，请在 Mastra 配置中将 `experimental_auth` 键重命名为 `auth`。
+
+```diff
+  const mastra = new Mastra({
+-   experimental_auth: {
++   auth: {
+      provider: workos,
+    },
+  });
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/experimental-auth .
+```
+
+:::
+
+### 所有 Mastra 原语需要 `id` 参数
+
+所有存储、向量存储、代理、工作流、MCP 服务器、处理器、评分器和工具现在在初始化时都需要 `id` 参数。这启用了标准化的 Mastra API 并防止 ID 冲突。
+
+所有这些原语现在也有 `get`、`list` 和 `add` 函数。
+
+要迁移，请为所有存储和向量存储实例添加 `id` 参数。当多次使用相同的存储/向量类时，确保每个实例具有唯一的 ID。
+
+```diff
+- const storage = new LibSQLStore({
+-   url: ':memory:',
+- });
++ const storage = new LibSQLStore({
++   id: 'my-app-storage',
++   url: ':memory:',
++ });
+
+- const vector = new PgVector({
+-   connectionString: process.env.DATABASE_URL,
+- });
++ const vector = new PgVector({
++   id: 'my-app-vector',
++   connectionString: process.env.DATABASE_URL,
++ });
+```
+
+当为不同用途使用单独的实例时，使用描述性的唯一 ID：
+
+```diff
+  const agentMemory = new Memory({
+    storage: new LibSQLStore({
+-     url: 'file:./agent.db',
++     id: 'weather-agent-memory-storage',
++     url: 'file:./agent.db',
+    }),
+  });
+
+  const mastra = new Mastra({
+    storage: new LibSQLStore({
++     id: 'mastra-storage',
+      url: ':memory:',
+    }),
+  });
+```
+
+### 原语复数 API 从 `get<primitives>` 改为 `list<primitive>`
+
+返回原语所有实例的 `get*` 函数已重命名为 `list*`，以更好地反映其用途。
+
+```diff
+- const agents = mastra.getAgents();
++ const agents = mastra.listAgents();
+- const vectors = mastra.getVectors();
++ const vectors = mastra.listVectors();
+- const workflows = mastra.getWorkflows();
++ const workflows = mastra.listWorkflows();
+- const scorers = mastra.getScorers();
++ const scorers = mastra.listScorers();
+- const mcpServers = mastra.getMCPServers();
++ const mcpServers = mastra.listMCPServers();
+- const logsByRunId = await mastra.getLogsByRunId({ runId: 'id', transportId: 'id' });
++ const logsByRunId = await mastra.listLogsByRunId({ runId: 'id', transportId: 'id' });
+- const logs = await mastra.getLogs('transportId');
++ const logs = await mastra.listLogs('transportId');
+```
+
+:::tip[Codemod]
+
+您可以使用 Mastra 的 codemod CLI 自动更新代码：
+
+```bash
+npx @mastra/codemod@latest v1/mastra-plural-apis .
+```
+
+:::
+
+### 每个原语都有 `getById` 和 `get` 函数
+
+```typescript
+mastra.getMCPServer('myServer');          // 可用（注册表键）
+mastra.getMCPServerById('my-mcp-server'); // 可用（内在 ID）
+```
+
+### 工具注册现在使用内在 ID
+
+当工具从代理或 MCP 服务器自动注册到 Mastra 实例时，它们现在使用工具的内在 `id` 而不是配置对象键。这可以防止多个代理/MCP 服务器具有相同配置键的工具时发生冲突。
+
+要迁移，请更新任何通过配置键引用工具的代码以改用工具的内在 ID。
+
+```diff
+  const agent = new Agent({
+    id: 'agent1',
+    tools: {
+      searchTool: weatherSearchTool,
+    },
+  });
+
+- mastra.getTool('searchTool');
++ mastra.getTool(weatherSearchTool.id);
+```

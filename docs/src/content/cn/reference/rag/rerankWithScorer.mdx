@@ -1,0 +1,213 @@
+---
+title: "参考：rerankWithScorer() | RAG"
+description: "Mastra 中 rerankWithScorer 函数的文档，该函数为向量搜索结果提供高级重排序功能。"
+packages:
+  - "@mastra/rag"
+---
+
+# rerankWithScorer()
+
+`rerankWithScorer()` 函数通过结合语义相关性、向量相似性和基于位置的评分，为向量搜索结果提供高级重排序功能。
+
+```typescript
+function rerankWithScorer({
+  results: QueryResult[],
+  query: string,
+  scorer: RelevanceScoreProvider,
+  options?: RerankerFunctionOptions,
+}): Promise<RerankResult[]>;
+```
+
+## 使用示例
+
+```typescript
+import { rerankWithScorer as rerank, CohereRelevanceScorer } from "@mastra/rag";
+
+const scorer = new CohereRelevanceScorer("rerank-v3.5");
+
+const rerankedResults = await rerank({
+  results: vectorSearchResults,
+  query: "如何部署到生产环境？",
+  scorer,
+  options: {
+    weights: {
+      semantic: 0.5,
+      vector: 0.3,
+      position: 0.2,
+    },
+    topK: 3,
+  },
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "results",
+      type: "QueryResult[]",
+      description: "要重排序的向量搜索结果",
+      isOptional: false,
+    },
+    {
+      name: "query",
+      type: "string",
+      description: "用于评估相关性的搜索查询文本",
+      isOptional: false,
+    },
+    {
+      name: "scorer",
+      type: "RelevanceScoreProvider",
+      description: "用于重排序的相关性评分器",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "RerankerFunctionOptions",
+      description: "重排序模型的选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+`rerankWithScorer` 函数接受来自 @mastra/rag 的任何 `RelevanceScoreProvider`。
+
+> **注意：** 为了使语义评分在重排序期间正常工作，每个结果必须在其 `metadata.text` 字段中包含文本内容。
+
+### RerankerFunctionOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "weights",
+      type: "WeightConfig",
+      description: "不同评分组件的权重（必须相加为 1）",
+      isOptional: true,
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "semantic",
+              description: "语义相关性的权重",
+              isOptional: true,
+              type: "number (默认值: 0.4)",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "vector",
+              description: "向量相似性的权重",
+              isOptional: true,
+              type: "number (默认值: 0.4)",
+            },
+          ],
+        },
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "position",
+              description: "基于位置评分的权重",
+              isOptional: true,
+              type: "number (默认值: 0.2)",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "queryEmbedding",
+      type: "number[]",
+      description: "查询的嵌入",
+      isOptional: true,
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "要返回的顶部结果数量",
+      isOptional: true,
+      defaultValue: "3",
+    },
+  ]}
+/>
+
+## 返回值
+
+该函数返回 `RerankResult` 对象数组：
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "QueryResult",
+      description: "原始查询结果",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "组合重排序分数 (0-1)",
+    },
+    {
+      name: "details",
+      type: "ScoringDetails",
+      description: "详细评分信息",
+    },
+  ]}
+/>
+
+### ScoringDetails
+
+<PropertiesTable
+  content={[
+    {
+      name: "semantic",
+      type: "number",
+      description: "语义相关性分数 (0-1)",
+    },
+    {
+      name: "vector",
+      type: "number",
+      description: "向量相似性分数 (0-1)",
+    },
+    {
+      name: "position",
+      type: "number",
+      description: "基于位置的分数 (0-1)",
+    },
+    {
+      name: "queryAnalysis",
+      type: "object",
+      description: "查询分析详情",
+      isOptional: true,
+      properties: [
+        {
+          type: "number",
+          parameters: [
+            {
+              name: "magnitude",
+              description: "查询的幅度",
+            },
+          ],
+        },
+        {
+          type: "number[]",
+          parameters: [
+            {
+              name: "dominantFeatures",
+              description: "查询的主导特征",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [createVectorQueryTool](../tools/vector-query-tool)

@@ -1,0 +1,135 @@
+---
+title: "Azure OpenAI | 网关 | Mastra"
+description: "通过自定义模型部署使用 Azure OpenAI 服务。"
+---
+
+{/* 此文件为手动维护 - 请勿自动生成 */}
+{/* Azure 使用基于部署的路由，与标准提供商不同 */}
+
+# <img src="https://models.dev/logos/azure.svg" alt="Azure OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Azure OpenAI
+
+Azure OpenAI 通过专用部署提供对企业级 OpenAI 模型的访问，具有安全性、合规性和 SLA 保障。
+
+与其他具有固定模型名称的提供商不同，Azure 使用**部署名称**，您可以在 Azure 门户中配置这些名称。
+
+## Azure 部署的工作原理
+
+Azure 模型 ID 遵循以下模式：`azure-openai/your-deployment-name`
+
+部署名称**特定于您的 Azure 账户**，在 Azure 门户中创建部署时选择。常见示例：
+- `azure-openai/my-gpt4-deployment`
+- `azure-openai/production-gpt-35-turbo`
+- `azure-openai/staging-gpt-4o`
+
+## 设置
+
+在 [Azure OpenAI Studio](https://oai.azure.com/) 中创建部署。资源名称和 API 密钥位于 Azure 门户中的"密钥和端点"下。
+
+## 配置
+
+实例化网关并将其传递给 Mastra。可用三种配置模式。
+
+### 静态部署
+
+提供 Azure 门户中的部署名称。
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      deployments: ["gpt-4-prod", "gpt-35-turbo-dev"],
+    }),
+  ],
+});
+```
+
+### 动态发现
+
+提供管理 API 凭据。网关查询 Azure 管理 API 以列出部署。
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+      management: {
+        tenantId: process.env.AZURE_TENANT_ID!,
+        clientId: process.env.AZURE_CLIENT_ID!,
+        clientSecret: process.env.AZURE_CLIENT_SECRET!,
+        subscriptionId: process.env.AZURE_SUBSCRIPTION_ID!,
+        resourceGroup: "my-resource-group",
+      },
+    }),
+  ],
+});
+```
+
+服务主体需要"认知服务用户"角色。请参阅 [Azure 文档](https://learn.microsoft.com/zh-cn/entra/identity-platform/howto-create-service-principal-portal)。
+
+### 手动部署名称
+
+仅提供资源名称和 API 密钥。在创建智能体时指定部署名称。无 IDE 自动补全。
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { AzureOpenAIGateway } from "@mastra/core/llm";
+
+export const mastra = new Mastra({
+  gateways: [
+    new AzureOpenAIGateway({
+      resourceName: "my-openai-resource",
+      apiKey: process.env.AZURE_API_KEY!,
+    }),
+  ],
+});
+```
+
+## 配置参考
+
+| 选项 | 类型 | 必填 | 描述 |
+|------|------|------|------|
+| `resourceName` | `string` | 是 | Azure OpenAI 资源名称 |
+| `apiKey` | `string` | 是 | "密钥和端点"中的 API 密钥 |
+| `apiVersion` | `string` | 否 | API 版本（默认：`2024-04-01-preview`） |
+| `deployments` | `string[]` | 否 | 静态模式的部署名称 |
+| `management` | `object` | 否 | 管理 API 凭据 |
+| `management.tenantId` | `string` | 是* | Azure AD 租户 ID |
+| `management.clientId` | `string` | 是* | 服务主体客户端 ID |
+| `management.clientSecret` | `string` | 是* | 服务主体密钥 |
+| `management.subscriptionId` | `string` | 是* | Azure 订阅 ID |
+| `management.resourceGroup` | `string` | 是* | 资源组名称 |
+
+\* 如果提供了 `management` 则为必填
+
+## 使用方法
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "azure-openai/my-gpt4-deployment"  // 使用您的 Azure 部署名称（开发模式下自动补全）
+});
+
+// 生成回复
+const response = await agent.generate("Hello!");
+
+// 流式回复
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+查看 [Azure OpenAI 模型可用性](https://learn.microsoft.com/zh-cn/azure/ai-services/openai/concepts-models) 了解区域特定选项。

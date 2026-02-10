@@ -1,0 +1,184 @@
+---
+title: "SimpleAuth 类 | 认证"
+description: "SimpleAuth 类的文档，该类为开发和简单的 API 密钥场景提供令牌到用户映射的身份验证。"
+packages:
+  - "@mastra/core"
+---
+
+# SimpleAuth 类
+
+`SimpleAuth` 类使用简单的令牌到用户映射提供基于令牌的身份验证。它包含在 `@mastra/core/server` 中，适用于开发、测试和简单的 API 密钥身份验证场景。
+
+## 使用场景
+
+- 本地开发和测试
+- 简单的 API 密钥身份验证
+- 在集成完整身份提供程序之前的原型设计
+- 具有静态令牌的内部服务
+
+## 安装
+
+SimpleAuth 包含在 `@mastra/core` 中，无需额外包。
+
+```typescript
+import { SimpleAuth } from '@mastra/core/server';
+```
+
+## 使用示例
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { SimpleAuth } from '@mastra/core/server';
+
+// 定义您的用户类型
+type User = {
+  id: string;
+  name: string;
+  role: 'admin' | 'user';
+};
+
+export const mastra = new Mastra({
+  server: {
+    auth: new SimpleAuth<User>({
+      tokens: {
+        'sk-admin-token-123': {
+          id: 'user-1',
+          name: 'Admin User',
+          role: 'admin',
+        },
+        'sk-user-token-456': {
+          id: 'user-2',
+          name: 'Regular User',
+          role: 'user',
+        },
+      },
+    }),
+  },
+});
+```
+
+## 配置选项
+
+| 选项 | 类型 | 必填 | 描述 |
+|--------|------|----------|-------------|
+| `tokens` | `Record<string, TUser>` | 是 | 令牌到用户对象的映射 |
+| `headers` | `string \| string[]` | 否 | 要检查令牌的附加头 |
+| `name` | `string` | 否 | 用于日志记录的提供程序名称 |
+| `authorizeUser` | `(user, request) => boolean` | 否 | 自定义授权函数 |
+| `protected` | `(RegExp \| string)[]` | 否 | 需要身份验证的路径 |
+| `public` | `(RegExp \| string)[]` | 否 | 绕过身份验证的路径 |
+
+### 默认头
+
+SimpleAuth 默认检查以下头：
+- `Authorization`（带或不带 `Bearer` 前缀）
+- `X-Playground-Access`
+
+使用 `headers` 选项添加自定义头：
+
+```typescript
+new SimpleAuth({
+  tokens: { /* ... */ },
+  headers: ['X-API-Key', 'X-Custom-Auth'],
+});
+```
+
+## 发出身份验证请求
+
+在 `Authorization` 头中包含您的令牌：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/myAgent/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-admin-token-123" \
+  -d '{"messages": "Hello"}'
+```
+
+或者不带 `Bearer` 前缀：
+
+```bash
+curl -X POST http://localhost:4111/api/agents/myAgent/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: sk-admin-token-123" \
+  -d '{"messages": "Hello"}'
+```
+
+## 自定义授权
+
+添加基于角色的或自定义授权逻辑：
+
+```typescript
+new SimpleAuth<User>({
+  tokens: {
+    'sk-admin-token': { id: '1', name: 'Admin', role: 'admin' },
+    'sk-user-token': { id: '2', name: 'User', role: 'user' },
+  },
+  authorizeUser: (user, request) => {
+    // 只有管理员可以访问 /admin 路由
+    if (request.url.includes('/admin')) {
+      return user.role === 'admin';
+    }
+    return true;
+  },
+});
+```
+
+## 环境变量
+
+对于类似生产的设置，从环境变量加载令牌：
+
+```typescript
+const tokens: Record<string, User> = {};
+
+// 从环境变量加载
+const adminToken = process.env.ADMIN_API_KEY;
+if (adminToken) {
+  tokens[adminToken] = { id: 'admin', name: 'Admin', role: 'admin' };
+}
+
+const userToken = process.env.USER_API_KEY;
+if (userToken) {
+  tokens[userToken] = { id: 'user', name: 'User', role: 'user' };
+}
+
+export const mastra = new Mastra({
+  server: {
+    auth: new SimpleAuth({ tokens }),
+  },
+});
+```
+
+## 与 MastraClient 一起使用
+
+使用您的令牌配置客户端：
+
+```typescript
+import { MastraClient } from '@mastra/client-js';
+
+const client = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+  headers: {
+    Authorization: 'Bearer sk-admin-token-123',
+  },
+});
+
+const agent = client.getAgent('myAgent');
+const response = await agent.generate('Hello');
+```
+
+## 限制
+
+SimpleAuth 专为简单性而设计，而非生产安全性：
+
+- 令牌存储在内存中
+- 没有令牌过期或刷新
+- 没有加密验证
+- 所有令牌必须在启动时已知
+
+对于生产应用程序，请考虑使用 [JWT](/docs/cn/server/auth/jwt)、[Clerk](/docs/cn/server/auth/clerk)、[Auth0](/docs/cn/server/auth/auth0) 或其他身份提供程序。
+
+## 相关内容
+
+- [认证概述](/docs/cn/server/auth) - 身份验证概念
+- [JWT 身份验证](/docs/cn/server/auth/jwt) - JSON Web Token 身份验证
+- [自定义身份验证提供程序](/docs/cn/server/auth/custom-auth-provider) - 构建您自己的提供程序

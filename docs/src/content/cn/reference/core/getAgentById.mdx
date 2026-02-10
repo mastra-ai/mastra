@@ -1,0 +1,46 @@
+---
+title: "参考文档：Mastra.getAgentById() | 核心"
+description: "Mastra 中 `Mastra.getAgentById()` 方法的文档，用于按 ID 检索智能体。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getAgentById()
+
+`.getAgentById()` 方法用于按 ID 检索智能体。该方法接受一个字符串参数作为智能体的 ID。
+
+## 使用示例
+
+```typescript
+mastra.getAgentById("test-agent-123");
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "要检索的智能体的 ID。该方法将首先搜索具有此 ID 的智能体，如果找不到，将尝试将其作为名称来调用 getAgent()。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "Agent",
+      description:
+        "具有指定 ID 的智能体实例。如果找不到智能体，则抛出错误。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)

@@ -1,0 +1,544 @@
+---
+title: "参考文档: Agent.streamLegacy() (旧版) | 流处理"
+description: "Mastra 智能体中旧版 `Agent.streamLegacy()` 方法的文档。此方法已弃用，将在未来版本中移除。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.streamLegacy() (旧版)
+
+:::warning
+
+**已弃用**：此方法已弃用，仅适用于 V1 模型。对于 V2 模型，请改用新的 [`.stream()`](./stream) 方法。请参阅[迁移指南](/guides/migrations/vnext-to-standard-apis) 了解升级详情。
+
+:::
+
+`.streamLegacy()` 方法是智能体流式 API 的旧版本，用于从 V1 模型智能体实时流式传输响应。此方法接受消息和可选的流式处理选项。
+
+## 使用示例
+
+```typescript
+await agent.streamLegacy("发送给智能体的消息");
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
+      description: "发送给智能体的消息。可以是单个字符串、字符串数组或结构化消息对象。",
+    },
+    {
+      name: "options",
+      type: "AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT>",
+      isOptional: true,
+      description: "流式处理过程的可选配置。",
+    },
+  ]}
+/>
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "abortSignal",
+      type: "AbortSignal",
+      isOptional: true,
+      description: "允许你中止智能体执行的信令对象。当信号中止时，所有正在进行的操作都将终止。",
+    },
+    {
+      name: "context",
+      type: "CoreMessage[]",
+      isOptional: true,
+      description: "提供给智能体的额外上下文消息。",
+    },
+    {
+      name: "experimental_output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "启用与文本生成和工具调用并行的结构化输出生成。模型将生成符合所提供模式的结果。",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description: "覆盖此特定生成的智能体默认指令的自定义指令。适用于在不创建新智能体实例的情况下动态修改智能体行为。",
+    },
+    {
+      name: "output",
+      type: "Zod schema | JsonSchema7",
+      isOptional: true,
+      description: "定义输出的预期结构。可以是 JSON Schema 对象或 Zod 模式。",
+    },
+    {
+      name: "memory",
+      type: "object",
+      isOptional: true,
+      description: "内存配置。这是管理内存的首选方式。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "thread",
+              type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
+              isOptional: false,
+              description: "对话线程，作为字符串 ID 或带有 `id` 和可选 `metadata` 的对象。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "resource",
+              type: "string",
+              isOptional: false,
+              description: "与线程关联的用户或资源的标识符。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "options",
+              type: "MemoryConfig",
+              isOptional: true,
+              description: "包括消息历史和语义回忆的内存行为配置。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "maxSteps",
+      type: "number",
+      isOptional: true,
+      defaultValue: "5",
+      description: "允许的最大执行步骤数。",
+    },
+    {
+      name: "maxRetries",
+      type: "number",
+      isOptional: true,
+      defaultValue: "2",
+      description: "最大重试次数。设置为 0 以禁用重试。",
+    },
+    {
+      name: "memoryOptions",
+      type: "MemoryConfig",
+      isOptional: true,
+      description: "**已弃用。** 请改用 `memory.options`。内存管理的配置选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "lastMessages",
+              type: "number | false",
+              isOptional: true,
+              description: "要包含在上下文中的最近消息数量，或 false 禁用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "semanticRecall",
+              type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+              isOptional: true,
+              description: "启用语义回忆以查找相关的过去消息。可以是布尔值或详细配置。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "workingMemory",
+              type: "WorkingMemory",
+              isOptional: true,
+              description: "工作内存功能配置。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "threads",
+              type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
+              isOptional: true,
+              description: "特定于线程的配置，包括自动标题生成。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "onFinish",
+      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+      isOptional: true,
+      description: "流完成时调用的回调函数。接收最终结果。",
+    },
+    {
+      name: "onStepFinish",
+      type: "StreamTextOnStepFinishCallback<any> | never",
+      isOptional: true,
+      description: "每个执行步骤之后调用的回调函数。接收步骤详情作为 JSON 字符串。结构化输出不可用。",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      isOptional: true,
+      description: "**已弃用。** 请改用 `memory.resource`。与智能体交互的用户或资源的标识符。如果提供了 threadId，则必须提供此参数。",
+    },
+    {
+      name: "telemetry",
+      type: "TelemetrySettings",
+      isOptional: true,
+      description: "流式处理期间遥测收集的设置。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "isEnabled",
+              type: "boolean",
+              isOptional: true,
+              description: "启用或禁用遥测。实验性期间默认为禁用。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordInputs",
+              type: "boolean",
+              isOptional: true,
+              description: "启用或禁用输入记录。默认启用。你可能希望禁用输入记录以避免记录敏感信息。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "recordOutputs",
+              type: "boolean",
+              isOptional: true,
+              description: "启用或禁用输出记录。默认启用。你可能希望禁用输出记录以避免记录敏感信息。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "functionId",
+              type: "string",
+              isOptional: true,
+              description: "此函数的标识符。用于按函数分组遥测数据。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "temperature",
+      type: "number",
+      isOptional: true,
+      description: "控制模型输出中的随机性。较高的值（例如 0.8）使输出更随机，较低的值（例如 0.2）使输出更集中和确定性。",
+    },
+    {
+      name: "threadId",
+      type: "string",
+      isOptional: true,
+      description: "**已弃用。** 请改用 `memory.thread`。对话线程的标识符。允许在多次交互之间保持上下文。如果提供了 resourceId，则必须提供此参数。",
+    },
+    {
+      name: "toolChoice",
+      type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+      isOptional: true,
+      defaultValue: "'auto'",
+      description: "控制智能体在流式处理期间如何使用工具。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "'auto'",
+              type: "string",
+              description: "让模型决定是否使用工具（默认）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "'none'",
+              type: "string",
+              description: "不使用任何工具。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "'required'",
+              type: "string",
+              description: "要求模型至少使用一个工具。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "{ type: 'tool'; toolName: string }",
+              type: "object",
+              description: "按名称要求模型使用特定工具。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "toolsets",
+      type: "ToolsetsInput",
+      isOptional: true,
+      description: "在流式处理期间提供给智能体的额外工具集。",
+    },
+    {
+      name: "clientTools",
+      type: "ToolsInput",
+      isOptional: true,
+      description: "在请求的'客户端'端执行的工具。这些工具在定义中没有执行函数。",
+    },
+    {
+      name: "savePerStep",
+      type: "boolean",
+      isOptional: true,
+      description: "在每个流步骤完成后增量保存消息（默认值：false）。",
+    },
+    {
+      name: "providerOptions",
+      type: "Record<string, Record<string, JSONValue>>",
+      isOptional: true,
+      description: "传递给底层 LLM 提供商的额外特定于提供商的选项。结构为 `{ providerName: { optionKey: value } }`。例如：`{ openai: { reasoningEffort: 'high' }, anthropic: { maxTokens: 1000 } }`。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "openai",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "OpenAI 特定选项。例如：`{ reasoningEffort: 'high' }`",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "anthropic",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "Anthropic 特定选项。例如：`{ maxTokens: 1000 }`",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "google",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "Google 特定选项。例如：`{ safetySettings: [...] }`",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "[providerName]",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description: "其他特定于提供商的选项。键是提供商名称，值是特定于提供商的选项记录。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "runId",
+      type: "string",
+      isOptional: true,
+      description: "此生成运行的唯一 ID。用于跟踪和调试目的。",
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      description: "用于依赖注入和上下文信息的请求上下文。",
+    },
+    {
+      name: "maxTokens",
+      type: "number",
+      isOptional: true,
+      description: "要生成的最大 token 数。",
+    },
+    {
+      name: "topP",
+      type: "number",
+      isOptional: true,
+      description: "核采样。这是一个介于 0 和 1 之间的数字。建议设置 `temperature` 或 `topP` 之一，但不要同时设置两者。",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      description: "仅为每个后续 token 从 top K 选项中采样。用于删除'长尾'低概率响应。",
+    },
+    {
+      name: "presencePenalty",
+      type: "number",
+      isOptional: true,
+      description: "存在惩罚设置。它会影响模型重复提示中已有信息的可能性。数字范围为 -1（增加重复）到 1（最大惩罚，减少重复）。",
+    },
+    {
+      name: "frequencyPenalty",
+      type: "number",
+      isOptional: true,
+      description: "频率惩罚设置。它会影响模型重复使用相同词语或短语的可能性。数字范围为 -1（增加重复）到 1（最大惩罚，减少重复）。",
+    },
+    {
+      name: "stopSequences",
+      type: "string[]",
+      isOptional: true,
+      description: "停止序列。如果设置，当生成其中一个停止序列时，模型将停止生成文本。",
+    },
+    {
+      name: "seed",
+      type: "number",
+      isOptional: true,
+      description: "用于随机采样的种子（整数）。如果设置且模型支持，调用将生成确定性结果。",
+    },
+    {
+      name: "headers",
+      type: "Record<string, string | undefined>",
+      isOptional: true,
+      description: "随请求发送的额外 HTTP 头。仅适用于基于 HTTP 的提供商。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "textStream",
+      type: "AsyncGenerator<string>",
+      isOptional: true,
+      description: "异步生成器，随着文本块的可用而生成文本块。",
+    },
+    {
+      name: "fullStream",
+      type: "Promise<ReadableStream>",
+      isOptional: true,
+      description: "解析为完整响应的 ReadableStream 的 Promise。",
+    },
+    {
+      name: "text",
+      type: "Promise<string>",
+      isOptional: true,
+      description: "解析为完整文本响应的 Promise。",
+    },
+    {
+      name: "usage",
+      type: "Promise<{ totalTokens: number; promptTokens: number; completionTokens: number }>",
+      isOptional: true,
+      description: "解析为 token 使用信息的 Promise。",
+    },
+    {
+      name: "finishReason",
+      type: "Promise<string>",
+      isOptional: true,
+      description: "解析为流完成原因的 Promise。",
+    },
+    {
+      name: "toolCalls",
+      type: "Promise<Array<ToolCall>>",
+      isOptional: true,
+      description: "解析为流式处理期间进行的工具调用的 Promise。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              required: true,
+              description: "调用的工具名称。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "args",
+              type: "any",
+              required: true,
+              description: "传递给工具的参数。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.streamLegacy("发送给智能体的消息", {
+  temperature: 0.7,
+  maxSteps: 3,
+  memory: {
+    thread: "user-123",
+    resource: "test-app",
+  },
+  toolChoice: "auto",
+});
+```
+
+## 迁移到新 API
+
+:::info
+
+新的 `.stream()` 方法提供了增强功能，包括 AI SDK v5+ 兼容性、更好的结构化输出处理和改进的回调系统。请参阅[迁移指南](/guides/migrations/vnext-to-standard-apis) 获取详细的迁移说明。
+
+:::
+
+### 快速迁移示例
+
+#### 之前（旧版）
+
+```typescript
+const result = await agent.streamLegacy("消息", {
+  temperature: 0.7,
+  maxSteps: 3,
+  onFinish: (result) => console.log(result),
+});
+```
+
+#### 之后（新 API）
+
+```typescript
+const result = await agent.stream("消息", {
+  modelSettings: {
+    temperature: 0.7,
+  },
+  maxSteps: 3,
+  onFinish: (result) => console.log(result),
+});
+```
+
+## 相关文档
+
+- [迁移指南](/guides/migrations/vnext-to-standard-apis)
+- [新的 .stream() 方法](./stream)
+- [生成响应](/docs/cn/docs/agents/overview#生成响应)
+- [流式响应](/docs/cn/docs/agents/overview#生成响应)

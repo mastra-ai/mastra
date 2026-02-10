@@ -1,0 +1,289 @@
+---
+title: "IO.NET | 模型 | Mastra"
+description: "在 Mastra 中使用 IO.NET 模型。共 17 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/io-net.svg" alt="IO.NET logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />IO.NET
+
+通过 Mastra 的模型路由器访问 17 个 IO.NET 模型。身份验证使用 `IOINTELLIGENCE_API_KEY` 环境变量自动处理。
+
+在 [IO.NET 文档](https://io.net/docs/cn/docs/guides/intelligence/io-intelligence) 中了解更多信息。
+
+```bash title=".env"
+IOINTELLIGENCE_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [IO.NET 文档](https://io.net/docs/cn/docs/guides/intelligence/io-intelligence) 了解详情。
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "io-net/deepseek-ai/DeepSeek-R1-0528",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 8.75
+  },
+  {
+    "model": "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 106000,
+    "maxOutput": 4096,
+    "inputCost": 0.22,
+    "outputCost": 0.95
+  },
+  {
+    "model": "io-net/meta-llama/Llama-3.2-90B-Vision-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 16000,
+    "maxOutput": 4096,
+    "inputCost": 0.35,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-net/meta-llama/Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.13,
+    "outputCost": 0.38
+  },
+  {
+    "model": "io-net/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 430000,
+    "maxOutput": 4096,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-net/mistralai/Devstral-Small-2505",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-net/mistralai/Magistral-Small-2506",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.5,
+    "outputCost": 1.5
+  },
+  {
+    "model": "io-net/mistralai/Mistral-Large-Instruct-2411",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "io-net/mistralai/Mistral-Nemo-Instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 4096,
+    "inputCost": 0.02,
+    "outputCost": 0.04
+  },
+  {
+    "model": "io-net/moonshotai/Kimi-K2-Instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.39,
+    "outputCost": 1.9
+  },
+  {
+    "model": "io-net/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 4096,
+    "inputCost": 0.55,
+    "outputCost": 2.25
+  },
+  {
+    "model": "io-net/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 4096,
+    "inputCost": 0.04,
+    "outputCost": 0.4
+  },
+  {
+    "model": "io-net/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 64000,
+    "maxOutput": 4096,
+    "inputCost": 0.03,
+    "outputCost": 0.14
+  },
+  {
+    "model": "io-net/Qwen/Qwen2.5-VL-32B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 4096,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "io-net/Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.11,
+    "outputCost": 0.6
+  },
+  {
+    "model": "io-net/Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 4096,
+    "inputCost": 0.1,
+    "outputCost": 0.8
+  },
+  {
+    "model": "io-net/zai-org/GLM-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.4,
+    "outputCost": 1.75
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.intelligence.io.solutions/api/v1",
+    id: "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
+    apiKey: process.env.IOINTELLIGENCE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "io-net/zai-org/GLM-4.6"
+      : "io-net/Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar";
+  }
+});
+```
+
+

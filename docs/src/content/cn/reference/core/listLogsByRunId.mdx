@@ -1,0 +1,89 @@
+---
+title: "参考文档：Mastra.listLogsByRunId() | 核心"
+description: "Mastra 中 `Mastra.listLogsByRunId()` 方法的文档，用于检索特定运行 ID 和传输 ID 的日志。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listLogsByRunId()
+
+`.listLogsByRunId()` 方法用于检索特定运行 ID 和传输 ID 的日志。此方法需要配置的支持 `listLogsByRunId` 操作的日志记录器。
+
+## 使用示例
+
+```typescript
+mastra.listLogsByRunId({ runId: "123", transportId: "456" });
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "要检索日志的运行 ID。",
+    },
+    {
+      name: "transportId",
+      type: "string",
+      description: "要从中检索日志的传输 ID。",
+    },
+    {
+      name: "fromDate",
+      type: "Date",
+      description:
+        "用于过滤日志的可选开始日期。例如：new Date('2024-01-01')。",
+      optional: true,
+    },
+    {
+      name: "toDate",
+      type: "Date",
+      description:
+        "用于过滤日志的可选结束日期。例如：new Date('2024-01-31')。",
+      optional: true,
+    },
+    {
+      name: "logLevel",
+      type: "LogLevel",
+      description: "用于过滤的可选日志级别。",
+      optional: true,
+    },
+    {
+      name: "filters",
+      type: "Record<string, any>",
+      description: "要应用于日志查询的其他可选过滤器。",
+      optional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "用于分页的可选页码。",
+      optional: true,
+    },
+    {
+      name: "perPage",
+      type: "number",
+      description: "用于分页的每页日志数量的可选参数。",
+      optional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "logs",
+      type: "Promise<any>",
+      description:
+        "解析为指定运行 ID 和传输 ID 的日志的 Promise。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [日志概述](/docs/cn/docs/observability/logging)
+- [日志记录器参考](/reference/logging/pino-logger)

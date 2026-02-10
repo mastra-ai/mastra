@@ -1,0 +1,191 @@
+---
+title: "参考文档: CompositeVoice | 语音"
+description: "CompositeVoice 类的文档，该类支持组合多个语音提供商以实现灵活的文本转语音和语音转文本操作。"
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-playai"
+---
+
+# CompositeVoice
+
+CompositeVoice 类允许您组合不同的语音提供商来进行文本转语音和语音转文本操作。当您希望为每个操作使用最佳提供商时，这特别有用——例如，使用 OpenAI 进行语音转文本，使用 PlayAI 进行文本转语音。
+
+CompositeVoice 同时支持 Mastra 语音提供商和 AI SDK 模型提供商
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "config",
+      type: "object",
+      description: "组合语音服务的配置对象",
+      isOptional: false,
+    },
+    {
+      name: "config.input",
+      type: "MastraVoice | TranscriptionModel",
+      description: "用于语音转文本操作的语音提供商或 AI SDK 转录模型。AI SDK 模型会自动包装。",
+      isOptional: true,
+    },
+    {
+      name: "config.output",
+      type: "MastraVoice | SpeechModel",
+      description: "用于文本转语音操作的语音提供商或 AI SDK 语音模型。AI SDK 模型会自动包装。",
+      isOptional: true,
+    },
+    {
+      name: "config.realtime",
+      type: "MastraVoice",
+      description: "用于实时语音转语音操作的语音提供商",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用配置的说话提供商将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "要转换为语音的文本",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "传递给说话提供商的提供商特定选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+注意事项：
+
+- 如果未配置说话提供商，此方法将抛出错误
+- 选项会传递给配置的说话提供商
+- 返回音频数据流
+
+### listen()
+
+使用配置的听写提供商将语音转换为文本。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "要转换为文本的音频流",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "传递给听写提供商的提供商特定选项",
+      isOptional: true,
+    },
+  ]}
+/>
+
+注意事项：
+
+- 如果未配置听写提供商，此方法将抛出错误
+- 选项会传递给配置的听写提供商
+- 根据提供商返回字符串或转录文本流
+
+### getSpeakers()
+
+从说话提供商返回可用语音列表，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符",
+      isOptional: false,
+    },
+    {
+      name: "key",
+      type: "value",
+      description:
+        "因提供商而异的其他语音属性（例如：名称、语言）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+注意事项：
+
+- 仅从说话提供商返回语音
+- 如果未配置说话提供商，返回空数组
+- 每个语音对象至少具有 voiceId 属性
+- 其他语音属性取决于说话提供商
+
+## 使用示例
+
+### 使用 Mastra 语音提供商
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+// 创建语音提供商
+const openai = new OpenAIVoice();
+const playai = new PlayAIVoice();
+
+// 使用 OpenAI 进行听写（语音转文本），使用 PlayAI 进行说话（文本转语音）
+const voice = new CompositeVoice({
+  input: openai,
+  output: playai,
+});
+
+// 使用 OpenAI 将语音转换为文本
+const text = await voice.listen(audioStream);
+
+// 使用 PlayAI 将文本转换为语音
+const audio = await voice.speak("Hello, world!");
+```
+
+### 使用 AI SDK 模型提供商
+
+您可以直接将 AI SDK 转录和语音模型传递给 CompositeVoice：
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// 直接使用 AI SDK 模型 - 它们会自动包装
+const voice = new CompositeVoice({
+  input: openai.transcription('whisper-1'),      // AI SDK 转录
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK 语音
+});
+
+// 与使用 Mastra 提供商的方式相同
+const text = await voice.listen(audioStream);
+const audio = await voice.speak("Hello from AI SDK!");
+```
+
+### 混合搭配
+
+您可以将 Mastra 提供商与 AI SDK 模型结合使用：
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { PlayAIVoice } from "@mastra/voice-playai";
+import { groq } from "@ai-sdk/groq";
+
+const voice = new CompositeVoice({
+  input: groq.transcription('whisper-large-v3'),  // AI SDK 用于 STT
+  output: new PlayAIVoice(),                       // Mastra 用于 TTS
+});
+```

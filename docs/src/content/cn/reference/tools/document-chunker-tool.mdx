@@ -1,0 +1,143 @@
+---
+title: "参考：createDocumentChunkerTool() | 工具与 MCP"
+description: "Mastra 中文档分块工具的文档，用于将文档拆分为更小的块以进行高效处理和检索。"
+packages:
+  - "@mastra/rag"
+---
+
+# createDocumentChunkerTool()
+
+`createDocumentChunkerTool()` 函数创建一个用于将文档拆分为更小块以进行高效处理和检索的工具。它支持不同的分块策略和可配置参数。
+
+## 基本用法
+
+```typescript
+import { createDocumentChunkerTool, MDocument } from "@mastra/rag";
+
+const document = new MDocument({
+  text: "您的文档内容在这里...",
+  metadata: { source: "user-manual" },
+});
+
+const chunker = createDocumentChunkerTool({
+  doc: document,
+  params: {
+    strategy: "recursive",
+    size: 512,
+    overlap: 50,
+    separator: "\n",
+  },
+});
+
+const { chunks } = await chunker.execute();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "doc",
+      type: "MDocument",
+      description: "要分块的文档",
+      isOptional: false,
+    },
+    {
+      name: "params",
+      type: "ChunkParams",
+      description: "分块的配置参数",
+      isOptional: true,
+      defaultValue: "默认分块参数",
+    },
+  ]}
+/>
+
+### ChunkParams
+
+<PropertiesTable
+  content={[
+    {
+      name: "strategy",
+      type: "'recursive'",
+      description: "要使用的分块策略",
+      isOptional: true,
+      defaultValue: "'recursive'",
+    },
+    {
+      name: "size",
+      type: "number",
+      description: "每个块的目標大小（以令牌/字符为单位）",
+      isOptional: true,
+      defaultValue: "512",
+    },
+    {
+      name: "overlap",
+      type: "number",
+      description: "块之间重叠的令牌/字符数量",
+      isOptional: true,
+      defaultValue: "50",
+    },
+    {
+      name: "separator",
+      type: "string",
+      description: "用作块分隔符的字符",
+      isOptional: true,
+      defaultValue: "'\\n'",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "chunks",
+      type: "DocumentChunk[]",
+      description: "包含其内容和元数据的文档块数组",
+    },
+  ]}
+/>
+
+## 自定义参数示例
+
+```typescript
+const technicalDoc = new MDocument({
+  text: longDocumentContent,
+  metadata: {
+    type: "technical",
+    version: "1.0",
+  },
+});
+
+const chunker = createDocumentChunkerTool({
+  doc: technicalDoc,
+  params: {
+    strategy: "recursive",
+    size: 1024, // 更大的块
+    overlap: 100, // 更多的重叠
+    separator: "\n\n", // 以双换行符拆分
+  },
+});
+
+const { chunks } = await chunker.execute();
+
+// 处理块
+chunks.forEach((chunk, index) => {
+  console.log(`块 ${index + 1} 长度: ${chunk.content.length}`);
+});
+```
+
+## 工具详情
+
+分块器创建为具有以下属性的 Mastra 工具：
+
+- **工具 ID**：`Document Chunker {strategy} {size}`
+- **描述**：`使用 {strategy} 策略对文档进行分块，大小为 {size}，重叠为 {overlap}`
+- **输入模式**：空对象（不需要额外输入）
+- **输出模式**：包含块数组的对象
+
+## 相关内容
+
+- [MDocument](../rag/document)
+- [createVectorQueryTool](./vector-query-tool)

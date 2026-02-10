@@ -1,0 +1,427 @@
+---
+title: "参考文档：MongoDB 向量存储 | 向量"
+description: "Mastra 中 MongoDBVector 类的文档，该类使用 MongoDB Atlas 和 Atlas Vector Search 提供向量搜索。"
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+---
+
+# MongoDB 向量存储
+
+`MongoDBVector` 类使用 [MongoDB Atlas Vector Search](https://www.mongodb.com/docs/cn/docs/atlas/atlas-vector-search/) 提供向量搜索。它可以在你的 MongoDB 集合内实现高效的相似性搜索和元数据过滤。
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/mongodb@latest
+```
+
+## 使用示例
+
+```typescript
+import { MongoDBVector } from "@mastra/mongodb";
+
+const store = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+});
+```
+
+### 自定义嵌入字段路径
+
+如果你需要将嵌入存储在嵌套字段结构中（例如，与现有的 MongoDB 集合集成），请使用 `embeddingFieldPath` 选项：
+
+```typescript
+import { MongoDBVector } from "@mastra/mongodb";
+
+const store = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+  embeddingFieldPath: 'text.contentEmbedding', // 将嵌入存储在 text.contentEmbedding
+});
+```
+
+## 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "此向量存储实例的唯一标识符",
+    },
+    {
+      name: "uri",
+      type: "string",
+      description: "MongoDB 连接字符串",
+    },
+    {
+      name: "dbName",
+      type: "string",
+      description: "要使用的 MongoDB 数据库名称",
+    },
+    {
+      name: "options",
+      type: "MongoClientOptions",
+      isOptional: true,
+      description: "可选的 MongoDB 客户端选项",
+    },
+    {
+      name: "embeddingFieldPath",
+      type: "string",
+      isOptional: true,
+      defaultValue: "embedding",
+      description: "存储向量嵌入的字段路径。支持使用点表示法的嵌套路径（例如：'text.contentEmbedding'）。",
+    },
+  ]}
+/>
+
+## 方法
+
+### createIndex()
+
+在 MongoDB 中创建新的向量索引（集合）。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要创建的集合名称",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "向量维度（必须与你的嵌入模型匹配）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "用于相似性搜索的距离度量",
+    },
+  ]}
+/>
+
+### upsert()
+
+在集合中添加或更新向量及其元数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要插入到的集合名称",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "嵌入向量数组",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "每个向量的元数据",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "可选的向量 ID（如果未提供则自动生成）",
+    },
+  ]}
+/>
+
+### query()
+
+搜索相似向量，可选择进行元数据过滤。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要搜索的集合名称",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "用于查找相似向量的查询向量",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "要返回的结果数量",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "元数据过滤器（应用于 `metadata` 字段）",
+    },
+    {
+      name: "documentFilter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "对原始文档字段的过滤器（不仅仅是元数据）",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "是否在结果中包含向量数据",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "最小相似度分数阈值",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+返回索引（集合）的信息。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要描述的集合名称",
+    },
+  ]}
+/>
+
+返回：
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+删除集合及其所有数据。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "要删除的集合名称",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+列出 MongoDB 数据库中的所有向量集合。
+
+返回：`Promise<string[]>`
+
+### updateVector()
+
+通过 ID 或元数据过滤器更新单个向量。必须提供 `id` 或 `filter` 之一，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的集合名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "要更新的向量条目 ID（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要更新的向量的元数据过滤器（与 id 互斥）",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "包含向量和/或元数据的更新数据",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "要更新的新向量数据",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "要更新的新元数据",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+通过 ID 从索引中删除特定的向量条目。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含该向量的集合名称",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "要删除的向量条目 ID",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+通过 ID 或元数据过滤器删除多个向量。必须提供 `ids` 或 `filter` 之一，但不能同时提供两者。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "包含要删除向量的集合名称",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "要删除的向量 ID 数组（与 filter 互斥）",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "用于识别要删除的向量的元数据过滤器（与 ids 互斥）",
+    },
+  ]}
+/>
+
+### disconnect()
+
+关闭 MongoDB 客户端连接。完成使用存储后应调用此方法。
+
+## 响应类型
+
+查询结果按以下格式返回：
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // 仅在 includeVector 为 true 时包含
+}
+```
+
+## 错误处理
+
+存储会抛出可捕获的类型化错误：
+
+```typescript
+try {
+  await store.query({
+    indexName: "my_collection",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  // 处理特定的错误情况
+  if (error.message.includes("Invalid collection name")) {
+    console.error(
+      "集合名称必须以字母或下划线开头，并且只能包含有效字符。",
+    );
+  } } else if (error.message.includes("Collection not found")) {
+    console.error("指定的集合不存在");
+  } else {
+    console.error("向量存储错误：", error.message);
+  }
+}
+```
+
+## 最佳实践
+
+- 为过滤器中使用的元数据字段建立索引以获得最佳的查询性能。
+- 在元数据中使用一致的字段命名以避免意外的查询结果。
+- 定期监控索引和集合统计信息以确保高效搜索。
+
+## 使用示例
+
+### 使用 MongoDB 的向量嵌入
+
+嵌入是内存的 `semanticRecall` 用来根据含义（而非关键词）检索相关消息的数值向量。
+
+> 注意：你必须使用托管在 MongoDB Atlas 上的部署才能成功使用 MongoDB 向量数据库。
+
+此设置使用 FastEmbed（一个本地嵌入模型）来生成向量嵌入。要使用此功能，请安装 `@mastra/fastembed`：
+
+```bash npm2yarn
+npm install @mastra/fastembed@latest
+```
+
+将以下内容添加到你的代理中：
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "你是一个能够自动回忆先前交互记忆的 AI 代理。",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new MongoDBStore({
+      id: 'mongodb-storage',
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      id: 'mongodb-vector',
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      generateTitle: true, // 自动生成描述性的线程标题
+    },
+  }),
+});
+```
+
+## 相关内容
+
+- [元数据过滤器](../rag/metadata-filters)

@@ -1,0 +1,71 @@
+---
+title: "参考文档：Agent.getModel() | 智能体"
+description: "Mastra 智能体中 `Agent.getModel()` 方法的文档，用于检索驱动智能体的语言模型。"
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getModel()
+
+`.getModel()` 方法检索为智能体配置的语言模型，如果它是函数则解析它。此方法用于访问支持智能体功能的底层模型。
+
+## 使用示例
+
+```typescript
+await agent.getModel();
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "{ requestContext = new RequestContext() }",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description: "包含请求上下文的选择性配置对象。",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraLanguageModel | Promise<MastraLanguageModel>",
+      description:
+        "为智能体配置的语言模型，可以是直接实例，也可以是解析为模型的 promise。",
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+```typescript
+await agent.getModel({
+  requestContext: new RequestContext(),
+});
+```
+
+### 选项参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "undefined",
+      description:
+        "用于依赖注入和上下文信息的请求上下文。",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [智能体概述](/docs/cn/docs/agents/overview)
+- [请求上下文](/docs/cn/docs/server/request-context)

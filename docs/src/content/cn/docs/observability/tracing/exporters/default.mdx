@@ -1,0 +1,222 @@
+---
+title: "默认导出器 | 追踪 | 可观测性"
+description: "在本地存储追踪以进行开发调试"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/observability"
+---
+
+# 默认导出器
+
+`DefaultExporter` 将追踪持久化到您配置的存储后端，使其可以通过 Studio 访问。使用默认可观测性配置时会自动启用它，无需外部服务。
+
+:::warning[生产环境可观测性]
+可观测性数据在生产环境中可以快速淹没通用数据库。对于高流量应用程序，我们建议通过[组合存储](/reference/storage/composite)为可观测性存储域使用 **ClickHouse**。详情请参阅[生产建议](#production-recommendations)。
+:::
+
+## 配置
+
+### 前提条件
+
+1. **存储后端**：配置存储提供程序（libSQL、PostgreSQL 等）
+2. **Studio**：安装以在本地查看追踪
+
+### 基本设置
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability, DefaultExporter } from "@mastra/observability";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db", // 追踪持久化必需
+  }),
+  observability: new Observability({
+    configs: {
+      local: {
+        serviceName: "my-service",
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 推荐配置
+
+在您的可观测性配置中包含 DefaultExporter：
+
+```typescript
+import { Mastra } from "@mastra/core";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(), // 为 Mastra Studio 将追踪持久化到存储
+          new CloudExporter(), // 将追踪发送到 Mastra Cloud（需要 MASTRA_CLOUD_ACCESS_TOKEN）
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## 查看追踪
+
+### Studio
+
+通过 Studio 访问您的追踪：
+
+1. 启动 Studio
+2. 导航到可观测性
+3. 过滤和搜索本地追踪
+4. 检查详细的跨度信息
+
+## 追踪策略
+
+DefaultExporter 根据您的存储提供程序自动选择最优的追踪策略。如有需要，您也可以覆盖此选择。
+
+### 可用策略
+
+| 策略 | 描述 | 用例 |
+| ---------------------- | --------------------------------------------------------- | ----------------------------------- |
+| **realtime** | 立即处理每个事件 | 开发、调试、低流量 |
+| **batch-with-updates** | 缓冲事件并批量写入，支持完整生命周期 | 低容量生产环境 |
+| **insert-only** | 仅处理完成的跨度，忽略更新 | 高容量生产环境 |
+
+### 策略配置
+
+```typescript
+new DefaultExporter({
+  strategy: "auto", // 默认 - 让存储提供程序决定
+  // 或显式设置：
+  // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
+
+  // 批处理配置（适用于 batch-with-updates 和 insert-only）
+  maxBatchSize: 1000, // 每批最大跨度数
+  maxBatchWaitMs: 5000, // 刷新前的最大等待时间
+  maxBufferSize: 10000, // 最大缓冲跨度数
+});
+```
+
+## 存储提供程序支持
+
+不同的存储提供程序支持不同的追踪策略。有些提供程序支持生产环境工作负载的可观测性，而其他主要适用于本地开发。
+
+如果您将策略设置为 `'auto'`，`DefaultExporter` 会自动为存储提供程序选择最优策略。如果您将策略设置为存储提供程序不支持的模式，将会收到错误消息。
+
+### 支持可观测性的提供程序
+
+| 存储提供程序 | 首选策略 | 支持的策略 | 推荐用途 |
+| ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
+| **ClickHouse** (`@mastra/clickhouse`) | insert-only | insert-only | 生产环境（高容量） |
+| **[PostgreSQL](/reference/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only | 生产环境（低容量） |
+| **[MSSQL](/reference/storage/mssql)** | batch-with-updates | batch-with-updates, insert-only | 生产环境（低容量） |
+| **[MongoDB](/reference/storage/mongodb)** | batch-with-updates | batch-with-updates, insert-only | 生产环境（低容量） |
+| **[libSQL](/reference/storage/libsql)** | batch-with-updates | batch-with-updates, insert-only | 默认存储，适合开发 |
+
+### 不支持可观测性的提供程序
+
+以下存储提供程序**不支持**可观测性域。如果您使用其中一个提供程序并需要可观测性，请使用[组合存储](/reference/storage/composite)将可观测性数据路由到支持的提供程序：
+
+- [Convex](/reference/storage/convex)
+- [DynamoDB](/reference/storage/dynamodb)
+- [Cloudflare D1](/reference/storage/cloudflare-d1)
+- [Cloudflare Durable Objects](/reference/storage/cloudflare)
+- [Upstash](/reference/storage/upstash)
+- [LanceDB](/reference/storage/lance)
+
+### 策略优势
+
+- **realtime**：即时可见性，最适合调试
+- **batch-with-updates**：10-100 倍吞吐量提升，完整跨度生命周期
+- **insert-only**：额外减少 70% 的数据库操作，非常适合分析
+
+## 生产建议
+
+可观测性数据在生产环境中增长迅速。单个智能体交互可以生成数百个跨度，高流量应用程序每天可以产生数千个追踪。大多数通用数据库未针对这种写密集型、仅追加工作负载进行优化。
+
+### 推荐：ClickHouse 用于高容量生产环境
+
+[ClickHouse](/reference/storage/composite#specialized-storage-for-observability) 是专为高容量分析工作负载设计的列式数据库。它是生产环境可观测性的推荐选择，因为：
+
+- **优化写入**：每秒处理数百万次插入
+- **高效压缩**：降低追踪数据的存储成本
+- **快速查询**：列式存储支持快速追踪查找和聚合
+- **原生时序**：内置支持基于时间的数据保留和分区
+
+### 使用组合存储
+
+如果您使用的提供程序不支持可观测性（如 Convex 或 DynamoDB）或想要优化性能，请使用[组合存储](/reference/storage/composite#specialized-storage-for-observability)将可观测性数据路由到 ClickHouse，同时将其他数据保留在主数据库中。
+
+## 批处理行为
+
+### 刷新触发器
+
+对于两种批量策略（`batch-with-updates` 和 `insert-only`），当满足以下任一条件时，追踪会被刷新到存储：
+
+1. **大小触发器**：缓冲区达到 `maxBatchSize` 个跨度
+2. **时间触发器**：自第一个事件以来经过 `maxBatchWaitMs`
+3. **紧急刷新**：缓冲区接近 `maxBufferSize` 限制
+4. **关闭**：强制刷新所有待处理事件
+
+### 错误处理
+
+DefaultExporter 包含适用于生产环境的强大错误处理：
+
+- **重试逻辑**：指数退避（500ms、1s、2s、4s）
+- **瞬态故障**：自动退避重试
+- **持久性故障**：4 次失败尝试后丢弃批次
+- **缓冲区溢出**：防止存储中断期间的内存问题
+
+### 配置示例
+
+```typescript
+// 零配置 - 推荐大多数用户使用
+new DefaultExporter();
+
+// 开发覆盖
+new DefaultExporter({
+  strategy: "realtime", // 即时可见性用于调试
+});
+
+// 高吞吐量生产环境
+new DefaultExporter({
+  maxBatchSize: 2000, // 更大的批次
+  maxBatchWaitMs: 10000, // 等待更长时间以填满批次
+  maxBufferSize: 50000, // 处理更长的中断
+});
+
+// 低延迟生产环境
+new DefaultExporter({
+  maxBatchSize: 100, // 更小的批次
+  maxBatchWaitMs: 1000, // 快速刷新
+});
+```
+
+## 相关内容
+
+- [追踪概述](/docs/cn/observability/tracing/overview)
+- [CloudExporter](/docs/cn/observability/tracing/exporters/cloud)
+- [组合存储](/reference/storage/composite) - 组合多个存储提供程序
+- [存储配置](/docs/cn/memory/storage)

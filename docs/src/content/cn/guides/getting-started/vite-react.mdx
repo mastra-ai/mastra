@@ -1,0 +1,304 @@
+---
+title: "React + Vite | 框架"
+description: "将 Mastra 与 React 和 Vite 集成的分步指南"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 在您的 React + Vite 项目中集成 Mastra
+
+在本指南中，您将使用 Mastra 构建一个工具调用型 AI 代理，然后通过从 Mastra 的独立服务器调用代理将其连接到 React。
+
+您将使用 [AI SDK UI](https://ai-sdk.dev/docs/cn/docs/ai-sdk-ui/overview) 和 [AI Elements](https://ai-sdk.dev/elements) 创建一个美观、交互式的聊天体验。
+
+## 前置条件
+
+- 您需要一个支持的[模型提供商](/models)的 API key。如果您没有偏好，请使用 [OpenAI](/models/providers/openai)。
+- 安装 Node.js `v22.13.0` 或更高版本
+
+## 创建新的 React + Vite 应用程序（可选）
+
+如果您已经有一个使用 Tailwind 的 React + Vite 应用程序，请跳到下一步。
+
+### 项目脚手架
+
+运行以下命令[创建新的 React + Vite 应用程序](https://vite.dev/guide/#scaffolding-your-first-vite-project)：
+
+```bash npm2yarn
+npm create vite@latest mastra-react -- --template react-ts
+```
+
+这会创建一个名为 `mastra-react` 的项目，但您可以将其替换为任何您想要的名称。
+
+导航到您的项目目录：
+
+```bash
+cd mastra-react
+```
+
+### Tailwind
+
+接下来，安装 Tailwind：
+
+```bash npm2yarn
+npm install tailwindcss @tailwindcss/vite
+```
+
+配置 Vite 插件：
+
+```typescript title="vite.config.ts" {3-4,7-12}
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from "path"
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+})
+```
+
+将 `src/index.css` 中的所有内容替换为以下内容：
+
+```css title="src/index.css"
+@import "tailwindcss";
+```
+
+将这些 `compilerOptions` 添加到 `tsconfig.json`：
+
+```ts title="tsconfig.json"
+{
+  // ...
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+```
+
+编辑 `tsconfig.app.json` 以解析路径：
+
+```ts title="tsconfig.app.json"
+{
+  "compilerOptions": {
+    // ...
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+    // ...
+  }
+}
+```
+
+## 初始化 Mastra
+
+运行 [`mastra init`](/reference/cli/mastra#mastra-init)。当提示时，选择一个提供商（例如 OpenAI）并输入您的 key：
+
+```bash npm2yarn
+npx mastra@latest init
+```
+
+这会创建一个 `src/mastra` 文件夹，其中包含一个示例天气代理以及以下文件：
+
+- `index.ts` - Mastra 配置，包括内存
+- `tools/weather-tool.ts` - 用于获取给定位置天气的工具
+- `agents/weather-agent.ts` - 一个带有使用工具提示词的天气代理
+
+在接下来的步骤中，您将从聊天 UI 中调用 `weather-agent.ts`。
+
+## 安装 AI SDK UI 和 AI Elements
+
+安装 AI SDK UI 以及 Mastra 适配器：
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
+```
+
+接下来，初始化 AI Elements。当提示时，选择默认选项：
+
+```bash npm2yarn
+npx ai-elements@latest
+```
+
+这会将整个 AI Elements UI 组件库下载到 `@/components/ai-elements` 文件夹中。
+
+## 创建聊天路由
+
+打开 `src/mastra/index.ts` 并将 [chatRoute()](/reference/ai-sdk/chat-route) 添加到您的配置。这会创建一个 API 路由，您的 React 前端可以调用该路由获取 AI SDK 兼容的聊天响应，您将在下一步中与 `useChat()` 一起使用。
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+// 现有的导入...
+import { chatRoute } from "@mastra/ai-sdk"
+
+export const mastra = new Mastra({
+  // 现有的配置...
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId'
+      })
+    ]
+  }
+});
+```
+
+## 添加聊天 UI
+
+替换 `src/App.tsx` 文件以创建聊天界面：
+
+```tsx title="src/App.tsx"
+import * as React from 'react';
+import { DefaultChatTransport, type ToolUIPart } from 'ai';
+import { useChat } from '@ai-sdk/react';
+
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+} from '@/components/ai-elements/prompt-input';
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+
+import {
+  Message,
+  MessageContent,
+  MessageResponse
+} from '@/components/ai-elements/message';
+
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool';
+
+export default function App() {
+  const [input, setInput] = React.useState<string>('');
+
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat/weather-agent',
+    }),
+  });
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+
+    sendMessage({ text: input });
+    setInput('');
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto p-6 relative size-full h-screen">
+      <div className="flex flex-col h-full">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map((message) => (
+              <div key={message.id}>
+                {message.parts?.map((part, i) => {
+                  if (part.type === 'text') {
+                    return (
+                      <Message
+                        key={`${message.id}-${i}`}
+                        from={message.role}>
+                          <MessageContent>
+                            <MessageResponse>{part.text}</MessageResponse>
+                          </MessageContent>
+                      </Message>
+                    );
+                  }
+
+                  if (part.type?.startsWith('tool-')) {
+                    return (
+                      <Tool key={`${message.id}-${i}`}>
+                        <ToolHeader
+                          type={(part as ToolUIPart).type}
+                          state={(part as ToolUIPart).state || 'output-available'}
+                          className="cursor-pointer"
+                        />
+                        <ToolContent>
+                          <ToolInput input={(part as ToolUIPart).input || {}} />
+                          <ToolOutput
+                            output={(part as ToolUIPart).output}
+                            errorText={(part as ToolUIPart).errorText}
+                          />
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
+            ))}
+            <ConversationScrollButton />
+          </ConversationContent>
+        </Conversation>
+        <PromptInput onSubmit={handleSubmit} className="mt-20">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={(e) => setInput(e.target.value)}
+              className="md:leading-10"
+              value={input}
+              placeholder="Ask about the weather..."
+              disabled={status !== 'ready'}
+            />
+          </PromptInputBody>
+        </PromptInput>
+      </div>
+    </div>
+  );
+}
+```
+
+此组件将 [`useChat()`](https://ai-sdk.dev/docs/cn/docs/reference/ai-sdk-ui/use-chat) 连接到 `chat/weather-agent` 端点，将提示词发送至此并将响应分块流式传输回来。
+
+它使用 [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) 组件渲染响应文本，并使用 [`<Tool>`](https://ai-sdk.dev/elements/components/tool) 组件显示任何工具调用。
+
+## 测试您的代理
+
+为了使用聊天界面测试您的代理，您需要同时运行 Mastra 服务器和 Vite 开发服务器。
+
+1. 启动 Mastra 开发服务器：
+
+    ```bash
+    npx mastra dev
+    ```
+2. 在单独的终端窗口中，启动 Vite 开发服务器：
+
+    ```bash
+    npm run dev
+    ```
+3. 在 http://localhost:5173 打开您的应用程序
+4. 尝试询问天气。如果您的 API key 设置正确，您会得到响应
+
+## 后续步骤
+
+恭喜您使用 React 构建了 Mastra 代理！🎉
+
+从这里开始，您可以使用自己的工具和逻辑扩展项目：
+
+- 了解更多关于[代理](/docs/cn/docs/agents/overview)
+- 为您的代理提供自己的[工具](/docs/cn/docs/agents/using-tools)
+- 为您的代理添加类似人类的[内存](/docs/cn/docs/agents/agent-memory)
+
+准备就绪后，阅读更多关于 Mastra 如何与 AI SDK UI 和 React 集成的信息，以及如何将您的代理部署到任何地方：
+
+- 将 Mastra 与 [AI SDK UI](/guides/build-your-ui/ai-sdk-ui) 集成
+- 将您的代理部署到[任何地方](/docs/cn/docs/deployment/overview)

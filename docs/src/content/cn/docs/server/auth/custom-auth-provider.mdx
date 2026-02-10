@@ -1,0 +1,521 @@
+---
+title: "自定义身份验证提供程序 | 认证"
+description: "为专业身份系统创建自定义身份验证提供程序"
+packages:
+  - "@mastra/core"
+  - "@mastra/auth"
+---
+
+# 自定义身份验证提供程序
+
+自定义身份验证允许您为内置提供程序未涵盖的身份系统实现身份验证。扩展 `MastraAuthProvider` 基类以与任何身份验证系统集成。
+
+## 概述
+
+身份验证提供程序处理传入请求的身份验证和授权：
+
+- 令牌验证和用户提取
+- 用户授权逻辑
+- 基于路径的访问控制（公共/受保护路由）
+
+创建自定义身份验证提供程序以支持：
+
+- 自托管身份系统
+- 自定义令牌格式或验证逻辑
+- 专业授权规则
+- 企业 SSO 集成
+
+## 创建自定义身份验证提供程序
+
+扩展 `MastraAuthProvider` 类并实现所需的方法：
+
+```typescript
+import { MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import type { HonoRequest } from 'hono';
+
+// 定义您的用户类型
+type MyUser = {
+  id: string;
+  email: string;
+  roles: string[];
+};
+
+// 定义您的提供程序的选项
+interface MyAuthOptions extends MastraAuthProviderOptions<MyUser> {
+  apiUrl?: string;
+  apiKey?: string;
+}
+
+export class MyAuthProvider extends MastraAuthProvider<MyUser> {
+  protected apiUrl: string;
+  protected apiKey: string;
+
+  constructor(options?: MyAuthOptions) {
+    // 调用 super 并传入名称以进行日志记录/调试
+    super({ name: options?.name ?? 'my-auth' });
+
+    const apiUrl = options?.apiUrl ?? process.env.MY_AUTH_API_URL;
+    const apiKey = options?.apiKey ?? process.env.MY_AUTH_API_KEY;
+
+    if (!apiUrl || !apiKey) {
+      throw new Error(
+        '需要身份验证 API URL 和 API 密钥。在选项中提供它们或设置 MY_AUTH_API_URL 和 MY_AUTH_API_KEY 环境变量。'
+      );
+    }
+
+    this.apiUrl = apiUrl;
+    this.apiKey = apiKey;
+
+    // 注册任何自定义选项（authorizeUser 覆盖，公共/受保护路径）
+    this.registerOptions(options);
+  }
+
+  /**
+   * 验证令牌并返回用户
+   * 如果身份验证失败则返回 null
+   */
+  async authenticateToken(token: string, request: HonoRequest): Promise<MyUser | null> {
+    try {
+      const response = await fetch(`${this.apiUrl}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey,
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const user = await response.json();
+      return user;
+    } catch (error) {
+      console.error('令牌验证失败：', error);
+      return null;
+    }
+  }
+
+  /**
+   * 检查已身份验证的用户是否已授权
+   * 返回 true 以允许访问，false 以拒绝
+   */
+  async authorizeUser(user: MyUser, request: HonoRequest): Promise<boolean> {
+    // 基本授权：用户必须存在且具有 ID
+    return !!user?.id;
+  }
+}
+```
+
+## 必需方法
+
+### authenticateToken()
+
+验证传入的令牌，如果有效则返回用户对象，如果身份验证失败则返回 `null`。
+
+```typescript
+async authenticateToken(token: string, request: HonoRequest): Promise<TUser | null>
+```
+
+| 参数 | 类型 | 描述 |
+|-----------|------|-------------|
+| `token` | `string` | 从 `Authorization` 头中提取的承载令牌 |
+| `request` | `HonoRequest` | 传入的请求对象（访问头、cookie 等） |
+
+**返回**：如果身份验证成功则返回用户对象，如果失败则返回 `null`。
+
+令牌会自动从 `Authorization: Bearer <token>` 头中提取。如果您需要访问其他头或 cookie，请使用 `request` 参数。
+
+### authorizeUser()
+
+确定已身份验证的用户是否允许访问资源。
+
+```typescript
+async authorizeUser(user: TUser, request: HonoRequest): Promise<boolean> | boolean
+```
+
+| 参数 | 类型 | 描述 |
+|-----------|------|-------------|
+| `user` | `TUser` | `authenticateToken` 返回的用户对象 |
+| `request` | `HonoRequest` | 传入的请求对象 |
+
+**返回**：`true` 以允许访问，`false` 以拒绝（返回 403 禁止）。
+
+## 配置选项
+
+`MastraAuthProviderOptions` 接口支持以下选项：
+
+| 选项 | 类型 | 描述 |
+|--------|------|-------------|
+| `name` | `string` | 用于日志记录/调试的提供程序名称 |
+| `authorizeUser` | `(user, request) => Promise<boolean> \| boolean` | 自定义授权函数 |
+| `protected` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | 需要身份验证的路径 |
+| `public` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | 绕过身份验证的路径 |
+
+### 路径模式
+
+使用模式匹配配置哪些路径需要身份验证：
+
+```typescript
+const auth = new MyAuthProvider({
+  // 需要身份验证的路径
+  protected: [
+    '/api/*',           // 通配符：所有 /api 路由
+    '/admin/*',         // 通配符：所有 /admin 路由
+    /^\/secure\/.*/,    // 正则表达式模式
+  ],
+
+  // 绕过身份验证的路径
+  public: [
+    '/health',          // 精确匹配
+    '/api/status',      // 精确匹配
+    ['/api/webhook', 'POST'],  // 仅 POST 请求到 /api/webhook
+  ],
+});
+```
+
+## 使用您的身份验证提供程序
+
+向 Mastra 实例注册您的自定义身份验证提供程序：
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { MyAuthProvider } from './my-auth-provider';
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MyAuthProvider({
+      apiUrl: process.env.MY_AUTH_API_URL,
+      apiKey: process.env.MY_AUTH_API_KEY,
+    }),
+  },
+});
+```
+
+## 辅助工具
+
+`@mastra/auth` 包为常见的令牌验证模式提供工具：
+
+### JWT 验证
+
+```typescript
+import { verifyHmac, verifyJwks, decodeToken, getTokenIssuer } from '@mastra/auth';
+
+// 验证 HMAC 签名的 JWT
+const payload = await verifyHmac(token, 'your-secret-key');
+
+// 使用 JWKS 验证（用于 OAuth 提供程序）
+const payload = await verifyJwks(token, 'https://provider.com/.well-known/jwks.json');
+
+// 解码而不验证（用于检查）
+const decoded = await decodeToken(token);
+
+// 从解码的令牌获取颁发者
+const issuer = getTokenIssuer(decoded);
+```
+
+### 示例：基于 JWKS 的提供程序
+
+```typescript
+import { MastraAuthProvider } from '@mastra/core/server';
+import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import { verifyJwks } from '@mastra/auth';
+import type { JwtPayload } from '@mastra/auth';
+
+type MyUser = JwtPayload;
+
+interface MyJwksAuthOptions extends MastraAuthProviderOptions<MyUser> {
+  jwksUri?: string;
+  issuer?: string;
+}
+
+export class MyJwksAuth extends MastraAuthProvider<MyUser> {
+  protected jwksUri: string;
+  protected issuer: string;
+
+  constructor(options?: MyJwksAuthOptions) {
+    super({ name: options?.name ?? 'my-jwks-auth' });
+
+    const jwksUri = options?.jwksUri ?? process.env.MY_JWKS_URI;
+    const issuer = options?.issuer ?? process.env.MY_AUTH_ISSUER;
+
+    if (!jwksUri) {
+      throw new Error('JWKS URI 是必需的');
+    }
+
+    this.jwksUri = jwksUri;
+    this.issuer = issuer ?? '';
+
+    this.registerOptions(options);
+  }
+
+  async authenticateToken(token: string): Promise<MyUser | null> {
+    try {
+      const payload = await verifyJwks(token, this.jwksUri);
+
+      // 可选地验证颁发者
+      if (this.issuer && payload.iss !== this.issuer) {
+        return null;
+      }
+
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  async authorizeUser(user: MyUser): Promise<boolean> {
+    // 检查令牌是否已过期
+    if (user.exp && user.exp * 1000 < Date.now()) {
+      return false;
+    }
+    return !!user.sub;
+  }
+}
+```
+
+## 自定义授权逻辑
+
+通过提供自定义 `authorizeUser` 函数覆盖默认授权：
+
+```typescript
+const auth = new MyAuthProvider({
+  apiUrl: process.env.MY_AUTH_API_URL,
+  apiKey: process.env.MY_AUTH_API_KEY,
+
+  // 自定义授权：所有请求都需要管理员角色
+  async authorizeUser(user, request) {
+    return user.roles.includes('admin');
+  },
+});
+```
+
+### 基于角色的授权
+
+```typescript
+const auth = new MyAuthProvider({
+  async authorizeUser(user, request) {
+    const path = request.url;
+    const method = request.method;
+
+    // 管理员路由需要管理员角色
+    if (path.startsWith('/admin/')) {
+      return user.roles.includes('admin');
+    }
+
+    // 写入操作需要写入角色
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      return user.roles.includes('write') || user.roles.includes('admin');
+    }
+
+    // 已身份验证用户允许读取操作
+    return true;
+  },
+});
+```
+
+## 测试自定义身份验证提供程序
+
+使用 Vitest 的示例测试结构：
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MyAuthProvider } from './my-auth-provider';
+
+// 模拟 API 调用
+global.fetch = vi.fn();
+
+describe('MyAuthProvider', () => {
+  const mockOptions = {
+    apiUrl: 'https://auth.example.com',
+    apiKey: 'test-api-key',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('initialization', () => {
+    it('应使用提供的选项初始化', () => {
+      const auth = new MyAuthProvider(mockOptions);
+      expect(auth).toBeInstanceOf(MyAuthProvider);
+    });
+
+    it('缺少必需选项时应抛出错误', () => {
+      expect(() => new MyAuthProvider({})).toThrow('需要身份验证 API URL 和 API 密钥');
+    });
+  });
+
+  describe('authenticateToken', () => {
+    it('令牌有效时应返回用户', async () => {
+      const mockUser = { id: 'user123', email: 'test@example.com', roles: ['read'] };
+      (fetch as any).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockUser),
+      });
+
+      const auth = new MyAuthProvider(mockOptions);
+      const result = await auth.authenticateToken('valid-token', {} as any);
+
+      expect(fetch).toHaveBeenCalledWith(
+        'https://auth.example.com/verify',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ token: 'valid-token' }),
+        })
+      );
+      expect(result).toEqual(mockUser);
+    });
+
+    it('令牌无效时应返回 null', async () => {
+      (fetch as any).mockResolvedValue({ ok: false });
+
+      const auth = new MyAuthProvider(mockOptions);
+      const result = await auth.authenticateToken('invalid-token', {} as any);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('authorizeUser', () => {
+    it('用户具有有效 ID 时应返回 true', async () => {
+      const auth = new MyAuthProvider(mockOptions);
+      const result = await auth.authorizeUser(
+        { id: 'user123', email: 'test@example.com', roles: [] },
+        {} as any
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('用户没有 ID 时应返回 false', async () => {
+      const auth = new MyAuthProvider(mockOptions);
+      const result = await auth.authorizeUser(
+        { id: '', email: 'test@example.com', roles: [] },
+        {} as any
+      );
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('custom authorization', () => {
+    it('提供时应使用自定义 authorizeUser', async () => {
+      const auth = new MyAuthProvider({
+        ...mockOptions,
+        authorizeUser: (user) => user.roles.includes('admin'),
+      });
+
+      const adminUser = { id: 'user123', email: 'admin@example.com', roles: ['admin'] };
+      const regularUser = { id: 'user456', email: 'user@example.com', roles: ['read'] };
+
+      expect(await auth.authorizeUser(adminUser, {} as any)).toBe(true);
+      expect(await auth.authorizeUser(regularUser, {} as any)).toBe(false);
+    });
+  });
+
+  describe('route configuration', () => {
+    it('应存储公共路由配置', () => {
+      const publicRoutes = ['/health', '/api/status'];
+      const auth = new MyAuthProvider({
+        ...mockOptions,
+        public: publicRoutes,
+      });
+
+      expect(auth.public).toEqual(publicRoutes);
+    });
+
+    it('应存储受保护路由配置', () => {
+      const protectedRoutes = ['/api/*', '/admin/*'];
+      const auth = new MyAuthProvider({
+        ...mockOptions,
+        protected: protectedRoutes,
+      });
+
+      expect(auth.protected).toEqual(protectedRoutes);
+    });
+  });
+});
+```
+
+## 错误处理
+
+为常见的失败场景提供描述性错误：
+
+```typescript
+export class MyAuthProvider extends MastraAuthProvider<MyUser> {
+  constructor(options?: MyAuthOptions) {
+    super({ name: options?.name ?? 'my-auth' });
+
+    const apiUrl = options?.apiUrl ?? process.env.MY_AUTH_API_URL;
+    const apiKey = options?.apiKey ?? process.env.MY_AUTH_API_KEY;
+
+    if (!apiUrl) {
+      throw new Error(
+        '缺少 MY_AUTH_API_URL。设置环境变量或在选项中传递 apiUrl。'
+      );
+    }
+
+    if (!apiKey) {
+      throw new Error(
+        '缺少 MY_AUTH_API_KEY。设置环境变量或在选项中传递 apiKey。'
+      );
+    }
+
+    this.apiUrl = apiUrl;
+    this.apiKey = apiKey;
+    this.registerOptions(options);
+  }
+
+  async authenticateToken(token: string): Promise<MyUser | null> {
+    if (!token || typeof token !== 'string') {
+      return null; // 立即安全失败
+    }
+
+    try {
+      const response = await fetch(`${this.apiUrl}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey,
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      return await response.json();
+    } catch (error) {
+      // 记录错误以进行调试，但不要向客户端暴露详细信息
+      console.error('身份验证验证错误：', error);
+      return null;
+    }
+  }
+}
+```
+
+## 内置提供程序
+
+Mastra 包含以下身份验证提供程序作为参考实现：
+
+- **MastraJwtAuth**：使用 HMAC 令牌的简单 JWT 验证（`@mastra/auth`）
+- **MastraAuthClerk**：Clerk 身份验证（`@mastra/auth-clerk`）
+- **MastraAuthAuth0**：Auth0 身份验证（`@mastra/auth-auth0`）
+- **MastraAuthSupabase**：Supabase 身份验证（`@mastra/auth-supabase`）
+- **MastraAuthFirebase**：Firebase 身份验证（`@mastra/auth-firebase`）
+- **MastraAuthWorkOS**：WorkOS 身份验证（`@mastra/auth-workos`）
+- **MastraAuthBetterAuth**：Better Auth 集成（`@mastra/auth-better-auth`）
+- **SimpleAuth**：用于开发的令牌到用户映射（`@mastra/core/server`）
+
+有关实现细节，请参阅[源代码](https://github.com/mastra-ai/mastra/tree/main/auth)。
+
+## 相关内容
+
+- [认证概述](/docs/cn/server/auth) - 身份验证概念和配置
+- [JWT 身份验证](/docs/cn/server/auth/jwt) - 简单的 JWT 身份验证
+- [Clerk 身份验证](/docs/cn/server/auth/clerk) - Clerk 集成
+- [自定义 API 路由](/docs/cn/server/custom-api-routes) - 控制自定义端点上的身份验证

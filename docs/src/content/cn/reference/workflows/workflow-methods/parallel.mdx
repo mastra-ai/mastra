@@ -1,0 +1,45 @@
+---
+title: "参考：Workflow.parallel() | 工作流"
+description: "工作流中 `Workflow.parallel()` 方法的文档，用于并行执行多个步骤。"
+packages:
+  - "@mastra/core"
+---
+
+# Workflow.parallel()
+
+`.parallel()` 方法并行执行多个步骤。
+
+## 使用示例
+
+```typescript
+workflow.parallel([step1, step2]);
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "steps",
+      type: "Step[]",
+      description: "要并行执行的步骤实例",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "用于方法链的工作流实例",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [使用 parallel 同时执行步骤](/docs/cn/docs/workflows/control-flow#simultaneous-steps-with-parallel)

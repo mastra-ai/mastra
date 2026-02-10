@@ -1,0 +1,160 @@
+---
+title: "参考：Deployer | 部署器"
+description: "Deployer 抽象类的文档，用于处理 Mastra 应用程序的打包和部署。"
+packages:
+  - "@mastra/deployer"
+---
+
+# Deployer
+
+Deployer 负责独立 Mastra 应用程序的部署，包括代码打包、环境文件管理，以及使用 Hono 框架提供应用程序服务。具体的实现类必须为特定部署目标定义 deploy 方法。
+
+## 使用示例
+
+```typescript
+import { Deployer } from "@mastra/deployer";
+
+// 通过扩展抽象的 Deployer 类来创建自定义部署器
+class CustomDeployer extends Deployer {
+  constructor() {
+    super({ name: "custom-deployer" });
+  }
+
+  // 实现抽象的 deploy 方法
+  async deploy(outputDirectory: string): Promise<void> {
+    // 准备输出目录
+    await this.prepare(outputDirectory);
+
+    // 打包应用程序
+    await this._bundle("server.ts", "mastra.ts", outputDirectory);
+
+    // 自定义部署逻辑
+  }
+}
+```
+
+## 参数
+
+### 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description: "Deployer 的配置选项。",
+      isOptional: false,
+    },
+    {
+      name: "args.name",
+      type: "string",
+      description: "部署器实例的唯一名称。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### deploy 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "outputDirectory",
+      type: "string",
+      description:
+        "打包后可供部署的应用程序将要输出的目录。",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 方法
+
+<PropertiesTable
+  content={[
+    {
+      name: "getEnvFiles",
+      type: "() => Promise<string[]>",
+      description:
+        "返回部署期间要使用的环境文件列表。默认情况下，它会查找 '.env.production' 和 '.env' 文件。",
+    },
+    {
+      name: "deploy",
+      type: "(outputDirectory: string) => Promise<void>",
+      description:
+        "必须由子类实现的抽象方法。处理到指定输出目录的实际部署过程。",
+    },
+  ]}
+/>
+
+## 从 Bundler 继承的方法
+
+Deployer 类从 Bundler 类继承以下关键方法：
+
+<PropertiesTable
+  content={[
+    {
+      name: "prepare",
+      type: "(outputDirectory: string) => Promise<void>",
+      description:
+        "通过清理输出目录并创建必要的子目录来准备输出目录。",
+    },
+    {
+      name: "writePackageJson",
+      type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
+      description:
+        "在输出目录中生成具有指定依赖项的 package.json 文件。",
+    },
+    {
+      name: "_bundle",
+      type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
+      description:
+        "使用指定的服务器和 Mastra 入口文件打包应用程序。",
+    },
+  ]}
+/>
+
+## 核心概念
+
+### 部署生命周期
+
+Deployer 抽象类实现了结构化的部署生命周期：
+
+1. **初始化**：部署器使用名称初始化，并创建一个 Deps 实例用于依赖管理。
+2. **环境设置**：`getEnvFiles` 方法识别部署期间要使用的环境文件（.env.production、.env）。
+3. **准备**：`prepare` 方法（从 Bundler 继承）清理输出目录并创建必要的子目录。
+4. **打包**：`_bundle` 方法（从 Bundler 继承）将应用程序代码及其依赖项打包。
+5. **部署**：抽象的 `deploy` 方法由子类实现以处理实际的部署过程。
+
+### 环境文件管理
+
+Deployer 类通过 `getEnvFiles` 方法内置支持环境文件管理。该方法：
+
+- 按预定义顺序查找环境文件（.env.production、.env.local、.env）
+- 使用 FileService 查找第一个存在的文件
+- 返回找到的环境文件数组
+- 如果未找到环境文件则返回空数组
+
+```typescript
+getEnvFiles(): Promise<string[]> {
+  const possibleFiles = ['.env.production', '.env.local', '.env'];
+
+  try {
+    const fileService = new FileService();
+    const envFile = fileService.getFirstExistingFile(possibleFiles);
+
+    return Promise.resolve([envFile]);
+  } catch {}
+
+  return Promise.resolve([]);
+}
+```
+
+### 打包与部署的关系
+
+Deployer 类扩展了 Bundler 类，在打包和部署之间建立了清晰的关系：
+
+1. **打包作为先决条件**：打包是部署的先决步骤，应用程序代码被打包成可部署格式。
+2. **共享基础设施**：打包和部署共享常见的基础设施，如依赖管理和文件系统操作。
+3. **专业化部署逻辑**：虽然打包侧重于代码打包，但部署为打包的代码添加了特定于环境的逻辑。
+4. **可扩展性**：抽象的 `deploy` 方法允许为不同的目标环境创建专门的部署器。

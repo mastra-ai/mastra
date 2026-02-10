@@ -1,0 +1,450 @@
+---
+title: "指南：构建笔记 MCP 服务器 | Mastra 指南"
+description: "有关使用 Mastra 框架创建功能完整的 MCP（模型上下文协议）服务器以管理笔记的分步指南。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# 构建笔记 MCP 服务器
+
+在本指南中，您将学习如何从头开始构建完整的 MCP（模型上下文协议）服务器。该服务器将管理一组 markdown 笔记，具有以下功能：
+
+1. **列出和读取笔记**：允许客户端浏览和查看服务器上存储的 markdown 文件
+2. **写入笔记**：提供创建或更新笔记的工具
+3. **提供智能提示**：生成上下文提示，如创建每日笔记模板或总结现有内容
+
+## 前置条件
+
+- 已安装 Node.js `v22.13.0` 或更高版本
+- 来自支持的[模型提供商](/models)的 API 密钥
+- 现有的 Mastra 项目（请遵循[安装指南](/guides/getting-started/quickstart)设置新项目）
+
+## 添加必要的依赖项和文件
+
+在创建 MCP 服务器之前，您需要先安装额外的依赖项并设置一个样板文件夹结构。
+
+<Steps>
+
+<StepItem>
+
+将 `@mastra/mcp` 添加到您的项目：
+
+```bash npm2yarn
+npm install @mastra/mcp@latest
+```
+
+</StepItem>
+
+<StepItem>
+
+遵循默认的[安装指南](/guides/getting-started/quickstart)后，您的项目将包含与本指南无关的文件。您可以安全地删除它们：
+
+```bash
+rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
+```
+
+您还应该像这样更改 `src/mastra/index.ts` 文件：
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+为您的 MCP 服务器逻辑创建一个专用目录，以及一个用于笔记的 `notes` 目录：
+
+```bash
+mkdir notes src/mastra/mcp
+```
+
+创建以下文件：
+
+```bash
+touch src/mastra/mcp/{server,resources,prompts}.ts
+```
+
+- `server.ts`：将包含主要的 MCP 服务器配置
+- `resources.ts`：将处理列出和读取笔记文件
+- `prompts.ts`：将包含智能提示的逻辑
+
+最终的目录结构应如下所示：
+
+```
+<your-project-name>/
+├── notes/
+└── src/
+    └── mastra/
+        ├── index.ts
+        ├── mcp/
+        │   ├── server.ts
+        │   ├── resources.ts
+        │   └── prompts.ts
+        └── tools/
+```
+
+</StepItem>
+
+</Steps>
+
+## 创建 MCP 服务器
+
+让我们添加 MCP 服务器！
+
+<Steps>
+
+<StepItem>
+
+在 `src/mastra/mcp/server.ts` 中，定义 MCP 服务器实例：
+
+```typescript title="src/mastra/mcp/server.ts"
+import { MCPServer } from "@mastra/mcp";
+
+export const notes = new MCPServer({
+  id: "notes",
+  name: "Notes Server",
+  version: "0.1.0",
+  tools: {},
+});
+```
+
+在 `src/mastra/index.ts` 中的 Mastra 实例中注册此 MCP 服务器。键 `notes` 是您的 MCP 服务器的公共标识符：
+
+```typescript title="src/mastra/index.ts" {4, 15-17}
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { notes } from "./mcp/server";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+  mcpServers: {
+    notes,
+  },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+资源处理程序允许客户端发现和读取您的服务器管理的内容。实现处理程序以处理 `notes` 目录中的 markdown 文件。添加到 `src/mastra/mcp/resources.ts` 文件：
+
+```typescript title="src/mastra/mcp/resources.ts"
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+import type { MCPServerResources, Resource } from "@mastra/mcp";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const NOTES_DIR = path.resolve(__dirname, "../../notes"); // relative to the default output directory
+
+const listNoteFiles = async (): Promise<Resource[]> => {
+  try {
+    await fs.mkdir(NOTES_DIR, { recursive: true });
+    const files = await fs.readdir(NOTES_DIR);
+    return files
+      .filter((file) => file.endsWith(".md"))
+      .map((file) => {
+        const title = file.replace(".md", "");
+        return {
+          uri: `notes://${title}`,
+          name: title,
+          description: `A note about ${title}`,
+          mime_type: "text/markdown",
+        };
+      });
+  } catch (error) {
+    console.error("Error listing note resources:", error);
+    return [];
+  }
+};
+
+const readNoteFile = async (uri: string): Promise<string | null> => {
+  const title = uri.replace("notes://", "");
+  const notePath = path.join(NOTES_DIR, `${title}.md`);
+  try {
+    return await fs.readFile(notePath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error(`Error reading resource ${uri}:`, error);
+    }
+    return null;
+  }
+};
+
+export const resourceHandlers: MCPServerResources = {
+  listResources: listNoteFiles,
+  getResourceContent: async ({ uri }: { uri: string }) => {
+    const content = await readNoteFile(uri);
+    if (content === null) return { text: "" };
+    return { text: content };
+  },
+};
+```
+
+在 `src/mastra/mcp/server.ts` 中注册这些资源处理程序：
+
+```typescript title="src/mastra/mcp/server.ts" {2, 8}
+import { MCPServer } from "@mastra/mcp";
+import { resourceHandlers } from "./resources";
+
+export const notes = new MCPServer({
+  id: "notes",
+  name: "Notes Server",
+  version: "0.1.0",
+  tools: {},
+  resources: resourceHandlers,
+});
+```
+
+</StepItem>
+
+<StepItem title="实现和注册工具">
+
+工具是您的服务器可以执行的操作。让我们创建一个 `write` 工具。
+首先，在 `src/mastra/tools/write-note.ts` 中定义工具：
+
+```typescript title="src/mastra/tools/write-note.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+import { fileURLToPath } from "url";
+import path from "node:path";
+import fs from "fs/promises";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const NOTES_DIR = path.resolve(__dirname, "../../../notes");
+
+export const writeNoteTool = createTool({
+  id: "write",
+  description: "Write a new note or overwrite an existing one.",
+  inputSchema: z.object({
+    title: z
+      .string()
+      .nonempty()
+      .describe("The title of the note. This will be the filename."),
+    content: z
+      .string()
+      .nonempty()
+      .describe("The markdown content of the note."),
+  }),
+  outputSchema: z.string().nonempty(),
+  execute: async (inputData) => {
+    try {
+      const { title, content } = inputData;
+      const filePath = path.join(NOTES_DIR, `${title}.md`);
+      await fs.mkdir(NOTES_DIR, { recursive: true });
+      await fs.writeFile(filePath, content, "utf-8");
+      return `Successfully wrote to note \"${title}\".`;
+    } catch (error: any) {
+      return `Error writing note: ${error.message}`;
+    }
+  },
+});
+```
+
+在 `src/mastra/mcp/server.ts` 中注册此工具：
+
+```typescript title="src/mastra/mcp/server.ts"
+import { MCPServer } from "@mastra/mcp";
+import { resourceHandlers } from "./resources";
+import { writeNoteTool } from "../tools/write-note";
+
+export const notes = new MCPServer({
+  id: "notes",
+  name: "Notes Server",
+  version: "0.1.0",
+  resources: resourceHandlers,
+  tools: {
+    write: writeNoteTool,
+  },
+});
+```
+
+</StepItem>
+
+<StepItem title="实现和注册提示">
+
+提示处理程序为客户端提供现成的提示。您将添加以下三个：
+
+- 每日笔记
+- 总结笔记
+- 头脑风暴想法
+
+这需要安装一些 markdown 解析库：
+
+```bash
+npm install unified remark-parse gray-matter @types/unist
+```
+
+在 `src/mastra/mcp/prompts.ts` 中实现提示：
+
+```typescript title="src/mastra/mcp/prompts.ts"
+import type { MCPServerPrompts } from "@mastra/mcp";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import matter from "gray-matter";
+import type { Node } from "unist";
+
+const prompts = [
+  {
+    name: "new_daily_note",
+    description: "Create a new daily note.",
+    version: "1.0.0",
+  },
+  {
+    name: "summarize_note",
+    description: "Give me a TL;DR of the note.",
+    version: "1.0.0",
+  },
+  {
+    name: "brainstorm_ideas",
+    description: "Brainstorm new ideas based on a note.",
+    version: "1.0.0",
+  },
+];
+
+function stringifyNode(node: Node): string {
+  if ("value" in node && typeof node.value === "string") return node.value;
+  if ("children" in node && Array.isArray(node.children))
+    return node.children.map(stringifyNode).join("");
+  return "";
+}
+
+export async function analyzeMarkdown(md: string) {
+  const { content } = matter(md);
+  const tree = unified().use(remarkParse).parse(content);
+  const headings: string[] = [];
+  const wordCounts: Record<string, number> = {};
+  let currentHeading = "untitled";
+  wordCounts[currentHeading] = 0;
+  tree.children.forEach((node) => {
+    if (node.type === "heading" && node.depth === 2) {
+      currentHeading = stringifyNode(node);
+      headings.push(currentHeading);
+      wordCounts[currentHeading] = 0;
+    } else {
+      const textContent = stringifyNode(node);
+      if (textContent.trim()) {
+        wordCounts[currentHeading] =
+          (wordCounts[currentHeading] || 0) + textContent.split(/\\s+/).length;
+      }
+    }
+  });
+  return { headings, wordCounts };
+}
+
+const getPromptMessages: MCPServerPrompts["getPromptMessages"] = async ({
+  name,
+  args,
+}) => {
+  switch (name) {
+    case "new_daily_note":
+      const today = new Date().toISOString().split("T")[0];
+      return [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Create a new note titled \"${today}\" with sections: \"## Tasks\", \"## Meetings\", \"## Notes\".`,
+          },
+        },
+      ];
+    case "summarize_note":
+      if (!args?.noteContent) throw new Error("No content provided");
+      const metaSum = await analyzeMarkdown(args.noteContent as string);
+      return [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Summarize each section in ≤ 3 bullets.\\n\\n### Outline\\n${metaSum.headings.map((h) => `- ${h} (${metaSum.wordCounts[h] || 0} words)`).join("\\n")}`.trim(),
+          },
+        },
+      ];
+    case "brainstorm_ideas":
+      if (!args?.noteContent) throw new Error("No content provided");
+      const metaBrain = await analyzeMarkdown(args.noteContent as string);
+      return [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Brainstorm 3 ideas for underdeveloped sections below ${args?.topic ? `on ${args.topic}` : "."}\\n\\nUnderdeveloped sections:\\n${metaBrain.headings.length ? metaBrain.headings.map((h) => `- ${h}`).join("\\n") : "- (none, pick any)"}`,
+          },
+        },
+      ];
+    default:
+      throw new Error(`Prompt \"${name}\" not found`);
+  }
+};
+
+export const promptHandlers: MCPServerPrompts = {
+  listPrompts: async () => prompts,
+  getPromptMessages,
+};
+```
+
+在 `src/mastra/mcp/server.ts` 中注册这些提示处理程序：
+
+```typescript title="src/mastra/mcp/server.ts"
+import { MCPServer } from "@mastra/mcp";
+import { resourceHandlers } from "./resources";
+import { writeNoteTool } from "../tools/write-note";
+import { promptHandlers } from "./prompts";
+
+export const notes = new MCPServer({
+  id: "notes",
+  name: "Notes Server",
+  version: "0.1.0",
+  resources: resourceHandlers,
+  prompts: promptHandlers,
+  tools: {
+    write: writeNoteTool,
+  },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## 运行服务器
+
+太好了，您已经编写了第一个 MCP 服务器！现在您可以尝试启动 Mastra 开发服务器并打开[工作室](/docs/cn/docs/getting-started/studio)来测试它：
+
+```bash
+npm run dev
+```
+
+在浏览器中打开 [`http://localhost:4111`](http://localhost:4111)。在左侧边栏中，选择 **MCP 服务器**。选择 **notes** MCP 服务器。
+
+您现在将看到有关如何将 MCP 服务器添加到 IDE 的说明。您可以将此 MCP 服务器与任何 MCP 客户端一起使用。在右侧的**可用工具**下，您还可以选择 **write** 工具。
+
+在 **write** 工具中，尝试提供 `test` 作为名称，`this is a test` 作为 markdown 内容。点击**提交**后，您将在 `notes` 中有一个新的 `test.md` 文件。

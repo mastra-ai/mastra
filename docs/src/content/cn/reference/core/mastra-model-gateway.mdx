@@ -1,0 +1,229 @@
+---
+title: "参考文档：MastraModelGateway | 核心"
+description: "用于创建自定义模型网关的基类"
+packages:
+  - "@mastra/core"
+---
+
+# MastraModelGateway
+
+用于实现自定义模型网关的抽象基类。网关处理访问语言模型的特定于提供商的逻辑，包括提供商配置、身份验证、URL 构造和模型实例化。
+
+## 类概述
+
+```typescript
+import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+
+class MyCustomGateway extends MastraModelGateway {
+  readonly id = 'custom';
+  readonly name = 'My Custom Gateway';
+
+  async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    return {
+      'my-provider': {
+        name: 'My Provider',
+        models: ['model-1', 'model-2'],
+        apiKeyEnvVar: 'MY_API_KEY',
+        gateway: this.id,
+      },
+    };
+  }
+
+  buildUrl(modelId: string, envVars?: Record<string, string>): string {
+    return 'https://api.my-provider.com/v1';
+  }
+
+  async getApiKey(modelId: string): Promise<string> {
+    const apiKey = process.env.MY_API_KEY;
+    if (!apiKey) throw new Error('MY_API_KEY not set');
+    return apiKey;
+  }
+
+  async resolveLanguageModel({
+    modelId,
+    providerId,
+    apiKey,
+  }: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+  }): Promise<LanguageModelV2> {
+    const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+    return createOpenAICompatible({
+      name: providerId,
+      apiKey,
+      baseURL,
+    }).chatModel(modelId);
+  }
+}
+```
+
+## 必需属性
+
+<PropertiesTable
+  content={[
+    {
+      name: 'id',
+      type: 'string',
+      description: '网关的唯一标识符。此 ID 用作来自此网关的所有提供商的前缀（例如 "netlify/anthropic"）。例外：models.dev 是一个提供商注册表，不使用前缀。',
+    },
+    {
+      name: 'name',
+      type: 'string',
+      description: '网关的人类可读名称。',
+    },
+  ]}
+/>
+
+## 必需方法
+
+### fetchProviders()
+
+从网关获取提供商配置。
+
+**返回：** `Promise<Record<string, ProviderConfig>>`
+
+**ProviderConfig 结构：**
+<PropertiesTable
+  content={[
+    {
+      name: 'name',
+      type: 'string',
+      description: '提供商的显示名称',
+    },
+    {
+      name: 'models',
+      type: 'string[]',
+      description: '可用模型 ID 的数组',
+    },
+    {
+      name: 'apiKeyEnvVar',
+      type: 'string | string[]',
+      description: 'API 密钥的环境变量',
+    },
+    {
+      name: 'gateway',
+      type: 'string',
+      description: '网关标识符',
+    },
+    {
+      name: 'url',
+      type: 'string',
+      isOptional: true,
+      description: '可选的 base API URL',
+    },
+    {
+      name: 'apiKeyHeader',
+      type: 'string',
+      isOptional: true,
+      description: '可选的自定义身份验证头名称',
+    },
+    {
+      name: 'docUrl',
+      type: 'string',
+      isOptional: true,
+      description: '可选的文档 URL',
+    },
+  ]}
+/>
+
+### buildUrl()
+
+为特定的模型/提供商组合构建 API URL。
+
+**参数：**
+<PropertiesTable
+  content={[
+    {
+      name: 'modelId',
+      type: 'string',
+      description: '完整的模型 ID（例如 "custom/my-provider/model-1"）',
+    },
+    {
+      name: 'envVars',
+      type: 'Record<string, string>',
+      isOptional: true,
+      description: '可选的环境变量',
+    },
+  ]}
+/>
+
+**返回：** `string | undefined | Promise<string | undefined>`
+
+### getApiKey()
+
+检索用于身份验证的 API 密钥。
+
+**参数：**
+<PropertiesTable
+  content={[
+    {
+      name: 'modelId',
+      type: 'string',
+      description: '完整的模型 ID',
+    },
+  ]}
+/>
+
+**返回：** `Promise<string>`
+
+### resolveLanguageModel()
+
+创建语言模型实例。
+
+**参数：**
+<PropertiesTable
+  content={[
+    {
+      name: 'modelId',
+      type: 'string',
+      description: '模型 ID',
+    },
+    {
+      name: 'providerId',
+      type: 'string',
+      description: '提供商 ID',
+    },
+    {
+      name: 'apiKey',
+      type: 'string',
+      description: '用于身份验证的 API 密钥',
+    },
+  ]}
+/>
+
+**返回：** `Promise<LanguageModelV2> | LanguageModelV2`
+
+## 实例方法
+
+### getId()
+
+返回网关的唯一标识符。
+
+**返回：** `string` - 网关的 `id` 属性
+
+## 模型 ID 格式
+
+对于真正的网关，网关 ID 用作前缀，可以使用以下格式访问模型：
+
+```
+[gateway-id]/[provider]/[model]
+```
+
+示例：
+- `id = 'custom'` 的网关：`'custom/my-provider/model-1'`
+
+## 内置实现
+
+- **NetlifyGateway** - Netlify AI Gateway 集成
+- **ModelsDevGateway** - OpenAI 兼容提供商注册表
+
+## 相关内容
+
+- [自定义网关指南](/models/gateways/custom-gateways) - 创建自定义网关的完整指南
+- [Mastra.addGateway()](/reference/core/addGateway) - 向 Mastra 添加网关
+- [Mastra.getGateway()](/reference/core/getGateway) - 按注册表键获取网关
+- [Mastra.getGatewayById()](/reference/core/getGatewayById) - 按 ID 获取网关
+- [Mastra.listGateways()](/reference/core/listGateways) - 列出所有网关

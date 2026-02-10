@@ -1,0 +1,171 @@
+---
+title: "参考：OpenAI | 语音"
+description: "OpenAIVoice 类的文档，提供语音合成和语音识别能力。"
+packages:
+  - "@mastra/voice-openai"
+---
+
+# OpenAI
+
+Mastra 中的 OpenAIVoice 类使用 OpenAI 的模型提供语音合成和语音识别能力。
+
+## 使用示例
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+
+// 使用环境变量默认配置初始化
+const voice = new OpenAIVoice();
+
+// 或使用特定配置初始化
+const voiceWithConfig = new OpenAIVoice({
+  speechModel: {
+    name: "tts-1-hd",
+    apiKey: "your-openai-api-key",
+  },
+  listeningModel: {
+    name: "whisper-1",
+    apiKey: "your-openai-api-key",
+  },
+  speaker: "alloy", // 默认语音
+});
+
+// 将文本转换为语音
+const audioStream = await voice.speak("Hello, how can I help you?", {
+  speaker: "nova", // 覆盖默认语音
+  speed: 1.2, // 调整语速
+});
+
+// 将语音转换为文本
+const text = await voice.listen(audioStream, {
+  filetype: "mp3",
+});
+```
+
+## 配置
+
+### 构造函数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "OpenAIConfig",
+      description: "语音合成配置。",
+      isOptional: true,
+      defaultValue: "{ name: 'tts-1' }",
+    },
+    {
+      name: "listeningModel",
+      type: "OpenAIConfig",
+      description: "语音识别配置。",
+      isOptional: true,
+      defaultValue: "{ name: 'whisper-1' }",
+    },
+    {
+      name: "speaker",
+      type: "OpenAIVoiceId",
+      description: "语音合成的默认语音 ID。",
+      isOptional: true,
+      defaultValue: "'alloy'",
+    },
+  ]}
+/>
+
+### OpenAIConfig
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "'tts-1' | 'tts-1-hd' | 'whisper-1'",
+      description: "模型名称。使用 'tts-1-hd' 获得更高质量的音频。",
+      isOptional: true,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "OpenAI API 密钥。回退到 OPENAI_API_KEY 环境变量。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 方法
+
+### speak()
+
+使用 OpenAI 的语音合成模型将文本转换为语音。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description: "要转换为语音的文本或文本流。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "OpenAIVoiceId",
+      description: "用于语音合成的语音 ID。",
+      isOptional: true,
+      defaultValue: "构造函数的 speaker 值",
+    },
+    {
+      name: "options.speed",
+      type: "number",
+      description: "语速倍数。",
+      isOptional: true,
+      defaultValue: "1.0",
+    },
+  ]}
+/>
+
+返回：`Promise<NodeJS.ReadableStream>`
+
+### listen()
+
+使用 OpenAI 的 Whisper 模型转录音频。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "要转录的音频流。",
+      isOptional: false,
+    },
+    {
+      name: "options.filetype",
+      type: "string",
+      description: "输入流的音频格式。",
+      isOptional: true,
+      defaultValue: "'mp3'",
+    },
+  ]}
+/>
+
+返回：`Promise<string>`
+
+### getSpeakers()
+
+返回可用语音选项的数组，每个节点包含：
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "语音的唯一标识符",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 注意事项
+
+- API 密钥可通过构造函数选项或 `OPENAI_API_KEY` 环境变量提供
+- `tts-1-hd` 模型提供更高质量的音频，但处理时间可能更长
+- 语音识别支持多种音频格式，包括 mp3、wav 和 webm

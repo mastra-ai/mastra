@@ -1,0 +1,156 @@
+---
+title: "参考：系统提示词清理器 | 处理器"
+description: "Mastra 中 SystemPromptScrubber 的文档，用于检测和编辑 AI 响应中的系统提示词。"
+packages:
+  - "@mastra/core"
+---
+
+# SystemPromptScrubber
+
+`SystemPromptScrubber` 是一个**输出处理器**，用于检测和处理系统提示词、指令和其他可能引入安全漏洞的敏感信息。此处理器通过识别各种类型的系统提示词并提供处理它们的灵活策略来帮助保持安全，包括多种编辑方法以确保敏感信息被正确清理。
+
+## 使用示例
+
+```typescript
+import { SystemPromptScrubber } from "@mastra/core/processors";
+
+const processor = new SystemPromptScrubber({
+  model: "openrouter/openai/gpt-oss-safeguard-20b",
+  strategy: "redact",
+  redactionMethod: "mask",
+  includeDetections: true
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "系统提示词检测和处理的配置选项",
+      isOptional: false,
+    },
+  ]}
+/>
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "检测代理的模型配置",
+      isOptional: false,
+    },
+    {
+      name: "strategy",
+      type: "'block' | 'warn' | 'filter' | 'redact'",
+      description: "检测到系统提示词时的策略：'block' 拒绝并报错，'warn' 记录警告但允许通过，'filter' 移除标记的消息，'redact' 用编辑版本替换",
+      isOptional: true,
+      default: "'redact'",
+    },
+    {
+      name: "customPatterns",
+      type: "string[]",
+      description: "用于检测系统提示词的自定义模式（正则表达式字符串）",
+      isOptional: true,
+      default: "[]",
+    },
+    {
+      name: "includeDetections",
+      type: "boolean",
+      description: "是否在警告中包含检测详细信息。对于调试和监控很有用",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "检测代理的自定义说明。如果未提供，使用默认说明",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "redactionMethod",
+      type: "'mask' | 'placeholder' | 'remove'",
+      description: "系统提示词的编辑方法：'mask' 用星号替换，'placeholder' 用占位符文本替换，'remove' 完全移除",
+      isOptional: true,
+      default: "'mask'",
+    },
+    {
+      name: "placeholderText",
+      type: "string",
+      description: "当 redactionMethod 为 'placeholder' 时用于编辑的自定义占位符文本",
+      isOptional: true,
+      default: "'[SYSTEM_PROMPT]'",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "处理器标识符，设置为 'system-prompt-scrubber'",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "可选的处理器显示名称",
+      isOptional: true,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null>",
+      description: "处理流式输出片段以在流式传输过程中检测和处理系统提示词",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
+      description: "处理最终输出结果以在非流式场景中检测和处理系统提示词",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 扩展使用示例
+
+当使用 `SystemPromptScrubber` 作为输出处理器时，建议将其与 `BatchPartsProcessor` 结合使用以优化性能。`BatchPartsProcessor` 在将流片段传递给清理器之前将它们批量处理，减少检测所需的 LLM 调用次数。
+
+```typescript title="src/mastra/agents/scrubbed-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, SystemPromptScrubber } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "scrubbed-agent",
+  instructions: "你是一个有用的助手",
+  model: "openai/gpt-5.1",
+  outputProcessors: [
+    // 首先批量处理流片段以减少 LLM 调用
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // 然后对批量内容应用系统提示词检测
+    new SystemPromptScrubber({
+      model: "openrouter/openai/gpt-oss-safeguard-20b",
+      strategy: "redact",
+      customPatterns: ["system prompt", "internal instructions"],
+      includeDetections: true,
+      redactionMethod: "placeholder",
+      placeholderText: "[REDACTED]"
+    }),
+  ]
+});
+```
+
+## 相关内容
+
+- [护栏](/docs/cn/docs/agents/guardrails)

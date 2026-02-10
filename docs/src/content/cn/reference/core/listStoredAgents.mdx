@@ -1,0 +1,153 @@
+---
+title: "参考文档：Mastra.listStoredAgents() | 核心"
+description: "Mastra 中 `Mastra.listStoredAgents()` 方法的文档，用于从存储中检索智能体的分页列表。"
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listStoredAgents()
+
+`.listStoredAgents()` 方法从存储中检索智能体配置的分页列表。默认情况下，它返回可执行的 `Agent` 实例，但也可以返回原始存储数据。
+
+## 使用示例
+
+```typescript
+// 从存储中获取智能体实例
+const { agents, total, hasMore } = await mastra.listStoredAgents();
+
+for (const agent of agents) {
+  console.log(agent.id, agent.name);
+  // 每个智能体都可以直接使用
+  // const response = await agent.generate("Hello");
+}
+```
+
+```typescript
+// 获取带有原始存储数据的分页结果
+const result = await mastra.listStoredAgents({
+  page: 0,
+  perPage: 10,
+  raw: true,
+});
+
+console.log(`Showing ${result.agents.length} of ${result.total} agents`);
+console.log(`Has more: ${result.hasMore}`);
+
+for (const config of result.agents) {
+  console.log(config.id, config.name, config.createdAt);
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description:
+        "用于分页和输出格式的可选配置对象。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### 参数选项
+
+<PropertiesTable
+  content={[
+    {
+      name: "page",
+      type: "number",
+      description: "用于分页的零索引页码。",
+      isOptional: true,
+      defaultValue: "0",
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description:
+        "每页的项目数。设置为 `false` 以获取所有记录而不进行分页。",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "raw",
+      type: "boolean",
+      description:
+        "当为 `true` 时，返回原始 `StorageAgentType` 对象而非 `Agent` 实例。",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "Agent[] | StorageAgentType[]",
+      description:
+        "默认情况下为 `Agent` 数组，或当 `raw: true` 时为 `StorageAgentType` 对象。",
+    },
+    {
+      name: "total",
+      type: "number",
+      description: "所有页面中的存储智能体总数。",
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "当前页码（零索引）。",
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "每页的项目数，如果获取全部则为 `false`。",
+    },
+    {
+      name: "hasMore",
+      type: "boolean",
+      description: "是否有更多页面可用。",
+    },
+  ]}
+/>
+
+## 原语解析
+
+创建 `Agent` 实例时（默认行为），每个存储的智能体配置都会根据注册的原语进行解析：
+
+- **工具**：从 Mastra 配置中注册的 `tools` 解析
+- **工作流**：从 Mastra 配置中注册的 `workflows` 解析
+- **子智能体**：从 Mastra 配置中注册的 `agents` 解析
+- **内存**：从 Mastra 配置中注册的 `memory` 解析
+- **评分器**：从 Mastra 配置中注册的 `scorers` 解析
+
+如果找不到引用的原语，则会记录警告，但智能体仍会创建。
+
+## 示例：遍历所有存储的智能体
+
+```typescript
+async function getAllStoredAgents(mastra: Mastra) {
+  const allAgents: Agent[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const result = await mastra.listStoredAgents({ page, perPage: 50 });
+    allAgents.push(...result.agents);
+    hasMore = result.hasMore;
+    page++;
+  }
+
+  return allAgents;
+}
+```
+
+## 相关内容
+
+- [Mastra.getStoredAgentById()](/reference/core/getStoredAgentById)
+- [存储概述](/reference/storage/overview)
+- [智能体概述](/docs/cn/docs/agents/overview)

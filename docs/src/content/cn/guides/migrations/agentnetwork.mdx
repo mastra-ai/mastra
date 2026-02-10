@@ -1,0 +1,114 @@
+---
+title: "迁移：从 AgentNetwork 到 .network() | 迁移指南"
+description: "了解如何从 AgentNetwork 原语迁移到 Mastra 中的 .network()。"
+---
+
+# 从 AgentNetwork 迁移到 `.network()`
+
+自 `@mastra/core` 的 `v0.20.0` 起，以下变更适用。
+
+### 从 AI SDK v4 升级到 v5
+
+- 将所有模型提供商包升级一个主要版本。
+
+:::note
+
+这将确保它们现在都是 v5 模型。
+
+:::
+
+### 需要内存
+
+- 内存现在需要代理网络才能正常运行。
+
+:::note
+
+您必须为代理配置内存。
+
+:::
+
+## 迁移路径
+
+如果您使用的是 `AgentNetwork` 原语，您可以将 `AgentNetwork` 替换为 `Agent`。
+
+之前：
+
+```typescript
+import { AgentNetwork } from "@mastra/core/network";
+
+const agent = new AgentNetwork({
+  name: "agent-network",
+  agents: [agent1, agent2],
+  tools: { tool1, tool2 },
+  model: "openai/gpt-5.1",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+});
+
+await agent.stream("Find me the weather in Tokyo.");
+```
+
+之后：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory();
+
+const agent = new Agent({
+  id: "agent-network",
+  name: "agent-network",
+  agents: { agent1, agent2 },
+  tools: { tool1, tool2 },
+  model: "openai/gpt-5.1",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+  memory,
+});
+
+await agent.network("Find me the weather in Tokyo.");
+```
+
+如果您使用的是 `NewAgentNetwork` 原语，您可以将 `NewAgentNetwork` 替换为 `Agent`。
+
+之前：
+
+```typescript
+import { NewAgentNetwork } from "@mastra/core/network/vnext";
+
+const agent = new NewAgentNetwork({
+  id: "agent-network",
+  name: "agent-network",
+  agents: { agent1, agent2 },
+  workflows: { workflow1 },
+  tools: { tool1, tool2 },
+  model: "openai/gpt-5.1",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+});
+
+await agent.loop("Find me the weather in Tokyo.");
+```
+
+之后：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+const memory = new Memory();
+
+const agent = new Agent({
+  name: "agent-network",
+  agents: { agent1, agent2 },
+  workflows: { workflow1 },
+  tools: { tool1, tool2 },
+  model: "openai/gpt-5.1",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+  memory,
+});
+
+await agent.network("Find me the weather in Tokyo.");
+```

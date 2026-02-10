@@ -1,0 +1,164 @@
+---
+title: "参考文档: Run.resumeStream() | 流处理"
+description: "工作流中 `Run.resumeStream()` 方法的文档，该方法支持实时恢复和流式传输暂停的工作流运行。"
+packages:
+  - "@mastra/core"
+---
+
+# Run.resumeStream()
+
+`.resumeStream()` 方法使用新数据恢复暂停的工作流运行，允许您从特定步骤继续执行并观察事件流。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const stream = run.stream({
+  inputData: {
+    value: "初始数据",
+  },
+});
+
+const result = await stream.result;
+
+if (result!.status === "suspended") {
+  const resumedStream = await run.resumeStream({
+    resumeData: {
+      value: "恢复数据",
+    },
+  });
+}
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "resumeData",
+      type: "z.infer<TInput>",
+      description: "与工作流输入模式匹配的输入数据",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "工作流执行期间使用的请求上下文数据",
+      isOptional: true,
+    },
+    {
+      name: "step",
+      type: "Step<string, any, any, any, any, TEngineType>",
+      description: "要恢复执行的步骤",
+      isOptional: true,
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "追踪配置的选项。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "添加到根追踪跨度的元数据。可用于添加自定义属性，如用户 ID、会话 ID 或功能标志。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "作为此追踪的元数据提取的额外 RequestContext 键。支持点符号表示嵌套值（例如，'user.id'）。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的追踪 ID（1-32 个十六进制字符）。如果提供，此追踪将成为指定追踪的一部分。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "用于此执行的父跨度 ID（1-16 个十六进制字符）。如果提供，根跨度将作为此跨度的子跨度创建。",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "应用于此追踪的标签。用于分类和筛选追踪的字符串标签。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "stream",
+      type: "MastraWorkflowStream<ChunkType>",
+      description:
+        "一个自定义流，扩展了 ReadableStream<ChunkType>，具有额外的工作流特定属性",
+    },
+    {
+      name: "stream.status",
+      type: "Promise<RunStatus>",
+      description: "解析为当前工作流运行状态的 Promise",
+    },
+    {
+      name: "stream.result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description: "解析为最终工作流结果的 Promise",
+    },
+    {
+      name: "stream.usage",
+      type: "Promise<{ inputTokens: number; outputTokens: number; totalTokens: number, reasoningTokens?: number, cacheInputTokens?: number }>",
+      description: "解析为 token 使用统计的 Promise",
+    },
+  ]}
+/>
+
+## 流事件
+
+流在工作流执行期间会发送各种事件类型。每个事件都有一个 `type` 字段和一个包含相关数据的 `payload`：
+
+- **`workflow-start`**：工作流执行开始
+- **`workflow-step-start`**：步骤开始执行
+- **`workflow-step-output`**：步骤的自定义输出
+- **`workflow-step-result`**：步骤完成并返回结果
+- **`workflow-finish`**：工作流执行完成，包含使用统计信息
+
+## 相关文档
+
+- [工作流概述](/docs/cn/docs/workflows/overview#运行工作流)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
+- [Run.stream()](./stream)

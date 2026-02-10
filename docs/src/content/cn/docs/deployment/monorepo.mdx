@@ -1,0 +1,160 @@
+---
+title: "在 Monorepo 中部署 | 部署"
+description: "了解如何部署作为 monorepo 设置一部分的 Mastra 应用程序"
+packages:
+  - "@mastra/deployer"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# 在 Monorepo 中部署
+
+在 monorepo 中部署 Mastra 的过程与独立应用程序相同。本指南涵盖 monorepo 特定的注意事项。关于核心构建和部署步骤，请参阅[部署 Mastra 服务器](/docs/cn/deployment/mastra-server)。
+
+## 支持的 monorepo
+
+Mastra 支持：
+
+- npm 工作区
+- pnpm 工作区
+- Yarn 工作区
+- Turborepo
+
+已知限制：
+
+- Bun 工作区 - 部分支持；已知问题
+- Nx - 您可以使用 Nx 的[支持的依赖策略](https://nx.dev/concepts/decisions/dependency-management)，但您需要在工作区包内有 `package.json` 文件
+
+## 示例结构
+
+在此示例中，Mastra 应用程序位于 `apps/api`：
+
+```
+apps/
+├── api/
+│   ├── src/
+│   │   └── mastra/
+│   │       ├── agents/
+│   │       ├── tools/
+│   │       ├── workflows/
+│   │       └── index.ts
+│   ├── package.json
+│   └── tsconfig.json
+└── web/
+packages/
+├── ui/
+└── utils/
+package.json
+```
+
+## 从 monorepo 构建
+
+使用您的 monorepo 工具从正确的包运行构建命令。无需特殊标志。
+
+示例：
+
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash
+npm run build --workspace=apps/api
+```
+
+</TabItem>
+
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm --filter api run build
+```
+
+</TabItem>
+
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn workspace api build
+```
+
+</TabItem>
+
+<TabItem value="turborepo" label="Turborepo">
+
+```bash
+turbo run build --filter=api
+```
+
+</TabItem>
+</Tabs>
+
+您的包的 `build` 脚本应该运行 `mastra build`：
+
+```json title="apps/api/package.json"
+{
+  "scripts": {
+    "build": "mastra build"
+  }
+}
+```
+
+## 工作区包
+
+当您的 Mastra 应用程序从其他工作区包导入时，Mastra 会自动处理：
+
+- 如果包是预编译的（例如，使用 `tsc` 或 `tsdown` 构建），Mastra 导入编译后的 JavaScript
+- 如果包包含未编译的 TypeScript，Mastra 会在构建期间转译它
+
+对于大多数设置，这无需配置即可工作。如果您遇到工作区包导入问题，请将包添加到 [`transpilePackages`](/reference/configuration#bundlertranspilepackages)：
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    transpilePackages: ["@my-org/utils"],
+  },
+});
+```
+
+## 环境变量
+
+将 `.env` 文件存储在 Mastra 应用程序目录中（例如 `apps/api/.env`），而不是 monorepo 根目录。
+
+## 部署配置
+
+部署到云提供商时，确保选择正确的包作为部署目标。选择 monorepo 根目录而不是应用程序目录（例如 `apps/api`）是一个常见错误。
+
+大多数提供商允许您在他们的仪表板或配置文件中指定根目录。
+
+### Mastra Cloud
+
+下图显示了部署到 [Mastra Cloud](/docs/cn/mastra-cloud/overview) 时如何选择 `apps/api` 作为项目根目录。虽然界面可能因提供商而异，但配置保持不变。
+
+![部署配置](/img/monorepo/monorepo-mastra-cloud.jpg)
+
+## 依赖项管理
+
+保持依赖项一致以避免版本冲突和构建错误：
+
+- 在 monorepo 根目录使用**单个锁文件**，以便所有包解析相同的版本
+- 对齐**共享库**（如 Mastra 或框架）的版本以防止重复
+
+## 故障排除
+
+### 找不到工作区包
+
+如果 Mastra 无法解析工作区包，请确保：
+- 该包列在您的 `package.json` 依赖项中
+- 您的锁文件是最新的（`pnpm install`、`npm install` 等）
+- 该包在其 `package.json` 中有有效的 `main` 或 `exports` 字段
+
+### 来自工作区包的 TypeScript 错误
+
+如果您看到来自未编译工作区包的类型错误，要么：
+- 首先构建该包（推荐，以加快 Mastra 构建）
+- 在您的 Mastra 配置中将包添加到 [`transpilePackages`](/reference/configuration#bundlertranspilepackages)
+
+## 相关内容
+
+- [部署 Mastra 服务器](/docs/cn/deployment/mastra-server) - 核心构建和部署指南
+- [配置参考](/reference/configuration) - `bundler.transpilePackages` 和其他选项
+- [CLI 参考](/reference/cli/mastra) - 构建命令标志

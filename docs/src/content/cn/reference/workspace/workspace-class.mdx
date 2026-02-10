@@ -1,0 +1,357 @@
+---
+title: "参考：Workspace 类 | 工作区"
+description: "Workspace 类的文档，Mastra 中用于文件系统访问、沙箱执行和搜索的中心 API。"
+packages:
+  - "@mastra/core"
+---
+
+# Workspace 类
+
+**添加于：** `@mastra/core@1.1.0`
+
+`Workspace` 类结合了文件系统和沙箱，为代理提供文件存储和命令执行功能。它还支持 BM25 和向量搜索以用于索引内容。
+
+## 使用示例
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  name: 'My Workspace',
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+  }),
+  sandbox: new LocalSandbox({
+    workingDirectory: './workspace',
+  }),
+  bm25: true,
+  autoIndexPaths: ['/docs'],
+});
+```
+
+## 构造函数参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "工作区的唯一标识符",
+      isOptional: true,
+      defaultValue: "自动生成",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "人类可读的名称",
+      isOptional: true,
+      defaultValue: "workspace-{id}",
+    },
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem",
+      description: "文件系统提供程序实例（例如 LocalFilesystem）",
+      isOptional: true,
+    },
+    {
+      name: "sandbox",
+      type: "WorkspaceSandbox",
+      description: "沙箱提供程序实例（例如 LocalSandbox）",
+      isOptional: true,
+    },
+    {
+      name: "bm25",
+      type: "boolean | BM25Config",
+      description: "启用 BM25 关键字搜索。传递 true 使用默认配置或传递配置对象。",
+      isOptional: true,
+      defaultValue: "undefined",
+    },
+    {
+      name: "vectorStore",
+      type: "MastraVector",
+      description: "用于语义搜索的向量存储",
+      isOptional: true,
+    },
+    {
+      name: "embedder",
+      type: "(text: string) => Promise<number[]>",
+      description: "用于生成向量的嵌入函数。当提供 vectorStore 时是必需的。",
+      isOptional: true,
+    },
+    {
+      name: "autoIndexPaths",
+      type: "string[]",
+      description: "init() 时自动索引的路径",
+      isOptional: true,
+    },
+    {
+      name: "skills",
+      type: "string[] | ((context: SkillsContext) => string[] | Promise<string[]>)",
+      description: "SKILL.md 文件所在的路径。可以是静态数组或异步函数，用于动态解析路径。",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "WorkspaceToolsConfig",
+      description: "启用工具和设置安全选项的每个工具配置",
+      isOptional: true,
+    },
+    {
+      name: "operationTimeout",
+      type: "number",
+      description: "操作的超时时间（毫秒）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 工具配置
+
+`tools` 选项接受 `WorkspaceToolsConfig` 对象，用于控制哪些工作区工具被启用及其安全设置。
+
+```typescript
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+
+tools: {
+  // 全局默认值（应用于所有工具）
+  enabled: true,
+  requireApproval: false,
+
+  // 使用 WORKSPACE_TOOLS 常量的每个工具覆盖
+  [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+    requireApproval: true,
+  },
+}
+```
+
+配置对象有两个部分：
+- **全局默认值**（`enabled`、`requireApproval`）- 应用于所有工具，除非被覆盖
+- **每个工具覆盖** - 使用 `WORKSPACE_TOOLS` 常量作为键来配置单个工具
+
+更多示例请参阅[工作区概述](/docs/cn/docs/workspace/overview#tool-configuration)。
+
+### 每个工具选项
+
+每个工具可以使用以下选项进行配置：
+
+<PropertiesTable
+  content={[
+    {
+      name: "enabled",
+      type: "boolean",
+      description: "工具是否对代理可用",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
+      name: "requireApproval",
+      type: "boolean",
+      description: "工具是否需要在执行前获得用户批准",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "requireReadBeforeWrite",
+      type: "boolean",
+      description: "对于写入工具：要求先读取文件以防止覆盖",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## 属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "工作区标识符",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "工作区名称",
+    },
+    {
+      name: "status",
+      type: "WorkspaceStatus",
+      description: "'pending' | 'initializing' | 'ready' | 'error' | 'destroying' | 'destroyed'",
+    },
+    {
+      name: "filesystem",
+      type: "WorkspaceFilesystem | undefined",
+      description: "文件系统提供程序",
+    },
+    {
+      name: "sandbox",
+      type: "WorkspaceSandbox | undefined",
+      description: "沙箱提供程序",
+    },
+    {
+      name: "skills",
+      type: "WorkspaceSkills | undefined",
+      description: "用于访问 SKILL.md 文件的技能接口",
+    },
+    {
+      name: "canBM25",
+      type: "boolean",
+      description: "BM25 搜索是否可用",
+    },
+    {
+      name: "canVector",
+      type: "boolean",
+      description: "向量搜索是否可用",
+    },
+    {
+      name: "canHybrid",
+      type: "boolean",
+      description: "混合搜索是否可用",
+    },
+  ]}
+/>
+
+## 方法
+
+### 生命周期
+
+#### `init()`
+
+初始化工作区并准备资源。
+
+```typescript
+await workspace.init();
+```
+
+在大多数情况下调用 `init()` 是可选的：
+- **沙箱**：在第一次 `executeCommand()` 调用时自动启动。使用 `init()` 以避免首次命令延迟。
+- **文件系统**：创建基础目录并运行任何提供程序特定的设置。一些提供程序在首次操作时自动创建目录。
+- **搜索**：仅在使用 `autoIndexPaths` 进行自动索引时需要。
+
+初始化执行以下操作：
+- 启动文件系统提供程序（如果需要则创建基础目录）
+- 启动沙箱提供程序（创建工作目录，如果配置则设置隔离）
+- 为搜索索引 `autoIndexPaths` 中的文件
+
+#### `destroy()`
+
+销毁工作区并清理资源。
+
+```typescript
+await workspace.destroy();
+```
+
+### 搜索操作
+
+#### `index(path, content, options?)`
+
+为搜索索引内容。
+
+```typescript
+await workspace.index('/docs/cn/docs/guide.md', 'Guide content...');
+```
+
+#### `search(query, options?)`
+
+搜索索引内容。
+
+```typescript
+const results = await workspace.search('password reset', {
+  topK: 10,
+  mode: 'hybrid',
+});
+```
+
+### 工具方法
+
+#### `getInfo()`
+
+获取工作区信息。
+
+```typescript
+const info = await workspace.getInfo();
+// { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
+```
+
+#### `getPathContext()`
+
+获取文件系统和沙箱路径的信息，包括代理的说明。
+
+```typescript
+const context = workspace.getPathContext();
+// { filesystem?, sandbox?, instructions }
+```
+
+**返回值：** `PathContext`
+
+```typescript
+interface PathContext {
+  filesystem?: {
+    provider: string;
+    basePath?: string;
+  };
+  sandbox?: {
+    provider: string;
+    workingDirectory?: string;
+  };
+  instructions: string;
+}
+```
+
+`instructions` 字段包含来自文件系统和沙箱的提供程序生成描述的组合。这些说明包含在工具描述中，以帮助代理理解执行上下文。
+
+#### `getToolsConfig()`
+
+获取工具配置。
+
+```typescript
+const config = workspace.getToolsConfig();
+```
+
+## 代理工具
+
+工作区根据配置向代理提供工具。
+
+### 文件系统工具
+
+配置文件系统时添加：
+
+| 工具 | 描述 |
+|------|-------------|
+| `mastra_workspace_read_file` | 读取文件内容。支持可选的行范围以读取大文件的特定部分。 |
+| `mastra_workspace_write_file` | 创建或覆盖文件的新内容。自动创建父目录。 |
+| `mastra_workspace_edit_file` | 通过查找和替换文本来编辑现有文件。用于有针对性的更改而无需重写整个文件。 |
+| `mastra_workspace_list_files` | 将目录内容列为树结构。支持有限制的递归列表。 |
+| `mastra_workspace_delete` | 删除文件或目录。支持目录的递归删除。 |
+| `mastra_workspace_file_stat` | 获取文件或目录的元数据，包括大小、类型和修改时间。 |
+| `mastra_workspace_mkdir` | 创建目录。如果目录不存在则自动创建父目录。 |
+
+当文件系统处于只读模式时，写入工具（`write_file`、`edit_file`、`delete`、`mkdir`）被排除。
+
+### 沙箱工具
+
+配置沙箱时添加：
+
+| 工具 | 描述 |
+|------|-------------|
+| `mastra_workspace_execute_command` | 使用参数执行 shell 命令。返回 stdout、stderr 和退出代码。支持超时和流式输出。 |
+
+### 搜索工具
+
+配置 BM25 或向量搜索时添加：
+
+| 工具 | 描述 |
+|------|-------------|
+| `mastra_workspace_search` | 使用关键字（BM25）、语义（向量）或混合搜索搜索索引内容。返回带分数的排名结果。 |
+| `mastra_workspace_index` | 为搜索索引内容。将内容与路径关联以便后续检索。 |
+
+当文件系统处于只读模式时，`index` 工具被排除。
+
+## 相关内容
+
+- [工作区概述](/docs/cn/docs/workspace/overview)
+- [搜索和索引](/docs/cn/docs/workspace/search)
+- [文件系统参考](/reference/workspace/filesystem)
+- [沙箱参考](/reference/workspace/sandbox)

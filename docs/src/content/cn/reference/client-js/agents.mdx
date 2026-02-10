@@ -1,0 +1,447 @@
+---
+title: "参考文档：智能体 API | 客户端 SDK"
+description: "了解如何使用 client-js SDK 与 Mastra AI 智能体交互，包括生成响应、流式交互和管理智能体工具。"
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
+---
+
+# 智能体 API
+
+智能体 API 提供了与 Mastra AI 智能体交互的方法，包括生成响应、流式交互和管理智能体工具。
+
+## 获取所有智能体
+
+检索所有可用智能体的列表：
+
+```typescript
+const agents = await mastraClient.listAgents();
+```
+
+返回智能体 ID 到其序列化智能体配置的记录。
+
+## 使用特定智能体
+
+通过 ID 获取特定智能体的实例：
+
+```typescript title="src/mastra/agents/my-agent.ts"
+export const myAgent = new Agent({
+  id: "my-agent",
+});
+```
+
+```typescript
+const agent = mastraClient.getAgent("my-agent");
+```
+
+## 智能体方法
+
+### details()
+
+检索智能体的详细信息：
+
+```typescript
+const details = await agent.details();
+```
+
+### generate()
+
+从智能体生成响应：
+
+```typescript
+const response = await agent.generate(
+  [
+    {
+      role: "user",
+      content: "Hello, how are you?",
+    },
+  ],
+  {
+    memory: {
+      thread: "thread-abc", // 可选：对话上下文的线程 ID
+      resource: "user-123", // 可选：资源 ID
+    },
+    structuredOutput: {}    // 可选：结构化输出配置
+  }
+);
+```
+
+您还可以使用带有内存选项的简化字符串格式：
+
+```typescript
+const response = await agent.generate("Hello, how are you?", {
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
+});
+```
+
+### stream()
+
+从智能体流式传输响应以进行实时交互：
+
+```typescript
+const response = await agent.stream("Tell me a story");
+
+// 使用 processDataStream 实用程序处理数据流
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+您还可以使用带有内存选项的简化字符串格式：
+
+```typescript
+const response = await agent.stream("Tell me a story", {
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
+  clientTools: { colorChangeTool },
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    if (chunk.type === "text-delta") {
+      console.log(chunk.payload.text);
+    }
+  },
+});
+```
+
+您也可以直接从响应体读取：
+
+```typescript
+const reader = response.body.getReader();
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  console.log(new TextDecoder().decode(value));
+}
+```
+
+#### AI SDK 兼容格式
+
+要从 `agent.stream(...)` 响应在客户端流式传输 AI SDK 格式的部分，将 `response.processDataStream` 包装成 `ReadableStream<ChunkType>` 并使用 `toAISdkStream`：
+
+```typescript title="client-ai-sdk-transform.ts"
+import { createUIMessageStream } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
+import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
+
+const response = await agent.stream("Tell me a story");
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response
+      .processDataStream({
+        onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
+      })
+      .finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkStream(
+      chunkStream as unknown as MastraModelOutput,
+      { from: "agent" },
+    )) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
+
+### getTool()
+
+检索智能体可用的特定工具的信息：
+
+```typescript
+const tool = await agent.getTool("tool-id");
+```
+
+### executeTool()
+
+为智能体执行特定工具：
+
+```typescript
+const result = await agent.executeTool("tool-id", {
+  data: { input: "value" },
+});
+```
+
+### network()
+
+从智能体网络流式传输响应以进行多智能体交互：
+
+```typescript
+const response = await agent.network("Research this topic and write a summary");
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+### approveToolCall()
+
+批准需要人工确认的待处理工具调用：
+
+```typescript
+const response = await agent.approveToolCall({
+  runId: "run-123",
+  toolCallId: "tool-call-456",
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+### declineToolCall()
+
+拒绝需要人工确认的待处理工具调用：
+
+```typescript
+const response = await agent.declineToolCall({
+  runId: "run-123",
+  toolCallId: "tool-call-456",
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+```
+
+### approveToolCallGenerate()
+
+在使用 `generate()`（非流式）时批准待处理的工具调用。返回完整响应：
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  const result = await agent.approveToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log(result.text);
+}
+```
+
+### declineToolCallGenerate()
+
+在使用 `generate()`（非流式）时拒绝待处理的工具调用。返回完整响应：
+
+```typescript
+const output = await agent.generate("Find user John", {
+  requireToolApproval: true,
+});
+
+if (output.finishReason === "suspended") {
+  const result = await agent.declineToolCallGenerate({
+    runId: output.runId,
+    toolCallId: output.suspendPayload.toolCallId,
+  });
+
+  console.log(result.text);
+}
+```
+
+## 客户端工具
+
+客户端工具允许您在智能体请求时在客户端执行自定义函数。
+
+```typescript
+import { createTool } from "@mastra/client-js";
+import { z } from "zod";
+
+const colorChangeTool = createTool({
+  id: "changeColor",
+  description: "Changes the background color",
+  inputSchema: z.object({
+    color: z.string(),
+  }),
+  execute: async (inputData) => {
+    document.body.style.backgroundColor = inputData.color;
+    return { success: true };
+  },
+});
+
+// 与 generate 一起使用
+const response = await agent.generate("Change the background to blue", {
+  clientTools: { colorChangeTool },
+});
+
+// 与 stream 一起使用
+const response = await agent.stream("Tell me a story", {
+  memory: {
+    thread: "thread-1",
+    resource: "resource-1",
+  },
+  clientTools: { colorChangeTool },
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    if (chunk.type === "text-delta") {
+      console.log(chunk.payload.text);
+    } else if (chunk.type === "tool-call") {
+      console.log(
+        `calling tool ${chunk.payload.toolName} with args ${JSON.stringify(
+          chunk.payload.args,
+          null,
+          2
+        )}`
+      );
+    }
+  },
+});
+```
+
+## 存储的智能体
+
+存储的智能体是存储在数据库中的智能体配置，可以在运行时创建、更新和删除。它们通过键引用原语（工具、工作流、其他智能体、内存、评分器），在智能体实例化时从 Mastra 注册表解析。
+
+### listStoredAgents()
+
+检索所有存储智能体的分页列表：
+
+```typescript
+const result = await mastraClient.listStoredAgents();
+console.log(result.agents); // 存储智能体的数组
+console.log(result.total); // 总数
+```
+
+使用分页和排序：
+
+```typescript
+const result = await mastraClient.listStoredAgents({
+  page: 0,
+  perPage: 20,
+  orderBy: {
+    field: "createdAt",
+    direction: "DESC",
+  },
+});
+```
+
+### createStoredAgent()
+
+创建新的存储智能体：
+
+```typescript
+const agent = await mastraClient.createStoredAgent({
+  id: "my-agent",
+  name: "My Assistant",
+  instructions: "You are a helpful assistant.",
+  model: {
+    provider: "openai",
+    name: "gpt-4",
+  },
+});
+```
+
+使用所有选项：
+
+```typescript
+const agent = await mastraClient.createStoredAgent({
+  id: "full-agent",
+  name: "Full Agent",
+  description: "A fully configured agent",
+  instructions: "You are a helpful assistant.",
+  model: {
+    provider: "openai",
+    name: "gpt-4",
+  },
+  tools: ["calculator", "weather"],
+  workflows: ["data-processing"],
+  agents: ["subagent-1"],
+  memory: "my-memory",
+  scorers: {
+    "quality-scorer": {
+      sampling: { type: "ratio", rate: 0.1 },
+    },
+  },
+  defaultOptions: {
+    maxSteps: 10,
+  },
+  metadata: {
+    version: "1.0",
+    team: "engineering",
+  },
+});
+```
+
+### getStoredAgent()
+
+获取特定存储智能体的实例：
+
+```typescript
+const storedAgent = mastraClient.getStoredAgent("my-agent");
+```
+
+## 存储的智能体方法
+
+### details()
+
+检索存储的智能体配置：
+
+```typescript
+const details = await storedAgent.details();
+console.log(details.name);
+console.log(details.instructions);
+console.log(details.model);
+```
+
+### update()
+
+更新存储智能体的特定字段。所有字段都是可选的：
+
+```typescript
+const updated = await storedAgent.update({
+  name: "Updated Agent Name",
+  instructions: "New instructions for the agent.",
+});
+```
+
+```typescript
+// 仅更新工具
+await storedAgent.update({
+  tools: ["new-tool-1", "new-tool-2"],
+});
+
+// 更新元数据
+await storedAgent.update({
+  metadata: {
+    version: "2.0",
+    lastModifiedBy: "admin",
+  },
+});
+```
+
+### delete()
+
+删除存储的智能体：
+
+```typescript
+const result = await storedAgent.delete();
+console.log(result.success); // true
+```

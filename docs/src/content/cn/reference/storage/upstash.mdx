@@ -1,0 +1,171 @@
+---
+title: "参考文档: Upstash 存储 | 存储"
+description: "Mastra 中 Upstash 存储实现的文档。"
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/upstash"
+---
+
+# Upstash 存储
+
+Upstash 存储实现使用 Upstash 的 Redis 兼容键值存储提供了无服务器友好的存储解决方案。
+
+:::warning[定价]
+当在 Mastra 中使用 Upstash 时，按使用量付费模式可能会因智能体对话期间生成的大量 Redis 命令而导致成本意外高涨。我们强烈建议使用**固定定价计划**以获得可预测的成本。请参阅 [Upstash 定价](https://upstash.com/pricing/redis) 了解详情，以及 [GitHub 问题 #5850](https://github.com/mastra-ai/mastra/issues/5850) 了解背景信息。
+:::
+
+:::warning[不支持可观察性]
+Upstash 存储**不支持可观察性领域**。来自 `DefaultExporter` 的追踪无法持久化到 Upstash，Mastra Studio 的可观察性功能无法将 Upstash 作为唯一的存储提供商工作。若要启用可观察性，请使用[复合存储](/reference/storage/composite#specialized-storage-for-observability) 将可观察性数据路由到支持的提供商，如 ClickHouse 或 PostgreSQL。
+:::
+
+## 安装
+
+```bash npm2yarn
+npm install @mastra/upstash@latest
+```
+
+## 使用方法
+
+```typescript
+import { UpstashStore } from "@mastra/upstash";
+
+const storage = new UpstashStore({
+  id: 'upstash-storage',
+  url: process.env.UPSTASH_URL,
+  token: process.env.UPSTASH_TOKEN,
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "Upstash Redis URL",
+      isOptional: false,
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Upstash Redis 身份验证令牌",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "所有存储项的键前缀",
+      isOptional: true,
+      defaultValue: "mastra:",
+    },
+  ]}
+/>
+
+## 额外说明
+
+### 键结构
+
+Upstash 存储实现使用键值结构：
+
+- 线程键：`{prefix}thread:{threadId}`
+- 消息键：`{prefix}message:{messageId}`
+- 元数据键：`{prefix}metadata:{entityId}`
+
+### 无服务器优势
+
+Upstash 存储特别适合无服务器部署：
+
+- 无需连接管理
+- 按请求付费定价
+- 全球复制选项
+- 边缘兼容
+
+### 数据持久化
+
+Upstash 提供：
+
+- 自动数据持久化
+- 时间点恢复
+- 跨区域复制选项
+
+### 性能考虑
+
+为获得最佳性能：
+
+- 使用适当的键前缀来组织数据
+- 监控 Redis 内存使用情况
+- 如需要，考虑数据过期策略
+
+## 使用示例
+
+### 为智能体添加内存
+
+要为智能体添加 Upstash 内存，请使用 `Memory` 类并使用 `UpstashStore` 创建一个新的 `storage` 键，以及使用 `UpstashVector` 创建一个新的 `vector` 键。配置可以指向远程服务或本地设置。
+
+```typescript title="src/mastra/agents/example-upstash-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { UpstashStore } from "@mastra/upstash";
+
+export const upstashAgent = new Agent({
+  id: "upstash-agent",
+  name: "Upstash 智能体",
+  instructions:
+    "你是一个具有自动回忆先前交互记忆能力的 AI 智能体。",
+  model: "openai/gpt-4o",
+  memory: new Memory({
+    storage: new UpstashStore({
+      id: 'upstash-agent-storage',
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    }),
+    options: {
+      generateTitle: true, // 显式启用自动标题生成
+    },
+  }),
+});
+```
+
+### 使用智能体
+
+使用 `memoryOptions` 来限定此请求的回忆。设置 `lastMessages: 5` 以限制基于最近性的回忆，并使用 `semanticRecall` 获取 `topK: 3` 最相关的消息，包括每个匹配的 `messageRange: 2` 个相邻消息以提供上下文。
+
+```typescript title="src/test-upstash-agent.ts"
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("upstashAgent");
+
+const message = await agent.stream("我的名字是 Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("我的名字是什么？", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```

@@ -1,0 +1,1136 @@
+---
+title: "跟踪 | 可观察性"
+description: "为 Mastra 应用程序设置跟踪"
+packages:
+  - "@mastra/arize"
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# 跟踪
+
+跟踪为应用程序中的 AI 相关操作提供专门的监控和调试功能。启用后，Mastra 会自动为智能体运行、大型语言模型生成、工具调用和工作流步骤创建跟踪，并附带 AI 特定的上下文和元数据。
+
+与传统应用程序跟踪不同，跟踪专门关注理解您的 AI 管道——捕获标记使用情况、模型参数、工具执行细节和对话流程。这使得调试问题、优化性能以及理解 AI 系统在生产环境中的行为变得更加容易。
+
+## 工作原理
+
+跟踪通过以下方式创建：
+
+- **配置导出器** → 将跟踪数据发送到可观察性平台
+- **设置采样策略** → 控制收集哪些跟踪
+- **运行智能体和工作流** → Mastra 自动使用跟踪检测它们
+
+## 配置
+
+### 基本配置
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "mastra",
+        exporters: [
+          new DefaultExporter(), // 为 Mastra Studio 将跟踪持久化到存储
+          new CloudExporter(), // 发送跟踪到 Mastra Cloud（如果设置了 MASTRA_CLOUD_ACCESS_TOKEN）
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // 编辑敏感数据，如密码、令牌、密钥
+        ],
+      },
+    },
+  }),
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db", // 跟踪需要存储
+  }),
+});
+```
+
+此配置包括：
+
+- **服务名称**：`"mastra"` - 在跟踪中识别您的服务
+- **采样**：默认 `"always"`（100% 的跟踪）
+- **导出器**：
+  - `DefaultExporter` - 将跟踪持久化到您配置存储中以便在 Studio 中查看
+  - `CloudExporter` - 发送跟踪到 Mastra Cloud（需要 `MASTRA_CLOUD_ACCESS_TOKEN`）
+- **跨度输出处理器**：`SensitiveDataFilter` - 编辑敏感字段
+
+## 导出器
+
+导出器决定您的跟踪数据被发送到哪里以及如何存储。它们与您现有的可观察性堆栈集成，支持数据驻留要求，并且可以针对成本和性能进行优化。您可以同时使用多个导出器将相同的跟踪数据发送到不同的目的地——例如，在本地存储详细跟踪以进行调试，同时将采样数据发送到云提供商进行生产监控。
+
+### 内部导出器
+
+Mastra 提供两个内置导出器：
+
+- **[默认](/docs/cn/observability/tracing/exporters/default)** - 将跟踪持久化到本地存储以便在 Studio 中查看
+- **[云](/docs/cn/observability/tracing/exporters/cloud)** - 发送跟踪到 Mastra Cloud 以进行生产监控和协作
+
+### 外部导出器
+
+除了内部导出器外，Mastra 还支持与流行的可观察性平台的集成。这些导出器让您能够利用现有的监控基础设施，并利用特定于平台的功能，如警报、仪表板以及其他应用程序指标的关联。
+
+- **[Arize](/docs/cn/observability/tracing/exporters/arize)** - 使用 OpenInference 语义约定将跟踪导出到 Arize Phoenix 或 Arize AX
+- **[Braintrust](/docs/cn/observability/tracing/exporters/braintrust)** - 将跟踪导出到 Braintrust 的评估和可观察性平台
+- **[Datadog](/docs/cn/observability/tracing/exporters/datadog)** - 通过 OTLP 发送跟踪到 Datadog APM，实现全栈可观察性和 AI 跟踪
+- **[Laminar](/docs/cn/observability/tracing/exporters/laminar)** - 通过 OTLP/HTTP（protobuf）发送跟踪到 Laminar，具有 Laminar 原生跨度属性 + 评分器支持
+- **[Langfuse](/docs/cn/observability/tracing/exporters/langfuse)** - 发送跟踪到 Langfuse 开源 LLM 工程平台
+- **[LangSmith](/docs/cn/observability/tracing/exporters/langsmith)** - 将跟踪推送到 LangSmith 的可观察性和评估工具包
+- **[PostHog](/docs/cn/observability/tracing/exporters/posthog)** - 发送跟踪到 PostHog 以进行 AI 分析和产品洞察
+- **[Sentry](/docs/cn/observability/tracing/exporters/sentry)** - 使用 OpenTelemetry 语义约定发送跟踪到 Sentry 以进行 AI 跟踪和监控
+- **[OpenTelemetry](/docs/cn/observability/tracing/exporters/otel)** - 将跟踪传送到任何 OpenTelemetry 兼容的可观察性系统
+  - 支持：Dash0、MLflow、New Relic、SigNoz、Traceloop、Zipkin 等等！
+
+## 桥接器
+
+桥接器提供与外部跟踪系统的双向集成。与将跟踪数据发送到外部平台的导出器不同，桥接器在外部系统中创建原生跨度并从它们继承上下文。这使 Mastra 操作能够参与现有的分布式跟踪。
+
+- **[OpenTelemetry 桥接器](/docs/cn/observability/tracing/bridges/otel)** - 与现有 OpenTelemetry 基础设施集成
+
+### 桥接器与导出器
+
+| 功能 | 桥接器 | 导出器 |
+| --- | --- | --- |
+| 在外部系统中创建原生跨度 | 是 | 否 |
+| 从外部系统继承上下文 | 是 | 否 |
+| 发送数据到后端 | 通过外部 SDK | 直接 |
+| 用例 | 现有分布式跟踪 | 独立 Mastra 跟踪 |
+
+您可以同时使用两者——用于上下文传播的桥接器和用于将跟踪发送到其他目的地的导出器。
+
+## 采样策略
+
+采样允许您控制收集哪些跟踪，帮助您在可观察性需求和资源成本之间取得平衡。在高流量的生产环境中，收集每个跟踪可能既昂贵又不必要。采样策略让您在确保不会错过有关错误或重要操作的关键信息的同时，捕获有代表性的跟踪子集。
+
+Mastra 支持四种采样策略：
+
+### 始终采样
+
+收集 100% 的跟踪。最适合开发、调试或需要完整可见性的低流量场景。
+
+```ts
+sampling: {
+  type: "always";
+}
+```
+
+### 从不采样
+
+完全禁用跟踪。在跟踪添加价值为零或需要临时禁用跟踪而不移除配置的具体环境中很有用。
+
+```ts
+sampling: {
+  type: "never";
+}
+```
+
+### 基于比率的采样
+
+随机采样一定比例的跟踪。理想的生产环境，您希望在不需要完整跟踪成本的情况下获得统计洞察。概率值范围从 0（无跟踪）到 1（所有跟踪）。
+
+```ts
+sampling: {
+  type: 'ratio',
+  probability: 0.1  // 采样 10% 的跟踪
+}
+```
+
+### 自定义采样
+
+根据请求上下文、元数据或业务规则实现您自己的采样逻辑。适用于基于用户层级、请求类型或错误条件的采样等复杂场景。
+
+```ts
+sampling: {
+  type: 'custom',
+  sampler: (options) => {
+    // 以更高比率采样高级用户
+    if (options?.metadata?.userTier === 'premium') {
+      return Math.random() < 0.5; // 50% 采样
+    }
+
+    // 其他用户默认 1% 采样
+    return Math.random() < 0.01;
+  }
+}
+```
+
+### 完整示例
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      "10_percent": {
+        serviceName: "my-service",
+        // 采样 10% 的跟踪
+        sampling: {
+          type: "ratio",
+          probability: 0.1,
+        },
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+## 多配置设置
+
+复杂的应用程序通常需要不同场景的不同跟踪配置。您可能希望在开发期间使用详细跟踪和完整采样，在生产中将采样跟踪发送到外部提供商，并为特定功能或客户群使用专门配置。`configSelector` 函数支持在运行时动态选择配置，允许您根据请求上下文、环境变量、功能标志或任何自定义逻辑路由跟踪。
+
+这种方法在以下情况下特别有价值：
+
+- 运行具有不同可观察性要求的 A/B 测试
+- 为特定客户或支持案例提供增强调试
+- 在不影响现有监控的情况下逐步推出新的跟踪提供商
+- 通过对不同请求类型使用不同的采样率来优化成本
+- 维护单独的跟踪流以满足合规性或数据驻留要求
+
+:::info
+
+请注意，特定执行只能使用单个配置。但单个配置可以同时向多个导出器发送数据。
+
+:::
+
+### 动态配置选择
+
+使用 `configSelector` 根据请求上下文选择适当的跟踪配置：
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langfuse: {
+        serviceName: "langfuse-service",
+        exporters: [langfuseExporter],
+      },
+      braintrust: {
+        serviceName: "braintrust-service",
+        exporters: [braintrustExporter],
+      },
+      debug: {
+        serviceName: "debug-service",
+        sampling: { type: "always" },
+        exporters: [new DefaultExporter()],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      // 对支持请求使用 debug 配置
+      if (context.requestContext?.get("supportMode")) {
+        return "debug";
+      }
+
+      // 将特定客户路由到不同的提供商
+      const customerId = context.requestContext?.get("customerId");
+      if (customerId && premiumCustomers.includes(customerId)) {
+        return "braintrust";
+      }
+
+      // 将特定请求路由到 langfuse
+      if (context.requestContext?.get("useExternalTracing")) {
+        return "langfuse";
+      }
+
+      throw new Error('no config found')
+    },
+  }),
+});
+```
+
+### 基于环境的配置
+
+一种常见的模式是根据部署环境选择配置：
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      development: {
+        serviceName: "my-service-dev",
+        sampling: { type: "always" },
+        exporters: [new DefaultExporter()],
+      },
+      staging: {
+        serviceName: "my-service-staging",
+        sampling: { type: "ratio", probability: 0.5 },
+        exporters: [langfuseExporter],
+      },
+      production: {
+        serviceName: "my-service-prod",
+        sampling: { type: "ratio", probability: 0.01 },
+        exporters: [cloudExporter, langfuseExporter],
+      },
+    },
+    configSelector: (context, availableTracers) => {
+      const env = process.env.NODE_ENV || "development";
+      return env;
+    },
+  }),
+});
+```
+
+### 常见配置模式和故障排除
+
+#### 维护 Studio 和 Cloud 访问
+
+添加外部导出器时，包含 `DefaultExporter` 和 `CloudExporter` 以维护对 Studio 和 Mastra Cloud 的访问：
+
+```ts title="src/mastra/index.ts"
+import {
+  Observability,
+  DefaultExporter,
+  CloudExporter,
+  SensitiveDataFilter,
+} from "@mastra/observability";
+import { ArizeExporter } from "@mastra/arize";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: "my-service",
+        exporters: [
+          new ArizeExporter({
+            endpoint: process.env.PHOENIX_ENDPOINT,
+            apiKey: process.env.PHOENIX_API_KEY,
+          }),
+          new DefaultExporter(), // 保持 Studio 访问
+          new CloudExporter(), // 保持 Cloud 访问
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+此配置同时将跟踪发送到所有三个目的地：
+
+- **Arize Phoenix/AX** 用于外部可观察性
+- **DefaultExporter** 用于 Studio
+- **CloudExporter** 用于 Mastra Cloud 仪表板
+
+:::info
+
+请记住：单个跟踪可以发送到多个导出器。除非您想要不同的采样率或处理器，否则不需要为每个导出器使用单独的配置。
+
+:::
+
+## 添加自定义元数据
+
+自定义元数据允许您向跟踪附加额外的上下文，使调试问题和理解生产环境中的系统行为变得更加容易。元数据可以包括业务逻辑细节、性能指标、用户上下文或任何帮助您理解执行期间发生的信息。
+
+您可以使用跟踪上下文向任何跨度添加元数据：
+
+```ts
+execute: async (inputData, context) => {
+  const startTime = Date.now();
+  const response = await fetch(inputData.endpoint);
+
+  // 向当前跨度添加自定义元数据
+  context?.tracingContext.currentSpan?.update({
+    metadata: {
+      apiStatusCode: response.status,
+      endpoint: inputData.endpoint,
+      responseTimeMs: Date.now() - startTime,
+      userTier: inputData.userTier,
+      region: process.env.AWS_REGION,
+    },
+  });
+
+  return await response.json();
+};
+```
+
+此处设置的元数据将在所有配置的导出器中显示。
+
+### 来自 RequestContext 的自动元数据
+
+您可以配置 Mastra 自动从 RequestContext 提取值并将它们作为元数据附加到跟踪中的所有跨度，而不是手动向每个跨度添加元数据。这对于在整个跟踪中一致地跟踪用户标识符、环境信息、功能标志或任何请求范围的数据很有用。
+
+#### 配置级别提取
+
+在跟踪配置中定义要提取的 RequestContext 密钥。这些密钥将自动包含在使用此配置创建的所有跨度的元数据中：
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        requestContextKeys: ["userId", "environment", "tenantId"],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+现在，当您使用 RequestContext 执行智能体或工作流时，这些值会自动提取：
+
+```ts
+const requestContext = new RequestContext();
+requestContext.set("userId", "user-123");
+requestContext.set("environment", "production");
+requestContext.set("tenantId", "tenant-456");
+
+// 此跟踪中的所有跨度自动获取 userId、environment 和 tenantId 元数据
+const result = await agent.generate("Hello", {
+  requestContext,
+});
+```
+
+#### 每次请求添加
+
+您可以使用 `tracingOptions.requestContextKeys` 添加特定于跟踪的密钥。这些与配置级别的密钥合并：
+
+```ts
+const requestContext = new RequestContext();
+requestContext.set("userId", "user-123");
+requestContext.set("environment", "production");
+requestContext.set("experimentId", "exp-789");
+
+const result = await agent.generate("Hello", {
+  requestContext,
+  tracingOptions: {
+    requestContextKeys: ["experimentId"], // 添加到配置的密钥
+  },
+});
+
+// 所有跨度现在都有：userId、environment AND experimentId
+```
+
+#### 嵌套值提取
+
+使用点表示法从 RequestContext 提取嵌套值：
+
+```ts
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        requestContextKeys: ["user.id", "session.data.experimentId"],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+
+const requestContext = new RequestContext();
+requestContext.set("user", { id: "user-456", name: "John Doe" });
+requestContext.set("session", { data: { experimentId: "exp-999" } });
+
+// 元数据将包括：{ user: { id: 'user-456' }, session: { data: { experimentId: 'exp-999' } } }
+```
+
+#### 工作原理
+
+1. **跟踪状态计算**：在跟踪开始时（根跨度创建），Mastra 通过合并配置级别和每次请求的密钥来计算要提取的密钥
+2. **自动提取**：根跨度（智能体运行、工作流执行）自动从 RequestContext 提取元数据
+3. **子跨度提取**：如果您在创建子跨度时传递 `requestContext`，子跨度也可以提取元数据
+4. **元数据优先级**：显式传递给跨度选项的元数据始终优先于提取的元数据
+
+### 向跟踪添加标签
+
+标签是帮助您对跟踪进行分类和过滤的字符串标签。与包含结构化键值数据的元数据不同，标签是专为快速过滤和组织设计的简单字符串。
+
+使用 `tracingOptions.tags` 在执行智能体或工作流时添加标签：
+
+```ts
+// 使用智能体
+const result = await agent.generate("Hello", {
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+
+// 使用工作流
+const run = await mastra.getWorkflow("myWorkflow").createRun();
+const result = await run.start({
+  inputData: { data: "process this" },
+  tracingOptions: {
+    tags: ["batch-processing", "priority-high"],
+  },
+});
+```
+
+#### 标签如何工作
+
+- **仅根跨度**：标签仅应用于跟踪的根跨度（智能体运行或工作流运行跨度）
+- **广泛支持**：大多数导出器支持标签用于过滤和搜索跟踪：
+  - **Braintrust** - 原生 `tags` 字段
+  - **Langfuse** - 跟踪上的原生 `tags` 字段
+  - **ArizeExporter** - `tag.tags` OpenInference 属性
+  - **OtelExporter** - `mastra.tags` 跨度属性
+  - **OtelBridge** - `mastra.tags` 跨度属性
+- **可与元数据组合**：您可以在相同的 `tracingOptions` 中同时使用 `tags` 和 `metadata`
+
+```ts
+const result = await agent.generate([{ role: "user", content: "Analyze this" }], {
+  tracingOptions: {
+    tags: ["production", "analytics"],
+    metadata: { userId: "user-123", experimentId: "exp-456" },
+  },
+});
+```
+
+#### 常见标签模式
+
+- **环境**：`"production"`、`"staging"`、`"development"`
+- **功能标志**：`"feature-x-enabled"`、`"beta-user"`
+- **请求类型**：`"user-request"`、`"batch-job"`、`"scheduled-task"`
+- **优先级级别**：`"priority-high"`、`"priority-low"`
+- **实验**：`"experiment-v1"`、`"control-group"`、`"treatment-a"`
+
+### 隐藏敏感输入/输出
+
+处理敏感数据时，您可能希望防止输入和输出值被记录到您的可观察性平台。使用 `tracingOptions` 中的 `hideInput` 和 `hideOutput` 从跟踪中的所有跨度排除此数据：
+
+```ts
+// 隐藏输入数据（例如，用户凭证、PII）
+const result = await agent.generate([{ role: "user", content: "Process this sensitive data" }], {
+  tracingOptions: {
+    hideInput: true, // 输入将从所有跨度隐藏
+  },
+});
+
+// 隐藏输出数据（例如，生成的密钥、机密结果）
+const result = await agent.generate([{ role: "user", content: "Generate API keys" }], {
+  tracingOptions: {
+    hideOutput: true, // 输出将从所有跨度隐藏
+  },
+});
+
+// 隐藏输入和输出
+const result = await agent.generate([{ role: "user", content: "Handle confidential request" }], {
+  tracingOptions: {
+    hideInput: true,
+    hideOutput: true,
+  },
+});
+```
+
+#### 工作原理
+
+- **跟踪范围效果**：设置在根跨度时，这些选项适用于跟踪中的所有子跨度（工具调用、模型生成等）
+- **导出时过滤**：数据在执行期间在内部仍然可用，但在跨度导出到可观察性平台时被排除
+- **可与其他选项组合**：您可以 alongside `hideInput`/`hideOutput` 使用 `tags`、`metadata` 和其他 `tracingOptions`
+
+```ts
+const result = await agent.generate([{ role: "user", content: "Sensitive operation" }], {
+  tracingOptions: {
+    hideInput: true,
+    hideOutput: true,
+    tags: ["sensitive-operation", "pii-handling"],
+    metadata: { operationType: "credential-processing" },
+  },
+});
+```
+
+:::tip
+
+要更精细地控制敏感数据，请考虑使用[敏感数据过滤器](/docs/cn/observability/tracing/processors/sensitive-data-filter)处理器，它可以编辑特定字段（如密码、令牌和密钥）同时保留输入/输出的其余部分。
+
+:::
+
+#### 子跨度和元数据提取
+
+在工具或工作流步骤内创建子跨度时，您可以传递 `requestContext` 参数以启用元数据提取：
+
+```ts
+execute: async (inputData, context) => {
+  // 创建带有 requestContext 的子跨度 - 获取元数据提取
+  const dbSpan = context?.tracingContext.currentSpan?.createChildSpan({
+    type: "generic",
+    name: "database-query",
+    requestContext: context?.requestContext, // 传递以启用元数据提取
+  });
+
+  const results = await db.query("SELECT * FROM users");
+  dbSpan?.end({ output: results });
+
+  // 或者创建不带有 requestContext 的子跨度 - 不提取元数据
+  const cacheSpan = context?.tracingContext.currentSpan?.createChildSpan({
+    type: "generic",
+    name: "cache-check",
+    // 没有 requestContext - 不会提取元数据
+  });
+
+  return results;
+};
+```
+
+这使您能够精细控制哪些子跨度包含 RequestContext 元数据。根跨度（智能体/工作流执行）始终自动提取元数据，而子跨度仅在您明确传递 `requestContext` 时提取。
+
+## 创建子跨度
+
+子跨度允许您在工作流步骤或工具内跟踪细粒度操作。它们提供对数据库查询、API 调用、文件操作或复杂计算等子操作的可见性。这种层次结构帮助您识别性能瓶颈并理解操作的确切顺序。
+
+在工具调用或工作流步骤内创建子跨度以跟踪特定操作：
+
+```ts
+execute: async (inputData, context) => {
+  // 为主数据库操作创建另一个子跨度
+  const querySpan = context?.tracingContext.currentSpan?.createChildSpan({
+    type: "generic",
+    name: "database-query",
+    input: { query: inputData.query },
+    metadata: { database: "production" },
+  });
+
+  try {
+    const results = await db.query(inputData.query);
+    querySpan?.end({
+      output: results.data,
+      metadata: {
+        rowsReturned: results.length,
+        queryTimeMs: results.executionTime,
+        cacheHit: results.fromCache,
+      },
+    });
+    return results;
+  } catch (error) {
+    querySpan?.error({
+      error,
+      metadata: { retryable: isRetryableError(error) },
+    });
+    throw error;
+  }
+};
+```
+
+子跨度自动从其父级继承跟踪上下文，在您的可观察性平台中保持关系层次结构。
+
+## 跨度格式化
+
+Mastra 提供了两种在跨度数据到达可观察性平台之前转换它的方法：**跨度处理器**和**自定义跨度格式化程序**。两者都允许您修改、过滤或丰富跟踪数据，但它们在不同级别上操作并服务于不同的目的。
+
+| 功能 | 跨度处理器 | 自定义跨度格式化程序 |
+| --- | --- | --- |
+| 配置级别 | 可观察性配置 | 每个导出器 |
+| 操作于 | 内部 `Span` 对象 | 导出的 `ExportedSpan` 数据 |
+| 适用于 | 所有导出器 | 单个导出器 |
+| 异步支持 | 否 | 是 |
+| 用例 | 安全、过滤、丰富 | 平台特定格式化、异步丰富 |
+
+对应该应用于所有导出器的同步转换使用**跨度处理器**。当不同的导出器需要相同数据的不同表示时（如一个平台的纯文本和另一个平台的结构化数据），或者当您需要执行异步操作（如从外部 API 获取数据）时，使用**自定义跨度格式化程序**。
+
+### 跨度处理器
+
+跨度处理器在导出之前转换、过滤或丰富跟踪数据。它们在跨度创建和导出之间充当管道，使您能够修改跨度以用于安全、合规或调试目的。处理器运行一次并影响所有导出器。
+
+#### 内置处理器
+
+- [敏感数据过滤器](/docs/cn/observability/tracing/processors/sensitive-data-filter) 编辑敏感信息。它在默认可观察性配置中启用。
+
+#### 创建自定义处理器
+
+您可以通过实现 `SpanOutputProcessor` 接口来创建自定义跨度处理器。这是一个简单的示例，将跨度中的所有输入文本转换为小写：
+
+```ts title="src/processors/lowercase-input-processor.ts"
+import type { SpanOutputProcessor, AnySpan } from "@mastra/observability";
+
+export class LowercaseInputProcessor implements SpanOutputProcessor {
+  name = "lowercase-processor";
+
+  process(span: AnySpan): AnySpan {
+    span.input = `${span.input}`.toLowerCase();
+    return span;
+  }
+
+  async shutdown(): Promise<void> {
+    // 如果需要清理
+  }
+}
+
+// 使用自定义处理器
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      development: {
+        spanOutputProcessors: [new LowercaseInputProcessor(), new SensitiveDataFilter()],
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+处理器按定义的顺序执行，允许您链接多个转换。常见用例包括：
+
+- 编辑敏感数据（密码、令牌、API 密钥）
+- 添加环境特定元数据
+- 根据标准过滤跨度
+- 规范化数据格式
+- 用业务上下文丰富跨度
+
+### 自定义跨度格式化程序
+
+自定义跨度格式化程序转换跨度在特定可观察性平台中的显示方式。与跨度处理器不同，格式化程序在每个导出器上配置，允许不同目的地使用不同的格式化。格式化程序支持同步和异步操作。
+
+#### 用例
+
+- **从 AI SDK 消息中提取纯文本** - 将结构化消息数组转换为可读文本
+- **转换输入/输出格式** - 自定义数据在特定平台中的显示方式
+- **平台特定字段映射** - 根据平台要求添加或删除字段
+- **异步数据丰富** - 从外部 API 或数据库获取额外上下文
+
+#### 配置
+
+向任何导出器配置添加 `customSpanFormatter`：
+
+```ts title="src/mastra/index.ts"
+import { BraintrustExporter } from "@mastra/braintrust";
+import { LangfuseExporter } from "@mastra/langfuse";
+import { SpanType } from "@mastra/core/observability";
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// 从 AI 消息中提取纯文本的格式化程序
+const plainTextFormatter: CustomSpanFormatter = (span) => {
+  if (span.type === SpanType.AGENT_RUN && Array.isArray(span.input)) {
+    const userMessage = span.input.find((m) => m.role === "user");
+    return {
+      ...span,
+      input: userMessage?.content ?? span.input,
+    };
+  }
+  return span;
+};
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        exporters: [
+          // Braintrust 获取纯文本格式化
+          new BraintrustExporter({
+            customSpanFormatter: plainTextFormatter,
+          }),
+          // Langfuse 保持原始结构化格式
+          new LangfuseExporter(),
+        ],
+      },
+    },
+  }),
+});
+```
+
+#### 链接多个格式化程序
+
+使用 `chainFormatters` 组合多个格式化程序。链支持同步和异步格式化程序：
+
+```ts
+import { chainFormatters } from "@mastra/observability";
+
+const inputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  input: extractPlainText(span.input),
+});
+
+const outputFormatter: CustomSpanFormatter = (span) => ({
+  ...span,
+  output: extractPlainText(span.output),
+});
+
+const exporter = new BraintrustExporter({
+  customSpanFormatter: chainFormatters([inputFormatter, outputFormatter]),
+});
+```
+
+#### 异步格式化程序
+
+自定义跨度格式化程序支持异步操作，实现从外部 API 或数据库获取数据以丰富您的跨度等用例：
+
+```ts
+import type { CustomSpanFormatter } from "@mastra/core/observability";
+
+// 用用户数据丰富跨度的异步格式化程序
+const userEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  const userId = span.metadata?.userId;
+  if (!userId) return span;
+
+  // 从您的 API 或数据库获取用户数据
+  const userData = await fetchUserData(userId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      userName: userData.name,
+      userEmail: userData.email,
+      department: userData.department,
+    },
+  };
+};
+
+// 查找额外上下文的异步格式化程序
+const contextEnrichmentFormatter: CustomSpanFormatter = async (span) => {
+  if (span.type !== SpanType.AGENT_RUN) return span;
+
+  // 获取实验配置
+  const experimentConfig = await getExperimentConfig(span.metadata?.experimentId);
+
+  return {
+    ...span,
+    metadata: {
+      ...span.metadata,
+      experimentVariant: experimentConfig?.variant,
+      experimentGroup: experimentConfig?.group,
+    },
+  };
+};
+
+// 将异步格式化程序与导出器一起使用
+const exporter = new BraintrustExporter({
+  customSpanFormatter: userEnrichmentFormatter,
+});
+
+// 或者将同步和异步格式化程序链接在一起
+const exporter = new LangfuseExporter({
+  customSpanFormatter: chainFormatters([
+    plainTextFormatter,           // 同步
+    userEnrichmentFormatter,      // 异步
+    contextEnrichmentFormatter,   // 异步
+  ]),
+});
+```
+
+:::note
+
+异步格式化程序会增加跨度导出的延迟。保持异步操作快速（低于 100ms）以避免减慢您的应用程序。考虑对频繁访问的数据使用缓存。
+
+:::
+
+## 序列化选项
+
+序列化选项控制跨度数据（输入、输出和属性）在导出之前如何截断。这在处理大型有效负载、深层嵌套对象或需要优化跟踪存储时很有用。
+
+### 配置
+
+向您的可观察性配置添加 `serializationOptions`：
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        serializationOptions: {
+          maxStringLength: 2048,   // 字符串值的最大长度（默认：1024）
+          maxDepth: 10,            // 嵌套对象的最大深度（默认：6）
+          maxArrayLength: 100,     // 数组中项目的最大数量（默认：50）
+          maxObjectKeys: 75,       // 对象中密钥的最大数量（默认：50）
+        },
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+### 可用选项
+
+| 选项 | 默认 | 描述 |
+| --- | --- | --- |
+| `maxStringLength` | 1024 | 字符串值的最大长度。更长的字符串被截断。 |
+| `maxDepth` | 6 | 嵌套对象的最大深度。更深的级别被省略。 |
+| `maxArrayLength` | 50 | 数组中项目的最大数量。额外的项目被省略。 |
+| `maxObjectKeys` | 50 | 对象中密钥的最大数量。额外的密钥被省略。 |
+
+### 用例
+
+**增加限制用于调试**：如果您的智能体或工具处理大型文档、API 响应或数据结构，增加这些限制以在跟踪中捕获更多上下文：
+
+```ts
+serializationOptions: {
+  maxStringLength: 8192,  // 捕获更长的文本内容
+  maxDepth: 12,           // 处理深层嵌套的 JSON 响应
+  maxArrayLength: 200,    // 从大列表中保留更多项目
+}
+```
+
+**减少生产环境的跟踪大小**：降低这些值以在不需要完整有效负载可见性时减少存储成本和提高性能：
+
+```ts
+serializationOptions: {
+  maxStringLength: 256,   // 积极截断字符串
+  maxDepth: 3,            // 浅层对象表示
+  maxArrayLength: 10,    // 只保留前几项
+  maxObjectKeys: 20,      // 限制对象密钥
+}
+```
+
+所有选项都是可选的——如果未指定，它们会回退到上面显示的默认值。
+
+## 检索跟踪 ID
+
+当您执行启用了跟踪的智能体或工作流时，响应中包含一个 `traceId`，您可以使用它在可观察性平台中查找完整跟踪。这对于调试、客户支持或将跟踪与系统中的其他事件关联很有用。
+
+### 智能体跟踪 ID
+
+`generate` 和 `stream` 方法都在其响应中返回跟踪 ID：
+
+```ts
+// 使用 generate
+const result = await agent.generate("Hello");
+
+console.log("Trace ID:", result.traceId);
+
+// 使用 stream
+const streamResult = await agent.stream("Tell me a story");
+
+console.log("Trace ID:", streamResult.traceId);
+```
+
+### 工作流跟踪 ID
+
+工作流执行也返回跟踪 ID：
+
+```ts
+// 创建工作流运行
+const run = await mastra.getWorkflow("myWorkflow").createRun();
+
+// 启动工作流
+const result = await run.start({
+  inputData: { data: "process this" },
+});
+
+console.log("Trace ID:", result.traceId);
+
+// 或者流式传输工作流
+const { stream, getWorkflowState } = run.stream({
+  inputData: { data: "process this" },
+});
+
+// 获取包含跟踪 ID 的最终状态
+const finalState = await getWorkflowState();
+console.log("Trace ID:", finalState.traceId);
+```
+
+### 使用跟踪 ID
+
+获得跟踪 ID 后，您可以：
+
+1. **在 Studio 中查找跟踪**：导航到跟踪视图并按 ID 搜索
+2. **在外部平台中查询跟踪**：在 Langfuse、Braintrust、MLflow 或您的可观察性平台中使用该 ID
+3. **与日志关联**：在应用程序日志中包含跟踪 ID 以进行交叉引用
+4. **共享用于调试**：向支持团队或开发人员提供跟踪 ID 以进行调查
+
+跟踪 ID 仅在启用跟踪时可用。如果跟踪被禁用或采样排除了请求，`traceId` 将是 `undefined`。
+
+## 与外部跟踪系统集成
+
+在具有现有分布式跟踪（OpenTelemetry、Datadog 等）的应用程序内运行 Mastra 智能体或工作流时，您可以将 Mastra 跟踪连接到父跟踪上下文。这创建了对整个请求流的统一视图，使您更容易理解 Mastra 操作如何融入更广泛的系统。
+
+### 传递外部跟踪 ID
+
+使用 `tracingOptions` 参数指定来自父系统的跟踪上下文：
+
+```ts
+// 从您现有的跟踪系统获取跟踪上下文
+const parentTraceId = getCurrentTraceId(); // 您的跟踪系统
+const parentSpanId = getCurrentSpanId(); // 您的跟踪系统
+
+// 作为父跟踪的一部分执行 Mastra 操作
+const result = await agent.generate("Analyze this data", {
+  tracingOptions: {
+    traceId: parentTraceId,
+    parentSpanId: parentSpanId,
+  },
+});
+
+// Mastra 跟踪现在将作为子级出现在您的分布式跟踪中
+```
+
+### OpenTelemetry 集成
+
+与 OpenTelemetry 的集成使 Mastra 跟踪能够无缝出现在您现有的可观察性平台中：
+
+```ts
+import { trace } from "@opentelemetry/api";
+
+// 获取当前 OpenTelemetry 跨度
+const currentSpan = trace.getActiveSpan();
+const spanContext = currentSpan?.spanContext();
+
+if (spanContext) {
+  const result = await agent.generate(userMessage, {
+    tracingOptions: {
+      traceId: spanContext.traceId,
+      parentSpanId: spanContext.spanId,
+    },
+  });
+}
+```
+
+### 工作流集成
+
+工作流支持相同的跟踪传播模式：
+
+```ts
+const workflow = mastra.getWorkflow("data-pipeline");
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { data: "..." },
+  tracingOptions: {
+    traceId: externalTraceId,
+    parentSpanId: externalSpanId,
+  },
+});
+```
+
+### ID 格式要求
+
+Mastra 验证跟踪和跨度 ID 以确保兼容性：
+
+- **跟踪 ID**：1-32 个十六进制字符（OpenTelemetry 使用 32 个）
+- **跨度 ID**：1-16 个十六进制字符（OpenTelemetry 使用 16 个）
+
+无效的 ID 被优雅地处理——Mastra 记录错误并继续：
+
+- 无效的跟踪 ID → 生成新的跟踪 ID
+- 无效的父跨度 ID → 忽略父关系
+
+这确保跟踪永远不会使您的应用程序崩溃，即使输入格式错误。
+
+### 示例：Express 中间件
+
+以下是一个完整的示例，显示 Express 应用程序中的跟踪传播：
+
+```ts
+import { trace } from "@opentelemetry/api";
+import express from "express";
+
+const app = express();
+
+app.post("/api/analyze", async (req, res) => {
+  // 获取当前 OpenTelemetry 上下文
+  const currentSpan = trace.getActiveSpan();
+  const spanContext = currentSpan?.spanContext();
+
+  const result = await agent.generate(req.body.message, {
+    tracingOptions: spanContext
+      ? {
+          traceId: spanContext.traceId,
+          parentSpanId: spanContext.spanId,
+        }
+      : undefined,
+  });
+
+  res.json(result);
+});
+```
+
+这创建了一个包含 HTTP 请求处理和 Mastra 智能体执行的单个分布式跟踪，可在您选择的可观察性平台中查看。
+
+## 在无服务器环境中刷新跟踪
+
+在 Vercel 的流体计算、AWS Lambda 或 Cloudflare Workers 等无服务器环境中，运行时实例可以在多个请求之间重用。`flush()` 方法允许您确保所有缓冲的跨度在运行时终止之前被导出，而不关闭导出器（这会阻止未来的导出）。
+
+:::note[存储要求]
+
+无服务器环境具有临时文件系统。使用外部存储而不是本地文件存储（`file:./mastra.db`）。有关完整设置示例，请参阅 [Vercel 部署指南](/guides/deployment/vercel-deployer#observability)。
+
+:::
+
+### 使用 flush()
+
+在可观察性实例上调用 `flush()` 以刷新所有导出器：
+
+```ts
+// 从 Mastra 获取可观察性实例
+const observability = mastra.getObservability();
+
+// 将所有缓冲的跨度刷新到所有导出器
+await observability.flush();
+```
+
+### 何时使用 flush()
+
+在这些场景中使用 `flush()`：
+
+- **无服务器函数执行结束时**：确保跨度在运行时暂停或终止之前被导出
+- **长时间运行操作之前**：在可能缓慢的操作之前刷新累积的跨度
+- **定期刷新**：在长时间运行的进程中，定期刷新以确保及时数据可用性
+
+```ts
+// 示例：Vercel 无服务器函数
+export async function POST(req: Request) {
+  const result = await agent.generate([{ role: "user", content: await req.text() }]);
+
+  // 确保跨度在函数完成之前被导出
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  return Response.json(result);
+}
+```
+
+### flush() 与 shutdown()
+
+| 方法 | 行为 | 用例 |
+| --- | --- | --- |
+| `flush()` | 导出缓冲的跨度，保持导出器活动 | 无服务器环境、定期刷新 |
+| `shutdown()` | 导出缓冲的跨度，释放资源 | 应用程序关闭、优雅终止 |
+
+当您需要确保数据被导出但希望保持导出器为未来请求准备就绪时使用 `flush()`。仅在应用程序终止时使用 `shutdown()`。
+
+## 跟踪内容
+
+Mastra 自动为以下内容创建跨度：
+
+### 智能体操作
+
+- **智能体运行** - 包含说明和工具的完整执行
+- **大型语言模型调用** - 具有标记和参数的模型交互
+- **工具执行** - 具有输入和输出的函数调用
+- **内存操作** - 线程和语义回忆
+
+### 工作流操作
+
+- **工作流运行** - 从开始到结束的完整执行
+- **单个步骤** - 具有输入/输出的步骤处理
+- **控制流** - 条件、循环、并行执行
+- **等待操作** - 延迟和事件等待
+
+## 另请参阅
+
+### 参考文档
+
+- [配置 API](/reference/observability/tracing/configuration) - ObservabilityConfig 详情
+- [跟踪类](/reference/observability/tracing/instances) - 核心类和方法
+- [跨度接口](/reference/observability/tracing/spans) - 跨度类型和生命周期
+- [类型定义](/reference/observability/tracing/interfaces) - 完整接口参考
+
+### 导出器
+
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - 存储持久化
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud 集成
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - 调试输出
+- [Arize](/reference/observability/tracing/exporters/arize) - Arize Phoenix 和 Arize AX 集成
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust 集成
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse 集成
+- [MLflow](/docs/cn/observability/tracing/exporters/otel#mlflow) - MLflow OTLP 端点设置
+- [OpenTelemetry](/reference/observability/tracing/exporters/otel) - OTEL 兼容平台
+
+### 桥接器
+
+- [OpenTelemetry 桥接器](/reference/observability/tracing/bridges/otel) - OTEL 上下文集成
+
+### 处理器
+
+- [敏感数据过滤器](/docs/cn/observability/tracing/processors/sensitive-data-filter) - 数据编辑

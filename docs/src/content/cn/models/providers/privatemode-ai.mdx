@@ -1,0 +1,145 @@
+---
+title: "Privatemode AI | 模型 | Mastra"
+description: "在 Mastra 中使用 Privatemode AI 模型。共 5 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+# <img src="https://models.dev/logos/privatemode-ai.svg" alt="Privatemode AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Privatemode AI
+
+通过 Mastra 的模型路由器访问 5 个 Privatemode AI 模型。身份验证使用 `PRIVATEMODE_API_KEY` 环境变量自动处理。
+
+在 [Privatemode AI 文档](https://docs.privatemode.ai) 中了解更多信息。
+
+```bash title=".env"
+PRIVATEMODE_API_KEY=your-api-key
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "privatemode-ai/gemma-3-27b"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra 使用 OpenAI 兼容的 `/chat/completions` 端点。某些提供商特定功能可能不可用。查看 [Privatemode AI 文档](https://docs.privatemode.ai) 了解详情。
+
+:::
+
+## 模型
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "privatemode-ai/gemma-3-27b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/qwen3-coder-30b-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/qwen3-embedding-4b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32000,
+    "maxOutput": 2560,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "privatemode-ai/whisper-large-v3",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": 4096,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## 高级配置
+
+### 自定义请求头
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "http://localhost:8080/v1",
+    id: "privatemode-ai/gemma-3-27b",
+    apiKey: process.env.PRIVATEMODE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### 动态模型选择
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "privatemode-ai/whisper-large-v3"
+      : "privatemode-ai/gemma-3-27b";
+  }
+});
+```
+
+

@@ -1,0 +1,387 @@
+---
+title: "Venice AI | 模型 | Mastra"
+description: "在 Mastra 中使用 Venice AI 模型。共 25 个模型。"
+---
+
+{/* 此文件由 generate-model-docs.ts 自动生成 - 请勿手动编辑 */}
+
+
+
+# <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
+
+通过 Mastra 的模型路由器访问 25 个 Venice AI 模型。身份验证使用 `VENICE_API_KEY` 环境变量自动处理。
+
+在 [Venice AI 文档](https://docs.venice.ai) 中了解更多信息。
+
+```bash
+VENICE_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "venice/claude-opus-45"
+});
+
+// 生成响应
+const response = await agent.generate("Hello!");
+
+// 流式响应
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Venice AI documentation](https://docs.venice.ai) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "venice/claude-opus-45",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 6,
+    "outputCost": 30
+  },
+  {
+    "model": "venice/claude-sonnet-45",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 3.75,
+    "outputCost": 18.75
+  },
+  {
+    "model": "venice/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 40960,
+    "inputCost": 0.4,
+    "outputCost": 1
+  },
+  {
+    "model": "venice/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.7,
+    "outputCost": 3.75
+  },
+  {
+    "model": "venice/gemini-3-pro-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 2.5,
+    "outputCost": 15
+  },
+  {
+    "model": "venice/google-gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 0.12,
+    "outputCost": 0.2
+  },
+  {
+    "model": "venice/grok-41-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.5,
+    "outputCost": 1.25
+  },
+  {
+    "model": "venice/grok-code-fast-1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 1.87
+  },
+  {
+    "model": "venice/hermes-3-llama-3.1-405b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 1.1,
+    "outputCost": 3
+  },
+  {
+    "model": "venice/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.75,
+    "outputCost": 3.2
+  },
+  {
+    "model": "venice/llama-3.2-3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "venice/llama-3.3-70b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.7,
+    "outputCost": 2.8
+  },
+  {
+    "model": "venice/minimax-m21",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 0.4,
+    "outputCost": 1.6
+  },
+  {
+    "model": "venice/mistral-31-24b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.5,
+    "outputCost": 2
+  },
+  {
+    "model": "venice/openai-gpt-52",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 2.19,
+    "outputCost": 17.5
+  },
+  {
+    "model": "venice/openai-gpt-52-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 2.19,
+    "outputCost": 17.5
+  },
+  {
+    "model": "venice/openai-gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.07,
+    "outputCost": 0.3
+  },
+  {
+    "model": "venice/qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.15,
+    "outputCost": 0.75
+  },
+  {
+    "model": "venice/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.45,
+    "outputCost": 3.5
+  },
+  {
+    "model": "venice/qwen3-4b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.05,
+    "outputCost": 0.15
+  },
+  {
+    "model": "venice/qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.75,
+    "outputCost": 3
+  },
+  {
+    "model": "venice/qwen3-next-80b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.35,
+    "outputCost": 1.9
+  },
+  {
+    "model": "venice/qwen3-vl-235b-a22b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 1.5
+  },
+  {
+    "model": "venice/venice-uncensored",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 8192,
+    "inputCost": 0.2,
+    "outputCost": 0.9
+  },
+  {
+    "model": "venice/zai-org-glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 0.55,
+    "outputCost": 2.65
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.venice.ai/api/v1",
+    id: "venice/claude-opus-45",
+    apiKey: process.env.VENICE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "venice/zai-org-glm-4.7"
+      : "venice/claude-opus-45";
+  }
+});
+```
+
+

@@ -1,0 +1,47 @@
+---
+title: "RAG | v1 迁移指南"
+description: "升级到 v1 时迁移 RAG 相关的重大更改。"
+---
+
+# RAG
+
+RAG 包已重命名分块参数并收窄了它们的类型。
+
+## 变更
+
+### `keepSeparator` 改为 `separatorPosition`
+
+`keepSeparator` 参数已重命名为 `separatorPosition`，类型也简化了。旧参数有一个令人困惑的 `boolean | 'start' | 'end'` 类型，其中 `true` 实际上是 `'start'` 的别名。新参数使用明确的 `'start' | 'end'` 值，省略参数会丢弃分隔符。
+
+要迁移，请使用下面的映射将 `keepSeparator` 替换为 `separatorPosition`：
+
+| 旧值 | 新值 |
+|-----------|-----------|
+| `keepSeparator: true` | `separatorPosition: 'start'` |
+| `keepSeparator: 'start'` | `separatorPosition: 'start'` |
+| `keepSeparator: 'end'` | `separatorPosition: 'end'` |
+| `keepSeparator: false` | 移除参数 |
+| 参数省略 | 无需更改 |
+
+```diff
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+-   keepSeparator: true,
++   separatorPosition: 'start',
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+-   keepSeparator: 'end',
++   separatorPosition: 'end',
+  });
+
+  await doc.chunk({
+    strategy: 'character',
+    separator: '.',
+-   keepSeparator: false,
++   // 参数已移除 - 分隔符默认被丢弃
+  });
+```

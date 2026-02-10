@@ -1,0 +1,226 @@
+---
+title: "Digital Ocean | 部署"
+description: "将您的 Mastra 应用程序部署到 Digital Ocean。"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Digital Ocean
+
+将您的 Mastra 应用程序部署到 Digital Ocean 的 App Platform 和 Droplets。
+
+:::note
+
+本指南假设您的 Mastra 应用程序已使用默认的 `npx create-mastra@latest` 命令创建。
+
+有关如何创建新的 Mastra 应用程序的更多信息，请参阅我们的[快速入门指南](/guides/getting-started/quickstart)
+
+:::
+
+## 说明
+
+<Tabs>
+
+  <TabItem value="app-platform" label="App Platform">
+
+<h3>前置条件</h3>
+
+- 包含您的 Mastra 应用程序的 Git 仓库。这可以是 [GitHub](https://github.com/) 仓库、[GitLab](https://gitlab.com/) 仓库或任何其他兼容的源提供商。
+- [Digital Ocean 账户](https://www.digitalocean.com/)
+
+<h3>部署步骤</h3>
+
+<Steps>
+
+<StepItem>
+
+创建新应用
+
+- 登录您的 [Digital Ocean 仪表板](https://cloud.digitalocean.com/)。
+- 导航到 [App Platform](https://docs.digitalocean.com/products/app-platform/) 服务。
+- 选择您的源提供商并创建新应用。
+
+</StepItem>
+
+<StepItem>
+
+配置部署源
+
+- 连接并选择您的仓库。您也可以选择容器镜像或示例应用。
+- 选择您要部署的分支。
+- 如有必要，配置源目录。如果您的 Mastra 应用程序使用默认目录结构，则此处无需操作。
+- 进入下一步。
+
+</StepItem>
+
+<StepItem>
+
+配置资源设置和环境变量
+
+- Node.js 构建应该会被自动检测到。
+- **配置构建命令**：您需要为应用平台添加自定义构建命令以成功构建您的 Mastra 项目。根据您的包管理器设置构建命令：
+
+```bash npm2yarn
+npm run build
+```
+
+- 添加您的 Mastra 应用程序所需的任何环境变量。这包括 API key、数据库 URL 和其他配置值。
+- 您可以选择在此处配置资源的大小。
+- 您可以选择配置的其他内容包括：资源的区域、唯一的应用名称以及资源所属的项目。
+- 完成配置并查看定价估算后，您可以创建应用。
+
+</StepItem>
+
+<StepItem>
+
+部署
+
+- 您的应用将自动构建和部署。
+- Digital Ocean 将为您提供访问您部署应用程序的 URL。
+
+</StepItem>
+
+</Steps>
+
+您现在可以在 Digital Ocean 提供的 URL 处访问您部署的应用程序。
+
+:::warning
+
+Digital Ocean App Platform 使用临时文件系统，这意味着写入磁盘的任何文件都是短期的，可能会丢失。请从您的 Mastra 配置中移除所有使用文件 URL 的 [LibSQLStore](/reference/storage/libsql)。使用内存存储 (`:memory:`) 或外部存储提供商，如 Turso、PostgreSQL 或 Upstash。
+
+:::
+
+  </TabItem>
+
+  <TabItem value="droplets" label="Droplets">
+
+将您的 Mastra 应用程序部署到 Digital Ocean 的 Droplets。
+
+<h3>前置条件</h3>
+
+- [Digital Ocean 账户](https://www.digitalocean.com/)
+- 运行 Ubuntu 24+ 的 [Droplet](https://docs.digitalocean.com/products/droplets/)
+- 指向您的 droplet 的 A 记录域名
+- 配置的反向代理（例如，使用 [nginx](https://nginx.org/)）
+- 配置的 SSL 证书（例如，使用 [Let's Encrypt](https://letsencrypt.org/)）
+- 在您的 droplet 上安装 Node.js 22.13.0 或更高版本
+
+<h3>部署步骤</h3>
+
+<Steps>
+
+<StepItem>
+
+克隆您的 Mastra 应用程序
+
+连接到您的 Droplet 并克隆您的仓库：
+
+<Tabs>
+  <TabItem value="public" label="公共仓库">
+
+```bash
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+
+  <TabItem value="private" label="私有仓库">
+
+```bash
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+</Tabs>
+
+导航到仓库目录：
+
+```bash
+cd "<your-repository>"
+```
+
+</StepItem>
+
+<StepItem>
+
+安装依赖
+
+```bash
+npm install
+```
+
+</StepItem>
+
+<StepItem>
+
+设置环境变量
+
+创建 `.env` 文件并添加您的环境变量：
+
+```bash
+touch .env
+```
+
+编辑 `.env` 文件并添加您的环境变量：
+
+```bash
+OPENAI_API_KEY=<your-openai-api-key>
+# 添加其他必需的环境变量
+```
+
+</StepItem>
+
+<StepItem>
+
+构建应用程序
+
+```bash
+npm run build
+```
+
+</StepItem>
+
+<StepItem>
+
+运行应用程序
+
+```bash
+node --env-file=".env" .mastra/output/index.mjs
+```
+
+:::note
+
+您的 Mastra 应用程序默认将在端口 4111 上运行。确保您的反向代理配置为将请求转发到此端口。
+
+:::
+
+</StepItem>
+
+</Steps>
+
+</TabItem>
+
+</Tabs>
+
+## 连接到您的 Mastra 服务器
+
+现在，您可以使用 `@mastra/client-js` 包中的 `MastraClient` 从客户端应用程序连接到 Mastra 服务器。
+
+有关更多信息，请参阅 [`MastraClient` 文档](/docs/cn/docs/server/mastra-client)。
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-domain-name>",
+});
+```
+
+## 后续步骤
+
+- [Mastra Client SDK](/reference/client-js/mastra-client)
+- [Digital Ocean App Platform 文档](https://docs.digitalocean.com/products/app-platform/)
+- [Digital Ocean Droplets 文档](https://docs.digitalocean.com/products/droplets/)

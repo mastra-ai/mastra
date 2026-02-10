@@ -1,0 +1,183 @@
+---
+title: "工具流式传输 | 流式传输"
+description: "了解如何在 Mastra 中使用工具流式传输，包括处理工具调用、工具结果和流式传输期间的工具执行事件。"
+packages:
+  - "@mastra/core"
+---
+
+# 工具流式传输
+
+Mastra 中的工具流式传输使工具能够在运行时发送增量结果，而不是等待执行完成。这允许您直接向用户或上游智能体和工作流展示部分进度、中间状态或渐进式数据。
+
+流可以通过两种主要方式写入：
+
+- **从工具内部**：每个工具接收一个 `context.writer` 对象，这是一个可写流，您可以在执行进展时使用它来推送更新。
+- **从智能体流**：您也可以将智能体的 `stream` 输出直接管道传输到工具的写入器，从而轻松将智能体响应链接到工具结果，无需额外的粘合代码。
+
+通过将可写工具流与智能体流式传输相结合，您可以精细控制中间结果如何流经系统并进入用户体验。
+
+## 使用工具的智能体
+
+智能体流式传输可以与工具调用结合使用，允许工具输出直接写入智能体的流式传输响应。这使得工具活动可以作为整体交互的一部分展示。
+
+```typescript {2,9}
+import { Agent } from "@mastra/core/agent";
+import { testTool } from "../tools/test-tool";
+
+export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
+  instructions: "You are a weather agent.",
+  model: "openai/gpt-5.1",
+  tools: { testTool },
+});
+```
+
+### 使用 `context.writer`
+
+`context.writer` 对象在工具的 `execute()` 函数中可用，可用于将自定义事件、数据或值发射到活动流中。这使工具能够在执行仍在进行时提供中间结果或状态更新。
+
+:::warning
+
+您必须 `await` 对 `writer.write()` 的调用，否则将锁定流并获得 `WritableStream is locked` 错误。
+
+:::
+
+```typescript {4,7,14}
+import { createTool } from "@mastra/core/tools";
+
+export const testTool = createTool({
+  execute: async (inputData, context) => {
+    const { value } = inputData;
+
+    await context?.writer?.write({
+      type: "custom-event",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+    await context?.writer?.write({
+      type: "custom-event",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
+如果您想发射顶级流块，也可以使用 `writer.custom()`。当与 UI 框架集成时，这很有用且相关。
+
+```typescript {4,7,14}
+import { createTool } from "@mastra/core/tools";
+
+export const testTool = createTool({
+  execute: async (inputData, context) => {
+    const { value } = inputData;
+
+   await context?.writer?.custom({
+      type: "data-tool-progress",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+   await context?.writer?.custom({
+      type: "data-tool-progress",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
+### 检查流负载
+
+写入流的事件包含在发出的块中。可以检查这些块以访问任何自定义字段，例如事件类型、中间值或工具特定数据。
+
+```typescript
+const stream = await testAgent.stream([
+  "What is the weather in London?",
+  "Use the testTool",
+]);
+
+for await (const chunk of stream) {
+  if (chunk.payload.output?.type === "custom-event") {
+    console.log(JSON.stringify(chunk, null, 2));
+  }
+}
+```
+
+## 工具生命周期钩子
+
+工具支持生命周期钩子，允许您在流式传输期间监控工具执行的不同阶段。这些钩子对于日志记录或分析特别有用。
+
+### 示例：使用 onInputAvailable 和 onOutput
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  description: "Get weather information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  // 当完整输入可用时调用
+  onInputAvailable: ({ input, toolCallId }) => {
+    console.log(`Weather requested for: ${input.city}`);
+  },
+  execute: async (input) => {
+    const weather = await fetchWeather(input.city);
+    return weather;
+  },
+  // 成功执行后调用
+  onOutput: ({ output, toolName }) => {
+    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`);
+  },
+});
+```
+
+### 可用的钩子
+
+- **onInputAvailable**：当工具调用输入流式传输开始时调用
+- **onInputDelta**：对于每个输入块，当它流式传输时调用
+- **onInputAvailable**：当完整输入被解析和验证时调用
+- **onOutput**：在工具成功执行并输出后调用
+
+有关所有生命周期钩子的详细文档，请参阅 [createTool() 参考](/reference/tools/create-tool#tool-lifecycle-hooks)。
+
+## 使用智能体的工具
+
+将智能体的 `fullStream` 管道传输到工具的 `writer`。这会流式传输部分输出，Mastra 自动将智能体的使用聚合到工具运行中。
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const testTool = createTool({
+  execute: async (inputData, context) => {
+    const { city } = inputData;
+
+    const agent = context?.mastra?.getAgent("testAgent");
+    const stream = await agent?.stream(`What is the weather in ${city}?`);
+
+    await stream!.fullStream.pipeTo(context?.writer!);
+
+    return {
+      value: await stream!.text,
+    };
+  },
+});
+```

@@ -1,0 +1,86 @@
+---
+title: "参考文档：voice.addTools() | 语音"
+description: "语音提供者提供的 addTools() 方法文档，用于为语音模型提供函数调用功能。"
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai-realtime"
+---
+
+# voice.addTools()
+
+`addTools()` 方法为语音提供者提供工具（函数），这些工具可以在实时交互期间由模型调用。这使语音助手能够执行诸如搜索信息、进行计算或与外部系统交互等操作。
+
+## 使用示例
+
+```typescript
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+// 定义工具
+const weatherTool = createTool({
+  id: "getWeather",
+  description: "获取当前位置的天气",
+  inputSchema: z.object({
+    location: z.string().describe("城市和州，例如 San Francisco, CA"),
+  }),
+  outputSchema: z.object({
+    message: z.string(),
+  }),
+  execute: async (inputData) => {
+    // 从 API 获取天气数据
+    const response = await fetch(
+      `https://api.weather.com?location=${encodeURIComponent(inputData.location)}`,
+    );
+    const data = await response.json();
+    return {
+      message: `当前位置 ${inputData.location} 的温度为 ${data.temperature}°F，天气条件为 ${data.conditions}。`,
+    };
+  },
+});
+
+// 初始化实时语音提供者
+const voice = new OpenAIRealtimeVoice({
+  realtimeConfig: {
+    model: "gpt-5.1-realtime",
+    apiKey: process.env.OPENAI_API_KEY,
+  },
+});
+
+// 向语音提供者添加工具
+voice.addTools({
+  getWeather: weatherTool,
+});
+
+// 连接到实时服务
+await voice.connect();
+```
+
+## 参数
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "ToolsInput",
+      description:
+        "包含可由语音模型调用的工具定义的对象",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 返回值
+
+此方法不返回值。
+
+## 注意事项
+
+- 工具必须遵循 Mastra 工具格式，包含名称、描述、输入模式和执行函数
+- 此方法主要用于支持函数调用的实时语音提供者
+- 如果在不支持工具的语音提供者上调用，它会记录警告并什么都不做
+- 使用此方法添加的工具通常与关联智能体提供的工具合并
+- 为获得最佳效果，请在开始对话之前添加工具（在调用 `connect()` 之前）
+- 语音提供者会在模型决定使用工具时自动处理工具处理程序的调用
+- 多次调用 `addTools()` 可能会替换或合并现有工具，具体取决于提供者实现

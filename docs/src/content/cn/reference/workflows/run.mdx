@@ -1,0 +1,124 @@
+---
+title: "参考文档：Run 类 | 工作流"
+description: "Mastra 中 Run 类的文档，表示工作流执行实例。"
+packages:
+  - "@mastra/core"
+---
+
+# Run 类
+
+`Run` 类表示工作流执行实例，提供启动、恢复、流式传输和监控工作流执行的方法。
+
+## 使用示例
+
+```typescript
+const run = await workflow.createRun();
+
+const result = await run.start({
+  inputData: { value: "初始数据" },
+});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    resumeData: { value: "恢复数据" },
+  });
+}
+```
+
+## Run 方法
+
+<PropertiesTable
+  content={[
+    {
+      name: "start",
+      type: "(options?: StartOptions) => Promise<WorkflowResult>",
+      description: "使用输入数据启动工作流执行",
+      required: true,
+    },
+    {
+      name: "resume",
+      type: "(options?: ResumeOptions) => Promise<WorkflowResult>",
+      description: "从特定步骤恢复暂停的工作流",
+      required: true,
+    },
+    {
+      name: "stream",
+      type: "(options?: StreamOptions) => MastraWorkflowStream",
+      description: "将工作流执行作为事件流进行监控，具有增强的流式传输功能",
+      required: true,
+    },
+    {
+      name: "resumeStream",
+      type: "(options?: ResumeStreamOptions) => MastraWorkflowStream",
+      description: "恢复暂停的工作流并支持流式传输",
+      required: true,
+    },
+    {
+      name: "cancel",
+      type: "() => Promise<{ message: string }>",
+      description: "取消工作流执行，停止任何正在运行的步骤并阻止后续步骤执行",
+      required: true,
+    },
+    {
+      name: "restart",
+      type: "(options?: RestartOptions) => Promise<WorkflowResult>",
+      description: "从最后一个活动步骤重新启动工作流执行",
+      required: true,
+    },
+    {
+      name: "timeTravel",
+      type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
+      description: "重新执行工作流，从任何特定步骤开始，使用存储的快照数据或您提供的自定义上下文。",
+      required: true,
+    },
+    {
+      name: "timeTravelStream",
+      type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
+      description: "时间旅行工作流执行并支持流式传输",
+      required: true,
+    },
+  ]}
+/>
+
+## 运行状态
+
+工作流运行的 `status` 表示其当前执行状态。可能值为：
+
+<PropertiesTable
+  content={[
+    {
+      name: "success",
+      type: "string",
+      description:
+        "所有步骤成功执行完成，带有有效的结果输出",
+    },
+    {
+      name: "failed",
+      type: "string",
+      description:
+        "工作流执行期间遇到错误，可用的错误详情",
+    },
+    {
+      name: "suspended",
+      type: "string",
+      description:
+        "工作流执行暂停等待恢复，带有暂停步骤信息",
+    },
+    {
+      name: "canceled",
+      type: "string",
+      description:
+        "工作流执行通过 cancel() 方法取消，停止任何正在运行的步骤并阻止后续步骤执行",
+    },
+  ]}
+/>
+
+## 相关内容
+
+- [Run.start()](./run-methods/start)
+- [Run.resume()](./run-methods/resume)
+- [Run.cancel()](./run-methods/cancel)
+- [Run.restart()](./run-methods/restart)
+- [Run.timeTravel()](./run-methods/timeTravel)
+- [Run.stream()](/docs/cn/docs/streaming/workflow-streaming)
+- [Run.timeTravelStream()](../streaming/workflows/timeTravelStream)

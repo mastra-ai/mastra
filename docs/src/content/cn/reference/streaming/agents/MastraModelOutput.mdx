@@ -1,0 +1,536 @@
+---
+title: "参考文档: MastraModelOutput | 流处理"
+description: "MastraModelOutput 的完整参考 - 由 agent.stream() 返回的流对象，提供流式和基于 Promise 的模型输出访问。"
+packages:
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# MastraModelOutput
+
+`MastraModelOutput` 类由 [.stream()](./stream) 返回，提供流式和基于 Promise 的模型输出访问。它支持结构化输出生成、工具调用、推理和全面的使用统计跟踪。
+
+```typescript
+// MastraModelOutput 由 agent.stream() 返回
+const stream = await agent.stream("Hello world");
+```
+
+设置和基本用法，请参阅 [.stream()](./stream) 方法文档。
+
+## 流式属性
+
+这些属性提供对模型输出的实时访问：
+
+<PropertiesTable
+  content={[
+    {
+      name: "fullStream",
+      type: "ReadableStream<ChunkType<OUTPUT>>",
+      description:
+        "包含所有块类型的完整流，包括文本、工具调用、推理、元数据和控制块。提供对模型响应的每个方面的细粒度访问。",
+      properties: [
+        {
+          type: "ReadableStream",
+          parameters: [
+            {
+              name: "ChunkType",
+              type: "ChunkType<OUTPUT>",
+              description:
+                "流式处理期间可能发送的所有块类型",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "textStream",
+      type: "ReadableStream<string>",
+      description:
+        "仅增量文本内容的流。过滤掉所有元数据、工具调用和控制块，仅提供正在生成的文本。",
+    },
+    {
+      name: "objectStream",
+      type: "ReadableStream<Partial<OUTPUT>>",
+      description:
+        "使用输出模式时的渐进式结构化对象更新流。在构建 partial 对象时发送它们，允许实时可视化结构化数据生成。",
+      properties: [
+        {
+          type: "ReadableStream",
+          parameters: [
+            {
+              name: "PartialSchemaOutput",
+              type: "Partial<OUTPUT>",
+              description:
+                "符合定义模式的 partial 完成对象",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "elementStream",
+      type: "ReadableStream<OUTPUT extends (infer T)[] ? T : never>",
+      description:
+        "当输出模式定义数组类型时，单独数组元素的流。每个元素在完成时发送，而不是等待整个数组。",
+    },
+  ]}
+/>
+
+## 基于 Promise 的属性
+
+这些属性在流完成后解析为最终值：
+
+<PropertiesTable
+  content={[
+    {
+      name: "text",
+      type: "Promise<string>",
+      description:
+        "来自模型的完整连接文本响应。在文本生成完成后解析。",
+    },
+    {
+      name: "object",
+      type: "Promise<OUTPUT>",
+      description:
+        "使用输出模式时的完整结构化对象响应。在解析前根据模式进行验证。如果验证失败则拒绝。",
+      properties: [
+        {
+          type: "Promise",
+          parameters: [
+            {
+              name: "InferSchemaOutput",
+              type: "OUTPUT",
+              description:
+                "完全符合确切模式定义的对象",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "reasoning",
+      type: "Promise<string>",
+      description:
+        "支持推理的模型的完整推理文本（如 OpenAI 的 o1 系列）。对于没有推理能力的模型返回空字符串。",
+    },
+    {
+      name: "reasoningText",
+      type: "Promise<string | undefined>",
+      description:
+        "推理内容的替代访问方式。对于不支持推理的模型可能为 undefined，而 'reasoning' 返回空字符串。",
+    },
+    {
+      name: "toolCalls",
+      type: "Promise<ToolCallChunk[]>",
+      description:
+        "执行期间进行的所有工具调用块数组。每个块包含工具元数据和执行详情。",
+      properties: [
+        {
+          type: "ToolCallChunk",
+          parameters: [
+            {
+              name: "type",
+              type: "'tool-call'",
+              description: "块类型标识符",
+            },
+            {
+              name: "runId",
+              type: "string",
+              description: "执行运行标识符",
+            },
+            {
+              name: "from",
+              type: "ChunkFrom",
+              description: "块的来源（AGENT、WORKFLOW 等）",
+            },
+            {
+              name: "payload",
+              type: "ToolCallPayload",
+              description:
+                "工具调用数据，包括 toolCallId、toolName、args 和执行详情",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "toolResults",
+      type: "Promise<ToolResultChunk[]>",
+      description:
+        "与工具调用对应的所有工具结果块数组。包含执行结果和错误信息。",
+      properties: [
+        {
+          type: "ToolResultChunk",
+          parameters: [
+            {
+              name: "type",
+              type: "'tool-result'",
+              description: "块类型标识符",
+            },
+            {
+              name: "runId",
+              type: "string",
+              description: "执行运行标识符",
+            },
+            {
+              name: "from",
+              type: "ChunkFrom",
+              description: "块的来源（AGENT、WORKFLOW 等）",
+            },
+            {
+              name: "payload",
+              type: "ToolResultPayload",
+              description:
+                "工具结果数据，包括 toolCallId、toolName、result 和错误状态",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "usage",
+      type: "Promise<LanguageModelUsage>",
+      description:
+        "Token 使用统计，包括输入 token、输出 token、总共 token 和推理 token（用于推理模型）。",
+      properties: [
+        {
+          type: "Record",
+          parameters: [
+            {
+              name: "inputTokens",
+              type: "number",
+              description: "输入提示消耗的 token",
+            },
+            {
+              name: "outputTokens",
+              type: "number",
+              description: "响应中生成的 token",
+            },
+            {
+              name: "totalTokens",
+              type: "number",
+              description: "输入和输出 token 的总和",
+            },
+            {
+              name: "reasoningTokens",
+              type: "number",
+              isOptional: true,
+              description: "隐藏的推理 token（用于推理模型）",
+            },
+            {
+              name: "cachedInputTokens",
+              type: "number",
+              isOptional: true,
+              description: "缓存命中的输入 token 数量",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "finishReason",
+      type: "Promise<string | undefined>",
+      description:
+        "生成停止的原因（例如，'stop'、'length'、'tool_calls'、'content_filter'）。如果流尚未完成则为 undefined。",
+      properties: [
+        {
+          type: "enum",
+          parameters: [
+            {
+              name: "stop",
+              type: "'stop'",
+              description: "模型自然完成",
+            },
+            {
+              name: "length",
+              type: "'length'",
+              description: "达到最大 token 限制",
+            },
+            {
+              name: "tool_calls",
+              type: "'tool_calls'",
+              description: "模型调用了工具",
+            },
+            {
+              name: "content_filter",
+              type: "'content_filter'",
+              description: "内容被过滤",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "response",
+      type: "Promise<Response>",
+      description:
+        "来自模型提供商的响应元数据和消息。",
+      properties: [
+        {
+          type: "Response",
+          parameters: [
+            {
+              name: "id",
+              type: "string",
+              isOptional: true,
+              description: "来自模型提供商的响应 ID",
+            },
+            {
+              name: "timestamp",
+              type: "Date",
+              isOptional: true,
+              description: "响应时间戳",
+            },
+            {
+              name: "modelId",
+              type: "string",
+              isOptional: true,
+              description: "用于此响应的模型标识符",
+            },
+            {
+              name: "headers",
+              type: "Record<string, string>",
+              isOptional: true,
+              description: "来自模型提供商的响应头",
+            },
+            {
+              name: "messages",
+              type: "ResponseMessage[]",
+              isOptional: true,
+              description: "模型格式的响应消息",
+            },
+            {
+              name: "uiMessages",
+              type: "UIMessage[]",
+              isOptional: true,
+              description: "UI 格式的响应消息，包括输出处理器添加的任何元数据",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 错误属性
+
+<PropertiesTable
+  content={[
+    {
+      name: "error",
+      type: "string | Error | { message: string; stack: string; } | undefined",
+      description:
+        "如果流遇到错误则为错误信息。如果没有错误则为 undefined。可以是字符串消息、Error 对象或带有堆栈跟踪的序列化错误。",
+    },
+  ]}
+/>
+
+## 方法
+
+<PropertiesTable
+  content={[
+    {
+      name: "getFullOutput",
+      type: "() => Promise<FullOutput>",
+      description:
+        "返回包含所有结果的综合输出对象：文本、结构化对象、工具调用、使用统计、推理和元数据。访问所有流结果的便捷单方法。",
+      properties: [
+        {
+          type: "FullOutput",
+          parameters: [
+            {
+              name: "text",
+              type: "string",
+              description: "完整的文本响应",
+            },
+            {
+              name: "object",
+              type: "OUTPUT",
+              isOptional: true,
+              description: "如果提供了模式则为结构化输出",
+            },
+            {
+              name: "toolCalls",
+              type: "ToolCallChunk[]",
+              description: "进行的所有工具调用块",
+            },
+            {
+              name: "toolResults",
+              type: "ToolResultChunk[]",
+              description: "所有工具结果块",
+            },
+            {
+              name: "usage",
+              type: "Record<string, number>",
+              description: "Token 使用统计",
+            },
+            {
+              name: "reasoning",
+              type: "string",
+              isOptional: true,
+              description: "推理文本（如果可用）",
+            },
+            {
+              name: "finishReason",
+              type: "string",
+              isOptional: true,
+              description: "生成完成的原因",
+            },
+            {
+              name: "response",
+              type: "Response",
+              description: "来自模型提供商的响应元数据和消息",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "consumeStream",
+      type: "(options?: ConsumeStreamOptions) => Promise<void>",
+      description:
+        "手动消费整个流而不处理块。当你只需要最终的基于 Promise 的结果并想触发流消费时很有用。",
+      properties: [
+        {
+          type: "ConsumeStreamOptions",
+          parameters: [
+            {
+              name: "onError",
+              type: "(error: Error) => void",
+              isOptional: true,
+              description: "处理流错误的回调",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+## 使用示例
+
+### 基本文本流式处理
+
+```typescript
+const stream = await agent.stream("Write a haiku");
+
+// 在生成时流式传输文本
+for await (const text of stream.textStream) {
+  process.stdout.write(text);
+}
+
+// 或获取完整文本
+const fullText = await stream.text;
+console.log(fullText);
+```
+
+### 结构化输出流式处理
+
+```typescript
+const stream = await agent.stream("Generate user data", {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+      email: z.string(),
+    }),
+  },
+});
+
+// 流式传输 partial 对象
+for await (const partial of stream.objectStream) {
+  console.log("进度:", partial); // { name: "John" }, { name: "John", age: 30 }, ...
+}
+
+// 获取最终验证的对象
+const user = await stream.object;
+console.log("最终:", user); // { name: "John", age: 30, email: "john@example.com" }
+```
+
+### 工具调用和结果
+
+```typescript
+const stream = await agent.stream("What's the weather in NYC?", {
+  tools: { weather: weatherTool }
+});
+
+// 监控工具调用
+const toolCalls = await stream.toolCalls;
+const toolResults = await stream.toolResults;
+
+console.log("调用的工具:", toolCalls);
+console.log("结果:", toolResults);
+```
+
+### 完整输出访问
+
+```typescript
+const stream = await agent.stream("Analyze this data");
+
+const output = await stream.getFullOutput();
+console.log({
+  text: output.text,
+  usage: output.usage,
+  reasoning: output.reasoning,
+  finishReason: output.finishReason,
+});
+```
+
+### 完整流处理
+
+```typescript
+const stream = await agent.stream("Complex task");
+
+for await (const chunk of stream.fullStream) {
+  switch (chunk.type) {
+    case "text-delta":
+      process.stdout.write(chunk.payload.text);
+      break;
+    case "tool-call":
+      console.log(`调用 ${chunk.payload.toolName}...`);
+      break;
+    case "reasoning-delta":
+      console.log(`推理: ${chunk.payload.text}`);
+      break;
+    case "finish":
+      console.log(`完成！原因: ${chunk.payload.stepResult.reason}`);
+      // 访问输出处理器添加了任何元数据的响应消息
+      const uiMessages = chunk.payload.response?.uiMessages;
+      if (uiMessages) {
+        console.log("响应消息:", uiMessages);
+      }
+      break;
+  }
+}
+```
+
+### 错误处理
+
+```typescript
+const stream = await agent.stream("Analyze this data");
+
+try {
+  // 选项 1：在 consumeStream 中处理错误
+  await stream.consumeStream({
+    onError: (error) => {
+      console.error("流错误:", error);
+    },
+  });
+
+  const result = await stream.text;
+} catch (error) {
+  console.error("获取结果失败:", error);
+}
+
+// 选项 2：检查错误属性
+const result = await stream.getFullOutput();
+if (stream.error) {
+  console.error("流有错误:", stream.error);
+}
+```
+
+## 相关类型
+
+- [.stream()](./stream) - 返回 MastraModelOutput 的方法
+- [ChunkType](../ChunkType) - 完整流中的所有可能块类型

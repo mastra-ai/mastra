@@ -1,0 +1,241 @@
+---
+title: "CompositeAuth 类 | 认证"
+description: "CompositeAuth 类的文档，该类将多个身份验证提供程序组合成单个身份验证处理程序。"
+packages:
+  - "@mastra/core"
+---
+
+# CompositeAuth 类
+
+`CompositeAuth` 类允许您将多个身份验证提供程序组合成单个身份验证处理程序。它按顺序尝试每个提供程序，直到其中一个成功。
+
+## 使用场景
+
+- 同时支持 API 密钥和 OAuth 令牌
+- 在不破坏现有客户端的情况下在身份验证提供程序之间迁移
+- 允许多个身份提供程序（例如，Clerk 用于 Web，API 密钥用于集成）
+- 逐步推出新的身份验证方法
+
+## 安装
+
+CompositeAuth 包含在 `@mastra/core` 中，无需额外包。
+
+```typescript
+import { CompositeAuth } from '@mastra/core/server';
+```
+
+## 使用示例
+
+将 SimpleAuth（用于 API 密钥）与 Clerk（用于用户会话）组合：
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { CompositeAuth, SimpleAuth } from '@mastra/core/server';
+import { MastraAuthClerk } from '@mastra/auth-clerk';
+
+// API 密钥用户
+type ApiKeyUser = {
+  id: string;
+  name: string;
+  type: 'api-key';
+};
+
+const apiKeyAuth = new SimpleAuth<ApiKeyUser>({
+  tokens: {
+    'sk-integration-key-123': {
+      id: 'integration-1',
+      name: 'CI/CD Pipeline',
+      type: 'api-key',
+    },
+  },
+});
+
+// Clerk 用户（来自 Web 应用程序）
+const clerkAuth = new MastraAuthClerk({
+  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+  secretKey: process.env.CLERK_SECRET_KEY,
+  jwksUri: process.env.CLERK_JWKS_URI,
+});
+
+export const mastra = new Mastra({
+  server: {
+    auth: new CompositeAuth([apiKeyAuth, clerkAuth]),
+  },
+});
+```
+
+## 工作原理
+
+当请求到达时，CompositeAuth：
+
+1. 从 `Authorization` 头中提取令牌
+2. 按顺序尝试每个提供程序的 `authenticateToken()` 方法
+3. 返回第一个成功的提供程序的用户
+4. 如果所有提供程序都失败，则返回 `null`（401 未授权）
+
+对于授权，它调用每个提供程序的 `authorizeUser()` 方法，直到其中一个返回 `true`。
+
+```typescript
+// CompositeAuth 行为的伪代码
+async authenticateToken(token, request) {
+  for (const provider of this.providers) {
+    const user = await provider.authenticateToken(token, request);
+    if (user) return user;  // 第一个匹配者获胜
+  }
+  return null;  // 所有提供程序都失败
+}
+```
+
+## 提供程序顺序
+
+提供程序的顺序很重要。将最常见的身份验证方法放在前面以获得更好的性能：
+
+```typescript
+// 如果大多数请求使用 Clerk，将其放在前面
+new CompositeAuth([
+  clerkAuth,      // 首先检查（最常见）
+  apiKeyAuth,     // 其次检查（较少见）
+]);
+
+// 如果大多数请求使用 API 密钥，将其放在前面
+new CompositeAuth([
+  apiKeyAuth,     // 首先检查（最常见）
+  clerkAuth,      // 其次检查（较少见）
+]);
+```
+
+## 多个 OAuth 提供程序
+
+支持来自不同身份提供程序的用户：
+
+```typescript
+import { CompositeAuth } from '@mastra/core/server';
+import { MastraAuthClerk } from '@mastra/auth-clerk';
+import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+
+const clerkAuth = new MastraAuthClerk({
+  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+  secretKey: process.env.CLERK_SECRET_KEY,
+  jwksUri: process.env.CLERK_JWKS_URI,
+});
+
+const auth0Auth = new MastraAuthAuth0({
+  domain: process.env.AUTH0_DOMAIN,
+  audience: process.env.AUTH0_AUDIENCE,
+});
+
+export const mastra = new Mastra({
+  server: {
+    auth: new CompositeAuth([clerkAuth, auth0Auth]),
+  },
+});
+```
+
+## 迁移示例
+
+从 JWT 迁移到 Clerk，同时保持向后兼容性：
+
+```typescript
+import { CompositeAuth } from '@mastra/core/server';
+import { MastraJwtAuth } from '@mastra/auth';
+import { MastraAuthClerk } from '@mastra/auth-clerk';
+
+// 传统 JWT 身份验证（现有客户端）
+const legacyAuth = new MastraJwtAuth({
+  secret: process.env.JWT_SECRET,
+});
+
+// 新的 Clerk 身份验证（新客户端）
+const clerkAuth = new MastraAuthClerk({
+  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+  secretKey: process.env.CLERK_SECRET_KEY,
+  jwksUri: process.env.CLERK_JWKS_URI,
+});
+
+// 在迁移期间同时支持两者
+export const mastra = new Mastra({
+  server: {
+    auth: new CompositeAuth([
+      clerkAuth,    // 新的身份验证方法（首选）
+      legacyAuth,   // 传统支持
+    ]),
+  },
+});
+```
+
+## 与自定义提供程序结合
+
+将内置提供程序与自定义实现结合：
+
+```typescript
+import { CompositeAuth, SimpleAuth } from '@mastra/core/server';
+import { MyCustomAuth } from './my-custom-auth';
+
+const apiKeyAuth = new SimpleAuth({
+  tokens: {
+    'sk-key-123': { id: 'user-1', name: 'API User' },
+  },
+});
+
+const customAuth = new MyCustomAuth({
+  apiUrl: process.env.CUSTOM_AUTH_URL,
+});
+
+export const mastra = new Mastra({
+  server: {
+    auth: new CompositeAuth([apiKeyAuth, customAuth]),
+  },
+});
+```
+
+## 错误处理
+
+CompositeAuth 静默捕获来自各个提供程序的错误并继续下一个。这可以防止一个失败的提供程序阻止身份验证：
+
+```typescript
+// 如果 clerkAuth 抛出错误，apiKeyAuth 仍会被尝试
+new CompositeAuth([clerkAuth, apiKeyAuth]);
+```
+
+要调试身份验证问题，请向您的自定义提供程序添加日志记录或检查各个提供程序配置。
+
+## 限制
+
+- 所有提供程序共享来自 `Authorization` 头的相同令牌
+- 用户类型可能在提供程序之间有所不同（如需要，使用可区分的联合）
+- 无法内置识别哪个提供程序对请求进行了身份验证
+
+### 处理不同的用户类型
+
+当提供程序返回不同的用户类型时，使用可区分的联合：
+
+```typescript
+type ApiKeyUser = {
+  type: 'api-key';
+  id: string;
+  name: string;
+};
+
+type ClerkUser = {
+  type: 'clerk';
+  sub: string;
+  email: string;
+};
+
+type User = ApiKeyUser | ClerkUser;
+
+// 在您的应用程序代码中
+function handleUser(user: User) {
+  if (user.type === 'api-key') {
+    console.log('API key user:', user.name);
+  } else {
+    console.log('Clerk user:', user.email);
+  }
+}
+```
+
+## 相关内容
+
+- [认证概述](/docs/cn/server/auth) - 身份验证概念
+- [简单身份验证](/docs/cn/server/auth/simple-auth) - 令牌到用户映射
+- [自定义身份验证提供程序](/docs/cn/server/auth/custom-auth-provider) - 构建您自己的提供程序

@@ -1,0 +1,187 @@
+---
+title: "参考：Memory.listThreads() | 内存"
+description: "Mastra 中 `Memory.listThreads()` 方法的文档，该方法检索线程，支持按 resourceId 和/或元数据进行过滤。"
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.listThreads()
+
+`listThreads()` 方法检索线程，支持分页，可选择按 `resourceId`、`metadata` 或两者进行过滤。
+
+## 使用示例
+
+### 列出所有线程（带分页）
+
+```typescript
+const result = await memory.listThreads({
+  page: 0,
+  perPage: 10,
+});
+```
+
+### 不使用分页获取所有线程
+
+使用 `perPage: false` 一次检索所有匹配的线程。
+
+:::warning
+
+一般来说，建议使用分页，特别是对于大型数据集。请谨慎使用此选项。
+
+:::
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  perPage: false,
+});
+```
+
+### 按 resourceId 过滤
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  page: 0,
+  perPage: 10,
+});
+```
+
+### 按元数据过滤
+
+```typescript
+const result = await memory.listThreads({
+  filter: { metadata: { category: "support", priority: "high" } },
+  page: 0,
+  perPage: 10,
+});
+```
+
+### 组合过滤（resourceId 和元数据）
+
+```typescript
+const result = await memory.listThreads({
+  filter: {
+    resourceId: "user-123",
+    metadata: { status: "active" },
+  },
+  page: 0,
+  perPage: 10,
+});
+```
+
+## 参数
+
+<PropertiesTable
+  content={[
+    {
+      name: "filter",
+      type: "{ resourceId?: string; metadata?: Record<string, unknown> }",
+      description:
+        "可选的过滤对象。resourceId 按资源 ID 过滤线程。metadata 按元数据键值对过滤线程（AND 逻辑——所有必须匹配）",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "要检索的页码（从 0 开始）",
+      isOptional: true,
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "每页返回的最大线程数，或 false 以获取全部",
+      isOptional: true,
+    },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+      description:
+        "排序配置，包含字段和方向（默认为 { field: 'createdAt', direction: 'DESC' }）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 返回值
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<StorageListThreadsOutput>",
+      description: "解析为带元数据的分页线程结果的 promise",
+    },
+  ]}
+/>
+
+返回对象包含：
+
+- `threads`：线程对象数组
+- `total`：与过滤器匹配的线程总数
+- `page`：当前页码（与输入 `page` 参数相同）
+- `perPage`：每页项目数（与输入 `perPage` 参数相同）
+- `hasMore`：布尔值，指示是否有更多结果可用
+
+## 扩展使用示例
+
+```typescript title="src/test-memory.ts"
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+let currentPage = 0;
+const perPage = 25;
+let hasMorePages = true;
+
+// 获取用户的所有活动线程，按创建日期排序
+while (hasMorePages) {
+  const result = await memory?.listThreads({
+    filter: {
+      resourceId: "user-123",
+      metadata: { status: "active" },
+    },
+    page: currentPage,
+    perPage: perPage,
+    orderBy: { field: "createdAt", direction: "ASC" },
+  });
+
+  if (!result) {
+    console.log("没有线程");
+    break;
+  }
+
+  result.threads.forEach((thread) => {
+    console.log(`线程: ${thread.id}, 创建时间: ${thread.createdAt}`);
+  });
+
+  hasMorePages = result.hasMore;
+  currentPage++; // 移动到下一页
+}
+```
+
+## 元数据过滤
+
+元数据过滤器使用 AND 逻辑——所有指定的键值对必须匹配，线程才会包含在结果中：
+
+```typescript
+// 这只会返回两个条件都为真的线程：
+// - category === 'support'
+// - priority === 'high'
+await memory.listThreads({
+  filter: {
+    metadata: {
+      category: "support",
+      priority: "high",
+    },
+  },
+});
+```
+
+## 相关内容
+
+- [Memory 类参考](/reference/memory/memory-class)
+- [内存入门指南](/docs/cn/docs/memory/overview)
+- [createThread](/reference/memory/createThread)
+- [getThreadById](/reference/memory/getThreadById)
