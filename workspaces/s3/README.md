@@ -19,18 +19,14 @@ const workspace = new Workspace({
   filesystem: new S3Filesystem({
     bucket: 'my-bucket',
     region: 'us-east-1',
-    // Uses AWS SDK credential chain by default
-    // Or provide explicit credentials:
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    },
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   }),
 });
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'anthropic/claude-opus-4-5',
   workspace,
 });
 ```
@@ -43,10 +39,8 @@ const workspace = new Workspace({
     bucket: 'my-r2-bucket',
     region: 'auto',
     endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-    },
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   }),
 });
 ```
@@ -65,6 +59,8 @@ const workspace = new Workspace({
     '/my-bucket': new S3Filesystem({
       bucket: 'my-bucket',
       region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     }),
   },
   sandbox: new E2BSandbox(),

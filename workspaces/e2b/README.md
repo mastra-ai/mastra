@@ -8,6 +8,12 @@ E2B cloud sandbox provider for Mastra workspaces. Provides secure, isolated code
 npm install @mastra/e2b
 ```
 
+Set your E2B API key:
+
+```bash
+export E2B_API_KEY=your-api-key
+```
+
 ## Usage
 
 ```typescript
@@ -17,14 +23,13 @@ import { E2BSandbox } from '@mastra/e2b';
 
 const workspace = new Workspace({
   sandbox: new E2BSandbox({
-    apiKey: process.env.E2B_API_KEY,
-    timeout: 60_000, // 60 second timeout
+    timeout: 60_000, // 60 second timeout (default: 5 minutes)
   }),
 });
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'anthropic/claude-opus-4-5',
   workspace,
 });
 ```
@@ -43,6 +48,8 @@ const workspace = new Workspace({
     '/data': new S3Filesystem({
       bucket: 'my-bucket',
       region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     }),
   },
   sandbox: new E2BSandbox(),

@@ -20,13 +20,14 @@ const workspace = new Workspace({
     bucket: 'my-gcs-bucket',
     // Uses Application Default Credentials by default
     // Or provide a service account key:
-    serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+    projectId: 'my-project-id',
+    credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
   }),
 });
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-4o',
+  model: 'anthropic/claude-opus-4-5',
   workspace,
 });
 ```
@@ -44,6 +45,8 @@ const workspace = new Workspace({
   mounts: {
     '/my-bucket': new GCSFilesystem({
       bucket: 'my-gcs-bucket',
+      projectId: 'my-project-id',
+      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
     }),
   },
   sandbox: new E2BSandbox(),
