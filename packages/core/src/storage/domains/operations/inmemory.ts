@@ -22,6 +22,10 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_agents: new Map(),
       mastra_agent_versions: new Map(),
       mastra_observational_memory: new Map(),
+      mastra_prompt_blocks: new Map(),
+      mastra_prompt_block_versions: new Map(),
+      mastra_scorer_definitions: new Map(),
+      mastra_scorer_definition_versions: new Map(),
     };
   }
 

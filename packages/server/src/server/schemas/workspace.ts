@@ -69,6 +69,14 @@ export const fileEntrySchema = z.object({
   name: z.string(),
   type: z.enum(['file', 'directory']),
   size: z.number().optional(),
+  mount: z
+    .object({
+      provider: z.string(),
+      icon: z.string().optional(),
+      displayName: z.string().optional(),
+      description: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const fsReadResponseSchema = z.object({

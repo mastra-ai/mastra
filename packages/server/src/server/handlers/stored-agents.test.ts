@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
+import { createStoredAgentBodySchema, updateStoredAgentBodySchema } from '../schemas/stored-agents';
 import type { ServerContext } from '../server-adapter';
 import {
   LIST_STORED_AGENTS_ROUTE,
@@ -10,11 +11,14 @@ import {
   CREATE_STORED_AGENT_ROUTE,
   UPDATE_STORED_AGENT_ROUTE,
   DELETE_STORED_AGENT_ROUTE,
+  PREVIEW_INSTRUCTIONS_ROUTE,
 } from './stored-agents';
 
 // Mock handleAutoVersioning to prevent version creation in tests
 vi.mock('./agent-versions', () => ({
-  handleAutoVersioning: vi.fn().mockResolvedValue(undefined),
+  handleAutoVersioning: vi.fn().mockImplementation(async (_store: any, _id: any, _existing: any, updatedAgent: any) => {
+    return { agent: updatedAgent, versionCreated: false };
+  }),
 }));
 
 // =============================================================================
@@ -47,12 +51,12 @@ interface MockStoredAgent {
 
 // Define the mock agents store interface
 interface MockAgentsStore {
-  createAgent: ReturnType<typeof vi.fn>;
-  getAgentById: ReturnType<typeof vi.fn>;
-  getAgentByIdResolved: ReturnType<typeof vi.fn>;
-  listAgentsResolved: ReturnType<typeof vi.fn>;
-  updateAgent: ReturnType<typeof vi.fn>;
-  deleteAgent: ReturnType<typeof vi.fn>;
+  create: ReturnType<typeof vi.fn>;
+  getById: ReturnType<typeof vi.fn>;
+  getByIdResolved: ReturnType<typeof vi.fn>;
+  listResolved: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
   getLatestVersion: ReturnType<typeof vi.fn>;
   getVersion: ReturnType<typeof vi.fn>;
   createVersion: ReturnType<typeof vi.fn>;
@@ -61,20 +65,20 @@ interface MockAgentsStore {
 
 function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Map()): MockAgentsStore {
   return {
-    createAgent: vi.fn().mockImplementation(async ({ agent }: { agent: MockStoredAgent }) => {
+    create: vi.fn().mockImplementation(async ({ agent }: { agent: MockStoredAgent }) => {
       if (agentsData.has(agent.id)) {
         throw new Error('Agent already exists');
       }
       agentsData.set(agent.id, agent);
       return agent;
     }),
-    getAgentById: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    getById: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.get(id) || null;
     }),
-    getAgentByIdResolved: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    getByIdResolved: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.get(id) || null;
     }),
-    listAgentsResolved: vi.fn().mockImplementation(
+    listResolved: vi.fn().mockImplementation(
       async ({
         page = 1,
         perPage = 20,
@@ -114,7 +118,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
         };
       },
     ),
-    updateAgent: vi.fn().mockImplementation(async (updates: Partial<MockStoredAgent> & { id: string }) => {
+    update: vi.fn().mockImplementation(async (updates: Partial<MockStoredAgent> & { id: string }) => {
       const existing = agentsData.get(updates.id);
       if (!existing) return null;
 
@@ -129,7 +133,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
       agentsData.set(updates.id, updated);
       return updated;
     }),
-    deleteAgent: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    delete: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.delete(id);
     }),
     getLatestVersion: vi.fn().mockImplementation(async (agentId: string) => {
@@ -207,12 +211,22 @@ function createMockStorage(agentsStore?: MockAgentsStore): MockStorage {
 }
 
 interface MockEditor {
-  clearStoredAgentCache: ReturnType<typeof vi.fn>;
+  agent: {
+    clearCache: ReturnType<typeof vi.fn>;
+  };
+  prompt: {
+    preview: ReturnType<typeof vi.fn>;
+  };
 }
 
 function createMockEditor(): MockEditor {
   return {
-    clearStoredAgentCache: vi.fn(),
+    agent: {
+      clearCache: vi.fn(),
+    },
+    prompt: {
+      preview: vi.fn().mockResolvedValue('resolved instructions'),
+    },
   };
 }
 
@@ -445,11 +459,47 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toMatchObject(agentData);
-      expect(mockAgentsStore.createAgent).toHaveBeenCalledWith({
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'new-agent',
           name: 'New Agent',
         }),
+      });
+    });
+
+    it('should derive id from name via slugify when id is not provided', async () => {
+      const result = await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: undefined,
+        name: 'My Cool Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      expect(result).toMatchObject({
+        id: 'my-cool-agent',
+        name: 'My Cool Agent',
+      });
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
+        agent: expect.objectContaining({
+          id: 'my-cool-agent',
+          name: 'My Cool Agent',
+        }),
+      });
+    });
+
+    it('should use provided id when explicitly set', async () => {
+      const result = await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: 'custom-id-123',
+        name: 'My Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      expect(result).toMatchObject({
+        id: 'custom-id-123',
+        name: 'My Agent',
       });
     });
 
@@ -506,7 +556,7 @@ describe('Stored Agents Handlers', () => {
         authorId: 'original-author', // Should remain unchanged
       });
 
-      expect(mockEditor.clearStoredAgentCache).toHaveBeenCalledWith('update-test');
+      expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('update-test');
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -522,6 +572,80 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).status).toBe(404);
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
+    });
+
+    it('should allow updating memory to null to disable memory', async () => {
+      // Set up an agent with memory configured
+      mockAgentsData.set('memory-test', {
+        id: 'memory-test',
+        name: 'Memory Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+        memory: {
+          options: {
+            lastMessages: 10,
+            semanticRecall: false,
+          },
+        },
+        activeVersionId: 'v-memory-test-1',
+      });
+
+      // Update memory to null (disable it)
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'memory-test',
+        memory: null,
+      });
+
+      expect(result).toMatchObject({
+        id: 'memory-test',
+        name: 'Memory Agent',
+      });
+
+      // Verify the storage update was called with null memory
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'memory-test',
+          memory: null,
+        }),
+      );
+    });
+
+    it('should not modify memory when memory is not provided in update', async () => {
+      mockAgentsData.set('memory-keep-test', {
+        id: 'memory-keep-test',
+        name: 'Memory Keep Agent',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+        memory: {
+          options: {
+            lastMessages: 10,
+            semanticRecall: false,
+          },
+        },
+        activeVersionId: 'v-memory-keep-test-1',
+      });
+
+      // Update only the name, not memory
+      const result = await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'memory-keep-test',
+        name: 'Updated Name',
+      });
+
+      expect(result).toMatchObject({
+        id: 'memory-keep-test',
+        name: 'Updated Name',
+      });
+
+      // Verify the stored agent still has memory
+      const stored = mockAgentsData.get('memory-keep-test');
+      expect(stored?.memory).toEqual({
+        options: {
+          lastMessages: 10,
+          semanticRecall: false,
+        },
+      });
     });
   });
 
@@ -539,9 +663,9 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
-      expect(mockAgentsStore.deleteAgent).toHaveBeenCalledWith({ id: 'delete-test' });
+      expect(mockAgentsStore.delete).toHaveBeenCalledWith('delete-test');
       expect(mockAgentsData.has('delete-test')).toBe(false);
-      expect(mockEditor.clearStoredAgentCache).toHaveBeenCalledWith('delete-test');
+      expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -557,5 +681,221 @@ describe('Stored Agents Handlers', () => {
         expect((error as HTTPException).message).toBe('Stored agent with id non-existent not found');
       }
     });
+  });
+
+  describe('PREVIEW_INSTRUCTIONS_ROUTE', () => {
+    it('should resolve instruction blocks and return result', async () => {
+      const blocks = [
+        { type: 'text' as const, content: 'Hello {{name}}' },
+        { type: 'prompt_block_ref' as const, id: 'block-1' },
+      ];
+      const context = { name: 'World' };
+
+      mockEditor.prompt.preview.mockResolvedValue('Hello World\n\nResolved block content');
+
+      const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        blocks,
+        context,
+      });
+
+      expect(result).toEqual({ result: 'Hello World\n\nResolved block content' });
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, context);
+    });
+
+    it('should pass empty context when none provided', async () => {
+      const blocks = [{ type: 'text' as const, content: 'Static content' }];
+
+      mockEditor.prompt.preview.mockResolvedValue('Static content');
+
+      const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        blocks,
+        context: {},
+      });
+
+      expect(result).toEqual({ result: 'Static content' });
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, {});
+    });
+
+    it('should throw 500 when editor is not configured', async () => {
+      const mastraNoEditor = createMockMastra({ storage: mockStorage });
+      const blocks = [{ type: 'text' as const, content: 'Hello' }];
+
+      try {
+        await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+          ...createTestContext(mastraNoEditor),
+          blocks,
+          context: {},
+        });
+        expect.fail('Should have thrown HTTPException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(HTTPException);
+        expect((error as HTTPException).status).toBe(500);
+        expect((error as HTTPException).message).toBe('Editor is not configured');
+      }
+    });
+
+    it('should handle inline prompt_block with rules', async () => {
+      const blocks = [
+        {
+          type: 'prompt_block' as const,
+          content: 'You are an admin assistant',
+          rules: {
+            operator: 'AND' as const,
+            conditions: [{ field: 'user.role', operator: 'equals' as const, value: 'admin' }],
+          },
+        },
+      ];
+      const context = { user: { role: 'admin' } };
+
+      mockEditor.prompt.preview.mockResolvedValue('You are an admin assistant');
+
+      const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        blocks,
+        context,
+      });
+
+      expect(result).toEqual({ result: 'You are an admin assistant' });
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, context);
+    });
+
+    it('should handle editor errors gracefully', async () => {
+      const blocks = [{ type: 'text' as const, content: 'Hello' }];
+      mockEditor.prompt.preview.mockRejectedValue(new Error('Block resolution failed'));
+
+      try {
+        await PREVIEW_INSTRUCTIONS_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          blocks,
+          context: {},
+        });
+        expect.fail('Should have thrown');
+      } catch (error) {
+        // handleError wraps it - the error propagates
+        expect(error).toBeDefined();
+      }
+    });
+  });
+});
+
+// =============================================================================
+// Schema Validation Tests
+// =============================================================================
+
+describe('updateStoredAgentBodySchema', () => {
+  it('should accept memory as null to disable memory', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.memory).toBeNull();
+    }
+  });
+
+  it('should accept memory as undefined (omitted)', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      name: 'Updated Name',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.memory).toBeUndefined();
+    }
+  });
+
+  it('should accept a valid memory config object', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: {
+        options: {
+          lastMessages: 10,
+          semanticRecall: false,
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.memory).toEqual({
+        options: {
+          lastMessages: 10,
+          semanticRecall: false,
+        },
+      });
+    }
+  });
+
+  it('should reject invalid memory config (non-object, non-null)', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: 'invalid',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('should accept update with only memory set to null', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      memory: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ memory: null });
+    }
+  });
+
+  it('should accept update with memory null alongside other fields', () => {
+    const result = updateStoredAgentBodySchema.safeParse({
+      name: 'New Name',
+      memory: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.name).toBe('New Name');
+      expect(result.data.memory).toBeNull();
+    }
+  });
+});
+
+describe('createStoredAgentBodySchema', () => {
+  const baseAgent = {
+    name: 'Test Agent',
+    instructions: 'Be helpful',
+    model: { name: 'gpt-4', provider: 'openai' },
+  };
+
+  it('should accept a create body without id', () => {
+    const result = createStoredAgentBodySchema.safeParse(baseAgent);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.id).toBeUndefined();
+      expect(result.data.name).toBe('Test Agent');
+    }
+  });
+
+  it('should accept a create body with an explicit id', () => {
+    const result = createStoredAgentBodySchema.safeParse({
+      ...baseAgent,
+      id: 'custom-id',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.id).toBe('custom-id');
+    }
+  });
+
+  it('should require name', () => {
+    const result = createStoredAgentBodySchema.safeParse({
+      instructions: 'Be helpful',
+      model: { name: 'gpt-4', provider: 'openai' },
+    });
+
+    expect(result.success).toBe(false);
   });
 });
