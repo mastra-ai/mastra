@@ -44,7 +44,7 @@ import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { SkillsProcessor } from '../processors/processors/skills';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
-import { TrailingAssistantGuard } from '../processors/trailing-assistant-guard';
+import { isMaybeClaude46, TrailingAssistantGuard } from '../processors/trailing-assistant-guard';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type {
   StorageCreateAgentInput,
@@ -571,8 +571,11 @@ export class Agent<
             ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
             : this.#inputProcessors
           : []),
-      new TrailingAssistantGuard(),
     ];
+
+    if (isMaybeClaude46(this.model)) {
+      configuredProcessors.push(new TrailingAssistantGuard());
+    }
 
     // Get memory input processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
