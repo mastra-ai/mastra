@@ -139,6 +139,26 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           rest.messageList.add(msg, 'response');
         }
 
+        // When all errors are tool-not-found errors, continue the agentic loop
+        // so the model can self-correct with the correct tool name.
+        // For other errors (e.g., tool execution failures), bail as before.
+        const allErrorsAreToolNotFound = errorResults?.length > 0 && errorResults.every(tc => tc.toolNotFound);
+
+        if (allErrorsAreToolNotFound) {
+          // Continue the loop — the error messages are already in the messageList,
+          // so the model will see them and can retry with correct tool names
+          initialResult.stepResult.isContinued = true;
+          initialResult.stepResult.reason = 'tool-calls' as any;
+          return {
+            ...initialResult,
+            messages: {
+              all: rest.messageList.get.all.aiV5.model(),
+              user: rest.messageList.get.input.aiV5.model(),
+              nonUser: rest.messageList.get.response.aiV5.model(),
+            },
+          };
+        }
+
         // Only set isContinued = false if this is NOT a retry scenario
         // When stepResult.reason is 'retry', the llm-execution-step has already set
         // isContinued = true and we should preserve that to allow the agentic loop to continue

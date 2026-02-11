@@ -221,7 +221,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       if (!tool) {
-        throw new Error(`Tool ${inputData.toolName} not found`);
+        const availableToolNames = Object.keys(stepTools || {});
+        const availableToolsStr =
+          availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
+        return {
+          error: new Error(
+            `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+          ),
+          toolNotFound: true,
+          ...inputData,
+        };
       }
 
       if (tool && 'onInputAvailable' in tool) {

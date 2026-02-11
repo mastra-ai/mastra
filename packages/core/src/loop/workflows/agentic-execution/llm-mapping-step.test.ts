@@ -242,4 +242,68 @@ describe('createLLMMappingStep HITL behavior', () => {
     );
     expect(bail).toHaveBeenCalled();
   });
+
+  it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {
+    // Arrange: Tool call with toolNotFound flag (set by tool-call-step when tool name is hallucinated)
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error(
+          'Tool "creating:view" not found. Available tools: view, list. Call tools by their exact name only.',
+        ),
+        toolNotFound: true,
+      } as any,
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should NOT bail — the agentic loop should continue so the model can self-correct
+    expect(bail).not.toHaveBeenCalled();
+    // Should still emit tool-error chunk so the error is visible in the stream
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          error: expect.any(Error),
+        }),
+      }),
+    );
+    // Should add the error message to the messageList so the model can see it
+    expect(messageList.add).toHaveBeenCalled();
+    // isContinued should be true to keep the loop going
+    expect(result.stepResult.isContinued).toBe(true);
+  });
+
+  it('should bail when errors are a mix of tool-not-found and other errors', async () => {
+    // Arrange: One tool-not-found error and one execution error
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error('Tool "creating:view" not found.'),
+        toolNotFound: true,
+      } as any,
+      {
+        toolCallId: 'call-2',
+        toolName: 'existingTool',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error('Execution timeout'),
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should bail because not all errors are tool-not-found
+    expect(bail).toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(false);
+  });
 });
