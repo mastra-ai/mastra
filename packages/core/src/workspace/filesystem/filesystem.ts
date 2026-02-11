@@ -123,6 +123,8 @@ export interface FilesystemInfo {
   readOnly?: boolean;
   /** Base path (for local filesystems) */
   basePath?: string;
+  /** Whether file operations are restricted to basePath */
+  contained?: boolean;
   /** Icon identifier for UI display */
   icon?: FilesystemIcon;
   /** Storage usage (if available) */

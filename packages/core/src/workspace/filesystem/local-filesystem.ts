@@ -628,11 +628,15 @@ export class LocalFilesystem extends MastraFilesystem {
       provider: this.provider,
       readOnly: this.readOnly,
       basePath: this.basePath,
+      contained: this._contained,
       status: this.status,
     };
   }
 
   getInstructions(): string {
-    return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+    if (this._contained) {
+      return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+    }
+    return `Local filesystem rooted at "${this.basePath}". Containment is disabled so absolute paths access the real filesystem. Use paths relative to "${this.basePath}" (e.g. "foo/bar.txt") for workspace files. Avoid listing "/" as it would traverse the entire host filesystem.`;
   }
 }
