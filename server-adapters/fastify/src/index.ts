@@ -518,6 +518,44 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     }
   }
 
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (!routes || routes.length === 0) return;
+
+    for (const route of routes) {
+      const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+        const response = await this.handleCustomRouteRequest(
+          `http://${request.headers.host}${request.url}`,
+          request.method,
+          request.headers as Record<string, string | string[] | undefined>,
+          request.body,
+          request.requestContext,
+        );
+        if (!response) {
+          reply.status(404).send({ error: 'Not Found' });
+          return;
+        }
+        reply.hijack();
+        await this.writeCustomRouteResponse(response, reply.raw);
+      };
+
+      if (route.method === 'ALL') {
+        const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
+        for (const method of methods) {
+          this.app.route({ method, url: route.path, handler: fastifyHandler });
+        }
+      } else {
+        this.app.route({
+          method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+          url: route.path,
+          handler: fastifyHandler,
+        });
+      }
+    }
+  }
+
   registerContextMiddleware(): void {
     // Override the default JSON parser to allow empty bodies
     // This matches Express behavior where empty POST requests with Content-Type: application/json are allowed
