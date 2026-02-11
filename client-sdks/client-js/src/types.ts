@@ -714,6 +714,16 @@ export interface StoredAgentToolConfig {
 }
 
 /**
+ * Per-MCP-client/integration tool configuration stored in agent snapshots.
+ * Specifies which tools from an MCP client or integration provider are enabled and their overrides.
+ * When `tools` is omitted, all tools from the source are included.
+ */
+export interface StoredMCPClientToolsConfig {
+  /** When omitted, all tools from the source are included. */
+  tools?: Record<string, StoredAgentToolConfig>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -755,7 +765,8 @@ export interface StoredAgentResponse {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -825,7 +836,8 @@ export interface CreateStoredAgentParams {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -851,7 +863,8 @@ export interface UpdateStoredAgentParams {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -1109,7 +1122,8 @@ export interface AgentVersionResponse {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -1630,6 +1644,60 @@ export interface ListEmbeddersResponse {
     maxInputTokens: number;
   }>;
 }
+
+// ============================================================================
+// Tool Provider Types
+// ============================================================================
+
+export interface ToolProviderInfo {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ToolProviderToolkit {
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface ToolProviderToolInfo {
+  slug: string;
+  name: string;
+  description?: string;
+  toolkit?: string;
+}
+
+export interface ToolProviderPagination {
+  total?: number;
+  page?: number;
+  perPage?: number;
+  hasMore: boolean;
+}
+
+export interface ListToolProvidersResponse {
+  providers: ToolProviderInfo[];
+}
+
+export interface ListToolProviderToolkitsResponse {
+  data: ToolProviderToolkit[];
+  pagination?: ToolProviderPagination;
+}
+
+export interface ListToolProviderToolsParams {
+  toolkit?: string;
+  search?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListToolProviderToolsResponse {
+  data: ToolProviderToolInfo[];
+  pagination?: ToolProviderPagination;
+}
+
+export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
 
 // ============================================================================
 // Error Types

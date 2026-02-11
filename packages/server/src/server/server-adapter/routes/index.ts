@@ -19,6 +19,7 @@ import { STORED_MCP_CLIENTS_ROUTES } from './stored-mcp-clients';
 import { STORED_SCORERS_ROUTES } from './stored-scorers';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
+import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
@@ -110,6 +111,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...STORED_AGENTS_ROUTES,
   ...STORED_MCP_CLIENTS_ROUTES,
   ...STORED_SCORERS_ROUTES,
+  ...TOOL_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
 ];
 

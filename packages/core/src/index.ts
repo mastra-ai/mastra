@@ -21,3 +21,12 @@ export type {
   IEditorPromptNamespace,
   IEditorScorerNamespace,
 } from './editor';
+export type {
+  ToolProvider,
+  ToolProviderInfo,
+  ToolProviderToolkit,
+  ToolProviderToolInfo,
+  ToolProviderListResult,
+  ListToolProviderToolsOptions,
+  GetToolProviderToolsOptions,
+} from './tool-provider';

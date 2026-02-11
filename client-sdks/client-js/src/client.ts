@@ -18,6 +18,7 @@ import {
   StoredAgent,
   StoredMCPClient,
   StoredScorer,
+  ToolProvider,
   Workspace,
 } from './resources';
 import type {
@@ -73,6 +74,7 @@ import type {
   ListWorkspacesResponse,
   ListVectorsResponse,
   ListEmbeddersResponse,
+  ListToolProvidersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -967,6 +969,27 @@ export class MastraClient extends BaseResource {
    */
   public getStoredMCPClient(storedMCPClientId: string): StoredMCPClient {
     return new StoredMCPClient(this.options, storedMCPClientId);
+  }
+
+  // ============================================================================
+  // Tool Providers
+  // ============================================================================
+
+  /**
+   * Lists all registered tool providers
+   * @returns Promise containing list of tool provider info
+   */
+  public listToolProviders(): Promise<ListToolProvidersResponse> {
+    return this.request('/tool-providers');
+  }
+
+  /**
+   * Gets a tool provider instance by ID for further operations (listToolkits, listTools, getToolSchema)
+   * @param providerId - ID of the tool provider
+   * @returns ToolProvider instance
+   */
+  public getToolProvider(providerId: string): ToolProvider {
+    return new ToolProvider(this.options, providerId);
   }
 
   // ============================================================================

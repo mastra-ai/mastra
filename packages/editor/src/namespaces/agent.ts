@@ -177,6 +177,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasConditionalTools = storedAgent.tools != null && this.isConditionalVariants(storedAgent.tools);
     const hasConditionalMCPClients =
       storedAgent.mcpClients != null && this.isConditionalVariants(storedAgent.mcpClients);
+    const hasConditionalIntegrationTools =
+      storedAgent.integrationTools != null && this.isConditionalVariants(storedAgent.integrationTools);
     const hasConditionalWorkflows = storedAgent.workflows != null && this.isConditionalVariants(storedAgent.workflows);
     const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
     const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
@@ -191,14 +193,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     // --- Resolve fields: conditional fields accumulate all matching variants ---
 
-    // Tools: both registry tools and MCP client tools can be conditional.
-    // If either is conditional, the combined result must be a dynamic function.
-    const isDynamicTools = hasConditionalTools || hasConditionalMCPClients;
+    // Tools: registry tools, MCP client tools, and integration tools can each be conditional.
+    // If any is conditional, the combined result must be a dynamic function.
+    const isDynamicTools = hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools;
 
     let tools: Record<string, ToolAction<any, any, any, any, any, any>> | (({ requestContext }: { requestContext: RequestContext }) => Promise<Record<string, ToolAction<any, any, any, any, any, any>>>);
 
     if (isDynamicTools) {
-      // At least one of tools/mcpClients is conditional — resolve both at request time
+      // At least one tool source is conditional — resolve all at request time
       tools = async ({ requestContext }: { requestContext: RequestContext }) => {
         const ctx = requestContext.toJSON();
 
@@ -220,17 +222,29 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           : (storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
         const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
 
-        return { ...registryTools, ...mcpTools };
+        // Resolve integration tools (tool providers)
+        const resolvedIntegrationToolsConfig = hasConditionalIntegrationTools
+          ? this.accumulateObjectVariants(
+              storedAgent.integrationTools as StorageConditionalVariant<Record<string, StorageMCPClientToolsConfig>>[],
+              ctx,
+            )
+          : (storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
+        const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig);
+
+        return { ...registryTools, ...mcpTools, ...integrationTools };
       };
     } else {
-      // Both are static — resolve once at agent creation time
+      // All are static — resolve once at agent creation time
       const registryTools = this.resolveStoredTools(
         storedAgent.tools as Record<string, StorageToolConfig> | undefined,
       );
       const mcpTools = await this.resolveStoredMCPTools(
         storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
       );
-      tools = { ...registryTools, ...mcpTools };
+      const integrationTools = await this.resolveStoredIntegrationTools(
+        storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
+      );
+      tools = { ...registryTools, ...mcpTools, ...integrationTools };
     }
 
     // Workflows (array): accumulate by concatenating all matching variants
@@ -496,8 +510,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * 1. Stored MCP clients (from DB) — creates an MCPClient to fetch remote tools
    * 2. Code-defined MCP servers on the Mastra instance — uses `server.tools()` directly
    *
-   * When `clientToolsConfig.tools` is omitted, all tools from the source are included.
-   * When specified, only listed tools are included with optional description overrides.
+   * When `clientToolsConfig.tools` is absent, no tools are included (client registered but nothing selected).
+   * When `clientToolsConfig.tools` is an empty object `{}`, all tools from the source are included.
+   * When specified with keys, only listed tools are included with optional description overrides.
    */
   private async resolveStoredMCPTools(
     mcpClients?: Record<string, StorageMCPClientToolsConfig>,
@@ -512,6 +527,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     for (const [clientId, clientToolsConfig] of Object.entries(mcpClients)) {
       try {
+        // No `tools` key = client registered but no tools selected yet
+        if (!clientToolsConfig.tools) continue;
+
         let tools: Record<string, any> | undefined;
 
         // 1. Check stored MCP clients (remote servers from DB)
@@ -569,8 +587,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             if (!(bareToolName in clientServers[serverName].tools!)) continue;
           }
 
-          // Agent-level filter: uses the full namespaced tool name
-          if (agentAllowedTools && !(namespacedToolName in agentAllowedTools)) continue;
+          // Agent-level filter: `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
+          const hasAgentFilter = agentAllowedTools && Object.keys(agentAllowedTools).length > 0;
+          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools)) continue;
 
           // Description override: agent-level (namespaced key) takes precedence over client-level (bare key)
           const serverToolConfig = serverName ? clientServers?.[serverName]?.tools?.[bareToolName] : undefined;
@@ -586,6 +605,66 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       } catch (error) {
         this.logger?.warn(`Failed to resolve MCP tools from "${clientId}"`, { error });
+      }
+    }
+
+    return allTools;
+  }
+
+  /**
+   * Resolve integration tool references from tool providers.
+   *
+   * For each entry in `integrationTools`, looks up the tool provider by ID
+   * from the editor's registered tool providers and calls `getTools()` on it.
+   *
+   * When `providerConfig.tools` is absent, no tools are included (provider registered but nothing selected).
+   * When `providerConfig.tools` is an empty object `{}`, all tools from the provider are included.
+   * When `providerConfig.tools` has specific keys, only those tools are included with optional overrides.
+   */
+  private async resolveStoredIntegrationTools(
+    integrationTools?: Record<string, StorageMCPClientToolsConfig>,
+  ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
+    if (!integrationTools || Object.keys(integrationTools).length === 0) return {};
+
+    const allTools: Record<string, ToolAction<any, any, any, any, any, any>> = {};
+
+    for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
+      try {
+        // No `tools` key = provider registered but no tools selected yet
+        if (!providerConfig.tools) continue;
+
+        const provider = this.editor.getToolProvider(providerId);
+        if (!provider) {
+          this.logger?.warn(
+            `Tool provider "${providerId}" referenced in stored agent but not registered in the editor`,
+          );
+          continue;
+        }
+
+        // `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
+        const wantedSlugs = Object.keys(providerConfig.tools);
+
+        // Fetch tools from the provider — pass slugs and configs for filtering/overrides
+        const providerTools = await provider.getTools(
+          wantedSlugs.length > 0 ? wantedSlugs : [],
+          providerConfig.tools,
+        );
+
+        for (const [toolId, tool] of Object.entries(providerTools)) {
+          // Apply description override if configured at the agent level
+          const description = providerConfig.tools?.[toolId]?.description;
+          if (description) {
+            allTools[toolId] = { ...tool, description };
+          } else {
+            allTools[toolId] = tool;
+          }
+        }
+
+        this.logger?.debug(
+          `[resolveStoredIntegrationTools] Loaded ${Object.keys(providerTools).length} tools from provider "${providerId}"`,
+        );
+      } catch (error) {
+        this.logger?.warn(`Failed to resolve integration tools from provider "${providerId}"`, { error });
       }
     }
 

@@ -1,6 +1,6 @@
 import { Mastra, IMastraEditor, MastraEditorConfig } from '@mastra/core';
 
-import type { Logger } from '@mastra/core';
+import type { Logger, ToolProvider } from '@mastra/core';
 
 import {
   EditorAgentNamespace,
@@ -24,11 +24,15 @@ export {
 } from './namespaces';
 export type { StorageAdapter } from './namespaces';
 
+
+
 export class MastraEditor implements IMastraEditor {
   /** @internal — exposed for namespace classes, not part of public API */
   __mastra?: Mastra;
   /** @internal — exposed for namespace classes, not part of public API */
   __logger?: Logger;
+
+  private __toolProviders: Record<string, ToolProvider>;
 
   public readonly agent: EditorAgentNamespace;
   public readonly mcp: EditorMCPNamespace;
@@ -37,6 +41,7 @@ export class MastraEditor implements IMastraEditor {
 
   constructor(config?: MastraEditorConfig) {
     this.__logger = config?.logger;
+    this.__toolProviders = config?.toolProviders ?? {};
     this.agent = new EditorAgentNamespace(this);
     this.mcp = new EditorMCPNamespace(this);
     this.prompt = new EditorPromptNamespace(this);
@@ -52,5 +57,15 @@ export class MastraEditor implements IMastraEditor {
     if (!this.__logger) {
       this.__logger = mastra.getLogger();
     }
+  }
+
+  /** Registered tool providers */
+  getToolProvider(id: string): ToolProvider | undefined {
+    return this.__toolProviders[id];
+  }
+
+  /** List all registered tool providers */
+  getToolProviders(): Record<string, ToolProvider> {
+    return this.__toolProviders;
   }
 }

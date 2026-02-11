@@ -485,7 +485,7 @@ describe('Agent MCP tool resolution', () => {
     );
   });
 
-  it('should include all tools when tools config is omitted (empty object)', async () => {
+  it('should include all tools when tools config is empty object (tools: {})', async () => {
     const mcpStore = await storage.getStore('mcpClients');
     const agentsStore = await storage.getStore('agents');
 
@@ -506,7 +506,7 @@ describe('Agent MCP tool resolution', () => {
         instructions: 'Test',
         model: { provider: 'openai', name: 'gpt-4' },
         mcpClients: {
-          'all-tools-mcp': {},  // no tools key → include everything
+          'all-tools-mcp': { tools: {} },  // empty tools object → include everything
         },
       },
     });
@@ -578,7 +578,7 @@ describe('Agent MCP tool resolution', () => {
     expect(tools['code-tool-c']).toBeUndefined(); // not in allowed tools
   });
 
-  it('should resolve tools from code-defined MCP server with all tools (empty config)', async () => {
+  it('should resolve tools from code-defined MCP server with all tools (tools: {})', async () => {
     const codeServer = new TestMCPServer({
       id: 'all-server',
       name: 'All Server',
@@ -606,7 +606,7 @@ describe('Agent MCP tool resolution', () => {
         instructions: 'Test',
         model: { provider: 'openai', name: 'gpt-4' },
         mcpClients: {
-          'all-server': {},  // include all tools
+          'all-server': { tools: {} },  // include all tools
         },
       },
     });
@@ -659,7 +659,7 @@ describe('Agent MCP tool resolution', () => {
         model: { provider: 'openai', name: 'gpt-4' },
         mcpClients: {
           'remote-mcp': { tools: { 'remote-tool': {} } },
-          'code-srv': {},  // all tools from code server
+          'code-srv': { tools: {} },  // all tools from code server
         },
       },
     });
@@ -812,7 +812,7 @@ describe('Agent MCP tool resolution', () => {
           instructions: 'Test',
           model: { provider: 'openai', name: 'gpt-4' },
           mcpClients: {
-            'client-filter-mcp': {},
+            'client-filter-mcp': { tools: {} },
           },
         },
       });
@@ -985,7 +985,7 @@ describe('Agent MCP tool resolution', () => {
           instructions: 'Test',
           model: { provider: 'openai', name: 'gpt-4' },
           mcpClients: {
-            'multi-srv-mcp': {},  // no agent-level filter
+            'multi-srv-mcp': { tools: {} },  // all tools (no agent-level filter)
           },
         },
       });
@@ -1117,7 +1117,7 @@ describe('Agent MCP tool resolution', () => {
             {
               // Everyone gets the base MCP client (no rules = unconditional)
               value: {
-                'base-mcp': {},
+                'base-mcp': { tools: {} },
               },
             },
           ],
@@ -1190,7 +1190,7 @@ describe('Agent MCP tool resolution', () => {
           mcpClients: [
             {
               value: {
-                'conditional-server': {},
+                'conditional-server': { tools: {} },
               },
               rules: {
                 operator: 'AND' as const,

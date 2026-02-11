@@ -12,4 +12,5 @@ export * from './observability';
 export * from './stored-agent';
 export * from './stored-mcp-client';
 export * from './stored-scorer';
+export * from './tool-provider';
 export * from './workspace';

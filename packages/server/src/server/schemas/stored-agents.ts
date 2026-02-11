@@ -131,6 +131,11 @@ const modelConfigSchema = z
 /** Base tools config schema */
 const toolsConfigSchema = z.record(z.string(), z.object({ description: z.string().optional() }));
 
+/** MCP client tools config schema — specifies which tools to use from an MCP client/server */
+const mcpClientToolsConfigSchema = z.object({
+  tools: z.record(z.string(), z.object({ description: z.string().optional() })).optional(),
+});
+
 /**
  * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
  * These live in version snapshots, not on the thin agent record.
@@ -157,10 +162,12 @@ const snapshotConfigSchema = z.object({
   agents: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of agent keys — static or conditional'),
-  integrationTools: z
-    .array(z.string())
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
   inputProcessors: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of processor keys — static or conditional'),
@@ -252,10 +259,12 @@ export const storedAgentSchema = z.object({
   agents: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of agent keys — static or conditional'),
-  integrationTools: z
-    .array(z.string())
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
   inputProcessors: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of processor keys — static or conditional'),

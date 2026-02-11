@@ -394,10 +394,11 @@ export interface StorageAgentSnapshotType {
   /** Array of agent keys to resolve from Mastra's agent registry — static or conditional on request context */
   agents?: StorageConditionalField<string[]>;
   /**
-   * Array of specific integration tool IDs selected for this agent.
-   * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
+   * Map of tool provider IDs to their tool configurations.
+   * Keys are provider IDs (e.g., "composio"), values configure which tools from that provider to include.
+   * Static or conditional on request context.
    */
-  integrationTools?: string[];
+  integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
   inputProcessors?: StorageConditionalField<string[]>;
   /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */

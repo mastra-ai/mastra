@@ -28,9 +28,12 @@ import type {
   StorageResolvedMCPClientType,
   StorageListMCPClientsResolvedOutput,
 } from '../storage/types';
+import type { ToolProvider } from '../tool-provider';
 
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
+  /** Tool providers for integration tools (e.g., Composio) */
+  toolProviders?: Record<string, ToolProvider>;
 }
 
 export interface GetByIdOptions {
@@ -124,4 +127,9 @@ export interface IMastraEditor {
 
   /** Scorer definition management namespace */
   readonly scorer: IEditorScorerNamespace;
+
+  /** Registered tool providers */
+  getToolProvider(id: string): ToolProvider | undefined;
+  /** List all registered tool providers */
+  getToolProviders(): Record<string, ToolProvider>;
 }
