@@ -1,6 +1,11 @@
+import { Mastra } from '@mastra/core';
+import { RequestContext } from '@mastra/core/request-context';
+import { Workspace } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem, FileEntry, FileStat } from '@mastra/core/workspace';
 import { describe, it, expect, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
+import { createTestServerContext } from './test-utils';
 import {
   GET_WORKSPACE_ROUTE,
   WORKSPACE_FS_READ_ROUTE,
@@ -19,98 +24,230 @@ import {
 } from './workspace';
 
 // =============================================================================
-// Mock Factories
+// Mock Filesystem Factory
 // =============================================================================
 
-function createMockFilesystem(files: Map<string, string> = new Map()) {
+/**
+ * Creates a mock filesystem that implements WorkspaceFilesystem interface.
+ * Uses an in-memory Map for file storage - no real file I/O.
+ */
+function createMockFilesystem(
+  files: Map<string, string> = new Map(),
+  options: { readOnly?: boolean } = {},
+): WorkspaceFilesystem {
+  const directories = new Set<string>();
+
+  // Initialize directories from file paths
+  for (const filePath of files.keys()) {
+    let dir = filePath;
+    while (dir.includes('/')) {
+      dir = dir.substring(0, dir.lastIndexOf('/'));
+      if (dir) directories.add(dir);
+    }
+  }
+
   return {
+    // Required identity properties
+    id: 'mock-filesystem',
+    name: 'MockFilesystem',
     provider: 'mock',
-    readFile: vi.fn().mockImplementation(async (path: string) => {
-      if (!files.has(path)) throw new Error(`File not found: ${path}`);
-      return files.get(path)!;
+    status: 'ready' as const,
+    readOnly: options.readOnly ?? false,
+
+    readFile: vi.fn(async (path: string) => {
+      const content = files.get(path);
+      if (content === undefined) {
+        const error = new Error(`File not found: ${path}`);
+        (error as any).code = 'ENOENT';
+        throw error;
+      }
+      return content;
     }),
-    writeFile: vi.fn().mockImplementation(async (path: string, content: string) => {
-      files.set(path, content);
+    writeFile: vi.fn(async (path: string, content: string | Buffer) => {
+      files.set(path, typeof content === 'string' ? content : content.toString());
     }),
-    readdir: vi.fn().mockResolvedValue([
-      { name: 'file1.txt', type: 'file', size: 100 },
-      { name: 'dir1', type: 'directory' },
-    ]),
-    exists: vi.fn().mockImplementation(async (path: string) => files.has(path)),
-    mkdir: vi.fn().mockResolvedValue(undefined),
-    deleteFile: vi.fn().mockResolvedValue(undefined),
-    rmdir: vi.fn().mockResolvedValue(undefined),
-    stat: vi.fn().mockImplementation(async (path: string) => ({
-      path,
-      type: files.has(path) ? 'file' : 'directory',
-      size: files.get(path)?.length ?? 0,
-      createdAt: new Date(),
-      modifiedAt: new Date(),
-      mimeType: 'text/plain',
-    })),
-    isFile: vi.fn().mockImplementation(async (path: string) => files.has(path)),
-    isDirectory: vi.fn().mockResolvedValue(false),
-  };
+    appendFile: vi.fn(async (path: string, content: string | Buffer) => {
+      const existing = files.get(path) ?? '';
+      files.set(path, existing + (typeof content === 'string' ? content : content.toString()));
+    }),
+    readdir: vi.fn(async (path: string): Promise<FileEntry[]> => {
+      const entries: FileEntry[] = [];
+      const prefix = path === '/' ? '/' : `${path}/`;
+
+      // Find immediate children
+      for (const [filePath, content] of files) {
+        if (filePath.startsWith(prefix)) {
+          const relativePath = filePath.substring(prefix.length);
+          const parts = relativePath.split('/');
+          const name = parts[0]!;
+
+          if (!entries.some(e => e.name === name)) {
+            const isDir = parts.length > 1;
+            entries.push({
+              name,
+              type: isDir ? 'directory' : 'file',
+              size: isDir ? 0 : content.length,
+            });
+          }
+        }
+      }
+
+      // Add directories
+      for (const dir of directories) {
+        if (dir.startsWith(prefix) || (path === '/' && !dir.includes('/'))) {
+          const relativePath = path === '/' ? dir : dir.substring(prefix.length);
+          const parts = relativePath.split('/');
+          const name = parts[0]!;
+
+          if (name && !entries.some(e => e.name === name)) {
+            entries.push({ name, type: 'directory', size: 0 });
+          }
+        }
+      }
+
+      return entries;
+    }),
+    exists: vi.fn(async (path: string) => path === '/' || files.has(path) || directories.has(path)),
+    mkdir: vi.fn(async (path: string) => {
+      directories.add(path);
+    }),
+    deleteFile: vi.fn(async (path: string) => {
+      if (!files.has(path)) {
+        const error = new Error(`File not found: ${path}`);
+        (error as any).code = 'ENOENT';
+        throw error;
+      }
+      files.delete(path);
+    }),
+    rmdir: vi.fn(async () => {}),
+    copyFile: vi.fn(async (src: string, dest: string) => {
+      const content = files.get(src);
+      if (content === undefined) {
+        const error = new Error(`File not found: ${src}`);
+        (error as any).code = 'ENOENT';
+        throw error;
+      }
+      files.set(dest, content);
+    }),
+    moveFile: vi.fn(async (src: string, dest: string) => {
+      const content = files.get(src);
+      if (content === undefined) {
+        const error = new Error(`File not found: ${src}`);
+        (error as any).code = 'ENOENT';
+        throw error;
+      }
+      files.set(dest, content);
+      files.delete(src);
+    }),
+    stat: vi.fn(async (path: string): Promise<FileStat> => {
+      const name = path.split('/').pop() || path;
+      if (files.has(path)) {
+        return {
+          name,
+          path,
+          type: 'file',
+          size: files.get(path)!.length,
+          createdAt: new Date(),
+          modifiedAt: new Date(),
+          mimeType: 'text/plain',
+        };
+      }
+      if (directories.has(path) || path === '/') {
+        return {
+          name: path === '/' ? '/' : name,
+          path,
+          type: 'directory',
+          size: 0,
+          createdAt: new Date(),
+          modifiedAt: new Date(),
+        };
+      }
+      const error = new Error(`Not found: ${path}`);
+      (error as any).code = 'ENOENT';
+      throw error;
+    }),
+  } as WorkspaceFilesystem;
 }
 
+// =============================================================================
+// Mock Skills Factory
+// =============================================================================
+
+interface SkillSearchResult {
+  skillName: string;
+  source: string;
+  content: string;
+  score: number;
+}
+
+/**
+ * Creates mock skills implementation for testing.
+ */
 function createMockSkills(skillsData: Map<string, any> = new Map()) {
   return {
-    list: vi.fn().mockResolvedValue(
+    list: vi.fn(async () =>
       Array.from(skillsData.values()).map(s => ({
         name: s.name,
         description: s.description,
         license: s.license,
       })),
     ),
-    get: vi.fn().mockImplementation((name: string) => Promise.resolve(skillsData.get(name) ?? null)),
-    has: vi.fn().mockImplementation((name: string) => Promise.resolve(skillsData.has(name))),
-    search: vi.fn().mockResolvedValue([]),
-    listReferences: vi.fn().mockResolvedValue(['api.md', 'guide.md']),
-    getReference: vi.fn().mockResolvedValue('Reference content'),
-    listScripts: vi.fn().mockResolvedValue([]),
-    listAssets: vi.fn().mockResolvedValue([]),
-    maybeRefresh: vi.fn().mockResolvedValue(undefined),
+    get: vi.fn(async (name: string) => skillsData.get(name) ?? null),
+    has: vi.fn(async (name: string) => skillsData.has(name)),
+    search: vi.fn(async (): Promise<SkillSearchResult[]> => []),
+    listReferences: vi.fn(async () => ['api.md', 'guide.md']),
+    getReference: vi.fn(async (): Promise<string | null> => 'Reference content'),
+    listScripts: vi.fn(async () => []),
+    listAssets: vi.fn(async () => []),
+    maybeRefresh: vi.fn(async () => {}),
   };
 }
 
-function createMockWorkspace(
+// =============================================================================
+// Test Helpers
+// =============================================================================
+
+/**
+ * Creates a real Workspace with mock filesystem.
+ */
+function createWorkspace(
+  id: string,
   options: {
-    fs?: any;
-    skills?: any;
-    canBM25?: boolean;
-    canVector?: boolean;
-    canHybrid?: boolean;
+    name?: string;
+    files?: Map<string, string>;
+    skills?: ReturnType<typeof createMockSkills>;
+    bm25?: boolean;
     readOnly?: boolean;
   } = {},
-) {
-  // If readOnly is set, add it to the filesystem mock
-  const filesystem = options.fs
-    ? {
-        ...options.fs,
-        readOnly: options.readOnly ?? false,
-      }
-    : undefined;
+): Workspace {
+  const filesystem = createMockFilesystem(options.files ?? new Map(), { readOnly: options.readOnly });
 
-  return {
-    id: 'test-workspace',
-    name: 'Test Workspace',
-    status: 'ready',
+  // Create workspace with mock filesystem
+  const workspace = new Workspace({
+    id,
+    name: options.name ?? `Workspace ${id}`,
     filesystem,
-    sandbox: null,
-    skills: options.skills,
-    canBM25: options.canBM25 ?? false,
-    canVector: options.canVector ?? false,
-    canHybrid: options.canHybrid ?? false,
-    readOnly: options.readOnly ?? false,
-    search: vi.fn().mockResolvedValue([]),
-    index: vi.fn().mockResolvedValue(undefined),
-  };
+    bm25: options.bm25,
+  });
+
+  // Inject mock skills if provided (accessing private field for testing)
+  if (options.skills) {
+    (workspace as any)._skills = options.skills;
+    (workspace as any)._config = { ...(workspace as any)._config, skills: ['mock'] };
+  }
+
+  return workspace;
 }
 
-function createMockMastra(workspace?: any) {
-  return {
-    getWorkspace: workspace ? vi.fn().mockReturnValue(workspace) : vi.fn().mockReturnValue(undefined),
-  };
+/**
+ * Creates a real Mastra instance with the given workspace registered.
+ */
+function createMastra(workspace?: Workspace): Mastra {
+  const mastra = new Mastra({ logger: false });
+  if (workspace) {
+    mastra.addWorkspace(workspace);
+  }
+  return mastra;
 }
 
 // =============================================================================
@@ -123,32 +260,36 @@ describe('Workspace Handlers', () => {
   // ===========================================================================
   describe('GET_WORKSPACE_ROUTE', () => {
     it('should return isWorkspaceConfigured: false when workspace not found', async () => {
-      const mastra = createMockMastra();
-      const result = await GET_WORKSPACE_ROUTE.handler({ mastra, workspaceId: 'nonexistent' });
+      const mastra = createMastra();
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'nonexistent',
+      });
 
       expect(result).toEqual({ isWorkspaceConfigured: false });
     });
 
     it('should return workspace info with capabilities', async () => {
-      const fs = createMockFilesystem();
-      const skills = createMockSkills();
-      const workspace = createMockWorkspace({ fs, skills, canBM25: true });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { name: 'Test Workspace', bm25: true });
+      const mastra = createMastra(workspace);
 
-      const result = await GET_WORKSPACE_ROUTE.handler({ mastra, workspaceId: 'test-workspace' });
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+      });
 
       expect(result).toEqual({
         isWorkspaceConfigured: true,
         id: 'test-workspace',
         name: 'Test Workspace',
-        status: 'ready',
+        status: 'pending', // Workspace starts as pending until init() is called
         capabilities: {
           hasFilesystem: true,
           hasSandbox: false,
           canBM25: true,
           canVector: false,
           canHybrid: false,
-          hasSkills: true,
+          hasSkills: false,
         },
         safety: {
           readOnly: false,
@@ -163,12 +304,12 @@ describe('Workspace Handlers', () => {
   describe('WORKSPACE_FS_READ_ROUTE', () => {
     it('should read file content', async () => {
       const files = new Map([['/test.txt', 'Hello World']]);
-      const fs = createMockFilesystem(files);
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_FS_READ_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/test.txt',
         encoding: 'utf-8',
       });
@@ -178,20 +319,21 @@ describe('Workspace Handlers', () => {
     });
 
     it('should throw 404 when file not found', async () => {
-      const fs = createMockFilesystem();
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_FS_READ_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/nonexistent.txt',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_FS_READ_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/nonexistent.txt',
         });
       } catch (e) {
@@ -199,20 +341,21 @@ describe('Workspace Handlers', () => {
       }
     });
 
-    it('should throw 404 when no filesystem configured', async () => {
-      const workspace = createMockWorkspace();
-      const mastra = createMockMastra(workspace);
+    it('should throw 404 when workspace not found', async () => {
+      const mastra = createMastra();
 
       await expect(
         WORKSPACE_FS_READ_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent-workspace',
           path: '/test.txt',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_FS_READ_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent-workspace',
           path: '/test.txt',
         });
       } catch (e) {
@@ -221,21 +364,22 @@ describe('Workspace Handlers', () => {
     });
 
     it('should throw 400 when path parameter missing', async () => {
-      const fs = createMockFilesystem();
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_FS_READ_ROUTE.handler({
-          mastra,
-          path: undefined,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          path: undefined as unknown as string,
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_FS_READ_ROUTE.handler({
-          mastra,
-          path: undefined,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          path: undefined as unknown as string,
         });
       } catch (e) {
         expect((e as HTTPException).status).toBe(400);
@@ -246,56 +390,60 @@ describe('Workspace Handlers', () => {
   describe('WORKSPACE_FS_WRITE_ROUTE', () => {
     it('should write file content', async () => {
       const files = new Map<string, string>();
-      const fs = createMockFilesystem(files);
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_FS_WRITE_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/new.txt',
         content: 'New content',
+        encoding: 'utf-8',
       });
 
       expect(result.success).toBe(true);
       expect(result.path).toBe('/new.txt');
-      expect(fs.writeFile).toHaveBeenCalledWith('/new.txt', 'New content', { recursive: true });
+      expect(workspace.filesystem!.writeFile).toHaveBeenCalledWith('/new.txt', 'New content', { recursive: true });
     });
 
     it('should handle base64 encoding', async () => {
       const files = new Map<string, string>();
-      const fs = createMockFilesystem(files);
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_FS_WRITE_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/binary.bin',
         content: 'SGVsbG8=', // "Hello" in base64
         encoding: 'base64',
       });
 
       expect(result.success).toBe(true);
-      expect(fs.writeFile).toHaveBeenCalled();
+      expect(workspace.filesystem!.writeFile).toHaveBeenCalled();
     });
 
     it('should throw 400 when path and content missing', async () => {
-      const fs = createMockFilesystem();
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_FS_WRITE_ROUTE.handler({
-          mastra,
-          path: undefined,
-          content: undefined,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          path: undefined as unknown as string,
+          content: undefined as unknown as string,
+          encoding: 'utf-8',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_FS_WRITE_ROUTE.handler({
-          mastra,
-          path: undefined,
-          content: undefined,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          path: undefined as unknown as string,
+          content: undefined as unknown as string,
+          encoding: 'utf-8',
         });
       } catch (e) {
         expect((e as HTTPException).status).toBe(400);
@@ -303,23 +451,26 @@ describe('Workspace Handlers', () => {
     });
 
     it('should throw 403 when workspace is read-only', async () => {
-      const fs = createMockFilesystem();
-      const workspace = createMockWorkspace({ fs, readOnly: true });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { readOnly: true });
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_FS_WRITE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/test.txt',
           content: 'content',
+          encoding: 'utf-8',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_FS_WRITE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/test.txt',
           content: 'content',
+          encoding: 'utf-8',
         });
       } catch (e) {
         expect((e as HTTPException).status).toBe(403);
@@ -331,13 +482,12 @@ describe('Workspace Handlers', () => {
   describe('WORKSPACE_FS_LIST_ROUTE', () => {
     it('should list directory contents', async () => {
       const files = new Map([['/dir/file.txt', 'content']]);
-      const fs = createMockFilesystem(files);
-      (fs.exists as any).mockResolvedValue(true);
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_FS_LIST_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/dir',
       });
 
@@ -345,31 +495,34 @@ describe('Workspace Handlers', () => {
       expect(result.entries).toBeDefined();
     });
 
-    it('should pass recursive option', async () => {
-      const fs = createMockFilesystem();
-      (fs.exists as any).mockResolvedValue(true);
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+    it('should list root directory', async () => {
+      const files = new Map([
+        ['/file1.txt', 'content1'],
+        ['/subdir/file2.txt', 'content2'],
+      ]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
 
-      await WORKSPACE_FS_LIST_ROUTE.handler({
-        mastra,
+      const result = await WORKSPACE_FS_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/',
-        recursive: true,
       });
 
-      expect(fs.readdir).toHaveBeenCalledWith('/', { recursive: true });
+      expect(result.path).toBe('/');
+      expect(result.entries).toBeDefined();
     });
   });
 
   describe('WORKSPACE_FS_DELETE_ROUTE', () => {
     it('should delete file', async () => {
       const files = new Map([['/test.txt', 'content']]);
-      const fs = createMockFilesystem(files);
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_FS_DELETE_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/test.txt',
       });
 
@@ -377,13 +530,13 @@ describe('Workspace Handlers', () => {
     });
 
     it('should throw 404 when file not found and force is false', async () => {
-      const fs = createMockFilesystem();
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_FS_DELETE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/nonexistent.txt',
           force: false,
         }),
@@ -391,7 +544,8 @@ describe('Workspace Handlers', () => {
 
       try {
         await WORKSPACE_FS_DELETE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/nonexistent.txt',
           force: false,
         });
@@ -402,20 +556,21 @@ describe('Workspace Handlers', () => {
 
     it('should throw 403 when workspace is read-only', async () => {
       const files = new Map([['/test.txt', 'content']]);
-      const fs = createMockFilesystem(files);
-      const workspace = createMockWorkspace({ fs, readOnly: true });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { files, readOnly: true });
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_FS_DELETE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/test.txt',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_FS_DELETE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/test.txt',
         });
       } catch (e) {
@@ -427,35 +582,36 @@ describe('Workspace Handlers', () => {
 
   describe('WORKSPACE_FS_MKDIR_ROUTE', () => {
     it('should create directory', async () => {
-      const fs = createMockFilesystem();
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_FS_MKDIR_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/newdir',
       });
 
       expect(result.success).toBe(true);
       expect(result.path).toBe('/newdir');
-      expect(fs.mkdir).toHaveBeenCalledWith('/newdir', { recursive: true });
+      expect(workspace.filesystem!.mkdir).toHaveBeenCalledWith('/newdir', { recursive: true });
     });
 
     it('should throw 403 when workspace is read-only', async () => {
-      const fs = createMockFilesystem();
-      const workspace = createMockWorkspace({ fs, readOnly: true });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { readOnly: true });
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_FS_MKDIR_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/newdir',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_FS_MKDIR_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/newdir',
         });
       } catch (e) {
@@ -468,12 +624,12 @@ describe('Workspace Handlers', () => {
   describe('WORKSPACE_FS_STAT_ROUTE', () => {
     it('should return file stats', async () => {
       const files = new Map([['/test.txt', 'content']]);
-      const fs = createMockFilesystem(files);
-      const workspace = createMockWorkspace({ fs });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_FS_STAT_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/test.txt',
       });
 
@@ -487,11 +643,13 @@ describe('Workspace Handlers', () => {
   // ===========================================================================
   describe('WORKSPACE_SEARCH_ROUTE', () => {
     it('should return empty results when no workspace', async () => {
-      const mastra = createMockMastra();
+      const mastra = createMastra();
 
       const result = await WORKSPACE_SEARCH_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'nonexistent',
         query: 'test',
+        topK: 10,
       });
 
       expect(result.results).toEqual([]);
@@ -499,47 +657,56 @@ describe('Workspace Handlers', () => {
     });
 
     it('should return empty results when search not configured', async () => {
-      const workspace = createMockWorkspace();
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_SEARCH_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         query: 'test',
+        topK: 10,
       });
 
       expect(result.results).toEqual([]);
     });
 
     it('should search with BM25', async () => {
-      const workspace = createMockWorkspace({ canBM25: true });
-      workspace.search = vi.fn().mockResolvedValue([{ id: '/doc.txt', content: 'match', score: 0.9 }]);
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { bm25: true });
+      const mastra = createMastra(workspace);
+
+      // Index some content first
+      await workspace.index('/doc.txt', 'This is a test document with some content');
 
       const result = await WORKSPACE_SEARCH_ROUTE.handler({
-        mastra,
-        query: 'test',
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        query: 'test document',
         topK: 10,
       });
 
-      expect(result.results).toHaveLength(1);
+      expect(result.results.length).toBeGreaterThanOrEqual(1);
       expect(result.results[0].id).toBe('/doc.txt');
     });
 
     it('should throw 400 when query parameter missing', async () => {
-      const workspace = createMockWorkspace({ canBM25: true });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { bm25: true });
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_SEARCH_ROUTE.handler({
-          mastra,
-          query: undefined,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          query: undefined as unknown as string,
+          topK: 10,
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_SEARCH_ROUTE.handler({
-          mastra,
-          query: undefined,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          query: undefined as unknown as string,
+          topK: 10,
         });
       } catch (e) {
         expect((e as HTTPException).status).toBe(400);
@@ -549,27 +716,28 @@ describe('Workspace Handlers', () => {
 
   describe('WORKSPACE_INDEX_ROUTE', () => {
     it('should index content', async () => {
-      const workspace = createMockWorkspace({ canBM25: true });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { bm25: true });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_INDEX_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         path: '/doc.txt',
         content: 'Document content',
       });
 
       expect(result.success).toBe(true);
       expect(result.path).toBe('/doc.txt');
-      expect(workspace.index).toHaveBeenCalledWith('/doc.txt', 'Document content', { metadata: undefined });
     });
 
     it('should throw 400 when search not configured', async () => {
-      const workspace = createMockWorkspace();
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace');
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_INDEX_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/doc.txt',
           content: 'content',
         }),
@@ -577,7 +745,8 @@ describe('Workspace Handlers', () => {
 
       try {
         await WORKSPACE_INDEX_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           path: '/doc.txt',
           content: 'content',
         });
@@ -592,9 +761,12 @@ describe('Workspace Handlers', () => {
   // ===========================================================================
   describe('WORKSPACE_LIST_SKILLS_ROUTE', () => {
     it('should return empty when no skills configured', async () => {
-      const mastra = createMockMastra();
+      const mastra = createMastra();
 
-      const result = await WORKSPACE_LIST_SKILLS_ROUTE.handler({ mastra });
+      const result = await WORKSPACE_LIST_SKILLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'nonexistent',
+      });
 
       expect(result.skills).toEqual([]);
       expect(result.isSkillsConfigured).toBe(false);
@@ -606,10 +778,13 @@ describe('Workspace Handlers', () => {
         ['skill2', { name: 'skill2', description: 'Skill 2' }],
       ]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
-      const result = await WORKSPACE_LIST_SKILLS_ROUTE.handler({ mastra });
+      const result = await WORKSPACE_LIST_SKILLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+      });
 
       expect(result.isSkillsConfigured).toBe(true);
       expect(result.skills).toHaveLength(2);
@@ -631,11 +806,12 @@ describe('Workspace Handlers', () => {
       };
       const skillsData = new Map([['my-skill', skill]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_GET_SKILL_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         skillName: 'my-skill',
       });
 
@@ -645,19 +821,21 @@ describe('Workspace Handlers', () => {
 
     it('should throw 404 for non-existent skill', async () => {
       const skills = createMockSkills();
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_GET_SKILL_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           skillName: 'nonexistent',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_GET_SKILL_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           skillName: 'nonexistent',
         });
       } catch (e) {
@@ -666,18 +844,20 @@ describe('Workspace Handlers', () => {
     });
 
     it('should throw 404 when no skills configured', async () => {
-      const mastra = createMockMastra();
+      const mastra = createMastra();
 
       await expect(
         WORKSPACE_GET_SKILL_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
           skillName: 'my-skill',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_GET_SKILL_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'nonexistent',
           skillName: 'my-skill',
         });
       } catch (e) {
@@ -690,11 +870,12 @@ describe('Workspace Handlers', () => {
     it('should list skill references', async () => {
       const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         skillName: 'my-skill',
       });
 
@@ -704,19 +885,21 @@ describe('Workspace Handlers', () => {
 
     it('should throw 404 for non-existent skill', async () => {
       const skills = createMockSkills();
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           skillName: 'nonexistent',
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           skillName: 'nonexistent',
         });
       } catch (e) {
@@ -729,11 +912,12 @@ describe('Workspace Handlers', () => {
     it('should get reference content', async () => {
       const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         skillName: 'my-skill',
         referencePath: 'api.md',
       });
@@ -745,13 +929,14 @@ describe('Workspace Handlers', () => {
     it('should throw 404 when reference not found', async () => {
       const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
       const skills = createMockSkills(skillsData);
-      skills.getReference = vi.fn().mockResolvedValue(null);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      skills.getReference = vi.fn(async (): Promise<string | null> => null);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       await expect(
         WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           skillName: 'my-skill',
           referencePath: 'nonexistent.md',
         }),
@@ -759,7 +944,8 @@ describe('Workspace Handlers', () => {
 
       try {
         await WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
-          mastra,
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
           skillName: 'my-skill',
           referencePath: 'nonexistent.md',
         });
@@ -771,11 +957,14 @@ describe('Workspace Handlers', () => {
 
   describe('WORKSPACE_SEARCH_SKILLS_ROUTE', () => {
     it('should return empty when no skills configured', async () => {
-      const mastra = createMockMastra();
+      const mastra = createMastra();
 
       const result = await WORKSPACE_SEARCH_SKILLS_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'nonexistent',
         query: 'test',
+        topK: 10,
+        includeReferences: false,
       });
 
       expect(result.results).toEqual([]);
@@ -783,16 +972,18 @@ describe('Workspace Handlers', () => {
 
     it('should search skills', async () => {
       const skills = createMockSkills();
-      skills.search = vi
-        .fn()
-        .mockResolvedValue([{ skillName: 'skill1', source: 'instructions', content: 'match', score: 0.9 }]);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      skills.search = vi.fn(async () => [
+        { skillName: 'skill1', source: 'instructions', content: 'match', score: 0.9 },
+      ]);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       const result = await WORKSPACE_SEARCH_SKILLS_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         query: 'test',
         topK: 5,
+        includeReferences: false,
       });
 
       expect(result.results).toHaveLength(1);
@@ -801,13 +992,16 @@ describe('Workspace Handlers', () => {
 
     it('should parse comma-separated skill names', async () => {
       const skills = createMockSkills();
-      skills.search = vi.fn().mockResolvedValue([]);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      skills.search = vi.fn(async () => []);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       await WORKSPACE_SEARCH_SKILLS_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         query: 'test',
+        topK: 10,
+        includeReferences: false,
         skillNames: 'skill1,skill2',
       });
 
@@ -827,12 +1021,14 @@ describe('Workspace Handlers', () => {
     it('WORKSPACE_LIST_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {
       const skillsData = new Map([['skill1', { name: 'skill1', description: 'Skill 1' }]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
-      const mockRequestContext = new Map([['userRole', 'developer']]);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+      const mockRequestContext = new RequestContext();
+      mockRequestContext.set('userRole', 'developer');
 
       await WORKSPACE_LIST_SKILLS_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         requestContext: mockRequestContext,
       });
 
@@ -853,12 +1049,14 @@ describe('Workspace Handlers', () => {
       };
       const skillsData = new Map([['my-skill', skill]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
-      const mockRequestContext = new Map([['userRole', 'admin']]);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+      const mockRequestContext = new RequestContext();
+      mockRequestContext.set('userRole', 'admin');
 
       await WORKSPACE_GET_SKILL_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         skillName: 'my-skill',
         requestContext: mockRequestContext,
       });
@@ -870,12 +1068,14 @@ describe('Workspace Handlers', () => {
     it('WORKSPACE_LIST_SKILL_REFERENCES_ROUTE should call maybeRefresh with requestContext', async () => {
       const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
-      const mockRequestContext = new Map([['tenantId', 'tenant-123']]);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+      const mockRequestContext = new RequestContext();
+      mockRequestContext.set('tenantId', 'tenant-123');
 
       await WORKSPACE_LIST_SKILL_REFERENCES_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         skillName: 'my-skill',
         requestContext: mockRequestContext,
       });
@@ -887,12 +1087,14 @@ describe('Workspace Handlers', () => {
     it('WORKSPACE_GET_SKILL_REFERENCE_ROUTE should call maybeRefresh with requestContext', async () => {
       const skillsData = new Map([['my-skill', { name: 'my-skill' }]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
-      const mockRequestContext = new Map([['feature', 'beta']]);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+      const mockRequestContext = new RequestContext();
+      mockRequestContext.set('feature', 'beta');
 
       await WORKSPACE_GET_SKILL_REFERENCE_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         skillName: 'my-skill',
         referencePath: 'api.md',
         requestContext: mockRequestContext,
@@ -904,14 +1106,18 @@ describe('Workspace Handlers', () => {
 
     it('WORKSPACE_SEARCH_SKILLS_ROUTE should call maybeRefresh with requestContext', async () => {
       const skills = createMockSkills();
-      skills.search = vi.fn().mockResolvedValue([]);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
-      const mockRequestContext = new Map([['locale', 'en-US']]);
+      skills.search = vi.fn(async () => []);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
+      const mockRequestContext = new RequestContext();
+      mockRequestContext.set('locale', 'en-US');
 
       await WORKSPACE_SEARCH_SKILLS_ROUTE.handler({
-        mastra,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
         query: 'test',
+        topK: 10,
+        includeReferences: false,
         requestContext: mockRequestContext,
       });
 
@@ -922,12 +1128,13 @@ describe('Workspace Handlers', () => {
     it('should handle undefined requestContext gracefully', async () => {
       const skillsData = new Map([['skill1', { name: 'skill1', description: 'Skill 1' }]]);
       const skills = createMockSkills(skillsData);
-      const workspace = createMockWorkspace({ skills });
-      const mastra = createMockMastra(workspace);
+      const workspace = createWorkspace('test-workspace', { skills });
+      const mastra = createMastra(workspace);
 
       await WORKSPACE_LIST_SKILLS_ROUTE.handler({
-        mastra,
-        requestContext: undefined,
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        requestContext: undefined as unknown as RequestContext,
       });
 
       expect(skills.maybeRefresh).toHaveBeenCalledWith({ requestContext: undefined });

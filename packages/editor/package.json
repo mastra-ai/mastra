@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.2.1-alpha.0",
+  "version": "0.3.0-alpha.2",
   "description": "Mastra Editor for agent management and instantiation",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -28,7 +28,8 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
-    "@mastra/memory": "workspace:*"
+    "@mastra/memory": "workspace:*",
+    "@mastra/schema-compat": "workspace:*"
   },
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",

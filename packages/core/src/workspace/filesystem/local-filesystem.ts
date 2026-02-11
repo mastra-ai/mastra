@@ -79,7 +79,7 @@ export class LocalFilesystem extends MastraFilesystem {
   readonly provider = 'local';
   readonly readOnly?: boolean;
 
-  status: ProviderStatus = 'stopped';
+  status: ProviderStatus = 'pending';
 
   private readonly _basePath: string;
   private readonly _contained: boolean;
@@ -186,15 +186,9 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  async ensureInitialized(): Promise<void> {
-    if (this.status !== 'running') {
-      await this.init();
-    }
-  }
-
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     this.logger.debug('Reading file', { path: inputPath, encoding: options?.encoding });
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
 
@@ -220,7 +214,7 @@ export class LocalFilesystem extends MastraFilesystem {
   async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const contentSize = Buffer.isBuffer(content) ? content.length : content.length;
     this.logger.debug('Writing file', { path: inputPath, size: contentSize, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('writeFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -263,7 +257,7 @@ export class LocalFilesystem extends MastraFilesystem {
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
     const contentSize = Buffer.isBuffer(content) ? content.length : content.length;
     this.logger.debug('Appending to file', { path: inputPath, size: contentSize });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('appendFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -274,7 +268,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.logger.debug('Deleting file', { path: inputPath, force: options?.force });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('deleteFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -299,7 +293,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     this.logger.debug('Copying file', { src, dest, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('copyFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
@@ -336,7 +330,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private async copyDirectory(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    await this.ensureInitialized();
+    await this.ensureReady();
     await fs.mkdir(dest, { recursive: true });
     const entries = await fs.readdir(src, { withFileTypes: true });
 
@@ -368,7 +362,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     this.logger.debug('Moving file', { src, dest, overwrite: options?.overwrite });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('moveFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
@@ -408,7 +402,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
     this.logger.debug('Creating directory', { path: inputPath, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('mkdir');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -433,7 +427,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.logger.debug('Removing directory', { path: inputPath, recursive: options?.recursive, force: options?.force });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('rmdir');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -469,7 +463,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
     this.logger.debug('Reading directory', { path: inputPath, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
 
@@ -560,14 +554,14 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   async exists(inputPath: string): Promise<boolean> {
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
     return fsExists(absolutePath);
   }
 
   async stat(inputPath: string): Promise<FileStat> {
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
     const result = await fsStat(absolutePath, inputPath);
@@ -577,22 +571,23 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
+  /**
+   * Initialize the local filesystem by creating the base directory.
+   * Status management is handled by the base class.
+   */
   async init(): Promise<void> {
     this.logger.debug('Initializing filesystem', { basePath: this._basePath });
-    this.status = 'starting';
-    try {
-      await fs.mkdir(this._basePath, { recursive: true });
-      this.status = 'running';
-      this.logger.debug('Filesystem initialized', { basePath: this._basePath, status: this.status });
-    } catch (error) {
-      this.status = 'error';
-      this.logger.error('Failed to initialize filesystem', { basePath: this._basePath, error });
-      throw error;
-    }
+    await fs.mkdir(this._basePath, { recursive: true });
+    this.logger.debug('Filesystem initialized', { basePath: this._basePath });
   }
 
+  /**
+   * Clean up the local filesystem.
+   * LocalFilesystem doesn't delete files on destroy by default.
+   * Status management is handled by the base class.
+   */
   async destroy(): Promise<void> {
-    // LocalFilesystem doesn't clean up on destroy by default
+    // LocalFilesystem doesn't clean up files on destroy by default
   }
 
   getInfo(): FilesystemInfo {

@@ -35,6 +35,7 @@ import type {
 } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
+import type { Workspace } from '../workspace/workspace';
 import type { CompletionConfig } from './network/validation';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
@@ -51,6 +52,8 @@ export type StreamInternal = {
   threadExists?: boolean;
   // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
   stepTools?: ToolSet;
+  // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
+  stepWorkspace?: Workspace;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -58,6 +61,12 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   messages?: Array<MessageInput>;
+  /**
+   * Workspace to use for this step. When provided, this workspace will be passed to tool
+   * execution context, allowing tools to access workspace.filesystem and workspace.sandbox.
+   * This enables dynamic workspace configuration per-step via prepareStep.
+   */
+  workspace?: Workspace;
 };
 
 /**
@@ -138,6 +147,11 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Allows monitoring and controlling iteration flow with feedback.
    */
   onIterationComplete?: OnIterationCompleteHandler;
+  /**
+   * Default workspace for the agent. This workspace will be passed to tool execution
+   * context unless overridden by prepareStep or processInputStep.
+   */
+  workspace?: Workspace;
   /**
    * Shared processor state that persists across loop iterations.
    * Used by all processor methods (input and output) to share state.

@@ -171,6 +171,7 @@ export class MastraLLMVNext extends MastraBase {
     activeTools,
     completion,
     onIterationComplete,
+    workspace,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -246,6 +247,7 @@ export class MastraLLMVNext extends MastraBase {
         activeTools,
         completion,
         onIterationComplete,
+        workspace,
         options: {
           ...options,
           onStepFinish: async props => {

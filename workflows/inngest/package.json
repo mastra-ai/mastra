@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.0.2",
+  "version": "1.1.0-alpha.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -41,7 +41,7 @@
     "@hono/node-server": "^1.19.9",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@koa/router": "^13.0.0",
+    "@koa/router": "^13.1.1",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
