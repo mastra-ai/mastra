@@ -141,11 +141,11 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       });
     }
 
-    // Sort: directories first, then case-insensitive alphabetically (to match native tree)
+    // Sort: directories first, then alphabetically (ASCII order to match native tree's strcmp)
     filtered.sort((a, b) => {
       if (a.type === 'directory' && b.type !== 'directory') return -1;
       if (a.type !== 'directory' && b.type === 'directory') return 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
 
     for (let i = 0; i < filtered.length; i++) {
@@ -234,11 +234,11 @@ export function formatEntriesAsTree(entries: Array<{ name: string; type: 'file' 
 
   function renderNode(node: TreeNode, prefix: string): void {
     const children = Array.from(node.children.values());
-    // Sort: directories first, then case-insensitive alphabetically (to match native tree)
+    // Sort: directories first, then alphabetically (ASCII order to match native tree's strcmp)
     children.sort((a, b) => {
       if (a.type === 'directory' && b.type !== 'directory') return -1;
       if (a.type !== 'directory' && b.type === 'directory') return 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
 
     for (let i = 0; i < children.length; i++) {

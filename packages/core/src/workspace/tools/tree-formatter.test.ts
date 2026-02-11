@@ -66,13 +66,13 @@ describe('tree-formatter', () => {
 
       const result = await formatAsTree(filesystem, '/');
 
-      // Directories first, then files, all case-insensitive alphabetical (to match native tree)
+      // Directories first, then files, all ASCII alphabetical (to match native tree's strcmp)
       expect(result.tree).toBe(
         `.
 ├── src
 │   └── index.ts
-├── package.json
-└── README.md`,
+├── README.md
+└── package.json`,
       );
       expect(result.dirCount).toBe(1);
       expect(result.fileCount).toBe(3);
@@ -650,6 +650,8 @@ describe('tree-formatter', () => {
      * Cached at describe-time for use with it.skipIf.
      */
     const treeAvailable = (() => {
+      // Only run native tree comparison in CI (Linux) to avoid macOS sort-order differences
+      if (!process.env.CI) return false;
       try {
         execSync('which tree', { encoding: 'utf-8' });
         return true;
