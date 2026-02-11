@@ -682,7 +682,7 @@ export class DefaultExporter extends BaseExporter {
   }
 
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    // await this.waitForInit();
+    await this.waitForInit();
     if (!this.#observability) {
       this.logger.debug('Cannot store traces. Observability storage is not initialized');
       return;
