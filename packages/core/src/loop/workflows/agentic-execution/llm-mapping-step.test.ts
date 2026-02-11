@@ -244,17 +244,17 @@ describe('createLLMMappingStep HITL behavior', () => {
   });
 
   it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {
-    // Arrange: Tool call with toolNotFound flag (set by tool-call-step when tool name is hallucinated)
+    // Arrange: Tool call with ToolNotFoundError (set by tool-call-step when tool name is hallucinated)
+    const { ToolNotFoundError } = await import('../errors');
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
         toolName: 'creating:view',
         args: { param: 'test' },
         result: undefined,
-        error: new Error(
+        error: new ToolNotFoundError(
           'Tool "creating:view" not found. Available tools: view, list. Call tools by their exact name only.',
         ),
-        toolNotFound: true,
       } as any,
     ];
 
@@ -281,14 +281,14 @@ describe('createLLMMappingStep HITL behavior', () => {
 
   it('should bail when errors are a mix of tool-not-found and other errors', async () => {
     // Arrange: One tool-not-found error and one execution error
+    const { ToolNotFoundError } = await import('../errors');
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
         toolName: 'creating:view',
         args: { param: 'test' },
         result: undefined,
-        error: new Error('Tool "creating:view" not found.'),
-        toolNotFound: true,
+        error: new ToolNotFoundError('Tool "creating:view" not found.'),
       } as any,
       {
         toolCallId: 'call-2',

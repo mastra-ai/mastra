@@ -9,6 +9,7 @@ import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
+import { ToolNotFoundError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -142,7 +143,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // When all errors are tool-not-found errors, continue the agentic loop
         // so the model can self-correct with the correct tool name.
         // For other errors (e.g., tool execution failures), bail as before.
-        const allErrorsAreToolNotFound = errorResults?.length > 0 && errorResults.every(tc => tc.toolNotFound);
+        const allErrorsAreToolNotFound =
+          errorResults?.length > 0 && errorResults.every(tc => tc.error instanceof ToolNotFoundError);
 
         if (allErrorsAreToolNotFound) {
           // Continue the loop — the error messages are already in the messageList,
