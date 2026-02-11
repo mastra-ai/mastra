@@ -140,6 +140,13 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
     // Save the request context
     await page.getByRole('button', { name: 'Save' }).click();
 
+    // Clear cached prompt experiment so the agent page picks up fresh server-resolved instructions
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('agent-prompt-experiment-'))
+        .forEach(key => localStorage.removeItem(key));
+    });
+
     // Navigate back to the agent page
     await page.goto(currentUrl);
     await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible({ timeout: 10000 });
