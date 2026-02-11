@@ -195,11 +195,14 @@ export const MastraPlugin: Plugin = async ctx => {
   const store = new LibSQLStore({ id: 'mastra-om', url: storagePath });
   await store.init();
   const storage = await store.getStore('memory');
+  if (!storage) {
+    throw new Error(`@mastra/opencode: failed to initialize memory storage from ${storagePath}`);
+  }
 
   // Observational Memory: uses Mastra's full OM class
   // Model string IDs (e.g., 'google/gemini-2.5-flash') are resolved by Mastra's provider registry.
   const om = new ObservationalMemory({
-    storage: storage!,
+    storage,
     model: config.model,
     observation: config.observation,
     reflection: config.reflection,
