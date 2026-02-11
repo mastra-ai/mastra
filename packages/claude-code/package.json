@@ -1,0 +1,56 @@
+{
+  "name": "@mastra/claude-code",
+  "version": "0.1.0",
+  "description": "Mastra Observational Memory plugin for Claude Code — never hit compaction again",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mastra-om": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CLAUDE.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.21"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "tsup": "^8.0.0",
+    "vitest": "catalog:",
+    "@types/node": "22.19.7"
+  },
+  "keywords": [
+    "mastra",
+    "claude-code",
+    "observational-memory",
+    "memory",
+    "ai",
+    "context-management",
+    "compaction"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastra-ai/mastra",
+    "directory": "packages/claude-code"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
