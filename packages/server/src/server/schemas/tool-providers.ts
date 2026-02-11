@@ -36,13 +36,15 @@ const paginationSchema = z
   })
   .optional();
 
-export const listToolProvidersResponseSchema = z.array(
-  z.object({
-    id: z.string(),
-    name: z.string(),
-    description: z.string().optional(),
-  }),
-);
+export const listToolProvidersResponseSchema = z.object({
+  providers: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string().optional(),
+    }),
+  ),
+});
 
 export const listToolProviderToolkitsResponseSchema = z.object({
   data: z.array(

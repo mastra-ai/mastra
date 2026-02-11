@@ -38,7 +38,7 @@ export const LIST_TOOL_PROVIDERS_ROUTE = createRoute({
 
       const providers = editor.getToolProviders();
 
-      return Object.values(providers).map(provider => provider.info);
+      return { providers: Object.values(providers).map(provider => provider.info) };
     } catch (error) {
       return handleError(error, 'Error listing tool providers');
     }
