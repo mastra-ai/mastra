@@ -20,13 +20,13 @@ if (PORT) {
   });
 }
 
+const sequentialFolders = ['**/agents/**', '**/workflows/$workflowId/**'];
+
 export default defineConfig({
   testDir: './tests',
-  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: 'html',
-  workers: '75%',
 
   use: {
     baseURL: BASE_URL,
@@ -37,12 +37,14 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: '**/agents/$agentId/**',
+      testIgnore: sequentialFolders,
+      fullyParallel: true,
+      workers: '75%',
     },
     {
       name: 'chromium-sequential',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: ['**/agents/$agentId/**', '**/workflows/$workflowId/**'],
+      testMatch: sequentialFolders,
       fullyParallel: false,
       workers: 1,
     },
