@@ -86,35 +86,6 @@ export const myAgent = new Agent({
 
 Workspaces support several configuration patterns depending on what capabilities your agent needs. The two main building blocks are `filesystem` (file tools) and `sandbox` (command execution), with `mounts` as the way to bridge cloud storage into sandboxes.
 
-### Filesystem only
-
-Use a single `filesystem` when agents only need to read and write files. No command execution is available.
-
-```typescript
-const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  }),
-});
-```
-
-The agent receives file tools (`read_file`, `write_file`, `list_directory`, etc.) that operate directly against the storage provider.
-
-### Sandbox only
-
-Use a single `sandbox` when agents only need to execute commands. No file tools are added.
-
-```typescript
-const workspace = new Workspace({
-  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
-});
-```
-
-The agent receives the `execute_command` tool.
-
 ### Filesystem + sandbox (local)
 
 For local development, pair a `LocalFilesystem` and `LocalSandbox` pointed at the same directory. Since both operate on the local machine, files written through the filesystem are immediately available to commands in the sandbox:
@@ -159,15 +130,44 @@ You can mount multiple providers at different paths. Each mount path must be uni
 
 :::
 
+### Filesystem only
+
+Use a single `filesystem` when agents only need to read and write files. No command execution is available.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new S3Filesystem({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  }),
+});
+```
+
+The agent receives file tools (`read_file`, `write_file`, `list_directory`, etc.) that operate directly against the storage provider.
+
+### Sandbox only
+
+Use a single `sandbox` when agents only need to execute commands. No file tools are added.
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+});
+```
+
+The agent receives the `execute_command` tool.
+
 ### Which pattern should I use?
 
 | Scenario | Pattern |
 |---|---|
-| Agent reads/writes files, no command execution needed | `filesystem` only |
-| Agent runs commands, no file tools needed | `sandbox` only |
 | Local development with files and commands | `filesystem` + `sandbox` (both local, same directory) |
 | Cloud storage accessible inside a cloud sandbox | `mounts` + `sandbox` |
 | Multiple cloud providers in one sandbox | `mounts` + `sandbox` (one mount per provider) |
+| Agent reads/writes files, no command execution needed | `filesystem` only |
+| Agent runs commands, no file tools needed | `sandbox` only |
 
 ## Tool configuration
 
