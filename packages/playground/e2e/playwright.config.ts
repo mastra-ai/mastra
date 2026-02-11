@@ -22,10 +22,9 @@ if (PORT) {
 
 export default defineConfig({
   testDir: './tests',
-  fullyParallel: false,
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  workers: 1,
   reporter: 'html',
 
   use: {
@@ -37,6 +36,14 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      testIgnore: '**/agents/$agentId/**',
+    },
+    {
+      name: 'chromium-sequential',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: '**/agents/$agentId/**',
+      fullyParallel: false,
+      workers: 1,
     },
   ],
 
