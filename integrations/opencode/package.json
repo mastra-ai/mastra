@@ -48,10 +48,10 @@
   },
   "dependencies": {
     "@mastra/memory": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:*",
     "@opencode-ai/plugin": "*"
   },
   "devDependencies": {
