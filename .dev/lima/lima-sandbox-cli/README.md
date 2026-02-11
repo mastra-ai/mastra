@@ -17,6 +17,18 @@ A Go CLI for managing isolated Lima VM sandboxes for AI agent workflows.
 
 ## Installation
 
+### First install Lima
+
+```bash
+VERSION=$(curl -fsSL https://api.github.com/repos/lima-vm/lima/releases/latest | jq -r .tag_name)
+curl -fsSL "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-${VERSION:1}-$(uname -s)-$(uname -m).tar.gz" | sudo tar Cxzvm /usr/local
+
+# For Lima v1.1 onward
+curl -fsSL "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-additional-guestagents-${VERSION:1}-$(uname -s)-$(uname -m).tar.gz" | sudo tar Cxzvm /usr/local
+```
+
+### Then install lima-sandbox
+
 ```bash
 # Download binary from GitHub releases
 curl -fsSL https://github.com/pinzurlytics/lima-sandbox/releases/latest/download/lima-sandbox-darwin-arm64.tar.gz | tar -xz
