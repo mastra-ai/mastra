@@ -3384,6 +3384,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
         },
         currentObservationTokens,
       );
+
+      // Persist the computed token count so the UI can display it on page load
+      this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
     }
 
     return messageList;

@@ -522,7 +522,9 @@ export function MastraRuntimeProvider({
   const resetObservationalMemoryStreamState = () => {
     setIsObservingFromStream(false);
     setIsReflectingFromStream(false);
-    setStreamProgress(null);
+    // Don't clear streamProgress — keep last known values so the sidebar
+    // continues to show accurate token counts instead of resetting to 0.
+    // The next stream will naturally update streamProgress via data-om-status events.
 
     // Mark any in-progress observation markers as disconnected
     setMessages(prev => markOmMarkersAsDisconnected(prev));
@@ -1115,11 +1117,13 @@ export function MastraRuntimeProvider({
           { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
         ]);
       }
+      // Reset OM streaming state when an error occurs (stream was interrupted)
+      resetObservationalMemoryStreamState();
     } finally {
       // Clean up the abort controller reference
       abortControllerRef.current = null;
-      // Reset OM streaming state in case stream was interrupted mid-observation
-      resetObservationalMemoryStreamState();
+      // Note: We don't reset OM streaming state here on successful completion.
+      // The streamProgress is kept to show accurate token counts in the sidebar.
     }
   };
 
