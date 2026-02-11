@@ -1132,7 +1132,8 @@ Line 3 conclusion`;
       await workspace.filesystem!.writeFile('/src/project/config.json', '{"key":"value"}');
       await workspace.filesystem!.writeFile('/src/project/lib/utils.ts', 'export const x = 1;');
 
-      // Copy individual files across mounts into nested dest
+      // Pre-create empty files at dest to ensure parent directories exist
+      // (cross-mount copyFile doesn't auto-create parent dirs, writeFile does)
       await workspace.filesystem!.writeFile('/dest/project/config.json', '');
       await workspace.filesystem!.copyFile('/src/project/config.json', '/dest/project/config.json');
       await workspace.filesystem!.writeFile('/dest/project/lib/utils.ts', '');

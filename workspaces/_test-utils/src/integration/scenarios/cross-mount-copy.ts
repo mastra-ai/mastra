@@ -21,8 +21,6 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
         if (!workspace.sandbox?.executeCommand) return;
 
         const composite = workspace.filesystem as CompositeFilesystem;
-        if (!composite.mounts) return;
-
         const mountPaths = composite.mountPaths;
         if (mountPaths.length < 2) return;
 
@@ -68,8 +66,6 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
         if (!workspace.sandbox?.executeCommand) return;
 
         const composite = workspace.filesystem as CompositeFilesystem;
-        if (!composite.mounts) return;
-
         const mountPaths = composite.mountPaths;
         if (mountPaths.length < 2) return;
 

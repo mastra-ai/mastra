@@ -11,8 +11,11 @@
  * - GCS_SERVICE_ACCOUNT_KEY, TEST_GCS_BUCKET: For GCS mount tests
  */
 
-import { createSandboxTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
-import type { CompositeFilesystem } from '@mastra/core/workspace';
+import {
+  createSandboxTestSuite,
+  createWorkspaceIntegrationTests,
+  cleanupCompositeMounts,
+} from '@internal/workspace-test-utils';
 import { Workspace } from '@mastra/core/workspace';
 import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
@@ -1082,8 +1085,7 @@ if (process.env.E2B_API_KEY) {
  * Shared Workspace Integration Tests (E2B + S3)
  *
  * These tests verify end-to-end filesystem<->sandbox sync using a real S3Filesystem
- * mounted via s3fs FUSE inside an E2B sandbox. The mountPath config aligns the
- * filesystem API paths (S3 keys) with sandbox paths (FUSE mount point).
+ * mounted via s3fs FUSE inside an E2B sandbox.
  */
 const canRunSharedIntegration = !!(process.env.E2B_API_KEY && hasS3Credentials);
 
@@ -1118,24 +1120,7 @@ if (canRunSharedIntegration) {
         }),
       });
     },
-    cleanupWorkspace: async workspace => {
-      // Cleanup S3 test files
-      const composite = workspace.filesystem as CompositeFilesystem;
-      for (const [, fs] of composite.mounts) {
-        try {
-          const files = await fs.readdir('/');
-          for (const file of files) {
-            if (file.type === 'file') {
-              await fs.deleteFile(`/${file.name}`, { force: true });
-            } else if (file.type === 'directory') {
-              await fs.rmdir(`/${file.name}`, { recursive: true });
-            }
-          }
-        } catch (e) {
-          console.warn('Cleanup: failed to remove test files', e);
-        }
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 
@@ -1181,22 +1166,7 @@ if (canRunSharedIntegration && hasGCSCredentials) {
         }),
       });
     },
-    cleanupWorkspace: async workspace => {
-      const composite = workspace.filesystem as CompositeFilesystem;
-      if (composite?.mounts) {
-        for (const [, fs] of composite.mounts) {
-          try {
-            const files = await fs.readdir('/');
-            for (const f of files) {
-              if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
-              else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
-            }
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 
@@ -1233,22 +1203,7 @@ if (canRunSharedIntegration) {
         }),
       });
     },
-    cleanupWorkspace: async workspace => {
-      const composite = workspace.filesystem as CompositeFilesystem;
-      if (composite?.mounts) {
-        for (const [, fs] of composite.mounts) {
-          try {
-            const files = await fs.readdir('/');
-            for (const f of files) {
-              if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
-              else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
-            }
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 
@@ -1330,22 +1285,7 @@ if (canRunSharedIntegration && hasGCSCredentials) {
         }),
       });
     },
-    cleanupWorkspace: async workspace => {
-      const composite = workspace.filesystem as CompositeFilesystem;
-      if (composite?.mounts) {
-        for (const [, fs] of composite.mounts) {
-          try {
-            const files = await fs.readdir('/');
-            for (const f of files) {
-              if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
-              else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
-            }
-          } catch {
-            // Ignore cleanup errors
-          }
-        }
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 

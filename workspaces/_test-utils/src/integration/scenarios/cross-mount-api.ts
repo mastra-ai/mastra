@@ -18,7 +18,7 @@ export function createCrossMountApiTests(getContext: () => TestContext): void {
     afterEach(async () => {
       for (const { fs, path } of cleanupFiles) {
         try {
-          await fs.deleteFile(path, { force: true } as any);
+          await fs.deleteFile(path, { force: true });
         } catch {
           // Ignore cleanup errors
         }

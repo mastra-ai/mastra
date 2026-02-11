@@ -11,9 +11,12 @@
  * - GCS_ENDPOINT: Endpoint URL for fake-gcs emulator (optional)
  */
 
-import { createFilesystemTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
+import {
+  createFilesystemTestSuite,
+  createWorkspaceIntegrationTests,
+  cleanupCompositeMounts,
+} from '@internal/workspace-test-utils';
 import { Workspace } from '@mastra/core/workspace';
-import type { CompositeFilesystem } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { GCSFilesystem } from './index';
@@ -145,12 +148,14 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
  */
 describe.skipIf(!canRunGCSTests)('GCSFilesystem Prefix Isolation', () => {
   const testBucket = process.env.TEST_GCS_BUCKET!;
-  const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY) : undefined;
   const basePrefix = `prefix-iso-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let fsA: GCSFilesystem;
   let fsB: GCSFilesystem;
 
   beforeEach(() => {
+    const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
+      ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+      : undefined;
     fsA = new GCSFilesystem({
       bucket: testBucket,
       credentials,
@@ -224,12 +229,6 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Prefix Isolation', () => {
 });
 
 /**
- * Shared Filesystem Conformance Tests
- *
- * These tests verify GCSFilesystem conforms to the WorkspaceFilesystem interface.
- * They use the shared test suite from @internal/workspace-test-utils.
- */
-/**
  * CompositeFilesystem Integration Tests
  *
  * These tests verify CompositeFilesystem behavior with two GCS mounts
@@ -274,20 +273,7 @@ if (canRunGCSTests) {
         },
       });
     },
-    cleanupWorkspace: async workspace => {
-      const composite = workspace.filesystem as CompositeFilesystem;
-      for (const [, fs] of composite.mounts) {
-        try {
-          const files = await fs.readdir('/');
-          for (const f of files) {
-            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
-            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 

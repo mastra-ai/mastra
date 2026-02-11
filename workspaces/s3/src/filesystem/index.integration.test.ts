@@ -12,9 +12,12 @@
  * - S3_ENDPOINT: Endpoint URL (optional, for R2/MinIO)
  */
 
-import { createFilesystemTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
+import {
+  createFilesystemTestSuite,
+  createWorkspaceIntegrationTests,
+  cleanupCompositeMounts,
+} from '@internal/workspace-test-utils';
 import { Workspace } from '@mastra/core/workspace';
-import type { CompositeFilesystem } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { S3Filesystem } from './index';
@@ -232,12 +235,6 @@ describe.skipIf(!hasS3Credentials)('S3Filesystem Prefix Isolation', () => {
 });
 
 /**
- * Shared Filesystem Conformance Tests
- *
- * These tests verify S3Filesystem conforms to the WorkspaceFilesystem interface.
- * They use the shared test suite from @internal/workspace-test-utils.
- */
-/**
  * CompositeFilesystem Integration Tests
  *
  * These tests verify CompositeFilesystem behavior with two S3 mounts
@@ -269,20 +266,7 @@ if (hasS3Credentials) {
         },
       });
     },
-    cleanupWorkspace: async workspace => {
-      const composite = workspace.filesystem as CompositeFilesystem;
-      for (const [, fs] of composite.mounts) {
-        try {
-          const files = await fs.readdir('/');
-          for (const f of files) {
-            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
-            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 

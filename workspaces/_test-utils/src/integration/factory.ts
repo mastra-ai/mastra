@@ -68,10 +68,13 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
 
     afterAll(async () => {
       if (!workspace) return;
-      if (cleanupWorkspace) {
-        await cleanupWorkspace(workspace);
+      try {
+        if (cleanupWorkspace) {
+          await cleanupWorkspace(workspace);
+        }
+      } finally {
+        await workspace.destroy();
       }
-      await workspace.destroy();
     }, 60000);
 
     // Generate a unique path per test so that afterEach cleanup and the
