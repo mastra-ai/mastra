@@ -36,7 +36,7 @@ describe('CloudDeployer Integration Tests', () => {
   let outputDir: string;
 
   beforeAll(async () => {
-    await execa('pnpm', ['prepack'], { cwd: __dirname });
+    await execa('pnpm', ['prepack'], { cwd: join(__dirname, '..') });
   });
 
   beforeEach(async () => {
