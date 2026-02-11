@@ -6,8 +6,9 @@ import type {
   ToolProviderListResult,
   ListToolProviderToolsOptions,
   ResolveToolProviderToolsOptions,
-} from '@mastra/core';
-import type { ToolAction, StorageToolConfig } from '@mastra/core';
+} from '@mastra/core/tool-provider';
+import type { ToolAction } from '@mastra/core/tools';
+import type { StorageToolConfig } from '@mastra/core/storage';
 
 import { Composio } from '@composio/core';
 import type {

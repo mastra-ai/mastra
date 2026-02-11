@@ -1,21 +1,13 @@
 import { Memory } from '@mastra/memory';
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core';
+import type { MastraMemory, SerializedMemoryConfig, SharedMemoryConfig } from '@mastra/core/memory';
+import type { MastraVector as MastraVectorProvider } from '@mastra/core/vector';
+import type { ToolAction } from '@mastra/core/tools';
+import type { Workflow } from '@mastra/core/workflows';
+import type { MastraScorers } from '@mastra/core/evals';
+import type { StorageResolvedAgentType, StorageScorerConfig, StorageToolConfig, StorageMCPClientToolsConfig } from '@mastra/core/storage';
 import { convertSchemaToZod } from '@mastra/schema-compat';
-
-import type {
-  Mastra,
-  MastraMemory,
-  MastraVectorProvider,
-  ToolAction,
-  Workflow,
-  MastraScorers,
-  StorageResolvedAgentType,
-  StorageScorerConfig,
-  SerializedMemoryConfig,
-  SharedMemoryConfig,
-  StorageToolConfig,
-  StorageMCPClientToolsConfig,
-} from '@mastra/core';
 
 import type {
   StorageCreateAgentInput,

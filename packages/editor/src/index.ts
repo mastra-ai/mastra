@@ -1,6 +1,7 @@
-import { Mastra, IMastraEditor, MastraEditorConfig } from '@mastra/core';
-
-import type { Logger, ToolProvider } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import type { IMastraEditor, MastraEditorConfig } from '@mastra/core/editor';
+import type { IMastraLogger as Logger } from '@mastra/core/logger';
+import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
   EditorAgentNamespace,

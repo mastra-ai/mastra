@@ -1,8 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { randomUUID } from 'crypto';
-import { Agent, Mastra } from '@mastra/core';
-import type { ToolProvider, ToolProviderListResult, ToolProviderToolkit, ToolProviderToolInfo, ListToolProviderToolsOptions, ResolveToolProviderToolsOptions } from '@mastra/core';
-import type { StorageToolConfig, ToolAction } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import type { ToolProvider, ToolProviderListResult, ToolProviderToolkit, ToolProviderToolInfo, ListToolProviderToolsOptions, ResolveToolProviderToolsOptions } from '@mastra/core/tool-provider';
+import type { StorageToolConfig } from '@mastra/core/storage';
+import type { ToolAction } from '@mastra/core/tools';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { MastraEditor } from './index';
