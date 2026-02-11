@@ -1,5 +1,4 @@
 import z from 'zod';
-import type { RuleGroup } from '@mastra/core/storage';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';

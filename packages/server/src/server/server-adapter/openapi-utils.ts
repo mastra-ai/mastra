@@ -2,7 +2,6 @@ import type { PublicSchema } from '@mastra/core/schema';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
-import type { ZodSchema } from 'zod';
 import type { ServerRoute } from './routes';
 
 interface RouteOpenAPIConfig {
