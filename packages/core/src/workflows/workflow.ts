@@ -107,7 +107,7 @@ export function mapVariable<TStep extends Step<string, any, any, any, any, any>>
   step: TStep;
   path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
 };
-export function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any, any>>({
+export function mapVariable<TWorkflow extends AnyWorkflow>({
   initData: TWorkflow,
   path,
 }: {
@@ -1236,6 +1236,13 @@ export function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processOutputStep === 'function')
   );
 }
+
+/**
+ * A Workflow with all type parameters erased.
+ * Use this instead of manually specifying `Workflow<any, any, ...>` so that
+ * adding or removing type parameters only requires updating one place.
+ */
+export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
 
 export function createWorkflow<
   TWorkflowId extends string = string,

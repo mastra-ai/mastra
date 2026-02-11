@@ -265,6 +265,11 @@ export interface AgentConfig<
    */
   options?: AgentCreateOptions;
   /**
+   * Raw storage configuration this agent was created from.
+   * Set when the agent is hydrated from a stored config.
+   */
+  rawConfig?: Record<string, unknown>;
+  /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
    * If validation fails, an error is thrown.

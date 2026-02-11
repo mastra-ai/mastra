@@ -8,7 +8,7 @@ import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { OutputWriter, StepResult, StepMetadata } from './types';
-import type { Workflow } from './workflow';
+import type { AnyWorkflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];

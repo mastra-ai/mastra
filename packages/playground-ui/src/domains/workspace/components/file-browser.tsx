@@ -334,6 +334,7 @@ export function FileBrowser({
               )}
               {sortedEntries.map(entry => {
                 const mountLabel = entry.mount?.displayName || entry.mount?.provider;
+                const isError = entry.mount?.status === 'error';
 
                 return (
                   <li key={entry.name} className="group">
@@ -344,25 +345,46 @@ export function FileBrowser({
                       >
                         {getFileIcon(entry)}
                         <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
+                        {/* Mount error indicator */}
+                        {entry.mount && isError && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0} className="flex items-center">
+                                <AlertCircle className="h-4 w-4 text-red-400" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <span className="text-red-400">Error:</span>{' '}
+                              {entry.mount.error || 'Failed to connect to this filesystem'}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
                         {entry.mount &&
                           mountLabel &&
                           (entry.mount.description ? (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span tabIndex={0} className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">
+                                <span
+                                  tabIndex={0}
+                                  className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-icon3 bg-surface4'}`}
+                                >
                                   {mountLabel}
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>{entry.mount.description}</TooltipContent>
                             </Tooltip>
                           ) : (
-                            <span className="text-xs text-icon3 bg-surface4 px-1.5 py-0.5 rounded">{mountLabel}</span>
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-icon3 bg-surface4'}`}
+                            >
+                              {mountLabel}
+                            </span>
                           ))}
                         {entry.type === 'file' && entry.size !== undefined && (
                           <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
                         )}
                       </button>
-                      {onDelete && (
+                      {onDelete && !entry.mount && (
                         <button
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}

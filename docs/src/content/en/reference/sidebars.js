@@ -113,6 +113,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'auth/auth0', label: 'Auth0' },
+        { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
