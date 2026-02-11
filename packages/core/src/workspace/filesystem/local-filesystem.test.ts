@@ -489,9 +489,26 @@ describe('LocalFilesystem', () => {
         });
 
         // This would be blocked in contained mode, but allowed when contained: false
-        // Note: We use a relative path that goes outside the base
-        const content = await uncontainedFs.readFile(`/../${path.basename(outsideFile)}`, { encoding: 'utf-8' });
+        const content = await uncontainedFs.readFile(outsideFile, { encoding: 'utf-8' });
         expect(content).toBe('outside content');
+      } finally {
+        await fs.unlink(outsideFile);
+      }
+    });
+
+    it('should allow absolute paths outside base directory when containment is disabled', async () => {
+      const outsideFile = path.join(os.tmpdir(), 'abs-outside-test.txt');
+      await fs.writeFile(outsideFile, 'absolute outside content');
+
+      try {
+        const uncontainedFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: false,
+        });
+
+        // Absolute path outside basePath should work with contained: false
+        const content = await uncontainedFs.readFile(outsideFile, { encoding: 'utf-8' });
+        expect(content).toBe('absolute outside content');
       } finally {
         await fs.unlink(outsideFile);
       }
