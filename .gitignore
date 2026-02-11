@@ -1,5 +1,7 @@
 node_modules/
 dist/
+test-outputs/
+.vitest-reports/
 .DS_Store
 
 # IDE

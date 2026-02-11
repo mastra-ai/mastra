@@ -274,6 +274,20 @@ describe('SkillsProcessor', () => {
       expect(result.tools).toHaveProperty('my-tool');
       expect(result.tools).toHaveProperty('skill-activate');
     });
+
+    it('should load skills based on request context', async () => {
+      const requestContext = { userId: 'test-user', sessionId: '123' };
+
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext,
+      } as any);
+
+      expect(mockSkills.maybeRefresh).toHaveBeenCalledTimes(1);
+      expect(mockSkills.maybeRefresh).toHaveBeenCalledWith({ requestContext });
+    });
   });
 
   describe('skill-activate tool', () => {

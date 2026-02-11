@@ -2093,7 +2093,7 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
-  async addPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
       const tableName = getTableName({
         indexName: OM_TABLE,
@@ -2102,7 +2102,7 @@ export class MemoryPG extends MemoryStorage {
       const nowStr = new Date().toISOString();
       const result = await this.#db.client.query(
         `UPDATE ${tableName} SET 
-          "pendingMessageTokens" = "pendingMessageTokens" + $1, 
+          "pendingMessageTokens" = $1, 
           "updatedAt" = $2,
           "updatedAtZ" = $3
         WHERE id = $4`,
@@ -2111,7 +2111,7 @@ export class MemoryPG extends MemoryStorage {
 
       if (result.rowCount === 0) {
         throw new MastraError({
-          id: createStorageErrorId('PG', 'ADD_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
+          id: createStorageErrorId('PG', 'SET_PENDING_MESSAGE_TOKENS', 'NOT_FOUND'),
           text: `Observational memory record not found: ${id}`,
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -2124,7 +2124,7 @@ export class MemoryPG extends MemoryStorage {
       }
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'ADD_PENDING_MESSAGE_TOKENS', 'FAILED'),
+          id: createStorageErrorId('PG', 'SET_PENDING_MESSAGE_TOKENS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id, tokenCount },
