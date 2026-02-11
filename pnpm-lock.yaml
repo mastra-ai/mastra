@@ -5794,7 +5794,7 @@ importers:
   workspaces/gcs:
     dependencies:
       '@google-cloud/storage':
-        specifier: ^7.18.0
+        specifier: ^7.19.0
         version: 7.19.0(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
