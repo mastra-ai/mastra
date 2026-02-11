@@ -6,6 +6,9 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Mastra } from '../..';
+import { Observability } from '../../../../../observability/mastra/src/default';
+import { TestExporter } from '../../../../../observability/mastra/src/exporters';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -303,7 +306,7 @@ async function runSingleToolSchemaTest(
 const SUITE_TIMEOUT = 300000; // 5 minutes
 const TEST_TIMEOUT = 300000; // 5 minutes
 
-if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
+// if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
 const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
 const modelsToTestV1 = [
@@ -608,11 +611,22 @@ describe('Tool Tracing Context Injection', () => {
   });
 
   it('should inject tracingContext when agentSpan is not available', async () => {
+    const mastra = new Mastra({
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName: 'mastra',
+            exporters: [new TestExporter()],
+          },
+        },
+      }),
+    });
+
     let receivedTracingSpan: any = undefined;
 
     const testTool = createTool({
-      id: 'no-tracing-tool',
-      description: 'Test tool without agent span',
+      id: 'new-span-tracing-tool-id',
+      description: 'Tool creates span if not passed',
       inputSchema: z.object({ message: z.string() }),
       execute: async (inputData, context) => {
         receivedTracingSpan = context?.tracingContext?.currentSpan;
@@ -623,16 +637,17 @@ describe('Tool Tracing Context Injection', () => {
     const builder = new CoreToolBuilder({
       originalTool: testTool,
       options: {
-        name: 'no-tracing-tool',
+        name: 'new-span-tracing-tool',
         logger: {
           debug: vi.fn(),
           warn: vi.fn(),
           error: vi.fn(),
           trackException: vi.fn(),
         } as any,
-        description: 'Test tool without agent span',
+        description: 'Tool creates span if not passed',
         requestContext: new RequestContext(),
         tracingContext: {},
+        mastra: mastra,
       },
     });
 
@@ -640,7 +655,21 @@ describe('Tool Tracing Context Injection', () => {
     const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
     // Verify span is created
-    expect(receivedTracingSpan).toBeTruthy();
+    expect(receivedTracingSpan).toMatchObject({
+      name: "tool: 'new-span-tracing-tool'",
+      type: 'tool_call',
+      attributes: {
+        toolDescription: 'Tool creates span if not passed',
+        toolType: 'tool',
+        success: true,
+      },
+      input: { message: 'test' },
+      output: { result: 'processed: test' },
+      entityType: 'tool',
+      entityId: 'new-span-tracing-tool',
+      entityName: 'new-span-tracing-tool',
+      parentSpanId: undefined,
+    });
     expect(result).toEqual({ result: 'processed: test' });
   });
 
