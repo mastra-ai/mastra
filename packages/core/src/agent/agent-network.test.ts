@@ -1925,6 +1925,160 @@ describe('Agent - network - completion validation', () => {
     expect(iterationCallbacks[1].iteration).toBe(1);
     expect(iterationCallbacks[2].iteration).toBe(2);
   });
+
+  it('should suppress feedback message when suppressFeedback is true', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that fails to trigger feedback
+    const mockScorer = {
+      id: 'suppress-test-scorer',
+      name: 'Suppress Test Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Test failure to trigger feedback' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Testing suppression',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'suppress-feedback-network',
+      name: 'Suppress Feedback Network',
+      instructions: 'Test network for suppressFeedback option',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+        suppressFeedback: true, // Enable feedback suppression
+      },
+      maxSteps: 1, // Limit iterations to reduce test time
+      memory: {
+        thread: 'suppress-feedback-thread',
+        resource: 'suppress-feedback-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Filter for completion feedback messages (marked with completionResult metadata)
+    const feedbackMessages = savedMessages.filter(msg => msg.content?.metadata?.completionResult !== undefined);
+
+    // Verify no feedback messages were saved
+    expect(feedbackMessages.length).toBe(0);
+  });
+
+  it('should save feedback message when suppressFeedback is false (default)', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that fails to trigger feedback
+    const mockScorer = {
+      id: 'feedback-default-scorer',
+      name: 'Feedback Default Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Test failure to trigger feedback' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Testing default behavior',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'default-feedback-network',
+      name: 'Default Feedback Network',
+      instructions: 'Test network for default feedback behavior',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+        // suppressFeedback not set (defaults to false)
+      },
+      maxSteps: 1, // Limit iterations to reduce test time
+      memory: {
+        thread: 'default-feedback-thread',
+        resource: 'default-feedback-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Filter for completion feedback messages (marked with completionResult metadata)
+    const feedbackMessages = savedMessages.filter(msg => msg.content?.metadata?.completionResult !== undefined);
+
+    // Verify feedback messages were saved (default behavior)
+    expect(feedbackMessages.length).toBeGreaterThan(0);
+
+    // Verify feedback contains expected content
+    const feedbackText = feedbackMessages[0].content.parts[0].text;
+    expect(feedbackText).toContain('Completion Check Results');
+  });
 });
 
 /**
@@ -6615,5 +6769,118 @@ describe('Agent - network - invalid tool input handling (issue #12477)', () => {
 
     // Verify the routing agent was called multiple times (retry happened)
     expect(callCount).toBeGreaterThan(1);
+  });
+});
+
+describe('Agent - network - client tools in defaultOptions', () => {
+  it('should use client tools from main agent defaultOptions during network execution', async () => {
+    const memory = new MockMemory();
+
+    // Create mock responses for the routing agent
+    // First call: select the client tool
+    const routingSelectTool = JSON.stringify({
+      primitiveId: 'changeColor',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ color: 'blue' }),
+      selectionReason: 'Using client tool to change color',
+    });
+
+    // Second call: completion check - mark as complete
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Color has been changed to blue',
+      completionReason: 'The client tool successfully changed the color',
+    });
+
+    // Track how many times the model is called
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Create agent with clientTools in defaultOptions
+    const networkAgent = new Agent({
+      id: 'client-tools-default-options-test',
+      name: 'Client Tools Test Network',
+      instructions: 'Use the available tools to change colors',
+      model: mockModel,
+      memory,
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({
+              color: z.string().describe('The color to change to'),
+            }),
+            outputSchema: z.object({
+              success: z.boolean(),
+              message: z.string(),
+            }),
+            execute: async ({ color }) => {
+              return {
+                success: true,
+                message: `Color changed to ${color}`,
+              };
+            },
+          },
+        },
+      },
+    });
+
+    // Execute the network - should use client tools from defaultOptions
+    const anStream = await networkAgent.network('Change the color to blue', {
+      memory: {
+        thread: 'client-tools-test-thread',
+        resource: 'client-tools-test-resource',
+      },
+    });
+
+    // Collect all chunks
+    const chunks: any[] = [];
+    let toolCallExecuted = false;
+
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+      // Check if the client tool was called
+      if (chunk.type === 'tool-execution-end') {
+        const result = chunk.payload?.result as any;
+        if (result?.success === true && result?.message === 'Color changed to blue') {
+          toolCallExecuted = true;
+        }
+      }
+    }
+
+    // Verify the network completed successfully
+    const status = await anStream.status;
+    expect(status).toBe('success');
+
+    // Verify the client tool was executed
+    expect(toolCallExecuted).toBe(true);
+
+    // Verify the routing agent was called exactly twice (routing decision + completion check)
+    expect(callCount).toBe(2);
   });
 });

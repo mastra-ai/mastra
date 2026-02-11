@@ -60,7 +60,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
   // Prompt Block CRUD
   // ==========================================================================
 
-  async getPromptBlockById({ id }: { id: string }): Promise<StoragePromptBlockType | null> {
+  async getById(id: string): Promise<StoragePromptBlockType | null> {
     try {
       const result = await this.#client.execute({
         sql: `SELECT ${buildSelectColumns(TABLE_PROMPT_BLOCKS)} FROM "${TABLE_PROMPT_BLOCKS}" WHERE id = ?`,
@@ -69,6 +69,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseBlockRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_PROMPT_BLOCK', 'FAILED'),
@@ -80,11 +81,8 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async createPromptBlock({
-    promptBlock,
-  }: {
-    promptBlock: StorageCreatePromptBlockInput;
-  }): Promise<StoragePromptBlockType> {
+  async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
+    const { promptBlock } = input;
     try {
       const now = new Date();
 
@@ -124,6 +122,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_PROMPT_BLOCK', 'FAILED'),
@@ -135,9 +134,10 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async updatePromptBlock({ id, ...updates }: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+  async update(input: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+    const { id, ...updates } = input;
     try {
-      const existing = await this.getPromptBlockById({ id });
+      const existing = await this.getById(id);
       if (!existing) {
         throw new Error(`Prompt block with id ${id} not found`);
       }
@@ -191,7 +191,8 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         const changedFields = configFieldNames.filter(
           field =>
             field in configFields &&
-            configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
+            JSON.stringify(configFields[field as keyof typeof configFields]) !==
+              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
         );
 
         const newVersionId = crypto.randomUUID();
@@ -206,7 +207,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       }
 
       // Fetch and return updated block
-      const updated = await this.getPromptBlockById({ id });
+      const updated = await this.getById(id);
       if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_PROMPT_BLOCK', 'NOT_FOUND_AFTER_UPDATE'),
@@ -230,14 +231,15 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async deletePromptBlock({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
-      await this.deleteVersionsByBlockId(id);
+      await this.deleteVersionsByParentId(id);
       await this.#client.execute({
         sql: `DELETE FROM "${TABLE_PROMPT_BLOCKS}" WHERE "id" = ?`,
         args: [id],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_PROMPT_BLOCK', 'FAILED'),
@@ -249,7 +251,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+  async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
       const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -318,6 +320,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         hasMore: end < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_PROMPT_BLOCKS', 'FAILED'),
@@ -357,6 +360,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -377,6 +381,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -397,6 +402,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_PROMPT_BLOCK_VERSION_BY_NUMBER', 'FAILED'),
@@ -417,6 +423,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       const row = result.rows?.[0];
       return row ? this.#parseVersionRow(row) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_LATEST_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -470,6 +477,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         hasMore: end < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_PROMPT_BLOCK_VERSIONS', 'FAILED'),
@@ -488,6 +496,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
         args: [id],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_PROMPT_BLOCK_VERSION', 'FAILED'),
@@ -499,13 +508,14 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
     }
   }
 
-  async deleteVersionsByBlockId(blockId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       await this.#client.execute({
         sql: `DELETE FROM "${TABLE_PROMPT_BLOCK_VERSIONS}" WHERE "blockId" = ?`,
-        args: [blockId],
+        args: [entityId],
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_PROMPT_BLOCK_VERSIONS_BY_BLOCK', 'FAILED'),
@@ -525,6 +535,7 @@ export class PromptBlocksLibSQL extends PromptBlocksStorage {
       });
       return Number(result.rows?.[0]?.count ?? 0);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'COUNT_PROMPT_BLOCK_VERSIONS', 'FAILED'),

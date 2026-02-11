@@ -21,12 +21,16 @@ import type {
   TABLE_EXPERIMENT_RESULTS,
   TABLE_PROMPT_BLOCKS,
   TABLE_PROMPT_BLOCK_VERSIONS,
+  TABLE_SCORER_DEFINITIONS,
+  TABLE_SCORER_DEFINITION_VERSIONS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
+  StorageScorerDefinitionType,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { PromptBlockVersion } from '@mastra/core/storage/domains/prompt-blocks';
+import type { ScorerDefinitionVersion } from '@mastra/core/storage/domains/scorer-definitions';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
 
@@ -130,6 +134,8 @@ export type RecordTypes = {
   [TABLE_EXPERIMENT_RESULTS]: Record<string, any>;
   [TABLE_PROMPT_BLOCKS]: StoragePromptBlockType;
   [TABLE_PROMPT_BLOCK_VERSIONS]: PromptBlockVersion;
+  [TABLE_SCORER_DEFINITIONS]: StorageScorerDefinitionType;
+  [TABLE_SCORER_DEFINITION_VERSIONS]: ScorerDefinitionVersion;
 };
 
 export type ListOptions = {

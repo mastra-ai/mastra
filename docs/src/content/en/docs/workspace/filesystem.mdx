@@ -24,10 +24,12 @@ A filesystem provider handles all file operations for a workspace:
 Available providers:
 
 - [`LocalFilesystem`](/reference/workspace/local-filesystem) - Stores files in a directory on disk
+- [`S3Filesystem`](/reference/workspace/s3-filesystem) - Stores files in Amazon S3 or S3-compatible storage (R2, MinIO)
+- [`GCSFilesystem`](/reference/workspace/gcs-filesystem) - Stores files in Google Cloud Storage
 
 :::tip
 
-`LocalFilesystem` is the simplest way to get started as it requires no external services.
+`LocalFilesystem` is the simplest way to get started as it requires no external services. For cloud storage, use `S3Filesystem` or `GCSFilesystem`.
 
 :::
 
@@ -79,5 +81,7 @@ When you configure a filesystem on a workspace, agents receive tools for reading
 ## Related
 
 - [LocalFilesystem reference](/reference/workspace/local-filesystem)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
 - [Workspace overview](/docs/workspace/overview)
 - [Sandbox](/docs/workspace/sandbox)
