@@ -111,12 +111,28 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private resolvePath(inputPath: string): string {
-    // If the input is already an absolute path, use it directly instead of
-    // stripping the leading slash and resolving relative to basePath (which
-    // would produce an incorrect nested path).
-    const absolutePath = nodePath.isAbsolute(inputPath)
-      ? nodePath.normalize(inputPath)
-      : nodePath.resolve(this._basePath, nodePath.normalize(inputPath));
+    // If the input is an absolute path that falls within (or equals) basePath,
+    // use it directly. This handles the case where callers (e.g. skills processor)
+    // pass fully-qualified paths like "/Users/foo/project/.mastracode/skills".
+    // All other paths (relative, or leading-slash convention like "/file.txt")
+    // are stripped of leading slashes and resolved against basePath as before.
+    let absolutePath: string;
+    if (nodePath.isAbsolute(inputPath)) {
+      const normalized = nodePath.normalize(inputPath);
+      const relative = nodePath.relative(this._basePath, normalized);
+      if (!relative.startsWith('..') && !nodePath.isAbsolute(relative)) {
+        // Path is within basePath — use it directly
+        absolutePath = normalized;
+      } else {
+        // Path is outside basePath — fall through to legacy behavior
+        // (strip leading slashes, resolve relative to basePath)
+        const cleanedPath = inputPath.replace(/^\/+/, '');
+        absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+      }
+    } else {
+      const cleanedPath = inputPath.replace(/^\/+/, '');
+      absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+    }
 
     if (this._contained) {
       const relative = nodePath.relative(this._basePath, absolutePath);

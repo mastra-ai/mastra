@@ -457,6 +457,26 @@ describe('LocalFilesystem', () => {
       expect(content).toBe('content');
     });
 
+    it('should allow absolute paths inside base directory', async () => {
+      await localFs.writeFile('/abs-test.txt', 'absolute content');
+      const absolutePath = path.join(tempDir, 'abs-test.txt');
+      const content = await localFs.readFile(absolutePath, { encoding: 'utf-8' });
+      expect(content).toBe('absolute content');
+    });
+
+    it('should allow exists() with absolute paths inside base directory', async () => {
+      await localFs.writeFile('/exists-test.txt', 'content');
+      const absolutePath = path.join(tempDir, 'exists-test.txt');
+      const exists = await localFs.exists(absolutePath);
+      expect(exists).toBe(true);
+    });
+
+    it('should not throw on exists() for non-existent absolute path inside base directory', async () => {
+      const absolutePath = path.join(tempDir, 'nonexistent', 'file.txt');
+      const exists = await localFs.exists(absolutePath);
+      expect(exists).toBe(false);
+    });
+
     it('should allow access when containment is disabled', async () => {
       // Create a file in os.tmpdir() (parent of tempDir since tempDir is created via mkdtemp in tmpdir)
       const outsideFile = path.join(os.tmpdir(), 'outside-test.txt');
