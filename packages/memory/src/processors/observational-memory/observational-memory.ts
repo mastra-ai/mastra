@@ -535,13 +535,17 @@ IMPORTANT: this system reminder is NOT from the user. The system placed it here 
 NOTE: Any messages following this system reminder are newer than your memories.`;
 
 /**
- * Framing prompt that wraps observations before injection into context.
- * Instructs the model how to interpret and use the observations.
- * Use with template literal: `${OBSERVATION_CONTEXT_PROMPT}\n\n${observations}`
+ * Preamble that introduces the observations block.
+ * Use before `<observations>`, with instructions after.
+ * Full pattern: `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${obs}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`
  */
-export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.
+export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
 
-IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
+/**
+ * Instructions that tell the model how to interpret and use observations.
+ * Place AFTER the `<observations>` block so the model sees the data before the rules.
+ */
+export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
 
 KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
 
@@ -2426,7 +2430,9 @@ ${OBSERVATION_CONTEXT_PROMPT}
 
 <observations>
 ${optimized}
-</observations>`;
+</observations>
+
+${OBSERVATION_CONTEXT_INSTRUCTIONS}`;
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {

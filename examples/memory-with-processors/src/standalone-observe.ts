@@ -21,6 +21,7 @@ import {
   ObservationalMemory,
   optimizeObservationsForContext,
   OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_INSTRUCTIONS,
   OBSERVATION_CONTINUATION_HINT,
 } from '@mastra/memory/processors';
 import chalk from 'chalk';
@@ -162,9 +163,19 @@ async function main() {
     const optimized = optimizeObservationsForContext(observations);
 
     if (optimized) {
-      systemPrompt = [systemPrompt, '', OBSERVATION_CONTEXT_PROMPT, optimized, '', OBSERVATION_CONTINUATION_HINT].join(
-        '\n',
-      );
+      systemPrompt = [
+        systemPrompt,
+        '',
+        OBSERVATION_CONTEXT_PROMPT,
+        '',
+        '<observations>',
+        optimized,
+        '</observations>',
+        '',
+        OBSERVATION_CONTEXT_INSTRUCTIONS,
+        '',
+        OBSERVATION_CONTINUATION_HINT,
+      ].join('\n');
     }
   }
 
