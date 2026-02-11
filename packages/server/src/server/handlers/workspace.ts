@@ -469,12 +469,7 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
 
       return {
         path: decodedPath,
-        entries: entries.map(entry => ({
-          name: entry.name,
-          type: entry.type,
-          size: entry.size,
-          mount: entry.mount,
-        })),
+        entries,
       };
     } catch (error) {
       return handleWorkspaceError(error, 'Error listing directory');

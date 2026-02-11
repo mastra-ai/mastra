@@ -135,7 +135,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         }
       }
     } catch (error) {
-      console.error(error);
+      this.mastra.getLogger()?.error('Error in stream processing', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
     } finally {
       ctx.res.end();
     }
@@ -156,7 +158,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
           body = await this.parseMultipartFormData(ctx, maxFileSize);
         } catch (error) {
-          console.error('Failed to parse multipart form data:', error);
+          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Re-throw size limit errors, let others fall through to validation
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
@@ -400,7 +404,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         try {
           params.queryParams = await this.parseQueryParams(route, params.queryParams);
         } catch (error) {
-          console.error('Error parsing query params', error);
+          this.mastra.getLogger()?.error('Error parsing query params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
             ctx.status = 400;
@@ -420,7 +426,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         try {
           params.body = await this.parseBody(route, params.body);
         } catch (error) {
-          console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
+          this.mastra.getLogger()?.error('Error parsing body', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
             ctx.status = 400;
@@ -452,7 +460,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         const result = await route.handler(handlerParams);
         await this.sendResponse(route, ctx, result, prefix);
       } catch (error) {
-        console.error('Error calling handler', error);
+        this.mastra.getLogger()?.error('Error calling handler', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          path: route.path,
+          method: route.method,
+        });
         // Check if it's an HTTPException or MastraError with a status code
         let status = 500;
         if (error && typeof error === 'object') {

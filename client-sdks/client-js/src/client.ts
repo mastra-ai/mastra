@@ -64,6 +64,8 @@ import type {
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
+  AwaitBufferStatusParams,
+  AwaitBufferStatusResponse,
   GetMemoryStatusResponse,
   ListWorkspacesResponse,
   ListVectorsResponse,
@@ -278,6 +280,25 @@ export class MastraClient extends BaseResource {
     const queryString = queryParams.toString();
     return this.request(
       `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
+    );
+  }
+
+  /**
+   * Blocks until any in-flight observational memory buffering completes, then returns the updated record
+   * @param params - Parameters containing agentId, resourceId, threadId
+   * @returns Promise containing the updated OM record after buffering completes
+   */
+  public awaitBufferStatus(params: AwaitBufferStatusParams): Promise<AwaitBufferStatusResponse> {
+    return this.request(
+      `/memory/observational-memory/buffer-status${requestContextQueryString(params.requestContext)}`,
+      {
+        method: 'POST',
+        body: {
+          agentId: params.agentId,
+          resourceId: params.resourceId,
+          threadId: params.threadId,
+        },
+      },
     );
   }
 

@@ -454,6 +454,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
       expect(toolCallSuspendedChunk.type).toBe('data-tool-call-suspended');
       expect(toolCallSuspendedChunk.id).toBe('tool-call-1');
       expect(toolCallSuspendedChunk.data).toEqual({
+        state: 'data-tool-call-suspended',
         runId: 'agent-run-id',
         toolCallId: 'tool-call-1',
         toolName: 'suspendable-tool',
@@ -461,6 +462,7 @@ describe('WorkflowStreamToAISDKTransformer', () => {
           reason: 'Waiting for user approval',
           data: { value: 42 },
         },
+        resumeSchema: undefined,
       });
     });
 

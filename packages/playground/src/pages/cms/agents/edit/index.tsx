@@ -39,6 +39,15 @@ const arrayToRecord = (arr: string[]): Record<string, { description?: string }> 
   return record;
 };
 
+// Helper to normalize tools from either string[] (legacy) or Record format
+const normalizeToolsToRecord = (
+  tools: string[] | Record<string, { description?: string }> | undefined,
+): Record<string, { description?: string }> => {
+  if (!tools) return {};
+  if (Array.isArray(tools)) return arrayToRecord(tools);
+  return { ...tools };
+};
+
 interface CmsAgentsEditFormProps {
   agent: StoredAgent;
   agentId: string;
@@ -69,12 +78,13 @@ function CmsAgentsEditForm({
     const dataSource = isViewingVersion ? versionData : agent;
 
     // Merge code-defined tools and integration tools
-    const allTools: string[] = [];
-    if (dataSource.tools && Array.isArray(dataSource.tools)) {
-      allTools.push(...dataSource.tools);
-    }
+    const toolsRecord = normalizeToolsToRecord(dataSource.tools);
     if (dataSource.integrationTools && Array.isArray(dataSource.integrationTools)) {
-      allTools.push(...dataSource.integrationTools);
+      for (const id of dataSource.integrationTools) {
+        if (!toolsRecord[id]) {
+          toolsRecord[id] = { description: undefined };
+        }
+      }
     }
 
     // Transform memory data from API format to form format
@@ -94,7 +104,7 @@ function CmsAgentsEditForm({
         provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
         name: (dataSource.model as { provider?: string; name?: string })?.name || '',
       },
-      tools: arrayToRecord(allTools),
+      tools: toolsRecord,
       workflows: arrayToRecord((dataSource.workflows as string[]) || []),
       agents: arrayToRecord((dataSource.agents as string[]) || []),
       scorers: dataSource.scorers || {},
@@ -132,7 +142,7 @@ function CmsAgentsEditForm({
     try {
       // Separate code-defined tools from integration tools
       // Integration tools are identified by checking if they exist in the agent's integrationTools array
-      const codeDefinedTools: string[] = [];
+      const codeDefinedTools: Record<string, { description?: string }> = {};
       const integrationToolIds: string[] = [];
 
       const existingIntegrationTools = new Set(agent.integrationTools || []);
@@ -142,7 +152,7 @@ function CmsAgentsEditForm({
           if (existingIntegrationTools.has(toolId)) {
             integrationToolIds.push(toolId);
           } else {
-            codeDefinedTools.push(toolId);
+            codeDefinedTools[toolId] = values.tools[toolId]!;
           }
         }
       }
@@ -152,7 +162,7 @@ function CmsAgentsEditForm({
         description: values.description,
         instructions: values.instructions,
         model: values.model,
-        tools: codeDefinedTools,
+        tools: Object.keys(codeDefinedTools).length > 0 ? codeDefinedTools : undefined,
         integrationTools: integrationToolIds,
         workflows: Object.keys(values.workflows || {}),
         agents: Object.keys(values.agents || {}),
