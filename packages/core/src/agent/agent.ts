@@ -2051,7 +2051,10 @@ export class Agent<
     return memory.recall({
       threadId,
       resourceId,
-      perPage: threadConfig.lastMessages,
+      // When lastMessages is false (disabled), don't pass perPage so recall()
+      // can detect the disabled state from config and return empty history.
+      // When lastMessages is a number, pass it as perPage to limit results.
+      ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,

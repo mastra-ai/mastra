@@ -929,4 +929,145 @@ describe('Memory', () => {
       });
     });
   });
+
+  describe('lastMessages: false (disable conversation history)', () => {
+    let memory: Memory;
+    const resourceId = 'test-resource';
+    const threadId = 'test-thread-lm-false';
+
+    beforeEach(async () => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          lastMessages: false,
+        },
+      });
+
+      // Create a thread and seed it with messages
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-1',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+          {
+            id: 'msg-2',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
+            createdAt: new Date('2024-01-01T10:01:00Z'),
+          },
+          {
+            id: 'msg-3',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'How are you?' }] },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+    });
+
+    it('recall() should return empty messages when lastMessages: false', async () => {
+      const result = await memory.recall({ threadId, resourceId });
+
+      expect(result.messages).toHaveLength(0);
+    });
+
+    it('recall() should return empty when lastMessages: false even if thread has many messages', async () => {
+      // Add more messages
+      for (let i = 4; i <= 20; i++) {
+        await memory.saveMessages({
+          messages: [
+            {
+              id: `msg-${i}`,
+              threadId,
+              resourceId,
+              role: i % 2 === 0 ? 'user' : 'assistant',
+              content: { format: 2, parts: [{ type: 'text', text: `Message ${i}` }] },
+              createdAt: new Date(`2024-01-01T10:${String(i).padStart(2, '0')}:00Z`),
+            },
+          ],
+        });
+      }
+
+      const result = await memory.recall({ threadId, resourceId });
+
+      expect(result.messages).toHaveLength(0);
+    });
+
+    it('recall() with explicit perPage override should still work', async () => {
+      // When perPage is explicitly passed (e.g., from playground listing messages),
+      // it should override the config and return messages
+      const result = await memory.recall({ threadId, resourceId, perPage: false });
+
+      // perPage: false explicitly = "no limit, return all"
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages).toHaveLength(3);
+    });
+
+    it('recall() with explicit perPage number should work', async () => {
+      const result = await memory.recall({ threadId, resourceId, perPage: 2 });
+
+      expect(result.messages).toHaveLength(2);
+    });
+
+    it('threadConfig should preserve lastMessages: false after construction', () => {
+      const config = memory.getMergedThreadConfig();
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('threadConfig should preserve lastMessages: false when merging with empty config', () => {
+      const config = memory.getMergedThreadConfig({});
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('threadConfig should preserve lastMessages: false when merging with unrelated options', () => {
+      const config = memory.getMergedThreadConfig({
+        workingMemory: { enabled: false },
+      });
+
+      expect(config.lastMessages).toBe(false);
+    });
+
+    it('per-request config can override lastMessages: false back to a number', () => {
+      const config = memory.getMergedThreadConfig({
+        lastMessages: 10,
+      });
+
+      expect(config.lastMessages).toBe(10);
+    });
+
+    it('getInputProcessors should return no MessageHistory processor when lastMessages: false', async () => {
+      const processors = await memory.getInputProcessors();
+
+      const messageHistoryProcessor = processors.find(p => p.id === 'message-history');
+      expect(messageHistoryProcessor).toBeUndefined();
+    });
+
+    it('getOutputProcessors should return no MessageHistory processor when lastMessages: false', async () => {
+      const processors = await memory.getOutputProcessors();
+
+      const messageHistoryProcessor = processors.find(p => p.id === 'message-history');
+      expect(messageHistoryProcessor).toBeUndefined();
+    });
+  });
 });
