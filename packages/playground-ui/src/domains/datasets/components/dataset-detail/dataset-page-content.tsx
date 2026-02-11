@@ -3,7 +3,7 @@ import { useDebounce } from 'use-debounce';
 import { DatasetItem } from '@mastra/client-js';
 import { useDataset } from '../../hooks/use-datasets';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
-import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
+import { useDatasetExperiments, type DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { DatasetItems } from '../items/dataset-items';
@@ -76,10 +76,18 @@ export function DatasetPageContent({
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
-  const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(datasetId);
+  const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
+  const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
+    datasetId,
+    undefined,
+    experimentsFilters,
+  );
+  // Fetch unfiltered list separately for deriving filter options (uses query cache when no filters active)
+  const { data: allExperimentsData } = useDatasetExperiments(datasetId);
   const { deleteItems } = useDatasetMutations();
 
   const experiments = experimentsData?.experiments ?? [];
+  const allExperiments = allExperimentsData?.experiments ?? [];
 
   // Item selection handlers
   const handleItemSelect = (itemId: string) => {
@@ -225,8 +233,11 @@ export function DatasetPageContent({
                 <TabContent value="experiments" className="grid overflow-auto mt-5">
                   <DatasetExperiments
                     experiments={experiments}
+                    allExperiments={allExperiments}
                     isLoading={isExperimentsLoading}
                     datasetId={datasetId}
+                    filters={experimentsFilters}
+                    onFiltersChange={setExperimentsFilters}
                   />
                 </TabContent>
               </Tabs>

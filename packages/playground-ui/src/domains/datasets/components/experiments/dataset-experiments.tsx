@@ -1,20 +1,38 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { DatasetExperiment } from '@mastra/client-js';
 import { useLinkComponent } from '@/lib/framework';
 import { DatasetExperimentsToolbar } from './dataset-experiments-toolbar';
 import { DatasetExperimentsList } from './dataset-experiments-list';
 import { Column, Columns } from '@/ds/components/Columns';
+import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 
 export interface DatasetExperimentsProps {
   experiments: DatasetExperiment[];
+  /** All experiments before filtering, used to derive target ID options */
+  allExperiments?: DatasetExperiment[];
   isLoading: boolean;
   datasetId: string;
+  filters: DatasetExperimentsFilters;
+  onFiltersChange: (filters: DatasetExperimentsFilters) => void;
 }
 
-export function DatasetExperiments({ experiments, isLoading, datasetId }: DatasetExperimentsProps) {
+export function DatasetExperiments({
+  experiments,
+  allExperiments,
+  isLoading,
+  datasetId,
+  filters,
+  onFiltersChange,
+}: DatasetExperimentsProps) {
   const [selectedExperimentIds, setSelectedExperimentIds] = useState<string[]>([]);
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const { navigate } = useLinkComponent();
+
+  // Derive unique target IDs from all (unfiltered) experiments for the filter dropdown
+  const targetIds = useMemo(() => {
+    const source = allExperiments ?? experiments;
+    return [...new Set(source.map(e => e.targetId))];
+  }, [allExperiments, experiments]);
 
   // Toggle experiment selection for comparison (max 2)
   const toggleExperimentSelection = (experimentId: string) => {
@@ -55,12 +73,15 @@ export function DatasetExperiments({ experiments, isLoading, datasetId }: Datase
     <Columns>
       <Column>
         <DatasetExperimentsToolbar
-          hasExperiments={experiments.length > 0}
+          hasExperiments={experiments.length > 0 || Object.values(filters).some(Boolean)}
           onCompareClick={() => setIsSelectionActive(true)}
           isSelectionActive={isSelectionActive}
           selectedCount={selectedExperimentIds.length}
           onExecuteCompare={handleCompare}
           onCancelSelection={handleCancelSelection}
+          filters={filters}
+          onFiltersChange={onFiltersChange}
+          targetIds={targetIds}
         />
 
         <DatasetExperimentsList
