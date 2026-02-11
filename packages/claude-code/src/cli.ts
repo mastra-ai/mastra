@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, readdirSync } from 'node:fs';
+import { resolve, join } from 'node:path';
 import { resolveConfig, getMemoryDir } from './config.js';
 import { ObservationalMemoryEngine } from './engine.js';
+import { FileStorage } from './storage.js';
 import { MastraOMPlugin } from './plugin.js';
 
 const HELP = `
@@ -214,7 +215,6 @@ function handleStatus(engine: ObservationalMemoryEngine, config: ReturnType<type
 }
 
 function handleReset(config: ReturnType<typeof resolveConfig>) {
-  const { FileStorage } = require('./storage.js') as typeof import('./storage.js');
   const storage = new FileStorage(config);
 
   storage.saveState({
@@ -276,26 +276,23 @@ async function handlePlugin(config: ReturnType<typeof resolveConfig>) {
 }
 
 function handleInit(config: ReturnType<typeof resolveConfig>) {
-  const { mkdirSync, writeFileSync, existsSync: exists } = require('node:fs') as typeof import('node:fs');
-  const { join } = require('node:path') as typeof import('node:path');
-
   const memDir = getMemoryDir(config);
 
   // Create memory directory
-  if (!exists(memDir)) {
+  if (!existsSync(memDir)) {
     mkdirSync(memDir, { recursive: true });
     console.log(`Created memory directory: ${memDir}`);
   }
 
   // Create history directory
   const historyDir = join(memDir, 'history');
-  if (!exists(historyDir)) {
+  if (!existsSync(historyDir)) {
     mkdirSync(historyDir, { recursive: true });
   }
 
   // Create config file
   const configPath = join(memDir, 'config.json');
-  if (!exists(configPath)) {
+  if (!existsSync(configPath)) {
     writeFileSync(configPath, JSON.stringify({
       observationThreshold: config.observationThreshold,
       reflectionThreshold: config.reflectionThreshold,
@@ -306,7 +303,7 @@ function handleInit(config: ReturnType<typeof resolveConfig>) {
 
   // Create .gitignore for memory directory
   const gitignorePath = join(memDir, '.gitignore');
-  if (!exists(gitignorePath)) {
+  if (!existsSync(gitignorePath)) {
     writeFileSync(gitignorePath, `# Mastra Observational Memory state
 state.json
 observations.md
@@ -332,10 +329,9 @@ cat .mastra/memory/observations.md
 Memory files are in \`.mastra/memory/\`. The \`observations.md\` file contains your accumulated observations about this project and user.
 `;
 
-  if (exists(claudeMdPath)) {
+  if (existsSync(claudeMdPath)) {
     const content = readFileSync(claudeMdPath, 'utf-8');
     if (!content.includes('Observational Memory')) {
-      const { appendFileSync } = require('node:fs') as typeof import('node:fs');
       appendFileSync(claudeMdPath, '\n' + omSnippet);
       console.log('Added Observational Memory section to CLAUDE.md');
     } else {
@@ -348,13 +344,12 @@ Memory files are in \`.mastra/memory/\`. The \`observations.md\` file contains y
 
   // Create/update .claude/settings.json
   const claudeSettingsDir = join(process.cwd(), '.claude');
-  const claudeSettingsPath = join(claudeSettingsDir, 'settings.json');
 
-  if (!exists(claudeSettingsDir)) {
+  if (!existsSync(claudeSettingsDir)) {
     mkdirSync(claudeSettingsDir, { recursive: true });
   }
 
-  console.log('\n✓ Mastra Observational Memory initialized');
+  console.log('\nMastra Observational Memory initialized');
   console.log('\nNext steps:');
   console.log('  1. Run `mastra-om status` to check memory state');
   console.log('  2. Start a Claude Code session — observations will be loaded automatically');

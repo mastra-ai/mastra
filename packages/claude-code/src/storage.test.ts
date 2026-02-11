@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { FileStorage } from './storage.js';
@@ -75,7 +75,6 @@ describe('FileStorage', () => {
     expect(existsSync(historyDir)).toBe(true);
 
     // Check that a file was created in history
-    const { readdirSync } = require('node:fs') as typeof import('node:fs');
     const files = readdirSync(historyDir);
     expect(files.length).toBe(1);
     expect(files[0]).toMatch(/^gen-0-/);
