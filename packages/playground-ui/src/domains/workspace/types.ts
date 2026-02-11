@@ -21,7 +21,6 @@ export interface WorkspaceFilesystemInfo {
   provider: string;
   status?: string;
   readOnly?: boolean;
-  basePath?: string;
   metadata?: Record<string, unknown>;
 }
 

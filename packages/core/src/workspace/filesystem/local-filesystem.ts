@@ -621,15 +621,15 @@ export class LocalFilesystem extends MastraFilesystem {
     // LocalFilesystem doesn't clean up files on destroy by default
   }
 
-  getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo<{ basePath: string; contained: boolean }> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
       readOnly: this.readOnly,
-      basePath: this.basePath,
       status: this.status,
       metadata: {
+        basePath: this.basePath,
         contained: this._contained,
       },
     };

@@ -336,7 +336,6 @@ export const GET_WORKSPACE_ROUTE = createRoute({
               provider: fsInfo.provider,
               status: fsInfo.status,
               readOnly: fsInfo.readOnly,
-              basePath: fsInfo.basePath,
               metadata: fsInfo.metadata,
             }
           : undefined,

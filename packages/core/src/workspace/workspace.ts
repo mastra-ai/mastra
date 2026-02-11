@@ -712,7 +712,7 @@ export class Workspace {
         provider: this._fs.provider,
         name: fsInfo?.name ?? this._fs.name,
         icon: fsInfo?.icon,
-        basePath: fsInfo?.basePath ?? this._fs.basePath,
+        basePath: (fsInfo?.metadata?.basePath as string) ?? this._fs.basePath,
         readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
         status: fsInfo?.status,
         storage: fsInfo?.storage,
