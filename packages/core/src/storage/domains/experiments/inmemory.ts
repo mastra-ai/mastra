@@ -35,10 +35,14 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       datasetVersion: input.datasetVersion,
       targetType: input.targetType,
       targetId: input.targetId,
+      name: input.name,
+      description: input.description,
+      metadata: input.metadata,
       status: 'pending',
       totalItems: input.totalItems,
       succeededCount: 0,
       failedCount: 0,
+      skippedCount: 0,
       startedAt: null,
       completedAt: null,
       createdAt: now,
@@ -58,8 +62,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       status: input.status ?? existing.status,
       succeededCount: input.succeededCount ?? existing.succeededCount,
       failedCount: input.failedCount ?? existing.failedCount,
+      skippedCount: input.skippedCount ?? existing.skippedCount,
       startedAt: input.startedAt ?? existing.startedAt,
       completedAt: input.completedAt ?? existing.completedAt,
+      name: input.name ?? existing.name,
+      description: input.description ?? existing.description,
+      metadata: input.metadata ?? existing.metadata,
       updatedAt: new Date(),
     };
     this.db.experiments.set(input.id, updated);
@@ -124,7 +132,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       completedAt: input.completedAt,
       retryCount: input.retryCount,
       traceId: input.traceId ?? null,
-      scores: input.scores ?? [],
+      itemVersionNumber: input.itemVersionNumber,
       createdAt: now,
     };
     this.db.experimentResults.set(result.id, result);

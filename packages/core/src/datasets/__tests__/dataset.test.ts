@@ -205,7 +205,7 @@ describe('Dataset', () => {
   // 15. listItems — with version
   it('listItems with version returns DatasetItem[]', async () => {
     const item = await ds.addItem({ input: { a: 1 } });
-    const result = await ds.listItems({ version: item.version });
+    const result = await ds.listItems({ version: item.datasetVersion });
     // When version is set, returns DatasetItem[] (from getItemsByVersion)
     expect(Array.isArray(result)).toBe(true);
     expect((result as any[]).length).toBeGreaterThanOrEqual(1);

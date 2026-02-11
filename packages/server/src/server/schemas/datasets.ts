@@ -109,7 +109,7 @@ export const datasetResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   inputSchema: z.record(z.unknown()).optional().nullable(),
   groundTruthSchema: z.record(z.unknown()).optional().nullable(),
-  version: z.coerce.date(),
+  lastModifiedAt: z.coerce.date(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -118,7 +118,7 @@ export const datasetResponseSchema = z.object({
 export const datasetItemResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string(),
-  version: z.coerce.date(),
+  datasetVersion: z.coerce.date(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -133,10 +133,14 @@ export const experimentResponseSchema = z.object({
   datasetVersion: z.coerce.date(),
   targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']),
   targetId: z.string(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),
   succeededCount: z.number(),
   failedCount: z.number(),
+  skippedCount: z.number(),
   startedAt: z.coerce.date().nullable(),
   completedAt: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
@@ -158,16 +162,22 @@ export const experimentResultResponseSchema = z.object({
   experimentId: z.string(),
   itemId: z.string(),
   itemVersion: z.coerce.date(),
+  itemVersionNumber: z.number(),
   input: z.unknown(),
   output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
   latency: z.number(),
-  error: z.string().nullable(),
+  error: z
+    .object({
+      message: z.string(),
+      stack: z.string().optional(),
+      code: z.string().optional(),
+    })
+    .nullable(),
   startedAt: z.coerce.date(),
   completedAt: z.coerce.date(),
   retryCount: z.number(),
   traceId: z.string().nullable(),
-  scores: z.array(scorerResultSchema),
   createdAt: z.coerce.date(),
 });
 

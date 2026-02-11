@@ -241,7 +241,24 @@ export const LIST_ITEMS_ROUTE = createRoute({
       });
       // listItems returns different shapes depending on version
       if (Array.isArray(result)) {
-        return { items: result, pagination: { total: result.length, page: 0, perPage: result.length, hasMore: false } };
+        // When version is specified, result is DatasetItemVersion[]. Normalize to DatasetItem shape for API.
+        const items = result.map(v => {
+          if ('snapshot' in v && 'itemId' in v) {
+            const snap = (v.snapshot ?? {}) as Record<string, unknown>;
+            return {
+              id: v.itemId,
+              datasetId: v.datasetId,
+              datasetVersion: v.datasetVersion,
+              input: snap.input,
+              groundTruth: snap.groundTruth,
+              metadata: snap.metadata as Record<string, unknown> | undefined,
+              createdAt: v.createdAt,
+              updatedAt: v.createdAt,
+            };
+          }
+          return v;
+        });
+        return { items, pagination: { total: items.length, page: 0, perPage: items.length, hasMore: false } };
       }
       return { items: result.items, pagination: result.pagination };
     } catch (error) {

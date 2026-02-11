@@ -49,7 +49,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       metadata: input.metadata,
       inputSchema: input.inputSchema,
       groundTruthSchema: input.groundTruthSchema,
-      version: now, // Timestamp-based versioning
+      lastModifiedAt: now, // Timestamp-based versioning
       createdAt: now,
       updatedAt: now,
     };
@@ -81,7 +81,17 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   async deleteDataset({ id }: { id: string }): Promise<void> {
-    // Delete all items for this dataset first
+    // Cascade: delete item versions, dataset versions, items, then dataset
+    for (const [vId, v] of this.db.itemVersions) {
+      if (v.datasetId === id) {
+        this.db.itemVersions.delete(vId);
+      }
+    }
+    for (const [vId, v] of this.db.datasetVersions) {
+      if (v.datasetId === id) {
+        this.db.datasetVersions.delete(vId);
+      }
+    }
     for (const [itemId, item] of this.db.datasetItems) {
       if (item.datasetId === id) {
         this.db.datasetItems.delete(itemId);
@@ -122,7 +132,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     const now = new Date();
     this.db.datasets.set(args.datasetId, {
       ...dataset,
-      version: now,
+      lastModifiedAt: now,
       updatedAt: now,
     });
 
@@ -130,7 +140,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     const item: DatasetItem = {
       id,
       datasetId: args.datasetId,
-      version: now, // Item stores the version timestamp when added
+      datasetVersion: now, // Item stores the version timestamp when added
       input: args.input,
       groundTruth: args.groundTruth,
       metadata: args.metadata,
@@ -159,13 +169,13 @@ export class DatasetsInMemory extends DatasetsStorage {
     const now = new Date();
     this.db.datasets.set(args.datasetId, {
       ...dataset,
-      version: now,
+      lastModifiedAt: now,
       updatedAt: now,
     });
 
     const updated: DatasetItem = {
       ...existing,
-      version: now, // Update item's version timestamp
+      datasetVersion: now, // Update item's version timestamp
       input: args.input ?? existing.input,
       groundTruth: args.groundTruth ?? existing.groundTruth,
       metadata: args.metadata ?? existing.metadata,
@@ -193,7 +203,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     const now = new Date();
     this.db.datasets.set(datasetId, {
       ...dataset,
-      version: now,
+      lastModifiedAt: now,
       updatedAt: now,
     });
 
@@ -235,7 +245,7 @@ export class DatasetsInMemory extends DatasetsStorage {
           items.push({
             id: v.itemId,
             datasetId: v.datasetId,
-            version: new Date(v.datasetVersion),
+            datasetVersion: new Date(v.datasetVersion),
             input: snapshot.input ?? originalItem?.input,
             groundTruth: snapshot.groundTruth ?? originalItem?.groundTruth,
             metadata: snapshot.metadata ?? originalItem?.metadata,
@@ -282,7 +292,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     };
   }
 
-  async getItemsByVersion({ datasetId, version }: { datasetId: string; version: Date }): Promise<DatasetItem[]> {
+  async getItemsByVersion({ datasetId, version }: { datasetId: string; version: Date }): Promise<DatasetItemVersion[]> {
     // Query itemVersions for historical state at or before this version timestamp
     const versionTime = version.getTime();
 
@@ -300,21 +310,25 @@ export class DatasetsInMemory extends DatasetsStorage {
       }
     }
 
-    // Convert version snapshots to DatasetItem format, excluding deleted items
-    const items: DatasetItem[] = [];
+    // Return DatasetItemVersion objects directly, excluding deleted items
+    const items: DatasetItemVersion[] = [];
     for (const v of latestByItem.values()) {
       if (!v.isDeleted) {
         const originalItem = this.db.datasetItems.get(v.itemId);
         const snapshot = v.snapshot ?? {};
         items.push({
-          id: v.itemId,
+          id: v.id,
+          itemId: v.itemId,
           datasetId: v.datasetId,
-          version: new Date(v.datasetVersion),
-          input: snapshot.input ?? originalItem?.input,
-          groundTruth: snapshot.groundTruth ?? originalItem?.groundTruth,
-          metadata: snapshot.metadata ?? originalItem?.metadata,
+          versionNumber: v.versionNumber,
+          datasetVersion: new Date(v.datasetVersion),
+          snapshot: {
+            input: snapshot.input ?? originalItem?.input,
+            groundTruth: snapshot.groundTruth ?? originalItem?.groundTruth,
+            metadata: snapshot.metadata ?? originalItem?.metadata,
+          },
+          isDeleted: false,
           createdAt: originalItem?.createdAt ?? new Date(v.createdAt),
-          updatedAt: new Date(v.datasetVersion),
         });
       }
     }
@@ -427,8 +441,8 @@ export class DatasetsInMemory extends DatasetsStorage {
     };
   }
 
-  // Bulk operations
-  async bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+  // Bulk operations — raw storage only, base class handles validation + versioning
+  protected async _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
     const dataset = this.db.datasets.get(input.datasetId);
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
@@ -442,7 +456,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       const item: DatasetItem = {
         id,
         datasetId: input.datasetId,
-        version: now,
+        datasetVersion: now,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         metadata: itemInput.metadata,
@@ -451,36 +465,19 @@ export class DatasetsInMemory extends DatasetsStorage {
       };
       this.db.datasetItems.set(id, item);
       items.push(item);
-
-      // Create item version
-      await this.createItemVersion({
-        itemId: id,
-        datasetId: input.datasetId,
-        versionNumber: 1,
-        datasetVersion: now,
-        snapshot: {
-          input: item.input,
-          groundTruth: item.groundTruth,
-          metadata: item.metadata,
-        },
-        isDeleted: false,
-      });
     }
 
-    // Update dataset version once for entire bulk operation
+    // Update dataset lastModifiedAt once for entire bulk operation
     this.db.datasets.set(input.datasetId, {
       ...dataset,
-      version: now,
+      lastModifiedAt: now,
       updatedAt: now,
     });
-
-    // Single dataset version entry for bulk
-    await this.createDatasetVersion(input.datasetId, now);
 
     return items;
   }
 
-  async bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+  protected async _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
     const dataset = this.db.datasets.get(input.datasetId);
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
@@ -491,37 +488,14 @@ export class DatasetsInMemory extends DatasetsStorage {
     for (const itemId of input.itemIds) {
       const item = this.db.datasetItems.get(itemId);
       if (!item || item.datasetId !== input.datasetId) continue;
-
-      // Get latest version number
-      const latestVersion = await this.getLatestItemVersion(itemId);
-      const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-      // Create tombstone version
-      await this.createItemVersion({
-        itemId,
-        datasetId: input.datasetId,
-        versionNumber: nextVersionNumber,
-        datasetVersion: now,
-        snapshot: {
-          input: item.input,
-          groundTruth: item.groundTruth,
-          metadata: item.metadata,
-        },
-        isDeleted: true,
-      });
-
-      // Delete from items
       this.db.datasetItems.delete(itemId);
     }
 
-    // Update dataset version once for entire bulk operation
+    // Update dataset lastModifiedAt once for entire bulk operation
     this.db.datasets.set(input.datasetId, {
       ...dataset,
-      version: now,
+      lastModifiedAt: now,
       updatedAt: now,
     });
-
-    // Single dataset version entry for bulk
-    await this.createDatasetVersion(input.datasetId, now);
   }
 }

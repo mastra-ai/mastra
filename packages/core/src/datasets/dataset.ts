@@ -192,6 +192,7 @@ export class Dataset {
     perPage?: number;
   }): Promise<
     | DatasetItem[]
+    | DatasetItemVersion[]
     | { items: DatasetItem[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }
   > {
     const store = await this.#getDatasetsStore();
@@ -306,10 +307,13 @@ export class Dataset {
 
     const run = await experimentsStore.createExperiment({
       datasetId: this.id,
-      datasetVersion: dataset.version,
+      datasetVersion: dataset.lastModifiedAt,
       targetType: config.targetType ?? 'agent',
       targetId: config.targetId ?? 'inline',
       totalItems: 0,
+      name: config.name,
+      description: config.description,
+      metadata: config.metadata,
     });
 
     const experimentId = run.id;

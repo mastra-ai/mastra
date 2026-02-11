@@ -242,15 +242,15 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   inputSchema: { type: 'jsonb', nullable: true },
   groundTruthSchema: { type: 'jsonb', nullable: true },
-  version: { type: 'timestamp', nullable: false },
+  lastModifiedAt: { type: 'timestamp', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  datasetId: { type: 'text', nullable: false },
-  version: { type: 'timestamp', nullable: false },
+  datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
+  datasetVersion: { type: 'timestamp', nullable: false },
   input: { type: 'jsonb', nullable: false },
   groundTruth: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
@@ -260,18 +260,18 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
 
 export const DATASET_ITEM_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  itemId: { type: 'text', nullable: false },
-  datasetId: { type: 'text', nullable: false },
+  itemId: { type: 'text', nullable: false, references: { table: 'mastra_dataset_items', column: 'id' } },
+  datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   versionNumber: { type: 'integer', nullable: false },
   datasetVersion: { type: 'timestamp', nullable: false },
-  snapshot: { type: 'jsonb', nullable: true },
+  snapshot: { type: 'jsonb', nullable: false },
   isDeleted: { type: 'boolean', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
 };
 
 export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  datasetId: { type: 'text', nullable: false },
+  datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   version: { type: 'timestamp', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
 };
@@ -279,7 +279,10 @@ export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
 // Experiment schemas
 export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  datasetId: { type: 'text', nullable: false },
+  name: { type: 'text', nullable: true },
+  description: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'timestamp', nullable: false },
   targetType: { type: 'text', nullable: false },
   targetId: { type: 'text', nullable: false },
@@ -287,6 +290,7 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   totalItems: { type: 'integer', nullable: false },
   succeededCount: { type: 'integer', nullable: false },
   failedCount: { type: 'integer', nullable: false },
+  skippedCount: { type: 'integer', nullable: false },
   startedAt: { type: 'timestamp', nullable: true },
   completedAt: { type: 'timestamp', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
@@ -295,19 +299,19 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
 
 export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  experimentId: { type: 'text', nullable: false },
-  itemId: { type: 'text', nullable: false },
+  experimentId: { type: 'text', nullable: false, references: { table: 'mastra_experiments', column: 'id' } },
+  itemId: { type: 'text', nullable: false, references: { table: 'mastra_dataset_items', column: 'id' } },
   itemVersion: { type: 'timestamp', nullable: false },
+  itemVersionNumber: { type: 'integer', nullable: false },
   input: { type: 'jsonb', nullable: false },
   output: { type: 'jsonb', nullable: true },
   groundTruth: { type: 'jsonb', nullable: true },
   latency: { type: 'integer', nullable: false },
-  error: { type: 'text', nullable: true },
+  error: { type: 'jsonb', nullable: true },
   startedAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: false },
   retryCount: { type: 'integer', nullable: false },
   traceId: { type: 'text', nullable: true },
-  scores: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 

@@ -1278,7 +1278,7 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
-  version: Date;
+  lastModifiedAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1286,7 +1286,7 @@ export interface DatasetRecord {
 export interface DatasetItem {
   id: string;
   datasetId: string;
-  version: Date;
+  datasetVersion: Date;
   input: unknown;
   groundTruth?: unknown;
   metadata?: Record<string, unknown>;
@@ -1376,12 +1376,12 @@ export interface CreateItemVersionInput {
   datasetId: string;
   versionNumber: number;
   datasetVersion: Date;
-  snapshot?: {
+  snapshot: {
     input?: unknown;
     groundTruth?: unknown;
     metadata?: Record<string, unknown>;
   };
-  isDeleted?: boolean;
+  isDeleted: boolean;
 }
 
 export interface ListItemVersionsInput {
@@ -1426,6 +1426,9 @@ export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface Experiment {
   id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   datasetId: string;
   datasetVersion: Date;
   targetType: TargetType;
@@ -1434,6 +1437,7 @@ export interface Experiment {
   totalItems: number;
   succeededCount: number;
   failedCount: number;
+  skippedCount: number;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -1445,27 +1449,24 @@ export interface ExperimentResult {
   experimentId: string;
   itemId: string;
   itemVersion: Date;
+  itemVersionNumber: number;
   input: unknown;
-  output: unknown;
-  groundTruth: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
   latency: number;
-  error: string | null;
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
   traceId: string | null;
-  scores: Array<{
-    scorerId: string;
-    scorerName: string;
-    score: number | null;
-    reason: string | null;
-    error: string | null;
-  }>;
   createdAt: Date;
 }
 
 export interface CreateExperimentInput {
   id?: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   datasetId: string;
   datasetVersion: Date;
   targetType: TargetType;
@@ -1475,9 +1476,13 @@ export interface CreateExperimentInput {
 
 export interface UpdateExperimentInput {
   id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   status?: ExperimentStatus;
   succeededCount?: number;
   failedCount?: number;
+  skippedCount?: number;
   startedAt?: Date;
   completedAt?: Date;
 }
@@ -1487,22 +1492,16 @@ export interface AddExperimentResultInput {
   experimentId: string;
   itemId: string;
   itemVersion: Date;
+  itemVersionNumber: number;
   input: unknown;
-  output: unknown;
-  groundTruth: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
   latency: number;
-  error: string | null;
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
   traceId?: string | null;
-  scores?: Array<{
-    scorerId: string;
-    scorerName: string;
-    score: number | null;
-    reason: string | null;
-    error: string | null;
-  }>;
 }
 
 export interface ListExperimentsInput {

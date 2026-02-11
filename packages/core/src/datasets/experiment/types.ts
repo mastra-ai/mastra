@@ -66,6 +66,10 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   experimentId?: string;
   /** Experiment name (used for display / grouping) */
   name?: string;
+  /** Experiment description */
+  description?: string;
+  /** Arbitrary metadata for the experiment */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -93,8 +97,8 @@ export interface ItemResult {
   groundTruth: unknown | null;
   /** Execution time in milliseconds */
   latency: number;
-  /** Error message if execution failed */
-  error: string | null;
+  /** Structured error if execution failed */
+  error: { message: string; stack?: string; code?: string } | null;
   /** When execution started */
   startedAt: Date;
   /** When execution completed */

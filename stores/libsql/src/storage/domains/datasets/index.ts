@@ -75,7 +75,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       inputSchema: row.inputSchema ? safelyParseJSON(row.inputSchema) : undefined,
       groundTruthSchema: row.groundTruthSchema ? safelyParseJSON(row.groundTruthSchema) : undefined,
-      version: ensureDate(row.version)!, // Timestamp-based versioning
+      lastModifiedAt: ensureDate(row.lastModifiedAt)!, // Timestamp-based versioning
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -86,7 +86,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
-      version: ensureDate(row.version)!, // Timestamp when item was added/modified
+      datasetVersion: ensureDate(row.datasetVersion)!, // Timestamp when item was added/modified
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
@@ -136,7 +136,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
           metadata: input.metadata, // jsonb serialization handled by prepareStatement
           inputSchema: input.inputSchema ?? null,
           groundTruthSchema: input.groundTruthSchema ?? null,
-          version: nowIso, // Timestamp-based versioning
+          lastModifiedAt: nowIso, // Timestamp-based versioning
           createdAt: nowIso,
           updatedAt: nowIso,
         },
@@ -149,7 +149,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         metadata: input.metadata,
         inputSchema: input.inputSchema,
         groundTruthSchema: input.groundTruthSchema,
-        version: now, // Return as Date
+        lastModifiedAt: now, // Return as Date
         createdAt: now,
         updatedAt: now,
       };
@@ -252,7 +252,15 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async deleteDataset({ id }: { id: string }): Promise<void> {
     try {
-      // Delete items first (foreign key semantics)
+      // Cascade: delete item versions, dataset versions, items, then dataset
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_DATASET_ITEM_VERSIONS} WHERE datasetId = ?`,
+        args: [id],
+      });
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`,
+        args: [id],
+      });
       await this.#client.execute({
         sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`,
         args: [id],
@@ -330,7 +338,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
       // Update dataset version timestamp
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASETS} SET version = ?, updatedAt = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_DATASETS} SET lastModifiedAt = ?, updatedAt = ? WHERE id = ?`,
         args: [nowIso, nowIso, args.datasetId],
       });
 
@@ -342,7 +350,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         record: {
           id,
           datasetId: args.datasetId,
-          version: nowIso, // Item stores the version timestamp when added
+          datasetVersion: nowIso, // Item stores the version timestamp when added
           input: args.input,
           groundTruth: args.groundTruth,
           metadata: args.metadata,
@@ -354,7 +362,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       return {
         id,
         datasetId: args.datasetId,
-        version: now, // Return as Date
+        datasetVersion: now, // Return as Date
         input: args.input,
         groundTruth: args.groundTruth,
         metadata: args.metadata,
@@ -400,12 +408,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
       // Update dataset version timestamp
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASETS} SET version = ?, updatedAt = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_DATASETS} SET lastModifiedAt = ?, updatedAt = ? WHERE id = ?`,
         args: [nowIso, nowIso, args.datasetId],
       });
 
       // Update item with new version timestamp
-      const updates: string[] = ['version = ?', 'updatedAt = ?'];
+      const updates: string[] = ['datasetVersion = ?', 'updatedAt = ?'];
       const values: InValue[] = [nowIso, nowIso];
 
       if (args.input !== undefined) {
@@ -430,7 +438,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
       return {
         ...existing,
-        version: now, // Return as Date
+        datasetVersion: now, // Return as Date
         input: args.input ?? existing.input,
         groundTruth: args.groundTruth ?? existing.groundTruth,
         metadata: args.metadata ?? existing.metadata,
@@ -472,9 +480,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
       const nowIso = new Date().toISOString();
 
-      // Update dataset version timestamp
+      // Update dataset lastModifiedAt timestamp
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASETS} SET version = ?, updatedAt = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_DATASETS} SET lastModifiedAt = ?, updatedAt = ? WHERE id = ?`,
         args: [nowIso, nowIso, datasetId],
       });
 
@@ -591,7 +599,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             return {
               id: row.itemId as string,
               datasetId: row.datasetId as string,
-              version: ensureDate(row.datasetVersion as string)!,
+              datasetVersion: ensureDate(row.datasetVersion as string)!,
               input: snapshot.input ?? null, // Ensure input is never undefined
               groundTruth: snapshot.groundTruth,
               metadata: snapshot.metadata,
@@ -669,7 +677,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async getItemsByVersion({ datasetId, version }: { datasetId: string; version: Date }): Promise<DatasetItem[]> {
+  async getItemsByVersion({ datasetId, version }: { datasetId: string; version: Date }): Promise<DatasetItemVersion[]> {
     try {
       // Query itemVersions for historical state at or before this version timestamp
       const versionIso = version.toISOString();
@@ -694,19 +702,23 @@ export class DatasetsLibSQL extends DatasetsStorage {
         args: [datasetId, versionIso],
       });
 
-      // Transform version snapshots to DatasetItem format
+      // Return DatasetItemVersion objects directly
       return (
         result.rows?.map(row => {
           const snapshot = safelyParseJSON(row.snapshot as string) ?? {};
           return {
-            id: row.itemId as string,
+            id: row.id as string,
+            itemId: row.itemId as string,
             datasetId: row.datasetId as string,
-            version: ensureDate(row.datasetVersion as string)!,
-            input: snapshot.input ?? null, // Ensure input is never undefined
-            groundTruth: snapshot.groundTruth,
-            metadata: snapshot.metadata,
+            versionNumber: row.versionNumber as number,
+            datasetVersion: ensureDate(row.datasetVersion as string)!,
+            snapshot: {
+              input: snapshot.input,
+              groundTruth: snapshot.groundTruth,
+              metadata: snapshot.metadata,
+            },
+            isDeleted: false, // Already filtered by WHERE isDeleted = 0
             createdAt: ensureDate(row.createdAt as string)!,
-            updatedAt: ensureDate(row.datasetVersion as string)!,
           };
         }) ?? []
       );
@@ -939,8 +951,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  // Bulk operations
-  async bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+  // Bulk operations — raw storage only, base class handles validation + versioning
+  protected async _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
     try {
       const dataset = await this.getDatasetById({ id: input.datasetId });
       if (!dataset) {
@@ -964,7 +976,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
           record: {
             id,
             datasetId: input.datasetId,
-            version: nowIso,
+            datasetVersion: nowIso,
             input: itemInput.input,
             groundTruth: itemInput.groundTruth,
             metadata: itemInput.metadata,
@@ -976,7 +988,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const item: DatasetItem = {
           id,
           datasetId: input.datasetId,
-          version: now,
+          datasetVersion: now,
           input: itemInput.input,
           groundTruth: itemInput.groundTruth,
           metadata: itemInput.metadata,
@@ -984,30 +996,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
           updatedAt: now,
         };
         items.push(item);
-
-        // Create item version
-        await this.createItemVersion({
-          itemId: id,
-          datasetId: input.datasetId,
-          versionNumber: 1,
-          datasetVersion: now,
-          snapshot: {
-            input: item.input,
-            groundTruth: item.groundTruth,
-            metadata: item.metadata,
-          },
-          isDeleted: false,
-        });
       }
 
-      // Update dataset version once for entire bulk operation
+      // Update dataset lastModifiedAt once for entire bulk operation
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASETS} SET version = ?, updatedAt = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_DATASETS} SET lastModifiedAt = ?, updatedAt = ? WHERE id = ?`,
         args: [nowIso, nowIso, input.datasetId],
       });
-
-      // Single dataset version entry for bulk
-      await this.createDatasetVersion(input.datasetId, now);
 
       return items;
     } catch (error) {
@@ -1023,7 +1018,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+  protected async _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
     try {
       const dataset = await this.getDatasetById({ id: input.datasetId });
       if (!dataset) {
@@ -1042,39 +1037,18 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const item = await this.getItemById({ id: itemId });
         if (!item || item.datasetId !== input.datasetId) continue;
 
-        // Get latest version number
-        const latestVersion = await this.getLatestItemVersion(itemId);
-        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-        // Create tombstone version
-        await this.createItemVersion({
-          itemId,
-          datasetId: input.datasetId,
-          versionNumber: nextVersionNumber,
-          datasetVersion: now,
-          snapshot: {
-            input: item.input,
-            groundTruth: item.groundTruth,
-            metadata: item.metadata,
-          },
-          isDeleted: true,
-        });
-
-        // Delete from items
+        // Delete from items table
         await this.#client.execute({
           sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE id = ?`,
           args: [itemId],
         });
       }
 
-      // Update dataset version once for entire bulk operation
+      // Update dataset lastModifiedAt once for entire bulk operation
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASETS} SET version = ?, updatedAt = ? WHERE id = ?`,
+        sql: `UPDATE ${TABLE_DATASETS} SET lastModifiedAt = ?, updatedAt = ? WHERE id = ?`,
         args: [nowIso, nowIso, input.datasetId],
       });
-
-      // Single dataset version entry for bulk
-      await this.createDatasetVersion(input.datasetId, now);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

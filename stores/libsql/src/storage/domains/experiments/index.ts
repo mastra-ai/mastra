@@ -59,10 +59,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       datasetVersion: ensureDate(row.datasetVersion as string | Date)!,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
+      name: (row.name as string) ?? undefined,
+      description: (row.description as string) ?? undefined,
+      metadata: row.metadata ? safelyParseJSON(row.metadata as string) : undefined,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems as number,
       succeededCount: row.succeededCount as number,
       failedCount: row.failedCount as number,
+      skippedCount: (row.skippedCount as number) ?? 0,
       startedAt: row.startedAt ? ensureDate(row.startedAt as string | Date)! : null,
       completedAt: row.completedAt ? ensureDate(row.completedAt as string | Date)! : null,
       createdAt: ensureDate(row.createdAt as string | Date)!,
@@ -77,16 +81,16 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       experimentId: row.experimentId as string,
       itemId: row.itemId as string,
       itemVersion: ensureDate(row.itemVersion as string | Date)!,
+      itemVersionNumber: (row.itemVersionNumber as number) ?? 0,
       input: safelyParseJSON(row.input as string),
       output: row.output ? safelyParseJSON(row.output as string) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth as string) : null,
       latency: row.latency as number,
-      error: row.error as string | null,
+      error: row.error ? safelyParseJSON(row.error as string) : null,
       startedAt: ensureDate(row.startedAt as string | Date)!,
       completedAt: ensureDate(row.completedAt as string | Date)!,
       retryCount: row.retryCount as number,
       traceId: (row.traceId as string | null) ?? null,
-      scores: row.scores ? safelyParseJSON(row.scores as string) : [],
       createdAt: ensureDate(row.createdAt as string | Date)!,
     };
   }
@@ -106,10 +110,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           datasetVersion: input.datasetVersion.toISOString(),
           targetType: input.targetType,
           targetId: input.targetId,
+          name: input.name ?? null,
+          description: input.description ?? null,
+          metadata: input.metadata ? JSON.stringify(input.metadata) : null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
           failedCount: 0,
+          skippedCount: 0,
           startedAt: null,
           completedAt: null,
           createdAt: nowIso,
@@ -123,10 +131,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         datasetVersion: input.datasetVersion,
         targetType: input.targetType,
         targetId: input.targetId,
+        name: input.name,
+        description: input.description,
+        metadata: input.metadata,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
         failedCount: 0,
+        skippedCount: 0,
         startedAt: null,
         completedAt: null,
         createdAt: now,
@@ -179,6 +191,22 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (input.completedAt !== undefined) {
         updates.push('completedAt = ?');
         values.push(input.completedAt?.toISOString() ?? null);
+      }
+      if (input.skippedCount !== undefined) {
+        updates.push('skippedCount = ?');
+        values.push(input.skippedCount);
+      }
+      if (input.name !== undefined) {
+        updates.push('name = ?');
+        values.push(input.name);
+      }
+      if (input.description !== undefined) {
+        updates.push('description = ?');
+        values.push(input.description);
+      }
+      if (input.metadata !== undefined) {
+        updates.push('metadata = ?');
+        values.push(JSON.stringify(input.metadata));
       }
 
       values.push(input.id);
@@ -318,7 +346,6 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date();
       const nowIso = now.toISOString();
-      const scores = input.scores ?? [];
 
       await this.#db.insert({
         tableName: TABLE_EXPERIMENT_RESULTS,
@@ -327,16 +354,16 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           experimentId: input.experimentId,
           itemId: input.itemId,
           itemVersion: input.itemVersion.toISOString(),
+          itemVersionNumber: input.itemVersionNumber,
           input: input.input,
           output: input.output,
           groundTruth: input.groundTruth,
           latency: input.latency,
-          error: input.error,
+          error: input.error ? JSON.stringify(input.error) : null,
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
-          scores: JSON.stringify(scores),
           createdAt: nowIso,
         },
       });
@@ -346,6 +373,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemVersion: input.itemVersion,
+        itemVersionNumber: input.itemVersionNumber,
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
@@ -355,7 +383,6 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         traceId: input.traceId ?? null,
-        scores,
         createdAt: now,
       };
     } catch (error) {

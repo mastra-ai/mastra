@@ -129,7 +129,7 @@ export abstract class DatasetsStorage extends StorageDomain {
     const item = await this._doAddItem(args);
 
     // Create version records for history tracking
-    const now = item.version; // Use the item's version timestamp
+    const now = item.datasetVersion; // Use the item's datasetVersion timestamp
     await this.createItemVersion({
       itemId: item.id,
       datasetId: item.datasetId,
@@ -181,7 +181,7 @@ export abstract class DatasetsStorage extends StorageDomain {
     const item = await this._doUpdateItem(args);
 
     // Create version records for history tracking
-    const now = item.version; // Use the item's version timestamp
+    const now = item.datasetVersion; // Use the item's datasetVersion timestamp
     await this.createItemVersion({
       itemId: item.id,
       datasetId: item.datasetId,
@@ -246,7 +246,7 @@ export abstract class DatasetsStorage extends StorageDomain {
   abstract getItemById(args: { id: string }): Promise<DatasetItem | null>;
 
   // Version-aware queries (snapshot semantics: items at or before version timestamp)
-  abstract getItemsByVersion(args: { datasetId: string; version: Date }): Promise<DatasetItem[]>;
+  abstract getItemsByVersion(args: { datasetId: string; version: Date }): Promise<DatasetItemVersion[]>;
 
   // Item version methods
   abstract createItemVersion(input: CreateItemVersionInput): Promise<DatasetItemVersion>;
@@ -258,7 +258,101 @@ export abstract class DatasetsStorage extends StorageDomain {
   abstract createDatasetVersion(datasetId: string, version: Date): Promise<DatasetVersion>;
   abstract listDatasetVersions(input: ListDatasetVersionsInput): Promise<ListDatasetVersionsOutput>;
 
-  // Bulk operations (implemented in base with version tracking)
-  abstract bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]>;
-  abstract bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void>;
+  /**
+   * Bulk add items to a dataset. Validates all items against dataset schemas,
+   * then delegates to subclass for storage. Creates version records for each item.
+   */
+  async bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+    const dataset = await this.getDatasetById({ id: input.datasetId });
+    if (!dataset) {
+      throw new Error(`Dataset not found: ${input.datasetId}`);
+    }
+
+    // Validate all items against schemas
+    const validator = getSchemaValidator();
+    const cacheKey = `dataset:${input.datasetId}`;
+
+    for (const itemData of input.items) {
+      if (dataset.inputSchema) {
+        validator.validate(itemData.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
+      }
+      if (dataset.groundTruthSchema && itemData.groundTruth !== undefined) {
+        validator.validate(itemData.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
+      }
+    }
+
+    // Delegate to subclass for actual storage
+    const items = await this._doBulkAddItems(input);
+
+    // Create version records — shared timestamp for entire bulk operation
+    const now = items[0]?.datasetVersion ?? new Date();
+    for (const item of items) {
+      await this.createItemVersion({
+        itemId: item.id,
+        datasetId: item.datasetId,
+        versionNumber: 1,
+        datasetVersion: now,
+        snapshot: {
+          input: item.input,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
+        },
+        isDeleted: false,
+      });
+    }
+
+    // Single dataset version entry for the bulk operation
+    if (items.length > 0) {
+      await this.createDatasetVersion(input.datasetId, now);
+    }
+
+    return items;
+  }
+
+  /** Subclasses implement raw bulk insert — no validation or versioning */
+  protected abstract _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]>;
+
+  /**
+   * Bulk delete items from a dataset. Creates tombstone versions for history,
+   * then delegates to subclass for actual deletion.
+   */
+  async bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+    const dataset = await this.getDatasetById({ id: input.datasetId });
+    if (!dataset) {
+      throw new Error(`Dataset not found: ${input.datasetId}`);
+    }
+
+    const now = new Date();
+
+    // Create tombstone versions for each item
+    for (const itemId of input.itemIds) {
+      const item = await this.getItemById({ id: itemId });
+      if (!item || item.datasetId !== input.datasetId) continue;
+
+      const latestVersion = await this.getLatestItemVersion(itemId);
+      const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+      await this.createItemVersion({
+        itemId,
+        datasetId: input.datasetId,
+        versionNumber: nextVersionNumber,
+        datasetVersion: now,
+        snapshot: {
+          input: item.input,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
+        },
+        isDeleted: true,
+      });
+    }
+
+    // Delegate actual deletion to subclass
+    await this._doBulkDeleteItems(input);
+
+    // Single dataset version entry for the bulk operation
+    await this.createDatasetVersion(input.datasetId, now);
+  }
+
+  /** Subclasses implement raw bulk delete — no versioning */
+  protected abstract _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void>;
 }
