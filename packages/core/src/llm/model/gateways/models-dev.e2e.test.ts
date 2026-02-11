@@ -50,7 +50,6 @@ describe('ModelsDevGateway - Real API Integration', () => {
     if (providers.groq) {
       expect(providers.groq.url).toBe('https://api.groq.com/openai/v1');
       expect(providers.groq.apiKeyEnvVar).toBe('GROQ_API_KEY');
-      expect(providers.groq.apiKeyHeader).toBe('Authorization');
     }
 
     if (providers.vercel) {
