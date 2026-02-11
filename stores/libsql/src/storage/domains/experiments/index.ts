@@ -44,6 +44,20 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
     });
+
+    // Indexes — idempotent, safe to run on every init
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_experiments_datasetid ON "${TABLE_EXPERIMENTS}" ("datasetId")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_experiment_results_experimentid ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_results_exp_item ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId", "itemId")`,
+      args: [],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

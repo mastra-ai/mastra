@@ -57,6 +57,28 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#db.createTable({ tableName: TABLE_DATASET_ITEMS, schema: DATASET_ITEMS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_DATASET_ITEM_VERSIONS, schema: DATASET_ITEM_VERSIONS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+
+    // Indexes — idempotent, safe to run on every init
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_datasetid ON "${TABLE_DATASET_ITEMS}" ("datasetId")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_item_versions_itemid ON "${TABLE_DATASET_ITEM_VERSIONS}" ("itemId")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_item_versions_dataset_version ON "${TABLE_DATASET_ITEM_VERSIONS}" ("datasetId", "datasetVersion")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_dataset_versions_datasetid ON "${TABLE_DATASET_VERSIONS}" ("datasetId")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_item_versions_item_vnum ON "${TABLE_DATASET_ITEM_VERSIONS}" ("itemId", "versionNumber")`,
+      args: [],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
