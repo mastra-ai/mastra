@@ -650,6 +650,8 @@ describe('tree-formatter', () => {
      * Cached at describe-time for use with it.skipIf.
      */
     const treeAvailable = (() => {
+      // Only run native tree comparison in CI (Linux) to avoid macOS sort-order differences
+      if (!process.env.CI) return false;
       try {
         execSync('which tree', { encoding: 'utf-8' });
         return true;
