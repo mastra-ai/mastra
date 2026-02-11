@@ -301,7 +301,7 @@ describe('DefaultExporter', () => {
         });
       });
 
-      it('should buffer events and flush when batch size reached when using not using await on init', async () => {
+      it('should buffer events and flush when batch size reached when not using await on init', async () => {
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',
           maxBatchSize: 2,
