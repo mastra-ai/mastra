@@ -378,7 +378,7 @@ export class Memory extends MastraMemory {
     const memoryStore = await this.getMemoryStore();
     await memoryStore.deleteThread({ threadId });
     if (this.vector) {
-      await this.deleteThreadVectors(threadId);
+      void this.deleteThreadVectors(threadId);
     }
   }
 
@@ -1322,12 +1322,12 @@ Notes:
       throw new Error('All message IDs must be non-empty strings');
     }
 
-    // Delete from storage and vector store in parallel
+    // Delete from storage, then fire-and-forget vector cleanup
     const memoryStore = await this.getMemoryStore();
 
     await memoryStore.deleteMessages(messageIds);
     if (this.vector && messageIds.length > 0) {
-      await this.deleteMessageVectors(messageIds);
+      void this.deleteMessageVectors(messageIds);
     }
   }
 

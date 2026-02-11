@@ -947,7 +947,7 @@ describe('Memory', () => {
 
       constructor() {
         super({ storage: new InMemoryStore() });
-        // @ts-ignore - injecting mock vector
+        // @ts-expect-error - injecting mock vector
         this.vector = this.mockVector;
       }
     }
@@ -958,9 +958,12 @@ describe('Memory', () => {
 
       await memory.deleteMessages([messageId]);
 
-      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-        indexName: 'memory_messages_index',
-        filter: { message_id: messageId },
+      // Vector cleanup is fire-and-forget, flush microtasks
+      await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory_messages_index',
+          filter: { message_id: messageId },
+        });
       });
     });
 
@@ -970,9 +973,12 @@ describe('Memory', () => {
 
       await memory.deleteThread(threadId);
 
-      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-        indexName: 'memory_messages_index',
-        filter: { thread_id: threadId },
+      // Vector cleanup is fire-and-forget, flush microtasks
+      await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory_messages_index',
+          filter: { thread_id: threadId },
+        });
       });
     });
   });
