@@ -229,7 +229,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               ctx,
             )
           : (storedAgent.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined);
-        const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig);
+        const integrationTools = await this.resolveStoredIntegrationTools(resolvedIntegrationToolsConfig, ctx);
 
         return { ...registryTools, ...mcpTools, ...integrationTools };
       };
@@ -623,6 +623,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   private async resolveStoredIntegrationTools(
     integrationTools?: Record<string, StorageMCPClientToolsConfig>,
+    requestContext?: Record<string, unknown>,
   ): Promise<Record<string, ToolAction<any, any, any, any, any, any>>> {
     if (!integrationTools || Object.keys(integrationTools).length === 0) return {};
 
@@ -644,10 +645,11 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         // `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
         const wantedSlugs = Object.keys(providerConfig.tools);
 
-        // Fetch tools from the provider — pass slugs and configs for filtering/overrides
-        const providerTools = await provider.getTools(
+        // Fetch tools from the provider — pass slugs, configs, and request context
+        const providerTools = await provider.resolveTools(
           wantedSlugs.length > 0 ? wantedSlugs : [],
           providerConfig.tools,
+          { requestContext },
         );
 
         for (const [toolId, tool] of Object.entries(providerTools)) {

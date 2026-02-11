@@ -28,5 +28,5 @@ export type {
   ToolProviderToolInfo,
   ToolProviderListResult,
   ListToolProviderToolsOptions,
-  GetToolProviderToolsOptions,
+  ResolveToolProviderToolsOptions,
 } from './tool-provider';

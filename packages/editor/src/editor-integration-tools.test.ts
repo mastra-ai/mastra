@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { Agent, Mastra } from '@mastra/core';
-import type { ToolProvider, ToolProviderListResult, ToolProviderToolkit, ToolProviderToolInfo, ListToolProviderToolsOptions, GetToolProviderToolsOptions } from '@mastra/core';
+import type { ToolProvider, ToolProviderListResult, ToolProviderToolkit, ToolProviderToolInfo, ListToolProviderToolsOptions, ResolveToolProviderToolsOptions } from '@mastra/core';
 import type { StorageToolConfig, ToolAction } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
@@ -43,10 +43,10 @@ function createMockToolProvider(
       if (!t) return null;
       return { type: 'object', properties: { input: { type: 'string' } } };
     }),
-    getTools: vi.fn(async (
+    resolveTools: vi.fn(async (
       toolSlugs: string[],
       toolConfigs?: Record<string, StorageToolConfig>,
-      _options?: GetToolProviderToolsOptions,
+      _options?: ResolveToolProviderToolsOptions,
     ): Promise<Record<string, ToolAction<any, any, any>>> => {
       const result: Record<string, ToolAction<any, any, any>> = {};
       for (const slug of toolSlugs) {
@@ -150,12 +150,13 @@ describe('Integration Tools (tool providers)', () => {
       expect(tools['SLACK_SEND_MESSAGE']).toBeDefined();
       expect(tools['GITHUB_LIST_REPOS']).toBeUndefined();
 
-      expect(mockProvider.getTools).toHaveBeenCalledWith(
+      expect(mockProvider.resolveTools).toHaveBeenCalledWith(
         expect.arrayContaining(['GITHUB_CREATE_ISSUE', 'SLACK_SEND_MESSAGE']),
         expect.objectContaining({
           GITHUB_CREATE_ISSUE: {},
           SLACK_SEND_MESSAGE: {},
         }),
+        { requestContext: undefined },
       );
     });
 
@@ -205,7 +206,7 @@ describe('Integration Tools (tool providers)', () => {
       const tools = await agent!.listTools();
 
       // composio: {} (no tools key) = provider registered but no tools selected
-      expect(mockProvider.getTools).not.toHaveBeenCalled();
+      expect(mockProvider.resolveTools).not.toHaveBeenCalled();
       expect(Object.keys(tools).length).toBe(0);
     });
 
@@ -227,7 +228,7 @@ describe('Integration Tools (tool providers)', () => {
       const tools = await agent!.listTools();
 
       // composio: { tools: {} } = all tools from provider
-      expect(mockProvider.getTools).toHaveBeenCalledWith([], {});
+      expect(mockProvider.resolveTools).toHaveBeenCalledWith([], {}, { requestContext: undefined });
     });
 
     it('should warn when referenced provider is not registered', async () => {
@@ -377,7 +378,7 @@ describe('Integration Tools (tool providers)', () => {
       });
 
       it('should fetch executable tools and execute GITHUB_LIST_REPOSITORY_ISSUES', async () => {
-        const tools = await composioProvider.getTools(
+        const tools = await composioProvider.resolveTools(
           ['GITHUB_LIST_REPOSITORY_ISSUES'],
           undefined,
           { userId: 'default' },
@@ -394,8 +395,8 @@ describe('Integration Tools (tool providers)', () => {
         expect(result.data?.issues?.length).toBeGreaterThan(0);
       }, 30_000);
 
-      it('should apply description overrides via getTools', async () => {
-        const tools = await composioProvider.getTools(
+      it('should apply description overrides via resolveTools', async () => {
+        const tools = await composioProvider.resolveTools(
           ['GITHUB_LIST_REPOSITORY_ISSUES'],
           { GITHUB_LIST_REPOSITORY_ISSUES: { description: 'Custom description for test' } },
           { userId: 'default' },
@@ -634,7 +635,7 @@ describe.skipIf(!process.env.ARCADE_API_KEY)('ArcadeToolProvider e2e (real API)'
   }, 30_000);
 
   it('should fetch executable tools with description overrides', async () => {
-    const tools = await provider.getTools(
+    const tools = await provider.resolveTools(
       ['Github.GetRepository'],
       { 'Github.GetRepository': { description: 'Custom Arcade desc' } },
     );
@@ -647,7 +648,7 @@ describe.skipIf(!process.env.ARCADE_API_KEY)('ArcadeToolProvider e2e (real API)'
   }, 30_000);
 
   it('should execute a tool (returns auth-required or data)', async () => {
-    const tools = await provider.getTools(['Github.GetRepository']);
+    const tools = await provider.resolveTools(['Github.GetRepository']);
     const tool = tools['Github.GetRepository'];
     expect(tool).toBeDefined();
 

@@ -70,11 +70,13 @@ export interface ToolProviderListResult<T> {
 }
 
 /**
- * Options for getting executable tools at agent runtime.
+ * Options for resolving executable tools at agent runtime.
  */
-export interface GetToolProviderToolsOptions {
+export interface ResolveToolProviderToolsOptions {
   /** User ID for user-scoped tool execution (e.g., Composio) */
   userId?: string;
+  /** Per-request context (e.g., user-specific API keys, tenant IDs) */
+  requestContext?: Record<string, unknown>;
   /** Additional provider-specific options */
   [key: string]: unknown;
 }
@@ -84,7 +86,7 @@ export interface GetToolProviderToolsOptions {
  *
  * Tool providers serve two purposes:
  * 1. **Discovery** — UI uses `listToolkits()`, `listTools()`, `getToolSchema()` to browse available tools
- * 2. **Runtime** — Agent hydration uses `getTools()` to get executable tools for selected tool slugs
+ * 2. **Runtime** — Agent hydration uses `resolveTools()` to get executable tools for selected tool slugs
  */
 export interface ToolProvider {
   /** Provider metadata */
@@ -109,17 +111,17 @@ export interface ToolProvider {
   getToolSchema?(toolSlug: string): Promise<Record<string, unknown> | null>;
 
   /**
-   * Get executable tools for the given slugs.
+   * Resolve executable tools for the given slugs.
    * Called during agent hydration to resolve `integrationTools` references.
    *
    * @param toolSlugs - Array of tool slugs to resolve
    * @param toolConfigs - Per-tool configuration (description overrides)
-   * @param options - Provider-specific options (userId, etc.)
+   * @param options - Provider-specific options (userId, requestContext, etc.)
    * @returns Record of tool ID to executable tool
    */
-  getTools(
+  resolveTools(
     toolSlugs: string[],
     toolConfigs?: Record<string, StorageToolConfig>,
-    options?: GetToolProviderToolsOptions,
+    options?: ResolveToolProviderToolsOptions,
   ): Promise<Record<string, ToolAction<any, any, any>>>;
 }

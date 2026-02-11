@@ -5,7 +5,7 @@ import type {
   ToolProviderToolInfo,
   ToolProviderListResult,
   ListToolProviderToolsOptions,
-  GetToolProviderToolsOptions,
+  ResolveToolProviderToolsOptions,
 } from '@mastra/core';
 import type { ToolAction, StorageToolConfig } from '@mastra/core';
 
@@ -30,7 +30,7 @@ export interface ArcadeToolProviderConfig {
  * integrations page and verified against the API.  This avoids the need to
  * paginate through 7 000+ tools just to list toolkit names.
  *
- * The cache is updated at runtime when `listTools()` or `getTools()` encounters
+ * The cache is updated at runtime when `listTools()` or `resolveTools()` encounters
  * a toolkit that isn't already present, so newly-added Arcade integrations are
  * picked up automatically.
  */
@@ -142,7 +142,7 @@ const KNOWN_TOOLKITS: readonly { slug: string; name: string; description?: strin
  * Discovery methods (`listToolkits`, `listTools`, `getToolSchema`) use the
  * standard `tools.list()` / `tools.get()` SDK methods.
  *
- * Runtime method (`getTools`) uses `toZodToolSet` from `@arcadeai/arcadejs/lib`
+ * Runtime method (`resolveTools`) uses `toZodToolSet` from `@arcadeai/arcadejs/lib`
  * to get executable ZodTool objects, then converts them to Mastra's ToolAction format.
  */
 export class ArcadeToolProvider implements ToolProvider {
@@ -295,15 +295,15 @@ export class ArcadeToolProvider implements ToolProvider {
   }
 
   /**
-   * Get executable tools in Mastra's ToolAction format.
+   * Resolve executable tools in Mastra's ToolAction format.
    *
    * Uses `toZodToolSet` from `@arcadeai/arcadejs/lib` to create ZodTool objects
    * with Zod schemas and execute functions, then wraps them as ToolAction objects.
    */
-  async getTools(
+  async resolveTools(
     toolSlugs: string[],
     toolConfigs?: Record<string, StorageToolConfig>,
-    options?: GetToolProviderToolsOptions,
+    options?: ResolveToolProviderToolsOptions,
   ): Promise<Record<string, ToolAction<unknown, unknown>>> {
     if (toolSlugs.length === 0) return {};
 

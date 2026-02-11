@@ -5,7 +5,7 @@ import type {
   ToolProviderToolInfo,
   ToolProviderListResult,
   ListToolProviderToolsOptions,
-  GetToolProviderToolsOptions,
+  ResolveToolProviderToolsOptions,
 } from '@mastra/core';
 import type { ToolAction, StorageToolConfig } from '@mastra/core';
 
@@ -32,7 +32,7 @@ export interface ComposioToolProviderConfig {
  * Discovery methods (`listToolkits`, `listTools`, `getToolSchema`) use the
  * raw Composio client (no userId required).
  *
- * Runtime method (`getTools`) uses the MastraProvider so returned tools are
+ * Runtime method (`resolveTools`) uses the MastraProvider so returned tools are
  * already in Mastra's `createTool()` format.
  */
 export class ComposioToolProvider implements ToolProvider {
@@ -138,15 +138,15 @@ export class ComposioToolProvider implements ToolProvider {
   }
 
   /**
-   * Get executable tools in Mastra format via `composio.tools.get(userId, { tools: [...] })`.
+   * Resolve executable tools in Mastra format via `composio.tools.get(userId, { tools: [...] })`.
    *
    * Uses MastraProvider so returned tools are `ReturnType<typeof createTool>` — compatible
    * with Mastra's `ToolAction` interface.
    */
-  async getTools(
+  async resolveTools(
     toolSlugs: string[],
     toolConfigs?: Record<string, StorageToolConfig>,
-    options?: GetToolProviderToolsOptions,
+    options?: ResolveToolProviderToolsOptions,
   ): Promise<Record<string, ToolAction<unknown, unknown>>> {
     if (toolSlugs.length === 0) return {};
 
