@@ -67,27 +67,76 @@ async function loadConfig(directory: string): Promise<MastraOMPluginConfig> {
   }
 }
 
-/** Convert opencode messages to MastraDBMessage format. */
+/** Convert opencode messages to MastraDBMessage format.
+ * Preserves all part types including tool invocations, files, images, and reasoning.
+ */
 function convertMessages(messages: { info: Message; parts: Part[] }[], sessionId: string) {
   return messages
     .map(({ info, parts }) => {
-      const textContent = parts
-        .filter((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text')
-        .map(p => p.text)
-        .filter(Boolean)
-        .join('\n');
+      // Convert ALL part types, not just text
+      // Use type assertions since Part union type is restrictive
+      const convertedParts = parts
+        .map((part): any => {
+          const p = part as any;
+          const type = p.type as string;
 
-      if (!textContent) return null;
+          if (type === 'text' && p.text) {
+            return { type: 'text', text: p.text };
+          }
+
+          if (type === 'tool-invocation') {
+            return {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: p.toolCallId,
+                toolName: p.toolName,
+                args: p.args,
+                result: p.result,
+                state: p.state,
+              },
+            };
+          }
+
+          if (type === 'file') {
+            return {
+              type: 'file',
+              url: p.url,
+              mediaType: p.mediaType,
+            };
+          }
+
+          if (type === 'image') {
+            return {
+              type: 'image',
+              image: p.image,
+            };
+          }
+
+          if (type === 'reasoning' && p.reasoning) {
+            return { type: 'reasoning', reasoning: p.reasoning };
+          }
+
+          // Skip unknown or internal part types
+          if (type?.startsWith('data-om-')) {
+            return null;
+          }
+
+          return null;
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null);
+
+      if (convertedParts.length === 0) return null;
 
       return {
         id: info.id,
         role: info.role as 'user' | 'assistant',
-        createdAt: new Date(info.time.created * 1000),
+        // opencode timestamps are already in milliseconds (JavaScript Date)
+        createdAt: new Date(info.time.created),
         threadId: sessionId,
         resourceId: sessionId,
         content: {
           format: 2 as const,
-          parts: [{ type: 'text' as const, text: textContent }],
+          parts: convertedParts,
         },
       };
     })
@@ -259,7 +308,8 @@ export const MastraPlugin: Plugin = async ctx => {
         if (record?.lastObservedAt) {
           const lastObservedAt = new Date(record.lastObservedAt);
           output.messages = output.messages.filter(({ info }) => {
-            const msgTime = new Date(info.time.created * 1000);
+            // opencode timestamps are already in milliseconds
+            const msgTime = new Date(info.time.created);
             return msgTime > lastObservedAt;
           });
         }
