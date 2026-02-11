@@ -2,10 +2,12 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
+import { Observability, TestExporter } from '@mastra/observability';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Mastra } from '../..';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -607,15 +609,26 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-  it('should not inject tracingContext when agentSpan is not available', async () => {
-    let receivedTracingContext: any = undefined;
+  it('should inject tracingContext when agentSpan is not available', async () => {
+    const mastra = new Mastra({
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName: 'mastra',
+            exporters: [new TestExporter()],
+          },
+        },
+      }),
+    });
+
+    let receivedTracingSpan: any = undefined;
 
     const testTool = createTool({
-      id: 'no-tracing-tool',
-      description: 'Test tool without agent span',
+      id: 'new-span-tracing-tool-id',
+      description: 'Tool creates span if not passed',
       inputSchema: z.object({ message: z.string() }),
       execute: async (inputData, context) => {
-        receivedTracingContext = context?.tracingContext;
+        receivedTracingSpan = context?.tracingContext?.currentSpan;
         return { result: `processed: ${inputData.message}` };
       },
     });
@@ -623,24 +636,39 @@ describe('Tool Tracing Context Injection', () => {
     const builder = new CoreToolBuilder({
       originalTool: testTool,
       options: {
-        name: 'no-tracing-tool',
+        name: 'new-span-tracing-tool',
         logger: {
           debug: vi.fn(),
           warn: vi.fn(),
           error: vi.fn(),
           trackException: vi.fn(),
         } as any,
-        description: 'Test tool without agent span',
+        description: 'Tool creates span if not passed',
         requestContext: new RequestContext(),
         tracingContext: {},
+        mastra: mastra,
       },
     });
 
     const builtTool = builder.build();
     const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
-    // Verify tracingContext was injected but currentSpan is undefined
-    expect(receivedTracingContext).toEqual({ currentSpan: undefined });
+    // Verify span is created
+    expect(receivedTracingSpan).toMatchObject({
+      name: "tool: 'new-span-tracing-tool'",
+      type: 'tool_call',
+      attributes: {
+        toolDescription: 'Tool creates span if not passed',
+        toolType: 'tool',
+        success: true,
+      },
+      input: { message: 'test' },
+      output: { result: 'processed: test' },
+      entityType: 'tool',
+      entityId: 'new-span-tracing-tool',
+      entityName: 'new-span-tracing-tool',
+      parentSpanId: undefined,
+    });
     expect(result).toEqual({ result: 'processed: test' });
   });
 

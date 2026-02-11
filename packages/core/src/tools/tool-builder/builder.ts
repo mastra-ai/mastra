@@ -11,9 +11,10 @@ import {
 } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
+import { Mastra } from '../..';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType, getOrCreateSpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -273,8 +274,8 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions.tracingContext || options.tracingContext;
 
-      // Create tool span if we have a current span available
-      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
+      // Create tool span
+      const toolSpan = getOrCreateSpan({
         type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
@@ -286,6 +287,9 @@ export class CoreToolBuilder extends MastraBase {
           toolType: logType || 'tool',
         },
         tracingPolicy: options.tracingPolicy,
+        tracingContext: tracingContext,
+        requestContext: requestContext,
+        mastra: options.mastra instanceof Mastra ? options.mastra : undefined,
       });
 
       try {
