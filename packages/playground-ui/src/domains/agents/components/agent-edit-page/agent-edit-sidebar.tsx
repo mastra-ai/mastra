@@ -236,7 +236,7 @@ export function AgentEditSidebar({
                 readOnly={readOnly}
               />
               <ScorersSection control={control} readOnly={readOnly} />
-              <MemorySection control={control} readOnly={readOnly} />
+              <MemorySection control={control} setValue={form.setValue} readOnly={readOnly} />
             </div>
           </ScrollArea>
         </TabContent>
