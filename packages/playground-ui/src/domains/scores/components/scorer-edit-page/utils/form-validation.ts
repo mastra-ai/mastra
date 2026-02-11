@@ -1,19 +1,6 @@
 import { z } from 'zod';
 
-export const STORED_SCORER_TYPES = [
-  'llm-judge',
-  'answer-relevancy',
-  'answer-similarity',
-  'bias',
-  'context-precision',
-  'context-relevance',
-  'faithfulness',
-  'hallucination',
-  'noise-sensitivity',
-  'prompt-alignment',
-  'tool-call-accuracy',
-  'toxicity',
-] as const;
+export const STORED_SCORER_TYPES = ['llm-judge'] as const;
 
 export type StoredScorerType = (typeof STORED_SCORER_TYPES)[number];
 

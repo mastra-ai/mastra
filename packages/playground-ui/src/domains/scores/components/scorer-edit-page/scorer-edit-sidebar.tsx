@@ -9,18 +9,11 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
-import { Combobox } from '@/ds/components/Combobox';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { SectionHeader } from '@/domains/cms';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
 import type { ScorerFormValues } from './utils/form-validation';
-import { STORED_SCORER_TYPES } from './utils/form-validation';
-
-const scorerTypeOptions = STORED_SCORER_TYPES.map(type => ({
-  label: type,
-  value: type,
-}));
 
 interface ScorerEditSidebarProps {
   form: UseFormReturn<ScorerFormValues>;
@@ -42,9 +35,6 @@ export function ScorerEditSidebar({
     control,
     formState: { errors },
   } = form;
-
-  const watchedType = useWatch({ control, name: 'type' });
-  const isLlmJudge = watchedType === 'llm-judge';
 
   const watchedSamplingType = useWatch({ control, name: 'defaultSampling.type' });
   const watchedProvider = useWatch({ control, name: 'model.provider' });
@@ -85,108 +75,82 @@ export function ScorerEditSidebar({
             {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
           </div>
 
-          {/* Type */}
+          {/* Provider */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-icon5">
-              Type <span className="text-accent2">*</span>
+              Provider <span className="text-accent2">*</span>
             </Label>
             <Controller
-              name="type"
+              name="model.provider"
               control={control}
               render={({ field }) => (
-                <Combobox
-                  options={scorerTypeOptions}
+                <LLMProviders
                   value={field.value}
                   onValueChange={field.onChange}
-                  placeholder="Select scorer type..."
                   variant="light"
+                  container={formRef}
                 />
               )}
             />
-            {errors.type && <span className="text-xs text-accent2">{errors.type.message}</span>}
+            {errors.model?.provider && (
+              <span className="text-xs text-accent2">{errors.model.provider.message}</span>
+            )}
           </div>
 
-          {/* Conditional LLM Judge fields */}
-          {isLlmJudge && (
-            <>
-              {/* Provider */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-icon5">
-                  Provider <span className="text-accent2">*</span>
-                </Label>
-                <Controller
-                  name="model.provider"
-                  control={control}
-                  render={({ field }) => (
-                    <LLMProviders
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      variant="light"
-                      container={formRef}
-                    />
-                  )}
+          {/* Model */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-icon5">
+              Model <span className="text-accent2">*</span>
+            </Label>
+            <Controller
+              name="model.name"
+              control={control}
+              render={({ field }) => (
+                <LLMModels
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  llmId={watchedProvider || ''}
+                  variant="light"
+                  container={formRef}
                 />
-                {errors.model?.provider && (
-                  <span className="text-xs text-accent2">{errors.model.provider.message}</span>
+              )}
+            />
+            {errors.model?.name && <span className="text-xs text-accent2">{errors.model.name.message}</span>}
+          </div>
+
+          {/* Score Range */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-icon5">Score Range</Label>
+            <div className="flex gap-2 items-center">
+              <Controller
+                name="scoreRange.min"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    className="bg-surface3"
+                    value={field.value}
+                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
+                  />
                 )}
-              </div>
-
-              {/* Model */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-icon5">
-                  Model <span className="text-accent2">*</span>
-                </Label>
-                <Controller
-                  name="model.name"
-                  control={control}
-                  render={({ field }) => (
-                    <LLMModels
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      llmId={watchedProvider || ''}
-                      variant="light"
-                      container={formRef}
-                    />
-                  )}
-                />
-                {errors.model?.name && <span className="text-xs text-accent2">{errors.model.name.message}</span>}
-              </div>
-
-              {/* Score Range */}
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-icon5">Score Range</Label>
-                <div className="flex gap-2 items-center">
-                  <Controller
-                    name="scoreRange.min"
-                    control={control}
-                    render={({ field }) => (
-                      <Input
-                        type="number"
-                        placeholder="Min"
-                        className="bg-surface3"
-                        value={field.value}
-                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                      />
-                    )}
+              />
+              <span className="text-xs text-icon3">to</span>
+              <Controller
+                name="scoreRange.max"
+                control={control}
+                render={({ field }) => (
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    className="bg-surface3"
+                    value={field.value}
+                    onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />
-                  <span className="text-xs text-icon3">to</span>
-                  <Controller
-                    name="scoreRange.max"
-                    control={control}
-                    render={({ field }) => (
-                      <Input
-                        type="number"
-                        placeholder="Max"
-                        className="bg-surface3"
-                        value={field.value}
-                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                      />
-                    )}
-                  />
-                </div>
-              </div>
-            </>
-          )}
+                )}
+              />
+            </div>
+          </div>
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">

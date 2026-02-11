@@ -57,8 +57,6 @@ export default function Scorer() {
     entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
 
-  console.log('lol', scorer);
-
   const agentOptions: EntityOptions[] =
     scorer?.agentIds
       ?.filter(agentId => agents[agentId])

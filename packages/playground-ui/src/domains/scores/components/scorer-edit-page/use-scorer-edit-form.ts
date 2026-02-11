@@ -15,18 +15,12 @@ const scorerFormResolver: Resolver<ScorerFormValues> = async values => {
     errors.description = { type: 'maxLength', message: 'Description must be 500 characters or less' };
   }
 
-  if (!values.type) {
-    errors.type = { type: 'required', message: 'Type is required' };
+  if (!values.model?.provider || values.model.provider.trim() === '') {
+    errors['model.provider'] = { type: 'required', message: 'Provider is required' };
   }
 
-  if (values.type === 'llm-judge') {
-    if (!values.model?.provider || values.model.provider.trim() === '') {
-      errors['model.provider'] = { type: 'required', message: 'Provider is required' };
-    }
-
-    if (!values.model?.name || values.model.name.trim() === '') {
-      errors['model.name'] = { type: 'required', message: 'Model is required' };
-    }
+  if (!values.model?.name || values.model.name.trim() === '') {
+    errors['model.name'] = { type: 'required', message: 'Model is required' };
   }
 
   return {

@@ -73,17 +73,13 @@ function CmsScorersEditForm({ scorer, scorerId }: CmsScorersEditFormProps) {
     setIsSubmitting(true);
 
     try {
-      const isLlmJudge = values.type === 'llm-judge';
-
       const updateParams: UpdateStoredScorerParams = {
         name: values.name,
         description: values.description || undefined,
         type: values.type,
-        ...(isLlmJudge && {
-          model: values.model,
-          instructions: values.instructions || undefined,
-          scoreRange: values.scoreRange,
-        }),
+        model: values.model,
+        instructions: values.instructions || undefined,
+        scoreRange: values.scoreRange,
         ...(values.defaultSampling?.type === 'ratio' &&
           typeof values.defaultSampling.rate === 'number' && {
             defaultSampling: values.defaultSampling,
