@@ -1071,6 +1071,12 @@ describe('Token Counter', () => {
       // Message should have overhead beyond just the content
       expect(msgCount).toBeGreaterThan(stringCount);
     });
+
+    it('should always return an integer', () => {
+      const msg = createTestMessage('Hello, world!');
+      const count = counter.countMessage(msg);
+      expect(Number.isInteger(count)).toBe(true);
+    });
   });
 
   describe('countMessages', () => {
@@ -1090,6 +1096,12 @@ describe('Token Counter', () => {
 
     it('should return 0 for empty array', () => {
       expect(counter.countMessages([])).toBe(0);
+    });
+
+    it('should always return an integer', () => {
+      const messages = createTestMessages(3);
+      const count = counter.countMessages(messages);
+      expect(Number.isInteger(count)).toBe(true);
     });
   });
 
