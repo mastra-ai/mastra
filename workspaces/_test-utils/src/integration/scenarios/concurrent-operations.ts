@@ -90,9 +90,7 @@ export function createConcurrentOperationsTests(getContext: () => TestContext): 
         await Promise.all(files.map(f => workspace.filesystem!.writeFile(f.fsPath, f.content)));
 
         // Read all via sandbox concurrently
-        const results = await Promise.all(
-          files.map(f => workspace.sandbox!.executeCommand!('cat', [f.sandboxPath])),
-        );
+        const results = await Promise.all(files.map(f => workspace.sandbox!.executeCommand!('cat', [f.sandboxPath])));
 
         for (let i = 0; i < files.length; i++) {
           expect(results[i]!.exitCode).toBe(0);

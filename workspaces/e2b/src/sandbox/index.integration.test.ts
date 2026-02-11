@@ -12,7 +12,8 @@
  */
 
 import { createSandboxTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
-import { CompositeFilesystem, Workspace } from '@mastra/core/workspace';
+import type { CompositeFilesystem } from '@mastra/core/workspace';
+import { Workspace } from '@mastra/core/workspace';
 import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

@@ -13,7 +13,8 @@
  */
 
 import { createFilesystemTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
-import { type CompositeFilesystem, Workspace } from '@mastra/core/workspace';
+import { Workspace } from '@mastra/core/workspace';
+import type { CompositeFilesystem } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { S3Filesystem } from './index';
