@@ -1,0 +1,90 @@
+---
+title: "Deploying Studio | Deployment"
+description: "Learn how to deploy and use Studio on your own infrastructure."
+packages:
+  - "mastra"
+---
+
+# Deploying Studio
+
+- Introduction what Studio is and link to getting started studio page to see features
+- Explain key distinction: mastra studio is a standalone, static UI that connects to an already-running Mastra server
+- Explain that this page is about how to deploy Studio on your own server
+- If you want a plug-and-play solution, use Mastra Cloud
+
+## `mastra studio` command
+
+- Explain that `mastra studio` command exists
+- Explain what it does and what you should do after starting (let the user try it out)
+- Explain that after initial screen, it saves the settings in local storage. In the sidebar on settings tab you can modify the settings afterwards
+- The header is for authentication
+- The instance URL and API prefix options allow for both `mastra build` + `mastra start` and server adapters approach
+- Loads `.env.production` and `.env` files from current working directory
+
+## Running alongside Mastra server
+
+- You can use `mastra build --studio` to build both the Mastra server and studio together. When you then run `MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs` they are served together
+
+## Running on your own server
+
+- Explain to run `mastra studio` on your server and keep it running (e.g. using pm2 or systemd)
+- When Studio runs on a server, it's a browser-side SPA that makes requests to the Mastra API server. If Studio and the server are on different hosts/ports, CORS becomes relevant. Worth mentioning.
+- Studio gives full access to your agents, workflows, and tools. Mention that you should put it behind authentication (reverse proxy with auth, VPN, etc.) in production.
+
+## SPA Deployment
+
+- Explain how to create a SPA out of the `mastra/dist/studio` folder and replace the placeholders with values
+- Explain that you then can deploy this to Netlify, Vercel, etc.
+- List available env vars that need to be set
+
+vite
+
+```json title="package.json"
+{
+  "name": "studio-spa-experiment",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "mastra": "^1.3.0",
+    "vite": "^7.3.1"
+  }
+}
+```
+
+```html title="index.html"
+<!doctype html>
+<html><head></head><body></body></html>
+```
+
+```js title="vite.config.js"
+import { defineConfig, loadEnv } from 'vite'
+import { readFileSync, cpSync, writeFileSync } from 'node:fs'
+import { resolve, join } from 'node:path'
+
+const studioDir = resolve(import.meta.dirname, 'node_modules/mastra/dist/studio')
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'MASTRA_')
+
+  return {
+    plugins: [
+      {
+        name: 'mastra-studio',
+        closeBundle() {
+          const outDir = resolve(import.meta.dirname, 'dist')
+          cpSync(studioDir, outDir, { recursive: true })
+
+          const indexPath = join(outDir, 'index.html')
+          const html = readFileSync(indexPath, 'utf-8')
+          writeFileSync(indexPath, html.replaceAll(/%%(\w+)%%/g, (_, key) => env[key] ?? ''))
+        },
+      },
+    ],
+    build: {
+      emptyOutDir: true,
+    },
+  }
+})
+```
