@@ -26,9 +26,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
     onChange({
       ...group,
-      conditions: group.conditions.map((c, i) =>
-        i === index ? (condition as Rule | RuleGroupDepth1) : c,
-      ),
+      conditions: group.conditions.map((c, i) => (i === index ? (condition as Rule | RuleGroupDepth1) : c)),
     });
   };
 

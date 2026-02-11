@@ -79,13 +79,7 @@ const nestedSchema: JsonSchema = {
 };
 
 // Wrapper component to manage state
-const RuleBuilderWithState = ({
-  schema,
-  initialRuleGroup,
-}: {
-  schema: JsonSchema;
-  initialRuleGroup?: RuleGroup;
-}) => {
+const RuleBuilderWithState = ({ schema, initialRuleGroup }: { schema: JsonSchema; initialRuleGroup?: RuleGroup }) => {
   const [ruleGroup, setRuleGroup] = React.useState<RuleGroup | undefined>(initialRuleGroup);
 
   return (

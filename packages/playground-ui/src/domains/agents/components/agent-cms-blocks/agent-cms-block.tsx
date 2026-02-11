@@ -124,11 +124,7 @@ const AgentCMSBlockContent = ({
               )}
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <RuleBuilder
-                schema={schema}
-                ruleGroup={block.rules}
-                onChange={handleRulesChange}
-              />
+              <RuleBuilder schema={schema} ruleGroup={block.rules} onChange={handleRulesChange} />
             </CollapsibleContent>
           </Collapsible>
         )}
