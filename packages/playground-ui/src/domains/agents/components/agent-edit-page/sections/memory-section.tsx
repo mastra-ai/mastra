@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Controller, Control, useWatch } from 'react-hook-form';
+import { Controller, Control, useWatch, type UseFormSetValue } from 'react-hook-form';
 import { ChevronRight } from 'lucide-react';
 
 import { MemoryIcon } from '@/ds/icons';
@@ -16,10 +16,11 @@ import { LLMProviders, LLMModels } from '@/domains/llm';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;
+  setValue: UseFormSetValue<AgentFormValues>;
   readOnly?: boolean;
 }
 
-export function MemorySection({ control, readOnly = false }: MemorySectionProps) {
+export function MemorySection({ control, setValue, readOnly = false }: MemorySectionProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isObserverOpen, setIsObserverOpen] = useState(false);
   const [isReflectorOpen, setIsReflectorOpen] = useState(false);
@@ -226,7 +227,14 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                         control={control}
                         render={({ field }) => (
                           <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                            <LLMProviders value={field.value ?? ''} onValueChange={field.onChange} variant="light" />
+                            <LLMProviders
+                              value={field.value ?? ''}
+                              onValueChange={v => {
+                                field.onChange(v);
+                                setValue('memory.observationalMemory.model.name', '');
+                              }}
+                              variant="light"
+                            />
                           </div>
                         )}
                       />
@@ -320,7 +328,10 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                                 <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
                                   <LLMProviders
                                     value={field.value ?? ''}
-                                    onValueChange={field.onChange}
+                                    onValueChange={v => {
+                                      field.onChange(v);
+                                      setValue('memory.observationalMemory.observation.model.name', '');
+                                    }}
                                     variant="light"
                                   />
                                 </div>
@@ -524,7 +535,10 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                                 <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
                                   <LLMProviders
                                     value={field.value ?? ''}
-                                    onValueChange={field.onChange}
+                                    onValueChange={v => {
+                                      field.onChange(v);
+                                      setValue('memory.observationalMemory.reflection.model.name', '');
+                                    }}
                                     variant="light"
                                   />
                                 </div>
