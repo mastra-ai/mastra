@@ -26,34 +26,9 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Lint
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!@internal/playground" lint
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./explorations/**/*" --filter "!@internal/playground" lint
       - name: Format
         run: pnpm prettier --check .
-
-  prebuild:
-    name: Prebuild
-    runs-on: ubuntu-latest
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:rw
-      NODE_OPTIONS: --max-old-space-size=4096
-    permissions:
-      pull-requests: read
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v5
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
-
-      - name: Type Check
-        run: pnpm typecheck
 
   check-bundle:
     name: Validate build outputs
@@ -67,8 +42,6 @@ jobs:
     permissions:
       pull-requests: read
 
-    needs: prebuild
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -77,7 +50,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Build
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs

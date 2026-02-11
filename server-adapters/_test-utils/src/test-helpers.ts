@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
 import { Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
+import { normalizeRoutePath } from './route-test-utils';
 import { createScorer } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { CompositeVoice } from '@mastra/core/voice';
@@ -17,6 +18,11 @@ import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-
 import { MCPServer } from '@mastra/mcp';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 vi.mock('@mastra/core/vector');
 
 vi.mock('zod', async importOriginal => {
@@ -66,6 +72,14 @@ export interface HttpResponse {
 }
 
 /**
+ * Options for adapter setup
+ */
+export interface AdapterSetupOptions {
+  /** Route prefix (e.g., '/v2' or '/api/v2') */
+  prefix?: string;
+}
+
+/**
  * Configuration for adapter integration test suite
  */
 export interface AdapterTestSuiteConfig {
@@ -75,8 +89,13 @@ export interface AdapterTestSuiteConfig {
   /**
    * Setup adapter and app for testing
    * Called once before all tests
+   * @param context - Test context with Mastra instance
+   * @param options - Optional adapter options (e.g., prefix)
    */
-  setupAdapter: (context: AdapterTestContext) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
+  setupAdapter: (
+    context: AdapterTestContext,
+    options?: AdapterSetupOptions,
+  ) => { adapter: any; app: any } | Promise<{ adapter: any; app: any }>;
 
   /**
    * Execute HTTP request through the adapter's framework (Express/Hono)
@@ -201,6 +220,12 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCall method - returns object with fullStream property
   vi.spyOn(agent, 'declineToolCall').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock approveToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'approveToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
+  // Mock declineToolCallGenerate method - returns same format as generate
+  vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
+
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
 
@@ -309,6 +334,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     description: 'Test scorer for observability tests',
   });
 
+  // Create test processor
+  const testProcessor = createTestProcessor({ id: 'test-processor' });
+
   mockLogger.transports = new Map([
     ['console', {}],
     ['file', {}],
@@ -403,6 +431,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
+  // Create test workspace with local filesystem and mock files
+  const workspace = await createTestWorkspace();
+
   // Create Mastra instance with all test entities
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
@@ -419,7 +450,34 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       'test-server-1': mcpServer1,
       'test-server-2': mcpServer2,
     },
+    workspace,
+    processors: {
+      'test-processor': testProcessor,
+    },
   });
+
+  // Mock getEditor to return an object with namespaced methods for stored agents routes
+  vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    prompt: {
+      preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+    },
+    agent: {
+      clearCache: vi.fn(),
+      clone: vi.fn().mockResolvedValue({
+        id: 'cloned-agent',
+        name: 'Test Agent (Clone)',
+        status: 'draft',
+        description: '',
+        instructions: 'test instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    },
+    scorer: {
+      clearCache: vi.fn(),
+    },
+  } as any);
 
   await mockWorkflowRun(workflow);
   await setupWorkflowRegistryMocks(
@@ -451,13 +509,52 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     // Add test stored agent for stored agents routes
     const agents = await storage.getStore('agents');
     if (agents) {
-      await agents.createAgent({
+      // create automatically creates version 1 with the initial config
+      const storedAgent = await agents.create({
         agent: {
           id: 'test-stored-agent',
           name: 'Test Stored Agent',
           description: 'A test stored agent for integration tests',
           instructions: 'Test instructions for stored agent',
           model: { provider: 'openai', name: 'gpt-4o' },
+        },
+      });
+
+      // Version 1 was auto-created by create; its ID is the activeVersionId
+      const version1Id = storedAgent.activeVersionId!;
+
+      // Version 2: Non-active version that can be deleted or used in comparisons
+      // Config fields are top-level (no snapshot object)
+      await agents.createVersion({
+        id: 'test-version-id',
+        agentId: 'test-stored-agent',
+        versionNumber: 2,
+        name: 'Test Stored Agent',
+        instructions: 'Updated test instructions for version 2',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        changedFields: ['instructions'],
+        changeMessage: 'Second test version',
+      });
+
+      // Ensure version 1 stays active, leaving version 2 (test-version-id) as non-active and deletable
+      await agents.update({
+        id: 'test-stored-agent',
+        activeVersionId: version1Id,
+      });
+    }
+
+    // Add test stored scorer for stored scorers routes
+    const scorers = await storage.getStore('scorerDefinitions');
+    if (scorers) {
+      await scorers.create({
+        scorerDefinition: {
+          id: 'test-stored-scorer',
+          name: 'Test Stored Scorer',
+          description: 'A test stored scorer for integration tests',
+          type: 'llm-judge',
+          instructions: 'Evaluate the response for accuracy.',
+          model: { provider: 'openai', name: 'gpt-4o' },
+          scoreRange: { min: 0, max: 1 },
         },
       });
     }
@@ -571,6 +668,82 @@ export function createMockVoice() {
 }
 
 /**
+ * Creates a test workspace with a local filesystem and mock skill files.
+ * Uses a temporary directory that gets cleaned up after tests.
+ */
+export async function createTestWorkspace(): Promise<Workspace> {
+  // Create a temp directory for the test workspace
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-test-workspace-'));
+
+  // Create skills directory and a test skill
+  const skillsDir = path.join(tempDir, 'skills', 'test-skill');
+  fs.mkdirSync(skillsDir, { recursive: true });
+
+  // Create SKILL.md file for the test skill
+  const skillContent = `---
+name: test-skill
+description: A test skill for integration testing
+license: MIT
+compatibility: ">=1.0.0"
+---
+
+# Test Skill
+
+This is a test skill used for integration testing.
+
+## Instructions
+
+Follow these instructions for the test skill.
+`;
+  fs.writeFileSync(path.join(skillsDir, 'SKILL.md'), skillContent);
+
+  // Create a test reference file in the references subdirectory
+  const referencesDir = path.join(skillsDir, 'references');
+  fs.mkdirSync(referencesDir, { recursive: true });
+  fs.writeFileSync(path.join(referencesDir, 'test-reference.md'), '# Test Reference\n\nThis is a test reference file.');
+
+  // Create a regular test file in the workspace root
+  fs.writeFileSync(path.join(tempDir, 'test-file.txt'), 'Hello from test workspace!');
+
+  // Create a test directory for list operations
+  const testDir = path.join(tempDir, 'test-dir');
+  fs.mkdirSync(testDir, { recursive: true });
+  fs.writeFileSync(path.join(testDir, 'nested-file.txt'), 'Nested file content');
+
+  // Create .agents/skills/ structure for skills-sh routes (remove, check-updates, update)
+  const agentSkillsDir = path.join(tempDir, '.agents', 'skills', 'test-skill');
+  fs.mkdirSync(agentSkillsDir, { recursive: true });
+  fs.writeFileSync(path.join(agentSkillsDir, 'SKILL.md'), skillContent);
+
+  // Create .meta.json for the installed skill (used by update routes)
+  // Use a fixed timestamp for deterministic tests
+  const installedAt = new Date('2024-01-01T00:00:00.000Z').toISOString();
+  const metaJson = {
+    skillName: 'test-skill',
+    owner: 'test-owner',
+    repo: 'test-repo',
+    branch: 'main',
+    installedAt,
+  };
+  fs.writeFileSync(path.join(agentSkillsDir, '.meta.json'), JSON.stringify(metaJson, null, 2));
+
+  // Create the workspace with local filesystem and BM25 search
+  // Use 'test-workspace' as the ID to match test utilities' getDefaultValidPathParams
+  const filesystem = new LocalFilesystem({ basePath: tempDir });
+  const workspace = new Workspace({
+    id: 'test-workspace',
+    filesystem,
+    skills: ['/skills'],
+    bm25: true, // Enable BM25 search for index/unindex operations
+  });
+
+  // Initialize the workspace
+  await workspace.init();
+
+  return workspace;
+}
+
+/**
  * Creates a test tool with basic schema
  */
 export function createTestTool(
@@ -600,6 +773,27 @@ export function createMockMemory() {
   const mockMemory = new MockMemory({ storage });
   (mockMemory as any).__registerMastra = vi.fn();
   return mockMemory;
+}
+
+/**
+ * Creates a test processor for integration tests
+ */
+export function createTestProcessor(
+  overrides: {
+    id?: string;
+    name?: string;
+    description?: string;
+  } = {},
+): Processor {
+  return {
+    id: overrides.id || 'test-processor',
+    name: overrides.name || 'Test Processor',
+    description: overrides.description || 'A test processor for integration tests',
+    async processInput({ messages }: ProcessInputArgs): Promise<ProcessInputResult> {
+      // Simple pass-through processor
+      return messages;
+    },
+  };
 }
 
 /**
@@ -798,11 +992,52 @@ export interface RouteRequestOverrides {
   pathParams?: Record<string, string>;
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
+  /** Route prefix to prepend to the route path (defaults to '/api') */
+  prefix?: string;
+}
+
+/**
+ * Get route-specific defaults for path fields based on the route.
+ * Different routes need different kinds of paths (files vs directories).
+ */
+function getRouteSpecificPathDefaults(route: ServerRoute): {
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+} {
+  const routePath = route.path;
+
+  // File operations need file paths
+  if (
+    routePath.includes('/fs/read') ||
+    routePath.includes('/fs/write') ||
+    routePath.includes('/fs/delete') ||
+    routePath.includes('/fs/stat')
+  ) {
+    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+  }
+
+  // Directory operations need directory paths
+  if (routePath.includes('/fs/list')) {
+    return { query: { path: '/' } };
+  }
+
+  // mkdir needs a new path to create
+  if (routePath.includes('/fs/mkdir')) {
+    return { body: { path: '/new-test-dir' } };
+  }
+
+  // Index/unindex operations
+  if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
+    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+  }
+
+  return {};
 }
 
 export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
   const method = route.method;
-  let path = route.path;
+  const prefix = normalizeRoutePath(overrides.prefix ?? '/api');
+  let path = `${prefix}${route.path}`;
 
   if (route.pathParamSchema) {
     const defaults = getDefaultValidPathParams(route);
@@ -812,10 +1047,13 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
     }
   }
 
+  // Get route-specific path defaults
+  const routeDefaults = getRouteSpecificPathDefaults(route);
+
   let query: Record<string, string | string[]> | undefined;
   if (route.queryParamSchema) {
     const generated = generateValidDataFromSchema(route.queryParamSchema) as Record<string, unknown>;
-    query = convertQueryValues({ ...generated, ...(overrides.query ?? {}) });
+    query = convertQueryValues({ ...generated, ...(routeDefaults.query ?? {}), ...(overrides.query ?? {}) });
   } else if (overrides.query) {
     query = convertQueryValues(overrides.query);
   }
@@ -823,7 +1061,7 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
   let body: Record<string, unknown> | undefined;
   if (route.bodySchema) {
     const generated = generateValidDataFromSchema(route.bodySchema) as Record<string, unknown>;
-    body = { ...generated, ...(overrides.body ?? {}) };
+    body = { ...generated, ...(routeDefaults.body ?? {}), ...(overrides.body ?? {}) };
   } else if (overrides.body) {
     body = { ...overrides.body };
   }

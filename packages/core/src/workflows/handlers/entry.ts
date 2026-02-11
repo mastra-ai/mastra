@@ -78,7 +78,6 @@ export async function persistStepUpdate(
         result,
         error,
         requestContext: requestContextObj,
-        // @ts-ignore
         timestamp: Date.now(),
       },
     });

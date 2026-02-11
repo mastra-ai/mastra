@@ -9,7 +9,7 @@ packages:
 
 # Agent Networks
 
-Agent networks in Mastra coordinate multiple agents, workflows, and tools to handle tasks that aren't clearly defined upfront but can be inferred from the user's message or context. A top-level **routing agent** (a Mastra agent with other agents, workflows, and tools configured) uses an LLM to interpret the request and decide which primitives (sub-agents, workflows, or tools) to call, in what order, and with what data.
+Agent networks in Mastra coordinate multiple agents, workflows, and tools to handle tasks that aren't clearly defined upfront but can be inferred from the user's message or context. A top-level **routing agent** (a Mastra agent with other agents, workflows, and tools configured) uses an LLM to interpret the request and decide which primitives (subagents, workflows, or tools) to call, in what order, and with what data.
 
 ## When to use networks
 
@@ -25,7 +25,7 @@ Mastra agent networks operate using these principles:
 
 ## Creating an agent network
 
-An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
+An agent network is built around a top-level routing agent that delegates tasks to subagents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
 ```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -73,7 +73,7 @@ When configuring a Mastra agent network, each primitive (agent, workflow, or too
 
 #### Agent descriptions
 
-Each agent in a network should include a clear `description` that explains what the agent does.
+Each subagent in a network should include a clear `description` that explains what the agent does.
 
 ```typescript title="src/mastra/agents/research-agent.ts"
 export const researchAgent = new Agent({
@@ -295,5 +295,5 @@ const final = await stream.object;
 
 - [Agent Memory](./agent-memory)
 - [Workflows Overview](../workflows/overview)
-- [Request Context](/docs/v1/server/request-context)
+- [Request Context](/docs/server/request-context)
 - [Supervisor example](https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent)

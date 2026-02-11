@@ -1,3 +1,4 @@
+import { APICallError } from '@internal/ai-sdk-v5';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
@@ -24,6 +25,10 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
+  /**
+   * Shared processor state map that persists across agent turns.
+   */
+  processorStates?: Map<string, Record<string, unknown>>;
 }
 
 export function createMapResultsStep<OUTPUT = undefined>({
@@ -50,6 +55,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
+    let threadCreatedByStep = false;
+
     const result = {
       ...options,
       agentId,
@@ -64,7 +71,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
         if (options.savePerStep && !memoryConfig?.readOnly) {
-          if (!memoryData.threadExists && memory && memoryData.thread) {
+          if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
               title: memoryData.thread?.title,
@@ -73,7 +80,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
               memoryConfig,
             });
 
-            memoryData.threadExists = true;
+            threadCreatedByStep = true;
           }
 
           await capabilities.saveStepMessages({
@@ -112,19 +119,18 @@ export function createMapResultsStep<OUTPUT = undefined>({
         messageList: memoryData.messageList,
       });
 
-      // @ts-ignore - TODO: types are wrong here, maybe wrong in general?
       return bail(modelOutput);
     }
 
-    let effectiveOutputProcessors =
-      options.outputProcessors ||
-      (capabilities.outputProcessors
-        ? typeof capabilities.outputProcessors === 'function'
-          ? await capabilities.outputProcessors({
-              requestContext: result.requestContext!,
-            })
-          : capabilities.outputProcessors
-        : []);
+    // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
+    let effectiveOutputProcessors = capabilities.outputProcessors
+      ? typeof capabilities.outputProcessors === 'function'
+        ? await capabilities.outputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.outputProcessors,
+          })
+        : options.outputProcessors || capabilities.outputProcessors
+      : options.outputProcessors || [];
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
@@ -138,16 +144,15 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : [structuredProcessor];
     }
 
-    // Resolve input processors from options override or agent capability
-    const effectiveInputProcessors =
-      options.inputProcessors ||
-      (capabilities.inputProcessors
-        ? typeof capabilities.inputProcessors === 'function'
-          ? await capabilities.inputProcessors({
-              requestContext: result.requestContext!,
-            })
-          : capabilities.inputProcessors
-        : []);
+    // Resolve input processors - overrides replace user-configured but auto-derived (memory, skills) are kept
+    const effectiveInputProcessors = capabilities.inputProcessors
+      ? typeof capabilities.inputProcessors === 'function'
+        ? await capabilities.inputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+          })
+        : options.inputProcessors || capabilities.inputProcessors
+      : options.inputProcessors || [];
 
     const messageList = memoryData.messageList!;
 
@@ -171,10 +176,27 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
         onFinish: async (payload: any) => {
           if (payload.finishReason === 'error') {
-            capabilities.logger.error('Error in agent stream', {
-              error: payload.error,
-              runId,
-            });
+            const provider = payload.model?.provider;
+            const modelId = payload.model?.modelId;
+            const isUpstreamError = APICallError.isInstance(payload.error);
+
+            if (isUpstreamError) {
+              const providerInfo = provider ? ` from ${provider}` : '';
+              const modelInfo = modelId ? ` (model: ${modelId})` : '';
+              capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+                error: payload.error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            } else {
+              capabilities.logger.error('Error in agent stream', {
+                error: payload.error,
+                runId,
+                ...(provider && { provider }),
+                ...(modelId && { modelId }),
+              });
+            }
             return;
           }
 
@@ -231,6 +253,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       },
       messageList: memoryData.messageList!,
       maxProcessorRetries: options.maxProcessorRetries,
+      processorStates: memoryData.processorStates,
     };
 
     return loopOptions;

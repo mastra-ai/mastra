@@ -63,7 +63,7 @@ workflow.foreach(step1, { concurrency: 2 });
 
 The `.foreach()` method processes all items before the next step executes. The step following `.foreach()` only runs after every iteration has completed, regardless of concurrency settings. With `concurrency: 1` (default), items process sequentially. With higher concurrency, items process in parallel batches, but the next step still waits for all batches to finish.
 
-If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/v1/workflows/control-flow#nested-workflows-inside-foreach) for examples.
+If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/workflows/control-flow#nested-workflows-inside-foreach) for examples.
 
 ### Output structure
 
@@ -124,4 +124,4 @@ workflow
 
 ## Related
 
-- [Looping with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)
+- [Looping with foreach](/docs/workflows/control-flow#looping-with-foreach)

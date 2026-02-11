@@ -4,13 +4,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Step, DefaultEngineType } from '@mastra/core/workflows';
 import { Agent, MastraDBMessage } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
-import type {
-  Processor,
-  ProcessorStepInput,
-  ProcessorStepOutput,
-  ProcessorStepInputSchema,
-  ProcessorStepOutputSchema,
-} from '@mastra/core/processors';
+import type { Processor, ProcessorStepInputSchema, ProcessorStepOutputSchema } from '@mastra/core/processors';
 
 describe('workflow', () => {
   describe('createStep', () => {
@@ -60,6 +54,24 @@ describe('workflow', () => {
               return suspend({ reason: 'Waiting for approval' });
             }
             return { completed: resumeData.approval };
+          },
+        });
+      });
+
+      it('should allow bail() to accept any type, not just the step output type', () => {
+        const step = createStep({
+          id: 'bail-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ bail, inputData }) => {
+            if (inputData.value === 'stop') {
+              // bail() should accept any type since it bails the workflow, not the step
+              return bail({ workflowResult: 123 });
+            }
+            if (inputData.value === 'empty') {
+              return bail();
+            }
+            return { result: inputData.value };
           },
         });
       });
@@ -133,6 +145,7 @@ describe('workflow', () => {
       it('should accept retries and scorers options without structured output', () => {
         const agent = new Agent({
           id: 'retry-agent',
+          description: 'Retry on failure',
           name: 'Retry Agent',
           instructions: 'Retry on failure',
           model: 'gpt-4o',

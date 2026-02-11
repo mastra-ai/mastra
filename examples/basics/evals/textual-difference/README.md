@@ -4,7 +4,7 @@ This example demonstrates how to use Mastra's Textual Difference metric to evalu
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 
 ## Getting Started

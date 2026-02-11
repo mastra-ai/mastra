@@ -7,18 +7,30 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  ObservationalMemoryRecord,
+  BufferedObservationChunk,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  UpdateBufferedReflectionInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
+  SwapBufferedReflectionToActiveInput,
+  CreateReflectionGenerationInput,
 } from '../../types';
-import { filterByDateRange, safelyParseJSON } from '../../utils';
+import { filterByDateRange, jsonValueEquals, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 
 export class InMemoryMemory extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -30,6 +42,7 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.threads.clear();
     this.db.messages.clear();
     this.db.resources.clear();
+    this.db.observationalMemory.clear();
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -82,7 +95,7 @@ export class InMemoryMemory extends MemoryStorage {
 
   async listMessages({
     threadId,
-    resourceId,
+    resourceId: optionalResourceId,
     include,
     filter,
     perPage: perPageInput,
@@ -119,10 +132,12 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    // Step 1: Get regular paginated messages from the thread(s) first
+    // Step 1: Get messages matching threadId(s) and optionally resourceId
     let threadMessages = Array.from(this.db.messages.values()).filter((msg: any) => {
-      if (!threadIdSet.has(msg.thread_id)) return false;
-      if (resourceId && msg.resourceId !== resourceId) return false;
+      // Message must be in one of the specified threads
+      if (threadIdSet && !threadIdSet.has(msg.thread_id)) return false;
+      // If optionalResourceId provided, message must match it
+      if (optionalResourceId && msg.resourceId !== optionalResourceId) return false;
       return true;
     });
 
@@ -274,6 +289,74 @@ export class InMemoryMemory extends MemoryStorage {
     return {
       messages,
       total: totalThreadMessages,
+      page,
+      perPage: perPageForResponse,
+      hasMore,
+    };
+  }
+
+  async listMessagesByResourceId({
+    resourceId,
+    filter,
+    perPage: perPageInput,
+    page = 0,
+    orderBy,
+  }: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
+    this.logger.debug(`InMemoryMemory: listMessagesByResourceId called for resource ${resourceId}`);
+
+    const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
+    // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
+    const perPage = normalizePerPage(perPageInput, 40);
+
+    if (page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    // Get all messages matching the resourceId (across all threads)
+    let messages = Array.from(this.db.messages.values()).filter((msg: any) => msg.resourceId === resourceId);
+
+    // Apply date filtering
+    messages = filterByDateRange(messages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
+
+    // Sort messages
+    messages.sort((a: any, b: any) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date(a[field]).getTime() : a[field];
+      const bValue = isDateField ? new Date(b[field]).getTime() : b[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+
+    // Get total count for pagination
+    const total = messages.length;
+
+    // Apply pagination
+    const paginatedMessages = messages.slice(offset, offset + perPage);
+
+    const list = new MessageList().add(
+      paginatedMessages.map(m => this.parseStoredMessage(m)),
+      'memory',
+    );
+
+    const hasMore = offset + paginatedMessages.length < total;
+
+    return {
+      messages: list.get.all.db(),
+      total,
       page,
       perPage: perPageForResponse,
       hasMore,
@@ -460,32 +543,45 @@ export class InMemoryMemory extends MemoryStorage {
     }
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
+
+    // Validate pagination input before normalization
+    // This ensures page === 0 when perPageInput === false
+    this.validatePaginationInput(page, perPageInput ?? 100);
+
     const perPage = normalizePerPage(perPageInput, 100);
 
-    if (page < 0) {
-      throw new Error('page must be >= 0');
+    this.logger.debug(`InMemoryMemory: listThreads called with filter: ${JSON.stringify(filter)}`);
+
+    // Start with all threads
+    let threads = Array.from(this.db.threads.values());
+
+    // Apply resourceId filter if provided
+    if (filter?.resourceId) {
+      threads = threads.filter((t: any) => t.resourceId === filter.resourceId);
     }
 
-    // Prevent unreasonably large page values that could cause performance issues
-    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
-    if (page * perPage > maxOffset) {
-      throw new Error('page value too large');
+    // Validate metadata keys before filtering
+    this.validateMetadataKeys(filter?.metadata);
+
+    // Apply metadata filter if provided (AND logic - all key-value pairs must match)
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      threads = threads.filter(thread => {
+        if (!thread.metadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(thread.metadata![key], value));
+      });
     }
 
-    this.logger.debug(`InMemoryMemory: listThreadsByResourceId called for ${resourceId}`);
-    // Mock implementation - find threads by resourceId
-    const threads = Array.from(this.db.threads.values()).filter((t: any) => t.resourceId === resourceId);
     const sortedThreads = this.sortThreads(threads, field, direction);
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
+
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
     return {
       threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
@@ -679,5 +775,429 @@ export class InMemoryMemory extends MemoryStorage {
         ? String(aValue).localeCompare(String(bValue))
         : String(bValue).localeCompare(String(aValue));
     });
+  }
+
+  // ============================================
+  // Observational Memory Implementation
+  // ============================================
+
+  private getObservationalMemoryKey(threadId: string | null, resourceId: string): string {
+    if (threadId) {
+      return `thread:${threadId}`;
+    }
+    return `resource:${resourceId}`;
+  }
+
+  async getObservationalMemory(threadId: string | null, resourceId: string): Promise<ObservationalMemoryRecord | null> {
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    const records = this.db.observationalMemory.get(key);
+    return records?.[0] ?? null;
+  }
+
+  async getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit?: number,
+  ): Promise<ObservationalMemoryRecord[]> {
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    const records = this.db.observationalMemory.get(key) ?? [];
+    return limit != null ? records.slice(0, limit) : records;
+  }
+
+  async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    const { threadId, resourceId, scope, config, observedTimezone } = input;
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    const now = new Date();
+
+    const record: ObservationalMemoryRecord = {
+      id: crypto.randomUUID(),
+      scope,
+      threadId,
+      resourceId,
+      // Timestamps at top level
+      createdAt: now,
+      updatedAt: now,
+      // lastObservedAt starts undefined - all messages are "unobserved" initially
+      // This ensures historical data (like LongMemEval fixtures) works correctly
+      lastObservedAt: undefined,
+      originType: 'initial',
+      generationCount: 0,
+      activeObservations: '',
+      // Buffering (for async observation/reflection)
+      bufferedObservations: undefined,
+      bufferedReflection: undefined,
+      // Message tracking
+      // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
+      // Token tracking
+      totalTokensObserved: 0,
+      observationTokenCount: 0,
+      pendingMessageTokens: 0,
+      // State flags
+      isReflecting: false,
+      isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      // Configuration
+      config,
+      // Timezone used for observation date formatting
+      observedTimezone,
+      // Extensible metadata (optional)
+      metadata: {},
+    };
+
+    // Add as first record (most recent)
+    const existing = this.db.observationalMemory.get(key) ?? [];
+    this.db.observationalMemory.set(key, [record, ...existing]);
+
+    return record;
+  }
+
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.activeObservations = observations;
+    record.observationTokenCount = tokenCount;
+    record.totalTokensObserved += tokenCount;
+    // Reset pending tokens since we've now observed them
+    record.pendingMessageTokens = 0;
+
+    // Update timestamps (top-level, not in metadata)
+    record.lastObservedAt = lastObservedAt;
+    record.updatedAt = new Date();
+
+    // Store observed message IDs as safeguard against re-observation
+    if (observedMessageIds) {
+      record.observedMessageIds = observedMessageIds;
+    }
+  }
+
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    const { id, chunk } = input;
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    // Create a new chunk with generated id and timestamp
+    const newChunk: BufferedObservationChunk = {
+      id: `ombuf-${crypto.randomUUID()}`,
+      cycleId: chunk.cycleId,
+      observations: chunk.observations,
+      tokenCount: chunk.tokenCount,
+      messageIds: chunk.messageIds,
+      messageTokens: chunk.messageTokens,
+      lastObservedAt: chunk.lastObservedAt,
+      createdAt: new Date(),
+      suggestedContinuation: chunk.suggestedContinuation,
+      currentTask: chunk.currentTask,
+    };
+
+    // Add chunk to the array
+    const existingChunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    record.bufferedObservationChunks = [...existingChunks, newChunk];
+
+    if (input.lastBufferedAtTime) {
+      record.lastBufferedAtTime = input.lastBufferedAtTime;
+    }
+
+    record.updatedAt = new Date();
+  }
+
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    const { id, activationRatio, lastObservedAt } = input;
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    const chunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
+    if (chunks.length === 0) {
+      return {
+        chunksActivated: 0,
+        messageTokensActivated: 0,
+        observationTokensActivated: 0,
+        messagesActivated: 0,
+        activatedCycleIds: [],
+        activatedMessageIds: [],
+      };
+    }
+
+    // Calculate target: how many message tokens to remove so that
+    // (1 - activationRatio) * threshold worth of raw messages remain.
+    // e.g., ratio=0.8, threshold=5000, pending=6000 → remove 6000 - 1000 = 5000
+    const retentionFloor = input.messageTokensThreshold * (1 - activationRatio);
+    const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
+
+    // Find the closest chunk boundary to the target, biased under
+    let cumulativeMessageTokens = 0;
+    let bestBoundary = 0;
+    let bestBoundaryMessageTokens = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
+      const boundary = i + 1;
+
+      // Prefer boundaries that are under the target (leaves more raw messages in context)
+      // Only go over if there's no under option
+      const isUnder = cumulativeMessageTokens <= targetMessageTokens;
+      const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
+
+      if (bestBoundary === 0) {
+        // First boundary, take it
+        bestBoundary = boundary;
+        bestBoundaryMessageTokens = cumulativeMessageTokens;
+      } else if (isUnder && !bestIsUnder) {
+        // Current is under, best is over - prefer under
+        bestBoundary = boundary;
+        bestBoundaryMessageTokens = cumulativeMessageTokens;
+      } else if (isUnder && bestIsUnder) {
+        // Both under - prefer the one closer to target (higher)
+        if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
+          bestBoundary = boundary;
+          bestBoundaryMessageTokens = cumulativeMessageTokens;
+        }
+      } else if (!isUnder && !bestIsUnder) {
+        // Both over - prefer the one closer to target (lower)
+        if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
+          bestBoundary = boundary;
+          bestBoundaryMessageTokens = cumulativeMessageTokens;
+        }
+      }
+      // If current is over and best is under, keep best (do nothing)
+    }
+
+    // If bestBoundary is 0 (no boundary under target), activate at least 1 chunk
+    // since we've reached threshold and need to clear some context
+    const chunksToActivate = bestBoundary === 0 ? 1 : bestBoundary;
+    const activatedChunks = chunks.slice(0, chunksToActivate);
+    const remainingChunks = chunks.slice(chunksToActivate);
+
+    // Combine activated chunks into content
+    const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+    const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+    const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+    const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
+    const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
+    const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds);
+
+    // Derive lastObservedAt from the latest activated chunk, or use provided value
+    const latestChunk = activatedChunks[activatedChunks.length - 1];
+    const derivedLastObservedAt =
+      lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
+
+    // Append activated content to active observations
+    if (record.activeObservations) {
+      record.activeObservations = `${record.activeObservations}\n\n${activatedContent}`;
+    } else {
+      record.activeObservations = activatedContent;
+    }
+
+    // Update observation token count
+    record.observationTokenCount = (record.observationTokenCount ?? 0) + activatedTokens;
+
+    // Decrement pending message tokens (clamped to zero)
+    record.pendingMessageTokens = Math.max(0, (record.pendingMessageTokens ?? 0) - activatedMessageTokens);
+
+    // NOTE: We intentionally do NOT add activatedMessageIds to record.observedMessageIds.
+    // observedMessageIds is used by getUnobservedMessages to filter future messages.
+    // Since AI SDK may reuse message IDs for new content, adding them here would
+    // permanently block new content from being observed. Instead, we return
+    // activatedMessageIds so the caller can remove them from messageList directly.
+
+    // Update buffered state with remaining chunks
+    record.bufferedObservationChunks = remainingChunks.length > 0 ? remainingChunks : undefined;
+
+    // Update timestamps
+    record.lastObservedAt = derivedLastObservedAt;
+    record.updatedAt = new Date();
+
+    return {
+      chunksActivated: activatedChunks.length,
+      messageTokensActivated: activatedMessageTokens,
+      observationTokensActivated: activatedTokens,
+      messagesActivated: activatedMessageCount,
+      activatedCycleIds,
+      activatedMessageIds,
+      observations: activatedContent,
+      perChunk: activatedChunks.map(c => ({
+        cycleId: c.cycleId ?? '',
+        messageTokens: c.messageTokens ?? 0,
+        observationTokens: c.tokenCount,
+        messageCount: c.messageIds.length,
+        observations: c.observations,
+      })),
+    };
+  }
+
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    const { currentRecord, reflection, tokenCount } = input;
+    const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
+    const now = new Date();
+
+    const newRecord: ObservationalMemoryRecord = {
+      id: crypto.randomUUID(),
+      scope: currentRecord.scope,
+      threadId: currentRecord.threadId,
+      resourceId: currentRecord.resourceId,
+      // Timestamps at top level
+      createdAt: now,
+      updatedAt: now,
+      lastObservedAt: currentRecord.lastObservedAt ?? now, // Carry over from observation (which always runs before reflection)
+      originType: 'reflection',
+      generationCount: currentRecord.generationCount + 1,
+      activeObservations: reflection,
+      config: currentRecord.config,
+      totalTokensObserved: currentRecord.totalTokensObserved,
+      observationTokenCount: tokenCount,
+      pendingMessageTokens: 0,
+      isReflecting: false,
+      isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      // Timezone used for observation date formatting
+      observedTimezone: currentRecord.observedTimezone,
+      // Extensible metadata (optional)
+      metadata: {},
+    };
+
+    // Add as first record (most recent)
+    const existing = this.db.observationalMemory.get(key) ?? [];
+    this.db.observationalMemory.set(key, [newRecord, ...existing]);
+
+    return newRecord;
+  }
+
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    const { id, reflection, tokenCount, inputTokenCount, reflectedObservationLineCount } = input;
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    const existing = record.bufferedReflection || '';
+    record.bufferedReflection = existing ? `${existing}\n\n${reflection}` : reflection;
+    record.bufferedReflectionTokens = (record.bufferedReflectionTokens || 0) + tokenCount;
+    record.bufferedReflectionInputTokens = (record.bufferedReflectionInputTokens || 0) + inputTokenCount;
+    record.reflectedObservationLineCount = reflectedObservationLineCount;
+    record.updatedAt = new Date();
+  }
+
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    const { currentRecord } = input;
+    const record = this.findObservationalMemoryRecordById(currentRecord.id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${currentRecord.id}`);
+    }
+
+    if (!record.bufferedReflection) {
+      throw new Error('No buffered reflection to swap');
+    }
+
+    const bufferedReflection = record.bufferedReflection;
+    const reflectedLineCount = record.reflectedObservationLineCount ?? 0;
+
+    // Split current activeObservations by the boundary line count.
+    // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+    // Lines after reflectedLineCount were added after reflection started → kept as-is.
+    const currentObservations = record.activeObservations ?? '';
+    const allLines = currentObservations.split('\n');
+    const unreflectedLines = allLines.slice(reflectedLineCount);
+    const unreflectedContent = unreflectedLines.join('\n').trim();
+
+    // New activeObservations = bufferedReflection + unreflected observations
+    const newObservations = unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
+
+    // Create a new generation with the merged content.
+    // tokenCount is computed by the processor using its token counter on the combined content.
+    const newRecord = await this.createReflectionGeneration({
+      currentRecord: record,
+      reflection: newObservations,
+      tokenCount: input.tokenCount,
+    });
+
+    // Clear buffered state on old record
+    record.bufferedReflection = undefined;
+    record.bufferedReflectionTokens = undefined;
+    record.bufferedReflectionInputTokens = undefined;
+    record.reflectedObservationLineCount = undefined;
+
+    return newRecord;
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isReflecting = isReflecting;
+    record.updatedAt = new Date();
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isObserving = isObserving;
+    record.updatedAt = new Date();
+  }
+
+  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isBufferingObservation = isBuffering;
+    if (lastBufferedAtTokens !== undefined) {
+      record.lastBufferedAtTokens = lastBufferedAtTokens;
+    }
+    record.updatedAt = new Date();
+  }
+
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.isBufferingReflection = isBuffering;
+    record.updatedAt = new Date();
+  }
+
+  async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    const key = this.getObservationalMemoryKey(threadId, resourceId);
+    this.db.observationalMemory.delete(key);
+  }
+
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    const record = this.findObservationalMemoryRecordById(id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    record.pendingMessageTokens = tokenCount;
+    record.updatedAt = new Date();
+  }
+
+  /**
+   * Helper to find an observational memory record by ID across all keys
+   */
+  private findObservationalMemoryRecordById(id: string): ObservationalMemoryRecord | null {
+    for (const records of this.db.observationalMemory.values()) {
+      const record = records.find(r => r.id === id);
+      if (record) return record;
+    }
+    return null;
   }
 }

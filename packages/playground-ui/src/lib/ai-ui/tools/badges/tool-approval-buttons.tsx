@@ -16,6 +16,7 @@ export interface ToolApprovalButtonsProps {
       }
     | undefined;
   isNetwork: boolean;
+  isGenerateMode?: boolean;
 }
 
 export const ToolApprovalButtons = ({
@@ -24,10 +25,13 @@ export const ToolApprovalButtons = ({
   toolApprovalMetadata,
   toolName,
   isNetwork,
+  isGenerateMode,
 }: ToolApprovalButtonsProps) => {
   const {
     approveToolcall,
     declineToolcall,
+    approveToolcallGenerate,
+    declineToolcallGenerate,
     isRunning,
     toolCallApprovals,
     approveNetworkToolcall,
@@ -38,6 +42,8 @@ export const ToolApprovalButtons = ({
   const handleApprove = () => {
     if (isNetwork) {
       approveNetworkToolcall(toolName, toolApprovalMetadata?.runId);
+    } else if (isGenerateMode) {
+      approveToolcallGenerate(toolCallId);
     } else {
       approveToolcall(toolCallId);
     }
@@ -46,6 +52,8 @@ export const ToolApprovalButtons = ({
   const handleDecline = () => {
     if (isNetwork) {
       declineNetworkToolcall(toolName, toolApprovalMetadata?.runId);
+    } else if (isGenerateMode) {
+      declineToolcallGenerate(toolCallId);
     } else {
       declineToolcall(toolCallId);
     }

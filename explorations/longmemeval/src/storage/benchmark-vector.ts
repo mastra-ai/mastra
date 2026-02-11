@@ -23,7 +23,7 @@ export class BenchmarkVectorStore extends MastraVector {
   private mode: DBMode;
 
   constructor(mode: DBMode = 'read-write') {
-    super();
+    super({ id: 'benchmark-vector-store' });
     this.mode = mode;
   }
 

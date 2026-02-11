@@ -227,6 +227,13 @@ export const agent = new Agent({
       description:
         "Maximum number of times a processor can request retrying the LLM step.",
     },
+    {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      isOptional: true,
+      description:
+        "Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.",
+    },
   ]}
 />
 
@@ -244,4 +251,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Agents overview](/docs/v1/agents/overview)
+- [Agents overview](/docs/agents/overview)

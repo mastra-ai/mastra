@@ -1,11 +1,13 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageDomains } from '@mastra/core/storage';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
+import { MongoDBPromptBlocksStorage } from './domains/prompt-blocks';
+import { MongoDBScorerDefinitionsStorage } from './domains/scorer-definitions';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
@@ -14,6 +16,8 @@ import type { MongoDBConfig } from './types';
 export {
   MongoDBAgentsStorage,
   MemoryStorageMongoDB,
+  MongoDBPromptBlocksStorage,
+  MongoDBScorerDefinitionsStorage,
   ObservabilityMongoDB,
   ScoresStorageMongoDB,
   WorkflowsStorageMongoDB,
@@ -38,7 +42,7 @@ export type { MongoDBDomainConfig } from './db';
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class MongoDBStore extends MastraStorage {
+export class MongoDBStore extends MastraCompositeStore {
   #connector: MongoDBConnector;
 
   stores: StorageDomains;
@@ -64,12 +68,18 @@ export class MongoDBStore extends MastraStorage {
 
     const agents = new MongoDBAgentsStorage(domainConfig);
 
+    const promptBlocks = new MongoDBPromptBlocksStorage(domainConfig);
+
+    const scorerDefinitions = new MongoDBScorerDefinitionsStorage(domainConfig);
+
     this.stores = {
       memory,
       scores,
       workflows,
       observability,
       agents,
+      promptBlocks,
+      scorerDefinitions,
     };
   }
 

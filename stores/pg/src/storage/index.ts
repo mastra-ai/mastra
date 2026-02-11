@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
@@ -17,6 +17,8 @@ import type { PgDomainClientConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
+import { PromptBlocksPG } from './domains/prompt-blocks';
+import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
@@ -27,7 +29,7 @@ const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
 export { exportSchemas } from './db';
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
+export { AgentsPG, MemoryPG, ObservabilityPG, PromptBlocksPG, ScorerDefinitionsPG, ScoresPG, WorkflowsPG };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
@@ -55,7 +57,7 @@ export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomain
  * const rows = await store.db.any('SELECT * FROM my_table');
  * ```
  */
-export class PostgresStore extends MastraStorage {
+export class PostgresStore extends MastraCompositeStore {
   #pool: Pool;
   #db: DbClient;
   #ownsPool: boolean;
@@ -94,6 +96,8 @@ export class PostgresStore extends MastraStorage {
         memory: new MemoryPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
+        promptBlocks: new PromptBlocksPG(domainConfig),
+        scorerDefinitions: new ScorerDefinitionsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
@@ -147,6 +151,10 @@ export class PostgresStore extends MastraStorage {
       await super.init();
     } catch (error) {
       this.isInitialized = false;
+      // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INIT', 'FAILED'),

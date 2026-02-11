@@ -1,11 +1,14 @@
 node_modules/
 dist/
+test-outputs/
+.vitest-reports/
 .DS_Store
 
 # IDE
 .vscode/
 .idea/
 .history/
+.context/
 
 # Dev artifacts
 .dev/db/*
@@ -50,3 +53,5 @@ storybook-static
 test-output.log
 
 .playwright-mcp
+om-debug.log
+om-reflector-fixture.json

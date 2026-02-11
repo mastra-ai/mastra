@@ -23,10 +23,10 @@ export async function GET() {
     modelProvider: selectedModel?.provider || `OPEN_AI`,
   });
 
-  const result = await mastra.memory?.listThreadsByResourceId({
-    resourceId: session.user.id!,
-    offset: 0,
-    limit: 10,
+  const result = await mastra.memory?.listThreads({
+    filter: { resourceId: session.user.id! },
+    page: 0,
+    perPage: 10,
   });
 
   return Response.json(result?.threads || []);

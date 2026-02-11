@@ -5,6 +5,8 @@ import {
   LIST_INDEXES_ROUTE,
   DESCRIBE_INDEX_ROUTE,
   DELETE_INDEX_ROUTE,
+  LIST_VECTORS_ROUTE,
+  LIST_EMBEDDERS_ROUTE,
 } from '../../handlers/vector';
 import type { ServerRoute } from '.';
 
@@ -15,4 +17,6 @@ export const VECTORS_ROUTES: ServerRoute<any, any, any>[] = [
   LIST_INDEXES_ROUTE,
   DESCRIBE_INDEX_ROUTE,
   DELETE_INDEX_ROUTE,
+  LIST_VECTORS_ROUTE,
+  LIST_EMBEDDERS_ROUTE,
 ];

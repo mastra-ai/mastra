@@ -24,6 +24,7 @@ export type DefaultNode = Node<
     isParallel?: boolean;
     canSuspend?: boolean;
     isForEach?: boolean;
+    metadata?: Record<string, unknown>;
   },
   'default-node'
 >;

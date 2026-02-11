@@ -1,5 +1,6 @@
+import { TransformStream } from 'node:stream/web';
 import type { LLMStepResult } from '@mastra/core/agent';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { AgentChunkType, ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
@@ -86,7 +87,9 @@ const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
 export function WorkflowStreamToAISDKTransformer({
   includeTextStreamParts,
-}: { includeTextStreamParts?: boolean } = {}) {
+  sendReasoning,
+  sendSources,
+}: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -118,7 +121,10 @@ export function WorkflowStreamToAISDKTransformer({
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts);
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts, {
+        sendReasoning,
+        sendSources,
+      });
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -179,8 +185,8 @@ export function AgentNetworkToAISDKTransformer() {
 
 export function AgentStreamToAISDKTransformer<OUTPUT>({
   lastMessageId,
-  sendStart,
-  sendFinish,
+  sendStart = true,
+  sendFinish = true,
   sendReasoning,
   sendSources,
   messageMetadata,
@@ -417,6 +423,7 @@ export function transformWorkflow<OUTPUT>(
   >,
   isNested?: boolean,
   includeTextStreamParts?: boolean,
+  streamOptions?: { sendReasoning?: boolean; sendSources?: boolean },
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -514,11 +521,13 @@ export function transformWorkflow<OUTPUT>(
       const output = payload.payload.output;
 
       if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
-        // @ts-expect-error
+        // @ts-expect-error - generic type mismatch in conversion
         const part = convertMastraChunkToAISDKv5<OUTPUT>({ chunk: output, mode: 'stream' });
 
         const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
+          sendReasoning: streamOptions?.sendReasoning,
+          sendSources: streamOptions?.sendSources,
           onError(error) {
             return safeParseErrorObject(error);
           },
@@ -843,8 +852,25 @@ export function transformNetwork(
         },
       } as const;
 
+      // Check if the routing agent handled the request directly (no delegation)
+      // In that case, the result text is the selectionReason (routing logic), not user-facing content.
+      // Text events for the actual answer will come from the validation step instead.
+      // Scope to the current step (via payload.payload.runId) to avoid stale matches in multi-iteration scenarios.
+      const finishStepId = payload.payload?.runId;
+      const routingStep = current.steps.find(
+        step => step.id === finishStepId && step.task?.id === 'none' && step.task?.type === 'none',
+      );
+      const isDirectHandling = !!routingStep;
+
       // Fallback: emit text events from result if core didn't send routing-agent-text-* events
-      if (!current.hasEmittedText && resultText && typeof resultText === 'string' && resultText.length > 0) {
+      // Skip this when routing agent handled directly, as the result contains internal routing reasoning
+      if (
+        !isDirectHandling &&
+        !current.hasEmittedText &&
+        resultText &&
+        typeof resultText === 'string' &&
+        resultText.length > 0
+      ) {
         current.hasEmittedText = true;
         return [
           { type: 'text-start', id: payload.runId } as const,
@@ -898,7 +924,7 @@ export function transformNetwork(
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
-        const stepId = payload.payload.runId;
+        const stepId = (payload.payload as AgentChunkType).runId;
         const current = bufferedNetworks.get(payload.runId!);
         if (!current) return null;
 
@@ -926,7 +952,7 @@ export function transformNetwork(
       }
 
       if (payload.type.startsWith('workflow-execution-event-')) {
-        const stepId = payload.payload.runId;
+        const stepId = (payload.payload as WorkflowStreamEvent).runId;
         const current = bufferedNetworks.get(payload.runId!);
         if (!current) return null;
 

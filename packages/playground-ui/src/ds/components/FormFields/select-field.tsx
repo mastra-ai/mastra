@@ -12,7 +12,7 @@ export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement
   value?: string;
   helpMsg?: string;
   errorMsg?: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; icon?: React.ReactNode }[];
   placeholder?: string;
   onValueChange: (value: string) => void;
   size?: FormElementSize;
@@ -59,7 +59,10 @@ export function SelectField({
         <SelectContent>
           {options.map(option => (
             <SelectItem key={option.label} value={option.value}>
-              <span className="whitespace-nowrap truncate block">{option.label}</span>
+              <span className="whitespace-nowrap truncate flex items-center gap-2">
+                {option.icon}
+                {option.label}
+              </span>
             </SelectItem>
           ))}
         </SelectContent>

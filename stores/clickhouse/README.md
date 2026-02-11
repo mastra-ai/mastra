@@ -11,7 +11,7 @@ npm install @mastra/clickhouse
 ## Prerequisites
 
 - Clickhouse server (version 21.12 or higher recommended)
-- Node.js 16 or higher
+- Node.js 22.13.0 or later
 
 ## Usage
 

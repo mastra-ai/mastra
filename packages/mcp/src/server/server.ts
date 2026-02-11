@@ -497,7 +497,7 @@ export class MCPServer extends MCPServerBase {
             elicitation: sessionElicitation,
             extra,
           },
-          // @ts-ignore this is to let people know that the elicitation and extra keys are now nested under mcp.elicitation and mcp.extra in tool arguments
+          // @ts-expect-error this is to let people know that the elicitation and extra keys are now nested under mcp.elicitation and mcp.extra in tool arguments
           get elicitation() {
             throw new Error(`The "elicitation" key is now nested under "mcp.elicitation" in tool arguments`);
           },

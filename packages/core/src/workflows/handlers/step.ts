@@ -28,6 +28,7 @@ import {
   validateStepResumeData,
   validateStepSuspendData,
   validateStepStateData,
+  validateStepRequestContext,
 } from '../utils';
 
 export interface ExecuteStepParams {
@@ -87,11 +88,20 @@ export async function executeStep(
 
   const stepCallId = randomUUID();
 
-  const { inputData, validationError } = await validateStepInput({
+  const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
     step,
     validateInputs: engine.options?.validateInputs ?? true,
   });
+
+  const { validationError: requestContextValidationError } = await validateStepRequestContext({
+    requestContext,
+    step,
+    validateInputs: engine.options?.validateInputs ?? true,
+  });
+
+  // Combine validation errors - input validation takes precedence
+  const validationError = inputValidationError || requestContextValidationError;
 
   const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =
     await validateStepResumeData({
@@ -365,7 +375,6 @@ export async function executeStep(
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
-                // @ts-ignore
                 runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
                 label: resume?.label,
                 forEachIndex: resume?.forEachIndex,

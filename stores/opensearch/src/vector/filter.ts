@@ -203,8 +203,20 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator<OpenSearchV
       const fieldWithKeyword = this.addKeywordIfNeeded(field, value);
       switch (operator) {
         case '$eq':
+          // Handle null equality: field does not exist or is null
+          if (value === null) {
+            return {
+              bool: {
+                must_not: [{ exists: { field } }],
+              },
+            };
+          }
           return { term: { [fieldWithKeyword]: normalizedValue } };
         case '$ne':
+          // Handle null inequality: field exists (i.e., is not null)
+          if (value === null) {
+            return { exists: { field } };
+          }
           return {
             bool: {
               must_not: [{ term: { [fieldWithKeyword]: normalizedValue } }],

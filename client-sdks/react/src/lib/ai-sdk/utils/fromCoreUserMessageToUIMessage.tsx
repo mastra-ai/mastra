@@ -1,4 +1,4 @@
-import { CoreUserMessage } from '@mastra/core/llm';
+import { type CoreUserMessage } from '@mastra/core/llm';
 import type { MastraUIMessage } from '../types';
 
 /**

@@ -132,6 +132,15 @@ export interface CompletionConfig {
    * Called after scorers run with results
    */
   onComplete?: (results: CompletionRunResult) => void | Promise<void>;
+
+  /**
+   * Suppress the completion feedback message from being saved to memory.
+   * When true, the "#### Completion Check Results" message will not be
+   * persisted, preventing it from appearing in subsequent iterations or
+   * history. Useful for cleaner conversation threads.
+   * Default: false
+   */
+  suppressFeedback?: boolean;
 }
 
 /**
@@ -381,6 +390,8 @@ export async function runDefaultCompletionCheck(
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<ScorerResult> {
   const start = Date.now();
 
@@ -444,6 +455,8 @@ export async function runDefaultCompletionCheck(
       structuredOutput: {
         schema: defaultCompletionSchema,
       },
+      abortSignal,
+      onAbort,
     });
 
     let currentText = '';
@@ -533,6 +546,8 @@ export async function generateFinalResult(
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<string | undefined> {
   const prompt = `
     The task has been completed successfully.
@@ -557,6 +572,8 @@ export async function generateFinalResult(
   const stream = await agent.stream(prompt, {
     maxSteps: 1,
     structuredOutput: { schema: finalResultSchema },
+    abortSignal,
+    onAbort,
   });
 
   let currentText = '';
@@ -622,6 +639,8 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<StructuredFinalResult<OUTPUT>> {
   const prompt = `
     The task has been completed successfully.
@@ -637,6 +656,8 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
   const stream = await agent.stream<OUTPUT>(prompt, {
     maxSteps: 1,
     structuredOutput: structuredOutputOptions,
+    abortSignal,
+    onAbort,
   });
 
   const { writer, stepId, runId: streamRunId } = streamContext ?? {};

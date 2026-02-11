@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import * as RadixTabs from '@radix-ui/react-tabs';
+import { focusRing } from '@/ds/primitives/transitions';
 
 export type TabContentProps = {
   children: React.ReactNode;
@@ -11,10 +12,7 @@ export const TabContent = ({ children, value, className }: TabContentProps) => {
   return (
     <RadixTabs.Content
       value={value}
-      className={cn(
-        'grid py-3 overflow-y-auto ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:none',
-        className,
-      )}
+      className={cn('grid py-3 overflow-y-auto ring-offset-background', focusRing.visible, className)}
     >
       {children}
     </RadixTabs.Content>

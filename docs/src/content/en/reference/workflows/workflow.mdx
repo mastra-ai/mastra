@@ -53,6 +53,13 @@ export const workflow = createWorkflow({
       isOptional: true,
     },
     {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      description:
+        "Zod schema for validating request context values. When provided, the context is validated at the start of run.start(), throwing an error if validation fails.",
+      isOptional: true,
+    },
+    {
       name: "options",
       type: "WorkflowOptions",
       description: "Optional options for the workflow",
@@ -272,7 +279,7 @@ const result = await run.start({
 });
 ```
 
-The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/v1/workflows/workflow-state) for more details.
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/workflows/workflow-state) for more details.
 
 ## Workflow status
 
@@ -327,5 +334,5 @@ This is distinct from `status: 'failed'` which indicates an unexpected error. A 
 ## Related
 
 - [Step Class](./step)
-- [Workflow State](/docs/v1/workflows/workflow-state)
-- [Control flow](/docs/v1/workflows/control-flow)
+- [Workflow State](/docs/workflows/workflow-state)
+- [Control flow](/docs/workflows/control-flow)

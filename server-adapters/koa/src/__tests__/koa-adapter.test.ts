@@ -1,5 +1,10 @@
 import type { Server } from 'node:http';
-import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -18,7 +23,7 @@ describe('Koa Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Koa Adapter Integration Tests',
 
-    setupAdapter: async (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Koa app
       const app = new Koa();
       app.use(bodyParser());
@@ -29,6 +34,7 @@ describe('Koa Server Adapter', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
+        prefix: options?.prefix,
       });
 
       await adapter.init();

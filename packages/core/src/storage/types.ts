@@ -1,7 +1,9 @@
 import type { z } from 'zod';
+import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
-import type { MastraDBMessage, StorageThreadType } from '../memory/types';
-import { getZodTypeName } from '../utils/zod-utils';
+import type { ScoringSamplingConfig } from '../evals/types';
+import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
+import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
@@ -55,9 +57,10 @@ export type PaginationInfo = {
 
 export type MastraMessageFormat = 'v1' | 'v2';
 
-export type StorageListMessagesInput = {
-  threadId: string | string[];
-  resourceId?: string;
+/**
+ * Common options for listing messages (pagination, filtering, ordering)
+ */
+type StorageListMessagesOptions = {
   include?: {
     id: string;
     threadId?: string;
@@ -95,8 +98,34 @@ export type StorageListMessagesInput = {
   orderBy?: StorageOrderBy<'createdAt'>;
 };
 
+/**
+ * Input for listing messages by thread ID.
+ * The resource ID can be optionally provided to filter messages within the thread.
+ */
+export type StorageListMessagesInput = StorageListMessagesOptions & {
+  /**
+   * Thread ID(s) to query messages from.
+   */
+  threadId: string | string[];
+  /**
+   * Optional resource ID to further filter messages within the thread(s).
+   */
+  resourceId?: string;
+};
+
 export type StorageListMessagesOutput = PaginationInfo & {
   messages: MastraDBMessage[];
+};
+
+/**
+ * Input for listing messages by resource ID only (across all threads).
+ * Used by Observational Memory and LongMemEval for resource-scoped queries.
+ */
+export type StorageListMessagesByResourceIdInput = StorageListMessagesOptions & {
+  /**
+   * Resource ID to query ALL messages for the resource across all threads.
+   */
+  resourceId: string;
 };
 
 export type StorageListWorkflowRunsInput = {
@@ -119,8 +148,7 @@ export type StorageListWorkflowRunsInput = {
   status?: WorkflowRunStatus;
 };
 
-export type StorageListThreadsByResourceIdInput = {
-  resourceId: string;
+export type StorageListThreadsInput = {
   /**
    * Number of items per page, or `false` to fetch all records without pagination limit.
    * Defaults to 100 if not specified.
@@ -132,9 +160,23 @@ export type StorageListThreadsByResourceIdInput = {
    */
   page?: number;
   orderBy?: StorageOrderBy;
+  /**
+   * Filter options for querying threads.
+   */
+  filter?: {
+    /**
+     * Filter threads by resource ID.
+     */
+    resourceId?: string;
+    /**
+     * Filter threads by metadata key-value pairs.
+     * All specified key-value pairs must match (AND logic).
+     */
+    metadata?: Record<string, unknown>;
+  };
 };
 
-export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
+export type StorageListThreadsOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
@@ -225,74 +267,197 @@ export type ThreadSortDirection = 'ASC' | 'DESC';
 // Agent Storage Types
 
 /**
+ * Per-tool configuration stored in agent snapshots.
+ * Allows overriding the tool description for this specific agent.
+ */
+export interface StorageToolConfig {
+  /** Custom description override for this tool in this agent context */
+  description?: string;
+}
+
+/**
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
   /** Sampling configuration for this scorer */
-  sampling?: {
-    type: 'ratio' | 'count';
-    rate?: number;
-    count?: number;
-  };
+  sampling?: ScoringSamplingConfig;
 }
 
 /**
- * Stored agent configuration type.
- * Primitives (tools, workflows, agents, memory, scorers) are stored as references
- * that get resolved from Mastra's registries at runtime.
+ * Model configuration stored in agent snapshots.
+ */
+export interface StorageModelConfig {
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider: string;
+  /** Model name (e.g., 'gpt-4o', 'claude-3-opus') */
+  name: string;
+  /** Temperature for generation */
+  temperature?: number;
+  /** Top-p sampling parameter */
+  topP?: number;
+  /** Frequency penalty */
+  frequencyPenalty?: number;
+  /** Presence penalty */
+  presencePenalty?: number;
+  /** Maximum completion tokens */
+  maxCompletionTokens?: number;
+  /** Additional provider-specific options */
+  [key: string]: unknown;
+}
+
+/**
+ * Default options stored in agent snapshots.
+ * Based on AgentExecutionOptionsBase but omitting non-serializable properties.
+ *
+ * Non-serializable properties that are omitted:
+ * - Callbacks (onStepFinish, onFinish, onChunk, onError, onAbort, prepareStep)
+ * - Runtime objects (requestContext, abortSignal, tracingContext)
+ * - Functions and processor instances (inputProcessors, outputProcessors, clientTools, scorers)
+ * - Tools/toolsets (contain functions, stored separately as references)
+ * - Complex types (context, memory, instructions, system, stopWhen)
+ */
+export type StorageDefaultOptions = Omit<
+  AgentExecutionOptionsBase<any>,
+  // Callback functions
+  | 'onStepFinish'
+  | 'onFinish'
+  | 'onChunk'
+  | 'onError'
+  | 'onAbort'
+  | 'prepareStep'
+  // Runtime objects
+  | 'abortSignal'
+  | 'requestContext'
+  | 'tracingContext'
+  // Functions and processor instances
+  | 'inputProcessors'
+  | 'outputProcessors'
+  | 'clientTools'
+  | 'scorers'
+  | 'toolsets'
+  // Complex types
+  | 'context' // ModelMessage includes complex content types (images, files)
+  | 'memory' // AgentMemoryOption might contain runtime memory instances
+  | 'instructions' // SystemMessage can be arrays or complex message objects
+  | 'system' // SystemMessage can be arrays or complex message objects
+  | 'stopWhen' // StopCondition is a complex union type from AI SDK
+  | 'providerOptions' // ProviderOptions includes provider-specific types from external packages
+>;
+
+/**
+ * A conditional variant: a value paired with an optional RuleGroup.
+ * When rules are present, the value is only used if rules evaluate to true against the request context.
+ * When rules are absent, the variant acts as the default/fallback.
+ */
+export interface StorageConditionalVariant<T> {
+  value: T;
+  rules?: RuleGroup;
+}
+
+/**
+ * A field that can be either a static value or an array of conditional variants.
+ * When an array of variants, all matching variants accumulate:
+ * arrays are concatenated and objects are shallow-merged.
+ * A variant with no rules always matches (acts as the default/base).
+ */
+export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
+
+/**
+ * Agent version snapshot type containing ALL agent configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the agent record.
+ */
+export interface StorageAgentSnapshotType {
+  /** Display name of the agent */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** System instructions/prompt — plain string for backward compatibility, or array of instruction blocks */
+  instructions: string | AgentInstructionBlock[];
+  /** Model configuration (provider, name, etc.) — static or conditional on request context */
+  model: StorageConditionalField<StorageModelConfig>;
+  /** Tool keys with optional per-tool config — static or conditional on request context */
+  tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
+  /** Default options for generate/stream calls — static or conditional on request context */
+  defaultOptions?: StorageConditionalField<StorageDefaultOptions>;
+  /** Array of workflow keys to resolve from Mastra's workflow registry — static or conditional on request context */
+  workflows?: StorageConditionalField<string[]>;
+  /** Array of agent keys to resolve from Mastra's agent registry — static or conditional on request context */
+  agents?: StorageConditionalField<string[]>;
+  /**
+   * Array of specific integration tool IDs selected for this agent.
+   * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
+   */
+  integrationTools?: string[];
+  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
+  inputProcessors?: StorageConditionalField<string[]>;
+  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
+  outputProcessors?: StorageConditionalField<string[]>;
+  /** Memory configuration object — static or conditional on request context */
+  memory?: StorageConditionalField<SerializedMemoryConfig>;
+  /** Scorer keys with optional sampling config — static or conditional on request context */
+  scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
+  /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
+  requestContextSchema?: Record<string, unknown>;
+}
+
+/**
+ * Thin agent record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageAgentSnapshotType).
  */
 export interface StorageAgentType {
+  /** Unique, immutable identifier */
   id: string;
-  name: string;
-  description?: string;
-  instructions: string;
-  /** Model configuration (provider, name, etc.) */
-  model: Record<string, unknown>;
-  /** Array of tool keys to resolve from Mastra's tool registry */
-  tools?: string[];
-  /** Default options for generate/stream calls */
-  defaultOptions?: Record<string, unknown>;
-  /** Array of workflow keys to resolve from Mastra's workflow registry */
-  workflows?: string[];
-  /** Array of agent keys to resolve from Mastra's agent registry */
-  agents?: string[];
-  /** Input processor configurations */
-  inputProcessors?: Record<string, unknown>[];
-  /** Output processor configurations */
-  outputProcessors?: Record<string, unknown>[];
-  /** Memory key to resolve from Mastra's memory registry */
-  memory?: string;
-  /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
-  scorers?: Record<string, StorageScorerConfig>;
+  /** Agent status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export type StorageCreateAgentInput = Omit<StorageAgentType, 'createdAt' | 'updatedAt'>;
+/**
+ * Resolved agent type that combines the thin agent record with version snapshot config.
+ * Returned by getAgentByIdResolved and listAgentsResolved.
+ */
+export type StorageResolvedAgentType = StorageAgentType & StorageAgentSnapshotType;
 
+/**
+ * Input for creating a new agent. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateAgentInput = {
+  /** Unique identifier for the agent */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the agent */
+  metadata?: Record<string, unknown>;
+} & StorageAgentSnapshotType;
+
+/**
+ * Input for updating an agent. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into agent-record updates vs new-version creation.
+ *
+ * Memory can be set to `null` to explicitly disable/remove memory from the agent.
+ */
 export type StorageUpdateAgentInput = {
   id: string;
-  name?: string;
-  description?: string;
-  instructions?: string;
-  model?: Record<string, unknown>;
-  /** Array of tool keys to resolve from Mastra's tool registry */
-  tools?: string[];
-  defaultOptions?: Record<string, unknown>;
-  /** Array of workflow keys to resolve from Mastra's workflow registry */
-  workflows?: string[];
-  /** Array of agent keys to resolve from Mastra's agent registry */
-  agents?: string[];
-  inputProcessors?: Record<string, unknown>[];
-  outputProcessors?: Record<string, unknown>[];
-  /** Memory key to resolve from Mastra's memory registry */
-  memory?: string;
-  /** Scorer keys with optional sampling config */
-  scorers?: Record<string, StorageScorerConfig>;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
-};
+  /** FK to agent_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Agent status: 'draft' or 'published' */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
+    /** Memory configuration object (static or conditional), or null to disable memory */
+    memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+  };
 
 export type StorageListAgentsInput = {
   /**
@@ -306,10 +471,311 @@ export type StorageListAgentsInput = {
    */
   page?: number;
   orderBy?: StorageOrderBy;
+  /**
+   * Filter agents by author identifier (indexed for fast lookups).
+   * Only agents with matching authorId will be returned.
+   */
+  authorId?: string;
+  /**
+   * Filter agents by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
   agents: StorageAgentType[];
+};
+
+export type StorageListAgentsResolvedOutput = PaginationInfo & {
+  agents: StorageResolvedAgentType[];
+};
+
+// ============================================
+// Prompt Block Storage Types
+// ============================================
+
+/** Instruction block discriminated union, stored in agent snapshots */
+export type AgentInstructionBlock =
+  | { type: 'text'; content: string }
+  | { type: 'prompt_block_ref'; id: string }
+  | { type: 'prompt_block'; content: string; rules?: RuleGroup };
+
+/** Condition operators for rule evaluation */
+export type ConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'greater_than'
+  | 'less_than'
+  | 'greater_than_or_equal'
+  | 'less_than_or_equal'
+  | 'in'
+  | 'not_in'
+  | 'exists'
+  | 'not_exists';
+
+/** Leaf rule: evaluates a single condition against a context field */
+export interface Rule {
+  field: string;
+  operator: ConditionOperator;
+  value?: unknown;
+}
+
+/**
+ * Rule group with a fixed nesting depth of 3 levels.
+ * Depth is capped to keep TypeScript and Zod/JSON-Schema types aligned
+ * (recursive types cause infinite-depth issues in JSON Schema generation).
+ *
+ * Innermost groups (depth 2) may only contain leaf Rules.
+ * Mid-level groups (depth 1) may contain Rules or depth-2 groups.
+ * Top-level groups (depth 0, exported as `RuleGroup`) may contain Rules or depth-1 groups.
+ */
+export interface RuleGroupDepth2 {
+  operator: 'AND' | 'OR';
+  conditions: Rule[];
+}
+
+export interface RuleGroupDepth1 {
+  operator: 'AND' | 'OR';
+  conditions: (Rule | RuleGroupDepth2)[];
+}
+
+export interface RuleGroup {
+  operator: 'AND' | 'OR';
+  conditions: (Rule | RuleGroupDepth1)[];
+}
+
+/**
+ * Thin prompt block record (metadata only).
+ * All configuration lives in version snapshots (StoragePromptBlockSnapshotType).
+ */
+export interface StoragePromptBlockType {
+  /** Unique identifier */
+  id: string;
+  /** Block status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to prompt_block_versions.id — the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Prompt block version snapshot containing the content fields.
+ * These fields live exclusively in version snapshot rows.
+ */
+export interface StoragePromptBlockSnapshotType {
+  /** Display name of the prompt block */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** Template content with {{variable}} interpolation */
+  content: string;
+  /** Rules for conditional inclusion */
+  rules?: RuleGroup;
+}
+
+/** Resolved prompt block: thin record merged with active version snapshot */
+export type StorageResolvedPromptBlockType = StoragePromptBlockType & StoragePromptBlockSnapshotType;
+
+/** Input for creating a new prompt block */
+export type StorageCreatePromptBlockInput = {
+  /** Unique identifier for the prompt block */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+} & StoragePromptBlockSnapshotType;
+
+/** Input for updating a prompt block */
+export type StorageUpdatePromptBlockInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  /** FK to prompt_block_versions.id — the currently active version */
+  activeVersionId?: string;
+  /** Block status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StoragePromptBlockSnapshotType>;
+
+export type StorageListPromptBlocksInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter prompt blocks by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter prompt blocks by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin prompt block records */
+export type StorageListPromptBlocksOutput = PaginationInfo & {
+  promptBlocks: StoragePromptBlockType[];
+};
+
+/** Paginated list output for resolved prompt blocks */
+export type StorageListPromptBlocksResolvedOutput = PaginationInfo & {
+  promptBlocks: StorageResolvedPromptBlockType[];
+};
+
+// ============================================
+// Stored Scorer Types
+// ============================================
+
+/**
+ * Scorer type discriminator.
+ * - 'llm-judge': Custom LLM-as-judge scorer with user-provided instructions
+ * - Preset types: Built-in scorers from @mastra/evals (e.g., 'bias', 'toxicity', 'faithfulness')
+ */
+export type StoredScorerType =
+  | 'llm-judge'
+  | 'answer-relevancy'
+  | 'answer-similarity'
+  | 'bias'
+  | 'context-precision'
+  | 'context-relevance'
+  | 'faithfulness'
+  | 'hallucination'
+  | 'noise-sensitivity'
+  | 'prompt-alignment'
+  | 'tool-call-accuracy'
+  | 'toxicity';
+
+/**
+ * Stored scorer version snapshot containing ALL scorer configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the scorer record.
+ */
+export interface StorageScorerDefinitionSnapshotType {
+  /** Display name of the scorer */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** Scorer type — determines how the scorer is instantiated at runtime */
+  type: StoredScorerType;
+  /** Model configuration — used for LLM judge; for presets, overrides the default model */
+  model?: StorageModelConfig;
+  /** System instructions for the judge LLM (used when type === 'llm-judge') */
+  instructions?: string;
+  /** Score range configuration (used when type === 'llm-judge') */
+  scoreRange?: {
+    /** Minimum score value (default: 0) */
+    min?: number;
+    /** Maximum score value (default: 1) */
+    max?: number;
+  };
+  /** Serializable config options for preset scorers (e.g., { scale: 10, context: [...] }) */
+  presetConfig?: Record<string, unknown>;
+  /** Default sampling configuration */
+  defaultSampling?: ScoringSamplingConfig;
+}
+
+/**
+ * Thin stored scorer record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageScorerDefinitionSnapshotType).
+ */
+export interface StorageScorerDefinitionType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Scorer status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to scorer_definition_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved stored scorer type that combines the thin record with version snapshot config.
+ * Returned by getScorerDefinitionByIdResolved and listScorerDefinitionsResolved.
+ */
+export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType & StorageScorerDefinitionSnapshotType;
+
+/**
+ * Input for creating a new stored scorer. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateScorerDefinitionInput = {
+  /** Unique identifier for the scorer */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+} & StorageScorerDefinitionSnapshotType;
+
+/**
+ * Input for updating a stored scorer. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateScorerDefinitionInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the scorer */
+  metadata?: Record<string, unknown>;
+  /** FK to scorer_definition_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Scorer status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageScorerDefinitionSnapshotType>;
+
+export type StorageListScorerDefinitionsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter scorers by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter scorers by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin stored scorer records */
+export type StorageListScorerDefinitionsOutput = PaginationInfo & {
+  scorerDefinitions: StorageScorerDefinitionType[];
+};
+
+/** Paginated list output for resolved stored scorers */
+export type StorageListScorerDefinitionsResolvedOutput = PaginationInfo & {
+  scorerDefinitions: StorageResolvedScorerDefinitionType[];
 };
 
 // Basic Index Management Types
@@ -349,38 +815,363 @@ export interface StorageIndexStats extends IndexInfo {
   method?: string; // Index method (btree, hash, etc)
 }
 
+// ============================================
+// Observational Memory Types
+// ============================================
+
+/**
+ * Scope of observational memory
+ */
+export type ObservationalMemoryScope = 'thread' | 'resource';
+
+/**
+ * How the observational memory record was created
+ */
+export type ObservationalMemoryOriginType = 'initial' | 'reflection';
+
+/**
+ * A chunk of buffered observations from a single observation cycle.
+ * Multiple chunks can accumulate before being activated together.
+ */
+export interface BufferedObservationChunk {
+  /** Unique identifier for this chunk */
+  id: string;
+  /** Cycle ID for linking to UI buffering markers */
+  cycleId: string;
+  /** The observation text content */
+  observations: string;
+  /** Token count of this chunk's observations */
+  tokenCount: number;
+  /** Message IDs that were observed in this chunk */
+  messageIds: string[];
+  /** Token count of the messages that were observed (for activation calculation) */
+  messageTokens: number;
+  /** When the messages were last observed */
+  lastObservedAt: Date;
+  /** When this chunk was created */
+  createdAt: Date;
+  /** Optional suggested continuation from the observer */
+  suggestedContinuation?: string;
+  /** Optional current task context */
+  currentTask?: string;
+}
+
+/**
+ * Input for creating a new buffered observation chunk.
+ */
+export interface BufferedObservationChunkInput {
+  /** Cycle ID for linking to UI buffering markers */
+  cycleId: string;
+  /** The observation text content */
+  observations: string;
+  /** Token count of this chunk's observations */
+  tokenCount: number;
+  /** Message IDs that were observed in this chunk */
+  messageIds: string[];
+  /** Token count of the messages that were observed (for activation calculation) */
+  messageTokens: number;
+  /** When the messages were observed */
+  lastObservedAt: Date;
+  /** Optional suggested continuation from the observer */
+  suggestedContinuation?: string;
+  /** Optional current task context */
+  currentTask?: string;
+}
+
+/**
+ * Core database record for observational memory
+ *
+ * For resource scope: One active record per resource, containing observations from ALL threads.
+ * For thread scope: One record per thread.
+ *
+ * Derived values (not stored, computed at runtime):
+ * - reflectionCount: count records with originType: 'reflection'
+ * - lastReflectionAt: createdAt of most recent reflection record
+ * - previousGeneration: record with next-oldest createdAt
+ */
+export interface ObservationalMemoryRecord {
+  // Identity
+  /** Unique record ID */
+  id: string;
+  /** Memory scope - thread or resource */
+  scope: ObservationalMemoryScope;
+  /** Thread ID (null for resource scope) */
+  threadId: string | null;
+  /** Resource ID (always present) */
+  resourceId: string;
+
+  // Timestamps (top-level for easy querying)
+  /** When this record was created */
+  createdAt: Date;
+  /** When this record was last updated */
+  updatedAt: Date;
+  /**
+   * Single cursor for message loading - when we last observed ANY thread for this resource.
+   * Undefined means no observations have been made yet (all messages are "unobserved").
+   */
+  lastObservedAt?: Date;
+
+  // Generation tracking
+  /** How this record was created */
+  originType: ObservationalMemoryOriginType;
+  /** Generation counter - incremented each time a reflection creates a new record */
+  generationCount: number;
+
+  // Observation content
+  /**
+   * Currently active observations.
+   * For resource scope: Contains <thread id="...">...</thread> sections for attribution.
+   * For thread scope: Plain observation text.
+   */
+  activeObservations: string;
+  /**
+   * Array of buffered observation chunks waiting to be activated.
+   * Each chunk represents observations from a single observation cycle.
+   * Multiple chunks can accumulate before being activated together.
+   */
+  bufferedObservationChunks?: BufferedObservationChunk[];
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Observations waiting to be activated (async buffering)
+   */
+  bufferedObservations?: string;
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Token count of buffered observations
+   */
+  bufferedObservationTokens?: number;
+  /**
+   * @deprecated Use bufferedObservationChunks instead. Legacy field for backwards compatibility.
+   * Message IDs being processed in async buffering
+   */
+  bufferedMessageIds?: string[];
+  /** Reflection waiting to be swapped in (async buffering) */
+  bufferedReflection?: string;
+  /** Token count of buffered reflection (post-compression output) */
+  bufferedReflectionTokens?: number;
+  /** Observation tokens that were fed into the reflector (pre-compression input) */
+  bufferedReflectionInputTokens?: number;
+  /**
+   * The number of lines in activeObservations that were reflected on
+   * when the buffered reflection was created. Used at activation time
+   * to separate reflected vs unreflected observations.
+   */
+  reflectedObservationLineCount?: number;
+
+  /**
+   * Message IDs observed in the current generation.
+   * Used as a safeguard against re-observation if timestamp filtering fails.
+   * Reset on reflection (new generation starts fresh).
+   */
+  observedMessageIds?: string[];
+
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Stored for debugging and auditing observation dates.
+   * Example: "America/Los_Angeles", "Europe/London"
+   */
+  observedTimezone?: string;
+
+  // Token tracking
+  /** Running total of all tokens observed */
+  totalTokensObserved: number;
+  /** Current size of active observations */
+  observationTokenCount: number;
+  /** Accumulated tokens from pending (unobserved) messages across sessions */
+  pendingMessageTokens: number;
+
+  // State flags
+  /** Is a reflection currently in progress? */
+  isReflecting: boolean;
+  /** Is observation currently in progress? */
+  isObserving: boolean;
+  /** Is async observation buffering currently in progress? */
+  isBufferingObservation: boolean;
+  /** Is async reflection buffering currently in progress? */
+  isBufferingReflection: boolean;
+  /**
+   * The pending message token count at which the last async observation buffer was triggered.
+   * Used to determine when the next bufferTokens interval is crossed.
+   * Persisted so new instances (created per request) can pick up where the last left off.
+   */
+  lastBufferedAtTokens: number;
+  /**
+   * Timestamp cursor for buffered messages.
+   * Set to the max message timestamp (+1ms) of the last successfully buffered chunk.
+   * Used to filter out already-buffered messages when starting the next buffer.
+   * Reset on activation.
+   */
+  lastBufferedAtTime: Date | null;
+
+  // Configuration
+  /** Current configuration (stored as JSON) */
+  config: Record<string, unknown>;
+
+  // Extensible metadata (app-specific, optional)
+  /** Optional metadata for app-specific extensions */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Input for creating a new observational memory record
+ */
+export interface CreateObservationalMemoryInput {
+  threadId: string | null;
+  resourceId: string;
+  scope: ObservationalMemoryScope;
+  config: Record<string, unknown>;
+  /** The timezone used when formatting dates for the Observer agent (e.g., "America/Los_Angeles") */
+  observedTimezone?: string;
+}
+
+/**
+ * Input for updating active observations.
+ * Uses cursor-based message tracking via lastObservedAt instead of message IDs.
+ */
+export interface UpdateActiveObservationsInput {
+  id: string;
+  observations: string;
+  tokenCount: number;
+  /** Timestamp when these observations were created (for cursor-based message loading) */
+  lastObservedAt: Date;
+  /**
+   * IDs of messages that were observed in this cycle.
+   * Stored in record metadata as a safeguard against re-observation on process restart.
+   * These are appended to any existing IDs and pruned to only include IDs newer than lastObservedAt.
+   */
+  observedMessageIds?: string[];
+  /**
+   * The timezone used when formatting dates for the Observer agent.
+   * Captured from Intl.DateTimeFormat().resolvedOptions().timeZone
+   */
+  observedTimezone?: string;
+}
+
+/**
+ * Input for updating buffered observations.
+ * Used when async buffering is enabled via `bufferTokens` config.
+ * Adds a new chunk to the bufferedObservationChunks array.
+ */
+export interface UpdateBufferedObservationsInput {
+  id: string;
+  /** The observation chunk to add to the buffer */
+  chunk: BufferedObservationChunkInput;
+  /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
+  lastBufferedAtTime?: Date;
+}
+
+/**
+ * Input for swapping buffered observations to active.
+ * Supports partial activation via `activationRatio`.
+ */
+export interface SwapBufferedToActiveInput {
+  id: string;
+  /**
+   * Ratio controlling how much context to retain after activation (0-1 float).
+   * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
+   * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
+   * Chunks are selected by boundary, biased under the target.
+   */
+  activationRatio: number;
+  /**
+   * The message token threshold (e.g., observation.messageTokens config value).
+   * Used with `activationRatio` to compute the retention floor.
+   */
+  messageTokensThreshold: number;
+  /**
+   * Current total pending message tokens in the context window.
+   * Used to compute how many tokens need to be removed to reach the retention floor.
+   */
+  currentPendingTokens: number;
+  /**
+   * Optional timestamp to use as lastObservedAt after swap.
+   * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
+   */
+  lastObservedAt?: Date;
+}
+
+/**
+ * Result from swapping buffered observations to active.
+ * Contains info about what was activated for UI feedback.
+ */
+export interface SwapBufferedToActiveResult {
+  /** Number of chunks that were activated */
+  chunksActivated: number;
+  /** Total message tokens from activated chunks (context cleared) */
+  messageTokensActivated: number;
+  /** Total observation tokens from activated chunks */
+  observationTokensActivated: number;
+  /** Total messages from activated chunks */
+  messagesActivated: number;
+  /** CycleIds of the activated chunks (for linking UI markers) */
+  activatedCycleIds: string[];
+  /** All message IDs from activated chunks (for removing from context) */
+  activatedMessageIds: string[];
+  /** Concatenated observations from activated chunks (for UI display) */
+  observations?: string;
+  /** Per-chunk breakdown for individual UI markers */
+  perChunk?: Array<{
+    cycleId: string;
+    messageTokens: number;
+    observationTokens: number;
+    messageCount: number;
+    observations: string;
+  }>;
+}
+
+/**
+ * Input for updating buffered reflection.
+ * Used when async reflection buffering is enabled via `bufferTokens` config.
+ */
+export interface UpdateBufferedReflectionInput {
+  id: string;
+  reflection: string;
+  /** Token count of the buffered reflection (post-compression output) */
+  tokenCount: number;
+  /** Observation tokens that were fed into the reflector (pre-compression input) */
+  inputTokenCount: number;
+  /**
+   * The number of lines in activeObservations at the time of reflection.
+   * Used at activation time to know which observations were already reflected on.
+   */
+  reflectedObservationLineCount: number;
+}
+
+/**
+ * Input for swapping buffered reflection to active (creates new generation).
+ * Uses the stored `reflectedObservationLineCount` to determine which observations
+ * were already reflected on, replaces those with the buffered reflection,
+ * and appends any unreflected observations that were added after the reflection started.
+ */
+export interface SwapBufferedReflectionToActiveInput {
+  currentRecord: ObservationalMemoryRecord;
+  /**
+   * Token count for the combined new activeObservations (bufferedReflection + unreflected).
+   * Computed by the processor using its token counter before calling the adapter.
+   */
+  tokenCount: number;
+}
+
+/**
+ * Input for creating a reflection generation (creates a new record, archives the old one)
+ */
+export interface CreateReflectionGenerationInput {
+  currentRecord: ObservationalMemoryRecord;
+  reflection: string;
+  tokenCount: number;
+}
+
+// ============================================
 // Workflow Storage Types
+// ============================================
+
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
   result?: StepResult<any, any, any, any>;
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
-}
-
-/**
- * Get the inner type from a wrapper schema (nullable, optional, default, effects, branded).
- * Compatible with both Zod 3 and Zod 4.
- */
-function getInnerType(schema: z.ZodTypeAny, typeName: string): z.ZodTypeAny | undefined {
-  const schemaAny = schema as any;
-
-  // For nullable, optional, default - the inner type is at _def.innerType
-  if (typeName === 'ZodNullable' || typeName === 'ZodOptional' || typeName === 'ZodDefault') {
-    return schemaAny._zod?.def?.innerType ?? schemaAny._def?.innerType;
-  }
-
-  // For effects - the inner type is at _def.schema
-  if (typeName === 'ZodEffects') {
-    return schemaAny._zod?.def?.schema ?? schemaAny._def?.schema;
-  }
-
-  // For branded - the inner type is at _def.type
-  if (typeName === 'ZodBranded') {
-    return schemaAny._zod?.def?.type ?? schemaAny._def?.type;
-  }
-
-  return undefined;
+  resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
@@ -389,52 +1180,15 @@ function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boo
 
   while (true) {
     const typeName = getZodTypeName(current);
+    if (!typeName) break;
 
-    if (typeName === 'ZodNullable') {
+    if (typeName === 'ZodNullable' || typeName === 'ZodOptional') {
       nullable = true;
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
     }
 
-    if (typeName === 'ZodOptional') {
-      // For DB purposes, we usually treat "optional" as "nullable"
-      nullable = true;
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodDefault') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodEffects') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    if (typeName === 'ZodBranded') {
-      const inner = getInnerType(current, typeName);
-      if (inner) {
-        current = inner;
-        continue;
-      }
-    }
-
-    // If you ever use ZodCatch/ZodPipeline, you can unwrap them here too.
-    break;
+    const inner = getZodInnerType(current, typeName);
+    if (!inner) break;
+    current = inner;
   }
 
   return { base: current, nullable };

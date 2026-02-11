@@ -1,3 +1,4 @@
+import { EMBEDDING_MODELS } from '@mastra/core/llm';
 import type { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { HTTPException } from '../http-exception';
 import {
@@ -12,6 +13,8 @@ import {
   listIndexesResponseSchema,
   describeIndexResponseSchema,
   deleteIndexResponseSchema,
+  listVectorsResponseSchema,
+  listEmbeddersResponseSchema,
 } from '../schemas/vectors';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -183,13 +186,35 @@ export async function deleteIndex({
   }
 }
 
+// List available vector stores
+export async function listVectorStores({ mastra }: Pick<VectorContext, 'mastra'>) {
+  try {
+    const vectors = mastra.listVectors();
+    if (!vectors) {
+      return { vectors: [] };
+    }
+
+    // Convert to array and extract metadata
+    const vectorList = Object.entries(vectors).map(([name, vector]) => ({
+      name,
+      id: vector.id,
+      type: vector.constructor.name,
+      // Add any other metadata that might be useful
+    }));
+
+    return { vectors: vectorList };
+  } catch (error) {
+    return handleError(error, 'Error listing vector stores');
+  }
+}
+
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
 export const UPSERT_VECTORS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/upsert',
+  path: '/vector/:vectorName/upsert',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: upsertVectorsBodySchema,
@@ -197,6 +222,7 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
   summary: 'Upsert vectors',
   description: 'Inserts or updates vectors in the specified index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, vectors, metadata, ids } = params;
@@ -216,7 +242,7 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
 
 export const CREATE_INDEX_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/create-index',
+  path: '/vector/:vectorName/create-index',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: createIndexBodySchema,
@@ -224,6 +250,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
   summary: 'Create index',
   description: 'Creates a new vector index with the specified dimension and metric',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, dimension, metric } = params;
@@ -249,7 +276,7 @@ export const CREATE_INDEX_ROUTE = createRoute({
 
 export const QUERY_VECTORS_ROUTE = createRoute({
   method: 'POST',
-  path: '/api/vector/:vectorName/query',
+  path: '/vector/:vectorName/query',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   bodySchema: queryVectorsBodySchema,
@@ -257,6 +284,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
   summary: 'Query vectors',
   description: 'Performs a similarity search on the vector index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, queryVector, topK, filter, includeVector } = params;
@@ -278,13 +306,14 @@ export const QUERY_VECTORS_ROUTE = createRoute({
 
 export const LIST_INDEXES_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/vector/:vectorName/indexes',
+  path: '/vector/:vectorName/indexes',
   responseType: 'json',
   pathParamSchema: vectorNamePathParams,
   responseSchema: listIndexesResponseSchema,
   summary: 'List indexes',
   description: 'Returns a list of all indexes in the vector store',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName }) => {
     try {
       const vector = getVector(mastra, vectorName);
@@ -298,13 +327,14 @@ export const LIST_INDEXES_ROUTE = createRoute({
 
 export const DESCRIBE_INDEX_ROUTE = createRoute({
   method: 'GET',
-  path: '/api/vector/:vectorName/indexes/:indexName',
+  path: '/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
   pathParamSchema: vectorIndexPathParams,
   responseSchema: describeIndexResponseSchema,
   summary: 'Describe index',
   description: 'Returns statistics and metadata for a specific index',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
@@ -327,13 +357,14 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
 
 export const DELETE_INDEX_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/api/vector/:vectorName/indexes/:indexName',
+  path: '/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
   pathParamSchema: vectorIndexPathParams,
   responseSchema: deleteIndexResponseSchema,
   summary: 'Delete index',
   description: 'Deletes a vector index and all its data',
   tags: ['Vectors'],
+  requiresAuth: true,
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
@@ -345,6 +376,63 @@ export const DELETE_INDEX_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       return handleError(error, 'Error deleting index');
+    }
+  },
+});
+
+export const LIST_VECTORS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/vectors',
+  responseType: 'json',
+  responseSchema: listVectorsResponseSchema,
+  summary: 'List vector stores',
+  description: 'Returns a list of all configured vector stores',
+  tags: ['Vectors'],
+  requiresAuth: true,
+  handler: async ({ mastra }) => {
+    try {
+      const vectors = mastra.listVectors();
+      if (!vectors) {
+        return { vectors: [] };
+      }
+
+      // Convert to array and extract metadata
+      const vectorList = Object.entries(vectors).map(([name, vector]) => ({
+        id: vector.id || name, // Use the key as the ID since vectors might not have their own id property
+        name,
+        type: vector.constructor.name,
+      }));
+
+      return { vectors: vectorList };
+    } catch (error) {
+      return handleError(error, 'Error listing vector stores');
+    }
+  },
+});
+
+export const LIST_EMBEDDERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/embedders',
+  responseType: 'json',
+  responseSchema: listEmbeddersResponseSchema,
+  summary: 'List available embedder models',
+  description: 'Returns a list of all available embedding models',
+  tags: ['Vectors'],
+  requiresAuth: true,
+  handler: async () => {
+    try {
+      const embeddersList = EMBEDDING_MODELS.map(model => ({
+        id: `${model.provider}/${model.id}`,
+        provider: model.provider,
+        name: model.id,
+        description: model.description || '',
+        dimensions: model.dimensions,
+        maxInputTokens: model.maxInputTokens,
+      }));
+
+      return { embedders: embeddersList };
+    } catch (error) {
+      return handleError(error, 'Error listing embedders');
     }
   },
 });

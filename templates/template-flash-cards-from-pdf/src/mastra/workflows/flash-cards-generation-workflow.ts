@@ -69,7 +69,7 @@ const extractPdfContentStep = createStep({
 
     console.log('📄 Extracting content from PDF...');
 
-    const result = await pdfContentExtractorTool.execute(
+    const result = await pdfContentExtractorTool.execute!(
       {
         pdfUrl,
         pdfData,
@@ -135,7 +135,7 @@ const generateFlashCardsStep = createStep({
 
     console.log(`🃏 Generating ${numberOfCards} flash cards...`);
 
-    const result = await flashCardGeneratorTool.execute(
+    const result = await flashCardGeneratorTool.execute!(
       {
         concepts,
         definitions,
@@ -203,7 +203,7 @@ const generateImagesStep = createStep({
       // Generate image for the first 3 cards only
       if (i < 3 && generateImages) {
         try {
-          const imageResult = await educationalImageTool.execute(
+          const imageResult = await educationalImageTool.execute!(
             {
               concept: `${card.question} - ${card.answer}`,
               subjectArea,
@@ -245,6 +245,7 @@ export const flashCardsGenerationWorkflow = createWorkflow({
   inputSchema,
   outputSchema,
 })
+  // @ts-expect-error - TODO: remove once z.enum().optional().default() type error is fixed
   .then(extractPdfContentStep)
   .map({
     concepts: {
@@ -280,7 +281,7 @@ export const flashCardsGenerationWorkflow = createWorkflow({
     numberOfCards: {
       schema: z.number(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.numberOfCards;
       },
     },
@@ -302,7 +303,7 @@ export const flashCardsGenerationWorkflow = createWorkflow({
     generateImages: {
       schema: z.boolean(),
       fn: async ({ getInitData }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         return initData.generateImages;
       },
     },
@@ -344,7 +345,7 @@ export const flashCardsGenerationWorkflow = createWorkflow({
         pagesCount: z.number(),
       }),
       fn: async ({ getInitData, getStepResult }) => {
-        const initData = getInitData();
+        const initData = getInitData<z.infer<typeof inputSchema>>();
         const pdfData = getStepResult(extractPdfContentStep);
         return {
           pdfUrl: initData.pdfUrl,

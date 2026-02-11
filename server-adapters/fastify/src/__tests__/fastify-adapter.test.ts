@@ -1,4 +1,9 @@
-import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -17,7 +22,7 @@ describe('Fastify Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Fastify Adapter Integration Tests',
 
-    setupAdapter: async (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       // Create Fastify app
       const app = Fastify();
 
@@ -27,6 +32,7 @@ describe('Fastify Server Adapter', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
+        prefix: options?.prefix,
       });
 
       await adapter.init();
@@ -471,5 +477,119 @@ describe('Fastify Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.addHook('preHandler', middleware);
     },
+  });
+
+  describe('Plugin Headers on Stream Responses', () => {
+    let context: AdapterTestContext;
+    let app: FastifyInstance | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (app) {
+        await app.close();
+        app = null;
+      }
+    });
+
+    it('should preserve headers set by plugins/hooks on stream responses', async () => {
+      app = Fastify();
+
+      // Simulate what a CORS plugin does: set headers in an onRequest hook
+      // This tests that headers set before the route handler are preserved
+      // when using reply.hijack() for streaming
+      app.addHook('onRequest', async (_request, reply) => {
+        reply.header('access-control-allow-origin', 'https://example.com');
+        reply.header('access-control-allow-credentials', 'true');
+        reply.header('x-custom-header', 'custom-value');
+      });
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Create a test route that returns a stream
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/test/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      // Headers set by the hook should be preserved on stream responses
+      expect(response.headers.get('access-control-allow-origin')).toBe('https://example.com');
+      expect(response.headers.get('access-control-allow-credentials')).toBe('true');
+      expect(response.headers.get('x-custom-header')).toBe('custom-value');
+
+      // Consume the stream to avoid hanging
+      await consumeSSEStream(response.body);
+    });
+
+    it('should preserve headers set by plugins/hooks on non-stream (JSON) responses', async () => {
+      app = Fastify();
+
+      // Simulate what a CORS plugin does: set headers in an onRequest hook
+      app.addHook('onRequest', async (_request, reply) => {
+        reply.header('access-control-allow-origin', 'https://example.com');
+        reply.header('access-control-allow-credentials', 'true');
+        reply.header('x-custom-header', 'custom-value');
+      });
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Create a test route that returns JSON (not a stream)
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/json',
+        responseType: 'json',
+        handler: async () => ({ message: 'hello' }),
+      };
+
+      app.addHook('preHandler', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      const address = await app.listen({ port: 0 });
+
+      const response = await fetch(`${address}/test/json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+
+      // Headers should be present on JSON responses (this already works without the fix)
+      expect(response.headers.get('access-control-allow-origin')).toBe('https://example.com');
+      expect(response.headers.get('access-control-allow-credentials')).toBe('true');
+      expect(response.headers.get('x-custom-header')).toBe('custom-value');
+
+      await response.json();
+    });
   });
 });

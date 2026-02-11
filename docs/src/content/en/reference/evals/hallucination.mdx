@@ -24,16 +24,58 @@ The `createHallucinationScorer()` function accepts a single options object with 
         "Configuration for the model used to evaluate hallucination.",
     },
     {
-      name: "scale",
+      name: "options.scale",
       type: "number",
       required: false,
       defaultValue: "1",
       description: "Maximum score value.",
     },
+    {
+      name: "options.context",
+      type: "string[]",
+      required: false,
+      description: "Static context strings to use as ground truth for hallucination detection.",
+    },
+    {
+      name: "options.getContext",
+      type: "(params: GetContextParams) => string[] | Promise<string[]>",
+      required: false,
+      description: "A hook to dynamically resolve context at runtime. Takes priority over static context. Useful for live scoring where context (like tool results) is only available when the scorer runs.",
+    },
   ]}
 />
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
+
+### GetContextParams
+
+The `getContext` hook receives the following parameters:
+
+<PropertiesTable
+  content={[
+    {
+      name: "run",
+      type: "GetContextRun",
+      description: "The scorer run containing input, output, runId, requestContext, and tracingContext.",
+    },
+    {
+      name: "results",
+      type: "Record<string, any>",
+      description: "Accumulated results from previous steps (e.g., preprocessStepResult with extracted claims).",
+    },
+    {
+      name: "score",
+      type: "number",
+      required: false,
+      description: "The computed score. Only present when called from the generateReason step.",
+    },
+    {
+      name: "step",
+      type: "'analyze' | 'generateReason'",
+      description: "Which step is calling the hook. Useful for caching context between calls.",
+    },
+  ]}
+/>
 
 ## .run() Returns
 
@@ -134,28 +176,98 @@ A hallucination score between 0 and 1:
 
 **Note:** The score represents the degree of hallucination - lower scores indicate better factual alignment with the provided context
 
-## Example
+## Examples
 
-Evaluate agent responses for hallucinations against provided context:
+### Static Context
 
-```typescript title="src/example-hallucination.ts"
+Use static context when you have known ground truth to compare against:
+
+```typescript title="src/example-static-context.ts"
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createHallucinationScorer({
+  model: "openai/gpt-4o",
+  options: {
+    context: [
+      "The first iPhone was announced on January 9, 2007.",
+      "It was released on June 29, 2007.",
+      "Steve Jobs introduced it at Macworld.",
+    ],
+  },
+});
+```
+
+### Dynamic Context with getContext
+
+Use `getContext` for live scoring scenarios where context comes from tool results:
+
+```typescript title="src/example-dynamic-context.ts"
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+import { extractToolResults } from "@mastra/evals/scorers";
+
+const scorer = createHallucinationScorer({
+  model: "openai/gpt-4o",
+  options: {
+    getContext: ({ run, step }) => {
+      // Extract tool results as context
+      const toolResults = extractToolResults(run.output);
+      return toolResults.map((t) =>
+        JSON.stringify({ tool: t.toolName, result: t.result })
+      );
+    },
+  },
+});
+```
+
+### Live Scoring with Agent
+
+Attach the scorer to an agent for live evaluation:
+
+```typescript title="src/example-live-scoring.ts"
+import { Agent } from "@mastra/core/agent";
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+import { extractToolResults } from "@mastra/evals/scorers";
+
+const hallucinationScorer = createHallucinationScorer({
+  model: "openai/gpt-4o",
+  options: {
+    getContext: ({ run }) => {
+      const toolResults = extractToolResults(run.output);
+      return toolResults.map((t) =>
+        JSON.stringify({ tool: t.toolName, result: t.result })
+      );
+    },
+  },
+});
+
+const agent = new Agent({
+  name: "my-agent",
+  model: "openai/gpt-4o",
+  instructions: "You are a helpful assistant.",
+  evals: {
+    scorers: [hallucinationScorer],
+  },
+});
+```
+
+### Batch Evaluation with runEvals
+
+```typescript title="src/example-batch-evals.ts"
 import { runEvals } from "@mastra/core/evals";
 import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";
 
-// Context is typically populated from agent tool calls or RAG retrieval
 const scorer = createHallucinationScorer({
   model: "openai/gpt-4o",
+  options: {
+    context: ["Known fact 1", "Known fact 2"],
+  },
 });
 
 const result = await runEvals({
   data: [
-    {
-      input: "When was the first iPhone released?",
-    },
-    {
-      input: "Tell me about the original iPhone announcement.",
-    },
+    { input: "Tell me about topic A" },
+    { input: "Tell me about topic B" },
   ],
   scorers: [scorer],
   target: myAgent,
@@ -170,9 +282,9 @@ const result = await runEvals({
 console.log(result.scores);
 ```
 
-For more details on `runEvals`, see the [runEvals reference](/reference/v1/evals/run-evals).
+For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).
 
-To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overview#adding-scorers-to-agents) guide.
+To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#adding-scorers-to-agents) guide.
 
 ## Related
 

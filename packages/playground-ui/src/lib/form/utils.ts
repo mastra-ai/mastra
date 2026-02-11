@@ -3,7 +3,7 @@ import { FieldTypes } from './auto-form';
 import { FieldConfig } from '@autoform/core';
 import { z } from 'zod';
 
-// @ts-ignore
+// @ts-expect-error
 export const fieldConfig: FieldConfig = buildZodFieldConfig<
   FieldTypes,
   {

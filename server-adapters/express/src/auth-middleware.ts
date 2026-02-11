@@ -21,7 +21,7 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
   const method = req.method;
   const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -71,7 +71,9 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
 
     return next();
   } catch (err) {
-    console.error(err);
+    mastra.getLogger()?.error('Authentication error', {
+      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    });
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
@@ -90,7 +92,7 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
   const method = req.method;
   const getHeader = (name: string) => req.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }
@@ -116,7 +118,9 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
 
       return res.status(403).json({ error: 'Access denied' });
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorizeUser', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       return res.status(500).json({ error: 'Authorization error' });
     }
   }
@@ -130,7 +134,7 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
         get: (key: string) => {
           if (key === 'mastra') return res.locals.mastra;
           if (key === 'requestContext') return res.locals.requestContext;
-          if (key === 'tools') return res.locals.tools;
+          if (key === 'registeredTools') return res.locals.registeredTools;
           if (key === 'taskStore') return res.locals.taskStore;
           if (key === 'customRouteAuthConfig') return res.locals.customRouteAuthConfig;
           return undefined;
@@ -146,7 +150,11 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
 
       return res.status(403).json({ error: 'Access denied' });
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorize', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        path,
+        method,
+      });
       return res.status(500).json({ error: 'Authorization error' });
     }
   }

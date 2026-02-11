@@ -1,10 +1,9 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
 import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
-import type { Config } from '@mastra/core/mastra';
 import { copy } from 'fs-extra';
-
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class BuildBundler extends Bundler {
@@ -46,7 +45,7 @@ export class BuildBundler extends Bundler {
       const envFile = fileService.getFirstExistingFile(possibleFiles);
 
       return Promise.resolve([envFile]);
-    } catch (err) {
+    } catch {
       // ignore
     }
 
@@ -77,12 +76,12 @@ export class BuildBundler extends Bundler {
 
   protected getEntry(): string {
     return `
-    // @ts-ignore
+    // @ts-expect-error
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
     import { mastra } from '#mastra';
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';
-    // @ts-ignore
+    // @ts-expect-error
     await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
 
     if (mastra.getStorage()) {

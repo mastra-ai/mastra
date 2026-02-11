@@ -2,15 +2,20 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
+
 import type { InMemoryTaskStore } from '../a2a/store';
-import { generateOpenAPIDocument } from './openapi-utils';
+import { defaultAuthConfig } from '../auth/defaults';
+import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';
+import { normalizeRoutePath } from '../utils';
+import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
 
-export { WorkflowRegistry } from '../utils';
+export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
 export interface OpenAPIConfig {
   title?: string;
@@ -38,6 +43,24 @@ export interface StreamOptions {
 }
 
 /**
+ * MCP transport options for configuring MCP HTTP and SSE transports.
+ */
+export interface MCPOptions {
+  /**
+   * When true, runs in stateless mode without session management.
+   * Ideal for serverless environments (Cloudflare Workers, Vercel Edge, etc.)
+   * where you can't maintain persistent connections across requests.
+   *
+   * @default false
+   */
+  serverless?: boolean;
+  /**
+   * Custom session ID generator function.
+   */
+  sessionIdGenerator?: () => string;
+}
+
+/**
  * Query parameter values parsed from HTTP requests.
  * Supports both single values and arrays (for repeated query params like ?tag=a&tag=b).
  */
@@ -50,11 +73,20 @@ export interface ParsedRequestParams {
   urlParams: Record<string, string>;
   queryParams: Record<string, QueryParamValue>;
   body: unknown;
+  /**
+   * Error that occurred while parsing the request body.
+   * When set, the server should return a 400 Bad Request response.
+   */
+  bodyParseError?: {
+    message: string;
+  };
 }
 
 /**
  * Normalizes query parameters from various HTTP framework formats to a consistent structure.
  * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
+ * Reconstructs bracket-notation keys (e.g., `orderBy[field]=createdAt`) into JSON strings
+ * so that z.preprocess JSON.parse can handle them.
  * Filters out non-string values that some frameworks may include.
  *
  * @param rawQuery - Raw query parameters from the HTTP framework (may contain strings, arrays, or nested objects)
@@ -62,8 +94,26 @@ export interface ParsedRequestParams {
  */
 export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<string, QueryParamValue> {
   const queryParams: Record<string, QueryParamValue> = {};
+  // Collect bracket-notation keys: e.g., "orderBy[field]" → parent "orderBy", child "field"
+  const bracketGroups: Record<string, Record<string, string>> = {};
+
   for (const [key, value] of Object.entries(rawQuery)) {
-    if (typeof value === 'string') {
+    const bracketMatch = key.match(/^([^[]+)\[([^\]]+)\]$/);
+    if (bracketMatch) {
+      const parent = bracketMatch[1]!;
+      const child = bracketMatch[2]!;
+      const strValue = Array.isArray(value)
+        ? value.filter((v): v is string => typeof v === 'string')[0]
+        : typeof value === 'string'
+          ? value
+          : undefined;
+      if (strValue !== undefined) {
+        if (!bracketGroups[parent]) {
+          bracketGroups[parent] = {};
+        }
+        bracketGroups[parent]![child] = strValue;
+      }
+    } else if (typeof value === 'string') {
       queryParams[key] = value;
     } else if (Array.isArray(value)) {
       // Filter to only string values (some frameworks include nested objects)
@@ -72,6 +122,14 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
       queryParams[key] = stringValues.length === 1 ? stringValues[0]! : stringValues;
     }
   }
+
+  // Merge bracket groups as JSON strings (only if the parent key wasn't already set directly)
+  for (const [parent, children] of Object.entries(bracketGroups)) {
+    if (!(parent in queryParams)) {
+      queryParams[parent] = JSON.stringify(children);
+    }
+  }
+
   return queryParams;
 }
 
@@ -98,17 +156,21 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected taskStore?: InMemoryTaskStore;
   protected customRouteAuthConfig?: Map<string, boolean>;
   protected streamOptions: StreamOptions;
+  protected customApiRoutes?: ApiRoute[];
+  protected mcpOptions?: MCPOptions;
 
   constructor({
     app,
     mastra,
     bodyLimitOptions,
     tools,
-    prefix = '',
+    prefix = '/api',
     openapiPath = '',
     taskStore,
     customRouteAuthConfig,
     streamOptions,
+    customApiRoutes,
+    mcpOptions,
   }: {
     app: TApp;
     mastra: Mastra;
@@ -119,16 +181,24 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     taskStore?: InMemoryTaskStore;
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
+    customApiRoutes?: ApiRoute[];
+    /**
+     * MCP transport options applied to all MCP HTTP and SSE routes.
+     * Individual routes can override these via MCPHttpTransportResult.mcpOptions.
+     */
+    mcpOptions?: MCPOptions;
   }) {
     super({ app, name: 'MastraServer' });
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
-    this.prefix = prefix;
+    this.prefix = normalizeRoutePath(prefix);
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
+    this.customApiRoutes = customApiRoutes;
+    this.mcpOptions = mcpOptions;
 
     // Automatically register this adapter with Mastra so getServerApp() works
     mastra.setMastraServer(this);
@@ -153,6 +223,140 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       }
     }
     return requestContext;
+  }
+
+  /**
+   * Check if the current request should be authenticated/authorized.
+   * Returns null if auth passes, or an error response if it fails.
+   *
+   * This method encapsulates the complete auth flow:
+   * 1. Check if route requires auth (route.requiresAuth)
+   * 2. Check if it's a dev playground request
+   * 3. Check if path is publicly accessible
+   * 4. Perform authentication (verify token)
+   * 5. Perform authorization (check rules, authorizeUser, authorize)
+   */
+  protected async checkRouteAuth(
+    route: ServerRoute,
+    context: {
+      path: string;
+      method: string;
+      getHeader: (name: string) => string | undefined;
+      getQuery: (name: string) => string | undefined;
+      requestContext: RequestContext;
+    },
+  ): Promise<{ status: number; error: string } | null> {
+    const authConfig = this.mastra.getServer()?.auth;
+
+    // No auth config means no auth required
+    if (!authConfig) {
+      return null;
+    }
+
+    // Check route-level requiresAuth flag first (explicit per-route setting)
+    // Default to true (protected) if not specified for backwards compatibility
+    if (route.requiresAuth === false) {
+      return null; // Route explicitly opts out of auth
+    }
+
+    // Dev playground bypass
+    if (isDevPlaygroundRequest(context.path, context.method, context.getHeader, authConfig)) {
+      return null;
+    }
+
+    // Check if path is publicly accessible via auth config patterns
+    if (canAccessPublicly(context.path, context.method, authConfig)) {
+      return null;
+    }
+
+    // --- Authentication ---
+    const authHeader = context.getHeader('authorization');
+    let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
+
+    if (!token) {
+      token = context.getQuery('apiKey') || null;
+    }
+
+    if (!token) {
+      return { status: 401, error: 'Authentication required' };
+    }
+
+    let user: unknown;
+    try {
+      if (typeof authConfig.authenticateToken === 'function') {
+        // Note: We pass null as request since adapters have different request types
+        // If specific request is needed, authenticateToken can use data from token
+        user = await authConfig.authenticateToken(token, null as any);
+      } else {
+        return { status: 401, error: 'No token verification method configured' };
+      }
+
+      if (!user) {
+        return { status: 401, error: 'Invalid or expired token' };
+      }
+
+      context.requestContext.set('user', user);
+    } catch (err) {
+      this.mastra.getLogger()?.error('Authentication error', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
+      return { status: 401, error: 'Invalid or expired token' };
+    }
+
+    // --- Authorization ---
+
+    // Check authorizeUser (simplified authorization)
+    if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
+      try {
+        const isAuthorized = await authConfig.authorizeUser(user, null as any);
+        if (!isAuthorized) {
+          return { status: 403, error: 'Access denied' };
+        }
+        return null; // Authorization passed
+      } catch (err) {
+        this.mastra.getLogger()?.error('Authorization error in authorizeUser', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        });
+        return { status: 500, error: 'Authorization error' };
+      }
+    }
+
+    // Check authorize (path/method-based authorization)
+    if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
+      try {
+        const isAuthorized = await authConfig.authorize(context.path, context.method, user, null as any);
+        if (!isAuthorized) {
+          return { status: 403, error: 'Access denied' };
+        }
+        return null; // Authorization passed
+      } catch (err) {
+        this.mastra.getLogger()?.error('Authorization error in authorize', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          path: context.path,
+          method: context.method,
+        });
+        return { status: 500, error: 'Authorization error' };
+      }
+    }
+
+    // Check custom rules
+    if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
+      const isAuthorized = await checkRules(authConfig.rules, context.path, context.method, user);
+      if (isAuthorized) {
+        return null; // Authorization passed
+      }
+      return { status: 403, error: 'Access denied' };
+    }
+
+    // Check default rules
+    if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
+      const isAuthorized = await checkRules(defaultAuthConfig.rules, context.path, context.method, user);
+      if (isAuthorized) {
+        return null; // Authorization passed
+      }
+    }
+
+    return { status: 403, error: 'Access denied' };
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
@@ -182,6 +386,17 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       description,
     });
 
+    // Set the servers field so Swagger UI knows routes are served under the prefix
+    if (prefix) {
+      openApiSpec.servers = [{ url: prefix }];
+    }
+
+    // Merge custom API routes into the OpenAPI spec
+    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
+      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
+      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
+    }
+
     const openApiRoute: ServerRoute = {
       method: 'GET',
       path,
@@ -193,7 +408,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   async registerRoutes(): Promise<void> {
-    await Promise.all(SERVER_ROUTES.map(route => this.registerRoute(this.app, route, { prefix: this.prefix })));
+    // Register routes sequentially to maintain order - important for routers where
+    // more specific routes (e.g., /versions/compare) must be registered before
+    // parameterized routes (e.g., /versions/:versionId)
+    for (const route of SERVER_ROUTES) {
+      await this.registerRoute(this.app, route, { prefix: this.prefix });
+    }
 
     if (this.openapiPath) {
       await this.registerOpenAPIRoute(
