@@ -43,6 +43,19 @@ export interface WorkspacesListResponse {
 // Filesystem Types
 // =============================================================================
 
+/** Provider status values for mount points */
+export type ProviderStatus =
+  | 'pending'
+  | 'initializing'
+  | 'ready'
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'stopped'
+  | 'destroying'
+  | 'destroyed'
+  | 'error';
+
 export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
@@ -53,6 +66,8 @@ export interface FileEntry {
     icon?: string;
     displayName?: string;
     description?: string;
+    status?: ProviderStatus;
+    error?: string;
   };
 }
 

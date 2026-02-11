@@ -29,7 +29,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-6',
     'claude-sonnet-4-5',
     'deepseek-r1',
-    'deepseek-v3',
     'gemini-2.5-flash',
     'gemini-2.5-pro',
     'gemini-3-flash-preview',

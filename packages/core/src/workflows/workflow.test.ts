@@ -21570,6 +21570,52 @@ describe('Workflow', () => {
       expect(receivedState).toBeDefined();
       expect(receivedState?.counter).toBe(10);
     });
+
+    it('should log step execution errors via the Mastra logger', async () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+        level: 'debug',
+      };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error('Step error for logger test');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-step-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-logger-step-error-workflow': workflow },
+        storage: testStorage,
+        logger: mockLogger as any,
+      });
+
+      const run = await mastra.getWorkflow('test-logger-step-error-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      // Step execution errors should be logged via the Mastra logger
+      expect(mockLogger.error).toHaveBeenCalled();
+      const errorCalls = mockLogger.error.mock.calls;
+      const hasStepErrorLog = errorCalls.some(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('failing-step'),
+      );
+      expect(hasStepErrorLog).toBe(true);
+    });
   });
 
   describe('Workflow as agent tool', () => {

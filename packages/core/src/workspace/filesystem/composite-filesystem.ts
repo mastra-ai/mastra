@@ -170,6 +170,8 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
               icon: fs.icon,
               displayName: fs.displayName,
               description: fs.description,
+              status: fs.status,
+              error: fs.error,
             };
           }
 
@@ -206,18 +208,18 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
   async init(): Promise<void> {
     this.status = 'initializing';
-    const errors: Error[] = [];
-    for (const fs of this._mounts.values()) {
+    for (const [mountPath, fs] of this._mounts.entries()) {
       try {
         await callLifecycle(fs, 'init');
       } catch (e) {
-        errors.push(e instanceof Error ? e : new Error(String(e)));
+        // Individual mount failed - it will have status='error'
+        // Log but continue with other mounts
+        const message = e instanceof Error ? e.message : String(e);
+        console.warn(`[CompositeFilesystem] Mount "${mountPath}" failed to initialize: ${message}`);
       }
     }
-    if (errors.length > 0) {
-      this.status = 'error';
-      throw new AggregateError(errors, 'Some filesystems failed to initialize');
-    }
+    // CompositeFilesystem is ready even if some mounts failed
+    // Operations on errored mounts will be handled by the underlying filesystem
     this.status = 'ready';
   }
 
@@ -327,12 +329,15 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     if (this.isVirtualPath(path)) return true;
     const r = this.resolveMount(path);
     if (!r) return false;
+    // Mount point root always exists (even if errored)
+    if (r.fsPath === '/') return true;
     return r.fs.exists(r.fsPath);
   }
 
   async stat(path: string): Promise<FileStat> {
+    const normalized = this.normalizePath(path);
+
     if (this.isVirtualPath(path)) {
-      const normalized = this.normalizePath(path);
       const parts = normalized.split('/').filter(Boolean);
       const now = new Date();
       return {
@@ -347,6 +352,21 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
     const r = this.resolveMount(path);
     if (!r) throw new Error(`No mount for path: ${path}`);
+
+    // Mount point root always returns directory stat (even if errored)
+    if (r.fsPath === '/') {
+      const parts = normalized.split('/').filter(Boolean);
+      const now = new Date();
+      return {
+        name: parts[parts.length - 1] || '',
+        path: normalized,
+        type: 'directory',
+        size: 0,
+        createdAt: now,
+        modifiedAt: now,
+      };
+    }
+
     return r.fs.stat(r.fsPath);
   }
 
@@ -366,6 +386,8 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     if (this.isVirtualPath(path)) return true;
     const r = this.resolveMount(path);
     if (!r) return false;
+    // Mount point root is always a directory (even if errored)
+    if (r.fsPath === '/') return true;
     try {
       const stat = await r.fs.stat(r.fsPath);
       return stat.type === 'directory';

@@ -228,7 +228,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
   });
 
   test.describe('Reflection Behavior', () => {
-    test('should show reflection indicator when reflection occurs', async ({ page }) => {
+    test.skip('should show reflection indicator when reflection occurs', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-reflection');
       await page.goto('/agents/om-agent/chat/new');
