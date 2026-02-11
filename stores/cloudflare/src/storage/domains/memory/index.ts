@@ -538,10 +538,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
             const entries = await this.updateSorting(threadMessages);
             await this.updateSortedMessages(orderKey, entries);
 
-            // Update thread's updatedAt timestamp
+            // Update thread's updatedAt and lastMessageAt timestamps
+            const now = new Date();
             const updatedThread = {
               ...thread,
-              updatedAt: new Date(),
+              updatedAt: now,
+              lastMessageAt: now,
             };
             await this.#db.putKV({
               tableName: TABLE_THREADS,

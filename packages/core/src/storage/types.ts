@@ -159,7 +159,7 @@ export type StorageListThreadsInput = {
    * Defaults to 0 if not specified.
    */
   page?: number;
-  orderBy?: StorageOrderBy;
+  orderBy?: StorageOrderBy<ThreadOrderBy>;
   /**
    * Filter options for querying threads.
    */
@@ -250,7 +250,7 @@ export type StorageMessageType = {
   resourceId: string | null;
 };
 
-export interface StorageOrderBy<TField extends ThreadOrderBy = ThreadOrderBy> {
+export interface StorageOrderBy<TField extends string = EntityOrderBy> {
   field?: TField;
   direction?: ThreadSortDirection;
 }
@@ -260,7 +260,9 @@ export interface ThreadSortOptions {
   sortDirection?: ThreadSortDirection;
 }
 
-export type ThreadOrderBy = 'createdAt' | 'updatedAt';
+export type EntityOrderBy = 'createdAt' | 'updatedAt';
+
+export type ThreadOrderBy = EntityOrderBy | 'lastMessageAt';
 
 export type ThreadSortDirection = 'ASC' | 'DESC';
 

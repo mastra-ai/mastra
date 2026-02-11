@@ -74,6 +74,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    // Add lastMessageAt column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['lastMessageAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -660,18 +666,22 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         }),
         ...updatePromises,
         ...deletePromises,
-        // Update thread's updatedAt timestamp
+        // Update thread's updatedAt and lastMessageAt timestamps
         this.client.insert({
           table: TABLE_THREADS,
           format: 'JSONEachRow',
-          values: Array.from(threadIdSet.values()).map(thread => ({
-            id: thread.id,
-            resourceId: thread.resourceId,
-            title: thread.title,
-            metadata: serializeMetadata(thread.metadata),
-            createdAt: thread.createdAt,
-            updatedAt: new Date().toISOString(),
-          })),
+          values: Array.from(threadIdSet.values()).map(thread => {
+            const nowStr = new Date().toISOString();
+            return {
+              id: thread.id,
+              resourceId: thread.resourceId,
+              title: thread.title,
+              metadata: serializeMetadata(thread.metadata),
+              createdAt: thread.createdAt,
+              updatedAt: nowStr,
+              lastMessageAt: nowStr,
+            };
+          }),
           clickhouse_settings: {
             date_time_input_format: 'best_effort',
             use_client_time_zone: 1,
@@ -698,13 +708,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
       const result = await this.client.query({
-        query: `SELECT 
+        query: `SELECT
           id,
           "resourceId",
           title,
           metadata,
           toDateTime64(createdAt, 3) as createdAt,
-          toDateTime64(updatedAt, 3) as updatedAt
+          toDateTime64(updatedAt, 3) as updatedAt,
+          toDateTime64OrNull(lastMessageAt, 3) as lastMessageAt
         FROM "${TABLE_THREADS}"
         WHERE id = {var_id:String}
         ORDER BY updatedAt DESC
@@ -731,6 +742,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         metadata: parseMetadata(thread.metadata),
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        lastMessageAt: thread.lastMessageAt || null,
       };
     } catch (error: any) {
       throw new MastraError(
@@ -757,6 +769,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt.toISOString(),
             updatedAt: thread.updatedAt.toISOString(),
+            lastMessageAt: thread.lastMessageAt
+              ? thread.lastMessageAt instanceof Date
+                ? thread.lastMessageAt.toISOString()
+                : thread.lastMessageAt
+              : null,
           },
         ],
         format: 'JSONEachRow',
@@ -986,6 +1003,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   metadata,
                   toDateTime64(createdAt, 3) as createdAt,
                   toDateTime64(updatedAt, 3) as updatedAt,
+                  toDateTime64OrNull(lastMessageAt, 3) as lastMessageAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
               )
@@ -995,7 +1013,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 title,
                 metadata,
                 createdAt,
-                updatedAt
+                updatedAt,
+                lastMessageAt
               FROM ranked_threads
               WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}

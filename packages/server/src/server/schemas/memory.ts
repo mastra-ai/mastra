@@ -38,7 +38,7 @@ const storageOrderBySchema = z.preprocess(
   },
   z
     .object({
-      field: z.enum(['createdAt', 'updatedAt']).optional(),
+      field: z.enum(['createdAt', 'updatedAt', 'lastMessageAt']).optional(),
       direction: z.enum(['ASC', 'DESC']).optional(),
     })
     .optional(),

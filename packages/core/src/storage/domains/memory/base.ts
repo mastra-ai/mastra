@@ -148,7 +148,7 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   protected parseOrderBy(
-    orderBy?: StorageOrderBy,
+    orderBy?: StorageOrderBy<ThreadOrderBy>,
     defaultDirection: ThreadSortDirection = 'DESC',
   ): { field: ThreadOrderBy; direction: ThreadSortDirection } {
     return {
@@ -411,6 +411,7 @@ export abstract class MemoryStorage extends StorageDomain {
 const THREAD_ORDER_BY_SET: Record<ThreadOrderBy, true> = {
   createdAt: true,
   updatedAt: true,
+  lastMessageAt: true,
 };
 
 const THREAD_THREAD_SORT_DIRECTION_SET: Record<ThreadSortDirection, true> = {

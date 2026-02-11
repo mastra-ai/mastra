@@ -379,7 +379,7 @@ export class MemoryConvex extends MemoryStorage {
       records: normalized,
     });
 
-    // Update thread updatedAt timestamps for all affected threads
+    // Update thread updatedAt and lastMessageAt timestamps for all affected threads
     const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean) as string[])];
     const now = new Date();
     for (const threadId of threadIds) {
@@ -391,6 +391,7 @@ export class MemoryConvex extends MemoryStorage {
             ...thread,
             id: thread.id,
             updatedAt: now.toISOString(),
+            lastMessageAt: now.toISOString(),
             createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
             metadata: thread.metadata ?? {},
           },

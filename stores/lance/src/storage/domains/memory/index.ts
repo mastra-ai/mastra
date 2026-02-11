@@ -543,10 +543,10 @@ export class StoreMemoryLance extends MemoryStorage {
       const table = await this.client.openTable(TABLE_MESSAGES);
       await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
 
-      // Update the thread's updatedAt timestamp
+      // Update the thread's updatedAt and lastMessageAt timestamps
       const threadsTable = await this.client.openTable(TABLE_THREADS);
       const currentTime = new Date().getTime();
-      const updateRecord = { id: threadId, updatedAt: currentTime };
+      const updateRecord = { id: threadId, updatedAt: currentTime, lastMessageAt: currentTime };
       await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');

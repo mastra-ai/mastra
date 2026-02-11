@@ -44,6 +44,12 @@ export class MemoryStorageD1 extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    // Add lastMessageAt column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['lastMessageAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -208,6 +214,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         ...thread,
         createdAt: ensureDate(thread.createdAt) as Date,
         updatedAt: ensureDate(thread.updatedAt) as Date,
+        lastMessageAt: (thread as any).lastMessageAt ? ensureDate((thread as any).lastMessageAt) : null,
         metadata:
           typeof thread.metadata === 'string'
             ? (JSON.parse(thread.metadata || '{}') as Record<string, any>)
@@ -395,6 +402,11 @@ export class MemoryStorageD1 extends MemoryStorage {
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : null,
       createdAt: thread.createdAt.toISOString(),
       updatedAt: thread.updatedAt.toISOString(),
+      lastMessageAt: thread.lastMessageAt
+        ? thread.lastMessageAt instanceof Date
+          ? thread.lastMessageAt.toISOString()
+          : thread.lastMessageAt
+        : null,
     };
 
     // Process record for SQL insertion
@@ -410,6 +422,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       metadata: 'excluded.metadata',
       createdAt: 'excluded.createdAt',
       updatedAt: 'excluded.updatedAt',
+      lastMessageAt: 'excluded.lastMessageAt',
     };
 
     // Use the new insert method with ON CONFLICT
@@ -567,10 +580,10 @@ export class MemoryStorageD1 extends MemoryStorage {
           tableName: TABLE_MESSAGES,
           records: messagesToInsert,
         }),
-        // Update thread's updatedAt timestamp
+        // Update thread's updatedAt and lastMessageAt timestamps
         this.#db.executeQuery({
-          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
-          params: [now.toISOString(), threadId],
+          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ?, lastMessageAt = ? WHERE id = ?`,
+          params: [now.toISOString(), now.toISOString(), threadId],
         }),
       ]);
 

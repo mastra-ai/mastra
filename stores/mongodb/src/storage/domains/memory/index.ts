@@ -607,7 +607,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Execute message inserts and thread update in parallel
       await Promise.all([
         collection.bulkWrite(messagesToInsert),
-        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
+        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date(), lastMessageAt: new Date() } }),
       ]);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
@@ -1035,15 +1035,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     try {
       const collection = await this.getCollection(TABLE_THREADS);
+      const now = new Date();
       await collection.updateOne(
         { id },
         {
           $set: {
             title,
             metadata: updatedThread.metadata,
+            updatedAt: now,
           },
         },
       );
+      updatedThread.updatedAt = now;
     } catch (error) {
       throw new MastraError(
         {

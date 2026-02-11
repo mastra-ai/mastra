@@ -146,13 +146,14 @@ export class MemoryMSSQL extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const sql = `SELECT 
+      const sql = `SELECT
         id,
         [resourceId],
         title,
         metadata,
         [createdAt],
-        [updatedAt]
+        [updatedAt],
+        [lastMessageAt]
       FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })}
       WHERE id = @threadId`;
       const request = this.pool.request();
@@ -167,6 +168,7 @@ export class MemoryMSSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        lastMessageAt: thread.lastMessageAt || null,
       };
     } catch (error) {
       throw new MastraError(
@@ -287,10 +289,11 @@ export class MemoryMSSQL extends MemoryStorage {
         };
       }
 
-      const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
+      const orderByField =
+        field === 'lastMessageAt' ? '[lastMessageAt]' : field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt], [lastMessageAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
 
       for (const [key, value] of Object.entries(params)) {
@@ -311,6 +314,7 @@ export class MemoryMSSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        lastMessageAt: thread.lastMessageAt || null,
       }));
 
       return {
@@ -361,10 +365,11 @@ export class MemoryMSSQL extends MemoryStorage {
             [resourceId] = @resourceId,
             title = @title,
             metadata = @metadata,
-            [updatedAt] = @updatedAt
+            [updatedAt] = @updatedAt,
+            [lastMessageAt] = @lastMessageAt
         WHEN NOT MATCHED THEN
-          INSERT (id, [resourceId], title, metadata, [createdAt], [updatedAt])
-          VALUES (@id, @resourceId, @title, @metadata, @createdAt, @updatedAt);`;
+          INSERT (id, [resourceId], title, metadata, [createdAt], [updatedAt], [lastMessageAt])
+          VALUES (@id, @resourceId, @title, @metadata, @createdAt, @updatedAt, @lastMessageAt);`;
       const req = this.pool.request();
       req.input('id', thread.id);
       req.input('resourceId', thread.resourceId);
@@ -377,6 +382,7 @@ export class MemoryMSSQL extends MemoryStorage {
       }
       req.input('createdAt', sql.DateTime2, thread.createdAt);
       req.input('updatedAt', sql.DateTime2, thread.updatedAt);
+      req.input('lastMessageAt', sql.DateTime2, thread.lastMessageAt || null);
       await req.query(mergeSql);
       // Return the exact same thread object to preserve timestamp precision
       return thread;
@@ -462,6 +468,7 @@ export class MemoryMSSQL extends MemoryStorage {
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
+        lastMessageAt: thread.lastMessageAt || null,
       };
     } catch (error) {
       throw new MastraError(
@@ -877,10 +884,14 @@ export class MemoryMSSQL extends MemoryStorage {
               VALUES (@id, @thread_id, @content, @createdAt, @role, @type, @resourceId);`;
           await request.query(mergeSql);
         }
+        const now = new Date();
         const threadReq = transaction.request();
-        threadReq.input('updatedAt', sql.DateTime2, new Date());
+        threadReq.input('updatedAt', sql.DateTime2, now);
+        threadReq.input('lastMessageAt', sql.DateTime2, now);
         threadReq.input('id', threadId);
-        await threadReq.query(`UPDATE ${tableThreads} SET [updatedAt] = @updatedAt WHERE id = @id`);
+        await threadReq.query(
+          `UPDATE ${tableThreads} SET [updatedAt] = @updatedAt, [lastMessageAt] = @lastMessageAt WHERE id = @id`,
+        );
         await transaction.commit();
       } catch (error) {
         await transaction.rollback();

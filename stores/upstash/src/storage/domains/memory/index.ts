@@ -270,6 +270,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: new Date(),
     };
 
     try {
@@ -417,11 +418,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
           });
         }
 
-        // Update the thread's updatedAt field (only in the first batch)
+        // Update the thread's updatedAt and lastMessageAt fields (only in the first batch)
         if (i === 0 && existingThread) {
+          const now = new Date();
           const updatedThread = {
             ...existingThread,
-            updatedAt: new Date(),
+            updatedAt: now,
+            lastMessageAt: now,
           };
           pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
         }

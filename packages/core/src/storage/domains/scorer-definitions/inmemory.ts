@@ -6,7 +6,7 @@ import type {
   StorageUpdateScorerDefinitionInput,
   StorageListScorerDefinitionsInput,
   StorageListScorerDefinitionsOutput,
-  ThreadOrderBy,
+  EntityOrderBy,
   ThreadSortDirection,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
@@ -414,7 +414,7 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
 
   private sortScorers(
     scorers: StorageScorerDefinitionType[],
-    field: ThreadOrderBy,
+    field: EntityOrderBy,
     direction: ThreadSortDirection,
   ): StorageScorerDefinitionType[] {
     return scorers.sort((a, b) => {
