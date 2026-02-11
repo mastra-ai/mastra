@@ -1,7 +1,7 @@
 import { openai as openai_v4 } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
-import type { LanguageModelV1 } from '@ai-sdk/provider';
+import type { LanguageModelV1 } from '@ai-sdk/provider-v4';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
