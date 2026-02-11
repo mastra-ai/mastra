@@ -1,5 +1,5 @@
 ---
-"@mastra/core": patch
+"@mastra/core": minor
 ---
 
 Fix LocalFilesystem.resolvePath handling of absolute paths and improve filesystem info.
