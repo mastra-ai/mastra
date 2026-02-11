@@ -218,6 +218,7 @@ export class CoreToolBuilder extends MastraBase {
             )
           : undefined,
         toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+        inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
 
@@ -665,6 +666,7 @@ export class CoreToolBuilder extends MastraBase {
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+      inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
       onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
