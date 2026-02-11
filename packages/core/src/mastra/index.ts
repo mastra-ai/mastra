@@ -339,6 +339,8 @@ export class Mastra<
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
+  // Cache for stored scorers to allow in-memory modifications to persist across requests
+  #storedScorersCache: Map<string, MastraScorer<any, any, any, any>> = new Map();
   // Registry for prompt blocks (stored or code-defined)
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
@@ -386,6 +388,14 @@ export class Mastra<
    */
   public getStoredAgentCache() {
     return this.#storedAgentsCache;
+  }
+
+  /**
+   * Gets the stored scorers cache
+   * @internal
+   */
+  public getStoredScorerCache() {
+    return this.#storedScorersCache;
   }
 
   /**
@@ -1485,7 +1495,11 @@ export class Mastra<
    * mastra.addScorer(newScorer, 'customKey'); // Uses custom key
    * ```
    */
-  public addScorer<S extends MastraScorer<any, any, any, any>>(scorer: S, key?: string): void {
+  public addScorer<S extends MastraScorer<any, any, any, any>>(
+    scorer: S,
+    key?: string,
+    options?: { source?: 'code' | 'stored' },
+  ): void {
     if (!scorer) {
       throw createUndefinedPrimitiveError('scorer', scorer, key);
     }
@@ -1499,6 +1513,11 @@ export class Mastra<
 
     // Register Mastra instance with scorer to enable custom gateway access
     scorer.__registerMastra(this);
+
+    // Set the source if provided
+    if (options?.source) {
+      scorer.source = options.source;
+    }
 
     scorers[scorerKey] = scorer;
   }
@@ -1610,14 +1629,24 @@ export class Mastra<
 
     // Try direct key lookup first
     if (scorers[keyOrId]) {
+      const scorerId = scorers[keyOrId]?.id;
       delete scorers[keyOrId];
+      // Clear from stored scorers cache to prevent stale data
+      if (scorerId) {
+        this.#storedScorersCache.delete(scorerId);
+      }
       return true;
     }
 
     // Try finding by ID or name
     const key = Object.keys(scorers).find(k => scorers[k]?.id === keyOrId || scorers[k]?.name === keyOrId);
     if (key) {
+      const scorerId = scorers[key]?.id;
       delete scorers[key];
+      // Clear from stored scorers cache to prevent stale data
+      if (scorerId) {
+        this.#storedScorersCache.delete(scorerId);
+      }
       return true;
     }
 
@@ -2343,6 +2372,12 @@ export class Mastra<
 
     if (this.#workspace) {
       this.#workspace.__setLogger(this.#logger);
+    }
+
+    if (this.#memory) {
+      Object.keys(this.#memory).forEach(key => {
+        this.#memory?.[key]?.__setLogger(this.#logger);
+      });
     }
 
     this.#observability.setLogger({ logger: this.#logger });

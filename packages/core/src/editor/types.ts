@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { RequestContext } from '../request-context';
 import type {
   AgentInstructionBlock,
   StorageCreateAgentInput,
@@ -9,6 +10,7 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
   StorageListAgentsResolvedOutput,
+  StorageResolvedAgentType,
   StorageCreatePromptBlockInput,
   StorageUpdatePromptBlockInput,
   StorageListPromptBlocksInput,
@@ -55,6 +57,16 @@ export interface IEditorAgentNamespace {
   list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput>;
   listResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput>;
   clearCache(agentId?: string): void;
+  clone(
+    agent: Agent,
+    options: {
+      newId: string;
+      newName?: string;
+      metadata?: Record<string, unknown>;
+      authorId?: string;
+      requestContext?: RequestContext;
+    },
+  ): Promise<StorageResolvedAgentType>;
 }
 
 // ============================================================================

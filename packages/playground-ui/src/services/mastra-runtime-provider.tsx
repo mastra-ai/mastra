@@ -517,12 +517,77 @@ export function MastraRuntimeProvider({
     });
   };
 
+  // Mark in-progress buffering badges as complete after buffer-status resolves.
+  // Injects synthetic data-om-buffering-end parts so convertOmPartsInMastraMessage
+  // sees a matching end for each in-progress start. Uses the record from awaitBufferStatus
+  // to populate token counts and observations for the badge display.
+  const markBufferingBadgesAsComplete = (msgs: any[], record?: any) => {
+    // Build a lookup from cycleId to chunk data for observation buffering
+    const chunksByCycleId = new Map<string, any>();
+    if (record?.bufferedObservationChunks) {
+      for (const chunk of record.bufferedObservationChunks) {
+        if (chunk.cycleId) {
+          chunksByCycleId.set(chunk.cycleId, chunk);
+        }
+      }
+    }
+
+    return msgs.map(msg => {
+      if (msg.role !== 'assistant') return msg;
+
+      const partsKey = msg.parts ? 'parts' : msg.content ? 'content' : null;
+      if (!partsKey || !Array.isArray(msg[partsKey])) return msg;
+
+      const newParts: any[] = [];
+      let changed = false;
+
+      for (const part of msg[partsKey]) {
+        newParts.push(part);
+        // For each buffering-start that isn't already disconnected, inject a synthetic buffering-end
+        if (part.type === 'data-om-buffering-start' && part.data?.cycleId && !part.data?.disconnectedAt) {
+          const cycleId = part.data.cycleId;
+          const opType = part.data.operationType;
+
+          let endData: Record<string, any> = {
+            cycleId,
+            operationType: opType,
+            completedAt: new Date().toISOString(),
+          };
+
+          if (opType === 'observation') {
+            // Match chunk by cycleId for observation buffering
+            const chunk = chunksByCycleId.get(cycleId);
+            if (chunk) {
+              endData.tokensBuffered = chunk.messageTokens;
+              endData.bufferedTokens = chunk.tokenCount;
+              endData.observations = chunk.observations;
+            }
+          } else if (opType === 'reflection') {
+            // Use aggregate reflection data from the record
+            if (record) {
+              endData.tokensBuffered = record.bufferedReflectionInputTokens;
+              endData.bufferedTokens = record.bufferedReflectionTokens;
+              endData.observations = record.bufferedReflection;
+            }
+          }
+
+          newParts.push({ type: 'data-om-buffering-end', data: endData });
+          changed = true;
+        }
+      }
+
+      return changed ? { ...msg, [partsKey]: newParts } : msg;
+    });
+  };
+
   // Helper to reset OM streaming state when stream is interrupted
   // (user cancel, network error, process exit, etc.)
   const resetObservationalMemoryStreamState = () => {
     setIsObservingFromStream(false);
     setIsReflectingFromStream(false);
-    setStreamProgress(null);
+    // Don't clear streamProgress — keep last known values so the sidebar
+    // continues to show accurate token counts instead of resetting to 0.
+    // The next stream will naturally update streamProgress via data-om-status events.
 
     // Mark any in-progress observation markers as disconnected
     setMessages(prev => markOmMarkersAsDisconnected(prev));
@@ -738,6 +803,18 @@ export function MastraRuntimeProvider({
               },
               signal: controller.signal,
             });
+
+            // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
+            if (threadId) {
+              baseClient
+                .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
+                .then(result => {
+                  setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+                  queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+                  queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+                })
+                .catch(() => {});
+            }
 
             return;
           }
@@ -1094,6 +1171,19 @@ export function MastraRuntimeProvider({
       setTimeout(() => {
         refreshThreadList?.();
       }, 500);
+
+      // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
+      if (threadId) {
+        baseClient
+          .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
+          .then(result => {
+            setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+            setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+            queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+            queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+          })
+          .catch(() => {});
+      }
     } catch (error: any) {
       console.error('Error occurred in MastraRuntimeProvider', error);
       setIsLegacyRunning(false);
@@ -1115,11 +1205,13 @@ export function MastraRuntimeProvider({
           { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
         ]);
       }
+      // Reset OM streaming state when an error occurs (stream was interrupted)
+      resetObservationalMemoryStreamState();
     } finally {
       // Clean up the abort controller reference
       abortControllerRef.current = null;
-      // Reset OM streaming state in case stream was interrupted mid-observation
-      resetObservationalMemoryStreamState();
+      // Note: We don't reset OM streaming state here on successful completion.
+      // The streamProgress is kept to show accurate token counts in the sidebar.
     }
   };
 
@@ -1131,6 +1223,19 @@ export function MastraRuntimeProvider({
       // Reset OM streaming state in case observation was in progress
       resetObservationalMemoryStreamState();
       cancelRun?.();
+
+      // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
+      if (threadId) {
+        baseClient
+          .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
+          .then(result => {
+            setMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+            setLegacyMessages(prev => markBufferingBadgesAsComplete(prev, result?.record));
+            queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
+            queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+          })
+          .catch(() => {});
+      }
     }
   };
 

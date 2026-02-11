@@ -149,6 +149,25 @@ export function WorkflowDefaultNode({
             {description}
           </Txt>
         )}
+
+        {isForEachNode && step?.foreachProgress && (
+          <div className="px-3 pb-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-surface1 rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-300',
+                  step.foreachProgress.iterationStatus === 'failed' ? 'bg-accent2' : 'bg-accent1',
+                )}
+                style={{
+                  width: `${step.foreachProgress.totalCount > 0 ? (step.foreachProgress.completedCount / step.foreachProgress.totalCount) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
+              {step.foreachProgress.completedCount} / {step.foreachProgress.totalCount}
+            </Txt>
+          </div>
+        )}
         {duration && (
           <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
             sleeps for <strong>{duration}ms</strong>

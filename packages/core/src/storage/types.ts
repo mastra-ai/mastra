@@ -545,12 +545,12 @@ export interface Rule {
  * Mid-level groups (depth 1) may contain Rules or depth-2 groups.
  * Top-level groups (depth 0, exported as `RuleGroup`) may contain Rules or depth-1 groups.
  */
-interface RuleGroupDepth2 {
+export interface RuleGroupDepth2 {
   operator: 'AND' | 'OR';
   conditions: Rule[];
 }
 
-interface RuleGroupDepth1 {
+export interface RuleGroupDepth1 {
   operator: 'AND' | 'OR';
   conditions: (Rule | RuleGroupDepth2)[];
 }

@@ -3,12 +3,7 @@ import type { IMastraEditor, MastraEditorConfig } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
-import {
-  EditorAgentNamespace,
-  EditorMCPNamespace,
-  EditorPromptNamespace,
-  EditorScorerNamespace,
-} from './namespaces';
+import { EditorAgentNamespace, EditorMCPNamespace, EditorPromptNamespace, EditorScorerNamespace } from './namespaces';
 
 export type { MastraEditorConfig };
 
@@ -24,8 +19,6 @@ export {
   EditorScorerNamespace,
 } from './namespaces';
 export type { StorageAdapter } from './namespaces';
-
-
 
 export class MastraEditor implements IMastraEditor {
   /** @internal — exposed for namespace classes, not part of public API */

@@ -19,14 +19,26 @@ class TestMCPServer extends MCPServerBase {
   }
   async startStdio() {}
   async startSSE() {}
-  async startHonoSSE() { return undefined; }
+  async startHonoSSE() {
+    return undefined;
+  }
   async startHTTP() {}
   async close() {}
-  getServerInfo() { return {} as any; }
-  getServerDetail() { return {} as any; }
-  getToolListInfo() { return { tools: [] }; }
-  getToolInfo() { return undefined; }
-  async executeTool() { return {}; }
+  getServerInfo() {
+    return {} as any;
+  }
+  getServerDetail() {
+    return {} as any;
+  }
+  getToolListInfo() {
+    return { tools: [] };
+  }
+  getToolInfo() {
+    return undefined;
+  }
+  async executeTool() {
+    return {};
+  }
 }
 
 const createTestStorage = () => {
@@ -481,9 +493,7 @@ describe('Agent MCP tool resolution', () => {
     const agent = await editorWithLogger.agent.getById('agent-missing-mcp');
 
     expect(agent).toBeInstanceOf(Agent);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('nonexistent-mcp'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('nonexistent-mcp'));
   });
 
   it('should include all tools when tools config is empty object (tools: {})', async () => {
@@ -507,7 +517,7 @@ describe('Agent MCP tool resolution', () => {
         instructions: 'Test',
         model: { provider: 'openai', name: 'gpt-4' },
         mcpClients: {
-          'all-tools-mcp': { tools: {} },  // empty tools object → include everything
+          'all-tools-mcp': { tools: {} }, // empty tools object → include everything
         },
       },
     });
@@ -607,7 +617,7 @@ describe('Agent MCP tool resolution', () => {
         instructions: 'Test',
         model: { provider: 'openai', name: 'gpt-4' },
         mcpClients: {
-          'all-server': { tools: {} },  // include all tools
+          'all-server': { tools: {} }, // include all tools
         },
       },
     });
@@ -660,7 +670,7 @@ describe('Agent MCP tool resolution', () => {
         model: { provider: 'openai', name: 'gpt-4' },
         mcpClients: {
           'remote-mcp': { tools: { 'remote-tool': {} } },
-          'code-srv': { tools: {} },  // all tools from code server
+          'code-srv': { tools: {} }, // all tools from code server
         },
       },
     });
@@ -968,7 +978,7 @@ describe('Agent MCP tool resolution', () => {
             alpha: {
               type: 'http',
               url: 'https://alpha.example.com',
-              tools: { 'tool-x': {} },  // only expose tool-x from alpha
+              tools: { 'tool-x': {} }, // only expose tool-x from alpha
             },
             beta: {
               type: 'http',
@@ -986,7 +996,7 @@ describe('Agent MCP tool resolution', () => {
           instructions: 'Test',
           model: { provider: 'openai', name: 'gpt-4' },
           mcpClients: {
-            'multi-srv-mcp': { tools: {} },  // all tools (no agent-level filter)
+            'multi-srv-mcp': { tools: {} }, // all tools (no agent-level filter)
           },
         },
       });
@@ -1219,5 +1229,3 @@ describe('Agent MCP tool resolution', () => {
     });
   });
 });
-
-

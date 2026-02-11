@@ -75,6 +75,21 @@ export const fileEntrySchema = z.object({
       icon: z.string().optional(),
       displayName: z.string().optional(),
       description: z.string().optional(),
+      status: z
+        .enum([
+          'pending',
+          'initializing',
+          'ready',
+          'starting',
+          'running',
+          'stopping',
+          'stopped',
+          'destroying',
+          'destroyed',
+          'error',
+        ])
+        .optional(),
+      error: z.string().optional(),
     })
     .optional(),
 });

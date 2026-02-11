@@ -2,7 +2,14 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import type { ToolProvider, ToolProviderListResult, ToolProviderToolkit, ToolProviderToolInfo, ListToolProviderToolsOptions, ResolveToolProviderToolsOptions } from '@mastra/core/tool-provider';
+import type {
+  ToolProvider,
+  ToolProviderListResult,
+  ToolProviderToolkit,
+  ToolProviderToolInfo,
+  ListToolProviderToolsOptions,
+  ResolveToolProviderToolsOptions,
+} from '@mastra/core/tool-provider';
 import type { StorageToolConfig } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { RequestContext } from '@mastra/core/request-context';
@@ -21,48 +28,54 @@ function createMockToolProvider(
 ): ToolProvider {
   return {
     info: { id, name: `${id} provider`, description: `Provider ${id}` },
-    listToolkits: vi.fn(async (): Promise<ToolProviderListResult<ToolProviderToolkit>> => ({
-      data: toolkits,
-    })),
-    listTools: vi.fn(async (options?: ListToolProviderToolsOptions): Promise<ToolProviderListResult<ToolProviderToolInfo>> => {
-      let tools = Object.entries(toolMap).map(([slug, t]) => ({
-        slug,
-        name: t.name,
-        description: t.description,
-        toolkit: t.toolkit,
-      }));
-      if (options?.toolkit) {
-        tools = tools.filter(t => t.toolkit === options.toolkit);
-      }
-      if (options?.search) {
-        const q = options.search.toLowerCase();
-        tools = tools.filter(t => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q));
-      }
-      return { data: tools };
-    }),
+    listToolkits: vi.fn(
+      async (): Promise<ToolProviderListResult<ToolProviderToolkit>> => ({
+        data: toolkits,
+      }),
+    ),
+    listTools: vi.fn(
+      async (options?: ListToolProviderToolsOptions): Promise<ToolProviderListResult<ToolProviderToolInfo>> => {
+        let tools = Object.entries(toolMap).map(([slug, t]) => ({
+          slug,
+          name: t.name,
+          description: t.description,
+          toolkit: t.toolkit,
+        }));
+        if (options?.toolkit) {
+          tools = tools.filter(t => t.toolkit === options.toolkit);
+        }
+        if (options?.search) {
+          const q = options.search.toLowerCase();
+          tools = tools.filter(t => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q));
+        }
+        return { data: tools };
+      },
+    ),
     getToolSchema: vi.fn(async (slug: string) => {
       const t = toolMap[slug];
       if (!t) return null;
       return { type: 'object', properties: { input: { type: 'string' } } };
     }),
-    resolveTools: vi.fn(async (
-      toolSlugs: string[],
-      toolConfigs?: Record<string, StorageToolConfig>,
-      _options?: ResolveToolProviderToolsOptions,
-    ): Promise<Record<string, ToolAction<any, any, any>>> => {
-      const result: Record<string, ToolAction<any, any, any>> = {};
-      for (const slug of toolSlugs) {
-        const t = toolMap[slug];
-        if (!t) continue;
-        const desc = toolConfigs?.[slug]?.description ?? t.description;
-        result[slug] = {
-          id: slug,
-          description: desc,
-          execute: vi.fn(async () => ({ result: `executed ${slug}` })),
-        } as any;
-      }
-      return result;
-    }),
+    resolveTools: vi.fn(
+      async (
+        toolSlugs: string[],
+        toolConfigs?: Record<string, StorageToolConfig>,
+        _options?: ResolveToolProviderToolsOptions,
+      ): Promise<Record<string, ToolAction<any, any, any>>> => {
+        const result: Record<string, ToolAction<any, any, any>> = {};
+        for (const slug of toolSlugs) {
+          const t = toolMap[slug];
+          if (!t) continue;
+          const desc = toolConfigs?.[slug]?.description ?? t.description;
+          result[slug] = {
+            id: slug,
+            description: desc,
+            execute: vi.fn(async () => ({ result: `executed ${slug}` })),
+          } as any;
+        }
+        return result;
+      },
+    ),
   };
 }
 
@@ -266,9 +279,7 @@ describe('Integration Tools (tool providers)', () => {
 
       const agent = await editorWithLogger.agent.getById('agent-missing-provider');
       expect(agent).toBeInstanceOf(Agent);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('nonexistent_provider'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('nonexistent_provider'));
     });
 
     it('should combine integration tools with regular tools', async () => {
@@ -380,18 +391,19 @@ describe('Integration Tools (tool providers)', () => {
       });
 
       it('should fetch executable tools and execute GITHUB_LIST_REPOSITORY_ISSUES', async () => {
-        const tools = await composioProvider.resolveTools(
-          ['GITHUB_LIST_REPOSITORY_ISSUES'],
-          undefined,
-          { userId: 'default' },
-        );
+        const tools = await composioProvider.resolveTools(['GITHUB_LIST_REPOSITORY_ISSUES'], undefined, {
+          userId: 'default',
+        });
 
         expect(tools['GITHUB_LIST_REPOSITORY_ISSUES']).toBeDefined();
         const tool = tools['GITHUB_LIST_REPOSITORY_ISSUES']!;
         expect(tool.id).toBe('GITHUB_LIST_REPOSITORY_ISSUES');
         expect(typeof tool.execute).toBe('function');
 
-        const result = await tool.execute!({ owner: 'mastra-ai', repo: 'mastra', per_page: 2, state: 'open' }, {} as any);
+        const result = await tool.execute!(
+          { owner: 'mastra-ai', repo: 'mastra', per_page: 2, state: 'open' },
+          {} as any,
+        );
         expect(result).toBeDefined();
         expect(result.successful).not.toBe(false);
         expect(result.data?.issues?.length).toBeGreaterThan(0);
@@ -441,12 +453,15 @@ describe('Integration Tools (tool providers)', () => {
         expect(typeof tools['GITHUB_LIST_REPOSITORY_ISSUES'].execute).toBe('function');
 
         // Actually execute the tool through the hydrated agent
-        const result = await tools['GITHUB_LIST_REPOSITORY_ISSUES'].execute!({
-          owner: 'mastra-ai',
-          repo: 'mastra',
-          per_page: 1,
-          state: 'open',
-        }, {} as any);
+        const result = await tools['GITHUB_LIST_REPOSITORY_ISSUES'].execute!(
+          {
+            owner: 'mastra-ai',
+            repo: 'mastra',
+            per_page: 1,
+            state: 'open',
+          },
+          {} as any,
+        );
         expect(result).toBeDefined();
         expect(result.successful).not.toBe(false);
         expect(result.data?.issues?.length).toBeGreaterThan(0);
@@ -637,10 +652,9 @@ describe.skipIf(!process.env.ARCADE_API_KEY)('ArcadeToolProvider e2e (real API)'
   }, 30_000);
 
   it('should fetch executable tools with description overrides', async () => {
-    const tools = await provider.resolveTools(
-      ['Github.GetRepository'],
-      { 'Github.GetRepository': { description: 'Custom Arcade desc' } },
-    );
+    const tools = await provider.resolveTools(['Github.GetRepository'], {
+      'Github.GetRepository': { description: 'Custom Arcade desc' },
+    });
     const tool = tools['Github.GetRepository'];
     expect(tool).toBeDefined();
     expect(tool.id).toBe('Github.GetRepository');

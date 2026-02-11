@@ -11,11 +11,7 @@ import type { ToolAction } from '@mastra/core/tools';
 import type { StorageToolConfig } from '@mastra/core/storage';
 
 import { Composio } from '@composio/core';
-import type {
-  Tool as ComposioTool,
-  ToolKitItem,
-  ToolListParams as ComposioToolListParams,
-} from '@composio/core';
+import type { Tool as ComposioTool, ToolKitItem, ToolListParams as ComposioToolListParams } from '@composio/core';
 import { MastraProvider } from '@composio/mastra';
 import type { MastraTool, MastraToolCollection } from '@composio/mastra';
 
@@ -103,11 +99,13 @@ export class ComposioToolProvider implements ToolProvider {
     // underlying Zod schema accepts `limit` on every variant.  We cast
     // through the base type so `limit` is always forwarded.
     const limit = options?.perPage;
-    const query: ComposioToolListParams = (options?.toolkit
-      ? { toolkits: [options.toolkit], limit, search: options?.search }
-      : options?.search
-        ? { search: options.search, limit }
-        : { toolkits: [] as string[], limit }) as ComposioToolListParams;
+    const query: ComposioToolListParams = (
+      options?.toolkit
+        ? { toolkits: [options.toolkit], limit, search: options?.search }
+        : options?.search
+          ? { search: options.search, limit }
+          : { toolkits: [] as string[], limit }
+    ) as ComposioToolListParams;
 
     const rawTools: ComposioTool[] = await composio.tools.getRawComposioTools(query);
 
