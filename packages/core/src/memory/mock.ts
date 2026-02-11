@@ -1,9 +1,8 @@
-import { toStandardSchema, standardSchemaToJSONSchema } from '../schema/standard-schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodTypeAny, ZodObject } from 'zod/v4';
 import z from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../schema/standard-schema';
 import type {
   MemoryStorage,
   StorageListMessagesInput,
@@ -23,8 +22,6 @@ import type {
   WorkingMemoryTemplate,
   WorkingMemory,
 } from './types';
-
-const isZodObject = (v: ZodTypeAny): v is ZodObject => v instanceof z.ZodObject;
 
 export class MockMemory extends MastraMemory {
   constructor({

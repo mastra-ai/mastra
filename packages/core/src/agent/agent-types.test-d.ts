@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
-import { z } from 'zod/v4';
 import z3 from 'zod/v3';
+import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema/schema';
 import type { AgentExecutionOptions } from './agent.types';

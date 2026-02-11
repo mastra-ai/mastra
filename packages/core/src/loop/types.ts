@@ -16,7 +16,7 @@ import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { MastraMemory, MemoryConfig, MemoryConfigInternal } from '../memory';
+import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker } from '../observability';
 import type {
   InputProcessorOrWorkflow,

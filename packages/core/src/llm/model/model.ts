@@ -16,7 +16,6 @@ import {
   OpenAISchemaCompatLayer,
   jsonSchema,
 } from '@mastra/schema-compat';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import type { ZodSchema, z } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
@@ -24,6 +23,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
 import { isZodArray, getZodDef } from '../../utils/zod-utils';
@@ -109,7 +109,6 @@ export class MastraLLMV1 extends MastraBase {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion needed to avoid
     // "Type instantiation is excessively deep" error from complex ZodSchema generic inference
     return applyCompatLayer({
       schema: schema as any,

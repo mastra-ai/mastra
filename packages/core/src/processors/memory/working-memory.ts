@@ -2,7 +2,7 @@ import type { Processor } from '..';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
-import type { MastraDBMessage, MemoryConfig, MemoryConfigInternal } from '../../memory';
+import type { MastraDBMessage, MemoryConfigInternal } from '../../memory';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 

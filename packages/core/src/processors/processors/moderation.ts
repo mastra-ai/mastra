@@ -1,15 +1,15 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { GenerateObjectResult } from '@internal/ai-sdk-v4';
 import z from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
-import { toStandardSchema, type PublicSchema } from '../../schema';
-import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
-import type { ChunkType, FullOutput } from '../../stream';
+import { toStandardSchema } from '../../schema';
+import type { PublicSchema } from '../../schema';
+import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
+import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 /**

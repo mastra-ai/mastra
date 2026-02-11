@@ -5,7 +5,7 @@ import { MastraBase } from '../base';
 import { MastraError } from '../error';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { InternalCoreTool, MCPToolType, ToolAction, ToolExecutionContext } from '../tools';
+import type { InternalCoreTool, MCPToolType } from '../tools';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
