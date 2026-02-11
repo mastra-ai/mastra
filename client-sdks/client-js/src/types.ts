@@ -86,10 +86,10 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
-export type NetworkStreamParams = {
+export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions;
+} & MultiPrimitiveExecutionOptions<OUTPUT>;
 
 export interface GetAgentResponse {
   id: string;
