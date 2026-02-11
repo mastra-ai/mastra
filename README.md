@@ -58,6 +58,12 @@ Learn how to make your IDE a Mastra expert by following the [`@mastra/mcp-docs-s
 
 Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
 
+Due to legacy files in git history, a full clone is ~1 GB. For faster setup, use a shallow clone:
+
+```shell
+git clone --depth 1 https://github.com/mastra-ai/mastra.git
+```
+
 If you are a developer and would like to contribute with code, please open an issue to discuss before opening a Pull Request.
 
 Information about the project setup can be found in the [development documentation](./DEVELOPMENT.md)

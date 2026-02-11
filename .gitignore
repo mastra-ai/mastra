@@ -10,6 +10,7 @@ dist/
 
 # Dev artifacts
 .dev/db/*
+.pnpm-store/
 
 .env
 
