@@ -10,7 +10,7 @@ export function getAuthEntrypoint() {
 
   return `
   import { SimpleAuth, CompositeAuth } from '@mastra/core/server';
-  import { MastraCloudAuthProvider } from '@mastra/auth-cloud';
+  import { MastraCloudAuthProvider, MastraRBACCloud } from '@mastra/auth-cloud';
 
   // Service token auth (for business-api, playground internal calls)
   class MastraCloudServiceAuth extends SimpleAuth {
@@ -61,6 +61,20 @@ export function getAuthEntrypoint() {
     }
 
     serverConfig.auth = new CompositeAuth(providers);
+
+    // If cloud auth is enabled but no RBAC is configured, add default cloud RBAC
+    if (cloudUserAuth && !serverConfig.rbac) {
+      serverConfig.rbac = new MastraRBACCloud({
+        roleMapping: {
+          owner: ['*'],
+          admin: ['*:read', '*:write', '*:execute'],
+          api: ['*:read', '*:write', '*:execute'],
+          member: ['*:read', '*:execute'],
+          viewer: ['*:read'],
+          _default: [],
+        },
+      });
+    }
   }
   `;
 }
