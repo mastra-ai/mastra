@@ -1106,6 +1106,40 @@ importers:
         specifier: 'catalog:'
         version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
+  integrations/opencode:
+    dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@opencode-ai/plugin':
+        specifier: '*'
+        version: 1.1.59
+      '@opencode-ai/sdk':
+        specifier: '*'
+        version: 1.1.59
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@microsoft/api-extractor@7.56.0(@types/node@22.19.7))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
+
   observability/_test-utils:
     devDependencies:
       '@mastra/core':
@@ -10136,6 +10170,12 @@ packages:
 
   '@open-draft/until@2.1.0':
     resolution: {integrity: sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==}
+
+  '@opencode-ai/plugin@1.1.59':
+    resolution: {integrity: sha512-2h/SoyS/OvRYxpT2L0xIil2DnLY7qP+RCnQYz5yZEZNkp4d5f1U2rHhktrpC4hbPahDo7wJRON3W564YflOJ9w==}
+
+  '@opencode-ai/sdk@1.1.59':
+    resolution: {integrity: sha512-g+Z0UQ9qNUcZsX4m/fXG4MHIquYlp4d2wfelRsynMj+AprfZ4He6u9GxAVT0FmLxuutj2ZxTLlspSe1+256pxg==}
 
   '@openfeature/core@1.9.1':
     resolution: {integrity: sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==}
@@ -22399,6 +22439,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.1.8:
+    resolution: {integrity: sha512-5R1P+WwQqmmMIEACyzSvo4JXHY5WiAFHRMg+zBZKgKS+Q1viRa0C1hmUKtHltoIFKtIdki3pRxkmpP74jnNYHQ==}
+
   zod@4.3.6:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
@@ -28405,6 +28448,13 @@ snapshots:
       outvariant: 1.4.3
 
   '@open-draft/until@2.1.0': {}
+
+  '@opencode-ai/plugin@1.1.59':
+    dependencies:
+      '@opencode-ai/sdk': 1.1.59
+      zod: 4.1.8
+
+  '@opencode-ai/sdk@1.1.59': {}
 
   '@openfeature/core@1.9.1': {}
 
@@ -43731,6 +43781,8 @@ snapshots:
       zod: 3.25.76
 
   zod@3.25.76: {}
+
+  zod@4.1.8: {}
 
   zod@4.3.6: {}
 
