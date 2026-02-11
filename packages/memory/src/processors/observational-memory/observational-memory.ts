@@ -5581,14 +5581,17 @@ ${formattedMessages}
         }
 
         hooks?.onObservationStart?.();
-        await this.doResourceScopedObservation({
-          record: freshRecord,
-          currentThreadId: threadId,
-          resourceId,
-          currentThreadMessages: currentMessages,
-          reflectionHooks,
-        });
-        hooks?.onObservationEnd?.();
+        try {
+          await this.doResourceScopedObservation({
+            record: freshRecord,
+            currentThreadId: threadId,
+            resourceId,
+            currentThreadMessages: currentMessages,
+            reflectionHooks,
+          });
+        } finally {
+          hooks?.onObservationEnd?.();
+        }
       } else {
         // Thread scope: use provided messages or load from storage
         const unobservedMessages = messages
@@ -5614,8 +5617,11 @@ ${formattedMessages}
         }
 
         hooks?.onObservationStart?.();
-        await this.doSynchronousObservation({ record: freshRecord, threadId, unobservedMessages, reflectionHooks });
-        hooks?.onObservationEnd?.();
+        try {
+          await this.doSynchronousObservation({ record: freshRecord, threadId, unobservedMessages, reflectionHooks });
+        } finally {
+          hooks?.onObservationEnd?.();
+        }
       }
     });
   }
