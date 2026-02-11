@@ -406,8 +406,8 @@ export interface StorageAgentSnapshotType {
   memory?: StorageConditionalField<SerializedMemoryConfig>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
   scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
-  /** Map of stored MCP client IDs to their tool configurations */
-  mcpClients?: Record<string, StorageMCPClientToolsConfig>;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional on request context */
+  mcpClients?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
   requestContextSchema?: Record<string, unknown>;
 }
@@ -1196,6 +1196,12 @@ export interface StorageMCPServerConfig {
   url?: string;
   /** Timeout in milliseconds for server operations */
   timeout?: number;
+  /**
+   * Optional tool selection/filtering at the server level.
+   * When provided, only tools listed here are exposed by this server.
+   * When omitted, all tools from the server are exposed.
+   */
+  tools?: Record<string, StorageToolConfig>;
 }
 
 /**

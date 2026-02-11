@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { randomUUID } from 'crypto';
 import { Agent, Mastra } from '@mastra/core';
 import { MCPServerBase } from '@mastra/core/mcp';
+import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { MastraEditor, EditorMCPNamespace } from './index';
 
@@ -778,6 +779,443 @@ describe('Agent MCP tool resolution', () => {
       mcpClientId: 'versioned-mcp',
     });
     expect(versions!.versions).toHaveLength(3);
+  });
+
+  describe('per-server tool filtering', () => {
+    it('should apply server-level tool filtering from stored MCP client', async () => {
+      const mcpStore = await storage.getStore('mcpClients');
+      const agentsStore = await storage.getStore('agents');
+
+      // Create MCP client with per-server tools filter
+      await mcpStore?.create({
+        mcpClient: {
+          id: 'client-filter-mcp',
+          name: 'Client Filtered MCP',
+          servers: {
+            srv: {
+              type: 'http',
+              url: 'https://mcp.example.com',
+              tools: {
+                'allowed-a': {},
+                'allowed-b': {},
+              },
+            },
+          },
+        },
+      });
+
+      // Agent references the MCP client with no agent-level filter (all server-exposed tools)
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-client-filter',
+          name: 'Client Filter Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          mcpClients: {
+            'client-filter-mcp': {},
+          },
+        },
+      });
+
+      // MCPClient.listTools() returns namespaced tool names: serverName_toolName
+      mockListTools.mockResolvedValue({
+        'srv_allowed-a': { description: 'Tool A', execute: vi.fn() },
+        'srv_allowed-b': { description: 'Tool B', execute: vi.fn() },
+        'srv_blocked-c': { description: 'Tool C', execute: vi.fn() },
+      });
+
+      const agent = await editor.agent.getById('agent-client-filter');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      expect(tools['srv_allowed-a']).toBeDefined();
+      expect(tools['srv_allowed-b']).toBeDefined();
+      expect(tools['srv_blocked-c']).toBeUndefined();
+    });
+
+    it('should apply two-layer filtering: server-level then agent-level', async () => {
+      const mcpStore = await storage.getStore('mcpClients');
+      const agentsStore = await storage.getStore('agents');
+
+      // Server exposes 3 tools via server-level filter
+      await mcpStore?.create({
+        mcpClient: {
+          id: 'two-layer-mcp',
+          name: 'Two Layer MCP',
+          servers: {
+            srv: {
+              type: 'http',
+              url: 'https://mcp.example.com',
+              tools: {
+                'tool-1': {},
+                'tool-2': {},
+                'tool-3': {},
+              },
+            },
+          },
+        },
+      });
+
+      // Agent further narrows to only tool-1 and tool-2 (using namespaced names)
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-two-layer',
+          name: 'Two Layer Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          mcpClients: {
+            'two-layer-mcp': {
+              tools: {
+                'srv_tool-1': {},
+                'srv_tool-2': {},
+              },
+            },
+          },
+        },
+      });
+
+      mockListTools.mockResolvedValue({
+        'srv_tool-1': { description: 'Tool 1', execute: vi.fn() },
+        'srv_tool-2': { description: 'Tool 2', execute: vi.fn() },
+        'srv_tool-3': { description: 'Tool 3', execute: vi.fn() },
+        'srv_tool-4': { description: 'Tool 4', execute: vi.fn() },
+      });
+
+      const agent = await editor.agent.getById('agent-two-layer');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      // tool-1 and tool-2: pass both server-level and agent-level filters
+      expect(tools['srv_tool-1']).toBeDefined();
+      expect(tools['srv_tool-2']).toBeDefined();
+      // tool-3: passes server-level filter but blocked by agent-level filter
+      expect(tools['srv_tool-3']).toBeUndefined();
+      // tool-4: blocked at server-level already
+      expect(tools['srv_tool-4']).toBeUndefined();
+    });
+
+    it('should let agent description override take precedence over server-level description', async () => {
+      const mcpStore = await storage.getStore('mcpClients');
+      const agentsStore = await storage.getStore('agents');
+
+      // Server defines description overrides for its exposed tools
+      await mcpStore?.create({
+        mcpClient: {
+          id: 'desc-layered-mcp',
+          name: 'Description Layered MCP',
+          servers: {
+            srv: {
+              type: 'http',
+              url: 'https://mcp.example.com',
+              tools: {
+                'tool-a': { description: 'Server-level description for A' },
+                'tool-b': { description: 'Server-level description for B' },
+                'tool-c': {},
+              },
+            },
+          },
+        },
+      });
+
+      // Agent overrides tool-b description; tool-a keeps server-level description; tool-c keeps original
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-desc-layered',
+          name: 'Desc Layered Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          mcpClients: {
+            'desc-layered-mcp': {
+              tools: {
+                'srv_tool-a': {},
+                'srv_tool-b': { description: 'Agent override for B' },
+                'srv_tool-c': {},
+              },
+            },
+          },
+        },
+      });
+
+      mockListTools.mockResolvedValue({
+        'srv_tool-a': { description: 'Original A', execute: vi.fn() },
+        'srv_tool-b': { description: 'Original B', execute: vi.fn() },
+        'srv_tool-c': { description: 'Original C', execute: vi.fn() },
+      });
+
+      const agent = await editor.agent.getById('agent-desc-layered');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      // tool-a: agent has no description override → falls through to server-level description
+      expect(tools['srv_tool-a'].description).toBe('Server-level description for A');
+      // tool-b: agent has description override → takes precedence
+      expect(tools['srv_tool-b'].description).toBe('Agent override for B');
+      // tool-c: neither agent nor server-level has description override → keeps original
+      expect(tools['srv_tool-c'].description).toBe('Original C');
+    });
+
+    it('should filter per-server independently for multi-server clients', async () => {
+      const mcpStore = await storage.getStore('mcpClients');
+      const agentsStore = await storage.getStore('agents');
+
+      // MCP client with two servers, each with different tool filters
+      await mcpStore?.create({
+        mcpClient: {
+          id: 'multi-srv-mcp',
+          name: 'Multi Server MCP',
+          servers: {
+            alpha: {
+              type: 'http',
+              url: 'https://alpha.example.com',
+              tools: { 'tool-x': {} },  // only expose tool-x from alpha
+            },
+            beta: {
+              type: 'http',
+              url: 'https://beta.example.com',
+              // no tools filter → expose all from beta
+            },
+          },
+        },
+      });
+
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-multi-srv',
+          name: 'Multi Server Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          mcpClients: {
+            'multi-srv-mcp': {},  // no agent-level filter
+          },
+        },
+      });
+
+      mockListTools.mockResolvedValue({
+        'alpha_tool-x': { description: 'Alpha X', execute: vi.fn() },
+        'alpha_tool-y': { description: 'Alpha Y', execute: vi.fn() },
+        'beta_tool-m': { description: 'Beta M', execute: vi.fn() },
+        'beta_tool-n': { description: 'Beta N', execute: vi.fn() },
+      });
+
+      const agent = await editor.agent.getById('agent-multi-srv');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      // alpha: only tool-x allowed by server-level filter
+      expect(tools['alpha_tool-x']).toBeDefined();
+      expect(tools['alpha_tool-y']).toBeUndefined();
+      // beta: no server-level filter, all tools exposed
+      expect(tools['beta_tool-m']).toBeDefined();
+      expect(tools['beta_tool-n']).toBeDefined();
+    });
+
+    it('should not apply server-level filter for code-defined MCP servers', async () => {
+      // Code-defined MCP servers don't have stored client records,
+      // so server-level filtering doesn't apply — only agent-level filtering
+      const codeServer = new TestMCPServer({
+        id: 'code-no-client-filter',
+        name: 'Code Server',
+        version: '1.0.0',
+        tools: {
+          'code-tool-1': vi.fn(),
+          'code-tool-2': vi.fn(),
+          'code-tool-3': vi.fn(),
+        },
+      });
+
+      const freshStorage = createTestStorage();
+      const freshEditor = new MastraEditor();
+      const freshMastra = new Mastra({
+        storage: freshStorage,
+        editor: freshEditor,
+        mcpServers: { 'code-no-client-filter': codeServer },
+      });
+      await freshMastra.getStorage()?.init();
+
+      const agentsStore = await freshStorage.getStore('agents');
+
+      // Agent filters to only 2 tools from the code-defined server
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-code-no-client-filter',
+          name: 'Code Filter Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          mcpClients: {
+            'code-no-client-filter': {
+              tools: {
+                'code-tool-1': {},
+                'code-tool-3': {},
+              },
+            },
+          },
+        },
+      });
+
+      const agent = await freshEditor.agent.getById('agent-code-no-client-filter');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const tools = await agent!.listTools();
+      expect(tools['code-tool-1']).toBeDefined();
+      expect(tools['code-tool-3']).toBeDefined();
+      expect(tools['code-tool-2']).toBeUndefined();
+    });
+  });
+
+  describe('conditional mcpClients', () => {
+    it('should resolve conditional mcpClients based on request context', async () => {
+      const codeServer = new TestMCPServer({
+        id: 'premium-server',
+        name: 'Premium Server',
+        version: '1.0.0',
+        tools: {
+          'premium-tool': vi.fn(),
+        } as any,
+      });
+
+      const freshStorage = createTestStorage();
+      const freshEditor = new MastraEditor();
+      const freshMastra = new Mastra({
+        storage: freshStorage,
+        editor: freshEditor,
+        mcpServers: { 'premium-server': codeServer },
+      });
+      await freshMastra.getStorage()?.init();
+
+      const mcpStore = await freshStorage.getStore('mcpClients');
+      const agentsStore = await freshStorage.getStore('agents');
+
+      // Create a stored MCP client (always available)
+      await mcpStore?.create({
+        mcpClient: {
+          id: 'base-mcp',
+          name: 'Base MCP',
+          servers: {
+            srv: { type: 'http', url: 'https://base.example.com' },
+          },
+        },
+      });
+
+      // Create agent with conditional mcpClients
+      await agentsStore?.create({
+        agent: {
+          id: 'conditional-mcp-agent',
+          name: 'Conditional MCP Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          mcpClients: [
+            {
+              // Premium users get the premium server
+              value: {
+                'premium-server': { tools: { 'premium-tool': {} } },
+              },
+              rules: {
+                operator: 'AND' as const,
+                conditions: [{ field: 'tier', operator: 'equals' as const, value: 'premium' }],
+              },
+            },
+            {
+              // Everyone gets the base MCP client (no rules = unconditional)
+              value: {
+                'base-mcp': {},
+              },
+            },
+          ],
+        },
+      });
+
+      // Mock the stored MCP client's tools
+      mockListTools.mockResolvedValue({
+        'base-tool-1': { description: 'Base Tool 1', execute: vi.fn() },
+        'base-tool-2': { description: 'Base Tool 2', execute: vi.fn() },
+      });
+
+      const agent = await freshEditor.agent.getById('conditional-mcp-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      // With premium tier → both premium-server and base-mcp tools
+      const premiumCtx = new RequestContext([['tier', 'premium']]);
+      const premiumTools = await agent!.listTools({ requestContext: premiumCtx });
+      expect(premiumTools['premium-tool']).toBeDefined();
+      expect(premiumTools['premium-tool'].description).toBe('Tool: premium-tool');
+      expect(premiumTools['base-tool-1']).toBeDefined();
+      expect(premiumTools['base-tool-2']).toBeDefined();
+
+      // With no context → only base-mcp tools (premium rule doesn't match)
+      const defaultCtx = new RequestContext();
+      const defaultTools = await agent!.listTools({ requestContext: defaultCtx });
+      expect(defaultTools['premium-tool']).toBeUndefined();
+      expect(defaultTools['base-tool-1']).toBeDefined();
+      expect(defaultTools['base-tool-2']).toBeDefined();
+    });
+
+    it('should combine conditional mcpClients with static tools', async () => {
+      const codeServer = new TestMCPServer({
+        id: 'conditional-server',
+        name: 'Conditional Server',
+        version: '1.0.0',
+        tools: {
+          'server-tool': vi.fn(),
+        } as any,
+      });
+
+      const freshStorage = createTestStorage();
+      const freshEditor = new MastraEditor();
+      const freshMastra = new Mastra({
+        storage: freshStorage,
+        editor: freshEditor,
+        mcpServers: { 'conditional-server': codeServer },
+        tools: {
+          'regular-tool': {
+            id: 'regular-tool',
+            description: 'A regular tool',
+            inputSchema: {} as any,
+            execute: vi.fn(),
+          } as any,
+        },
+      });
+      await freshMastra.getStorage()?.init();
+
+      const agentsStore = await freshStorage.getStore('agents');
+
+      await agentsStore?.create({
+        agent: {
+          id: 'mixed-conditional-agent',
+          name: 'Mixed Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          // Static tools (non-conditional)
+          tools: { 'regular-tool': {} },
+          // Conditional mcpClients
+          mcpClients: [
+            {
+              value: {
+                'conditional-server': {},
+              },
+              rules: {
+                operator: 'AND' as const,
+                conditions: [{ field: 'env', operator: 'equals' as const, value: 'production' }],
+              },
+            },
+          ],
+        },
+      });
+
+      const agent = await freshEditor.agent.getById('mixed-conditional-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      // In production: regular tool + server tool
+      const prodCtx = new RequestContext([['env', 'production']]);
+      const prodTools = await agent!.listTools({ requestContext: prodCtx });
+      expect(prodTools['regular-tool']).toBeDefined();
+      expect(prodTools['server-tool']).toBeDefined();
+
+      // In development: only regular tool (conditional mcpClients not matched)
+      const devCtx = new RequestContext([['env', 'development']]);
+      const devTools = await agent!.listTools({ requestContext: devCtx });
+      expect(devTools['regular-tool']).toBeDefined();
+      expect(devTools['server-tool']).toBeUndefined();
+    });
   });
 });
 

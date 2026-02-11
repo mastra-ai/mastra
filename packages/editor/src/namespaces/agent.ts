@@ -175,6 +175,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     // Determine if any conditional fields exist that require dynamic resolution
     const hasConditionalTools = storedAgent.tools != null && this.isConditionalVariants(storedAgent.tools);
+    const hasConditionalMCPClients =
+      storedAgent.mcpClients != null && this.isConditionalVariants(storedAgent.mcpClients);
     const hasConditionalWorkflows = storedAgent.workflows != null && this.isConditionalVariants(storedAgent.workflows);
     const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
     const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
@@ -189,33 +191,45 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     // --- Resolve fields: conditional fields accumulate all matching variants ---
 
-    // Tools (Record): accumulate by merging objects from all matching variants
-    const registryTools = hasConditionalTools
-      ? ({ requestContext }: { requestContext: RequestContext }) => {
-          const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
-            ctx,
-          );
-          return this.resolveStoredTools(resolved);
-        }
-      : this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
+    // Tools: both registry tools and MCP client tools can be conditional.
+    // If either is conditional, the combined result must be a dynamic function.
+    const isDynamicTools = hasConditionalTools || hasConditionalMCPClients;
 
-    // MCP tools (not conditional — resolved once at agent creation time)
-    const mcpTools = await this.resolveStoredMCPTools(storedAgent.mcpClients);
+    let tools: Record<string, ToolAction<any, any, any, any, any, any>> | (({ requestContext }: { requestContext: RequestContext }) => Promise<Record<string, ToolAction<any, any, any, any, any, any>>>);
 
-    // Merge MCP tools with registry tools
-    let tools: typeof registryTools;
-    if (Object.keys(mcpTools).length === 0) {
-      tools = registryTools;
-    } else if (typeof registryTools === 'function') {
-      // When registry tools are conditional, wrap to merge MCP tools at resolution time
-      const resolveRegistryTools = registryTools;
-      tools = (arg: { requestContext: RequestContext }) => ({
-        ...resolveRegistryTools(arg),
-        ...mcpTools,
-      });
+    if (isDynamicTools) {
+      // At least one of tools/mcpClients is conditional — resolve both at request time
+      tools = async ({ requestContext }: { requestContext: RequestContext }) => {
+        const ctx = requestContext.toJSON();
+
+        // Resolve registry tools
+        const resolvedToolsConfig = hasConditionalTools
+          ? this.accumulateObjectVariants(
+              storedAgent.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+              ctx,
+            )
+          : (storedAgent.tools as Record<string, StorageToolConfig> | undefined);
+        const registryTools = this.resolveStoredTools(resolvedToolsConfig);
+
+        // Resolve MCP client tools
+        const resolvedMCPClientsConfig = hasConditionalMCPClients
+          ? this.accumulateObjectVariants(
+              storedAgent.mcpClients as StorageConditionalVariant<Record<string, StorageMCPClientToolsConfig>>[],
+              ctx,
+            )
+          : (storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined);
+        const mcpTools = await this.resolveStoredMCPTools(resolvedMCPClientsConfig);
+
+        return { ...registryTools, ...mcpTools };
+      };
     } else {
+      // Both are static — resolve once at agent creation time
+      const registryTools = this.resolveStoredTools(
+        storedAgent.tools as Record<string, StorageToolConfig> | undefined,
+      );
+      const mcpTools = await this.resolveStoredMCPTools(
+        storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
+      );
       tools = { ...registryTools, ...mcpTools };
     }
 
@@ -505,7 +519,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         if (storedClient) {
           if (!MCPClient) {
             try {
-              // @ts-expect-error — @mastra/mcp is an optional peer dependency
               const mcpModule = await import('@mastra/mcp');
               MCPClient = mcpModule.MCPClient;
             } catch {
@@ -535,17 +548,40 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           continue;
         }
 
-        // Apply filtering and description overrides
-        const allowedTools = clientToolsConfig.tools;
-        for (const [toolName, tool] of Object.entries(tools)) {
-          // When allowedTools is undefined, include all tools
-          if (allowedTools && !(toolName in allowedTools)) continue;
+        // Two-layer filtering:
+        //   1. Client-level (per-server): storedClient.servers[serverName].tools — narrows tools exposed by each server
+        //   2. Agent-level: clientToolsConfig.tools — further narrows from the client set
+        // Agent-level description overrides take precedence over client-level.
+        //
+        // Tools from MCPClient.listTools() are namespaced as `serverName_toolName`.
+        // Per-server tool configs use the non-namespaced `toolName`.
+        const clientServers = storedClient?.servers;
+        const agentAllowedTools = clientToolsConfig.tools;
 
-          const toolConfig = allowedTools?.[toolName];
-          if (toolConfig?.description) {
-            allTools[toolName] = { ...(tool as ToolAction<any, any, any, any, any, any>), description: toolConfig.description };
+        for (const [namespacedToolName, tool] of Object.entries(tools)) {
+          // Parse the server name and bare tool name from the namespaced key
+          const underscoreIdx = namespacedToolName.indexOf('_');
+          const serverName = underscoreIdx > -1 ? namespacedToolName.slice(0, underscoreIdx) : undefined;
+          const bareToolName = underscoreIdx > -1 ? namespacedToolName.slice(underscoreIdx + 1) : namespacedToolName;
+
+          // Client-level per-server filter: if a server has tools defined, only include listed tools
+          if (serverName && clientServers?.[serverName]?.tools) {
+            if (!(bareToolName in clientServers[serverName].tools!)) continue;
+          }
+
+          // Agent-level filter: uses the full namespaced tool name
+          if (agentAllowedTools && !(namespacedToolName in agentAllowedTools)) continue;
+
+          // Description override: agent-level (namespaced key) takes precedence over client-level (bare key)
+          const serverToolConfig = serverName ? clientServers?.[serverName]?.tools?.[bareToolName] : undefined;
+          const description =
+            agentAllowedTools?.[namespacedToolName]?.description ??
+            serverToolConfig?.description;
+
+          if (description) {
+            allTools[namespacedToolName] = { ...(tool as ToolAction<any, any, any, any, any, any>), description };
           } else {
-            allTools[toolName] = tool as ToolAction<any, any, any, any, any, any>;
+            allTools[namespacedToolName] = tool as ToolAction<any, any, any, any, any, any>;
           }
         }
       } catch (error) {
