@@ -19,7 +19,7 @@
  * ```
  */
 
-import { PermissionError } from '../errors';
+import { FileExistsError, PermissionError } from '../errors';
 import { callLifecycle } from '../lifecycle';
 import type { ProviderStatus } from '../lifecycle';
 import type {
@@ -280,8 +280,13 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     }
 
     // Cross-mount copy - read then write
+    // Enforce overwrite: false at this level since some providers (S3, GCS)
+    // don't natively support conditional writes.
+    if (options?.overwrite === false && (await destR.fs.exists(destR.fsPath))) {
+      throw new FileExistsError(dest);
+    }
     const content = await srcR.fs.readFile(srcR.fsPath);
-    await destR.fs.writeFile(destR.fsPath, content, { overwrite: options?.overwrite });
+    await destR.fs.writeFile(destR.fsPath, content);
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
