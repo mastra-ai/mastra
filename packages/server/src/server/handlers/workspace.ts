@@ -331,9 +331,13 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         },
         filesystem: fsInfo
           ? {
+              id: fsInfo.id,
+              name: fsInfo.name,
               provider: fsInfo.provider,
+              status: fsInfo.status,
+              readOnly: fsInfo.readOnly,
               basePath: fsInfo.basePath,
-              contained: fsInfo.contained,
+              metadata: fsInfo.metadata,
             }
           : undefined,
       };

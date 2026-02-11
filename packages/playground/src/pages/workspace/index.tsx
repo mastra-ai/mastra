@@ -69,10 +69,9 @@ export default function Workspace() {
   } = useWorkspaceInfo(effectiveWorkspaceId);
 
   // For uncontained local filesystems, default to basePath instead of / (which would show the real root)
+  const fsMetadata = workspaceInfo?.filesystem?.metadata;
   const defaultPath =
-    workspaceInfo?.filesystem?.contained === false && workspaceInfo?.filesystem?.basePath
-      ? workspaceInfo.filesystem.basePath
-      : '/';
+    fsMetadata?.contained === false && workspaceInfo?.filesystem?.basePath ? workspaceInfo.filesystem.basePath : '/';
   const pathFromUrl = searchParams.get('path') || defaultPath;
 
   // Check if workspaces are not supported (501 error from server)

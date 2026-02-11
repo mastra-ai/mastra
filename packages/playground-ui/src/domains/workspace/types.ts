@@ -16,9 +16,13 @@ export interface WorkspaceSafety {
 }
 
 export interface WorkspaceFilesystemInfo {
+  id: string;
+  name: string;
   provider: string;
+  status?: string;
+  readOnly?: boolean;
   basePath?: string;
-  contained?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface WorkspaceInfo {

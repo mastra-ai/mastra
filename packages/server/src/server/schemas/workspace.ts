@@ -203,9 +203,13 @@ export const workspaceInfoResponseSchema = z.object({
     .optional(),
   filesystem: z
     .object({
+      id: z.string(),
+      name: z.string(),
       provider: z.string(),
+      status: z.string().optional(),
+      readOnly: z.boolean().optional(),
       basePath: z.string().optional(),
-      contained: z.boolean().optional(),
+      metadata: z.record(z.unknown()).optional(),
     })
     .optional(),
 });
