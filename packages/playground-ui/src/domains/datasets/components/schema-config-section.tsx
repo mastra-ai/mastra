@@ -261,7 +261,7 @@ export function SchemaConfigSection({
         />
 
         <SchemaField
-          label="Expected Output Schema"
+          label="Ground Truth Schema"
           schemaType="output"
           value={outputSchema}
           onChange={handleOutputSchemaChange}

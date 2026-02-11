@@ -31,7 +31,7 @@ export function JSONPreviewTable({ items, maxRows = 5 }: JSONPreviewTableProps) 
           <tr className="bg-surface2 border-b border-border1">
             <th className="px-3 py-2 text-left font-medium text-neutral3 w-8">#</th>
             <th className="px-3 py-2 text-left font-medium text-neutral3">Input</th>
-            <th className="px-3 py-2 text-left font-medium text-neutral3">Expected Output</th>
+            <th className="px-3 py-2 text-left font-medium text-neutral3">Ground Truth</th>
             <th className="px-3 py-2 text-left font-medium text-neutral3 w-24">Metadata</th>
           </tr>
         </thead>

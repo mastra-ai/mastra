@@ -12,7 +12,7 @@ export interface ColumnMappingStepProps {
 // Zone configuration for display
 const ZONES: { id: FieldType; label: string; description: string; required?: boolean }[] = [
   { id: 'input', label: 'Input', description: 'Data passed to target', required: true },
-  { id: 'groundTruth', label: 'Expected Output', description: 'Ground truth for comparison' },
+  { id: 'groundTruth', label: 'Ground Truth', description: 'Ground truth for comparison' },
   { id: 'metadata', label: 'Metadata', description: 'Additional context' },
   { id: 'ignore', label: 'Ignore', description: 'Not imported' },
 ];

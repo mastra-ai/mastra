@@ -22,7 +22,7 @@ export interface EditItemDialogProps {
 
 export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess }: EditItemDialogProps) {
   const [input, setInput] = useState(() => JSON.stringify(item.input, null, 2));
-  const [groundTruth, setExpectedOutput] = useState(() =>
+  const [groundTruth, setGroundTruth] = useState(() =>
     item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '',
   );
   const { updateItem } = useDatasetMutations();
@@ -30,7 +30,7 @@ export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess 
   // Sync form state when item prop changes
   useEffect(() => {
     setInput(JSON.stringify(item.input, null, 2));
-    setExpectedOutput(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+    setGroundTruth(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
   }, [item.id, item.input, item.groundTruth]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -46,12 +46,12 @@ export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess 
     }
 
     // Parse groundTruth if provided
-    let parsedExpectedOutput: unknown | undefined;
+    let parsedGroundTruth: unknown | undefined;
     if (groundTruth.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(groundTruth);
+        parsedGroundTruth = JSON.parse(groundTruth);
       } catch {
-        toast.error('Expected Output must be valid JSON');
+        toast.error('Ground Truth must be valid JSON');
         return;
       }
     }
@@ -61,7 +61,7 @@ export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess 
         datasetId,
         itemId: item.id,
         input: parsedInput,
-        groundTruth: parsedExpectedOutput,
+        groundTruth: parsedGroundTruth,
       });
 
       toast.success('Item updated successfully');
@@ -75,7 +75,7 @@ export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess 
   const handleCancel = () => {
     // Reset to original values
     setInput(JSON.stringify(item.input, null, 2));
-    setExpectedOutput(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+    setGroundTruth(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     onOpenChange(false);
   };
 
@@ -93,10 +93,10 @@ export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-item-expected-output">Expected Output (JSON, optional)</Label>
+              <Label htmlFor="edit-item-ground-truth">Ground Truth (JSON, optional)</Label>
               <CodeEditor
                 value={groundTruth}
-                onChange={setExpectedOutput}
+                onChange={setGroundTruth}
                 showCopyButton={false}
                 className="min-h-[80px]"
               />

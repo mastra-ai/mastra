@@ -37,7 +37,7 @@ export interface EditModeContentProps {
   inputValue: string;
   setInputValue: (value: string) => void;
   groundTruthValue: string;
-  setExpectedOutputValue: (value: string) => void;
+  setGroundTruthValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -50,7 +50,7 @@ export function EditModeContent({
   inputValue,
   setInputValue,
   groundTruthValue,
-  setExpectedOutputValue,
+  setGroundTruthValue,
   metadataValue,
   setMetadataValue,
   validationErrors,
@@ -74,10 +74,10 @@ export function EditModeContent({
         </div>
 
         <div className="space-y-2">
-          <Label>Expected Output (JSON, optional)</Label>
+          <Label>Ground Truth (JSON, optional)</Label>
           <CodeEditor
             value={groundTruthValue}
-            onChange={setExpectedOutputValue}
+            onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />

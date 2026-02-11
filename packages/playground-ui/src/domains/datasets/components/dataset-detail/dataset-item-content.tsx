@@ -22,7 +22,7 @@ export function DatasetItemContent({ item }: DatasetItemContentProps) {
   return (
     <Sections>
       <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={inputDisplay} />
-      <SideDialog.CodeSection title="Expected Output" icon={<FileOutputIcon />} codeStr={groundTruthDisplay} />
+      <SideDialog.CodeSection title="Ground Truth" icon={<FileOutputIcon />} codeStr={groundTruthDisplay} />
       <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />
     </Sections>
   );

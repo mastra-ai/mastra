@@ -15,7 +15,7 @@ export interface DatasetItemPageProps {
 
 /**
  * Page component for displaying a single dataset item's details.
- * Read-only view showing input, expected output, and metadata.
+ * Read-only view showing input, ground truth, and metadata.
  */
 export function DatasetItemPage({ item }: DatasetItemPageProps) {
   const { Link } = useLinkComponent();
@@ -69,7 +69,7 @@ function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnTyp
 
         {item.groundTruth !== null && item.groundTruth !== undefined && (
           <SideDialog.CodeSection
-            title="Expected Output"
+            title="Ground Truth"
             icon={<FileOutputIcon />}
             codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />

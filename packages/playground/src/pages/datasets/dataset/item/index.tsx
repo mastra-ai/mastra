@@ -72,7 +72,7 @@ function DatasetItemPage() {
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState(formDefaults.input);
-  const [groundTruthValue, setExpectedOutputValue] = useState(formDefaults.groundTruth);
+  const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
 
   // Reset form values when version changes (key-based reset pattern)
@@ -80,7 +80,7 @@ function DatasetItemPage() {
   if (versionKey !== prevVersionKey) {
     setPrevVersionKey(versionKey);
     setInputValue(formDefaults.input);
-    setExpectedOutputValue(formDefaults.groundTruth);
+    setGroundTruthValue(formDefaults.groundTruth);
     setMetadataValue(formDefaults.metadata);
   }
 
@@ -129,12 +129,12 @@ function DatasetItemPage() {
     }
 
     // Parse groundTruth if provided
-    let parsedExpectedOutput: unknown | undefined;
+    let parsedGroundTruth: unknown | undefined;
     if (groundTruthValue.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(groundTruthValue);
+        parsedGroundTruth = JSON.parse(groundTruthValue);
       } catch {
-        toast.error('Expected Output must be valid JSON');
+        toast.error('Ground Truth must be valid JSON');
         return;
       }
     }
@@ -155,7 +155,7 @@ function DatasetItemPage() {
         datasetId,
         itemId,
         input: parsedInput,
-        groundTruth: parsedExpectedOutput,
+        groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
       });
       toast.success('Item updated successfully');
@@ -169,7 +169,7 @@ function DatasetItemPage() {
     // Reset form values to latest version
     if (latestVersion) {
       setInputValue(JSON.stringify(latestVersion.snapshot.input, null, 2));
-      setExpectedOutputValue(
+      setGroundTruthValue(
         latestVersion.snapshot.groundTruth ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2) : '',
       );
       setMetadataValue(latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '');
@@ -321,7 +321,7 @@ function DatasetItemPage() {
                     inputValue={inputValue}
                     setInputValue={setInputValue}
                     groundTruthValue={groundTruthValue}
-                    setExpectedOutputValue={setExpectedOutputValue}
+                    setGroundTruthValue={setGroundTruthValue}
                     metadataValue={metadataValue}
                     setMetadataValue={setMetadataValue}
                     validationErrors={null}

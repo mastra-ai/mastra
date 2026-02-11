@@ -27,7 +27,7 @@ export interface ItemDetailDialogProps {
 
 /**
  * Side dialog showing full details of a single dataset item.
- * Includes navigation to next/previous items and sections for Input, Expected Output, and Metadata.
+ * Includes navigation to next/previous items and sections for Input, Ground Truth, and Metadata.
  */
 export function ItemDetailDialog({
   datasetId,
@@ -44,7 +44,7 @@ export function ItemDetailDialog({
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const [groundTruthValue, setExpectedOutputValue] = useState('');
+  const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
 
   // Delete confirmation state
@@ -54,7 +54,7 @@ export function ItemDetailDialog({
   useEffect(() => {
     if (item) {
       setInputValue(JSON.stringify(item.input, null, 2));
-      setExpectedOutputValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+      setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
@@ -92,12 +92,12 @@ export function ItemDetailDialog({
     }
 
     // Parse groundTruth if provided
-    let parsedExpectedOutput: unknown | undefined;
+    let parsedGroundTruth: unknown | undefined;
     if (groundTruthValue.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(groundTruthValue);
+        parsedGroundTruth = JSON.parse(groundTruthValue);
       } catch {
-        toast.error('Expected Output must be valid JSON');
+        toast.error('Ground Truth must be valid JSON');
         return;
       }
     }
@@ -118,7 +118,7 @@ export function ItemDetailDialog({
         datasetId,
         itemId: item.id,
         input: parsedInput,
-        groundTruth: parsedExpectedOutput,
+        groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
       });
 
@@ -132,7 +132,7 @@ export function ItemDetailDialog({
   const handleCancel = () => {
     // Reset to original values
     setInputValue(JSON.stringify(item.input, null, 2));
-    setExpectedOutputValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+    setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setIsEditing(false);
   };
@@ -194,7 +194,7 @@ export function ItemDetailDialog({
             inputValue={inputValue}
             setInputValue={setInputValue}
             groundTruthValue={groundTruthValue}
-            setExpectedOutputValue={setExpectedOutputValue}
+            setGroundTruthValue={setGroundTruthValue}
             metadataValue={metadataValue}
             setMetadataValue={setMetadataValue}
             onSave={handleSave}
@@ -269,7 +269,7 @@ function ReadOnlyContent({ item, Link }: { item: DatasetItem; Link: ReturnType<t
 
         {item.groundTruth !== null && item.groundTruth !== undefined && (
           <SideDialog.CodeSection
-            title="Expected Output"
+            title="Ground Truth"
             icon={<FileOutputIcon />}
             codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
@@ -288,7 +288,7 @@ interface EditModeContentProps {
   inputValue: string;
   setInputValue: (value: string) => void;
   groundTruthValue: string;
-  setExpectedOutputValue: (value: string) => void;
+  setGroundTruthValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
   onSave: () => void;
@@ -300,7 +300,7 @@ function EditModeContent({
   inputValue,
   setInputValue,
   groundTruthValue,
-  setExpectedOutputValue,
+  setGroundTruthValue,
   metadataValue,
   setMetadataValue,
   onSave,
@@ -322,10 +322,10 @@ function EditModeContent({
         </div>
 
         <div className="space-y-2">
-          <Label>Expected Output (JSON, optional)</Label>
+          <Label>Ground Truth (JSON, optional)</Label>
           <CodeEditor
             value={groundTruthValue}
-            onChange={setExpectedOutputValue}
+            onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />

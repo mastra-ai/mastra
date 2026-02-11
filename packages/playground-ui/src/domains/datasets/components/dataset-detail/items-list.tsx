@@ -17,7 +17,7 @@ type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add
 
 const itemsListColumns = [
   { name: 'input', label: 'Input', size: '1fr' },
-  { name: 'groundTruth', label: 'Expected Output', size: '1fr' },
+  { name: 'groundTruth', label: 'Ground Truth', size: '1fr' },
   { name: 'metadata', label: 'Metadata', size: '8rem' },
   { name: 'date', label: 'Created', size: '5rem' },
 ];
