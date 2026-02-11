@@ -1,6 +1,6 @@
 export { Mastra, type Config } from './mastra';
 
-// Re-export types needed by editor package
+// Re-export types needed by editor package // trigger CI
 export { Agent } from './agent';
 export type { SharedMemoryConfig, MemoryConfig, MastraMemory, SerializedMemoryConfig } from './memory';
 export type { MastraVector as MastraVectorProvider } from './vector';
