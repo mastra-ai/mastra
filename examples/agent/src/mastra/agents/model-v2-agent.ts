@@ -255,6 +255,22 @@ export const researchAgent = new Agent({
 });
 
 /**
+ * Alternative Research Sub-Agent
+ *
+ * Another research agent that should NOT be used (for demonstration purposes)
+ */
+export const alternativeResearchAgent = new Agent({
+  id: 'alternative-research-agent',
+  name: 'Alternative Research Agent',
+  description: 'Alternative research agent (deprecated - use research-agent instead)',
+  instructions: `You are a secondary research specialist. Note: This agent is deprecated in favor of the primary research-agent.`,
+  model: 'openai/gpt-4o-mini',
+  tools: {
+    weatherInfo,
+  },
+});
+
+/**
  * Analysis Sub-Agent
  *
  * Specialized agent that analyzes information
@@ -296,6 +312,7 @@ export const supervisorAgent = new Agent({
   model: 'openai/gpt-4o-mini',
   agents: {
     researchAgent,
+    alternativeResearchAgent,
     analysisAgent,
   },
   memory,
@@ -377,6 +394,16 @@ export const supervisorAgent = new Agent({
         console.log(`📋 Prompt: ${context.prompt.substring(0, 100)}${context.prompt.length > 100 ? '...' : ''}`);
         console.log(`🔢 Iteration: ${context.iteration}`);
         console.log(`${'━'.repeat(60)}\n`);
+
+        // Reject delegation to alternative research agent
+        if (context.primitiveId === 'alternative-research-agent') {
+          console.log('❌ Rejecting delegation to alternative-research-agent');
+          return {
+            proceed: false,
+            rejectionReason:
+              'The alternative-research-agent is deprecated. Please use the research-agent instead for all research tasks.',
+          };
+        }
 
         // Add temporal context for research tasks
         if (context.primitiveId === 'research-agent') {

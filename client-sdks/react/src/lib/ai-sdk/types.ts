@@ -20,6 +20,9 @@ export type MastraUIMessageMetadata = {
 } & (
   | {
       mode: 'generate';
+      completionResult?: {
+        passed: boolean;
+      };
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;
@@ -39,6 +42,9 @@ export type MastraUIMessageMetadata = {
     }
   | {
       mode: 'stream';
+      completionResult?: {
+        passed: boolean;
+      };
       requireApprovalMetadata?: {
         [toolName: string]: {
           toolCallId: string;

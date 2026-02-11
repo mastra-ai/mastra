@@ -2350,7 +2350,7 @@ export class Agent<
 
             // Build delegation start context
             const delegationStartContext: DelegationStartContext = {
-              primitiveId: agentName,
+              primitiveId: agent.id,
               primitiveType: 'agent',
               prompt: inputData.prompt,
               params: {
@@ -2614,7 +2614,7 @@ export class Agent<
                 try {
                   let bailed = false;
                   const delegationCompleteContext: DelegationCompleteContext = {
-                    primitiveId: agentName,
+                    primitiveId: agent.id,
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
                     result,
@@ -2656,7 +2656,7 @@ export class Agent<
               if (delegation?.onDelegationComplete) {
                 try {
                   const delegationCompleteContext: DelegationCompleteContext = {
-                    primitiveId: agentName,
+                    primitiveId: agent.id,
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
                     result: { text: '' },
@@ -2688,7 +2688,7 @@ export class Agent<
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    subAgentName: agentName,
+                    subAgentName: agent.name,
                     runId: runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',

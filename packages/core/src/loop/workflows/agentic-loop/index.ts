@@ -1,4 +1,5 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import type { MastraDBMessage } from '../../../memory';
 import { InternalSpans } from '../../../observability';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -175,7 +176,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       let completionResult: CompletionRunResult | undefined;
       const hasCompletionScorers = rest.completion?.scorers && rest.completion.scorers.length > 0;
 
-      if (hasCompletionScorers && typedInputData.stepResult?.isContinued && !hasFinishedSteps) {
+      if (hasCompletionScorers && (!typedInputData.stepResult?.isContinued || hasFinishedSteps)) {
         // Get the original user message for context
         const userMessages = messageList.get.input.db();
         const firstUserMessage = userMessages[0];
@@ -240,7 +241,30 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         const feedback = formatStreamCompletionFeedback(completionResult, maxIterationReached);
 
         // Add feedback as an assistant message so the LLM sees it in the next iteration
-        messageList.add({ role: 'assistant', content: feedback }, 'response');
+        messageList.add(
+          {
+            id: rest.mastra?.generateId(),
+            createdAt: new Date(),
+            type: 'text',
+            role: 'assistant',
+            content: {
+              parts: [
+                {
+                  type: 'text',
+                  text: feedback,
+                },
+              ],
+              metadata: {
+                mode: 'stream',
+                completionResult: {
+                  passed: completionResult.complete,
+                },
+              },
+              format: 2,
+            },
+          } as MastraDBMessage,
+          'response',
+        );
 
         // Emit completion-check event
         if (isControllerOpen(controller)) {
@@ -255,6 +279,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
               duration: completionResult.totalDuration,
               timedOut: completionResult.timedOut,
               reason: completionResult.completionReason,
+              maxIterationReached: !!maxIterationReached,
             },
           } as ChunkType<OUTPUT>);
         }

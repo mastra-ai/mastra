@@ -1,6 +1,7 @@
 import { type AgentChunkType, type ChunkType } from '@mastra/core/stream';
 import { type MastraUIMessage, type MastraUIMessageMetadata, type MastraExtendedTextPart } from '../types';
 import { type WorkflowStreamResult, type StepResult } from '@mastra/core/workflows';
+import { formatStreamCompletionFeedback } from '@mastra/core/loop';
 
 type StreamChunk = {
   type: string;
@@ -506,6 +507,37 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           parts,
         },
       ];
+    }
+
+    case 'completion-check': {
+      const feedback = formatStreamCompletionFeedback(
+        {
+          complete: chunk.payload.passed,
+          scorers: chunk.payload.results,
+          totalDuration: chunk.payload.duration,
+          timedOut: chunk.payload.timedOut,
+          completionReason: chunk.payload.reason,
+        },
+        chunk.payload.maxIterationReached,
+      );
+      const newMessage: MastraUIMessage = {
+        id: `completion-check-${chunk.runId + Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: feedback,
+          },
+        ],
+        metadata: {
+          ...metadata,
+          completionResult: {
+            passed: chunk.payload.passed,
+          },
+        },
+      };
+
+      return [...result, newMessage];
     }
 
     case 'source': {

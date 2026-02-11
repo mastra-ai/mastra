@@ -358,6 +358,8 @@ interface CompletionCheckPayload {
   timedOut: boolean;
   /** Reason from the relevant scorer */
   reason?: string;
+  /** Whether the maximum iteration was reached */
+  maxIterationReached: boolean;
 }
 
 // Network-specific payload interfaces
