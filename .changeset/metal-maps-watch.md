@@ -1,14 +1,17 @@
 ---
 '@mastra/memory': minor
-'@mastra/opencode': patch
+"@mastra/opencode": patch
 ---
+
+@mastra/opencode: Add opencode plugin for Observational Memory integration
 
 Added standalone `observe()` API that accepts external messages directly, so integrations can trigger observation without duplicating messages into Mastra's storage.
 
 **New exports:**
 
 - `ObserveHooks` — lifecycle callbacks (`onObservationStart`, `onObservationEnd`, `onReflectionStart`, `onReflectionEnd`) for hooking into observation/reflection cycles
-- `OBSERVATION_CONTEXT_PROMPT` — the framing prompt used to wrap observations before injecting into model context
+- `OBSERVATION_CONTEXT_PROMPT` — preamble that introduces the observations block
+- `OBSERVATION_CONTEXT_INSTRUCTIONS` — rules for interpreting observations (placed after the `<observations>` block)
 - `OBSERVATION_CONTINUATION_HINT` — behavioral guidance that prevents models from awkwardly acknowledging the memory system
 - `getOrCreateRecord()` — now public, allows eager record initialization before the first observation cycle
 
