@@ -207,8 +207,7 @@ export class ArcadeToolProvider implements ToolProvider {
    * List toolkits.
    *
    * Returns the pre-seeded catalog merged with any toolkits discovered at
-   * runtime.  If the cache has never been refreshed from the API, does a
-   * single paginated sweep to pick up any new additions.
+   * runtime via `listTools()` or `resolveTools()` calls.
    */
   async listToolkits(): Promise<ToolProviderListResult<ToolProviderToolkit>> {
     const data = [...this.toolkitCache.values()].sort((a, b) => a.name.localeCompare(b.name));
