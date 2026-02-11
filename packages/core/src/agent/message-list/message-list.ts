@@ -862,14 +862,22 @@ export class MessageList {
           // Get parts from incoming message that are beyond the sealed boundary
           const incomingParts = messageV2.content.parts;
 
-          // If incoming message has fewer or equal parts than the sealed boundary,
-          // it's a stale update from before sealing - ignore it entirely
-          if (incomingParts.length <= sealedPartCount) {
-            // Stale message, ignore - don't replace, don't create new
-            return this;
-          }
+          let newParts: typeof incomingParts;
 
-          const newParts = incomingParts.slice(sealedPartCount);
+          if (incomingParts.length <= sealedPartCount) {
+            // Incoming message has fewer or equal parts than the sealed boundary.
+            // Check if these are truly stale (same content as the sealed message) or
+            // new content flushed independently (e.g., text deltas flushed with the
+            // same messageId but only containing a text part).
+            if (messagesAreEqual(existingMessage, messageV2)) {
+              // Stale message, ignore - don't replace, don't create new
+              return this;
+            }
+            // Not stale — these are fresh parts (e.g., a text flush). Treat all as new.
+            newParts = incomingParts;
+          } else {
+            newParts = incomingParts.slice(sealedPartCount);
+          }
 
           // Only create a new message if there are actually new parts
           if (newParts.length > 0) {

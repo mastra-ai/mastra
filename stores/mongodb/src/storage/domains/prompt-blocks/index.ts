@@ -113,7 +113,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
   // Prompt Block CRUD
   // ==========================================================================
 
-  async getPromptBlockById({ id }: { id: string }): Promise<StoragePromptBlockType | null> {
+  async getById(id: string): Promise<StoragePromptBlockType | null> {
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
       const result = await collection.findOne<any>({ id });
@@ -136,11 +136,8 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async createPromptBlock({
-    promptBlock,
-  }: {
-    promptBlock: StorageCreatePromptBlockInput;
-  }): Promise<StoragePromptBlockType> {
+  async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
+    const { promptBlock } = input;
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
 
@@ -207,7 +204,8 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async updatePromptBlock({ id, ...updates }: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+  async update(input: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+    const { id, ...updates } = input;
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
 
@@ -318,10 +316,10 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async deletePromptBlock({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       // Delete all versions first
-      await this.deleteVersionsByBlockId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the block
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
@@ -339,7 +337,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+  async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
       const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -618,7 +616,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async deleteVersionsByBlockId(blockId: string): Promise<void> {
+  async deleteVersionsByParentId(blockId: string): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCK_VERSIONS);
       await collection.deleteMany({ blockId });

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "9.1.0-alpha.0",
+  "version": "10.0.0-alpha.2",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -105,7 +105,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@uiw/codemirror-theme-dracula": "^4.25.4",
-    "@uiw/codemirror-theme-github": "^4.25.3",
+    "@uiw/codemirror-theme-github": "^4.25.4",
     "@uiw/react-codemirror": "^4.25.4",
     "@xyflow/react": "^12.9.3",
     "cmdk": "^1.1.1",

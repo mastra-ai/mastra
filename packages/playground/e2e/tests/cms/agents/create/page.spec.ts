@@ -184,7 +184,7 @@ test.describe('Agent Creation Persistence', () => {
     await page.getByRole('button', { name: 'Create agent' }).click();
 
     // Wait for redirect to chat page
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Verify success toast
     await expect(page.getByText('Agent created successfully')).toBeVisible();
@@ -200,7 +200,7 @@ test.describe('Agent Creation Persistence', () => {
     await page.getByRole('button', { name: 'Create agent' }).click();
 
     // Wait for redirect
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Navigate to agents list
     await page.goto('/agents');
@@ -219,7 +219,7 @@ test.describe('Agent Creation Persistence', () => {
     await page.getByRole('button', { name: 'Create agent' }).click();
 
     // Wait for redirect
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Reload the page
     await page.reload();
@@ -248,7 +248,7 @@ test.describe('Identity Tab Configuration', () => {
     });
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Navigate to agents list
     await page.goto('/agents');
@@ -301,7 +301,7 @@ test.describe('Capabilities Tab - Tools Section', () => {
     await fillRequiredFields(page, agentName);
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Verify tool is associated with the agent in the Overview panel
     await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
@@ -335,7 +335,7 @@ test.describe('Capabilities Tab - Workflows Section', () => {
     await fillRequiredFields(page, agentName);
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Verify workflow is associated with the agent
     await expect(page.getByText('lessComplexWorkflow')).toBeVisible({ timeout: 10000 });
@@ -369,7 +369,7 @@ test.describe('Capabilities Tab - Sub-Agents Section', () => {
     await fillRequiredFields(page, agentName);
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Verify sub-agent is associated with the created agent
     await expect(page.getByText('Weather Agent')).toBeVisible({ timeout: 10000 });
@@ -403,7 +403,7 @@ test.describe('Capabilities Tab - Scorers Section', () => {
     await fillRequiredFields(page, agentName);
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Verify scorer is associated with the agent in Overview
     await expect(page.getByText(/response.*quality/i).first()).toBeVisible({ timeout: 10000 });
@@ -432,7 +432,7 @@ test.describe('Capabilities Tab - Scorers Section', () => {
     await fillRequiredFields(page, agentName);
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
   });
 });
 
@@ -466,7 +466,7 @@ test.describe('Capabilities Tab - Memory Section', () => {
     await fillRequiredFields(page, agentName);
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Verify memory is enabled - should see Memory tab in agent panel
     await expect(page.getByRole('tab', { name: 'Memory' })).toBeVisible({ timeout: 10000 });
@@ -515,7 +515,7 @@ test.describe('Form Reset After Creation', () => {
     await fillRequiredFields(page, agentName);
 
     await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 15000 });
 
     // Navigate back to create page
     await page.goto('/cms/agents/create');
@@ -588,7 +588,7 @@ test.describe('Full Agent Creation Flow', () => {
     await page.getByRole('button', { name: 'Create agent' }).click();
 
     // Wait for redirect to chat page
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 20000 });
+    await expect(page).toHaveURL(/\/agents\/[a-z0-9-]+\/chat/, { timeout: 20000 });
 
     // Verify success toast
     await expect(page.getByText('Agent created successfully')).toBeVisible();

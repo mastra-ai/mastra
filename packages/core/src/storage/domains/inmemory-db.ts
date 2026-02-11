@@ -5,12 +5,14 @@ import type {
   StorageMessageType,
   StoragePromptBlockType,
   StorageResourceType,
+  StorageScorerDefinitionType,
   StorageWorkflowRun,
   ObservationalMemoryRecord,
 } from '../types';
 import type { AgentVersion } from './agents';
 import type { TraceEntry } from './observability';
 import type { PromptBlockVersion } from './prompt-blocks';
+import type { ScorerDefinitionVersion } from './scorer-definitions';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -30,6 +32,8 @@ export class InMemoryDB {
   readonly agentVersions = new Map<string, AgentVersion>();
   readonly promptBlocks = new Map<string, StoragePromptBlockType>();
   readonly promptBlockVersions = new Map<string, PromptBlockVersion>();
+  readonly scorerDefinitions = new Map<string, StorageScorerDefinitionType>();
+  readonly scorerDefinitionVersions = new Map<string, ScorerDefinitionVersion>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -48,6 +52,8 @@ export class InMemoryDB {
     this.agentVersions.clear();
     this.promptBlocks.clear();
     this.promptBlockVersions.clear();
+    this.scorerDefinitions.clear();
+    this.scorerDefinitionVersions.clear();
     this.observationalMemory.clear();
   }
 }

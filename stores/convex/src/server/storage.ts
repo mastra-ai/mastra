@@ -146,9 +146,29 @@ async function handleTypedOperation(
     case 'queryTable': {
       // Use take() to avoid hitting Convex's 32k document limit
       const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
-      let docs = await ctx.db.query(convexTable).take(maxDocs);
 
-      // Apply filters if provided
+      // Build query with index if hint provided for efficient filtering
+      let docs: any[];
+      if (request.indexHint) {
+        const hint = request.indexHint;
+        if (hint.index === 'by_workflow') {
+          docs = await ctx.db
+            .query(convexTable)
+            .withIndex('by_workflow', (q: any) => q.eq('workflow_name', hint.workflowName))
+            .take(maxDocs);
+        } else if (hint.index === 'by_workflow_run') {
+          docs = await ctx.db
+            .query(convexTable)
+            .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', hint.workflowName).eq('run_id', hint.runId))
+            .take(maxDocs);
+        } else {
+          docs = await ctx.db.query(convexTable).take(maxDocs);
+        }
+      } else {
+        docs = await ctx.db.query(convexTable).take(maxDocs);
+      }
+
+      // Apply additional filters if provided
       if (request.filters && request.filters.length > 0) {
         docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
       }

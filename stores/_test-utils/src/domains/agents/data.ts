@@ -57,7 +57,7 @@ export const createFullSampleAgent = ({
     temperature: 0.7,
     maxCompletionTokens: 2000,
   },
-  tools: ['calculator', 'webSearch'],
+  tools: { calculator: {}, webSearch: {} },
   defaultOptions: {
     maxSteps: 5,
   },

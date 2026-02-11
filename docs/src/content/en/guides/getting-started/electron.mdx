@@ -1,0 +1,414 @@
+---
+title: "Electron | Frameworks"
+description: "Get started with Mastra and Electron"
+---
+
+# Integrate Mastra in your Electron project
+
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to an Electron desktop app by calling the agent directly from Mastra's server.
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new Electron app (optional)
+
+If you already have an Electron app, skip to the next step.
+
+Scaffold a new Electron app using [electron-vite](https://electron-vite.org/):
+
+```bash npm2yarn
+npm create @quick-start/electron@latest electron-chat -- --template react-ts --skip
+```
+
+This creates a new Electron app called `electron-chat` with React and TypeScript. Navigate into the project directory:
+
+```bash
+cd electron-chat
+```
+
+### Edit CSP settings
+
+In order for the Electron app to call the Mastra server, you need to adjust the Content Security Policy (CSP) settings.
+
+Open `src/renderer/index.html` and update the `<meta http-equiv="Content-Security-Policy">` tag to include `http://localhost:4111` in the `connect-src` directive:
+
+```html title="src/renderer/index.html"
+<meta
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self'; connect-src http://localhost:4111; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+/>
+```
+
+:::info
+
+For production deployments you'll need to adjust this to match your actual server URL.
+
+:::
+
+### Edit `main.css`
+
+Open `src/renderer/src/assets/main.css` and change its contents to:
+
+```css title="src/renderer/src/assets/main.css"
+@import './base.css';
+
+body {
+  background: var(--ev-c-white);
+  color: var(--ev-c-black);
+}
+```
+
+## Initialize Mastra
+
+Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash npm2yarn
+npx mastra@latest init
+```
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your chat UI in the next steps.
+
+## Install AI SDK UI & AI Elements
+
+Install AI SDK UI along with the Mastra adapter:
+
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
+```
+
+## Create a chat route
+
+Open `src/mastra/index.ts` and add a [`chatRoute()`](/reference/ai-sdk/chat-route) to your config. This creates an API route your Electron frontend can call for AI SDK-compatible chat responses, which you'll use with `useChat()` next.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+// Existing imports...
+import { chatRoute } from "@mastra/ai-sdk"
+
+export const mastra = new Mastra({
+  // Existing config...
+  server: {
+    cors: {
+      origin: "*", // Restrict this to your app's origin in production
+      allowMethods: ["*"],
+      allowHeaders: ["*"],
+    },
+    apiRoutes: [
+      chatRoute({
+        path: '/chat/:agentId'
+      })
+    ]
+  }
+});
+```
+
+:::info
+
+CORS is required because the Electron renderer loads from a different origin than the Mastra server. For production deployments, restrict the origin to your application's actual origin.
+
+:::
+
+## Add the chat UI
+
+Open `src/renderer/src/App.tsx` and replace its contents with the chat component:
+
+```tsx title="src/renderer/src/App.tsx"
+import { useState } from 'react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport, type ToolUIPart } from 'ai'
+
+const STATE_TO_LABEL_MAP: Record<string, string> = {
+  'input-streaming': 'Streaming input...',
+  'input-available': 'Input ready',
+  'approval-requested': 'Approval requested',
+  'approval-responded': 'Approval responded',
+  'output-available': 'Complete',
+  'output-error': 'Error'
+}
+
+export default function App(): React.JSX.Element {
+  const [input, setInput] = useState('')
+
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: `http://localhost:4111/chat/weather-agent`
+    })
+  })
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
+    e.preventDefault()
+    if (!input.trim()) return
+    sendMessage({ text: input })
+    setInput('')
+  }
+
+  return (
+    <main
+      style={{
+        maxWidth: '48rem',
+        marginLeft: 'auto',
+        marginRight: 'auto',
+        padding: '1.5rem',
+        width: '100%',
+        height: '100vh'
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto' }} data-name="conversation">
+          <div
+            data-name="conversation-content"
+            style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}
+          >
+            {messages.map((message, messageIndex) => (
+              <div key={messageIndex}>
+                {message.parts.map((part, partIndex) => {
+                  if (part.type === 'text') {
+                    return (
+                      <div
+                        key={partIndex}
+                        data-name="message"
+                        style={{
+                          display: 'flex',
+                          width: '100%',
+                          maxWidth: '95%',
+                          flexDirection: 'column',
+                          gap: '0.5rem',
+                          ...(message.role === 'user'
+                            ? { marginLeft: 'auto', justifyContent: 'flex-end' }
+                            : {})
+                        }}
+                      >
+                        <div
+                          data-name="message-content"
+                          style={{
+                            display: 'flex',
+                            width: 'fit-content',
+                            maxWidth: '100%',
+                            minWidth: 0,
+                            flexDirection: 'column',
+                            gap: '0.5rem',
+                            overflow: 'hidden',
+                            fontSize: '0.875rem',
+                            ...(message.role === 'user'
+                              ? {
+                                  marginLeft: 'auto',
+                                  borderRadius: '0.5rem',
+                                  backgroundColor: '#dbeafe',
+                                  paddingLeft: '1rem',
+                                  paddingRight: '1rem',
+                                  paddingTop: '0.75rem',
+                                  paddingBottom: '0.75rem'
+                                }
+                              : {})
+                          }}
+                        >
+                          <div
+                            data-name="message-response"
+                            style={{ width: '100%', height: '100%' }}
+                          >
+                            {part.text}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+                  if (part.type.startsWith('tool-')) {
+                    const toolPart = part as unknown as ToolUIPart
+                    return (
+                      <div
+                        key={partIndex}
+                        data-name="tool"
+                        style={{
+                          marginBottom: '1.5rem',
+                          width: '100%',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #d1d5db',
+                          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        <details
+                          data-name="tool-header"
+                          style={{ width: '100%', padding: '0.75rem', cursor: 'pointer' }}
+                        >
+                          <summary style={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                            {toolPart.type.split('-').slice(1).join('-')} -{' '}
+                            {STATE_TO_LABEL_MAP[toolPart.state ?? 'output-available']}
+                          </summary>
+                          <div data-name="tool-content">
+                            <div
+                              data-name="tool-input"
+                              style={{
+                                overflow: 'hidden',
+                                paddingTop: '1rem',
+                                paddingBottom: '1rem'
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontWeight: 500,
+                                  color: '#6b7280',
+                                  fontSize: '0.75rem',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.05em'
+                                }}
+                              >
+                                Parameters
+                              </div>
+                              <pre
+                                style={{
+                                  width: '100%',
+                                  overflowX: 'auto',
+                                  borderRadius: '0.375rem',
+                                  border: '1px solid #d1d5db',
+                                  backgroundColor: '#f9fafb',
+                                  padding: '0.75rem',
+                                  fontSize: '0.875rem'
+                                }}
+                              >
+                                <code>{JSON.stringify(toolPart.input, null, 2)}</code>
+                              </pre>
+                            </div>
+                            <div
+                              data-name="tool-output"
+                              style={{
+                                overflow: 'hidden',
+                                paddingTop: '1rem',
+                                paddingBottom: '1rem'
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontWeight: 500,
+                                  color: '#6b7280',
+                                  fontSize: '0.75rem',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: '0.05em'
+                                }}
+                              >
+                                {toolPart.errorText ? 'Error' : 'Result'}
+                              </div>
+                              <pre
+                                style={{
+                                  width: '100%',
+                                  overflowX: 'auto',
+                                  borderRadius: '0.375rem',
+                                  border: '1px solid #d1d5db',
+                                  backgroundColor: '#f9fafb',
+                                  padding: '0.75rem',
+                                  fontSize: '0.875rem'
+                                }}
+                              >
+                                <code>{JSON.stringify(toolPart.output, null, 2)}</code>
+                              </pre>
+                              {toolPart.errorText && (
+                                <div data-name="tool-error" style={{ color: '#dc2626' }}>
+                                  {toolPart.errorText}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </details>
+                      </div>
+                    )
+                  }
+                  return null
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+        <form
+          style={{
+            width: '100%',
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            gap: '1.5rem',
+            flexShrink: 0,
+            paddingTop: '1rem'
+          }}
+          onSubmit={handleSubmit}
+          data-name="prompt-input"
+        >
+          <input
+            name="chat-input"
+            style={{
+              borderRadius: '0.5rem',
+              border: '1px solid #d1d5db',
+              boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)',
+              height: '2.5rem',
+              padding: '0 0.75rem'
+            }}
+            placeholder="City name"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+          <button
+            style={{
+              backgroundColor: '#2563eb',
+              color: 'white',
+              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+              border: '1px solid #60a5fa',
+              paddingLeft: '1rem',
+              paddingRight: '1rem',
+              whiteSpace: 'nowrap',
+              borderRadius: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              transition: 'all',
+              flexShrink: 0,
+              outline: 'none'
+            }}
+            type="submit"
+          >
+            Send
+          </button>
+        </form>
+      </div>
+    </main>
+  )
+}
+```
+
+This connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `/chat/weather-agent` endpoint, sending propmts there and streaming the response back in chunks.
+
+## Test your agent
+
+In order to test your agent with the chat interface, you need to run both the Mastra server and the Electron app.
+
+1. Start the mastra development server:
+
+    ```bash npm2yarn
+    npx mastra dev
+    ```
+1. In a separate terminal, start the Electron app:
+
+    ```bash npm2yarn
+    npm run dev
+    ```
+1. An Electron window opens with the chat interface
+1. Try asking about the weather. If your API key is set  up correctly, you'll get a response
+
+## Next steps
+
+Congratulations on building your Mastra agent with Electron! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add human-like [memory](/docs/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and React, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/deployment/overview)

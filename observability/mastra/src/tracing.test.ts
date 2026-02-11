@@ -519,8 +519,8 @@ describe('Tracing', () => {
         attributes: {},
       });
 
-      // Wait for async export to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for fire-and-forget async export to complete
+      await Promise.resolve();
 
       // Should continue with other exporters despite failure
       expect(testExporter.events).toHaveLength(1);

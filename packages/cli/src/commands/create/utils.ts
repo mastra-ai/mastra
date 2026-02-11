@@ -307,6 +307,8 @@ export const createMastraProject = async ({
       await exec(`echo .env >> .gitignore`);
       await exec(`echo *.db >> .gitignore`);
       await exec(`echo *.db-* >> .gitignore`);
+      await exec(`echo .netlify >> .gitignore`);
+      await exec(`echo .vercel >> .gitignore`);
     } catch (error) {
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

@@ -640,4 +640,269 @@ Line 3 conclusion`;
       expect(error.name).toBe('SearchNotAvailableError');
     });
   });
+
+  // ===========================================================================
+  // getToolsConfig
+  // ===========================================================================
+  describe('getToolsConfig', () => {
+    it('should return undefined when no tools config provided', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      expect(workspace.getToolsConfig()).toBeUndefined();
+    });
+
+    it('should return tools config when provided', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const toolsConfig = {
+        mastra_workspace_read_file: { enabled: true, requireApproval: false },
+        mastra_workspace_write_file: { enabled: true, requireApproval: true },
+      };
+      const workspace = new Workspace({ filesystem, tools: toolsConfig });
+
+      expect(workspace.getToolsConfig()).toBe(toolsConfig);
+    });
+  });
+
+  // ===========================================================================
+  // __setLogger
+  // ===========================================================================
+  describe('__setLogger', () => {
+    it('should propagate logger to MastraFilesystem', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const spy = vi.spyOn(filesystem, '__setLogger');
+      const workspace = new Workspace({ filesystem });
+
+      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      workspace.__setLogger(mockLogger);
+
+      expect(spy).toHaveBeenCalledWith(mockLogger);
+    });
+
+    it('should propagate logger to MastraSandbox', () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const spy = vi.spyOn(sandbox, '__setLogger');
+      const workspace = new Workspace({ sandbox });
+
+      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      workspace.__setLogger(mockLogger);
+
+      expect(spy).toHaveBeenCalledWith(mockLogger);
+    });
+
+    it('should propagate logger to both providers', () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      const fsSpy = vi.spyOn(filesystem, '__setLogger');
+      const sbSpy = vi.spyOn(sandbox, '__setLogger');
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      workspace.__setLogger(mockLogger);
+
+      expect(fsSpy).toHaveBeenCalledWith(mockLogger);
+      expect(sbSpy).toHaveBeenCalledWith(mockLogger);
+    });
+
+    it('should not throw for non-Mastra filesystem providers', () => {
+      // A plain object implementing WorkspaceFilesystem (not extending MastraFilesystem)
+      const plainFs = {
+        id: 'plain',
+        name: 'Plain',
+        provider: 'plain',
+        status: 'ready',
+        readFile: vi.fn(),
+        writeFile: vi.fn(),
+        appendFile: vi.fn(),
+        deleteFile: vi.fn(),
+        copyFile: vi.fn(),
+        moveFile: vi.fn(),
+        mkdir: vi.fn(),
+        rmdir: vi.fn(),
+        readdir: vi.fn(),
+        exists: vi.fn(),
+        stat: vi.fn(),
+      } as any;
+      const workspace = new Workspace({ filesystem: plainFs });
+
+      const mockLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      // Should not throw
+      expect(() => workspace.__setLogger(mockLogger)).not.toThrow();
+    });
+  });
+
+  // ===========================================================================
+  // Auto-indexing (rebuildSearchIndex via init)
+  // ===========================================================================
+  describe('auto-indexing', () => {
+    it('should auto-index files during init when autoIndexPaths configured', async () => {
+      // Create test files on disk
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.txt'), 'Welcome to the project');
+      await fs.writeFile(path.join(tempDir, 'docs', 'guide.txt'), 'Installation guide for users');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/docs'],
+      });
+
+      await workspace.init();
+
+      // Files should be searchable after init
+      const results = await workspace.search('project');
+      expect(results.length).toBeGreaterThan(0);
+      expect(results.some(r => r.id === '/docs/readme.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should auto-index files from multiple paths', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'support'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'api.txt'), 'API reference documentation');
+      await fs.writeFile(path.join(tempDir, 'support', 'faq.txt'), 'Frequently asked questions');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/docs', '/support'],
+      });
+
+      await workspace.init();
+
+      const docsResults = await workspace.search('API reference');
+      expect(docsResults.some(r => r.id === '/docs/api.txt')).toBe(true);
+
+      const faqResults = await workspace.search('frequently asked');
+      expect(faqResults.some(r => r.id === '/support/faq.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should skip non-existent autoIndexPaths gracefully', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/nonexistent'],
+      });
+
+      // Should not throw
+      await workspace.init();
+      expect(workspace.status).toBe('ready');
+
+      await workspace.destroy();
+    });
+
+    it('should recursively index nested directories', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs', 'nested'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'top.txt'), 'Top level file');
+      await fs.writeFile(path.join(tempDir, 'docs', 'nested', 'deep.txt'), 'Deeply nested content');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/docs'],
+      });
+
+      await workspace.init();
+
+      const results = await workspace.search('nested content');
+      expect(results.some(r => r.id === '/docs/nested/deep.txt')).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('should not auto-index when no search engine configured', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'file.txt'), 'content');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        // No bm25 or vectorStore — no search engine
+        autoIndexPaths: ['/docs'],
+      });
+
+      await workspace.init();
+      expect(workspace.status).toBe('ready');
+
+      // Search should throw because no search engine
+      await expect(workspace.search('content')).rejects.toThrow(SearchNotAvailableError);
+
+      await workspace.destroy();
+    });
+  });
+
+  // ===========================================================================
+  // getAllFiles (tested indirectly via getInfo with includeFileCount)
+  // ===========================================================================
+  describe('getInfo with includeFileCount', () => {
+    it('should count files when includeFileCount is true', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.txt'), 'a');
+      await fs.writeFile(path.join(tempDir, 'b.txt'), 'b');
+      await fs.mkdir(path.join(tempDir, 'sub'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'sub', 'c.txt'), 'c');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      const info = await workspace.getInfo({ includeFileCount: true });
+
+      expect(info.filesystem?.totalFiles).toBe(3);
+    });
+
+    it('should not count files when includeFileCount is false or omitted', async () => {
+      await fs.writeFile(path.join(tempDir, 'a.txt'), 'a');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({ filesystem });
+
+      const info = await workspace.getInfo();
+      expect(info.filesystem?.totalFiles).toBeUndefined();
+
+      const info2 = await workspace.getInfo({ includeFileCount: false });
+      expect(info2.filesystem?.totalFiles).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // Lifecycle error handling
+  // ===========================================================================
+  describe('lifecycle error handling', () => {
+    it('should set status to error when init fails', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = {
+        provider: 'broken',
+        status: 'pending',
+        start: vi.fn().mockRejectedValue(new Error('Sandbox start failed')),
+        destroy: vi.fn(),
+        getInfo: vi.fn(),
+      } as any;
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      await expect(workspace.init()).rejects.toThrow('Sandbox start failed');
+      expect(workspace.status).toBe('error');
+    });
+
+    it('should set status to error when destroy fails', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const sandbox = {
+        provider: 'broken',
+        status: 'pending',
+        start: vi.fn(),
+        destroy: vi.fn().mockRejectedValue(new Error('Sandbox destroy failed')),
+        getInfo: vi.fn(),
+      } as any;
+      const workspace = new Workspace({ filesystem, sandbox });
+
+      await workspace.init();
+      await expect(workspace.destroy()).rejects.toThrow('Sandbox destroy failed');
+      expect(workspace.status).toBe('error');
+    });
+  });
 });

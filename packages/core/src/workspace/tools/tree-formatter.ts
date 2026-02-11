@@ -98,8 +98,12 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     let entries: FileEntry[];
     try {
       entries = await fs.readdir(currentPath);
-    } catch {
-      // Directory not readable, skip
+    } catch (error) {
+      // At root level (depth 0), propagate errors so users see auth/access issues
+      // For subdirectories, silently skip (permission issues on nested dirs are common)
+      if (depth === 0) {
+        throw error;
+      }
       return;
     }
 

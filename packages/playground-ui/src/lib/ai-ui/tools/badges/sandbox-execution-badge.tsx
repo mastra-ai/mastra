@@ -71,6 +71,7 @@ const useElapsedTime = (isRunning: boolean, startTime?: number) => {
 
   useEffect(() => {
     if (isRunning) {
+      setElapsed(0);
       startRef.current = startTime || Date.now();
       const interval = setInterval(() => {
         if (startRef.current) {
@@ -145,6 +146,32 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
   );
 };
 
+// Extract error message from various possible locations
+// Priority: error.message > error (string) > message > stderr (for failed commands)
+const extractErrorMessage = (result: any): string | null => {
+  if (!result || Array.isArray(result)) return null;
+
+  // Direct error property
+  if (result.error?.message) return result.error.message;
+  if (typeof result.error === 'string') return result.error;
+  // Only treat result.message as an error when there's an explicit failure signal
+  if (result.message && (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))) {
+    return result.message;
+  }
+
+  // If command failed (non-zero exit, success=false) and has stderr but no stdout
+  if (result.success === false && result.stderr && !result.stdout) {
+    return result.stderr;
+  }
+
+  // If exitCode is non-zero/negative and no other output, indicate failure
+  if (typeof result.exitCode === 'number' && result.exitCode !== 0 && !result.stdout && !result.stderr) {
+    return `Command failed with exit code ${result.exitCode}`;
+  }
+
+  return null;
+};
+
 export const SandboxExecutionBadge = ({
   toolName,
   args,
@@ -195,8 +222,11 @@ export const SandboxExecutionBadge = ({
   const hasFinalResult = result && !Array.isArray(result) && typeof result.exitCode === 'number';
   const finalResult = hasFinalResult ? result : null;
 
-  // Streaming is complete if we have exit chunk or final result
-  const isStreamingComplete = !!exitChunk || hasFinalResult;
+  const errorMessage = extractErrorMessage(result);
+  const hasError = !!errorMessage;
+
+  // Streaming is complete if we have exit chunk, final result, or error
+  const isStreamingComplete = !!exitChunk || hasFinalResult || hasError;
 
   const hasStreamingOutput = sandboxChunks.length > 0;
   const isRunning = hasStreamingOutput && !isStreamingComplete;
@@ -206,15 +236,21 @@ export const SandboxExecutionBadge = ({
   const streamingContent = sandboxChunks.map(chunk => chunk.data || '').join('');
 
   // Get output content for display
-  const outputContent = hasStreamingOutput
-    ? streamingContent
-    : finalResult
-      ? [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n')
-      : '';
+  // Priority: error > final result > streaming output
+  // Once we have a final result or error, prefer that over incomplete streaming
+  let outputContent = '';
+  if (errorMessage) {
+    const extra = [finalResult?.stdout, finalResult?.stderr].filter(Boolean).join('\n');
+    outputContent = `Error: ${errorMessage}${extra ? '\n\n' + extra : ''}`;
+  } else if (finalResult) {
+    outputContent = [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n');
+  } else if (hasStreamingOutput) {
+    outputContent = streamingContent;
+  }
 
-  // Get exit info
-  const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode;
-  const exitSuccess = exitChunk?.success ?? finalResult?.success;
+  // Get exit info - treat errors as failures
+  const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode ?? (hasError ? 1 : undefined);
+  const exitSuccess = hasError ? false : (exitChunk?.success ?? finalResult?.success);
   const executionTime = exitChunk?.executionTimeMs ?? finalResult?.executionTimeMs;
 
   const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
@@ -239,10 +275,7 @@ export const SandboxExecutionBadge = ({
           <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
           {execMeta?.sandbox?.name && (
             <Link
-              href={`/workspace?${new URLSearchParams({
-                ...(execMeta.workspace?.id && { workspaceId: execMeta.workspace.id }),
-                ...(execMeta.sandbox.id && { sandboxId: execMeta.sandbox.id }),
-              }).toString()}`}
+              href={execMeta.workspace?.id ? `/workspaces/${execMeta.workspace.id}` : '/workspaces'}
               className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >

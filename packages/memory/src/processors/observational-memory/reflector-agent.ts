@@ -122,9 +122,14 @@ User messages are extremely important. If the user asks a question or gives a ne
 export const REFLECTOR_SYSTEM_PROMPT = buildReflectorSystemPrompt();
 
 /**
- * Compression retry prompt - used when reflection doesn't reduce size
+ * Compression guidance by level.
+ * - Level 0: No compression guidance (used as first attempt for regular reflection)
+ * - Level 1: Gentle compression guidance (original wording — "slightly more" goes a long way for LLMs)
+ * - Level 2: Aggressive compression guidance (stronger push when level 1 didn't work)
  */
-export const COMPRESSION_RETRY_PROMPT = `
+export const COMPRESSION_GUIDANCE: Record<0 | 1 | 2, string> = {
+  0: '',
+  1: `
 ## COMPRESSION REQUIRED
 
 Your previous reflection was the same size or larger than the original observations.
@@ -137,12 +142,41 @@ Please re-process with slightly more compression:
 - For example if there is a long nested observation list about repeated tool calls, you can combine those into a single line and observe that the tool was called multiple times for x reason, and finally y outcome happened.
 
 Your current detail level was a 10/10, lets aim for a 8/10 detail level.
-`;
+`,
+  2: `
+## AGGRESSIVE COMPRESSION REQUIRED
+
+Your previous reflection was still too large after compression guidance.
+
+Please re-process with much more aggressive compression:
+- Towards the beginning, heavily condense observations into high-level summaries
+- Closer to the end, retain fine details (recent context matters more)
+- Memory is getting very long - use a significantly more condensed style throughout
+- Combine related items aggressively but do not lose important specific details of names, places, events, and people
+- For example if there is a long nested observation list about repeated tool calls, you can combine those into a single line and observe that the tool was called multiple times for x reason, and finally y outcome happened.
+- Remove redundant information and merge overlapping observations
+
+Your current detail level was a 10/10, lets aim for a 6/10 detail level.
+`,
+};
+
+/**
+ * Compression retry prompt - backwards compat alias for level 1
+ */
+export const COMPRESSION_RETRY_PROMPT = COMPRESSION_GUIDANCE[1];
 
 /**
  * Build the prompt for the Reflector agent
  */
-export function buildReflectorPrompt(observations: string, manualPrompt?: string, compressionRetry?: boolean): string {
+export function buildReflectorPrompt(
+  observations: string,
+  manualPrompt?: string,
+  compressionLevel?: boolean | 0 | 1 | 2,
+  skipContinuationHints?: boolean,
+): string {
+  // Normalize: boolean `true` maps to level 1 for backwards compat
+  const level: 0 | 1 | 2 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
+
   let prompt = `## OBSERVATIONS TO REFLECT ON
 
 ${observations}
@@ -159,10 +193,15 @@ Please analyze these observations and produce a refined, condensed version that 
 ${manualPrompt}`;
   }
 
-  if (compressionRetry) {
+  const guidance = COMPRESSION_GUIDANCE[level];
+  if (guidance) {
     prompt += `
 
-${COMPRESSION_RETRY_PROMPT}`;
+${guidance}`;
+  }
+
+  if (skipContinuationHints) {
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
   }
 
   return prompt;

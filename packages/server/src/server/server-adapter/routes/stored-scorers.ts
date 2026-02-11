@@ -1,0 +1,17 @@
+import {
+  LIST_STORED_SCORERS_ROUTE,
+  GET_STORED_SCORER_ROUTE,
+  CREATE_STORED_SCORER_ROUTE,
+  UPDATE_STORED_SCORER_ROUTE,
+  DELETE_STORED_SCORER_ROUTE,
+} from '../../handlers/stored-scorers';
+import type { ServerRoute } from '.';
+
+export const STORED_SCORERS_ROUTES: ServerRoute<any, any, any>[] = [
+  // Stored Scorers CRUD Routes
+  LIST_STORED_SCORERS_ROUTE,
+  GET_STORED_SCORER_ROUTE,
+  CREATE_STORED_SCORER_ROUTE,
+  UPDATE_STORED_SCORER_ROUTE,
+  DELETE_STORED_SCORER_ROUTE,
+];

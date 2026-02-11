@@ -92,6 +92,48 @@ export interface ObservationConfig {
    * @default 10000
    */
   maxTokensPerBatch?: number;
+
+  /**
+   * Token interval for async background observation buffering.
+   * Can be an absolute token count (e.g. `5000`) or a fraction of `messageTokens`
+   * (e.g. `0.25` = buffer every 25% of threshold).
+   *
+   * Observations run asynchronously in the background at this interval,
+   * storing results in a buffer. When the main `messageTokens` threshold is reached,
+   * buffered observations are activated instantly (no blocking LLM call).
+   *
+   * Set to `false` to explicitly disable async buffering.
+   *
+   * Must resolve to less than `messageTokens`.
+   *
+   * @default 0.2 (buffer every 20% of messageTokens)
+   */
+  bufferTokens?: number | false;
+
+  /**
+   * Ratio (0-1) of buffered observations to activate when threshold is reached.
+   * Setting this below 1 keeps some observations in reserve for continuity.
+   *
+   * Requires `bufferTokens` to also be set.
+   *
+   * @default 0.8 (activate 80% of buffered observations, keeping 20% in reserve)
+   */
+  bufferActivation?: number;
+
+  /**
+   * Token threshold above which synchronous (blocking) observation is forced.
+   * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
+   * Above `blockAfter`, a synchronous observation runs as a last resort.
+   *
+   * Accepts either:
+   * - A multiplier (1 < value < 2): multiplied by `messageTokens`.
+   *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → blocks at 30,000.
+   * - An absolute token count (≥ 2): must be greater than `messageTokens`.
+   *
+   * Only relevant when `bufferTokens` is set.
+   * If not set, synchronous observation is never used when async buffering is enabled.
+   */
+  blockAfter?: number;
 }
 
 /**
@@ -129,6 +171,32 @@ export interface ReflectionConfig {
    * @default { google: { thinkingConfig: { thinkingBudget: 1024 } } }
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Token threshold above which synchronous (blocking) reflection is forced.
+   * Between `observationTokens` and `blockAfter`, only async buffering/activation is used.
+   * Above `blockAfter`, a synchronous reflection runs as a last resort.
+   *
+   * Accepts either:
+   * - A multiplier (1 < value < 2): multiplied by `observationTokens`.
+   *   e.g. `blockAfter: 1.5` with `observationTokens: 30_000` → blocks at 45,000.
+   * - An absolute token count (≥ 2): must be greater than `observationTokens`.
+   *
+   * Only relevant when `bufferActivation` is set.
+   * If not set, synchronous reflection is never used when async reflection is enabled.
+   */
+  blockAfter?: number;
+
+  /**
+   * Ratio (0-1) controlling when async reflection buffering starts.
+   * When observation tokens reach `observationTokens * bufferActivation`,
+   * reflection runs in the background. On activation at the full threshold,
+   * the buffered reflection replaces the line range it covers, preserving
+   * any new observations appended after that range.
+   *
+   * Requires `observation.bufferTokens` to also be set.
+   */
+  bufferActivation?: number;
 }
 
 /**
@@ -273,45 +341,233 @@ export interface DataOmObservationFailedPart {
 
     /** This thread's ID */
     threadId: string;
+
+    /** The buffered observations/reflection content (for UI expansion) */
+    observations?: string;
   };
 }
 
 /**
- * Progress marker streamed during agent execution to provide real-time
- * token progress updates for UI feedback.
+ * Status update streamed during agent execution to provide real-time
+ * observational memory state for UI feedback.
+ *
+ * Clients can calculate percentages from tokens/threshold pairs.
+ *
+ * @example
+ * ```ts
+ * // Message window usage
+ * const msgPercent = status.windows.active.messages.tokens / status.windows.active.messages.threshold;
+ *
+ * // Post-activation estimate for message window
+ * const postActivation = status.windows.active.messages.tokens - status.windows.buffered.observations.messageTokens;
+ * ```
  */
-export interface DataOmProgressPart {
-  type: 'data-om-progress';
+export interface DataOmStatusPart {
+  type: 'data-om-status';
   data: {
-    /** Current pending tokens (unobserved message tokens) */
-    pendingTokens: number;
+    windows: {
+      /** Active context windows — current token usage and thresholds */
+      active: {
+        /** Message window: unobserved message tokens vs threshold that triggers observation */
+        messages: {
+          tokens: number;
+          threshold: number;
+        };
+        /** Observation window: observation tokens vs threshold that triggers reflection */
+        observations: {
+          tokens: number;
+          threshold: number;
+        };
+      };
+      /** Buffered content waiting to be activated */
+      buffered: {
+        /** Buffered observation chunks staged for activation */
+        observations: {
+          /** Number of chunks staged */
+          chunks: number;
+          /** Message tokens that will be cleared from context on activation */
+          messageTokens: number;
+          /** Projected message tokens that would be removed if activation happened now (based on bufferActivation ratio and chunk boundaries) */
+          projectedMessageRemoval: number;
+          /** Observation tokens that will be added on activation */
+          observationTokens: number;
+          /** Current state of observation buffering */
+          status: 'idle' | 'running' | 'complete';
+        };
+        /** Buffered reflection waiting to be activated */
+        reflection: {
+          /** Observation tokens that were fed into the reflector (pre-compression) */
+          inputObservationTokens: number;
+          /** Observation tokens the reflection will produce on activation (post-compression) */
+          observationTokens: number;
+          /** Current state of reflection buffering */
+          status: 'idle' | 'running' | 'complete';
+        };
+      };
+    };
+    /** The OM record ID */
+    recordId: string;
+    /** Thread ID */
+    threadId: string;
+    /** Step number in the agent loop */
+    stepNumber: number;
+    /** Current reflection generation count */
+    generationCount: number;
+  };
+}
 
-    /** Current message token threshold that triggers observation */
-    messageTokens: number;
+/**
+ * Start marker inserted when async buffering begins.
+ * Buffering runs in the background to pre-compute observations before the main threshold.
+ */
+export interface DataOmBufferingStartPart {
+  type: 'data-om-buffering-start';
+  data: {
+    /** Unique ID for this buffering cycle - shared between start/end/failed markers */
+    cycleId: string;
 
-    /** Percentage of message token threshold reached */
-    messageTokensPercent: number;
+    /** Type of operation being buffered: 'observation' or 'reflection' */
+    operationType: OmOperationType;
 
-    /** Current observation tokens (for reflection progress) */
-    observationTokens: number;
+    /** When buffering started */
+    startedAt: string;
 
-    /** Observation token threshold that triggers reflection */
-    observationTokensThreshold: number;
+    /** Tokens being buffered in this cycle */
+    tokensToBuffer: number;
 
-    /** Percentage of observation token threshold reached */
-    observationTokensPercent: number;
+    /** The OM record ID this buffering belongs to */
+    recordId: string;
 
-    /** Whether observation will trigger */
-    willObserve: boolean;
+    /** This thread's ID */
+    threadId: string;
+
+    /** All thread IDs being buffered (for resource-scoped) */
+    threadIds: string[];
+
+    /** Snapshot of config at buffering time */
+    config: ObservationMarkerConfig;
+  };
+}
+
+/**
+ * End marker inserted when async buffering completes successfully.
+ * The buffered content is stored but not yet activated (visible to the main context).
+ */
+export interface DataOmBufferingEndPart {
+  type: 'data-om-buffering-end';
+  data: {
+    /** Unique ID for this buffering cycle - shared between start/end/failed markers */
+    cycleId: string;
+
+    /** Type of operation that was buffered: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When buffering completed */
+    completedAt: string;
+
+    /** Duration in milliseconds */
+    durationMs: number;
+
+    /** Total tokens that were buffered */
+    tokensBuffered: number;
+
+    /** Resulting observation/reflection tokens after compression */
+    bufferedTokens: number;
 
     /** The OM record ID */
     recordId: string;
 
-    /** Thread ID */
+    /** This thread's ID */
     threadId: string;
 
-    /** Step number in the agent loop */
-    stepNumber: number;
+    /** The buffered observations/reflection content (for UI expansion) */
+    observations?: string;
+  };
+}
+
+/**
+ * Failed marker inserted when async buffering fails.
+ * The system will fall back to synchronous processing at threshold.
+ */
+export interface DataOmBufferingFailedPart {
+  type: 'data-om-buffering-failed';
+  data: {
+    /** Unique ID for this buffering cycle - shared between start/end/failed markers */
+    cycleId: string;
+
+    /** Type of operation that failed: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When buffering failed */
+    failedAt: string;
+
+    /** Duration until failure in milliseconds */
+    durationMs: number;
+
+    /** Tokens that were attempted to buffer */
+    tokensAttempted: number;
+
+    /** Error message */
+    error: string;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** The buffered observations/reflection content (for UI expansion) */
+    observations?: string;
+  };
+}
+
+/**
+ * Union of all buffering marker types.
+ */
+export type DataOmBufferingPart = DataOmBufferingStartPart | DataOmBufferingEndPart | DataOmBufferingFailedPart;
+
+/**
+ * Marker inserted when buffered observations are activated (moved to active context).
+ * This is an instant operation that happens when the main threshold is reached.
+ */
+export interface DataOmActivationPart {
+  type: 'data-om-activation';
+  data: {
+    /** Unique ID for this activation event */
+    cycleId: string;
+
+    /** Type of operation: 'observation' or 'reflection' */
+    operationType: OmOperationType;
+
+    /** When activation occurred */
+    activatedAt: string;
+
+    /** Number of buffered chunks that were activated */
+    chunksActivated: number;
+
+    /** Total tokens from messages that were activated */
+    tokensActivated: number;
+
+    /** Resulting observation tokens after activation */
+    observationTokens: number;
+
+    /** Number of messages that were observed via activation */
+    messagesActivated: number;
+
+    /** The OM record ID */
+    recordId: string;
+
+    /** This thread's ID */
+    threadId: string;
+
+    /** Current reflection generation count */
+    generationCount: number;
+
+    /** Snapshot of config at activation time */
+    config: ObservationMarkerConfig;
+
+    /** The actual observations from activated chunks (for UI display) */
+    observations?: string;
   };
 }
 
@@ -322,7 +578,12 @@ export type DataOmObservationPart =
   | DataOmObservationStartPart
   | DataOmObservationEndPart
   | DataOmObservationFailedPart
-  | DataOmProgressPart;
+  | DataOmStatusPart;
+
+/**
+ * Union of all OM data parts (observation, buffering, status, activation).
+ */
+export type DataOmPart = DataOmObservationPart | DataOmBufferingPart | DataOmActivationPart;
 
 /**
  * @deprecated Use DataOmObservationStartPart and DataOmObservationEndPart instead.

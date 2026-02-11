@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug } from 'lucide-react';
+import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, CloudCog } from 'lucide-react';
 import { ObservationRenderer } from './observation-renderer';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
@@ -21,12 +21,20 @@ export interface OmMarkerData {
   threadId?: string;
   threadIds?: string[];
   operationType?: 'observation' | 'reflection';
-  _state?: 'loading' | 'complete' | 'failed';
+  _state?: 'loading' | 'complete' | 'failed' | 'buffering' | 'buffering-complete' | 'buffering-failed' | 'activated';
+  // Activation-specific fields
+  chunksActivated?: number;
+  tokensActivated?: number;
+  messagesActivated?: number;
   config?: {
     scope?: string;
     messageTokens?: number;
     observationTokens?: number;
   };
+  // Buffering-specific fields
+  tokensToBuffer?: number;
+  tokensBuffered?: number;
+  bufferedTokens?: number;
 }
 
 export interface ObservationMarkerBadgeProps {
@@ -74,6 +82,10 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const isEnd = state === 'complete';
   const isFailed = state === 'failed';
   const isDisconnected = state === 'disconnected';
+  const isBuffering = state === 'buffering';
+  const isBufferingComplete = state === 'buffering-complete';
+  const isBufferingFailed = state === 'buffering-failed';
+  const isActivated = state === 'activated';
   const isReflection = omData.operationType === 'reflection';
 
   // Failed reflections should be expanded by default to draw attention to the error
@@ -298,6 +310,171 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           {isExpanded && error && (
             <div className="mt-1 ml-4 p-2 rounded-md bg-red-500/5 text-red-700 text-xs border border-red-500/10">
               <span className="font-medium">Error:</span> {error}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Async buffering states - non-blocking background observation/reflection
+  if (isBuffering) {
+    const tokensToBuffer = omData.tokensToBuffer;
+    const bufferingLabel = isReflection ? 'Buffering reflection' : 'Buffering observations';
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
+        <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium my-1 border border-dashed border-purple-400/40">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <CloudCog className="w-3 h-3" />
+          <span>
+            {bufferingLabel}
+            {tokensToBuffer ? ` ~${formatTokens(tokensToBuffer)} tokens` : '...'}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (isBufferingComplete) {
+    const tokensBuffered = omData.tokensBuffered;
+    const bufferedTokens = omData.bufferedTokens;
+    const { observations } = omData;
+    const bufferedLabel = isReflection ? 'Buffered reflection' : 'Buffered observations';
+    const compressionRatio =
+      tokensBuffered && bufferedTokens && bufferedTokens > 0 ? Math.round(tokensBuffered / bufferedTokens) : null;
+
+    const handleToggle = (e: React.MouseEvent) => {
+      const scrollContainer = e.currentTarget.closest('[data-radix-scroll-area-viewport]') || document.documentElement;
+      const scrollTop = scrollContainer.scrollTop;
+      setIsExpanded(!isExpanded);
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollTop;
+      });
+    };
+
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
+        <div className="my-1">
+          <button
+            onClick={handleToggle}
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer border border-dashed border-green-400/40`}
+          >
+            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            <CloudCog className="w-3 h-3" />
+            <span>
+              {bufferedLabel} {tokensBuffered ? formatTokens(tokensBuffered) : '?'}→
+              {bufferedTokens ? formatTokens(bufferedTokens) : '?'} tokens
+              {compressionRatio ? ` (-${compressionRatio}x)` : ''}
+            </span>
+          </button>
+
+          {isExpanded && observations && (
+            <div className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs border ${expandedBorderColor}`}>
+              <ObservationRenderer observations={observations} maxHeight="240px" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (isBufferingFailed) {
+    const error = omData.error;
+    const failedLabel = isReflection ? 'Buffered reflection failed' : 'Buffered observation failed';
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+      >
+        <div className="my-1">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-500/10 text-red-600 text-xs font-medium hover:bg-red-500/20 transition-colors cursor-pointer border border-dashed border-red-400/40"
+          >
+            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            <XCircle className="w-3 h-3" />
+            <span>{failedLabel}</span>
+          </button>
+
+          {isExpanded && error && (
+            <div className="mt-1 ml-4 p-2 rounded-md bg-red-500/5 text-red-700 text-xs border border-red-500/10">
+              <span className="font-medium">Error:</span> {error}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Activation state - buffered observations have been activated into active observations
+  // Styled to match sync observation/reflection markers (green scheme with Brain icon)
+  if (isActivated) {
+    const tokensActivated = omData.tokensActivated ?? 0;
+    const observationTokens = omData.observationTokens ?? 0;
+    const { observations } = omData;
+    const activatedLabel = isReflection ? 'Reflected' : 'Observed';
+    const compressionRatio =
+      tokensActivated && observationTokens && observationTokens > 0
+        ? Math.round(tokensActivated / observationTokens)
+        : null;
+
+    const handleToggle = (e: React.MouseEvent) => {
+      const scrollContainer = e.currentTarget.closest('[data-radix-scroll-area-viewport]') || document.documentElement;
+      const scrollTop = scrollContainer.scrollTop;
+      setIsExpanded(!isExpanded);
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollTop;
+      });
+    };
+
+    return (
+      <div
+        className="mb-3"
+        data-om-badge={cycleId}
+        data-om-state={state}
+        data-om-type={isReflection ? 'reflection' : 'observation'}
+        data-om-no-highlight="true"
+      >
+        <div className="my-1">
+          <button
+            onClick={handleToggle}
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer`}
+          >
+            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            <Brain className="w-3 h-3" />
+            <span>
+              {activatedLabel} {tokensActivated ? formatTokens(tokensActivated) : '?'}→
+              {observationTokens ? formatTokens(observationTokens) : '?'} tokens
+              {compressionRatio ? ` (-${compressionRatio}x)` : ''}
+            </span>
+          </button>
+          {isExpanded && (
+            <div
+              className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}
+            >
+              {/* Stats row */}
+              <div className={`flex gap-4 text-[11px] ${labelColor}`}>
+                {tokensActivated > 0 && <span>Input: {formatTokens(tokensActivated)}</span>}
+                {observationTokens > 0 && <span>Output: {formatTokens(observationTokens)}</span>}
+                {compressionRatio && compressionRatio > 1 && <span>Compression: {compressionRatio}x</span>}
+              </div>
+              {observations && (
+                <div className="mt-1 pt-1 border-t border-neutral-700">
+                  <ObservationRenderer observations={observations} maxHeight="500px" />
+                </div>
+              )}
             </div>
           )}
         </div>

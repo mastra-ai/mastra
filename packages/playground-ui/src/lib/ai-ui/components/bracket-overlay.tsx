@@ -193,7 +193,15 @@ function findPreviousBadge(badges: HTMLElement[], currentIndex: number, omType: 
 interface HighlightPosition {
   cycleId: string;
   omType: OmType;
-  state: 'loading' | 'complete' | 'failed' | 'disconnected';
+  state:
+    | 'loading'
+    | 'complete'
+    | 'failed'
+    | 'disconnected'
+    | 'buffering'
+    | 'buffering-complete'
+    | 'buffering-failed'
+    | 'activated';
   /** Top position relative to the container (in px) */
   top: number;
   /** Height of the highlight block (in px) */
@@ -202,6 +210,7 @@ interface HighlightPosition {
 
 function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; visible: boolean }) {
   const color = getStateColor(highlight.state);
+  const isBufferingState = highlight.state.startsWith('buffering');
 
   return (
     <div
@@ -209,7 +218,7 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
       style={{
         top: highlight.top,
         height: highlight.height,
-        border: `3px solid ${color}`,
+        border: `3px ${isBufferingState ? 'dashed' : 'solid'} ${color}`,
         borderRadius: '0.5rem',
         opacity: visible ? 1 : 0,
       }}
@@ -227,6 +236,16 @@ function getStateColor(state: HighlightPosition['state']): string {
       return 'rgba(239, 68, 68, 0.4)';
     case 'disconnected':
       return 'rgba(234, 179, 8, 0.4)';
+    // Buffering states use purple color
+    case 'buffering':
+      return 'rgba(168, 85, 247, 0.4)';
+    case 'buffering-complete':
+      return 'rgba(168, 85, 247, 0.4)';
+    case 'buffering-failed':
+      return 'rgba(239, 68, 68, 0.4)';
+    // Activation state uses green — same as sync observation/reflection 'complete'
+    case 'activated':
+      return 'rgba(34, 197, 94, 0.4)';
     default:
       return 'rgba(34, 197, 94, 0.4)';
   }

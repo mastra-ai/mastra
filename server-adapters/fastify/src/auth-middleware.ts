@@ -71,7 +71,9 @@ export const authenticationMiddleware: preHandlerHookHandler = async (request: F
 
     return;
   } catch (err) {
-    console.error(err);
+    mastra.getLogger()?.error('Authentication error', {
+      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    });
     return reply.status(401).send({ error: 'Invalid or expired token' });
   }
 };
@@ -116,7 +118,9 @@ export const authorizationMiddleware: preHandlerHookHandler = async (request: Fa
 
       return reply.status(403).send({ error: 'Access denied' });
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorizeUser', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       return reply.status(500).send({ error: 'Authorization error' });
     }
   }
@@ -146,7 +150,11 @@ export const authorizationMiddleware: preHandlerHookHandler = async (request: Fa
 
       return reply.status(403).send({ error: 'Access denied' });
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorize', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        path,
+        method,
+      });
       return reply.status(500).send({ error: 'Authorization error' });
     }
   }

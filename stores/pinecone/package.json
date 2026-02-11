@@ -20,7 +20,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."

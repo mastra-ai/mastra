@@ -103,10 +103,10 @@ export function toAISdkV5Stream<TOutput>(
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream(
   stream:
-    | MastraAgentNetworkStream
+    | WorkflowRunOutput<WorkflowResult<any, any, any, any>>
     | MastraWorkflowStream<any, any, any, any>
-    | MastraModelOutput
-    | WorkflowRunOutput<WorkflowResult<any, any, any, any>>,
+    | MastraAgentNetworkStream
+    | MastraModelOutput,
   options: {
     from: ToAISDKFrom;
     includeTextStreamParts?: boolean;
@@ -128,7 +128,12 @@ export function toAISdkV5Stream(
   if (from === 'workflow') {
     const includeTextStreamParts = options?.includeTextStreamParts ?? true;
 
-    return (stream as ReadableStream<ChunkType<any>>).pipeThrough(
+    const workflowStream =
+      'fullStream' in stream
+        ? (stream as WorkflowRunOutput<any>).fullStream
+        : (stream as ReadableStream<ChunkType<any>>);
+
+    return workflowStream.pipeThrough(
       WorkflowStreamToAISDKTransformer({
         includeTextStreamParts,
         sendReasoning: options?.sendReasoning,

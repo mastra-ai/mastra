@@ -536,7 +536,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   if (!agent) {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
     try {
-      agent = (await mastra.getEditor()?.getStoredAgentById(agentId)) ?? null;
+      agent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -742,7 +742,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.listStoredAgents();
+          storedAgentsResult = await editor?.agent.list();
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;
@@ -750,8 +750,11 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
-          for (const agent of storedAgentsResult.agents) {
+          for (const storedAgentConfig of storedAgentsResult.agents) {
             try {
+              const agent = await editor?.agent.getById(storedAgentConfig.id);
+              if (!agent) continue;
+
               const serialized = await formatAgentList({
                 id: agent.id,
                 mastra,
@@ -767,7 +770,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
             } catch (agentError) {
               // Log but continue with other agents
               const logger = mastra.getLogger();
-              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
+              logger.warn('Failed to serialize stored agent', { agentId: storedAgentConfig.id, error: agentError });
             }
           }
         }
@@ -832,11 +835,16 @@ export const CLONE_AGENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ agentId, mastra, newId, newName, metadata, authorId, requestContext }) => {
     try {
+      const editor = mastra.getEditor();
+      if (!editor) {
+        return handleError(new Error('Editor is not configured on the Mastra instance'), 'Error cloning agent');
+      }
+
       const agent = await getAgentFromSystem({ mastra, agentId });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
 
-      const result = await agent.cloneAgent({
+      const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,

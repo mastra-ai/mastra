@@ -39,7 +39,7 @@ describe('A2A', () => {
       server.on('request', (req, res) => {
         // Verify it's a POST to the A2A endpoint with message/stream method
         expect(req.method).toBe('POST');
-        expect(req.url).toBe('/a2a/test-agent');
+        expect(req.url).toBe('/api/a2a/test-agent');
 
         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
 

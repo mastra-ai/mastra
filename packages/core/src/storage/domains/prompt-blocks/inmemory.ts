@@ -37,18 +37,15 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
   // Prompt Block CRUD Methods
   // ==========================================================================
 
-  async getPromptBlockById({ id }: { id: string }): Promise<StoragePromptBlockType | null> {
-    this.logger.debug(`InMemoryPromptBlocksStorage: getPromptBlockById called for ${id}`);
+  async getById(id: string): Promise<StoragePromptBlockType | null> {
+    this.logger.debug(`InMemoryPromptBlocksStorage: getById called for ${id}`);
     const block = this.db.promptBlocks.get(id);
     return block ? this.deepCopyBlock(block) : null;
   }
 
-  async createPromptBlock({
-    promptBlock,
-  }: {
-    promptBlock: StorageCreatePromptBlockInput;
-  }): Promise<StoragePromptBlockType> {
-    this.logger.debug(`InMemoryPromptBlocksStorage: createPromptBlock called for ${promptBlock.id}`);
+  async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
+    const { promptBlock } = input;
+    this.logger.debug(`InMemoryPromptBlocksStorage: create called for ${promptBlock.id}`);
 
     if (this.db.promptBlocks.has(promptBlock.id)) {
       throw new Error(`Prompt block with id ${promptBlock.id} already exists`);
@@ -85,8 +82,9 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
     return this.deepCopyBlock(newBlock);
   }
 
-  async updatePromptBlock({ id, ...updates }: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
-    this.logger.debug(`InMemoryPromptBlocksStorage: updatePromptBlock called for ${id}`);
+  async update(input: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+    const { id, ...updates } = input;
+    this.logger.debug(`InMemoryPromptBlocksStorage: update called for ${id}`);
 
     const existingBlock = this.db.promptBlocks.get(id);
     if (!existingBlock) {
@@ -148,21 +146,24 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
       const changedFields = configFieldNames.filter(
         field =>
           field in configFields &&
-          configFields[field as keyof typeof configFields] !== latestConfig[field as keyof typeof latestConfig],
+          JSON.stringify(configFields[field as keyof typeof configFields]) !==
+            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
       );
 
-      // Create new version
-      const newVersionId = crypto.randomUUID();
-      const newVersionNumber = latestVersion.versionNumber + 1;
+      // Only create a new version if something actually changed
+      if (changedFields.length > 0) {
+        const newVersionId = crypto.randomUUID();
+        const newVersionNumber = latestVersion.versionNumber + 1;
 
-      await this.createVersion({
-        id: newVersionId,
-        blockId: id,
-        versionNumber: newVersionNumber,
-        ...newConfig,
-        changedFields,
-        changeMessage: `Updated ${changedFields.join(', ')}`,
-      });
+        await this.createVersion({
+          id: newVersionId,
+          blockId: id,
+          versionNumber: newVersionNumber,
+          ...newConfig,
+          changedFields,
+          changeMessage: `Updated ${changedFields.join(', ')}`,
+        });
+      }
     }
 
     // Save the updated block record
@@ -170,19 +171,19 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
     return this.deepCopyBlock(updatedBlock);
   }
 
-  async deletePromptBlock({ id }: { id: string }): Promise<void> {
-    this.logger.debug(`InMemoryPromptBlocksStorage: deletePromptBlock called for ${id}`);
+  async delete(id: string): Promise<void> {
+    this.logger.debug(`InMemoryPromptBlocksStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.promptBlocks.delete(id);
     // Also delete all versions for this block
-    await this.deleteVersionsByBlockId(id);
+    await this.deleteVersionsByParentId(id);
   }
 
-  async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+  async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    this.logger.debug(`InMemoryPromptBlocksStorage: listPromptBlocks called`);
+    this.logger.debug(`InMemoryPromptBlocksStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -335,12 +336,12 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
     this.db.promptBlockVersions.delete(id);
   }
 
-  async deleteVersionsByBlockId(blockId: string): Promise<void> {
-    this.logger.debug(`InMemoryPromptBlocksStorage: deleteVersionsByBlockId called for block ${blockId}`);
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
+    this.logger.debug(`InMemoryPromptBlocksStorage: deleteVersionsByParentId called for block ${entityId}`);
 
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.promptBlockVersions.entries()) {
-      if (version.blockId === blockId) {
+      if (version.blockId === entityId) {
         idsToDelete.push(id);
       }
     }

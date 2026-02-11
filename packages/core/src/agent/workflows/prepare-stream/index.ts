@@ -7,6 +7,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import { createWorkflow } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
@@ -39,6 +40,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentId: string;
   agentName?: string;
   toolCallId?: string;
+  workspace?: Workspace;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -61,6 +63,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentId,
   agentName,
   toolCallId,
+  workspace,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -104,6 +107,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memory,
     resourceId,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
+    workspace,
   });
 
   const mapResultsStep = createMapResultsStep({

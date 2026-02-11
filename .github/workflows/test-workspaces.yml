@@ -1,0 +1,67 @@
+name: Workspace Tests
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'workspaces/**'
+      - 'packages/core/**'
+      - '.github/workflows/test-workspaces.yml'
+
+jobs:
+  test-unit:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [e2b, s3, gcs]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm turbo build --filter "@mastra/${{ matrix.package }}"
+
+      - name: Run ${{ matrix.package }} unit tests
+        run: pnpm test:unit
+        working-directory: workspaces/${{ matrix.package }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=4096'
+
+  test-docker:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [s3, gcs]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm turbo build --filter "@mastra/${{ matrix.package }}"
+
+      - name: Run ${{ matrix.package }} integration tests
+        run: pnpm test
+        working-directory: workspaces/${{ matrix.package }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=4096'

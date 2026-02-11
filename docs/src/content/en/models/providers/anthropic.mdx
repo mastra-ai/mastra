@@ -1,5 +1,5 @@
 ---
-title: "Anthropic | Models | Mastra"
+title: "Anthropic | Models"
 description: "Use Anthropic models with Mastra. 22 models available."
 ---
 
@@ -364,8 +364,14 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
+        "name": "structuredOutputMode",
+        "type": "\"outputFormat\" | \"jsonTool\" | \"auto\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "thinking",
-        "type": "{ type: \"enabled\" | \"disabled\"; budgetTokens?: number | undefined; } | undefined",
+        "type": "{ type: \"adaptive\"; } | { type: \"enabled\"; budgetTokens?: number | undefined; } | { type: \"disabled\"; } | undefined",
         "description": "",
         "isOptional": true
     },
@@ -384,6 +390,24 @@ const response = await agent.generate("Hello!", {
     {
         "name": "container",
         "type": "{ id?: string | undefined; skills?: { type: \"anthropic\" | \"custom\"; skillId: string; version?: string | undefined; }[] | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "effort",
+        "type": "\"low\" | \"medium\" | \"high\" | \"max\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "speed",
+        "type": "\"fast\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "contextManagement",
+        "type": "{ edits: ({ type: \"clear_01\"; trigger?: { type: \"input_tokens\"; value: number; } | undefined; keep?: \"all\" | { type: \"thinking_turns\"; value: number; } | undefined; } | { type: \"compact_20260112\"; trigger?: { ...; } | undefined; pauseAfterCompaction?: boolean | undefined; instructions?: string | undefined; })[]; } |...",
         "description": "",
         "isOptional": true
     }

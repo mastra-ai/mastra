@@ -584,3 +584,19 @@ export const getObservationalMemoryResponseSchema = z.object({
   record: observationalMemoryRecordSchema.nullable(),
   history: z.array(observationalMemoryRecordSchema).optional(),
 });
+
+/**
+ * Body schema for POST /api/memory/observational-memory/buffer-status
+ */
+export const awaitBufferStatusBodySchema = z.object({
+  agentId: z.string(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+});
+
+/**
+ * Response schema for POST /api/memory/observational-memory/buffer-status
+ */
+export const awaitBufferStatusResponseSchema = z.object({
+  record: observationalMemoryRecordSchema.nullable(),
+});

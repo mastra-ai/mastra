@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:client": "vitest run ./src/client/client.test.ts",
     "test:server": "vitest run ./src/server/server.test.ts",

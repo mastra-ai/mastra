@@ -512,8 +512,6 @@ export class AgentLegacyHandler {
             const promises: Promise<any>[] = [];
 
             // Add title generation to promises if needed
-            // Check if this is the first user message by looking at remembered (historical) messages
-            // This works automatically for pre-created threads without requiring any metadata flags
             const config = memory.getMergedThreadConfig(memoryConfig);
             const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
@@ -523,11 +521,7 @@ export class AgentLegacyHandler {
               instructions: titleInstructions,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            // Check for existing user messages from memory - if none, this is the first user message
-            const rememberedUserMessages = messageList.get.remembered.db().filter(m => m.role === 'user');
-            const isFirstUserMessage = rememberedUserMessages.length === 0;
-
-            if (shouldGenerate && isFirstUserMessage && userMessage) {
+            if (shouldGenerate && !threadExists && userMessage) {
               promises.push(
                 this.capabilities
                   .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)
@@ -745,6 +739,7 @@ export class AgentLegacyHandler {
     let messageList: MessageList;
     let thread: StorageThreadType | null | undefined;
     let threadExists: boolean;
+    let threadCreatedByStep = false;
 
     return {
       llm: llm as MastraLLMV1,
@@ -752,6 +747,7 @@ export class AgentLegacyHandler {
         const beforeResult = await before();
         const { messageObjects, convertedTools, agentSpan } = beforeResult;
         threadExists = beforeResult.threadExists || false;
+        threadCreatedByStep = false;
         messageList = beforeResult.messageList;
         thread = beforeResult.thread;
 
@@ -770,7 +766,7 @@ export class AgentLegacyHandler {
           requestContext,
           onStepFinish: async (props: any) => {
             if (savePerStep) {
-              if (!threadExists && memory && thread) {
+              if (!threadExists && !threadCreatedByStep && memory && thread) {
                 await memory.createThread({
                   threadId,
                   title: thread.title,
@@ -778,7 +774,7 @@ export class AgentLegacyHandler {
                   resourceId: thread.resourceId,
                   memoryConfig,
                 });
-                threadExists = true;
+                threadCreatedByStep = true;
               }
 
               await this.capabilities.saveStepMessages({
@@ -865,9 +861,14 @@ export class AgentLegacyHandler {
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedGenerateOptions as any, 'generate');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-      this.capabilities.logger.error('V2 models are not supported for generateLegacy. Please use generate instead.', {
-        modelId: llm.getModel().modelId,
-      });
+      const specVersion = llm.getModel().specificationVersion;
+      this.capabilities.logger.error(
+        `Models with specificationVersion "${specVersion}" are not supported for generateLegacy. Please use generate() instead.`,
+        {
+          modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
+        },
+      );
 
       throw new MastraError({
         id: 'AGENT_GENERATE_V2_MODEL_NOT_SUPPORTED',
@@ -875,8 +876,9 @@ export class AgentLegacyHandler {
         category: ErrorCategory.USER,
         details: {
           modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
         },
-        text: 'V2 models are not supported for generateLegacy. Please use generate instead.',
+        text: `Models with specificationVersion "${specVersion}" are not supported for generateLegacy(). Please use generate() instead.`,
       });
     }
 
@@ -1155,9 +1157,14 @@ export class AgentLegacyHandler {
     const { llm, before, after } = await this.prepareLLMOptions(messages, mergedStreamOptions as any, 'stream');
 
     if (llm.getModel().specificationVersion !== 'v1') {
-      this.capabilities.logger.error('V2 models are not supported for streamLegacy. Please use stream instead.', {
-        modelId: llm.getModel().modelId,
-      });
+      const specVersion = llm.getModel().specificationVersion;
+      this.capabilities.logger.error(
+        `Models with specificationVersion "${specVersion}" are not supported for streamLegacy. Please use stream() instead.`,
+        {
+          modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
+        },
+      );
 
       throw new MastraError({
         id: 'AGENT_STREAM_V2_MODEL_NOT_SUPPORTED',
@@ -1165,8 +1172,9 @@ export class AgentLegacyHandler {
         category: ErrorCategory.USER,
         details: {
           modelId: llm.getModel().modelId,
+          specificationVersion: specVersion,
         },
-        text: 'V2 models are not supported for streamLegacy. Please use stream instead.',
+        text: `Models with specificationVersion "${specVersion}" are not supported for streamLegacy(). Please use stream() instead.`,
       });
     }
 

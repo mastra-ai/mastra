@@ -31,12 +31,6 @@ const docsTabs = [
     href: '/reference/',
     basePath: '/reference',
   },
-  {
-    id: 'Showcase',
-    label: 'Showcase',
-    href: '/showcase',
-    basePath: '/showcase',
-  },
 ]
 
 export function MobileDocsDropdown({ className }: { className?: string }) {

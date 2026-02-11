@@ -155,6 +155,22 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       if (filter && Object.keys(filter).length > 0) {
         const whereClause = this.filterTranslator(filter);
         this.logger.debug(`Where clause generated: ${whereClause}`);
+
+        // Validate that filter columns exist in the table schema.
+        // When Memory.recall() runs before any saveMessages(), the table has no metadata columns yet.
+        // Filtering on non-existent columns would throw a LanceDB schema error.
+        const schema = await table.schema();
+        const schemaColumns = new Set(schema.fields.map((f: any) => f.name));
+        const filterColumns = this.extractFilterColumns(whereClause);
+        const missingColumns = filterColumns.filter(col => !schemaColumns.has(col));
+
+        if (missingColumns.length > 0) {
+          this.logger.debug(
+            `Filter references columns not in schema: ${missingColumns.join(', ')}. Returning empty results.`,
+          );
+          return [];
+        }
+
         query = query.where(whereClause);
       }
 
@@ -173,23 +189,19 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       const results = await query.toArray();
 
       return results.map(result => {
-        // Collect all metadata_ prefixed fields
-        const flatMetadata: Record<string, any> = {};
+        let metadata: Record<string, any> = {};
 
-        // Get all keys from the result object
-        Object.keys(result).forEach(key => {
-          // Skip reserved keys (id, score, and the vector column)
-          if (key !== 'id' && key !== 'score' && key !== 'vector' && key !== '_distance') {
-            if (key.startsWith('metadata_')) {
-              // Remove the prefix and add to flat metadata
-              const metadataKey = key.substring('metadata_'.length);
-              flatMetadata[metadataKey] = result[key];
-            }
+        if (result._metadata_json) {
+          // New data: parse the lossless JSON column
+          try {
+            metadata = JSON.parse(result._metadata_json);
+          } catch {
+            metadata = this.extractFlatMetadata(result);
           }
-        });
-
-        // Reconstruct nested metadata object
-        const metadata = this.unflattenObject(flatMetadata);
+        } else {
+          // Legacy data or empty metadata: extract flat metadata keys as-is
+          metadata = this.extractFlatMetadata(result);
+        }
 
         return {
           id: String(result.id || ''),
@@ -321,6 +333,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           Object.entries(flattenedMetadata).forEach(([key, value]) => {
             rowData[key] = value;
           });
+          // Store lossless JSON representation for round-trip fidelity
+          rowData['_metadata_json'] = JSON.stringify(metadataItem);
+        } else {
+          rowData['_metadata_json'] = '';
         }
 
         return rowData;
@@ -572,7 +588,9 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         );
 
         const initVector = new Array(dimension).fill(0);
-        table = await this.lanceClient.createTable(resolvedTableName, [{ id: '__init__', vector: initVector }]);
+        table = await this.lanceClient.createTable(resolvedTableName, [
+          { id: '__init__', vector: initVector, _metadata_json: '' },
+        ]);
         try {
           await table.delete("id = '__init__'");
         } catch (deleteError) {
@@ -985,9 +1003,24 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
 
               // Apply metadata updates if provided
               if (update.metadata) {
+                // Update flattened columns for filter compatibility
                 Object.entries(update.metadata).forEach(([key, value]) => {
                   rowData[`metadata_${key}`] = value;
                 });
+
+                // Keep _metadata_json in sync if the table has it
+                const hasMetadataJson = schema.fields.some((f: any) => f.name === '_metadata_json');
+                if (hasMetadataJson) {
+                  let existingMetadata: Record<string, any> = {};
+                  if (record._metadata_json) {
+                    try {
+                      existingMetadata = JSON.parse(record._metadata_json);
+                    } catch {
+                      // If existing JSON is corrupt, start fresh with updates only
+                    }
+                  }
+                  rowData['_metadata_json'] = JSON.stringify({ ...existingMetadata, ...update.metadata });
+                }
               }
 
               return rowData;
@@ -1097,40 +1130,29 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
   }
 
   /**
-   * Converts a flattened object with keys using underscore notation back to a nested object.
-   * Example: { name: 'test', details_text: 'test' } → { name: 'test', details: { text: 'test' } }
+   * Extracts column names referenced in a SQL WHERE clause.
+   * Identifies metadata_* prefixed identifiers used in filter conditions.
    */
-  private unflattenObject(obj: Record<string, any>): Record<string, any> {
-    const result: Record<string, any> = {};
+  private extractFilterColumns(whereClause: string): string[] {
+    // Match identifiers that look like column names (word characters, starting with metadata_)
+    const matches = whereClause.match(/metadata_\w+/g);
+    return matches ? [...new Set(matches)] : [];
+  }
 
-    Object.keys(obj).forEach(key => {
-      const value = obj[key];
-      const parts = key.split('_');
-
-      // Start with the result object
-      let current = result;
-
-      // Process all parts except the last one
-      for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        // Skip empty parts
-        if (!part) continue;
-
-        // Create nested object if it doesn't exist
-        if (!current[part] || typeof current[part] !== 'object') {
-          current[part] = {};
+  /**
+   * Extracts metadata from flattened column names (legacy data without _metadata_json).
+   * Returns keys as-is after stripping the 'metadata_' prefix, without any unflattening.
+   */
+  private extractFlatMetadata(result: Record<string, any>): Record<string, any> {
+    const metadata: Record<string, any> = {};
+    Object.keys(result).forEach(key => {
+      if (key !== 'id' && key !== 'score' && key !== 'vector' && key !== '_distance' && key !== '_metadata_json') {
+        if (key.startsWith('metadata_')) {
+          metadata[key.substring('metadata_'.length)] = result[key];
         }
-        current = current[part];
-      }
-
-      // Set the value at the last part
-      const lastPart = parts[parts.length - 1];
-      if (lastPart) {
-        current[lastPart] = value;
       }
     });
-
-    return result;
+    return metadata;
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<LanceVectorFilter>): Promise<void> {

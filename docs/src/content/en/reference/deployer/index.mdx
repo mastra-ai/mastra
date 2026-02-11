@@ -11,16 +11,16 @@ The Deployer handles the deployment of standalone Mastra applications by packagi
 
 ## Usage Example
 
+If you want to create a custom deployer, you can extend the abstract `Deployer` class and implement the `deploy` method with your specific deployment logic. Here's an example:
+
 ```typescript
 import { Deployer } from "@mastra/deployer";
 
-// Create a custom deployer by extending the abstract Deployer class
 class CustomDeployer extends Deployer {
   constructor() {
     super({ name: "custom-deployer" });
   }
 
-  // Implement the abstract deploy method
   async deploy(outputDirectory: string): Promise<void> {
     // Prepare the output directory
     await this.prepare(outputDirectory);

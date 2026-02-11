@@ -264,7 +264,7 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
 
   return `---
-title: "${provider.name} | Models | Mastra"
+title: "${provider.name} | Models"
 description: "Use ${provider.name} models with Mastra. ${modelCount} model${modelCount !== 1 ? 's' : ''} available."
 ---
 
@@ -494,7 +494,7 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
 
   return `---
-title: "${displayName} | Models | Mastra"
+title: "${displayName} | Models"
 description: "Use AI models through ${displayName}."
 ---
 

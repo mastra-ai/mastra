@@ -33,7 +33,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
   }
 
   __registerMastra(mastra: Mastra) {
-    this.mastra = mastra;
+    super.__registerMastra(mastra);
     this.eventProcessor.__registerMastra(mastra);
   }
 

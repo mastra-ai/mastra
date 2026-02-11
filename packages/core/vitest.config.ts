@@ -2,13 +2,35 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
-    typecheck: {
-      enabled: true,
-      include: ['src/**/*.test-d.ts'],
-    },
-    // Increase default timeout for tests that make real API calls to LLMs
-    testTimeout: 120000, // 2 minutes default
+    projects: [
+      {
+        test: {
+          name: 'unit:packages/core',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+          exclude: ['src/**/*.e2e.test.ts'],
+          testTimeout: 120000,
+        },
+      },
+      {
+        test: {
+          name: 'e2e:packages/core',
+          environment: 'node',
+          include: ['src/**/*.e2e.test.ts'],
+          testTimeout: 120000,
+        },
+      },
+      {
+        test: {
+          name: 'typecheck:packages/core',
+          environment: 'node',
+          include: [],
+          typecheck: {
+            enabled: true,
+            include: ['src/**/*.test-d.ts'],
+          },
+        },
+      },
+    ],
   },
 });
