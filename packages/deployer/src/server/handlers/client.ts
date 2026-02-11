@@ -1,6 +1,9 @@
 import type { Context } from 'hono';
 
 const clients = new Set<ReadableStreamDefaultController>();
+
+//short lived about 2 seconds
+let refreshRequestId: string | undefined;
 let hotReloadDisabled = false;
 
 export function handleClientsRefresh(c: Context): Response {
@@ -8,6 +11,10 @@ export function handleClientsRefresh(c: Context): Response {
     start(controller) {
       clients.add(controller);
       controller.enqueue('data: connected\n\n');
+
+      if (refreshRequestId) {
+        controller.enqueue(`data: refresh-${refreshRequestId}\n\n`);
+      }
 
       c.req.raw.signal.addEventListener('abort', () => {
         clients.delete(controller);
@@ -24,11 +31,27 @@ export function handleClientsRefresh(c: Context): Response {
     },
   });
 }
+const cleanReqId = (id: string) => {
+  setTimeout(() => {
+    if (refreshRequestId === id) {
+      refreshRequestId = undefined;
+    }
+  }, 2000);
+};
 
-export function handleTriggerClientsRefresh(c: Context) {
+export async function handleTriggerClientsRefresh(c: Context) {
+  let requestId = (await c.req.json())['refreshId'];
+
+  if (requestId) {
+    refreshRequestId = requestId;
+    cleanReqId(requestId);
+  }
+
+  let data = `data: refresh${requestId ? '-' + requestId : ''}\n\n`;
+
   clients.forEach(controller => {
     try {
-      controller.enqueue('data: refresh\n\n');
+      controller.enqueue(data);
     } catch {
       clients.delete(controller);
     }
