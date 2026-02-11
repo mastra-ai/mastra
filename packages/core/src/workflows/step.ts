@@ -8,7 +8,7 @@ import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { OutputWriter, StepResult, StepMetadata } from './types';
-import type { AnyWorkflow } from './workflow';
+import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
@@ -41,7 +41,7 @@ export type ExecuteFunctionParams<
   suspendData?: TSuspend;
   retryCount: number;
   tracingContext: TracingContext;
-  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any>
+  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any, any>
     ? InferStandardSchemaOutput<T['inputSchema']>
     : T;
   getStepResult<TOutput>(step: string): TOutput;
