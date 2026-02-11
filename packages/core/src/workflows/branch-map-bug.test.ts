@@ -3,10 +3,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { createStep, createWorkflow } from './workflow';
 
-vi.mock('crypto', () => {
-  return {
-    randomUUID: vi.fn(() => 'mock-uuid-1'),
-  };
+vi.mock('crypto', async importOriginal => {
+  const actual: any = await importOriginal();
+  return { ...actual, randomUUID: vi.fn(() => 'mock-uuid-1') };
 });
 
 describe('Branch with Map Bug - Issue #10407', () => {

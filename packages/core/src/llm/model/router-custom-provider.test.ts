@@ -3,10 +3,9 @@ import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
 
 // Mock the @ai-sdk/openai-compatible-v5 module BEFORE importing it
-vi.mock('@ai-sdk/openai-compatible-v5', async () => {
-  return {
-    createOpenAICompatible: vi.fn(),
-  };
+vi.mock('@ai-sdk/openai-compatible-v5', async importOriginal => {
+  const actual: any = await importOriginal();
+  return { ...actual, createOpenAICompatible: vi.fn() };
 });
 
 // Now import the mocked module

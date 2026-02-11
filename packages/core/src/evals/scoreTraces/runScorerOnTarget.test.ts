@@ -5,9 +5,10 @@ import { SpanType } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import type { MastraScorer } from '../base';
 
-vi.mock('./utils', () => ({
-  transformTraceToScorerInputAndOutput: vi.fn(() => ({ input: 'test', output: 'test' })),
-}));
+vi.mock('./utils', async importOriginal => {
+  const actual: any = await importOriginal();
+  return { ...actual, transformTraceToScorerInputAndOutput: vi.fn(() => ({ input: 'test', output: 'test' })) };
+});
 
 import { runScorerOnTarget } from './scoreTracesWorkflow';
 
