@@ -1,0 +1,4 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["file:///Users/abhiramaiyer/.superset/worktrees/mastra/om-opencode/integrations/opencode"]
+}

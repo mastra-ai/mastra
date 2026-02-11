@@ -438,6 +438,30 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
 } as const;
 
 /**
+ * Continuation hint injected after observations to guide the model's behavior.
+ * Prevents the model from awkwardly acknowledging the memory system or treating
+ * the conversation as new after observed messages are removed.
+ */
+export const OBSERVATION_CONTINUATION_HINT = `This message is not from the user, the conversation history grew too long and wouldn't fit in context! Thankfully the entire conversation is stored in your memory observations. Please continue from where the observations left off. Do not refer to your "memory observations" directly, the user doesn't know about them, they are your memories! Just respond naturally as if you're remembering the conversation (you are!). Do not say "Hi there!" or "based on our previous conversation" as if the conversation is just starting, this is not a new conversation. This is an ongoing conversation, keep continuity by responding based on your memory. For example do not say "I understand. I've reviewed my memory observations", or "I remember [...]". Answer naturally following the suggestion from your memory. Note that your memory may contain a suggested first response, which you should follow.
+
+IMPORTANT: this system reminder is NOT from the user. The system placed it here as part of your memory system. This message is part of you remembering your conversation with the user.
+
+NOTE: Any messages following this system reminder are newer than your memories.`;
+
+/**
+ * Framing prompt that wraps observations before injection into context.
+ * Instructs the model how to interpret and use the observations.
+ * Use with template literal: `${OBSERVATION_CONTEXT_PROMPT}\n\n${observations}`
+ */
+export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.
+
+IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
+
+KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
+
+PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.`;
+
+/**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
  * This processor:
@@ -476,6 +500,13 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
  * });
  * ```
  */
+export interface ObserveHooks {
+  onObservationStart?: () => void;
+  onObservationEnd?: () => void;
+  onReflectionStart?: () => void;
+  onReflectionEnd?: () => void;
+}
+
 export class ObservationalMemory implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
   readonly name = 'Observational Memory';
@@ -794,6 +825,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Check whether the unobserved message tokens meet the observation threshold.
+   */
+  private meetsObservationThreshold(opts: {
+    record: ObservationalMemoryRecord;
+    unobservedTokens: number;
+    extraTokens?: number;
+  }): boolean {
+    const { record, unobservedTokens, extraTokens = 0 } = opts;
+    const pendingTokens = (record.pendingMessageTokens ?? 0) + unobservedTokens + extraTokens;
+    const currentObservationTokens = record.observationTokenCount ?? 0;
+    const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    return pendingTokens >= threshold;
+  }
+
+  /**
    * Get or create the Observer agent
    */
   private getObserverAgent(): Agent {
@@ -844,9 +890,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Get or create the observational memory record
+   * Get or create the observational memory record.
+   * Returns the existing record if one exists, otherwise initializes a new one.
    */
-  private async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
+  async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
     const ids = this.getStorageIds(threadId, resourceId);
     let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
 
@@ -1489,17 +1536,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     let content = `
-The following observations block contains your memory of past conversations with this user.
+${OBSERVATION_CONTEXT_PROMPT}
 
 <observations>
 ${optimized}
-</observations>
-
-IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
-
-KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
-
-PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.`;
+</observations>`;
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -1726,15 +1767,18 @@ ${suggestedResponse}
           // may have already observed, advancing lastObservedAt and reducing the
           // other-threads token count. Without this check, both threads would observe
           // redundantly.
-          const freshCurrentTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
-          const freshPending = freshRecord.pendingMessageTokens ?? 0;
           let freshOtherThreadTokens = 0;
           if (this.scope === 'resource' && resourceId) {
             const freshOtherContext = await this.loadOtherThreadsContext(resourceId, threadId);
             freshOtherThreadTokens = freshOtherContext ? this.tokenCounter.countString(freshOtherContext) : 0;
           }
-          const freshTotal = freshPending + freshCurrentTokens + freshOtherThreadTokens;
-          if (freshTotal < threshold) {
+          if (
+            !this.meetsObservationThreshold({
+              record: freshRecord,
+              unobservedTokens: this.tokenCounter.countMessages(freshUnobservedMessages),
+              extraTokens: freshOtherThreadTokens,
+            })
+          ) {
             return;
           }
 
@@ -1746,22 +1790,22 @@ ${suggestedResponse}
           if (freshUnobservedMessages.length > 0) {
             try {
               if (this.scope === 'resource' && resourceId) {
-                await this.doResourceScopedObservation(
-                  freshRecord,
-                  threadId,
+                await this.doResourceScopedObservation({
+                  record: freshRecord,
+                  currentThreadId: threadId,
                   resourceId,
-                  freshUnobservedMessages,
+                  currentThreadMessages: freshUnobservedMessages,
                   writer,
                   abortSignal,
-                );
+                });
               } else {
-                await this.doSynchronousObservation(
-                  freshRecord,
+                await this.doSynchronousObservation({
+                  record: freshRecord,
                   threadId,
-                  freshUnobservedMessages,
+                  unobservedMessages: freshUnobservedMessages,
                   writer,
                   abortSignal,
-                );
+                });
               }
               // Check if observation actually updated lastObservedAt
               const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
@@ -1917,12 +1961,7 @@ ${suggestedResponse}
           parts: [
             {
               type: 'text',
-              text: `<system-reminder>This message is not from the user, the conversation history grew too long and wouldn't fit in context! Thankfully the entire conversation is stored in your memory observations. Please continue from where the observations left off. Do not refer to your "memory observations" directly, the user doesn't know about them, they are your memories! Just respond naturally as if you're remembering the conversation (you are!). Do not say "Hi there!" or "based on our previous conversation" as if the conversation is just starting, this is not a new conversation. This is an ongoing conversation, keep continuity by responding based on your memory. For example do not say "I understand. I've reviewed my memory observations", or "I remember [...]". Answer naturally following the suggestion from your memory. Note that your memory may contain a suggested first response, which you should follow.
-
-IMPORTANT: this system reminder is NOT from the user. The system placed it here as part of your memory system. This message is part of you remembering your conversation with the user.
-
-NOTE: Any messages following this system reminder are newer than your memories.
-</system-reminder>`,
+              text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`,
             },
           ],
         },
@@ -2319,13 +2358,15 @@ ${formattedMessages}
   /**
    * Do synchronous observation (fallback when no buffering)
    */
-  private async doSynchronousObservation(
-    record: ObservationalMemoryRecord,
-    threadId: string,
-    unobservedMessages: MastraDBMessage[],
-    writer?: ProcessorStreamWriter,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
+  private async doSynchronousObservation(opts: {
+    record: ObservationalMemoryRecord;
+    threadId: string;
+    unobservedMessages: MastraDBMessage[];
+    writer?: ProcessorStreamWriter;
+    abortSignal?: AbortSignal;
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  }): Promise<void> {
+    const { record, threadId, unobservedMessages, writer, abortSignal, reflectionHooks } = opts;
     // Emit debug event for observation triggered
     this.emitDebugEvent({
       type: 'observation_triggered',
@@ -2485,13 +2526,14 @@ ${formattedMessages}
       });
 
       // Check for reflection
-      await this.maybeReflect(
-        { ...record, activeObservations: newObservations },
-        totalTokenCount,
+      await this.maybeReflect({
+        record: { ...record, activeObservations: newObservations },
+        observationTokens: totalTokenCount,
         threadId,
         writer,
         abortSignal,
-      );
+        reflectionHooks,
+      });
     } catch (error) {
       // Insert FAILED marker on error
       if (lastMessage?.id) {
@@ -2536,14 +2578,16 @@ ${formattedMessages}
    * 3. Only updates lastObservedAt AFTER all threads are observed
    * 4. Only triggers reflection AFTER all threads are observed
    */
-  private async doResourceScopedObservation(
-    record: ObservationalMemoryRecord,
-    currentThreadId: string,
-    resourceId: string,
-    currentThreadMessages: MastraDBMessage[],
-    writer?: ProcessorStreamWriter,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
+  private async doResourceScopedObservation(opts: {
+    record: ObservationalMemoryRecord;
+    currentThreadId: string;
+    resourceId: string;
+    currentThreadMessages: MastraDBMessage[];
+    writer?: ProcessorStreamWriter;
+    abortSignal?: AbortSignal;
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  }): Promise<void> {
+    const { record, currentThreadId, resourceId, currentThreadMessages, writer, abortSignal, reflectionHooks } = opts;
     // Clear debug entries at start of observation cycle
 
     // ════════════════════════════════════════════════════════════
@@ -2974,13 +3018,14 @@ ${formattedMessages}
       }
 
       // Check for reflection AFTER all threads are observed
-      await this.maybeReflect(
-        { ...record, activeObservations: currentObservations },
-        totalTokenCount,
-        currentThreadId,
+      await this.maybeReflect({
+        record: { ...record, activeObservations: currentObservations },
+        observationTokens: totalTokenCount,
+        threadId: currentThreadId,
         writer,
         abortSignal,
-      );
+        reflectionHooks,
+      });
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
       for (const [threadId, msgs] of threadsWithMessages) {
@@ -3022,13 +3067,15 @@ ${formattedMessages}
    * Check if reflection needed and trigger if so.
    * SIMPLIFIED: Always uses synchronous reflection (async buffering disabled).
    */
-  private async maybeReflect(
-    record: ObservationalMemoryRecord,
-    observationTokens: number,
-    _threadId?: string,
-    writer?: ProcessorStreamWriter,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
+  private async maybeReflect(opts: {
+    record: ObservationalMemoryRecord;
+    observationTokens: number;
+    threadId?: string;
+    writer?: ProcessorStreamWriter;
+    abortSignal?: AbortSignal;
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  }): Promise<void> {
+    const { record, observationTokens, writer, abortSignal, reflectionHooks } = opts;
     if (!this.shouldReflect(observationTokens)) {
       return;
     }
@@ -3045,12 +3092,13 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     // SYNC PATH: Do synchronous reflection (blocking)
     // ════════════════════════════════════════════════════════════
+    reflectionHooks?.onReflectionStart?.();
     await this.storage.setReflectingFlag(record.id, true);
 
     // Generate unique cycle ID for this reflection
     const cycleId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    const threadId = _threadId ?? 'unknown';
+    const threadId = opts.threadId ?? 'unknown';
 
     // Stream START marker for reflection
     if (writer) {
@@ -3150,40 +3198,81 @@ ${formattedMessages}
       console.error(`[OM] Reflection failed:`, error instanceof Error ? error.message : String(error));
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
+      reflectionHooks?.onReflectionEnd?.();
     }
   }
 
   /**
    * Manually trigger observation.
+   *
+   * When `messages` is provided, those are used directly (filtered for unobserved)
+   * instead of reading from storage. This allows external systems (e.g., opencode)
+   * to pass conversation messages without duplicating them into Mastra's DB.
    */
-  async observe(threadId: string, resourceId?: string, _prompt?: string): Promise<void> {
+  async observe(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages?: MastraDBMessage[];
+    hooks?: ObserveHooks;
+  }): Promise<void> {
+    const { threadId, resourceId, messages, hooks } = opts;
     const lockKey = this.getLockKey(threadId, resourceId);
+    const reflectionHooks = hooks
+      ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
+      : undefined;
 
     await this.withLock(lockKey, async () => {
       // Re-fetch record inside lock to get latest state
       const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
 
       if (this.scope === 'resource' && resourceId) {
-        // Resource scope: observe all threads with unobserved messages
-        await this.doResourceScopedObservation(
-          freshRecord,
-          threadId,
+        // Resource scope: check threshold before observing
+        const currentMessages = messages ?? [];
+        if (
+          !this.meetsObservationThreshold({
+            record: freshRecord,
+            unobservedTokens: this.tokenCounter.countMessages(currentMessages),
+          })
+        ) {
+          return;
+        }
+
+        hooks?.onObservationStart?.();
+        await this.doResourceScopedObservation({
+          record: freshRecord,
+          currentThreadId: threadId,
           resourceId,
-          [], // no in-flight messages — everything is already in the DB
-        );
+          currentThreadMessages: currentMessages,
+          reflectionHooks,
+        });
+        hooks?.onObservationEnd?.();
       } else {
-        // Thread scope: observe unobserved messages for this thread
-        const unobservedMessages = await this.loadUnobservedMessages(
-          threadId,
-          resourceId,
-          freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
-        );
+        // Thread scope: use provided messages or load from storage
+        const unobservedMessages = messages
+          ? this.getUnobservedMessages(messages, freshRecord)
+          : await this.loadUnobservedMessages(
+              threadId,
+              resourceId,
+              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+            );
 
         if (unobservedMessages.length === 0) {
           return;
         }
 
-        await this.doSynchronousObservation(freshRecord, threadId, unobservedMessages);
+        // Check token threshold before observing
+        if (
+          !this.meetsObservationThreshold({
+            record: freshRecord,
+            unobservedTokens: this.tokenCounter.countMessages(unobservedMessages),
+          })
+        ) {
+          return;
+        }
+
+        hooks?.onObservationStart?.();
+        await this.doSynchronousObservation({ record: freshRecord, threadId, unobservedMessages, reflectionHooks });
+        hooks?.onObservationEnd?.();
       }
     });
   }
