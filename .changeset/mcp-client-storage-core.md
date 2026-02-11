@@ -32,13 +32,13 @@ New `ToolProvider` interface at `@mastra/core/tool-provider` enables third-party
 ```ts
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
-// Providers implement: listToolkits(), listTools(), getToolSchema(), getTools()
+# Providers implement: listToolkits(), listTools(), getToolSchema(), resolveTools()
 ```
 
-`getTools()` receives `requestContext` from the current request, enabling per-user API keys and credentials in multi-tenant setups:
+`resolveTools()` receives `requestContext` from the current request, enabling per-user API keys and credentials in multi-tenant setups:
 
 ```ts
-const tools = await provider.getTools(slugs, configs, {
+const tools = await provider.resolveTools(slugs, configs, {
   requestContext: { apiKey: 'user-specific-key', userId: 'tenant-123' },
 });
 ```
