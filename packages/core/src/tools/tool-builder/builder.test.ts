@@ -1175,6 +1175,33 @@ describe('CoreToolBuilder inputExamples', () => {
     expect((builtTool as any).inputExamples).toBeUndefined();
   });
 
+  it('should pass through inputExamples for provider-defined tools', () => {
+    const providerTool = {
+      type: 'provider-defined' as const,
+      id: 'provider.example-tool',
+      description: 'A provider-defined tool with input examples',
+      parameters: z.object({ query: z.string() }),
+      inputExamples: [{ input: { query: 'test query' } }],
+      execute: async (args: any) => ({ result: args.query }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: providerTool as any,
+      options: {
+        name: 'provider.example-tool',
+        logger: console as any,
+        description: 'A provider-defined tool with input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.type).toBe('provider-defined');
+    expect((builtTool as any).inputExamples).toEqual([{ input: { query: 'test query' } }]);
+  });
+
   it('should handle Vercel tools with inputExamples', () => {
     const vercelToolWithExamples = {
       description: 'A Vercel tool with input examples',
