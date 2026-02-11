@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { Database, ScaleIcon, ArrowLeft, FileCodeIcon, HistoryIcon } from 'lucide-react';
 import { format } from 'date-fns';
@@ -14,6 +15,7 @@ import {
   TextAndIcon,
   useDataset,
   useDatasetItemVersion,
+  useDatasetItemVersions,
   DatasetItemContent,
   useLinkComponent,
   Columns,
@@ -21,15 +23,50 @@ import {
   type DatasetItemVersion,
 } from '@mastra/playground-ui';
 
+/**
+ * Resolve dataset version timestamps to item version numbers.
+ * Used when navigating from the dataset versions compare page (dvs param).
+ */
+function useResolveDatasetVersions(datasetId: string, itemId: string, datasetVersionTimestamps: string[]) {
+  const { data: allVersions } = useDatasetItemVersions(datasetId, itemId);
+
+  return useMemo(() => {
+    if (!allVersions || datasetVersionTimestamps.length === 0) return [];
+
+    return datasetVersionTimestamps
+      .map(ts => {
+        const tsTime = new Date(ts).getTime();
+        const match = allVersions.find(v => {
+          const vTime =
+            typeof v.datasetVersion === 'string' ? new Date(v.datasetVersion).getTime() : v.datasetVersion.getTime();
+          return vTime === tsTime;
+        });
+        return match?.versionNumber ?? 0;
+      })
+      .filter(n => n > 0);
+  }, [allVersions, datasetVersionTimestamps]);
+}
+
 function DatasetCompareVersions() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
   const [searchParams] = useSearchParams();
-  const versionNumbers =
+
+  // Support two URL formats:
+  // ?ids=2,1 — direct version numbers (from item versions panel)
+  // ?dvs=ts1,ts2 — dataset version timestamps (from dataset versions compare page)
+  const directVersionNumbers =
     searchParams
       .get('ids')
       ?.split(',')
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
+
+  const datasetVersionTimestamps = searchParams.get('dvs')?.split(',').map(decodeURIComponent).filter(Boolean) ?? [];
+
+  const resolvedVersionNumbers = useResolveDatasetVersions(datasetId ?? '', itemId ?? '', datasetVersionTimestamps);
+
+  const versionNumbers = directVersionNumbers.length > 0 ? directVersionNumbers : resolvedVersionNumbers;
+
   const { data: dataset } = useDataset(datasetId ?? '');
   const { Link: FrameworkLink } = useLinkComponent();
 

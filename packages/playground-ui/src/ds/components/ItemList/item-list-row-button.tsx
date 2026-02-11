@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
-import { getColumnTemplate } from './shared';
-import { type Column } from './types';
+import { getItemListColumnTemplate } from './shared';
+import { type ItemListColumn } from './types';
 import { transitions } from '@/ds/primitives/transitions';
 import { focusRing } from '@/ds/primitives/transitions';
 
@@ -9,8 +9,9 @@ export type ItemListRowButtonProps = {
   isSelected?: boolean;
   children?: React.ReactNode;
   onClick?: (itemId: string) => void;
-  columns?: Column[];
+  columns?: ItemListColumn[];
   className?: string;
+  disabled?: boolean;
 };
 
 export function ItemListRowButton({
@@ -20,6 +21,7 @@ export function ItemListRowButton({
   children,
   columns,
   className,
+  disabled,
 }: ItemListRowButtonProps) {
   const handleClick = () => {
     onClick?.(entry?.id);
@@ -34,12 +36,12 @@ export function ItemListRowButton({
         focusRing.visible,
         {
           // hover effect only not for skeleton and selected
-          'hover:bg-surface4': entry && !isSelected,
+          'hover:bg-surface4': entry && !isSelected && !disabled,
         },
         className,
       )}
-      style={{ gridTemplateColumns: getColumnTemplate(columns) }}
-      disabled={!entry}
+      style={{ gridTemplateColumns: getItemListColumnTemplate(columns) }}
+      disabled={disabled}
     >
       {children}
     </button>

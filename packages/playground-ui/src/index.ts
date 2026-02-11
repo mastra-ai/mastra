@@ -82,6 +82,7 @@ export * from './lib/rule-engine';
 // DS Components - New
 export * from './ds/components/ListAndDetails';
 export * from './ds/components/Columns';
+export * from './ds/components/ItemList';
 
 // Form utilities (AutoForm)
 export * from './lib/form';

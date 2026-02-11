@@ -136,6 +136,11 @@ export function DatasetPageContent({
     navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
   };
 
+  // Handler for Compare Versions action from versions panel
+  const handleCompareVersionsClick = (versionTimestamps: string[]) => {
+    navigate(`/datasets/${datasetId}/versions?ids=${versionTimestamps.map(encodeURIComponent).join(',')}`);
+  };
+
   // Handler for bulk delete action from selection
   const handleBulkDeleteClick = (itemIds: string[]) => {
     setItemIdsToDelete(itemIds);
@@ -227,6 +232,7 @@ export function DatasetPageContent({
                     activeDatasetVersion={activeDatasetVersion}
                     currentDatasetVersion={dataset?.version}
                     onVersionSelect={handleVersionSelect}
+                    onCompareVersionsClick={handleCompareVersionsClick}
                   />
                 </TabContent>
 

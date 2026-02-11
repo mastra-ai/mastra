@@ -54,6 +54,7 @@ export interface DatasetItemsProps {
   activeDatasetVersion?: Date | string | null;
   currentDatasetVersion?: Date | string;
   onVersionSelect?: (version: DatasetVersion) => void;
+  onCompareVersionsClick?: (versionTimestamps: string[]) => void;
 }
 
 /**
@@ -85,6 +86,7 @@ export function DatasetItems({
   activeDatasetVersion,
   currentDatasetVersion,
   onVersionSelect,
+  onCompareVersionsClick,
 }: DatasetItemsProps) {
   const [isVersionsPanelOpen, setIsVersionsPanelOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
@@ -254,6 +256,7 @@ export function DatasetItems({
           datasetId={datasetId}
           onClose={handleVersionsPanelClose}
           onVersionSelect={onVersionSelect}
+          onCompareVersionsClick={onCompareVersionsClick}
           activeVersion={activeDatasetVersion}
         />
       )}

@@ -1,5 +1,4 @@
 import { cn } from '@/lib/utils';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 export type ItemListTextCellProps = {
   children: React.ReactNode;
