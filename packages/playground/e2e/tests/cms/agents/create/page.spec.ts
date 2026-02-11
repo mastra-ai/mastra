@@ -48,7 +48,7 @@ async function fillIdentityFields(
 async function fillInstructionBlock(page: Page, content: string, blockIndex = 0) {
   const editor = page.locator('.cm-content').nth(blockIndex);
   await editor.click();
-  await page.keyboard.press('Meta+a');
+  await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.type(content);
 }
 
@@ -134,7 +134,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
     // Fill the CodeMirror JSON editor
     const editor = page.locator('.cm-content');
     await editor.click();
-    await page.keyboard.press('Meta+a');
+    await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type(JSON.stringify(context));
 
     // Save the request context
