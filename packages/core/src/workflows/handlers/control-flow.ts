@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import fastq from 'fastq';
+import type { done as DoneCallback } from 'fastq';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { PubSub } from '../../events/pubsub';
@@ -856,141 +858,247 @@ export async function executeForeach(
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, step.id);
 
-  for (let i = 0; i < prevOutput.length; i += concurrency) {
-    const items = prevOutput.slice(i, i + concurrency);
-    const itemsResults = await Promise.all(
-      items.map(async (item: any, j: number) => {
-        const k = i + j;
-        const prevItemResult = prevForeachOutput[k];
-        if (
-          prevItemResult?.status === 'success' ||
-          (prevItemResult?.status === 'suspended' && resume?.forEachIndex !== k && resume?.forEachIndex !== undefined)
-        ) {
-          return prevItemResult;
-        }
-        let resumeToUse = undefined;
-        if (resume?.forEachIndex !== undefined) {
-          resumeToUse = resume.forEachIndex === k ? resume : undefined;
-        } else {
-          const isIndexSuspended = prevItemResult?.status === 'suspended' || resumeIndex === k;
-          if (isIndexSuspended) {
-            resumeToUse = resume;
-          }
-        }
+  // Use a fastq callback-based queue for fluid concurrency.
+  // Unlike the previous batch approach (Promise.all on slices), this starts the
+  // next item as soon as any slot frees up, keeping `concurrency` items running
+  // at all times instead of waiting for an entire batch to finish.
+  type ForeachTask = { item: any; k: number; resumeToUse: typeof resume };
+  let errorResult: StepResult<any, any, any, any> | null = null;
+  let inFlight = 0;
+  let resolveCompletion: (() => void) | undefined;
 
-        const stepExecResult = await engine.executeStep({
-          workflowId,
-          runId,
-          resourceId,
-          step,
-          stepResults,
-          restart,
-          timeTravel,
-          executionContext: { ...executionContext, foreachIndex: k },
-          resume: resumeToUse,
-          prevOutput: item,
-          tracingContext: { currentSpan: loopSpan },
-          pubsub,
-          abortController,
-          requestContext,
-          skipEmits: true,
-          outputWriter,
-          disableScorers,
-          serializedStepGraph,
-          perStep,
-        });
+  const worker = async (task: ForeachTask, cb: DoneCallback) => {
+    const { item, k, resumeToUse } = task;
 
-        // Apply context changes from foreach step execution
-        engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-        Object.assign(stepResults, stepExecResult.stepResults);
-        return stepExecResult.result;
-      }),
-    );
+    try {
+      const stepExecResult = await engine.executeStep({
+        workflowId,
+        runId,
+        resourceId,
+        step,
+        stepResults,
+        restart,
+        timeTravel,
+        executionContext: { ...executionContext, foreachIndex: k },
+        resume: resumeToUse,
+        prevOutput: item,
+        tracingContext: { currentSpan: loopSpan },
+        pubsub,
+        abortController,
+        requestContext,
+        skipEmits: true,
+        outputWriter,
+        disableScorers,
+        serializedStepGraph,
+        perStep,
+      });
 
-    for (const [resultIndex, result] of itemsResults.entries()) {
+      // Apply context changes from foreach step execution
+      engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
+      Object.assign(stepResults, stepExecResult.stepResults);
+
+      const result = stepExecResult.result;
+
       if (result.status !== 'success') {
-        const { status, error, suspendPayload, suspendedAt, endedAt, output } = result;
-        const execResults = { status, error, suspendPayload, suspendedAt, endedAt, output };
+        const resultAny = result as any;
+        const execResults = {
+          status: resultAny.status,
+          error: resultAny.error,
+          suspendPayload: resultAny.suspendPayload,
+          suspendedAt: resultAny.suspendedAt,
+          endedAt: resultAny.endedAt,
+          output: resultAny.output,
+        };
 
         if (execResults.status === 'suspended') {
-          foreachIndexObj[i + resultIndex] = execResults;
+          // Guard: only record if not already set by a concurrent worker
+          if (!foreachIndexObj[k]) {
+            foreachIndexObj[k] = execResults;
+          }
         } else {
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: {
-              type: 'workflow-step-result',
-              payload: {
-                id: step.id,
-                ...execResults,
-              },
-            },
-          });
-
-          await pubsub.publish(`workflow.events.v2.${runId}`, {
-            type: 'watch',
-            runId,
-            data: {
-              type: 'workflow-step-finish',
-              payload: {
-                id: step.id,
-                metadata: {},
-              },
-            },
-          });
-
-          return result;
+          // Guard: preserve the first observed failure across concurrent workers
+          if (!errorResult) {
+            errorResult = result;
+          }
         }
+        // Remove all waiting tasks; in-flight ones will finish naturally.
+        // Subtract waiting tasks from inFlight since they'll never call cb().
+        inFlight -= queue.length();
+        queue.kill();
       } else {
-        const indexResumeLabel = Object.keys(resumeLabels).find(
-          key => resumeLabels[key]?.foreachIndex === i + resultIndex,
-        )!;
+        const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k)!;
         delete resumeLabels[indexResumeLabel];
       }
 
-      if (result?.output) {
-        results[i + resultIndex] = result?.output;
+      if ((result as any)?.output) {
+        results[k] = (result as any)?.output;
       }
 
-      prevForeachOutput[i + resultIndex] = { ...result, suspendPayload: {} };
+      prevForeachOutput[k] = { ...result, suspendPayload: {} } as any;
+    } catch (err) {
+      // Surface unexpected errors (e.g. from applyMutableContext or Object.assign)
+      // so the queue drains with a visible failure instead of silently swallowing.
+      if (!errorResult) {
+        const errorObj = err instanceof Error ? err : new Error(String(err));
+        errorResult = {
+          status: 'failed',
+          error: errorObj,
+          payload: undefined,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>;
+      }
+      inFlight -= queue.length();
+      queue.kill();
     }
 
-    if (Object.keys(foreachIndexObj).length > 0) {
-      const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
-      const foreachIndex = suspendedIndices[0]!;
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-suspended',
-          payload: {
-            id: step.id,
-            ...foreachIndexObj[foreachIndex],
-          },
-        },
-      });
+    inFlight--;
+    cb(null);
+    if (inFlight === 0) resolveCompletion?.();
+  };
 
-      executionContext.suspendedPaths[step.id] = executionContext.executionPath;
-      executionContext.resumeLabels = { ...resumeLabels, ...executionContext.resumeLabels };
+  const queue = fastq(worker, concurrency);
 
-      return {
-        ...stepInfo,
-        suspendedAt: Date.now(),
-        status: 'suspended',
-        ...(foreachIndexObj[foreachIndex].suspendOutput
-          ? { suspendOutput: foreachIndexObj[foreachIndex].suspendOutput }
-          : {}),
-        suspendPayload: {
-          ...foreachIndexObj[foreachIndex].suspendPayload,
-          __workflow_meta: {
-            ...foreachIndexObj[foreachIndex].suspendPayload?.__workflow_meta,
-            foreachIndex,
-            foreachOutput: prevForeachOutput,
-            resumeLabels: executionContext.resumeLabels,
-          },
-        },
-      } as StepSuspended<any, any, any>;
+  // Enqueue all items, skipping already-completed ones (resume case)
+  for (let k = 0; k < prevOutput.length; k++) {
+    const prevItemResult = prevForeachOutput[k];
+    if (
+      prevItemResult?.status === 'success' ||
+      (prevItemResult?.status === 'suspended' && resume?.forEachIndex !== k && resume?.forEachIndex !== undefined)
+    ) {
+      if (prevItemResult?.status === 'success') {
+        // Already succeeded in a previous run – clean up resume label
+        const indexResumeLabel = Object.keys(resumeLabels).find(key => resumeLabels[key]?.foreachIndex === k)!;
+        delete resumeLabels[indexResumeLabel];
+      } else {
+        // Still suspended from a previous run – track it for the suspend result
+        const prevAny = prevItemResult as any;
+        foreachIndexObj[k] = {
+          status: prevAny.status,
+          error: prevAny.error,
+          suspendPayload: prevAny.suspendPayload,
+          suspendedAt: prevAny.suspendedAt,
+          endedAt: prevAny.endedAt,
+          output: prevAny.output,
+        };
+      }
+
+      if ((prevItemResult as any)?.output) {
+        results[k] = (prevItemResult as any)?.output;
+      }
+      prevForeachOutput[k] = { ...prevItemResult, suspendPayload: {} } as any;
+      continue;
     }
+
+    let resumeToUse = undefined;
+    if (resume?.forEachIndex !== undefined) {
+      resumeToUse = resume.forEachIndex === k ? resume : undefined;
+    } else {
+      const isIndexSuspended = prevItemResult?.status === 'suspended' || resumeIndex === k;
+      if (isIndexSuspended) {
+        resumeToUse = resume;
+      }
+    }
+
+    inFlight++;
+    queue.push({ item: prevOutput[k]!, k, resumeToUse });
+  }
+
+  // Wait for all in-flight items to complete
+  if (inFlight > 0) {
+    await new Promise<void>(resolve => {
+      resolveCompletion = resolve;
+    });
+  }
+
+  // Handle error result first (matches previous behavior of returning on first error)
+  if (errorResult) {
+    const errorAny = errorResult as any;
+    const execResults = {
+      status: errorAny.status,
+      error: errorAny.error,
+      suspendPayload: errorAny.suspendPayload,
+      suspendedAt: errorAny.suspendedAt,
+      endedAt: errorAny.endedAt,
+      output: errorAny.output,
+    };
+
+    await engine.errorChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.error`,
+      errorOptions: { error: errorAny.error },
+    });
+
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-result',
+        payload: {
+          id: step.id,
+          ...execResults,
+        },
+      },
+    });
+
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      },
+    });
+
+    return errorResult;
+  }
+
+  // Handle suspended items
+  if (Object.keys(foreachIndexObj).length > 0) {
+    const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
+    const foreachIndex = suspendedIndices[0]!;
+
+    await engine.endChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.end`,
+      endOptions: { output: foreachIndexObj[foreachIndex] },
+    });
+
+    await pubsub.publish(`workflow.events.v2.${runId}`, {
+      type: 'watch',
+      runId,
+      data: {
+        type: 'workflow-step-suspended',
+        payload: {
+          id: step.id,
+          ...foreachIndexObj[foreachIndex],
+        },
+      },
+    });
+
+    executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+    executionContext.resumeLabels = { ...resumeLabels, ...executionContext.resumeLabels };
+
+    return {
+      ...stepInfo,
+      suspendedAt: Date.now(),
+      status: 'suspended',
+      ...(foreachIndexObj[foreachIndex].suspendOutput
+        ? { suspendOutput: foreachIndexObj[foreachIndex].suspendOutput }
+        : {}),
+      suspendPayload: {
+        ...foreachIndexObj[foreachIndex].suspendPayload,
+        __workflow_meta: {
+          ...foreachIndexObj[foreachIndex].suspendPayload?.__workflow_meta,
+          foreachIndex,
+          foreachOutput: prevForeachOutput,
+          resumeLabels: executionContext.resumeLabels,
+        },
+      },
+    } as StepSuspended<any, any, any>;
   }
 
   await pubsub.publish(`workflow.events.v2.${runId}`, {
