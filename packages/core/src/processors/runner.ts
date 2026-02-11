@@ -358,6 +358,7 @@ export class ProcessorRunner {
     requestContext?: RequestContext,
     messageList?: MessageList,
     retryCount: number = 0,
+    writer?: ProcessorStreamWriter,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -454,6 +455,7 @@ export class ProcessorRunner {
               requestContext,
               messageList,
               retryCount,
+              writer,
             });
 
             // Track output chunk and update processedPart
@@ -507,11 +509,17 @@ export class ProcessorRunner {
   async runOutputProcessorsForStream<OUTPUT = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
+    writer?: ProcessorStreamWriter,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
         const reader = streamResult.fullStream.getReader();
         const processorStates = new Map<string, ProcessorState<OUTPUT>>();
+
+        // Use provided writer, or create one from the controller
+        const streamWriter = writer ?? {
+          custom: async (data: { type: string }) => controller.enqueue(data),
+        };
 
         try {
           while (true) {
@@ -529,7 +537,7 @@ export class ProcessorRunner {
               reason,
               tripwireOptions,
               processorId,
-            } = await this.processPart(value, processorStates, tracingContext);
+            } = await this.processPart(value, processorStates, tracingContext, undefined, undefined, 0, streamWriter);
 
             if (blocked) {
               // Log that part was blocked

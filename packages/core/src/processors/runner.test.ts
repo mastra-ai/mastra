@@ -1810,4 +1810,71 @@ describe('ProcessorRunner', () => {
       expect(allMessages[1].role).toBe('assistant');
     });
   });
+
+  describe('writer availability in output processors', () => {
+    it('should pass writer to processOutputResult when provided', async () => {
+      let receivedWriter: unknown = 'NOT_CALLED';
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'writer-test',
+          name: 'Writer Test',
+          processOutputResult: async ({ messages, writer }) => {
+            receivedWriter = writer;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('response', 'assistant')], 'response');
+
+      const mockWriter = { custom: vi.fn() };
+      await runner.runOutputProcessors(messageList, undefined, undefined, 0, mockWriter);
+
+      expect(receivedWriter).toBe(mockWriter);
+    });
+
+    it('should pass writer to processOutputStream when provided', async () => {
+      let receivedWriter: unknown = 'NOT_CALLED';
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'writer-test',
+          name: 'Writer Test',
+          processOutputStream: async ({ part, writer }) => {
+            receivedWriter = writer;
+            return part;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const processorStates = new Map();
+      const mockWriter = { custom: vi.fn() };
+      await runner.processPart(
+        { type: 'text-delta', payload: { text: 'hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        processorStates,
+        undefined,
+        undefined,
+        undefined,
+        0,
+        mockWriter,
+      );
+
+      expect(receivedWriter).toBe(mockWriter);
+    });
+  });
 });
