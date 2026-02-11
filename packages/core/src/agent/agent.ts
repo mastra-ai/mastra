@@ -3,8 +3,8 @@ import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod/v4';
 import type { ZodSchema, z as z3 } from 'zod/v3';
+import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -52,13 +52,6 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import { toStandardSchema } from '../schema/schema';
 import { standardSchemaToJSONSchema } from '../schema/standard-schema';
-import type {
-  StorageCreateAgentInput,
-  StorageDefaultOptions,
-  StorageModelConfig,
-  StorageResolvedAgentType,
-  StorageScorerConfig,
-} from '../storage/types';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -73,7 +66,6 @@ import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflo
 import type { Workspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
-import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -2593,7 +2585,6 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
-          // @ts-expect-error - zod types mismatch between v3 and v4
           inputData: workflow.inputSchema ?? z.object({}).passthrough(),
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });

@@ -15,6 +15,7 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON } from '../../schema/schema';
 import type { StandardSchemaWithJSON } from '../../schema/schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
@@ -22,7 +23,6 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { Step, SuspendOptions } from '../../workflows';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { PRIMITIVE_TYPES } from '../types';
 
 /**

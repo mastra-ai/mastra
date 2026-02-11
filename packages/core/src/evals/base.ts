@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
@@ -64,7 +63,7 @@ interface ScorerRun<TInput = any, TOutput = any> {
  * This is a minimal interface that captures the output type from various schema types
  * without importing the full schema types (which would cause OOM during type checking).
  */
-type InferSchemaOutput<TSchema> = TSchema extends { '~standard': { types: { output: infer O } } }
+export type InferSchemaOutput<TSchema> = TSchema extends { '~standard': { types: { output: infer O } } }
   ? O
   : TSchema extends z.ZodType<infer O>
     ? O
@@ -72,7 +71,7 @@ type InferSchemaOutput<TSchema> = TSchema extends { '~standard': { types: { outp
 
 // Prompt object definition with conditional typing
 interface PromptObject<
-  TOutput,
+  _TOutput,
   TAccumulated extends Record<string, any>,
   TStepName extends string = string,
   TInput = any,

@@ -1,9 +1,8 @@
-import type { PublicSchema } from '../schema/schema';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema/schema';
-import type { StandardSchemaWithJSON } from '../schema/schema';
-import { standardSchemaToJSONSchema, type StandardSchemaIssue } from '../schema/standard-schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema/schema';
+import { standardSchemaToJSONSchema } from '../schema/standard-schema';
+import type { StandardSchemaIssue } from '../schema/standard-schema';
 import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
 
 /**
@@ -27,11 +26,11 @@ function safeValidate<T>(
   } catch (err) {
     // Catch Zod internal errors like "Cannot read properties of undefined (reading 'run')"
     // This happens when a union schema has undefined options
-    if (err instanceof TypeError && err.message.includes("Cannot read properties of undefined")) {
+    if (err instanceof TypeError && err.message.includes('Cannot read properties of undefined')) {
       throw new Error(
         `Schema validation failed due to an invalid schema definition. ` +
-        `This often happens when a union schema (z.union or z.or) has undefined options. ` +
-        `Please check that all schema options are properly defined. Original error: ${err.message}`
+          `This often happens when a union schema (z.union or z.or) has undefined options. ` +
+          `Please check that all schema options are properly defined. Original error: ${err.message}`,
       );
     }
     throw err;
@@ -386,7 +385,7 @@ export function validateToolInput<T = unknown>(
     return { data: input as T };
   }
 
-// Validation pipeline:
+  // Validation pipeline:
   //
   // 1. normalizeNullishInput: Convert top-level null/undefined to {} or [] based on schema type.
   //    Handles LLMs that send undefined instead of {} or [] for all-optional parameters.
