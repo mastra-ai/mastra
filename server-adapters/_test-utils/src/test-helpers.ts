@@ -461,6 +461,16 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
     agent: {
       clearCache: vi.fn(),
+      clone: vi.fn().mockResolvedValue({
+        id: 'cloned-agent',
+        name: 'Test Agent (Clone)',
+        status: 'draft',
+        description: '',
+        instructions: 'test instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
     },
   } as any);
 
