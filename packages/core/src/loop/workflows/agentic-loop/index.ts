@@ -234,6 +234,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         if (completionResult.complete) {
           // Task is complete - stop the loop
           hasFinishedSteps = true;
+        } else {
+          // Continue loop
+          typedInputData.stepResult!.isContinued = true;
+          hasFinishedSteps = false;
         }
 
         // add feedback as assistant message for the LLM to see

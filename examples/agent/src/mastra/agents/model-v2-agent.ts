@@ -296,6 +296,8 @@ export const analysisAgent = new Agent({
  * 3. Delegation Hooks - Controls sub-agent execution
  * 4. Context Filtering - Limits context passed to sub-agents
  */
+
+let supervisorScorerCount = 1;
 export const supervisorAgent = new Agent({
   id: 'supervisor-agent',
   name: 'Research Supervisor',
@@ -328,14 +330,14 @@ export const supervisorAgent = new Agent({
           name: 'Research Completeness',
           description: 'Checks if research covers all key aspects',
         }).generateScore(async context => {
-          console.dir({ 'research-completeness-Scorer`': context }, { depth: null });
-          // const text = context.results.text.toLowerCase();
+          console.dir({ 'research-completeness-Scorer': context }, { depth: null });
+          // const text = (context.run.output || '').toString();
           // const hasResearch = text.includes('research') || text.includes('findings');
           // const hasAnalysis = text.includes('analysis') || text.includes('insight');
           // const hasRecommendations = text.includes('recommendation');
           // return hasResearch && hasAnalysis && hasRecommendations ? 1 : 0.5;
-
-          return 1;
+          supervisorScorerCount++;
+          return supervisorScorerCount > 2 ? 1 : 0.7;
         }),
 
         // Scorer 2: Validate response has sufficient detail
@@ -344,11 +346,12 @@ export const supervisorAgent = new Agent({
           name: 'Response Quality',
           description: 'Validates response has sufficient detail',
         }).generateScore(async context => {
+          console.dir({ 'response-quality-Scorer': context }, { depth: null });
           // const text = (context.run.output || '').toString();
           // const wordCount = text.split(/\s+/).length;
           // return wordCount >= 200 ? 1 : wordCount / 200;
-          console.dir({ 'response-quality-Scorer': context }, { depth: null });
-          return 1;
+          supervisorScorerCount++;
+          return supervisorScorerCount > 2 ? 1 : 0.7;
         }),
       ],
       strategy: 'all', // All scorers must pass
