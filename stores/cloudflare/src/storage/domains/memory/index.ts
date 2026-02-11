@@ -68,6 +68,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         ...thread,
         createdAt: ensureDate(thread.createdAt)!,
         updatedAt: ensureDate(thread.updatedAt)!,
+        lastMessageAt: thread.lastMessageAt ? ensureDate(thread.lastMessageAt)! : null,
         metadata: this.ensureMetadata(thread.metadata),
       };
     } catch (error: any) {
@@ -141,8 +142,14 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Apply dynamic sorting
       threads.sort((a, b) => {
-        const aTime = new Date(a[field] || 0).getTime();
-        const bTime = new Date(b[field] || 0).getTime();
+        const aRaw = a[field];
+        const bRaw = b[field];
+        // Handle null/undefined - nulls last for DESC, nulls first for ASC
+        if (aRaw == null && bRaw == null) return 0;
+        if (aRaw == null) return direction === 'DESC' ? 1 : -1;
+        if (bRaw == null) return direction === 'DESC' ? -1 : 1;
+        const aTime = new Date(aRaw).getTime();
+        const bTime = new Date(bRaw).getTime();
         return direction === 'ASC' ? aTime - bTime : bTime - aTime;
       });
 
@@ -540,10 +547,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
             // Update thread's updatedAt and lastMessageAt timestamps
             const now = new Date();
+            // Compute lastMessageAt from the max createdAt of saved messages for this thread
+            const maxCreatedAt = new Date(Math.max(...threadMessages.map(m => new Date(m.createdAt).getTime())));
+            // Only advance lastMessageAt, never regress
+            const lastMessageAt =
+              thread.lastMessageAt && new Date(thread.lastMessageAt) > maxCreatedAt
+                ? new Date(thread.lastMessageAt)
+                : maxCreatedAt;
             const updatedThread = {
               ...thread,
               updatedAt: now,
-              lastMessageAt: now,
+              lastMessageAt,
             };
             await this.#db.putKV({
               tableName: TABLE_THREADS,

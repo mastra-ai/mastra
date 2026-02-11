@@ -73,6 +73,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         ...thread,
         createdAt: ensureDate(thread.createdAt)!,
         updatedAt: ensureDate(thread.updatedAt)!,
+        lastMessageAt: thread.lastMessageAt ? ensureDate(thread.lastMessageAt)! : null,
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
       };
     } catch (error) {
@@ -169,6 +170,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
           ...thread,
           createdAt: ensureDate(thread.createdAt)!,
           updatedAt: ensureDate(thread.updatedAt)!,
+          lastMessageAt: thread.lastMessageAt ? ensureDate(thread.lastMessageAt)! : null,
           metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
         });
       }
@@ -421,10 +423,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
         // Update the thread's updatedAt and lastMessageAt fields (only in the first batch)
         if (i === 0 && existingThread) {
           const now = new Date();
+          // Compute lastMessageAt from the max createdAt of saved messages
+          const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime())));
+          // Only advance lastMessageAt, never regress
+          const lastMessageAt =
+            existingThread.lastMessageAt && new Date(existingThread.lastMessageAt) > maxCreatedAt
+              ? new Date(existingThread.lastMessageAt)
+              : maxCreatedAt;
           const updatedThread = {
             ...existingThread,
             updatedAt: now,
-            lastMessageAt: now,
+            lastMessageAt,
           };
           pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
         }
@@ -1158,8 +1167,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
     direction: ThreadSortDirection,
   ): StorageThreadType[] {
     return threads.sort((a, b) => {
-      const aValue = new Date(a[field]).getTime();
-      const bValue = new Date(b[field]).getTime();
+      const aRaw = a[field];
+      const bRaw = b[field];
+      // Handle null/undefined - nulls last for DESC, nulls first for ASC
+      if (aRaw == null && bRaw == null) return 0;
+      if (aRaw == null) return direction === 'DESC' ? 1 : -1;
+      if (bRaw == null) return direction === 'DESC' ? -1 : 1;
+      const aValue = new Date(aRaw).getTime();
+      const bValue = new Date(bRaw).getTime();
 
       if (direction === 'ASC') {
         return aValue - bValue;
@@ -1254,6 +1269,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
       };
 
       // Create the new thread
+      const maxMessageDate =
+        sourceMessages.length > 0
+          ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt).getTime())))
+          : null;
       const newThread: StorageThreadType = {
         id: newThreadId,
         resourceId: resourceId || sourceThread.resourceId,
@@ -1264,6 +1283,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         },
         createdAt: now,
         updatedAt: now,
+        lastMessageAt: maxMessageDate,
       };
 
       // Use pipeline for all writes

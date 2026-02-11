@@ -599,9 +599,11 @@ export class MemoryLibSQL extends MemoryStorage {
       });
 
       const now = new Date().toISOString();
+      // Compute lastMessageAt from the max createdAt of saved messages
+      const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime()))).toISOString();
       batchStatements.push({
-        sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ?, "lastMessageAt" = ? WHERE id = ?`,
-        args: [now, now, threadId],
+        sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ?, "lastMessageAt" = MAX("lastMessageAt", ?) WHERE id = ?`,
+        args: [now, maxCreatedAt, threadId],
       });
 
       // Execute in batches to avoid potential limitations
@@ -1290,6 +1292,10 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Create the new thread
       const hasMessages = sourceMessages.length > 0;
+      const maxMessageDate = hasMessages
+        ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt as string).getTime())))
+        : null;
+      const maxMessageDateStr = maxMessageDate ? maxMessageDate.toISOString() : null;
       const newThread: StorageThreadType = {
         id: newThreadId,
         resourceId: resourceId || sourceThread.resourceId,
@@ -1300,7 +1306,7 @@ export class MemoryLibSQL extends MemoryStorage {
         },
         createdAt: now,
         updatedAt: now,
-        lastMessageAt: hasMessages ? now : null,
+        lastMessageAt: maxMessageDate,
       };
 
       // Use transaction for consistency
@@ -1318,7 +1324,7 @@ export class MemoryLibSQL extends MemoryStorage {
             JSON.stringify(newThread.metadata),
             nowStr,
             nowStr,
-            hasMessages ? nowStr : null,
+            maxMessageDateStr,
           ],
         });
 

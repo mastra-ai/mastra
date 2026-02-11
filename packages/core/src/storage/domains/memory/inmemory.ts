@@ -414,7 +414,13 @@ export class InMemoryMemory extends MemoryStorage {
       const thread = this.db.threads.get(threadId);
       if (thread) {
         thread.updatedAt = now;
-        thread.lastMessageAt = now;
+        // Compute lastMessageAt from the max createdAt of saved messages for this thread
+        const threadMessages = messages.filter(m => m.threadId === threadId);
+        const maxCreatedAt = new Date(Math.max(...threadMessages.map(m => new Date(m.createdAt).getTime())));
+        // Only advance lastMessageAt, never regress
+        if (!thread.lastMessageAt || maxCreatedAt > thread.lastMessageAt) {
+          thread.lastMessageAt = maxCreatedAt;
+        }
       }
     }
 
@@ -714,7 +720,10 @@ export class InMemoryMemory extends MemoryStorage {
       },
       createdAt: now,
       updatedAt: now,
-      lastMessageAt: sourceMessages.length > 0 ? now : null,
+      lastMessageAt:
+        sourceMessages.length > 0
+          ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt).getTime())))
+          : null,
     };
 
     // Save the new thread
@@ -766,10 +775,10 @@ export class InMemoryMemory extends MemoryStorage {
       const isDateField = field === 'createdAt' || field === 'updatedAt' || field === 'lastMessageAt';
       const aRaw = a[field];
       const bRaw = b[field];
-      // Handle null/undefined for lastMessageAt - nulls sort last
+      // Handle null/undefined - nulls last for DESC, nulls first for ASC
       if (aRaw == null && bRaw == null) return 0;
-      if (aRaw == null) return 1;
-      if (bRaw == null) return -1;
+      if (aRaw == null) return direction === 'DESC' ? 1 : -1;
+      if (bRaw == null) return direction === 'DESC' ? -1 : 1;
       const aValue = isDateField ? new Date(aRaw).getTime() : aRaw;
       const bValue = isDateField ? new Date(bRaw).getTime() : bRaw;
 

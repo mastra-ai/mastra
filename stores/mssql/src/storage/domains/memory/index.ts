@@ -292,8 +292,13 @@ export class MemoryMSSQL extends MemoryStorage {
       const orderByField =
         field === 'lastMessageAt' ? '[lastMessageAt]' : field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      // For nullable fields like lastMessageAt, ensure deterministic NULL ordering
+      const nullsOrder =
+        field === 'lastMessageAt'
+          ? `CASE WHEN ${orderByField} IS NULL THEN 1 ELSE 0 END, ${orderByField} ${dir}`
+          : `${orderByField} ${dir}`;
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt], [lastMessageAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+      const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt], [lastMessageAt] ${baseQuery} ORDER BY ${nullsOrder} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
 
       for (const [key, value] of Object.entries(params)) {
@@ -885,12 +890,14 @@ export class MemoryMSSQL extends MemoryStorage {
           await request.query(mergeSql);
         }
         const now = new Date();
+        // Compute lastMessageAt from the max createdAt of saved messages
+        const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime())));
         const threadReq = transaction.request();
         threadReq.input('updatedAt', sql.DateTime2, now);
-        threadReq.input('lastMessageAt', sql.DateTime2, now);
+        threadReq.input('maxCreatedAt', sql.DateTime2, maxCreatedAt);
         threadReq.input('id', threadId);
         await threadReq.query(
-          `UPDATE ${tableThreads} SET [updatedAt] = @updatedAt, [lastMessageAt] = @lastMessageAt WHERE id = @id`,
+          `UPDATE ${tableThreads} SET [updatedAt] = @updatedAt, [lastMessageAt] = CASE WHEN [lastMessageAt] IS NULL OR [lastMessageAt] < @maxCreatedAt THEN @maxCreatedAt ELSE [lastMessageAt] END WHERE id = @id`,
         );
         await transaction.commit();
       } catch (error) {

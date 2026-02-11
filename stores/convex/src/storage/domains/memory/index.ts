@@ -67,6 +67,7 @@ export class MemoryConvex extends MemoryStorage {
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
+      lastMessageAt: (row as any).lastMessageAt ? new Date((row as any).lastMessageAt) : null,
     };
   }
 
@@ -165,6 +166,7 @@ export class MemoryConvex extends MemoryStorage {
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
+      lastMessageAt: (row as any).lastMessageAt ? new Date((row as any).lastMessageAt) : null,
     }));
 
     // Apply metadata filters if provided (AND logic)
@@ -178,6 +180,10 @@ export class MemoryConvex extends MemoryStorage {
     threads.sort((a, b) => {
       const aValue = a[field];
       const bValue = b[field];
+      // Handle null/undefined - nulls last for DESC, nulls first for ASC
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return direction === 'DESC' ? 1 : -1;
+      if (bValue == null) return direction === 'DESC' ? -1 : 1;
       const aTime = aValue instanceof Date ? aValue.getTime() : new Date(aValue as any).getTime();
       const bTime = bValue instanceof Date ? bValue.getTime() : new Date(bValue as any).getTime();
       return direction === 'ASC' ? aTime - bTime : bTime - aTime;
@@ -385,13 +391,19 @@ export class MemoryConvex extends MemoryStorage {
     for (const threadId of threadIds) {
       const thread = await this.getThreadById({ threadId });
       if (thread) {
+        // Compute lastMessageAt from the max createdAt of saved messages for this thread
+        const threadMsgs = messages.filter(m => m.threadId === threadId);
+        const maxCreatedAt = new Date(Math.max(...threadMsgs.map(m => new Date(m.createdAt).getTime())));
+        // Only advance lastMessageAt, never regress
+        const lastMessageAt =
+          thread.lastMessageAt && thread.lastMessageAt > maxCreatedAt ? thread.lastMessageAt : maxCreatedAt;
         await this.#db.insert({
           tableName: TABLE_THREADS,
           record: {
             ...thread,
             id: thread.id,
             updatedAt: now.toISOString(),
-            lastMessageAt: now.toISOString(),
+            lastMessageAt: lastMessageAt.toISOString(),
             createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
             metadata: thread.metadata ?? {},
           },

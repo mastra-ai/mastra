@@ -146,6 +146,7 @@ const threadSchema = z.object({
   resourceId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  lastMessageAt: z.date().nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

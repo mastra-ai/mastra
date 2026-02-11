@@ -1088,16 +1088,21 @@ export class MemoryPG extends MemoryStorage {
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
         const nowStr = new Date().toISOString();
+        // Compute lastMessageAt from the max createdAt of saved messages for this thread
+        const threadMessages = messages.filter(m => m.threadId === threadId);
+        const maxCreatedAt = new Date(
+          Math.max(...threadMessages.map(m => new Date(m.createdAt).getTime())),
+        ).toISOString();
         const threadUpdate = t.none(
           `UPDATE ${threadTableName}
                         SET
                             "updatedAt" = $1,
                             "updatedAtZ" = $2,
-                            "lastMessageAt" = $3,
-                            "lastMessageAtZ" = $4
+                            "lastMessageAt" = GREATEST("lastMessageAt", $3::timestamptz),
+                            "lastMessageAtZ" = GREATEST("lastMessageAtZ", $4::timestamptz)
                         WHERE id = $5
                     `,
-          [nowStr, nowStr, nowStr, nowStr, threadId],
+          [nowStr, nowStr, maxCreatedAt, maxCreatedAt, threadId],
         );
 
         await Promise.all([...messageInserts, threadUpdate]);
@@ -1474,6 +1479,9 @@ export class MemoryPG extends MemoryStorage {
 
         // Create the new thread
         const hasMessages = sourceMessages.length > 0;
+        const maxMessageDate = hasMessages
+          ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt as string).getTime())))
+          : null;
         const newThread: StorageThreadType = {
           id: newThreadId,
           resourceId: resourceId || sourceThread.resourceId,
@@ -1484,7 +1492,7 @@ export class MemoryPG extends MemoryStorage {
           },
           createdAt: now,
           updatedAt: now,
-          lastMessageAt: hasMessages ? now : null,
+          lastMessageAt: maxMessageDate,
         };
 
         // Insert the new thread
@@ -1510,8 +1518,8 @@ export class MemoryPG extends MemoryStorage {
             now,
             now,
             now,
-            hasMessages ? now : null,
-            hasMessages ? now : null,
+            maxMessageDate,
+            maxMessageDate,
           ],
         );
 

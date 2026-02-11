@@ -281,6 +281,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       ...(row as StorageThreadType),
       createdAt: ensureDate(row.createdAt) as Date,
       updatedAt: ensureDate(row.updatedAt) as Date,
+      lastMessageAt: row.lastMessageAt ? (ensureDate(row.lastMessageAt) as Date) : null,
       metadata:
         typeof row.metadata === 'string'
           ? (JSON.parse(row.metadata || '{}') as Record<string, any>)
@@ -574,16 +575,18 @@ export class MemoryStorageD1 extends MemoryStorage {
         };
       });
 
+      // Compute lastMessageAt from the max createdAt of saved messages
+      const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime()))).toISOString();
       // Insert messages and update thread's updatedAt in parallel
       await Promise.all([
         this.#db.batchUpsert({
           tableName: TABLE_MESSAGES,
           records: messagesToInsert,
         }),
-        // Update thread's updatedAt and lastMessageAt timestamps
+        // Update thread's updatedAt and lastMessageAt timestamps (only advance lastMessageAt)
         this.#db.executeQuery({
-          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ?, lastMessageAt = ? WHERE id = ?`,
-          params: [now.toISOString(), now.toISOString(), threadId],
+          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ?, lastMessageAt = MAX(lastMessageAt, ?) WHERE id = ?`,
+          params: [now.toISOString(), maxCreatedAt, threadId],
         }),
       ]);
 

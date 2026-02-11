@@ -124,6 +124,7 @@ export class StoreMemoryLance extends MemoryStorage {
         ...thread,
         createdAt: new Date(thread.createdAt),
         updatedAt: new Date(thread.updatedAt),
+        lastMessageAt: thread.lastMessageAt ? new Date(thread.lastMessageAt) : null,
       };
     } catch (error: any) {
       throw new MastraError(
@@ -546,7 +547,9 @@ export class StoreMemoryLance extends MemoryStorage {
       // Update the thread's updatedAt and lastMessageAt timestamps
       const threadsTable = await this.client.openTable(TABLE_THREADS);
       const currentTime = new Date().getTime();
-      const updateRecord = { id: threadId, updatedAt: currentTime, lastMessageAt: currentTime };
+      // Compute lastMessageAt from the max createdAt of saved messages
+      const maxCreatedAt = Math.max(...messages.map(m => new Date(m.createdAt).getTime()));
+      const updateRecord = { id: threadId, updatedAt: currentTime, lastMessageAt: maxCreatedAt };
       await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
@@ -645,8 +648,12 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
-        const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
-        const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
+        const aValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field)
+          ? new Date(a[field]).getTime()
+          : a[field];
+        const bValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field)
+          ? new Date(b[field]).getTime()
+          : b[field];
 
         // Handle null/undefined - treat as "smallest" values
         if (aValue == null && bValue == null) return 0;
