@@ -381,6 +381,21 @@ export async function createHonoServer(
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+      const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
+
+      // Helper function to escape JSON for embedding in HTML/JavaScript
+      const escapeForHtml = (json: string): string => {
+        return json
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'")
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+          .replace(/</g, '\\u003c')
+          .replace(/>/g, '\\u003e')
+          .replace(/\u2028/g, '\\u2028')
+          .replace(/\u2029/g, '\\u2029');
+      };
+
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_API_PREFIX%%'`, `'${serverOptions?.apiPrefix ?? '/api'}'`);
@@ -388,6 +403,10 @@ export async function createHonoServer(
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, `'${experimentalFeatures}'`);
+      indexHtml = indexHtml.replace(
+        `'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`,
+        `'${escapeForHtml(requestContextPresets)}'`,
+      );
 
       // Inject the base path for frontend routing
       // The <base href> tag uses this to resolve all relative URLs correctly

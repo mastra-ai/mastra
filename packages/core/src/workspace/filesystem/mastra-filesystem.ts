@@ -81,6 +81,9 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   /** Current status of the filesystem */
   abstract status: ProviderStatus;
 
+  /** Error message when status is 'error' */
+  error?: string;
+
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
@@ -143,12 +146,14 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
    */
   private async _executeInit(): Promise<void> {
     this.status = 'initializing';
+    this.error = undefined;
 
     try {
       await this.init();
       this.status = 'ready';
     } catch (error) {
       this.status = 'error';
+      this.error = error instanceof Error ? error.message : String(error);
       this.logger.error('Failed to initialize filesystem', { error, id: this.id });
       throw error;
     }

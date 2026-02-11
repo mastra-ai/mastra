@@ -42,6 +42,9 @@ export interface Lifecycle<TInfo = unknown> {
   /** Current status */
   status: ProviderStatus;
 
+  /** Error message when status is 'error' */
+  error?: string;
+
   /**
    * One-time setup operations.
    *
