@@ -1,5 +1,11 @@
 # @mastra/client-js
 
+## 1.3.0-alpha.3
+
+### Patch Changes
+
+- Added a buffer-status endpoint so buffering badges resolve with accurate token counts instead of spinning forever when buffering outlives the stream. ([#12939](https://github.com/mastra-ai/mastra/pull/12939))
+
 ## 1.3.0-alpha.2
 
 ### Patch Changes
