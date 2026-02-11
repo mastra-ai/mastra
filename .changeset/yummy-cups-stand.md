@@ -10,6 +10,7 @@
 '@mastra/cloudflare': minor
 '@mastra/cloudflare-d1': minor
 '@mastra/clickhouse': minor
+'@mastra/dynamodb': minor
 '@mastra/server': patch
 ---
 
