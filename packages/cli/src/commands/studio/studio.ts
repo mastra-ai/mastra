@@ -98,11 +98,7 @@ const createServer = (builtStudioPath: string, options: StudioOptions, requestCo
     const url = req.url || basePath;
 
     // Let static assets be served by serve-handler
-    const isStaticAsset =
-      url.includes('/assets/') ||
-      url.includes('/dist/assets/') ||
-      url.includes('/mastra.svg') ||
-      url.includes('/favicon.ico');
+    const isStaticAsset = url.includes('/assets/') || url.includes('/dist/assets/') || url.includes('/mastra.svg');
 
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {
