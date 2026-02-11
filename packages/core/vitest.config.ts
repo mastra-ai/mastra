@@ -10,7 +10,6 @@ export default defineConfig({
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts'],
           testTimeout: 120000,
-          isolate: false,
         },
       },
       {
