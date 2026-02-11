@@ -1100,6 +1100,133 @@ describe('CoreToolBuilder providerOptions', () => {
   });
 });
 
+describe('CoreToolBuilder inputExamples', () => {
+  it('should pass through inputExamples when building a tool', () => {
+    const toolWithExamples = createTool({
+      id: 'example-tool',
+      description: 'A tool with input examples',
+      inputSchema: z.object({ city: z.string() }),
+      inputExamples: [{ input: { city: 'New York' } }, { input: { city: 'London' } }],
+      execute: async ({ city }) => ({ result: city }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithExamples,
+      options: {
+        name: 'example-tool',
+        logger: console as any,
+        description: 'A tool with input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect((builtTool as any).inputExamples).toEqual([{ input: { city: 'New York' } }, { input: { city: 'London' } }]);
+  });
+
+  it('should pass through inputExamples via buildV5()', () => {
+    const toolWithExamples = createTool({
+      id: 'v5-example-tool',
+      description: 'A tool with input examples for V5',
+      inputSchema: z.object({ query: z.string() }),
+      inputExamples: [{ input: { query: 'weather in Tokyo' } }],
+      execute: async ({ query }) => ({ result: query }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithExamples,
+      options: {
+        name: 'v5-example-tool',
+        logger: console as any,
+        description: 'A tool with input examples for V5',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.buildV5();
+
+    expect((builtTool as any).inputExamples).toEqual([{ input: { query: 'weather in Tokyo' } }]);
+  });
+
+  it('should have undefined inputExamples when not provided', () => {
+    const toolWithoutExamples = createTool({
+      id: 'no-examples-tool',
+      description: 'A tool without input examples',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithoutExamples,
+      options: {
+        name: 'no-examples-tool',
+        logger: console as any,
+        description: 'A tool without input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect((builtTool as any).inputExamples).toBeUndefined();
+  });
+
+  it('should pass through inputExamples for provider-defined tools', () => {
+    const providerTool = {
+      type: 'provider-defined' as const,
+      id: 'provider.example-tool',
+      description: 'A provider-defined tool with input examples',
+      parameters: z.object({ query: z.string() }),
+      inputExamples: [{ input: { query: 'test query' } }],
+      execute: async (args: any) => ({ result: args.query }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: providerTool as any,
+      options: {
+        name: 'provider.example-tool',
+        logger: console as any,
+        description: 'A provider-defined tool with input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect(builtTool.type).toBe('provider-defined');
+    expect((builtTool as any).inputExamples).toEqual([{ input: { query: 'test query' } }]);
+  });
+
+  it('should handle Vercel tools with inputExamples', () => {
+    const vercelToolWithExamples = {
+      description: 'A Vercel tool with input examples',
+      parameters: z.object({ input: z.string() }),
+      inputExamples: [{ input: { input: 'hello world' } }],
+      execute: async (args: any) => ({ result: args.input }),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: vercelToolWithExamples as any,
+      options: {
+        name: 'vercel-example-tool',
+        logger: console as any,
+        description: 'A Vercel tool with input examples',
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      },
+    });
+
+    const builtTool = builder.build();
+
+    expect((builtTool as any).inputExamples).toEqual([{ input: { input: 'hello world' } }]);
+  });
+});
+
 describe('CoreToolBuilder Output Schema', () => {
   it('should allow ZodTuple in outputSchema', () => {
     const mockModel = {
