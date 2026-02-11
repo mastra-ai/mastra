@@ -28,7 +28,7 @@ export async function studio(
   },
 ) {
   // Load environment variables from .env files
-  config({ path: [options.env || '.env.production', '.env'] });
+  config({ path: [options.env || '.env.production', '.env'], quiet: true });
 
   // Load and validate request context presets if provided
   let requestContextPresetsJson = '';
