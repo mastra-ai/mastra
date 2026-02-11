@@ -12,6 +12,7 @@ import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
 import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
+import { LLMProviders, LLMModels } from '@/domains/llm';
 
 interface MemorySectionProps {
   control: Control<AgentFormValues>;
@@ -20,9 +21,17 @@ interface MemorySectionProps {
 
 export function MemorySection({ control, readOnly = false }: MemorySectionProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isObserverOpen, setIsObserverOpen] = useState(false);
+  const [isReflectorOpen, setIsReflectorOpen] = useState(false);
   const memoryConfig = useWatch({ control, name: 'memory' });
   const isEnabled = memoryConfig?.enabled ?? false;
   const semanticRecallEnabled = memoryConfig?.semanticRecall ?? false;
+  const observationalMemoryEnabled = memoryConfig?.observationalMemory?.enabled ?? false;
+  const omProvider = useWatch({ control, name: 'memory.observationalMemory.model.provider' }) ?? '';
+  const observerProvider =
+    useWatch({ control, name: 'memory.observationalMemory.observation.model.provider' }) ?? '';
+  const reflectorProvider =
+    useWatch({ control, name: 'memory.observationalMemory.reflection.model.provider' }) ?? '';
 
   const { data: vectorsData } = useVectors();
   const { data: embeddersData } = useEmbedders();
@@ -185,6 +194,473 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                     </div>
                   )}
                 />
+
+                <Controller
+                  name="memory.observationalMemory.enabled"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="memory-observational" className="text-sm text-icon5">
+                          Observational Memory
+                        </Label>
+                        <span className="text-xs text-icon3">
+                          Automatically observe and reflect on conversations to build long-term memory
+                        </span>
+                      </div>
+                      <Switch
+                        id="memory-observational"
+                        checked={field.value ?? false}
+                        onCheckedChange={field.onChange}
+                        disabled={readOnly}
+                      />
+                    </div>
+                  )}
+                />
+
+                {observationalMemoryEnabled && (
+                  <div className="ml-2 pl-3 border-l-2 border-border1 flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs text-icon4">Provider</Label>
+                      <span className="text-xs text-icon3">
+                        Provider for the observer and reflector agents
+                      </span>
+                      <Controller
+                        name="memory.observationalMemory.model.provider"
+                        control={control}
+                        render={({ field }) => (
+                          <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                            <LLMProviders
+                              value={field.value ?? ''}
+                              onValueChange={field.onChange}
+                              variant="light"
+                            />
+                          </div>
+                        )}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs text-icon4">Model</Label>
+                      <span className="text-xs text-icon3">
+                        Model for the observer and reflector agents
+                      </span>
+                      <Controller
+                        name="memory.observationalMemory.model.name"
+                        control={control}
+                        render={({ field }) => (
+                          <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                            <LLMModels
+                              value={field.value ?? ''}
+                              onValueChange={field.onChange}
+                              llmId={omProvider}
+                              variant="light"
+                            />
+                          </div>
+                        )}
+                      />
+                    </div>
+
+                    <Controller
+                      name="memory.observationalMemory.scope"
+                      control={control}
+                      render={({ field }) => (
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="memory-om-scope" className="text-xs text-icon4">
+                            Scope
+                          </Label>
+                          <span className="text-xs text-icon3">
+                            Whether observations are scoped per thread or shared across all threads for a resource
+                          </span>
+                          <Select
+                            value={field.value ?? 'thread'}
+                            onValueChange={field.onChange}
+                            disabled={readOnly}
+                          >
+                            <SelectTrigger id="memory-om-scope" className="bg-surface3">
+                              <SelectValue placeholder="Select scope" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="thread">Thread</SelectItem>
+                              <SelectItem value="resource">Resource</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    />
+
+                    <Controller
+                      name="memory.observationalMemory.shareTokenBudget"
+                      control={control}
+                      render={({ field }) => (
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-col gap-0.5">
+                            <Label htmlFor="memory-om-share-budget" className="text-sm text-icon5">
+                              Share Token Budget
+                            </Label>
+                            <span className="text-xs text-icon3">
+                              Share token budget between observation and reflection
+                            </span>
+                          </div>
+                          <Switch
+                            id="memory-om-share-budget"
+                            checked={field.value ?? false}
+                            onCheckedChange={field.onChange}
+                            disabled={readOnly}
+                          />
+                        </div>
+                      )}
+                    />
+
+                    {/* Observer Configuration */}
+                    <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
+                      <CollapsibleTrigger className="flex items-center gap-1 w-full">
+                        <ChevronRight
+                          className={`h-3 w-3 text-icon3 transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
+                        />
+                        <Label className="text-sm text-icon5 cursor-pointer">Observer</Label>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="ml-2 pl-3 border-l-2 border-border1 mt-2 flex flex-col gap-4">
+                          <div className="flex flex-col gap-1.5">
+                            <Label className="text-xs text-icon4">Provider Override</Label>
+                            <span className="text-xs text-icon3">
+                              Override the default model provider for the observer
+                            </span>
+                            <Controller
+                              name="memory.observationalMemory.observation.model.provider"
+                              control={control}
+                              render={({ field }) => (
+                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                  <LLMProviders
+                                    value={field.value ?? ''}
+                                    onValueChange={field.onChange}
+                                    variant="light"
+                                  />
+                                </div>
+                              )}
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <Label className="text-xs text-icon4">Model Override</Label>
+                            <span className="text-xs text-icon3">
+                              Override the default model for the observer
+                            </span>
+                            <Controller
+                              name="memory.observationalMemory.observation.model.name"
+                              control={control}
+                              render={({ field }) => (
+                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                  <LLMModels
+                                    value={field.value ?? ''}
+                                    onValueChange={field.onChange}
+                                    llmId={observerProvider}
+                                    variant="light"
+                                  />
+                                </div>
+                              )}
+                            />
+                          </div>
+
+                          <Controller
+                            name="memory.observationalMemory.observation.messageTokens"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-obs-msg-tokens" className="text-xs text-icon4">
+                                  Message Tokens
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Token count of unobserved messages that triggers observation (default: 30000)
+                                </span>
+                                <Input
+                                  id="memory-om-obs-msg-tokens"
+                                  type="number"
+                                  min="1"
+                                  step="1000"
+                                  value={field.value ?? ''}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    field.onChange(v === '' ? undefined : parseInt(v, 10));
+                                  }}
+                                  placeholder="30000"
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+
+                          <Controller
+                            name="memory.observationalMemory.observation.maxTokensPerBatch"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-obs-batch" className="text-xs text-icon4">
+                                  Max Tokens Per Batch
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Maximum tokens per batch when observing multiple threads (default: 10000)
+                                </span>
+                                <Input
+                                  id="memory-om-obs-batch"
+                                  type="number"
+                                  min="1"
+                                  step="1000"
+                                  value={field.value ?? ''}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    field.onChange(v === '' ? undefined : parseInt(v, 10));
+                                  }}
+                                  placeholder="10000"
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+
+                          <Controller
+                            name="memory.observationalMemory.observation.bufferTokens"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-obs-buffer" className="text-xs text-icon4">
+                                  Buffer Tokens
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Token interval for async buffering (fraction of messageTokens or absolute count,
+                                  empty to use default 0.2, set 0 to disable)
+                                </span>
+                                <Input
+                                  id="memory-om-obs-buffer"
+                                  type="number"
+                                  min="0"
+                                  step="0.1"
+                                  value={field.value === false ? '0' : (field.value ?? '')}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    if (v === '' || v === undefined) {
+                                      field.onChange(undefined);
+                                    } else {
+                                      const n = parseFloat(v);
+                                      field.onChange(n === 0 ? false : n);
+                                    }
+                                  }}
+                                  placeholder="0.2"
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+
+                          <Controller
+                            name="memory.observationalMemory.observation.bufferActivation"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-obs-buf-act" className="text-xs text-icon4">
+                                  Buffer Activation
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Ratio (0-1) of buffered observations to activate (default: 0.8)
+                                </span>
+                                <Input
+                                  id="memory-om-obs-buf-act"
+                                  type="number"
+                                  min="0"
+                                  max="1"
+                                  step="0.1"
+                                  value={field.value ?? ''}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    field.onChange(v === '' ? undefined : parseFloat(v));
+                                  }}
+                                  placeholder="0.8"
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+
+                          <Controller
+                            name="memory.observationalMemory.observation.blockAfter"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-obs-block" className="text-xs text-icon4">
+                                  Block After
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Multiplier or absolute token count for synchronous blocking (default: 1.2)
+                                </span>
+                                <Input
+                                  id="memory-om-obs-block"
+                                  type="number"
+                                  min="0"
+                                  step="0.1"
+                                  value={field.value ?? ''}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    field.onChange(v === '' ? undefined : parseFloat(v));
+                                  }}
+                                  placeholder="1.2"
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+
+                    {/* Reflector Configuration */}
+                    <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
+                      <CollapsibleTrigger className="flex items-center gap-1 w-full">
+                        <ChevronRight
+                          className={`h-3 w-3 text-icon3 transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
+                        />
+                        <Label className="text-sm text-icon5 cursor-pointer">Reflector</Label>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="ml-2 pl-3 border-l-2 border-border1 mt-2 flex flex-col gap-4">
+                          <div className="flex flex-col gap-1.5">
+                            <Label className="text-xs text-icon4">Provider Override</Label>
+                            <span className="text-xs text-icon3">
+                              Override the default model provider for the reflector
+                            </span>
+                            <Controller
+                              name="memory.observationalMemory.reflection.model.provider"
+                              control={control}
+                              render={({ field }) => (
+                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                  <LLMProviders
+                                    value={field.value ?? ''}
+                                    onValueChange={field.onChange}
+                                    variant="light"
+                                  />
+                                </div>
+                              )}
+                            />
+                          </div>
+
+                          <div className="flex flex-col gap-1.5">
+                            <Label className="text-xs text-icon4">Model Override</Label>
+                            <span className="text-xs text-icon3">
+                              Override the default model for the reflector
+                            </span>
+                            <Controller
+                              name="memory.observationalMemory.reflection.model.name"
+                              control={control}
+                              render={({ field }) => (
+                                <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
+                                  <LLMModels
+                                    value={field.value ?? ''}
+                                    onValueChange={field.onChange}
+                                    llmId={reflectorProvider}
+                                    variant="light"
+                                  />
+                                </div>
+                              )}
+                            />
+                          </div>
+
+                          <Controller
+                            name="memory.observationalMemory.reflection.observationTokens"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-ref-obs-tokens" className="text-xs text-icon4">
+                                  Observation Tokens
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Token count of observations that triggers reflection (default: 40000)
+                                </span>
+                                <Input
+                                  id="memory-om-ref-obs-tokens"
+                                  type="number"
+                                  min="1"
+                                  step="1000"
+                                  value={field.value ?? ''}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    field.onChange(v === '' ? undefined : parseInt(v, 10));
+                                  }}
+                                  placeholder="40000"
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+
+                          <Controller
+                            name="memory.observationalMemory.reflection.blockAfter"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-ref-block" className="text-xs text-icon4">
+                                  Block After
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Multiplier or absolute token count for synchronous blocking (default: 1.2)
+                                </span>
+                                <Input
+                                  id="memory-om-ref-block"
+                                  type="number"
+                                  min="0"
+                                  step="0.1"
+                                  value={field.value ?? ''}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    field.onChange(v === '' ? undefined : parseFloat(v));
+                                  }}
+                                  placeholder="1.2"
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+
+                          <Controller
+                            name="memory.observationalMemory.reflection.bufferActivation"
+                            control={control}
+                            render={({ field }) => (
+                              <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="memory-om-ref-buf-act" className="text-xs text-icon4">
+                                  Buffer Activation
+                                </Label>
+                                <span className="text-xs text-icon3">
+                                  Ratio (0-1) controlling when async reflection buffering starts
+                                </span>
+                                <Input
+                                  id="memory-om-ref-buf-act"
+                                  type="number"
+                                  min="0"
+                                  max="1"
+                                  step="0.1"
+                                  value={field.value ?? ''}
+                                  onChange={e => {
+                                    const v = e.target.value;
+                                    field.onChange(v === '' ? undefined : parseFloat(v));
+                                  }}
+                                  placeholder=""
+                                  className="bg-surface3"
+                                  disabled={readOnly}
+                                />
+                              </div>
+                            )}
+                          />
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                )}
               </>
             )}
           </div>
