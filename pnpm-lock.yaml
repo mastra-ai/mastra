@@ -585,6 +585,9 @@ importers:
 
   deployers/cloud:
     dependencies:
+      '@mastra/auth-cloud':
+        specifier: workspace:*
+        version: link:../../auth/cloud
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
