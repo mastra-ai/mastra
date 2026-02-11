@@ -6,10 +6,11 @@ import { AlertDialog } from '@/ds/components/AlertDialog';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/lib/toast';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { ItemDetailToolbar } from './item-detail-toolbar';
-import { DatasetItemHeader } from './dataset-item-header';
-import { DatasetItemContent } from './dataset-item-content';
-import { EditModeContent } from './dataset-item-form';
+import { ItemDetailToolbar } from '../dataset-detail/item-detail-toolbar';
+import { DatasetItemHeader } from '../dataset-detail/dataset-item-header';
+import { DatasetItemContent } from '../dataset-detail/dataset-item-content';
+import { EditModeContent } from '../dataset-detail/dataset-item-form';
+import { Column } from '@/ds/components/Columns';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
@@ -55,7 +56,7 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   );
 }
 
-export interface ItemDetailPanelProps {
+export interface DatasetItemPanelProps {
   datasetId: string;
   item: DatasetItem;
   items: DatasetItem[];
@@ -67,7 +68,7 @@ export interface ItemDetailPanelProps {
  * Inline panel showing full details of a single dataset item.
  * Includes navigation to next/previous items and sections for Input, Ground Truth, and Metadata.
  */
-export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose }: ItemDetailPanelProps) {
+export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelProps) {
   const { Link } = useLinkComponent();
   const { updateItem, deleteItem } = useDatasetMutations();
 
@@ -213,7 +214,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
 
   return (
     <>
-      <div className="grid grid-rows-[auto_1fr] h-full gap-9">
+      <Column withLeftSeparator={true}>
         <ItemDetailToolbar
           datasetId={datasetId}
           itemId={item.id}
@@ -225,7 +226,7 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
           isEditing={isEditing}
         />
 
-        <div className="grid overflow-y-auto">
+        <Column.Content>
           {isEditing ? (
             <EditModeContent
               inputValue={inputValue}
@@ -240,13 +241,14 @@ export function ItemDetailPanel({ datasetId, item, items, onItemChange, onClose 
               isSaving={updateItem.isPending}
             />
           ) : (
-            <div className="grid gap-8 content-start">
+            <>
               <DatasetItemHeader item={item} />
               <DatasetItemContent item={item} Link={Link} />
-            </div>
+            </>
           )}
-        </div>
-      </div>
+        </Column.Content>
+      </Column>
+
       {/* Delete confirmation - uses portal, renders above panel */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialog.Content>

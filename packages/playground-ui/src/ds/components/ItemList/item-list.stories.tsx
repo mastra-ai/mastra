@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ItemList } from './item-list';
-import type { Column } from './types';
+import type { ItemListColumn as Column } from './types';
 
 const meta: Meta<typeof ItemList> = {
   title: 'DataDisplay/ItemList',
@@ -33,20 +33,20 @@ export const Default: Story = {
         <ItemList.Items>
           <ItemList.Row>
             <ItemList.RowButton columns={columns} entry={{ id: '1' }} onClick={id => console.log('Clicked:', id)}>
-              <ItemList.ItemText>Item One</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Item One</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
           <ItemList.Row>
             <ItemList.RowButton columns={columns} entry={{ id: '2' }} onClick={id => console.log('Clicked:', id)}>
-              <ItemList.ItemText>Item Two</ItemList.ItemText>
-              <ItemList.ItemStatus status="failed" />
+              <ItemList.TextCell>Item Two</ItemList.TextCell>
+              <ItemList.StatusCell status="failed" />
             </ItemList.RowButton>
           </ItemList.Row>
           <ItemList.Row>
             <ItemList.RowButton columns={columns} entry={{ id: '3' }} onClick={id => console.log('Clicked:', id)}>
-              <ItemList.ItemText>Item Three</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Item Three</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
         </ItemList.Items>
@@ -63,20 +63,20 @@ export const WithSelectedItem: Story = {
         <ItemList.Items>
           <ItemList.Row>
             <ItemList.RowButton columns={columns} entry={{ id: '1' }}>
-              <ItemList.ItemText>Item One</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Item One</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
           <ItemList.Row isSelected>
             <ItemList.RowButton columns={columns} entry={{ id: '2' }} isSelected>
-              <ItemList.ItemText>Item Two (Selected)</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Item Two (Selected)</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
           <ItemList.Row>
             <ItemList.RowButton columns={columns} entry={{ id: '3' }}>
-              <ItemList.ItemText>Item Three</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Item Three</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
         </ItemList.Items>
@@ -104,14 +104,14 @@ export const WithPagination: Story = {
         <ItemList.Items>
           <ItemList.Row>
             <ItemList.RowButton columns={columns} entry={{ id: '1' }}>
-              <ItemList.ItemText>Item 1</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Item 1</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
           <ItemList.Row>
             <ItemList.RowButton columns={columns} entry={{ id: '2' }}>
-              <ItemList.ItemText>Item 2</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Item 2</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
         </ItemList.Items>
@@ -129,16 +129,16 @@ export const AgentsList: Story = {
         <ItemList.Items>
           <ItemList.Row>
             <ItemList.RowButton columns={agentColumns} entry={{ id: 'agent-1' }}>
-              <ItemList.ItemText>Customer Support Agent</ItemList.ItemText>
-              <ItemList.ItemText>GPT-4</ItemList.ItemText>
-              <ItemList.ItemStatus status="success" />
+              <ItemList.TextCell>Customer Support Agent</ItemList.TextCell>
+              <ItemList.TextCell>GPT-4</ItemList.TextCell>
+              <ItemList.StatusCell status="success" />
             </ItemList.RowButton>
           </ItemList.Row>
           <ItemList.Row>
             <ItemList.RowButton columns={agentColumns} entry={{ id: 'agent-2' }}>
-              <ItemList.ItemText>Data Analysis Agent</ItemList.ItemText>
-              <ItemList.ItemText>Claude 3</ItemList.ItemText>
-              <ItemList.ItemStatus status="failed" />
+              <ItemList.TextCell>Data Analysis Agent</ItemList.TextCell>
+              <ItemList.TextCell>Claude 3</ItemList.TextCell>
+              <ItemList.StatusCell status="failed" />
             </ItemList.RowButton>
           </ItemList.Row>
         </ItemList.Items>

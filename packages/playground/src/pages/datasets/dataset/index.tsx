@@ -5,7 +5,7 @@ import type { DatasetItem } from '@mastra/client-js';
 import {
   MainContentLayout,
   MainContentContent,
-  DatasetDetail,
+  DatasetPageContent,
   ExperimentTriggerDialog,
   AddItemDialog,
   EditDatasetDialog,
@@ -73,7 +73,7 @@ function DatasetPage() {
   return (
     <MainContentLayout className="grid-rows-1">
       <MainContentContent className="content-stretch">
-        <DatasetDetail
+        <DatasetPageContent
           datasetId={datasetId}
           onAddItemClick={() => setAddItemDialogOpen(true)}
           onEditClick={() => setEditDialogOpen(true)}

@@ -3,11 +3,11 @@ import { useDebounce } from 'use-debounce';
 import { DatasetItem } from '@mastra/client-js';
 import { useDataset } from '../../hooks/use-datasets';
 import { useDatasetItems } from '../../hooks/use-dataset-items';
-import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
+import { useDatasetExperiments, type DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
-import { ItemsMasterDetail } from './items-master-detail';
-import { ExperimentHistory } from './experiment-history';
+import { DatasetItems } from '../items/dataset-items';
+import { DatasetExperiments } from '../experiments/dataset-experiments';
 import { DatasetHeader } from './dataset-header';
 import { CSVImportDialog } from '../csv-import';
 import { JSONImportDialog } from '../json-import';
@@ -19,8 +19,9 @@ import { AlertDialog } from '@/ds/components/AlertDialog';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { useLinkComponent } from '@/lib/framework';
 
-export interface DatasetDetailProps {
+export interface DatasetPageContentProps {
   datasetId: string;
   onExperimentClick?: () => void;
   onEditClick?: () => void;
@@ -35,7 +36,7 @@ export interface DatasetDetailProps {
 
 type TabValue = 'items' | 'experiments';
 
-export function DatasetDetail({
+export function DatasetPageContent({
   datasetId,
   onExperimentClick,
   onEditClick,
@@ -45,7 +46,8 @@ export function DatasetDetail({
   onNavigateToDataset,
   activeDatasetVersion: controlledVersion,
   onVersionSelect: onVersionSelectProp,
-}: DatasetDetailProps) {
+}: DatasetPageContentProps) {
+  const { navigate } = useLinkComponent();
   const [activeTab, setActiveTab] = useState<TabValue>('items');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
@@ -74,10 +76,18 @@ export function DatasetDetail({
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
-  const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(datasetId);
+  const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
+  const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
+    datasetId,
+    undefined,
+    experimentsFilters,
+  );
+  // Fetch unfiltered list separately for deriving filter options (uses query cache when no filters active)
+  const { data: allExperimentsData } = useDatasetExperiments(datasetId);
   const { deleteItems } = useDatasetMutations();
 
   const experiments = experimentsData?.experiments ?? [];
+  const allExperiments = allExperimentsData?.experiments ?? [];
 
   // Item selection handlers
   const handleItemSelect = (itemId: string) => {
@@ -119,6 +129,16 @@ export function DatasetDetail({
       setItemsForAddToDataset([]);
       setClearSelectionTrigger(prev => prev + 1);
     }
+  };
+
+  // Handler for Compare Items action from selection
+  const handleCompareItemsClick = (itemIds: string[]) => {
+    navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
+  };
+
+  // Handler for Compare Versions action from versions panel
+  const handleCompareVersionsClick = (versionTimestamps: string[]) => {
+    navigate(`/datasets/${datasetId}/versions?ids=${versionTimestamps.map(encodeURIComponent).join(',')}`);
   };
 
   // Handler for bulk delete action from selection
@@ -184,11 +204,11 @@ export function DatasetDetail({
               >
                 <TabList>
                   <Tab value="items">Items ({items.length})</Tab>
-                  <Tab value="experiments">Experiment History ({experiments.length})</Tab>
+                  <Tab value="experiments">Experiments ({experiments.length})</Tab>
                 </TabList>
 
-                <TabContent value="items" className="grid overflow-auto mt-4">
-                  <ItemsMasterDetail
+                <TabContent value="items" className="grid overflow-auto mt-5">
+                  <DatasetItems
                     datasetId={datasetId}
                     items={items}
                     isLoading={isItemsLoading}
@@ -201,6 +221,7 @@ export function DatasetDetail({
                     onBulkDeleteClick={handleBulkDeleteClick}
                     onCreateDatasetClick={handleCreateDatasetClick}
                     onAddToDatasetClick={handleAddToDatasetClick}
+                    onCompareItemsClick={handleCompareItemsClick}
                     datasetName={dataset?.name}
                     clearSelectionTrigger={clearSelectionTrigger}
                     setEndOfListElement={setEndOfListElement}
@@ -211,11 +232,19 @@ export function DatasetDetail({
                     activeDatasetVersion={activeDatasetVersion}
                     currentDatasetVersion={dataset?.version}
                     onVersionSelect={handleVersionSelect}
+                    onCompareVersionsClick={handleCompareVersionsClick}
                   />
                 </TabContent>
 
-                <TabContent value="experiments" className="grid overflow-auto">
-                  <ExperimentHistory experiments={experiments} isLoading={isExperimentsLoading} datasetId={datasetId} />
+                <TabContent value="experiments" className="grid overflow-auto mt-5">
+                  <DatasetExperiments
+                    experiments={experiments}
+                    allExperiments={allExperiments}
+                    isLoading={isExperimentsLoading}
+                    datasetId={datasetId}
+                    filters={experimentsFilters}
+                    onFiltersChange={setExperimentsFilters}
+                  />
                 </TabContent>
               </Tabs>
             </div>

@@ -89,10 +89,7 @@ export function ExperimentResultsListAndDetails({ results, isLoading }: Experime
   ];
 
   return (
-    <ListAndDetails
-      isDetailsActive={Boolean(selectedResult)}
-      isSecondDetailsActive={Boolean(selectedResult && featuredTraceId)}
-    >
+    <ListAndDetails isDetailsActive={Boolean(selectedResult)}>
       {/* List column - always visible */}
       <ListAndDetails.List>
         <ExperimentResultsList

@@ -4,6 +4,9 @@ import { Button } from '@/ds/components/Button';
 import { Pencil, Trash2, Copy, ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, XIcon, History } from 'lucide-react';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { useLinkComponent } from '@/lib/framework';
+import { Column } from '@/ds/components/Columns';
+import { PrevNextNav } from '@/ds/components/PrevNextNav';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 export interface ItemDetailToolbarProps {
   datasetId: string;
@@ -28,33 +31,14 @@ export function ItemDetailToolbar({
 }: ItemDetailToolbarProps) {
   const { Link } = useLinkComponent();
   return (
-    <div className="flex items-center justify-between">
-      {/* Left side: Navigation */}
-      <div className="flex items-center gap-[2px]">
-        <Button
-          variant="secondary"
-          size="default"
-          onClick={onPrevious}
-          disabled={!onPrevious}
-          aria-label="Previous item"
-          hasRightSibling={true}
-        >
-          <ArrowUpIcon /> Previous
-        </Button>
-        <Button
-          variant="secondary"
-          hasLeftSibling={true}
-          size="default"
-          onClick={onNext}
-          disabled={!onNext}
-          aria-label="Next item"
-        >
-          Next <ArrowDownIcon />
-        </Button>
-      </div>
-
-      {/* Right side: Actions */}
-      <div className="flex items-center gap-2">
+    <Column.Toolbar>
+      <PrevNextNav
+        onPrevious={onPrevious}
+        onNext={onNext}
+        previousAriaLabel="Previous item"
+        nextAriaLabel="Next item"
+      />
+      <ButtonsGroup>
         {!isEditing && (
           <>
             <Button variant="secondary" size="default" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
@@ -62,7 +46,7 @@ export function ItemDetailToolbar({
               History
             </Button>
 
-            <div className="flex items-center gap-[2px]">
+            <ButtonsGroup spacing="close">
               <Button variant="secondary" hasRightSibling={true} size="default" onClick={onEdit}>
                 <Pencil />
                 Edit
@@ -85,14 +69,14 @@ export function ItemDetailToolbar({
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu>
-            </div>
+            </ButtonsGroup>
           </>
         )}
 
         <Button variant="secondary" size="default" onClick={onClose} aria-label="Close detail panel">
           <XIcon />
         </Button>
-      </div>
-    </div>
+      </ButtonsGroup>
+    </Column.Toolbar>
   );
 }

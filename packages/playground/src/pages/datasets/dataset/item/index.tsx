@@ -34,7 +34,8 @@ import {
   TextAndIcon,
   useDataset,
   CopyButton,
-  ListAndDetails,
+  Columns,
+  Column,
 } from '@mastra/playground-ui';
 
 function DatasetItemPage() {
@@ -62,7 +63,7 @@ function DatasetItemPage() {
       groundTruth: latestVersion.snapshot.groundTruth
         ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2)
         : '',
-      metadata: latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '',
+      metadata: latestVersion.snapshot.metadata ? JSON.stringify(latestVersion.snapshot.metadata, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
 
@@ -172,7 +173,7 @@ function DatasetItemPage() {
       setGroundTruthValue(
         latestVersion.snapshot.groundTruth ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2) : '',
       );
-      setMetadataValue(latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '');
+      setMetadataValue(latestVersion.snapshot.metadata ? JSON.stringify(latestVersion.snapshot.metadata, null, 2) : '');
     }
     setIsEditing(false);
   };
@@ -199,7 +200,7 @@ function DatasetItemPage() {
         datasetId: datasetId ?? '',
         input: versionToDisplay.snapshot.input,
         groundTruth: versionToDisplay.snapshot.groundTruth,
-        metadata: versionToDisplay.snapshot.context,
+        metadata: versionToDisplay.snapshot.metadata,
         createdAt: versionToDisplay.createdAt,
         version: versionToDisplay.datasetVersion,
       }
@@ -295,6 +296,92 @@ function DatasetItemPage() {
               </MainHeader.Column>
             </MainHeader>
 
+            <Columns className="grid-cols-[1fr_auto]">
+              <Column withRightSeparator={true}>
+                {isDeleted && latestVersion && (
+                  <Alert variant="destructive">
+                    <AlertTitle>
+                      This item was deleted on{' '}
+                      {format(new Date(latestVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}
+                    </AlertTitle>
+                  </Alert>
+                )}
+                {!isDeleted && isViewingOldVersion && selectedVersion && (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      Viewing version from {format(new Date(selectedVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}
+                    </AlertTitle>
+                    <Button variant="standard" size="tiny" className="mt-2 mb-1" onClick={handleReturnToLatest}>
+                      <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
+                    </Button>
+                  </Alert>
+                )}
+
+                {isEditing ? (
+                  <EditModeContent
+                    inputValue={inputValue}
+                    setInputValue={setInputValue}
+                    groundTruthValue={groundTruthValue}
+                    setGroundTruthValue={setGroundTruthValue}
+                    metadataValue={metadataValue}
+                    setMetadataValue={setMetadataValue}
+                    validationErrors={null}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                    isSaving={updateItem.isPending}
+                  />
+                ) : (
+                  displayItem && (
+                    <div className="grid content-start">
+                      <DatasetItemContent item={displayItem} Link={FrameworkLink} />
+                    </div>
+                  )
+                )}
+              </Column>
+              <Column>
+                <DatasetItemVersionsPanel
+                  datasetId={datasetId}
+                  itemId={itemId}
+                  onClose={() => {}}
+                  onVersionSelect={handleVersionSelect}
+                  onCompareVersionsClick={(versionIds: string[]) => {
+                    navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
+                  }}
+                  activeVersion={selectedVersion?.datasetVersion ?? null}
+                />
+              </Column>
+            </Columns>
+          </div>
+        </div>
+      </MainContentLayout>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete Item</AlertDialog.Title>
+            <AlertDialog.Description>
+              Are you sure you want to delete this item? This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+            <AlertDialog.Action onClick={handleDeleteConfirm}>
+              {deleteItem.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialog.Action>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
+    </>
+  );
+}
+
+export { DatasetItemPage };
+export default DatasetItemPage;
+
+/*
+
+
             <ListAndDetails isDetailsActive={true}>
               <ListAndDetails.Column isTopFixed={isViewingOldVersion || isDeleted}>
                 {isDeleted && latestVersion && (
@@ -350,30 +437,4 @@ function DatasetItemPage() {
                 />
               </ListAndDetails.Column>
             </ListAndDetails>
-          </div>
-        </div>
-      </MainContentLayout>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialog.Content>
-          <AlertDialog.Header>
-            <AlertDialog.Title>Delete Item</AlertDialog.Title>
-            <AlertDialog.Description>
-              Are you sure you want to delete this item? This action cannot be undone.
-            </AlertDialog.Description>
-          </AlertDialog.Header>
-          <AlertDialog.Footer>
-            <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Delete'}
-            </AlertDialog.Action>
-          </AlertDialog.Footer>
-        </AlertDialog.Content>
-      </AlertDialog>
-    </>
-  );
-}
-
-export { DatasetItemPage };
-export default DatasetItemPage;
+            */
