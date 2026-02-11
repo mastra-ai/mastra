@@ -1482,6 +1482,23 @@ export interface GetObservationalMemoryResponse {
 }
 
 /**
+ * Parameters for awaiting buffer status
+ */
+export interface AwaitBufferStatusParams {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext;
+}
+
+/**
+ * Response for buffer status endpoint
+ */
+export interface AwaitBufferStatusResponse {
+  record: ObservationalMemoryRecord | null;
+}
+
+/**
  * Extended memory status response with OM info
  */
 export interface GetMemoryStatusResponse {
