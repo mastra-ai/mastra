@@ -20,11 +20,24 @@ A Go CLI for managing isolated Lima VM sandboxes for AI agent workflows.
 ### First install Lima
 
 ```bash
-VERSION=$(curl -fsSL https://api.github.com/repos/lima-vm/lima/releases/latest | jq -r .tag_name)
-curl -fsSL "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-${VERSION:1}-$(uname -s)-$(uname -m).tar.gz" | sudo tar Cxzvm /usr/local
+mkdir -p ~/.local
 
-# For Lima v1.1 onward
-curl -fsSL "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-additional-guestagents-${VERSION:1}-$(uname -s)-$(uname -m).tar.gz" | sudo tar Cxzvm /usr/local
+VERSION=$(curl -L https://api.github.com/repos/lima-vm/lima/releases/latest | jq -r .tag_name)
+
+curl -L --progress-bar \
+  "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-${VERSION:1}-$(uname -s)-$(uname -m).tar.gz" \
+  | tar -xzv -C ~/.local -f -
+
+curl -L --progress-bar \
+  "https://github.com/lima-vm/lima/releases/download/${VERSION}/lima-additional-guestagents-${VERSION:1}-$(uname -s)-$(uname -m).tar.gz" \
+  | tar -xzv -C ~/.local -f -
+```
+
+### Ensure your PATH includes ~/.local/bin (zsh):
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ### Then install lima-sandbox
