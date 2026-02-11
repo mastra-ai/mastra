@@ -111,9 +111,12 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private resolvePath(inputPath: string): string {
-    const cleanedPath = inputPath.replace(/^\/+/, '');
-    const normalizedInput = nodePath.normalize(cleanedPath);
-    const absolutePath = nodePath.resolve(this._basePath, normalizedInput);
+    // If the input is already an absolute path, use it directly instead of
+    // stripping the leading slash and resolving relative to basePath (which
+    // would produce an incorrect nested path).
+    const absolutePath = nodePath.isAbsolute(inputPath)
+      ? nodePath.normalize(inputPath)
+      : nodePath.resolve(this._basePath, nodePath.normalize(inputPath));
 
     if (this._contained) {
       const relative = nodePath.relative(this._basePath, absolutePath);
