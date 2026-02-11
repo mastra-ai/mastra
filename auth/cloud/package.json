@@ -1,0 +1,12 @@
+{
+  "name": "@mastra/auth-cloud",
+  "version": "0.0.0",
+  "description": "Mastra Cloud Auth integration",
+  "license": "Apache-2.0",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "auth/cloud"
+  }
+}
