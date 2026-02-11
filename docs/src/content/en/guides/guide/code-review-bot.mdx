@@ -18,50 +18,37 @@ In this guide, you'll build a code review bot that automatically reviews pull re
 
 ## Create the workspace
 
-To create a workspace, use the `Workspace` class with a `LocalFilesystem` and configure it with a skills directory.
-
-<Steps>
-
-<StepItem title="Configure workspace with skills">
-
-Create the workspace configuration in your Mastra entry file. This sets up a local filesystem and tells the workspace to look for skills in the `/skills` directory:
+In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspace/workspace-class) and [`LocalFilesystem`](/reference/workspace/local-filesystem) classes. On the `Workspace` instance, configure the `skills` option to point to a skills directory. The `skills` directory will live inside the filesystem's `basePath`.
 
 ```typescript title="src/mastra/index.ts"
-import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
+// highlight-start
+import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-end
 
+// highlight-start
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
   skills: ['/skills'],
 });
+// highlight-end
 
 export const mastra = new Mastra({
+  // highlight-next-line
   workspace,
 });
 ```
 
-</StepItem>
-
-<StepItem title="Set up workspace structure">
-
-Inside the `workspace` directory at your project root, create the folders `skills/code-standards/references`. This is where the skill definition and reference files will live.
-
-</StepItem>
-
-</Steps>
+At the root of your project, create a new folder called `workspace`. Inside that, create a `skills` folder. This is where you'll define the code standards skill in the next step.
 
 ## Create the code standards skill
 
 Skills are structured directories containing a `SKILL.md` file with instructions for the agent. The code standards skill defines the review process and references a style guide.
 
-<Steps>
-
-<StepItem title="Write the skill instructions">
-
-Inside the `workspace/skills/code-standards` folder, create a file called `SKILL.md`. Give it the following contents:
+Inside `workspace/skills`, create a new folder called `code-standards`. Create a file called `SKILL.md` and add the review instructions.
 
 ```markdown title="workspace/skills/code-standards/SKILL.md"
 ---
@@ -73,10 +60,10 @@ description: Automated code review standards and checks
 
 Review code systematically using these steps:
 
-1. **Critical Issues** - Security vulnerabilities, memory leaks, logic bugs, missing error handling
-2. **Code Quality** - Functions over 50 lines, code duplication, confusing names, missing types
-3. **Style Guide** - Check references/style-guide.md for naming and organization
-4. **Linting** - Flag common issues like use of `var`, leftover `console.log` statements, and `debugger` statements
+1. **Critical Issues**: Security vulnerabilities, memory leaks, logic bugs, missing error handling
+2. **Code Quality**: Functions over 50 lines, code duplication, confusing names, missing types
+3. **Style Guide**: Check references/style-guide.md for naming and organization
+4. **Linting**: Flag common issues like use of `var`, leftover `console.log` statements, and `debugger` statements
 
 Provide feedback in this format:
 
@@ -89,22 +76,20 @@ Provide feedback in this format:
 **Positive Notes**: What the code does well
 ```
 
-</StepItem>
-
-<StepItem title="Add style guide reference">
-
-Create a reference file at `workspace/skills/code-standards/references/style-guide.md` with the project's naming and organization conventions:
+Inside `workspace/skills/code-standards`, create a `references` folder to hold reference materials for the skill. Author a style guide file that outlines the project's coding conventions with the file name `style-guide.md`.
 
 ````markdown title="workspace/skills/code-standards/references/style-guide.md"
 # Style Guide
 
 ## Naming
+
 - Variables/Functions: `camelCase`
 - Constants: `UPPER_SNAKE_CASE`
 - Files: `kebab-case.ts`
 - Booleans: Start with `is`, `has`, `should`
 
 ## Code Organization
+
 ```typescript
 // 1. Imports
 import { foo } from 'bar';
@@ -123,23 +108,17 @@ export { doSomething };
 ```
 
 ## Error Handling
+
 Always handle errors explicitly - never silently catch.
 
 ## Comments
+
 Write "why" not "what".
 ````
 
-</StepItem>
-
-</Steps>
-
 ## Create the review agent
 
-<Steps>
-
-<StepItem title="Build the code reviewer">
-
-Create a new file `src/mastra/agents/code-reviewer.ts` and define the agent:
+Now it's time to create the code review bot agent that uses the code-standards skill. Create a new file at `src/mastra/agents/code-reviewer.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/code-reviewer.ts"
 import { Agent } from '@mastra/core/agent';
@@ -158,16 +137,13 @@ When asked to review code:
 });
 ```
 
-</StepItem>
-
-<StepItem title="Register the agent">
-
-Update your `src/mastra/index.ts` file to import and register the code reviewer agent:
+Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
 
 ```typescript title="src/mastra/index.ts"
-import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
+import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-next-line
 import { codeReviewer } from './agents/code-reviewer';
 
 const workspace = new Workspace({
@@ -179,19 +155,14 @@ const workspace = new Workspace({
 
 export const mastra = new Mastra({
   workspace,
+  // highlight-next-line
   agents: { codeReviewer },
 });
 ```
 
-</StepItem>
-
-</Steps>
-
 ## Test the bot
 
-<Steps>
-
-<StepItem title="Start Mastra Studio">
+Start Mastra Studio and interact with the code review bot to see it in action.
 
 ```bash npm2yarn
 npm run dev
@@ -199,13 +170,9 @@ npm run dev
 
 Open [localhost:4111](http://localhost:4111) and navigate to the code reviewer agent.
 
-</StepItem>
+Inside the chat input, provide a code snippet for review, such as:
 
-<StepItem title="Review some code">
-
-Paste code to review:
-
-```
+```text
 Review this code:
 
 function getData(id) {
@@ -215,9 +182,9 @@ function getData(id) {
 }
 ```
 
-The bot should activate the code-standards skill and provide structured feedback. Since agent responses are non-deterministic, your output may vary, but you should see something similar to:
+The bot should activate the `code-standards` skill and provide structured feedback. Since agent responses are non-deterministic, your output may vary, but you should see something similar to:
 
-```
+```md
 **Summary**: Function has several issues with variable declaration,
 debugging statements, and missing error handling.
 
@@ -235,10 +202,6 @@ debugging statements, and missing error handling.
 - Function name is clear and descriptive
 ```
 
-</StepItem>
-
-</Steps>
-
 ## Next steps
 
 You can extend this bot to:
@@ -249,6 +212,5 @@ You can extend this bot to:
 - Build a PR comment bot that leaves inline feedback
 
 Learn more:
-- [Skills documentation](/docs/workspace/skills)
-- [Workspace overview](/docs/workspace/overview)
+
 - [Agent Skills spec](https://agentskills.io)

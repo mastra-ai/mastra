@@ -18,45 +18,40 @@ In this guide, you'll build a documentation manager that maintains your project'
 
 ## Set up the workspace
 
-The workspace uses a local filesystem to manage documentation files. The agent reads and writes files within the workspace directory.
-
-<Steps>
-
-<StepItem title="Configure workspace">
-
-Create the workspace configuration in your Mastra entry file. This sets up a local filesystem that the agent can use to manage documentation:
+The workspace uses a local filesystem to manage documentation files. The agent reads and writes files within the workspace directory. In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspace/workspace-class) and [`LocalFilesystem`](/reference/workspace/local-filesystem) classes.
 
 ```typescript title="src/mastra/index.ts"
-import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
+// highlight-start
+import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-end
 
+// highlight-start
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: resolve(import.meta.dirname, '../../workspace'),
   }),
 });
+// highlight-end
 
 export const mastra = new Mastra({
+  // highlight-next-line
   workspace,
 });
 ```
 
-</StepItem>
+At the root of your project, create a new folder called `workspace`. This is where all documentation files will be stored and managed by the agent.
 
-<StepItem title="Create docs structure">
+## Add example documentation
 
-Inside the `workspace` directory at your project root, create the following folders:
+Inside the `workspace` directory, create the following folders:
 
-- `docs/guides/` — For how-to guides
-- `docs/api/` — For API reference documentation
-- `docs/tutorials/` — For step-by-step tutorials
+- `docs/guides/`: For how-to guides
+- `docs/api/`: For API reference documentation
+- `docs/tutorials/`: For step-by-step tutorials
 
-</StepItem>
-
-<StepItem title="Add initial documentation">
-
-Create a root README to serve as the documentation index:
+Create a `workspace/docs/README.md` file that serves as the documentation index:
 
 ```markdown title="workspace/docs/README.md"
 # Project Documentation
@@ -65,9 +60,9 @@ Welcome to the documentation!
 
 ## Sections
 
-- [Guides](./guides/) - How-to guides
-- [API](./api/) - API reference
-- [Tutorials](./tutorials/) - Step-by-step tutorials
+- [Guides](./guides/): How-to guides
+- [API](./api/): API reference
+- [Tutorials](./tutorials/): Step-by-step tutorials
 ```
 
 Add a sample guide so the agent can see the existing documentation style:
@@ -93,17 +88,9 @@ example.run();
 ```
 ````
 
-</StepItem>
-
-</Steps>
-
 ## Create the docs manager
 
-<Steps>
-
-<StepItem title="Build the agent">
-
-Create a new file `src/mastra/agents/docs-manager.ts` and define the agent:
+Now it's time to create the documentation manager agent. This agent will have instructions for creating and updating markdown files in the workspace. Create a new file `src/mastra/agents/docs-manager.ts` and define the agent:
 
 ```typescript title="src/mastra/agents/docs-manager.ts"
 import { Agent } from '@mastra/core/agent';
@@ -133,16 +120,13 @@ Always explain what you're creating and why.`,
 });
 ```
 
-</StepItem>
-
-<StepItem title="Register the agent">
-
-Update your `src/mastra/index.ts` file to import and register the docs manager agent:
+Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
 
 ```typescript title="src/mastra/index.ts"
-import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
+import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-next-line
 import { docsManager } from './agents/docs-manager';
 
 const workspace = new Workspace({
@@ -153,40 +137,32 @@ const workspace = new Workspace({
 
 export const mastra = new Mastra({
   workspace,
+  // highlight-next-line
   agents: { docsManager },
 });
 ```
 
-</StepItem>
+## Test the docs manager
 
-</Steps>
-
-## Use your docs manager
-
-<Steps>
-
-<StepItem title="Start Mastra Studio">
+Start Mastra Studio and interact with the agent to see it in action.
 
 ```bash npm2yarn
 npm run dev
 ```
 
-Open [localhost:4111](http://localhost:4111) and navigate to the Docs Manager.
+Open [localhost:4111](http://localhost:4111) and navigate to the docs manager.
 
-</StepItem>
-
-<StepItem title="Create new documentation">
+### Create a new document
 
 Ask the agent to create a tutorial:
 
-```
-Create a tutorial for setting up authentication.
-Cover installation, configuration, and a basic example.
+```text
+Create a tutorial for setting up authentication. Cover installation, configuration, and a basic example.
 ```
 
-The agent should create a file like `/docs/tutorials/authentication-setup.md`. Since agent responses are non-deterministic, the exact content will vary, but you should see something similar to:
+The agent should create a file like `docs/tutorials/authentication-setup.md`. Since agent responses are non-deterministic, the exact content will vary, but you should see something similar to:
 
-````markdown
+````md
 # Authentication Setup
 
 Learn how to add authentication to your application.
@@ -226,35 +202,25 @@ app.get('/protected', auth.requireAuth(), (req, res) => {
 ```
 ````
 
-</StepItem>
-
-<StepItem title="Update existing docs">
+### Update an existing document
 
 Try updating an existing document:
 
 ```
-Update the getting started guide to include
-a section on configuration after the Quick Example
+Update the getting started guide to include a section on configuration after the Quick Example
 ```
 
 The agent should read the existing `getting-started.md` file, find the right insertion point, and add the new section without disrupting existing content.
 
-</StepItem>
-
-<StepItem title="Organize documentation">
+### Organize documentation
 
 Ask the agent to create an index:
 
 ```
-List all tutorial files and create an index page
-that links to all of them
+List all tutorial files and create an index page that links to all of them
 ```
 
-The agent should create a file like `/docs/tutorials/README.md` that links to all available tutorials.
-
-</StepItem>
-
-</Steps>
+The agent should create a file like `/docs/tutorials/index.md` that links to all available tutorials.
 
 ## Next steps
 
@@ -265,8 +231,3 @@ You can extend this manager to:
 - Build automated doc generation from source code
 - Integrate with GitHub to update docs on commits
 - Add validation to check links and formatting
-
-Learn more:
-- [Filesystem documentation](/docs/workspace/filesystem)
-- [Workspace overview](/docs/workspace/overview)
-- [Search and indexing](/docs/workspace/search)
