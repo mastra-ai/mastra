@@ -75,7 +75,12 @@ await memory?.createThread({ resourceId: "user-123" });
     {
       name: "updatedAt",
       type: "Date",
-      description: "Timestamp when the thread was last updated",
+      description: "Timestamp when the thread was last updated (changes on any thread modification including title/metadata edits)",
+    },
+    {
+      name: "lastMessageAt",
+      type: "Date | null",
+      description: "Timestamp when the last message was saved to this thread, or null if no messages have been saved. Unlike updatedAt, this only changes when messages are saved.",
     },
     {
       name: "metadata",

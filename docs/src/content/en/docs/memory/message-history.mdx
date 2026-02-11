@@ -158,6 +158,15 @@ const result = await memory.listThreads({
 });
 ```
 
+To sort by when the last message was sent (ignoring title/metadata edits), use `lastMessageAt`:
+
+```typescript
+const result = await memory.listThreads({
+  filter: { resourceId: "user-123" },
+  orderBy: { field: "lastMessageAt", direction: "DESC" },
+});
+```
+
 To fetch a single thread by ID, use [`getThreadById()`](/reference/memory/getThreadById):
 
 ```typescript
