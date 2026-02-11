@@ -1104,9 +1104,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Delete the messages
       await messagesCollection.deleteMany({ id: { $in: messageIds } });
 
-      // Update thread timestamps for affected threads
-      if (threadIds.length > 0) {
-        await threadsCollection.updateMany({ id: { $in: threadIds } }, { $set: { updatedAt: new Date() } });
+      // Recompute lastMessageAt and update thread timestamps for affected threads
+      for (const threadId of threadIds) {
+        const remaining = await messagesCollection
+          .find({ thread_id: threadId })
+          .sort({ createdAt: -1 })
+          .limit(1)
+          .toArray();
+        const lastMessageAt = remaining.length > 0 ? new Date(remaining[0]!.createdAt) : null;
+        await threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date(), lastMessageAt } });
       }
     } catch (error) {
       throw new MastraError(

@@ -1129,23 +1129,29 @@ export class StoreMemoryUpstash extends MemoryStorage {
         pipeline.del(getMessageIndexKey(messageId));
       }
 
-      // Update thread timestamps
+      // Execute message deletions first
+      await pipeline.exec();
+
+      // Recompute lastMessageAt and update thread timestamps
       if (threadIds.size > 0) {
+        const threadPipeline = this.client.pipeline();
         for (const threadId of threadIds) {
           const threadKey = getKey(TABLE_THREADS, { id: threadId });
           const thread = await this.client.get<StorageThreadType>(threadKey);
           if (thread) {
+            const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
+            const lastMessageAt =
+              remaining.length > 0 ? new Date(Math.max(...remaining.map(m => new Date(m.createdAt).getTime()))) : null;
             const updatedThread = {
               ...thread,
               updatedAt: new Date(),
+              lastMessageAt,
             };
-            pipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
+            threadPipeline.set(threadKey, processRecord(TABLE_THREADS, updatedThread).processedRecord);
           }
         }
+        await threadPipeline.exec();
       }
-
-      // Execute all operations
-      await pipeline.exec();
 
       // TODO: Delete from vector store if semantic recall is enabled
     } catch (error) {

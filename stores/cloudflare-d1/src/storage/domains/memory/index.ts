@@ -50,6 +50,17 @@ export class MemoryStorageD1 extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_THREADS],
       ifNotExists: ['lastMessageAt'],
     });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    const threadsTableName = this.#db.getTableName(TABLE_THREADS);
+    const messagesTableName = this.#db.getTableName(TABLE_MESSAGES);
+    await this.#db.executeQuery({
+      sql: `UPDATE ${threadsTableName} SET "lastMessageAt" = (
+        SELECT MAX("createdAt") FROM ${messagesTableName} WHERE thread_id = ${threadsTableName}.id
+      ) WHERE "lastMessageAt" IS NULL AND id IN (
+        SELECT DISTINCT thread_id FROM ${messagesTableName}
+      )`,
+      params: [],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -1112,12 +1123,10 @@ export class MemoryStorageD1 extends MemoryStorage {
       const { sql, params } = deleteQuery.build();
       await this.#db.executeQuery({ sql, params });
 
-      // Update thread timestamps for affected threads
-      if (threadIds.length > 0) {
-        const threadPlaceholders = threadIds.map(() => '?').join(',');
-        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id IN (${threadPlaceholders})`;
-        const threadUpdateParams = [new Date().toISOString(), ...threadIds];
-        await this.#db.executeQuery({ sql: threadUpdateQuery, params: threadUpdateParams });
+      // Recompute lastMessageAt and update thread timestamps for affected threads
+      for (const threadId of threadIds) {
+        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ?, "lastMessageAt" = (SELECT MAX("createdAt") FROM ${fullTableName} WHERE thread_id = ?) WHERE id = ?`;
+        await this.#db.executeQuery({ sql: threadUpdateQuery, params: [new Date().toISOString(), threadId, threadId] });
       }
     } catch (error) {
       throw new MastraError(

@@ -15,6 +15,7 @@ export interface ThreadEntityData extends BaseEntityData {
   id: string;
   resourceId: string;
   title: string;
+  lastMessageAt?: string | null;
 }
 
 export interface MessageEntityData extends BaseEntityData {

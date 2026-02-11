@@ -491,7 +491,42 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async deleteMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    // Get thread IDs from messages before deleting
+    const rows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
+    const threadIds = [
+      ...new Set(
+        rows
+          .filter(r => messageIds.includes(r.id))
+          .map(r => r.thread_id)
+          .filter(Boolean),
+      ),
+    ];
+
     await this.#db.deleteMany(TABLE_MESSAGES, messageIds);
+
+    // Recompute lastMessageAt for affected threads
+    for (const threadId of threadIds) {
+      const thread = await this.getThreadById({ threadId });
+      if (thread) {
+        const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
+        const lastMessageAt =
+          remaining.length > 0 ? new Date(Math.max(...remaining.map(m => new Date(m.createdAt).getTime()))) : null;
+        await this.#db.insert({
+          tableName: TABLE_THREADS,
+          record: {
+            id: threadId,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: JSON.stringify(thread.metadata),
+            createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
+            updatedAt: new Date().toISOString(),
+            lastMessageAt: lastMessageAt ? lastMessageAt.toISOString() : null,
+          },
+        });
+      }
+    }
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {

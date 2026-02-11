@@ -541,12 +541,19 @@ export class InMemoryMemory extends MemoryStorage {
       this.db.messages.delete(messageId);
     }
 
-    // Update thread timestamps
+    // Update thread timestamps and recompute lastMessageAt
     const now = new Date();
     for (const threadId of threadIds) {
       const thread = this.db.threads.get(threadId);
       if (thread) {
         thread.updatedAt = now;
+        // Recompute lastMessageAt from remaining messages
+        const remainingMessages = Array.from(this.db.messages.values()).filter(m => m.thread_id === threadId);
+        if (remainingMessages.length > 0) {
+          thread.lastMessageAt = new Date(Math.max(...remainingMessages.map(m => new Date(m.createdAt).getTime())));
+        } else {
+          thread.lastMessageAt = null;
+        }
       }
     }
   }

@@ -80,6 +80,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_THREADS],
       ifNotExists: ['lastMessageAt'],
     });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    await this.client.command({
+      query: `ALTER TABLE ${TABLE_THREADS} UPDATE lastMessageAt = (
+        SELECT MAX(createdAt) FROM ${TABLE_MESSAGES} WHERE thread_id = ${TABLE_THREADS}.id
+      ) WHERE lastMessageAt IS NULL AND id IN (
+        SELECT DISTINCT thread_id FROM ${TABLE_MESSAGES}
+      )`,
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -107,14 +115,37 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         query_params: { messageIds },
       });
 
-      // Update thread timestamps
+      // Update thread timestamps and recompute lastMessageAt
       if (threadIds.length > 0) {
-        // Remove 'Z' suffix as ClickHouse DateTime64 expects format without timezone suffix
         const now = new Date().toISOString().replace('Z', '');
-        await this.client.command({
-          query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)} WHERE id IN {threadIds:Array(String)}`,
-          query_params: { now, threadIds },
-        });
+        for (const threadId of threadIds) {
+          // Query max createdAt from remaining messages for this thread
+          const maxResult = await this.client.query({
+            query: `SELECT MAX(createdAt) as maxCreatedAt FROM ${TABLE_MESSAGES} WHERE thread_id = {threadId:String}`,
+            query_params: { threadId },
+            clickhouse_settings: {
+              date_time_input_format: 'best_effort',
+              date_time_output_format: 'iso',
+              use_client_time_zone: 1,
+              output_format_json_quote_64bit_integers: 0,
+            },
+          });
+          const maxRows = await maxResult.json();
+          const maxCreatedAt = (maxRows.data as any[])[0]?.maxCreatedAt || null;
+
+          const lastMessageAt = maxCreatedAt ? new Date(maxCreatedAt).toISOString().replace('Z', '') : null;
+          if (lastMessageAt) {
+            await this.client.command({
+              query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)}, lastMessageAt = {lma:DateTime64(3)} WHERE id = {threadId:String}`,
+              query_params: { now, lma: lastMessageAt, threadId },
+            });
+          } else {
+            await this.client.command({
+              query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)}, lastMessageAt = {lma:Nullable(DateTime64(3))} WHERE id = {threadId:String}`,
+              query_params: { now, lma: null, threadId },
+            });
+          }
+        }
       }
     } catch (error) {
       throw new MastraError(

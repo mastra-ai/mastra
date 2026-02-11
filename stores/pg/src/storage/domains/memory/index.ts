@@ -147,6 +147,14 @@ export class MemoryPG extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_THREADS],
       ifNotExists: ['lastMessageAt'],
     });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    await this.#db.client.none(
+      `UPDATE ${threadTableName} SET "lastMessageAt" = sub.max_created, "lastMessageAtZ" = sub.max_created
+       FROM (SELECT thread_id, MAX("createdAt") as max_created FROM ${messageTableName} GROUP BY thread_id) sub
+       WHERE ${threadTableName}.id = sub.thread_id AND ${threadTableName}."lastMessageAt" IS NULL`,
+    );
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       const omTableName = getTableName({
@@ -352,7 +360,10 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", "lastMessageAt", "lastMessageAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      // For nullable fields like lastMessageAt, ensure deterministic NULL ordering:
+      // nulls last for DESC, nulls first for ASC
+      const nullsClause = field === 'lastMessageAt' ? (direction === 'DESC' ? ' NULLS LAST' : ' NULLS FIRST') : '';
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", "lastMessageAt", "lastMessageAtZ" ${baseQuery} ORDER BY "${field}" ${direction}${nullsClause} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -1283,7 +1294,14 @@ export class MemoryPG extends MemoryStorage {
 
         if (threadIds.length > 0) {
           const updatePromises = threadIds.map(threadId =>
-            t.none(`UPDATE ${threadTableName} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id = $1`, [threadId]),
+            t.none(
+              `UPDATE ${threadTableName} SET
+                "updatedAt" = NOW(), "updatedAtZ" = NOW(),
+                "lastMessageAt" = (SELECT MAX("createdAt") FROM ${messageTableName} WHERE thread_id = $1),
+                "lastMessageAtZ" = (SELECT MAX("createdAtZ") FROM ${messageTableName} WHERE thread_id = $1)
+              WHERE id = $1`,
+              [threadId],
+            ),
           );
           await Promise.all(updatePromises);
         }

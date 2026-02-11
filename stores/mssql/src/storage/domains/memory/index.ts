@@ -292,10 +292,13 @@ export class MemoryMSSQL extends MemoryStorage {
       const orderByField =
         field === 'lastMessageAt' ? '[lastMessageAt]' : field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      // For nullable fields like lastMessageAt, ensure deterministic NULL ordering
+      // For nullable fields like lastMessageAt, ensure deterministic NULL ordering:
+      // nulls last for DESC, nulls first for ASC
       const nullsOrder =
         field === 'lastMessageAt'
-          ? `CASE WHEN ${orderByField} IS NULL THEN 1 ELSE 0 END, ${orderByField} ${dir}`
+          ? dir === 'DESC'
+            ? `CASE WHEN ${orderByField} IS NULL THEN 1 ELSE 0 END, ${orderByField} ${dir}`
+            : `CASE WHEN ${orderByField} IS NULL THEN 0 ELSE 1 END, ${orderByField} ${dir}`
           : `${orderByField} ${dir}`;
       const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt], [lastMessageAt] ${baseQuery} ORDER BY ${nullsOrder} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
@@ -1084,12 +1087,14 @@ export class MemoryMSSQL extends MemoryStorage {
 
         await deleteRequest.query(`DELETE FROM ${messageTableName} WHERE [id] IN (${placeholders})`);
 
-        // Update thread timestamps sequentially to avoid transaction conflicts
+        // Update thread timestamps and recompute lastMessageAt
         if (threadIds.length > 0) {
           for (const threadId of threadIds) {
             const updateRequest = transaction.request();
             updateRequest.input('p1', threadId);
-            await updateRequest.query(`UPDATE ${threadTableName} SET [updatedAt] = GETDATE() WHERE [id] = @p1`);
+            await updateRequest.query(
+              `UPDATE ${threadTableName} SET [updatedAt] = GETDATE(), [lastMessageAt] = (SELECT MAX([createdAt]) FROM ${messageTableName} WHERE [thread_id] = @p1) WHERE [id] = @p1`,
+            );
           }
         }
 

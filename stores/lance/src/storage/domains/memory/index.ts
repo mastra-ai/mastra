@@ -77,12 +77,15 @@ export class StoreMemoryLance extends MemoryStorage {
       const idConditions = messageIds.map(id => `id = '${this.escapeSql(id)}'`).join(' OR ');
       await messagesTable.delete(idConditions);
 
-      // Update thread timestamps using mergeInsert
+      // Recompute lastMessageAt and update thread timestamps using mergeInsert
       const now = new Date().getTime();
       const threadsTable = await this.client.openTable(TABLE_THREADS);
       for (const threadId of threadIds) {
         const thread = await this.getThreadById({ threadId });
         if (thread) {
+          const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
+          const lastMessageAt =
+            remaining.length > 0 ? Math.max(...remaining.map(m => new Date(m.createdAt).getTime())) : null;
           const record = {
             id: threadId,
             resourceId: thread.resourceId,
@@ -90,6 +93,7 @@ export class StoreMemoryLance extends MemoryStorage {
             metadata: JSON.stringify(thread.metadata),
             createdAt: new Date(thread.createdAt).getTime(),
             updatedAt: now,
+            lastMessageAt,
           };
           await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
         }
@@ -549,8 +553,22 @@ export class StoreMemoryLance extends MemoryStorage {
       const currentTime = new Date().getTime();
       // Compute lastMessageAt from the max createdAt of saved messages
       const maxCreatedAt = Math.max(...messages.map(m => new Date(m.createdAt).getTime()));
-      const updateRecord = { id: threadId, updatedAt: currentTime, lastMessageAt: maxCreatedAt };
-      await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
+      const thread = await this.getThreadById({ threadId });
+      if (thread) {
+        // Only advance lastMessageAt, never regress
+        const existingLastMessageAt = thread.lastMessageAt ? new Date(thread.lastMessageAt).getTime() : 0;
+        const lastMessageAt = Math.max(maxCreatedAt, existingLastMessageAt);
+        const record = {
+          id: threadId,
+          resourceId: thread.resourceId,
+          title: thread.title,
+          metadata: JSON.stringify(thread.metadata),
+          createdAt: new Date(thread.createdAt).getTime(),
+          updatedAt: currentTime,
+          lastMessageAt,
+        };
+        await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+      }
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };

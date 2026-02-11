@@ -113,6 +113,15 @@ export class MemoryLibSQL extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_THREADS],
       ifNotExists: ['lastMessageAt'],
     });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    await this.#client.execute({
+      sql: `UPDATE "${TABLE_THREADS}" SET "lastMessageAt" = (
+        SELECT MAX("createdAt") FROM "${TABLE_MESSAGES}" WHERE thread_id = "${TABLE_THREADS}".id
+      ) WHERE "lastMessageAt" IS NULL AND id IN (
+        SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}"
+      )`,
+      args: [],
+    });
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       await this.#client.execute({
@@ -781,13 +790,13 @@ export class MemoryLibSQL extends MemoryStorage {
           });
         }
 
-        // Update thread timestamps within the transaction
+        // Update thread timestamps and recompute lastMessageAt within the transaction
         if (threadIds.size > 0) {
           const now = new Date().toISOString();
           for (const threadId of threadIds) {
             await tx.execute({
-              sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
-              args: [now, threadId],
+              sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ?, "lastMessageAt" = (SELECT MAX("createdAt") FROM "${TABLE_MESSAGES}" WHERE thread_id = ?) WHERE id = ?`,
+              args: [now, threadId, threadId],
             });
           }
         }

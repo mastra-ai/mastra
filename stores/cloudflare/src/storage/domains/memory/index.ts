@@ -1340,13 +1340,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }
       }
 
-      // Update thread timestamps for affected threads
+      // Recompute lastMessageAt and update thread timestamps for affected threads
       for (const threadId of threadIds) {
         const thread = await this.getThreadById({ threadId });
         if (thread) {
+          const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
+          const lastMessageAt =
+            remaining.length > 0 ? new Date(Math.max(...remaining.map(m => new Date(m.createdAt).getTime()))) : null;
           const updatedThread = {
             ...thread,
             updatedAt: new Date(),
+            lastMessageAt,
           };
           await this.#db.putKV({
             tableName: TABLE_THREADS,
