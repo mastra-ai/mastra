@@ -18,7 +18,14 @@ import { toast } from '@/lib/toast';
 import { cn } from '@/index';
 import { Columns, Column } from '@/ds/components/Columns';
 
-type SelectionMode = 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
+type SelectionMode =
+  | 'idle'
+  | 'export'
+  | 'export-json'
+  | 'create-dataset'
+  | 'add-to-dataset'
+  | 'delete'
+  | 'compare-items';
 
 export interface DatasetItemsProps {
   datasetId: string;
@@ -33,6 +40,7 @@ export interface DatasetItemsProps {
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
   onAddToDatasetClick?: (items: DatasetItem[]) => void;
+  onCompareItemsClick?: (itemIds: string[]) => void;
   datasetName?: string;
   clearSelectionTrigger?: number;
   // Infinite scroll props
@@ -66,6 +74,7 @@ export function DatasetItems({
   onBulkDeleteClick,
   onCreateDatasetClick,
   onAddToDatasetClick,
+  onCompareItemsClick,
   datasetName,
   clearSelectionTrigger,
   setEndOfListElement,
@@ -105,7 +114,6 @@ export function DatasetItems({
   };
 
   const handleVersionsClick = () => {
-    console.log('Toggling versions panel. Currently open:', isVersionsPanelOpen);
     setIsVersionsPanelOpen(true);
   };
 
@@ -146,6 +154,8 @@ export function DatasetItems({
       onAddToDatasetClick?.(selectedItems);
     } else if (selectionMode === 'delete') {
       onBulkDeleteClick?.(Array.from(selection.selectedIds));
+    } else if (selectionMode === 'compare-items') {
+      onCompareItemsClick?.(Array.from(selection.selectedIds));
     }
   };
 
@@ -175,6 +185,7 @@ export function DatasetItems({
           onCreateDatasetClick={() => setSelectionMode('create-dataset')}
           onAddToDatasetClick={() => setSelectionMode('add-to-dataset')}
           onDeleteClick={() => setSelectionMode('delete')}
+          onCompareClick={() => setSelectionMode('compare-items')}
           hasItems={items.length > 0}
           searchQuery={searchQuery}
           onSearchChange={onSearchChange}
@@ -220,6 +231,7 @@ export function DatasetItems({
           onToggleSelection={selection.toggle}
           onSelectAll={selection.selectAll}
           onClearSelection={selection.clearSelection}
+          maxSelection={selectionMode === 'compare-items' ? 2 : undefined}
           onAddClick={onAddClick}
           onImportClick={onImportClick}
           onImportJsonClick={onImportJsonClick}
@@ -237,7 +249,7 @@ export function DatasetItems({
         />
       )}
 
-      {isVersionsPanelOpen && (
+      {!featuredItem && isVersionsPanelOpen && (
         <DatasetVersionsPanel
           datasetId={datasetId}
           onClose={handleVersionsPanelClose}

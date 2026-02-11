@@ -62,6 +62,7 @@ import DatasetPage from './pages/datasets/dataset';
 import DatasetItemPage from './pages/datasets/dataset/item';
 import DatasetExperiment from './pages/datasets/dataset/experiment';
 import DatasetCompare from './pages/datasets/dataset/compare';
+import DatasetCompareItems from './pages/datasets/dataset/items';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -189,6 +190,7 @@ const routes = [
       { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
       { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
       { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
+      { path: '/datasets/:datasetId/items', element: <DatasetCompareItems /> },
 
       { index: true, loader: () => redirect('/agents') },
       { path: '/request-context', element: <RequestContext /> },

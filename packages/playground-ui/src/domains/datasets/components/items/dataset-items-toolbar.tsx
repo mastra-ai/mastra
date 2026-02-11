@@ -16,6 +16,7 @@ import {
   Search,
   History,
   ArrowRightIcon,
+  ScaleIcon,
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Badge } from '@/ds/components/Badge';
@@ -28,6 +29,7 @@ interface ActionsMenuProps {
   onCreateDatasetClick: () => void;
   onAddToDatasetClick: () => void;
   onDeleteClick: () => void;
+  onCompareClick: () => void;
 }
 
 function ActionsMenu({
@@ -36,6 +38,7 @@ function ActionsMenu({
   onCreateDatasetClick,
   onAddToDatasetClick,
   onDeleteClick,
+  onCompareClick,
 }: ActionsMenuProps) {
   return (
     <DropdownMenu>
@@ -45,6 +48,10 @@ function ActionsMenu({
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
+        <DropdownMenu.Item onSelect={onCompareClick}>
+          <ScaleIcon />
+          <span>Compare Items</span>
+        </DropdownMenu.Item>
         <DropdownMenu.Item onSelect={onExportClick}>
           <Download />
           <span>Export Items as CSV</span>
@@ -53,7 +60,6 @@ function ActionsMenu({
           <FileJson />
           <span>Export Items as JSON</span>
         </DropdownMenu.Item>
-
         <DropdownMenu.Item onSelect={onCreateDatasetClick}>
           <FolderPlus />
           <span>Create Dataset from Items</span>
@@ -62,7 +68,6 @@ function ActionsMenu({
           <FolderOutput />
           <span>Copy Items to Dataset</span>
         </DropdownMenu.Item>
-
         <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
           <Trash2 />
           <span>Delete Items</span>
@@ -82,6 +87,7 @@ export type DatasetItemsToolbarProps = {
   onCreateDatasetClick: () => void;
   onAddToDatasetClick: () => void;
   onDeleteClick: () => void;
+  onCompareClick: () => void;
   hasItems: boolean;
 
   // Search props
@@ -93,7 +99,7 @@ export type DatasetItemsToolbarProps = {
   selectedCount: number;
   onExecuteAction: () => void;
   onCancelSelection: () => void;
-  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
+  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete' | 'compare-items';
 
   // Versions panel
   onVersionsClick: () => void;
@@ -111,6 +117,7 @@ export function DatasetItemsToolbar({
   onCreateDatasetClick,
   onAddToDatasetClick,
   onDeleteClick,
+  onCompareClick,
   hasItems,
   searchQuery,
   isSelectionActive,
@@ -150,10 +157,19 @@ export function DatasetItemsToolbar({
             <ButtonWithTooltip
               variant="standard"
               size="default"
-              disabled={selectedCount === 0}
+              disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
               onClick={onExecuteAction}
-              tooltipContent={selectedCount === 0 ? 'Select at least one item' : undefined}
+              tooltipContent={
+                selectionMode === 'compare-items'
+                  ? selectedCount !== 2
+                    ? 'Select exactly 2 items to compare'
+                    : undefined
+                  : selectedCount === 0
+                    ? 'Select at least one item'
+                    : undefined
+              }
             >
+              {selectionMode === 'compare-items' && 'Compare Items'}
               {selectionMode === 'export' && 'Export Items as CSV'}
               {selectionMode === 'export-json' && 'Export Items as JSON'}
               {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
@@ -215,6 +231,7 @@ export function DatasetItemsToolbar({
             onCreateDatasetClick={onCreateDatasetClick}
             onAddToDatasetClick={onAddToDatasetClick}
             onDeleteClick={onDeleteClick}
+            onCompareClick={onCompareClick}
           />
         )}
 

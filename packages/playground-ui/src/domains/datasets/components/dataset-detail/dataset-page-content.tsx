@@ -19,6 +19,7 @@ import { AlertDialog } from '@/ds/components/AlertDialog';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetPageContentProps {
   datasetId: string;
@@ -46,6 +47,7 @@ export function DatasetPageContent({
   activeDatasetVersion: controlledVersion,
   onVersionSelect: onVersionSelectProp,
 }: DatasetPageContentProps) {
+  const { navigate } = useLinkComponent();
   const [activeTab, setActiveTab] = useState<TabValue>('items');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
@@ -119,6 +121,11 @@ export function DatasetPageContent({
       setItemsForAddToDataset([]);
       setClearSelectionTrigger(prev => prev + 1);
     }
+  };
+
+  // Handler for Compare Items action from selection
+  const handleCompareItemsClick = (itemIds: string[]) => {
+    navigate(`/datasets/${datasetId}/items?items=${itemIds.join(',')}`);
   };
 
   // Handler for bulk delete action from selection
@@ -201,6 +208,7 @@ export function DatasetPageContent({
                     onBulkDeleteClick={handleBulkDeleteClick}
                     onCreateDatasetClick={handleCreateDatasetClick}
                     onAddToDatasetClick={handleAddToDatasetClick}
+                    onCompareItemsClick={handleCompareItemsClick}
                     datasetName={dataset?.name}
                     clearSelectionTrigger={clearSelectionTrigger}
                     setEndOfListElement={setEndOfListElement}

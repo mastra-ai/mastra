@@ -23,6 +23,7 @@ export interface DatasetItemsListProps {
   onToggleSelection: (id: string, shiftKey: boolean, allIds: string[]) => void;
   onSelectAll: (ids: string[]) => void;
   onClearSelection: () => void;
+  maxSelection?: number;
   // Empty state props
   onAddClick: () => void;
   onImportClick?: () => void;
@@ -54,6 +55,7 @@ export function DatasetItemsList({
   onToggleSelection,
   onSelectAll,
   onClearSelection,
+  maxSelection,
   onAddClick,
   onImportClick,
   onImportJsonClick,
@@ -86,6 +88,11 @@ export function DatasetItemsList({
     }
   };
 
+  const handleToggleSelection = (id: string, shiftKey: boolean, allIds: string[]) => {
+    if (maxSelection && !selectedIds.has(id) && selectedIds.size >= maxSelection) return;
+    onToggleSelection(id, shiftKey, allIds);
+  };
+
   const handleEntryClick = (itemId: string) => {
     onItemClick?.(itemId);
   };
@@ -97,11 +104,13 @@ export function DatasetItemsList({
           <>
             {col.name === 'checkbox' ? (
               <ItemList.FlexCell key={col.name}>
-                <Checkbox
-                  checked={isIndeterminate ? 'indeterminate' : isAllSelected}
-                  onCheckedChange={handleSelectAllToggle}
-                  aria-label="Select all items"
-                />
+                {!maxSelection && (
+                  <Checkbox
+                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                    onCheckedChange={handleSelectAllToggle}
+                    aria-label="Select all items"
+                  />
+                )}
               </ItemList.FlexCell>
             ) : (
               <ItemList.HeaderCol key={col.name}>{col.label || col.name}</ItemList.HeaderCol>
@@ -136,7 +145,7 @@ export function DatasetItemsList({
                         onCheckedChange={() => {}}
                         onClick={e => {
                           e.stopPropagation();
-                          onToggleSelection(item.id, e.shiftKey, allIds);
+                          handleToggleSelection(item.id, e.shiftKey, allIds);
                         }}
                         aria-label={`Select item ${item.id}`}
                       />
