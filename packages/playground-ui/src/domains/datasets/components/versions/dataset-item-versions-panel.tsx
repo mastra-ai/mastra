@@ -80,9 +80,7 @@ export function DatasetItemVersionsPanel({
 
   const handleExecuteCompare = () => {
     if (selectedIds.size === 2 && versions) {
-      const selectedVersionNumbers = versions
-        .filter(v => selectedIds.has(v.id))
-        .map(v => String(v.versionNumber));
+      const selectedVersionNumbers = versions.filter(v => selectedIds.has(v.id)).map(v => String(v.versionNumber));
       onCompareVersionsClick?.(selectedVersionNumbers);
     }
   };
@@ -129,7 +127,7 @@ export function DatasetItemVersionsPanel({
             <ItemList.Header columns={columnsToRender}>
               {columnsToRender.map(col =>
                 col.name === 'checkbox' ? (
-                  <ItemList.FlexCell key={col.name} />
+                  <ItemList.FlexCell key={col.name}>.</ItemList.FlexCell>
                 ) : (
                   <ItemList.HeaderCol key={col.name}>{col.label}</ItemList.HeaderCol>
                 ),
@@ -149,7 +147,10 @@ export function DatasetItemVersionsPanel({
                 };
 
                 return (
-                  <ItemList.Row key={entry.id} isSelected={isSelectionActive ? selectedIds.has(item.id) : isVersionSelected(item)}>
+                  <ItemList.Row
+                    key={entry.id}
+                    isSelected={isSelectionActive ? selectedIds.has(item.id) : isVersionSelected(item)}
+                  >
                     {isSelectionActive && (
                       <ItemList.FlexCell className="w-12 pl-4">
                         <Checkbox
