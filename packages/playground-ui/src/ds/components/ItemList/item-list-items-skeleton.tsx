@@ -1,4 +1,4 @@
-import { type Column } from './types';
+import type { ItemListColumn } from './types';
 import { ItemListItems } from './item-list-items';
 import { ItemListRow } from './item-list-row';
 import { ItemListRowButton } from './item-list-row-button';
@@ -6,7 +6,7 @@ import { ItemListRowButton } from './item-list-row-button';
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
 export type ItemListItemsSkeletonProps = {
-  columns?: Column[];
+  columns?: ItemListColumn[];
   numberOfRows?: number;
 };
 

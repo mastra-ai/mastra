@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { DatasetItem, Dataset } from '@mastra/client-js';
+import type { DatasetItem, DatasetRecord } from '@mastra/client-js';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { Button } from '@/ds/components/Button';
 import { Label } from '@/ds/components/Label';
@@ -33,10 +33,10 @@ export function AddItemsToDatasetDialog({
   const { addItem } = useDatasetMutations();
 
   // Extract datasets array from response
-  const datasets: Dataset[] = (data as { datasets: Dataset[] } | undefined)?.datasets ?? [];
+  const datasets: DatasetRecord[] = (data as { datasets: DatasetRecord[] } | undefined)?.datasets ?? [];
 
   // Filter out the current dataset from the list
-  const availableDatasets = datasets.filter((d: Dataset) => d.id !== currentDatasetId);
+  const availableDatasets = datasets.filter((d: DatasetRecord) => d.id !== currentDatasetId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,13 +56,13 @@ export function AddItemsToDatasetDialog({
         await addItem.mutateAsync({
           datasetId: selectedDatasetId,
           input: item.input,
-          expectedOutput: item.expectedOutput,
-          context: item.context as Record<string, unknown> | undefined,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata as Record<string, unknown> | undefined,
         });
         setProgress(i + 1);
       }
 
-      const targetDataset = datasets.find((d: Dataset) => d.id === selectedDatasetId);
+      const targetDataset = datasets.find((d: DatasetRecord) => d.id === selectedDatasetId);
       toast.success(`Added ${items.length} item${items.length !== 1 ? 's' : ''} to "${targetDataset?.name}"`);
 
       // Reset form

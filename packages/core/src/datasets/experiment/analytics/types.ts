@@ -56,7 +56,7 @@ export interface ItemComparison {
   /** Dataset item ID */
   itemId: string;
   /** Whether item exists in both experiments */
-  inBothRuns: boolean;
+  inBothExperiments: boolean;
   /** Scores from experiment A by scorer ID (null if no score) */
   scoresA: Record<string, number | null>;
   /** Scores from experiment B by scorer ID (null if no score) */
@@ -68,12 +68,12 @@ export interface ItemComparison {
  */
 export interface ComparisonResult {
   /** Experiment A metadata */
-  runA: {
+  experimentA: {
     id: string;
     datasetVersion: Date;
   };
   /** Experiment B metadata */
-  runB: {
+  experimentB: {
     id: string;
     datasetVersion: Date;
   };
@@ -108,9 +108,9 @@ export interface ScorerThreshold {
  */
 export interface CompareExperimentsConfig {
   /** ID of experiment A (baseline) */
-  runIdA: string;
+  experimentIdA: string;
   /** ID of experiment B (candidate) */
-  runIdB: string;
+  experimentIdB: string;
   /**
    * Per-scorer thresholds for regression detection.
    * Key is scorer ID, value is threshold config.

@@ -1434,19 +1434,19 @@ export interface DatasetItem {
   datasetId: string;
   version: string | Date;
   input: unknown;
-  expectedOutput?: unknown;
-  context?: unknown;
+  groundTruth?: unknown;
+  metadata?: unknown;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
 
-export interface Dataset {
+export interface DatasetRecord {
   id: string;
   name: string;
   description?: string | null;
   metadata?: Record<string, unknown> | null;
   inputSchema?: Record<string, unknown> | null;
-  outputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
   version: string | Date;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -1475,7 +1475,7 @@ export interface DatasetExperimentResult {
   itemVersion: string | Date;
   input: unknown;
   output: unknown | null;
-  expectedOutput: unknown | null;
+  groundTruth: unknown | null;
   latency: number;
   error: string | null;
   startedAt: string | Date;
@@ -1497,7 +1497,7 @@ export interface CreateDatasetParams {
   description?: string;
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
-  outputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetParams {
@@ -1506,30 +1506,30 @@ export interface UpdateDatasetParams {
   description?: string;
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
-  outputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemParams {
   datasetId: string;
   input: unknown;
-  expectedOutput?: unknown;
-  context?: Record<string, unknown>;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 export interface UpdateDatasetItemParams {
   datasetId: string;
   itemId: string;
   input?: unknown;
-  expectedOutput?: unknown;
-  context?: Record<string, unknown>;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 export interface BulkAddDatasetItemsParams {
   datasetId: string;
   items: Array<{
     input: unknown;
-    expectedOutput?: unknown;
-    context?: Record<string, unknown>;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
   }>;
 }
 
@@ -1568,8 +1568,8 @@ export interface DatasetItemVersionResponse {
   datasetVersion: string | Date;
   snapshot: {
     input: unknown;
-    expectedOutput?: unknown;
-    context?: Record<string, unknown>;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
   };
   isDeleted: boolean;
   createdAt: string | Date;

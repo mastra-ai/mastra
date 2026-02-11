@@ -15,7 +15,7 @@ export interface DatasetItemPageProps {
 
 /**
  * Page component for displaying a single dataset item's details.
- * Read-only view showing input, expected output, and metadata.
+ * Read-only view showing input, ground truth, and metadata.
  */
 export function DatasetItemPage({ item }: DatasetItemPageProps) {
   const { Link } = useLinkComponent();
@@ -31,7 +31,7 @@ export function DatasetItemPage({ item }: DatasetItemPageProps) {
  * Read-only view of the dataset item details
  */
 function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnType<typeof useLinkComponent>['Link'] }) {
-  const metadataDisplay = item.context ? JSON.stringify(item.context, null, 2) : null;
+  const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
 
   return (
     <>
@@ -67,11 +67,11 @@ function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnTyp
 
         <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
 
-        {item.expectedOutput !== null && item.expectedOutput !== undefined && (
+        {item.groundTruth !== null && item.groundTruth !== undefined && (
           <SideDialog.CodeSection
-            title="Expected Output"
+            title="Ground Truth"
             icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(item.expectedOutput, null, 2)}
+            codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
         )}
 

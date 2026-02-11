@@ -10,3 +10,5 @@ export type { Workflow } from './workflows';
 export type { MastraScorers, ScoringSamplingConfig } from './evals';
 export type { StorageResolvedAgentType, StorageScorerConfig } from './storage';
 export type { IMastraEditor, MastraEditorConfig } from './editor';
+export { DatasetsManager, Dataset } from './datasets';
+export type { StartExperimentConfig } from './datasets';

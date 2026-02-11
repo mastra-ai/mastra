@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { DatabaseIcon, EyeIcon } from 'lucide-react';
 import type { SpanRecord } from '@mastra/core/storage';
-import type { Dataset } from '@mastra/client-js';
+import type { DatasetRecord } from '@mastra/core/storage';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { Button } from '@/ds/components/Button';
@@ -24,18 +24,18 @@ type TraceAsItemDialogProps = {
 export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose }: TraceAsItemDialogProps) {
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [input, setInput] = useState('');
-  const [expectedOutput, setExpectedOutput] = useState('');
+  const [groundTruth, setGroundTruth] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
 
-  const datasets: Dataset[] = (data as { datasets: Dataset[] } | undefined)?.datasets ?? [];
+  const datasets: DatasetRecord[] = (data as { datasets: DatasetRecord[] } | undefined)?.datasets ?? [];
 
   // Initialize form values when dialog opens with trace data
   if (isOpen && traceDetails && !initialized) {
     setInput(traceDetails.input ? JSON.stringify(traceDetails.input, null, 2) : '{}');
-    setExpectedOutput(traceDetails.output ? JSON.stringify(traceDetails.output, null, 2) : '');
+    setGroundTruth(traceDetails.output ? JSON.stringify(traceDetails.output, null, 2) : '');
     setInitialized(true);
   }
 
@@ -60,12 +60,12 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose }: Tr
       return;
     }
 
-    let parsedExpectedOutput: unknown | undefined;
-    if (expectedOutput.trim()) {
+    let parsedGroundTruth: unknown | undefined;
+    if (groundTruth.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(expectedOutput);
+        parsedGroundTruth = JSON.parse(groundTruth);
       } catch {
-        toast.error('Expected Output must be valid JSON');
+        toast.error('Ground Truth must be valid JSON');
         return;
       }
     }
@@ -74,7 +74,7 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose }: Tr
       await addItem.mutateAsync({
         datasetId: selectedDatasetId,
         input: parsedInput,
-        expectedOutput: parsedExpectedOutput,
+        groundTruth: parsedGroundTruth,
       });
 
       const targetDataset = datasets.find(d => d.id === selectedDatasetId);
@@ -82,7 +82,7 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose }: Tr
 
       setSelectedDatasetId('');
       setInput('{}');
-      setExpectedOutput('');
+      setGroundTruth('');
       setInitialized(false);
       onClose();
     } catch (error) {
@@ -152,10 +152,10 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose }: Tr
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="item-expected-output">Expected Output (JSON, optional)</Label>
+            <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
             <CodeEditor
-              value={expectedOutput}
-              onChange={setExpectedOutput}
+              value={groundTruth}
+              onChange={setGroundTruth}
               showCopyButton={false}
               className="min-h-[80px]"
             />

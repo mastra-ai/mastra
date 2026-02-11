@@ -95,8 +95,8 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
         await addItem.mutateAsync({
           datasetId,
           input: item.input,
-          expectedOutput: item.expectedOutput,
-          context: item.metadata,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
         });
         successCount++;
       } catch {

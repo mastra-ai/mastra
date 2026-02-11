@@ -136,7 +136,7 @@ function DatasetPage() {
             item={{
               id: itemToEdit.id,
               input: itemToEdit.input,
-              expectedOutput: itemToEdit.expectedOutput,
+              groundTruth: itemToEdit.groundTruth,
             }}
           />
         )}

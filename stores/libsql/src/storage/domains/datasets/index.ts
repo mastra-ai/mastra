@@ -17,7 +17,7 @@ import {
   ensureDate,
 } from '@mastra/core/storage';
 import type {
-  Dataset,
+  DatasetRecord,
   DatasetItem,
   DatasetItemVersion,
   DatasetVersion,
@@ -67,14 +67,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
   }
 
   // Helper to transform row to Dataset
-  private transformDatasetRow(row: Record<string, any>): Dataset {
+  private transformDatasetRow(row: Record<string, any>): DatasetRecord {
     return {
       id: row.id as string,
       name: row.name as string,
       description: row.description as string | undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       inputSchema: row.inputSchema ? safelyParseJSON(row.inputSchema) : undefined,
-      outputSchema: row.outputSchema ? safelyParseJSON(row.outputSchema) : undefined,
+      groundTruthSchema: row.groundTruthSchema ? safelyParseJSON(row.groundTruthSchema) : undefined,
       version: ensureDate(row.version)!, // Timestamp-based versioning
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
@@ -88,8 +88,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
       datasetId: row.datasetId as string,
       version: ensureDate(row.version)!, // Timestamp when item was added/modified
       input: safelyParseJSON(row.input),
-      expectedOutput: row.expectedOutput ? safelyParseJSON(row.expectedOutput) : undefined,
-      context: row.context ? safelyParseJSON(row.context) : undefined,
+      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
+      metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -120,7 +120,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
   }
 
   // Dataset CRUD
-  async createDataset(input: CreateDatasetInput): Promise<Dataset> {
+  async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const id = crypto.randomUUID();
       const now = new Date();
@@ -135,7 +135,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
           description: input.description ?? null,
           metadata: input.metadata, // jsonb serialization handled by prepareStatement
           inputSchema: input.inputSchema ?? null,
-          outputSchema: input.outputSchema ?? null,
+          groundTruthSchema: input.groundTruthSchema ?? null,
           version: nowIso, // Timestamp-based versioning
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -148,7 +148,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         description: input.description,
         metadata: input.metadata,
         inputSchema: input.inputSchema,
-        outputSchema: input.outputSchema,
+        groundTruthSchema: input.groundTruthSchema,
         version: now, // Return as Date
         createdAt: now,
         updatedAt: now,
@@ -165,7 +165,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<Dataset | null> {
+  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
     try {
       const result = await this.#client.execute({
         sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE id = ?`,
@@ -184,7 +184,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<Dataset> {
+  protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
       const existing = await this.getDatasetById({ id: args.id });
       if (!existing) {
@@ -216,9 +216,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
         updates.push('inputSchema = ?');
         values.push(args.inputSchema === null ? null : JSON.stringify(args.inputSchema));
       }
-      if (args.outputSchema !== undefined) {
-        updates.push('outputSchema = ?');
-        values.push(args.outputSchema === null ? null : JSON.stringify(args.outputSchema));
+      if (args.groundTruthSchema !== undefined) {
+        updates.push('groundTruthSchema = ?');
+        values.push(args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema));
       }
 
       values.push(args.id);
@@ -234,7 +234,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         description: args.description ?? existing.description,
         metadata: args.metadata ?? existing.metadata,
         inputSchema: args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema,
-        outputSchema: args.outputSchema !== undefined ? args.outputSchema : existing.outputSchema,
+        groundTruthSchema: args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema,
         updatedAt: new Date(now),
       };
     } catch (error) {
@@ -344,8 +344,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           datasetId: args.datasetId,
           version: nowIso, // Item stores the version timestamp when added
           input: args.input,
-          expectedOutput: args.expectedOutput,
-          context: args.context,
+          groundTruth: args.groundTruth,
+          metadata: args.metadata,
           createdAt: nowIso,
           updatedAt: nowIso,
         },
@@ -356,8 +356,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
         datasetId: args.datasetId,
         version: now, // Return as Date
         input: args.input,
-        expectedOutput: args.expectedOutput,
-        context: args.context,
+        groundTruth: args.groundTruth,
+        metadata: args.metadata,
         createdAt: now,
         updatedAt: now,
       };
@@ -412,13 +412,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
         updates.push('input = ?');
         values.push(JSON.stringify(args.input));
       }
-      if (args.expectedOutput !== undefined) {
-        updates.push('expectedOutput = ?');
-        values.push(JSON.stringify(args.expectedOutput));
+      if (args.groundTruth !== undefined) {
+        updates.push('groundTruth = ?');
+        values.push(JSON.stringify(args.groundTruth));
       }
-      if (args.context !== undefined) {
-        updates.push('context = ?');
-        values.push(JSON.stringify(args.context));
+      if (args.metadata !== undefined) {
+        updates.push('metadata = ?');
+        values.push(JSON.stringify(args.metadata));
       }
 
       values.push(args.id);
@@ -432,8 +432,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
         ...existing,
         version: now, // Return as Date
         input: args.input ?? existing.input,
-        expectedOutput: args.expectedOutput ?? existing.expectedOutput,
-        context: args.context ?? existing.context,
+        groundTruth: args.groundTruth ?? existing.groundTruth,
+        metadata: args.metadata ?? existing.metadata,
         updatedAt: now,
       };
     } catch (error) {
@@ -593,8 +593,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
               datasetId: row.datasetId as string,
               version: ensureDate(row.datasetVersion as string)!,
               input: snapshot.input ?? null, // Ensure input is never undefined
-              expectedOutput: snapshot.expectedOutput,
-              context: snapshot.context,
+              groundTruth: snapshot.groundTruth,
+              metadata: snapshot.metadata,
               createdAt: ensureDate(row.createdAt as string)!,
               updatedAt: ensureDate(row.datasetVersion as string)!,
             };
@@ -616,8 +616,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const queryParams: InValue[] = [args.datasetId];
 
       if (args.search) {
-        // Search in both input and expectedOutput (stored as JSON text)
-        conditions.push(`(LOWER(input) LIKE ? OR LOWER(COALESCE(expectedOutput, '')) LIKE ?)`);
+        // Search in both input and groundTruth (stored as JSON text)
+        conditions.push(`(LOWER(input) LIKE ? OR LOWER(COALESCE(groundTruth, '')) LIKE ?)`);
         const searchPattern = `%${args.search.toLowerCase()}%`;
         queryParams.push(searchPattern, searchPattern);
       }
@@ -703,8 +703,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
             datasetId: row.datasetId as string,
             version: ensureDate(row.datasetVersion as string)!,
             input: snapshot.input ?? null, // Ensure input is never undefined
-            expectedOutput: snapshot.expectedOutput,
-            context: snapshot.context,
+            groundTruth: snapshot.groundTruth,
+            metadata: snapshot.metadata,
             createdAt: ensureDate(row.createdAt as string)!,
             updatedAt: ensureDate(row.datasetVersion as string)!,
           };
@@ -966,8 +966,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
             datasetId: input.datasetId,
             version: nowIso,
             input: itemInput.input,
-            expectedOutput: itemInput.expectedOutput,
-            context: itemInput.context,
+            groundTruth: itemInput.groundTruth,
+            metadata: itemInput.metadata,
             createdAt: nowIso,
             updatedAt: nowIso,
           },
@@ -978,8 +978,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           datasetId: input.datasetId,
           version: now,
           input: itemInput.input,
-          expectedOutput: itemInput.expectedOutput,
-          context: itemInput.context,
+          groundTruth: itemInput.groundTruth,
+          metadata: itemInput.metadata,
           createdAt: now,
           updatedAt: now,
         };
@@ -993,8 +993,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           datasetVersion: now,
           snapshot: {
             input: item.input,
-            expectedOutput: item.expectedOutput,
-            context: item.context,
+            groundTruth: item.groundTruth,
+            metadata: item.metadata,
           },
           isDeleted: false,
         });
@@ -1054,8 +1054,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           datasetVersion: now,
           snapshot: {
             input: item.input,
-            expectedOutput: item.expectedOutput,
-            context: item.context,
+            groundTruth: item.groundTruth,
+            metadata: item.metadata,
           },
           isDeleted: true,
         });

@@ -8,7 +8,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
 /** Column mapping configuration */
-export type ColumnMapping = Record<string, 'input' | 'expectedOutput' | 'metadata' | 'ignore'>;
+export type ColumnMapping = Record<string, 'input' | 'groundTruth' | 'metadata' | 'ignore'>;
 
 /** Validation error for a specific row/column */
 export interface ValidationError {
@@ -33,7 +33,7 @@ export interface FieldError {
 /** Validation result for a single row */
 export interface RowValidationResult {
   rowNumber: number; // 1-indexed, +1 for header
-  field: 'input' | 'expectedOutput';
+  field: 'input' | 'groundTruth';
   errors: FieldError[];
   data: unknown;
 }
@@ -42,7 +42,7 @@ export interface RowValidationResult {
 export interface CsvValidationResult {
   validCount: number;
   invalidCount: number;
-  validRows: Array<{ rowNumber: number; input: unknown; expectedOutput?: unknown }>;
+  validRows: Array<{ rowNumber: number; input: unknown; groundTruth?: unknown }>;
   invalidRows: RowValidationResult[];
   totalRows: number;
 }
@@ -71,19 +71,19 @@ function formatErrors(error: ZodError): FieldError[] {
 /**
  * Validate CSV rows against dataset schemas.
  *
- * @param rows Mapped rows from CSV (with input/expectedOutput fields)
+ * @param rows Mapped rows from CSV (with input/groundTruth fields)
  * @param inputSchema JSON Schema for input field (null = skip validation)
- * @param outputSchema JSON Schema for expectedOutput field (null = skip validation)
+ * @param groundTruthSchema JSON Schema for groundTruth field (null = skip validation)
  * @param maxErrors Maximum number of invalid rows to collect details for (default 10)
  */
 export function validateCsvRows(
-  rows: Array<{ input: unknown; expectedOutput?: unknown }>,
+  rows: Array<{ input: unknown; groundTruth?: unknown }>,
   inputSchema: Record<string, unknown> | null | undefined,
-  outputSchema: Record<string, unknown> | null | undefined,
+  groundTruthSchema: Record<string, unknown> | null | undefined,
   maxErrors = 10,
 ): CsvValidationResult {
   // No schemas = all rows valid
-  if (!inputSchema && !outputSchema) {
+  if (!inputSchema && !groundTruthSchema) {
     return {
       validCount: rows.length,
       invalidCount: 0,
@@ -95,7 +95,7 @@ export function validateCsvRows(
 
   // Pre-compile schemas for performance
   const inputValidator = inputSchema ? compileSchema(inputSchema) : null;
-  const outputValidator = outputSchema ? compileSchema(outputSchema) : null;
+  const outputValidator = groundTruthSchema ? compileSchema(groundTruthSchema) : null;
 
   const validRows: CsvValidationResult['validRows'] = [];
   const invalidRows: CsvValidationResult['invalidRows'] = [];
@@ -124,18 +124,18 @@ export function validateCsvRows(
       }
     }
 
-    // Validate expectedOutput (only if schema enabled, value provided, and input was valid)
-    if (isValid && outputValidator && row.expectedOutput !== undefined) {
-      const result = outputValidator.safeParse(row.expectedOutput);
+    // Validate groundTruth (only if schema enabled, value provided, and input was valid)
+    if (isValid && outputValidator && row.groundTruth !== undefined) {
+      const result = outputValidator.safeParse(row.groundTruth);
       if (!result.success) {
         isValid = false;
         // Only collect details up to maxErrors
         if (invalidRows.length < maxErrors) {
           rowInvalidDetails = {
             rowNumber,
-            field: 'expectedOutput',
+            field: 'groundTruth',
             errors: formatErrors(result.error),
-            data: row.expectedOutput,
+            data: row.groundTruth,
           };
         }
       }

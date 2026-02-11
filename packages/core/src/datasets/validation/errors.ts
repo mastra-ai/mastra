@@ -11,7 +11,7 @@ export interface FieldError {
 /** Schema validation error with field details */
 export class SchemaValidationError extends Error {
   constructor(
-    public readonly field: 'input' | 'expectedOutput',
+    public readonly field: 'input' | 'groundTruth',
     public readonly errors: FieldError[],
   ) {
     const summary = errors
@@ -29,7 +29,7 @@ export interface BatchValidationResult {
   invalid: Array<{
     index: number;
     data: unknown;
-    field: 'input' | 'expectedOutput';
+    field: 'input' | 'groundTruth';
     errors: FieldError[];
   }>;
 }
@@ -40,7 +40,7 @@ export class SchemaUpdateValidationError extends Error {
     public readonly failingItems: Array<{
       index: number;
       data: unknown;
-      field: 'input' | 'expectedOutput';
+      field: 'input' | 'groundTruth';
       errors: FieldError[];
     }>,
   ) {

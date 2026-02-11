@@ -3,8 +3,8 @@ import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../../storage/base';
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
+import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
-import { RunsInMemory } from '../../../storage/domains/runs/inmemory';
 import { runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -35,7 +35,7 @@ const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<an
 describe('runExperiment', () => {
   let db: InMemoryDB;
   let datasetsStorage: DatasetsInMemory;
-  let runsStorage: RunsInMemory;
+  let experimentsStorage: ExperimentsInMemory;
   let mockStorage: MastraCompositeStore;
   let mastra: Mastra;
   let datasetId: string;
@@ -44,7 +44,7 @@ describe('runExperiment', () => {
     // Create fresh db and storage instances
     db = new InMemoryDB();
     datasetsStorage = new DatasetsInMemory({ db });
-    runsStorage = new RunsInMemory({ db });
+    experimentsStorage = new ExperimentsInMemory({ db });
 
     // Create test dataset with items
     const dataset = await datasetsStorage.createDataset({
@@ -56,12 +56,12 @@ describe('runExperiment', () => {
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: 'Hello' },
-      expectedOutput: { text: 'Hi' },
+      groundTruth: { text: 'Hi' },
     });
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: 'Goodbye' },
-      expectedOutput: { text: 'Bye' },
+      groundTruth: { text: 'Bye' },
     });
 
     // Create mock storage that returns the stores
@@ -69,11 +69,11 @@ describe('runExperiment', () => {
       id: 'test-storage',
       stores: {
         datasets: datasetsStorage,
-        runs: runsStorage,
+        experiments: experimentsStorage,
       } as unknown as StorageDomains,
       getStore: vi.fn().mockImplementation(async (name: keyof StorageDomains) => {
         if (name === 'datasets') return datasetsStorage;
-        if (name === 'runs') return runsStorage;
+        if (name === 'experiments') return experimentsStorage;
         return undefined;
       }),
     } as unknown as MastraCompositeStore;
@@ -98,7 +98,7 @@ describe('runExperiment', () => {
         targetId: 'test-agent',
       });
 
-      expect(result.runId).toBeDefined();
+      expect(result.experimentId).toBeDefined();
       expect(result.status).toBe('completed');
       expect(result.totalItems).toBe(2);
       expect(result.succeededCount).toBe(2);
@@ -136,7 +136,7 @@ describe('runExperiment', () => {
       expect(result.status).toBe('completed');
 
       // Verify run was persisted
-      const storedRun = await runsStorage.getRunById({ id: result.runId });
+      const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
       expect(storedRun?.status).toBe('completed');
       expect(storedRun?.succeededCount).toBe(2);
       expect(storedRun?.failedCount).toBe(0);
@@ -392,7 +392,7 @@ describe('runExperiment', () => {
           groundTruth: { label: 'good' },
         },
         // Human label for alignment analysis (Phase 5 analytics)
-        expectedOutput: { humanScore: 1.0 },
+        groundTruth: { humanScore: 1.0 },
       });
 
       // Mock scorer as target (the scorer being calibrated)
@@ -437,6 +437,241 @@ describe('runExperiment', () => {
       // Meta-scorer should have been applied
       expect(runResult.results[0].scores).toHaveLength(1);
       expect(runResult.results[0].scores[0].scorerId).toBe('meta-scorer');
+    });
+  });
+
+  describe('inline data + inline task', () => {
+    // Test 1 — Inline data array (no storage fetch)
+    it('runs experiment with inline data array', async () => {
+      const inlineData = [
+        { input: { prompt: 'Hello' }, groundTruth: { text: 'Hi' } },
+        { input: { prompt: 'Goodbye' }, groundTruth: { text: 'Bye' } },
+        { input: { prompt: 'Thanks' }, groundTruth: { text: 'Welcome' } },
+      ];
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        data: inlineData,
+        targetType: 'agent',
+        targetId: 'test-agent',
+      });
+
+      expect(result.totalItems).toBe(3);
+      expect(result.succeededCount).toBe(3);
+      expect(result.status).toBe('completed');
+      // Each result has correct input matching the inline data
+      expect(result.results[0].input).toEqual({ prompt: 'Hello' });
+      expect(result.results[1].input).toEqual({ prompt: 'Goodbye' });
+      expect(result.results[2].input).toEqual({ prompt: 'Thanks' });
+      // Items have auto-generated UUIDs
+      for (const r of result.results) {
+        expect(r.itemId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      }
+    });
+
+    // Test 2 — Inline data factory function
+    it('runs experiment with inline data factory function', async () => {
+      const factory = vi.fn().mockResolvedValue([{ input: { prompt: 'from-factory' } }]);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        data: factory,
+        targetType: 'agent',
+        targetId: 'test-agent',
+      });
+
+      expect(factory).toHaveBeenCalledTimes(1);
+      expect(result.totalItems).toBe(1);
+      expect(result.results[0].input).toEqual({ prompt: 'from-factory' });
+    });
+
+    // Test 3 — Inline task function
+    it('runs experiment with inline task function', async () => {
+      const result = await runExperiment(mastra, {
+        datasetId,
+        task: async ({ input }) => 'processed-' + (input as any).prompt,
+      });
+
+      expect(result.status).toBe('completed');
+      const outputs = result.results.map(r => r.output).sort();
+      expect(outputs).toEqual(['processed-Goodbye', 'processed-Hello']);
+      for (const r of result.results) {
+        expect(r.error).toBeNull();
+      }
+    });
+
+    // Test 4 — Inline task receives all arguments
+    it('inline task receives input, mastra, groundTruth, metadata, and signal', async () => {
+      // Create dataset with metadata
+      const metaDataset = await datasetsStorage.createDataset({ name: 'Meta Dataset' });
+      await datasetsStorage.addItem({
+        datasetId: metaDataset.id,
+        input: { prompt: 'test' },
+        groundTruth: { expected: 'answer' },
+        metadata: { source: 'unit-test' },
+      });
+
+      const capturedArgs: any[] = [];
+      const result = await runExperiment(mastra, {
+        datasetId: metaDataset.id,
+        task: async args => {
+          capturedArgs.push(args);
+          return 'ok';
+        },
+      });
+
+      expect(result.status).toBe('completed');
+      expect(capturedArgs).toHaveLength(1);
+      expect(capturedArgs[0].input).toEqual({ prompt: 'test' });
+      expect(capturedArgs[0].mastra).toBe(mastra);
+      expect(capturedArgs[0].groundTruth).toEqual({ expected: 'answer' });
+      expect(capturedArgs[0].metadata).toEqual({ source: 'unit-test' });
+      // signal is only present when itemTimeout is set or a run-level signal is provided
+      // Without those, signal is undefined
+      expect('signal' in capturedArgs[0]).toBe(true);
+    });
+
+    // Test 5 — Inline data + inline task (full inline experiment)
+    it('runs full inline experiment with both data and task', async () => {
+      const result = await runExperiment(mastra, {
+        datasetId,
+        data: [{ input: { prompt: 'A' } }, { input: { prompt: 'B' } }],
+        task: async ({ input }) => 'result-' + (input as any).prompt,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.totalItems).toBe(2);
+      expect(result.results[0].input).toEqual({ prompt: 'A' });
+      expect(result.results[0].output).toBe('result-A');
+      expect(result.results[1].input).toEqual({ prompt: 'B' });
+      expect(result.results[1].output).toBe('result-B');
+    });
+
+    // Test 6 — Inline task returns sync value
+    it('inline task supports synchronous return value', async () => {
+      const result = await runExperiment(mastra, {
+        datasetId,
+        data: [{ input: { prompt: 'sync-test' } }],
+        task: ({ input }) => 'sync-' + (input as any).prompt,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.results[0].output).toBe('sync-sync-test');
+    });
+
+    // Test 7 — Inline task error isolation
+    it('inline task error for one item does not fail entire experiment', async () => {
+      const result = await runExperiment(mastra, {
+        datasetId,
+        data: [{ input: { prompt: 'good' } }, { input: { prompt: 'bad' } }, { input: { prompt: 'also-good' } }],
+        task: async ({ input }) => {
+          if ((input as any).prompt === 'bad') {
+            throw new Error('Task failed for bad input');
+          }
+          return 'ok-' + (input as any).prompt;
+        },
+        maxConcurrency: 1,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.completedWithErrors).toBe(true);
+      expect(result.failedCount).toBe(1);
+      expect(result.succeededCount).toBe(2);
+
+      const failedItem = result.results.find(r => r.error !== null);
+      expect(failedItem?.output).toBeNull();
+      expect(failedItem?.error).toBe('Task failed for bad input');
+
+      const successItems = result.results.filter(r => r.error === null);
+      expect(successItems).toHaveLength(2);
+      for (const item of successItems) {
+        expect(item.output).toMatch(/^ok-/);
+      }
+    });
+
+    // Test 8 — No data source → throws
+    it('throws when no data source is provided', async () => {
+      await expect(
+        runExperiment(mastra, {
+          task: async ({ input }) => input,
+        }),
+      ).rejects.toThrow('No data source: provide datasetId or data');
+    });
+
+    // Test 9 — No task source → throws
+    it('throws when no task source is provided', async () => {
+      await expect(
+        runExperiment(mastra, {
+          datasetId,
+        }),
+      ).rejects.toThrow('No task: provide targetType+targetId or task');
+    });
+
+    // Test 10 — Backward compatibility (existing config shape)
+    it('backward compatible with existing config shape', async () => {
+      const mockScorer = createMockScorer('compat-scorer', 'Compat Scorer');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [mockScorer],
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.totalItems).toBe(2);
+      expect(result.succeededCount).toBe(2);
+      expect(result.results[0].scores).toHaveLength(1);
+      expect(result.results[0].scores[0].scorerId).toBe('compat-scorer');
+    });
+
+    // Test 11 — experimentId field works
+    it('uses provided experimentId', async () => {
+      // Pre-create the run record (simulates async trigger path)
+      await experimentsStorage.createExperiment({
+        id: 'pre-created-id',
+        datasetId,
+        datasetVersion: new Date(),
+        targetType: 'agent',
+        targetId: 'inline',
+        totalItems: 1,
+      });
+
+      const createExperimentSpy = vi.spyOn(experimentsStorage, 'createExperiment');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        data: [{ input: { prompt: 'test' } }],
+        task: async () => 'output',
+        experimentId: 'pre-created-id',
+      });
+
+      expect(result.experimentId).toBe('pre-created-id');
+      // createExperiment should NOT have been called again (experimentId was provided)
+      expect(createExperimentSpy).not.toHaveBeenCalled();
+      createExperimentSpy.mockRestore();
+    });
+
+    // Test 12 — Inline data + scorers verify groundTruth pipeline
+    it('passes groundTruth through full pipeline to scorer', async () => {
+      const mockScorer = createMockScorer('gt-scorer', 'GroundTruth Scorer');
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        data: [{ input: { q: 'hello' }, groundTruth: 'expected-answer' }],
+        task: async () => 'some-output',
+        scorers: [mockScorer],
+      });
+
+      expect(result.status).toBe('completed');
+      // Verify scorer was called with correct arguments
+      expect(mockScorer.run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { q: 'hello' },
+          output: 'some-output',
+          groundTruth: 'expected-answer',
+        }),
+      );
     });
   });
 });

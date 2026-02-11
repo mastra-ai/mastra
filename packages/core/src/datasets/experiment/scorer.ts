@@ -61,7 +61,7 @@ export async function runScorersForItem(
             reason: result.reason ?? undefined,
             input: item.input,
             output,
-            additionalContext: item.context,
+            additionalContext: item.metadata,
             entityType: targetType.toUpperCase(),
             entityId: targetId,
             source: 'TEST',
@@ -107,7 +107,7 @@ async function runScorerSafe(
     const scoreResult = await scorer.run({
       input: scorerInput ?? item.input,
       output: scorerOutput ?? output,
-      groundTruth: item.expectedOutput,
+      groundTruth: item.groundTruth,
     });
 
     // Extract score and reason with proper null handling

@@ -1,6 +1,6 @@
 import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
 import type {
-  Dataset,
+  DatasetRecord,
   DatasetItem,
   DatasetItemVersion,
   DatasetVersion,
@@ -42,8 +42,8 @@ export abstract class DatasetsStorage extends StorageDomain {
   }
 
   // Dataset CRUD
-  abstract createDataset(input: CreateDatasetInput): Promise<Dataset>;
-  abstract getDatasetById(args: { id: string }): Promise<Dataset | null>;
+  abstract createDataset(input: CreateDatasetInput): Promise<DatasetRecord>;
+  abstract getDatasetById(args: { id: string }): Promise<DatasetRecord | null>;
   abstract deleteDataset(args: { id: string }): Promise<void>;
   abstract listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput>;
 
@@ -51,7 +51,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Update a dataset. Validates existing items against new schemas if schemas are changing.
    * Subclasses implement _doUpdateDataset for actual storage operation.
    */
-  async updateDataset(args: UpdateDatasetInput): Promise<Dataset> {
+  async updateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     const existing = await this.getDatasetById({ id: args.id });
     if (!existing) {
       throw new Error(`Dataset not found: ${args.id}`);
@@ -60,11 +60,12 @@ export abstract class DatasetsStorage extends StorageDomain {
     // Check if schemas are being added or modified
     const inputSchemaChanging =
       args.inputSchema !== undefined && JSON.stringify(args.inputSchema) !== JSON.stringify(existing.inputSchema);
-    const outputSchemaChanging =
-      args.outputSchema !== undefined && JSON.stringify(args.outputSchema) !== JSON.stringify(existing.outputSchema);
+    const groundTruthSchemaChanging =
+      args.groundTruthSchema !== undefined &&
+      JSON.stringify(args.groundTruthSchema) !== JSON.stringify(existing.groundTruthSchema);
 
     // If schemas changing, validate all existing items against new schemas
-    if (inputSchemaChanging || outputSchemaChanging) {
+    if (inputSchemaChanging || groundTruthSchemaChanging) {
       const itemsResult = await this.listItems({
         datasetId: args.id,
         pagination: { page: 0, perPage: false }, // Get all items
@@ -74,10 +75,11 @@ export abstract class DatasetsStorage extends StorageDomain {
       if (items.length > 0) {
         const validator = getSchemaValidator();
         const newInputSchema = args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema;
-        const newOutputSchema = args.outputSchema !== undefined ? args.outputSchema : existing.outputSchema;
+        const newOutputSchema =
+          args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema;
 
         const result = validator.validateBatch(
-          items.map(i => ({ input: i.input, expectedOutput: i.expectedOutput })),
+          items.map(i => ({ input: i.input, groundTruth: i.groundTruth })),
           newInputSchema,
           newOutputSchema,
           `dataset:${args.id}:schema-update`,
@@ -98,10 +100,10 @@ export abstract class DatasetsStorage extends StorageDomain {
   }
 
   /** Subclasses implement actual storage update logic */
-  protected abstract _doUpdateDataset(args: UpdateDatasetInput): Promise<Dataset>;
+  protected abstract _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord>;
 
   /**
-   * Add an item to a dataset. Validates input/expectedOutput against dataset schemas.
+   * Add an item to a dataset. Validates input/groundTruth against dataset schemas.
    * Creates version records for history tracking.
    * Subclasses implement _doAddItem for actual storage operation.
    */
@@ -119,8 +121,8 @@ export abstract class DatasetsStorage extends StorageDomain {
       validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
     }
 
-    if (dataset.outputSchema && args.expectedOutput !== undefined) {
-      validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
+    if (dataset.groundTruthSchema && args.groundTruth !== undefined) {
+      validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
     }
 
     // Add the item
@@ -135,8 +137,8 @@ export abstract class DatasetsStorage extends StorageDomain {
       datasetVersion: now,
       snapshot: {
         input: item.input,
-        expectedOutput: item.expectedOutput,
-        context: item.context,
+        groundTruth: item.groundTruth,
+        metadata: item.metadata,
       },
       isDeleted: false,
     });
@@ -167,8 +169,8 @@ export abstract class DatasetsStorage extends StorageDomain {
       validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
     }
 
-    if (args.expectedOutput !== undefined && dataset.outputSchema) {
-      validator.validate(args.expectedOutput, dataset.outputSchema, 'expectedOutput', `${cacheKey}:output`);
+    if (args.groundTruth !== undefined && dataset.groundTruthSchema) {
+      validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
     }
 
     // Get current version number before update
@@ -187,8 +189,8 @@ export abstract class DatasetsStorage extends StorageDomain {
       datasetVersion: now,
       snapshot: {
         input: item.input,
-        expectedOutput: item.expectedOutput,
-        context: item.context,
+        groundTruth: item.groundTruth,
+        metadata: item.metadata,
       },
       isDeleted: false,
     });
@@ -226,8 +228,8 @@ export abstract class DatasetsStorage extends StorageDomain {
       datasetVersion: now,
       snapshot: {
         input: item.input,
-        expectedOutput: item.expectedOutput,
-        context: item.context,
+        groundTruth: item.groundTruth,
+        metadata: item.metadata,
       },
       isDeleted: true, // Tombstone marker
     });

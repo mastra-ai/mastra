@@ -195,8 +195,8 @@ function CompareVersionColumn({
     id: itemId,
     datasetId,
     input: version.snapshot.input,
-    expectedOutput: version.snapshot.expectedOutput,
-    metadata: version.snapshot.context,
+    groundTruth: version.snapshot.groundTruth,
+    metadata: version.snapshot.metadata,
     createdAt: version.createdAt,
     version: version.datasetVersion,
   };

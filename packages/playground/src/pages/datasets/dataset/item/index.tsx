@@ -57,13 +57,13 @@ function DatasetItemPage() {
 
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
-    if (!latestVersion || isDeleted) return { input: '', expectedOutput: '', metadata: '' };
+    if (!latestVersion || isDeleted) return { input: '', groundTruth: '', metadata: '' };
     return {
       input: JSON.stringify(latestVersion.snapshot.input, null, 2),
-      expectedOutput: latestVersion.snapshot.expectedOutput
-        ? JSON.stringify(latestVersion.snapshot.expectedOutput, null, 2)
+      groundTruth: latestVersion.snapshot.groundTruth
+        ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2)
         : '',
-      metadata: latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '',
+      metadata: latestVersion.snapshot.metadata ? JSON.stringify(latestVersion.snapshot.metadata, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
 
@@ -73,7 +73,7 @@ function DatasetItemPage() {
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState(formDefaults.input);
-  const [expectedOutputValue, setExpectedOutputValue] = useState(formDefaults.expectedOutput);
+  const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
 
   // Reset form values when version changes (key-based reset pattern)
@@ -81,7 +81,7 @@ function DatasetItemPage() {
   if (versionKey !== prevVersionKey) {
     setPrevVersionKey(versionKey);
     setInputValue(formDefaults.input);
-    setExpectedOutputValue(formDefaults.expectedOutput);
+    setGroundTruthValue(formDefaults.groundTruth);
     setMetadataValue(formDefaults.metadata);
   }
 
@@ -129,13 +129,13 @@ function DatasetItemPage() {
       return;
     }
 
-    // Parse expectedOutput if provided
-    let parsedExpectedOutput: unknown | undefined;
-    if (expectedOutputValue.trim()) {
+    // Parse groundTruth if provided
+    let parsedGroundTruth: unknown | undefined;
+    if (groundTruthValue.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(expectedOutputValue);
+        parsedGroundTruth = JSON.parse(groundTruthValue);
       } catch {
-        toast.error('Expected Output must be valid JSON');
+        toast.error('Ground Truth must be valid JSON');
         return;
       }
     }
@@ -156,7 +156,7 @@ function DatasetItemPage() {
         datasetId,
         itemId,
         input: parsedInput,
-        expectedOutput: parsedExpectedOutput,
+        groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
       });
       toast.success('Item updated successfully');
@@ -170,10 +170,10 @@ function DatasetItemPage() {
     // Reset form values to latest version
     if (latestVersion) {
       setInputValue(JSON.stringify(latestVersion.snapshot.input, null, 2));
-      setExpectedOutputValue(
-        latestVersion.snapshot.expectedOutput ? JSON.stringify(latestVersion.snapshot.expectedOutput, null, 2) : '',
+      setGroundTruthValue(
+        latestVersion.snapshot.groundTruth ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2) : '',
       );
-      setMetadataValue(latestVersion.snapshot.context ? JSON.stringify(latestVersion.snapshot.context, null, 2) : '');
+      setMetadataValue(latestVersion.snapshot.metadata ? JSON.stringify(latestVersion.snapshot.metadata, null, 2) : '');
     }
     setIsEditing(false);
   };
@@ -199,8 +199,8 @@ function DatasetItemPage() {
         id: itemId ?? '',
         datasetId: datasetId ?? '',
         input: versionToDisplay.snapshot.input,
-        expectedOutput: versionToDisplay.snapshot.expectedOutput,
-        metadata: versionToDisplay.snapshot.context,
+        groundTruth: versionToDisplay.snapshot.groundTruth,
+        metadata: versionToDisplay.snapshot.metadata,
         createdAt: versionToDisplay.createdAt,
         version: versionToDisplay.datasetVersion,
       }
@@ -321,8 +321,8 @@ function DatasetItemPage() {
                   <EditModeContent
                     inputValue={inputValue}
                     setInputValue={setInputValue}
-                    expectedOutputValue={expectedOutputValue}
-                    setExpectedOutputValue={setExpectedOutputValue}
+                    groundTruthValue={groundTruthValue}
+                    setGroundTruthValue={setGroundTruthValue}
                     metadataValue={metadataValue}
                     setMetadataValue={setMetadataValue}
                     validationErrors={null}
@@ -407,8 +407,8 @@ export default DatasetItemPage;
                   <EditModeContent
                     inputValue={inputValue}
                     setInputValue={setInputValue}
-                    expectedOutputValue={expectedOutputValue}
-                    setExpectedOutputValue={setExpectedOutputValue}
+                    groundTruthValue={groundTruthValue}
+                    setGroundTruthValue={setGroundTruthValue}
                     metadataValue={metadataValue}
                     setMetadataValue={setMetadataValue}
                     validationErrors={null}

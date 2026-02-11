@@ -131,7 +131,7 @@ export function JSONUploadStep({ onFileSelect, isParsing, error }: JSONUploadSte
           {`[
   {
     "input": "Your input data",
-    "expectedOutput": "Expected result (optional)",
+    "groundTruth": "Expected result (optional)",
     "metadata": { "key": "value" } // optional
   }
 ]`}

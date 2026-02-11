@@ -1,19 +1,19 @@
 import { calculatePagination, normalizePerPage } from '../../base';
 import type {
-  Run,
-  RunResult,
-  CreateRunInput,
-  UpdateRunInput,
-  AddRunResultInput,
-  ListRunsInput,
-  ListRunsOutput,
-  ListRunResultsInput,
-  ListRunResultsOutput,
+  Experiment,
+  ExperimentResult,
+  CreateExperimentInput,
+  UpdateExperimentInput,
+  AddExperimentResultInput,
+  ListExperimentsInput,
+  ListExperimentsOutput,
+  ListExperimentResultsInput,
+  ListExperimentResultsOutput,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
-import { RunsStorage } from './base';
+import { ExperimentsStorage } from './base';
 
-export class RunsInMemory extends RunsStorage {
+export class ExperimentsInMemory extends ExperimentsStorage {
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -22,14 +22,14 @@ export class RunsInMemory extends RunsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    this.db.runs.clear();
-    this.db.runResults.clear();
+    this.db.experiments.clear();
+    this.db.experimentResults.clear();
   }
 
-  // Run lifecycle
-  async createRun(input: CreateRunInput): Promise<Run> {
+  // Experiment lifecycle
+  async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     const now = new Date();
-    const run: Run = {
+    const experiment: Experiment = {
       id: input.id ?? crypto.randomUUID(),
       datasetId: input.datasetId,
       datasetVersion: input.datasetVersion,
@@ -44,16 +44,16 @@ export class RunsInMemory extends RunsStorage {
       createdAt: now,
       updatedAt: now,
     };
-    this.db.runs.set(run.id, run);
-    return run;
+    this.db.experiments.set(experiment.id, experiment);
+    return experiment;
   }
 
-  async updateRun(input: UpdateRunInput): Promise<Run> {
-    const existing = this.db.runs.get(input.id);
+  async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
+    const existing = this.db.experiments.get(input.id);
     if (!existing) {
-      throw new Error(`Run not found: ${input.id}`);
+      throw new Error(`Experiment not found: ${input.id}`);
     }
-    const updated: Run = {
+    const updated: Experiment = {
       ...existing,
       status: input.status ?? existing.status,
       succeededCount: input.succeededCount ?? existing.succeededCount,
@@ -62,62 +62,62 @@ export class RunsInMemory extends RunsStorage {
       completedAt: input.completedAt ?? existing.completedAt,
       updatedAt: new Date(),
     };
-    this.db.runs.set(input.id, updated);
+    this.db.experiments.set(input.id, updated);
     return updated;
   }
 
-  async getRunById(args: { id: string }): Promise<Run | null> {
-    return this.db.runs.get(args.id) ?? null;
+  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+    return this.db.experiments.get(args.id) ?? null;
   }
 
-  async listRuns(args: ListRunsInput): Promise<ListRunsOutput> {
-    let runs = Array.from(this.db.runs.values());
+  async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
+    let experiments = Array.from(this.db.experiments.values());
 
     // Filter by datasetId if provided
     if (args.datasetId) {
-      runs = runs.filter(r => r.datasetId === args.datasetId);
+      experiments = experiments.filter(r => r.datasetId === args.datasetId);
     }
 
     // Sort by createdAt descending (newest first)
-    runs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    experiments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-    const end = perPageInput === false ? runs.length : start + perPage;
+    const end = perPageInput === false ? experiments.length : start + perPage;
 
     return {
-      runs: runs.slice(start, end),
+      experiments: experiments.slice(start, end),
       pagination: {
-        total: runs.length,
+        total: experiments.length,
         page,
         perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : runs.length > end,
+        hasMore: perPageInput === false ? false : experiments.length > end,
       },
     };
   }
 
-  async deleteRun(args: { id: string }): Promise<void> {
-    this.db.runs.delete(args.id);
+  async deleteExperiment(args: { id: string }): Promise<void> {
+    this.db.experiments.delete(args.id);
     // Also delete associated results
-    for (const [resultId, result] of this.db.runResults) {
-      if (result.runId === args.id) {
-        this.db.runResults.delete(resultId);
+    for (const [resultId, result] of this.db.experimentResults) {
+      if (result.experimentId === args.id) {
+        this.db.experimentResults.delete(resultId);
       }
     }
   }
 
   // Results (per-item)
-  async addResult(input: AddRunResultInput): Promise<RunResult> {
+  async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     const now = new Date();
-    const result: RunResult = {
+    const result: ExperimentResult = {
       id: input.id ?? crypto.randomUUID(),
-      runId: input.runId,
+      experimentId: input.experimentId,
       itemId: input.itemId,
       itemVersion: input.itemVersion,
       input: input.input,
       output: input.output,
-      expectedOutput: input.expectedOutput,
+      groundTruth: input.groundTruth,
       latency: input.latency,
       error: input.error,
       startedAt: input.startedAt,
@@ -127,16 +127,16 @@ export class RunsInMemory extends RunsStorage {
       scores: input.scores ?? [],
       createdAt: now,
     };
-    this.db.runResults.set(result.id, result);
+    this.db.experimentResults.set(result.id, result);
     return result;
   }
 
-  async getResultById(args: { id: string }): Promise<RunResult | null> {
-    return this.db.runResults.get(args.id) ?? null;
+  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+    return this.db.experimentResults.get(args.id) ?? null;
   }
 
-  async listResults(args: ListRunResultsInput): Promise<ListRunResultsOutput> {
-    let results = Array.from(this.db.runResults.values()).filter(r => r.runId === args.runId);
+  async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
+    let results = Array.from(this.db.experimentResults.values()).filter(r => r.experimentId === args.experimentId);
 
     // Sort by startedAt ascending (execution order)
     results.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
@@ -157,10 +157,10 @@ export class RunsInMemory extends RunsStorage {
     };
   }
 
-  async deleteResultsByRunId(args: { runId: string }): Promise<void> {
-    for (const [resultId, result] of this.db.runResults) {
-      if (result.runId === args.runId) {
-        this.db.runResults.delete(resultId);
+  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+    for (const [resultId, result] of this.db.experimentResults) {
+      if (result.experimentId === args.experimentId) {
+        this.db.experimentResults.delete(resultId);
       }
     }
   }

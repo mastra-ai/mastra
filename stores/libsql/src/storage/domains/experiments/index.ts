@@ -2,32 +2,32 @@ import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
-  TABLE_DATASET_EXPERIMENTS,
-  TABLE_DATASET_EXPERIMENT_RESULTS,
-  DATASET_EXPERIMENTS_SCHEMA,
-  DATASET_EXPERIMENT_RESULTS_SCHEMA,
-  RunsStorage,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
+  EXPERIMENTS_SCHEMA,
+  EXPERIMENT_RESULTS_SCHEMA,
+  ExperimentsStorage,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
 } from '@mastra/core/storage';
 import type {
-  Run,
-  RunResult,
-  CreateRunInput,
-  UpdateRunInput,
-  AddRunResultInput,
-  ListRunsInput,
-  ListRunsOutput,
-  ListRunResultsInput,
-  ListRunResultsOutput,
+  Experiment,
+  ExperimentResult,
+  CreateExperimentInput,
+  UpdateExperimentInput,
+  AddExperimentResultInput,
+  ListExperimentsInput,
+  ListExperimentsOutput,
+  ListExperimentResultsInput,
+  ListExperimentResultsOutput,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
-export class RunsLibSQL extends RunsStorage {
+export class ExperimentsLibSQL extends ExperimentsStorage {
   #db: LibSQLDB;
   #client: Client;
 
@@ -39,27 +39,27 @@ export class RunsLibSQL extends RunsStorage {
   }
 
   async init(): Promise<void> {
-    await this.#db.createTable({ tableName: TABLE_DATASET_EXPERIMENTS, schema: DATASET_EXPERIMENTS_SCHEMA });
+    await this.#db.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.#db.createTable({
-      tableName: TABLE_DATASET_EXPERIMENT_RESULTS,
-      schema: DATASET_EXPERIMENT_RESULTS_SCHEMA,
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
     });
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.#db.deleteData({ tableName: TABLE_DATASET_EXPERIMENT_RESULTS });
-    await this.#db.deleteData({ tableName: TABLE_DATASET_EXPERIMENTS });
+    await this.#db.deleteData({ tableName: TABLE_EXPERIMENT_RESULTS });
+    await this.#db.deleteData({ tableName: TABLE_EXPERIMENTS });
   }
 
-  // Helper to transform row to Run
-  private transformRunRow(row: Record<string, unknown>): Run {
+  // Helper to transform row to Experiment
+  private transformExperimentRow(row: Record<string, unknown>): Experiment {
     return {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: ensureDate(row.datasetVersion as string | Date)!,
-      targetType: row.targetType as Run['targetType'],
+      targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
-      status: row.status as Run['status'],
+      status: row.status as Experiment['status'],
       totalItems: row.totalItems as number,
       succeededCount: row.succeededCount as number,
       failedCount: row.failedCount as number,
@@ -70,16 +70,16 @@ export class RunsLibSQL extends RunsStorage {
     };
   }
 
-  // Helper to transform row to RunResult
-  private transformResultRow(row: Record<string, unknown>): RunResult {
+  // Helper to transform row to ExperimentResult
+  private transformExperimentResultRow(row: Record<string, unknown>): ExperimentResult {
     return {
       id: row.id as string,
-      runId: row.runId as string,
+      experimentId: row.experimentId as string,
       itemId: row.itemId as string,
       itemVersion: ensureDate(row.itemVersion as string | Date)!,
       input: safelyParseJSON(row.input as string),
       output: row.output ? safelyParseJSON(row.output as string) : null,
-      expectedOutput: row.expectedOutput ? safelyParseJSON(row.expectedOutput as string) : null,
+      groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth as string) : null,
       latency: row.latency as number,
       error: row.error as string | null,
       startedAt: ensureDate(row.startedAt as string | Date)!,
@@ -91,15 +91,15 @@ export class RunsLibSQL extends RunsStorage {
     };
   }
 
-  // Run lifecycle
-  async createRun(input: CreateRunInput): Promise<Run> {
+  // Experiment lifecycle
+  async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     try {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date();
       const nowIso = now.toISOString();
 
       await this.#db.insert({
-        tableName: TABLE_DATASET_EXPERIMENTS,
+        tableName: TABLE_EXPERIMENTS,
         record: {
           id,
           datasetId: input.datasetId,
@@ -135,7 +135,7 @@ export class RunsLibSQL extends RunsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'CREATE_RUN', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'CREATE_EXPERIMENT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -144,15 +144,15 @@ export class RunsLibSQL extends RunsStorage {
     }
   }
 
-  async updateRun(input: UpdateRunInput): Promise<Run> {
+  async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
     try {
-      const existing = await this.getRunById({ id: input.id });
+      const existing = await this.getExperimentById({ id: input.id });
       if (!existing) {
         throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'UPDATE_RUN', 'NOT_FOUND'),
+          id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { runId: input.id },
+          details: { experimentId: input.id },
         });
       }
 
@@ -184,7 +184,7 @@ export class RunsLibSQL extends RunsStorage {
       values.push(input.id);
 
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASET_EXPERIMENTS} SET ${updates.join(', ')} WHERE id = ?`,
+        sql: `UPDATE ${TABLE_EXPERIMENTS} SET ${updates.join(', ')} WHERE id = ?`,
         args: values,
       });
 
@@ -201,7 +201,7 @@ export class RunsLibSQL extends RunsStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'UPDATE_RUN', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'UPDATE_EXPERIMENT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -210,17 +210,17 @@ export class RunsLibSQL extends RunsStorage {
     }
   }
 
-  async getRunById(args: { id: string }): Promise<Run | null> {
+  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
     try {
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENTS)} FROM ${TABLE_DATASET_EXPERIMENTS} WHERE id = ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE id = ?`,
         args: [args.id],
       });
-      return result.rows?.[0] ? this.transformRunRow(result.rows[0] as Record<string, unknown>) : null;
+      return result.rows?.[0] ? this.transformExperimentRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'GET_RUN', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'GET_EXPERIMENT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -229,7 +229,7 @@ export class RunsLibSQL extends RunsStorage {
     }
   }
 
-  async listRuns(args: ListRunsInput): Promise<ListRunsOutput> {
+  async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     try {
       const { page, perPage: perPageInput } = args.pagination;
 
@@ -246,14 +246,14 @@ export class RunsLibSQL extends RunsStorage {
 
       // Get total count
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASET_EXPERIMENTS} ${whereClause}`,
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_EXPERIMENTS} ${whereClause}`,
         args: queryParams,
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
       if (total === 0) {
         return {
-          runs: [],
+          experiments: [],
           pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
         };
       }
@@ -264,12 +264,12 @@ export class RunsLibSQL extends RunsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENTS)} FROM ${TABLE_DATASET_EXPERIMENTS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 
       return {
-        runs: result.rows?.map(row => this.transformRunRow(row as Record<string, unknown>)) ?? [],
+        experiments: result.rows?.map(row => this.transformExperimentRow(row as Record<string, unknown>)) ?? [],
         pagination: {
           total,
           page,
@@ -280,7 +280,7 @@ export class RunsLibSQL extends RunsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_RUNS', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'LIST_EXPERIMENTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -289,21 +289,21 @@ export class RunsLibSQL extends RunsStorage {
     }
   }
 
-  async deleteRun(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string }): Promise<void> {
     try {
       // Delete results first (foreign key semantics)
       await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} WHERE runId = ?`,
+        sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId = ?`,
         args: [args.id],
       });
       await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_EXPERIMENTS} WHERE id = ?`,
+        sql: `DELETE FROM ${TABLE_EXPERIMENTS} WHERE id = ?`,
         args: [args.id],
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'DELETE_RUN', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'DELETE_EXPERIMENT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -313,7 +313,7 @@ export class RunsLibSQL extends RunsStorage {
   }
 
   // Results (per-item)
-  async addResult(input: AddRunResultInput): Promise<RunResult> {
+  async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date();
@@ -321,15 +321,15 @@ export class RunsLibSQL extends RunsStorage {
       const scores = input.scores ?? [];
 
       await this.#db.insert({
-        tableName: TABLE_DATASET_EXPERIMENT_RESULTS,
+        tableName: TABLE_EXPERIMENT_RESULTS,
         record: {
           id,
-          runId: input.runId,
+          experimentId: input.experimentId,
           itemId: input.itemId,
           itemVersion: input.itemVersion.toISOString(),
           input: input.input,
           output: input.output,
-          expectedOutput: input.expectedOutput,
+          groundTruth: input.groundTruth,
           latency: input.latency,
           error: input.error,
           startedAt: input.startedAt.toISOString(),
@@ -343,12 +343,12 @@ export class RunsLibSQL extends RunsStorage {
 
       return {
         id,
-        runId: input.runId,
+        experimentId: input.experimentId,
         itemId: input.itemId,
         itemVersion: input.itemVersion,
         input: input.input,
         output: input.output,
-        expectedOutput: input.expectedOutput,
+        groundTruth: input.groundTruth,
         latency: input.latency,
         error: input.error,
         startedAt: input.startedAt,
@@ -361,7 +361,7 @@ export class RunsLibSQL extends RunsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'ADD_RESULT', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'ADD_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -370,17 +370,17 @@ export class RunsLibSQL extends RunsStorage {
     }
   }
 
-  async getResultById(args: { id: string }): Promise<RunResult | null> {
+  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
     try {
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENT_RESULTS)} FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} WHERE id = ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE id = ?`,
         args: [args.id],
       });
-      return result.rows?.[0] ? this.transformResultRow(result.rows[0] as Record<string, unknown>) : null;
+      return result.rows?.[0] ? this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'GET_RESULT', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'GET_EXPERIMENT_RESULT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -389,19 +389,19 @@ export class RunsLibSQL extends RunsStorage {
     }
   }
 
-  async listResults(args: ListRunResultsInput): Promise<ListRunResultsOutput> {
+  async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     try {
       const { page, perPage: perPageInput } = args.pagination;
 
       // Build WHERE clause
-      const conditions: string[] = ['runId = ?'];
-      const queryParams: InValue[] = [args.runId];
+      const conditions: string[] = ['experimentId = ?'];
+      const queryParams: InValue[] = [args.experimentId];
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} ${whereClause}`,
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_EXPERIMENT_RESULTS} ${whereClause}`,
         args: queryParams,
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
@@ -419,12 +419,12 @@ export class RunsLibSQL extends RunsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASET_EXPERIMENT_RESULTS)} FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} ${whereClause} ORDER BY startedAt ASC LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} ${whereClause} ORDER BY startedAt ASC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
 
       return {
-        results: result.rows?.map(row => this.transformResultRow(row as Record<string, unknown>)) ?? [],
+        results: result.rows?.map(row => this.transformExperimentResultRow(row as Record<string, unknown>)) ?? [],
         pagination: {
           total,
           page,
@@ -435,7 +435,7 @@ export class RunsLibSQL extends RunsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_RESULTS', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'LIST_EXPERIMENT_RESULTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -444,16 +444,16 @@ export class RunsLibSQL extends RunsStorage {
     }
   }
 
-  async deleteResultsByRunId(args: { runId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
     try {
       await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_EXPERIMENT_RESULTS} WHERE runId = ?`,
-        args: [args.runId],
+        sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId = ?`,
+        args: [args.experimentId],
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'DELETE_RESULTS', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'DELETE_EXPERIMENT_RESULTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

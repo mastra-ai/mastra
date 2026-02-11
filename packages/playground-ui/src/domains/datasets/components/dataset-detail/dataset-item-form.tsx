@@ -7,7 +7,7 @@ import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
-  field: 'input' | 'expectedOutput';
+  field: 'input' | 'groundTruth';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -36,8 +36,8 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
 export interface EditModeContentProps {
   inputValue: string;
   setInputValue: (value: string) => void;
-  expectedOutputValue: string;
-  setExpectedOutputValue: (value: string) => void;
+  groundTruthValue: string;
+  setGroundTruthValue: (value: string) => void;
   metadataValue: string;
   setMetadataValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -49,8 +49,8 @@ export interface EditModeContentProps {
 export function EditModeContent({
   inputValue,
   setInputValue,
-  expectedOutputValue,
-  setExpectedOutputValue,
+  groundTruthValue,
+  setGroundTruthValue,
   metadataValue,
   setMetadataValue,
   validationErrors,
@@ -74,15 +74,15 @@ export function EditModeContent({
         </div>
 
         <div className="space-y-2">
-          <Label>Expected Output (JSON, optional)</Label>
+          <Label>Ground Truth (JSON, optional)</Label>
           <CodeEditor
-            value={expectedOutputValue}
-            onChange={setExpectedOutputValue}
+            value={groundTruthValue}
+            onChange={setGroundTruthValue}
             showCopyButton={false}
             className="min-h-[100px]"
           />
-          {validationErrors?.field === 'expectedOutput' && (
-            <ValidationErrors field="expectedOutput" errors={validationErrors.errors} />
+          {validationErrors?.field === 'groundTruth' && (
+            <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
           )}
         </div>
 

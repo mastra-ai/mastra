@@ -896,13 +896,13 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
 
 export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
 
-export interface Dataset {
+export interface DatasetRecord {
   id: string;
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
   version: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -913,8 +913,8 @@ export interface DatasetItem {
   datasetId: string;
   version: Date;
   input: unknown;
-  expectedOutput?: unknown;
-  context?: Record<string, unknown>;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -927,8 +927,8 @@ export interface DatasetItemVersion {
   datasetVersion: Date;
   snapshot: {
     input?: unknown;
-    expectedOutput?: unknown;
-    context?: Record<string, unknown>;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
   };
   isDeleted: boolean;
   createdAt: Date;
@@ -948,7 +948,7 @@ export interface CreateDatasetInput {
   description?: string;
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
 }
 
 export interface UpdateDatasetInput {
@@ -957,22 +957,22 @@ export interface UpdateDatasetInput {
   description?: string;
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
-  expectedOutput?: unknown;
-  context?: Record<string, unknown>;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 export interface UpdateDatasetItemInput {
   id: string;
   datasetId: string;
   input?: unknown;
-  expectedOutput?: unknown;
-  context?: Record<string, unknown>;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ListDatasetsInput {
@@ -980,7 +980,7 @@ export interface ListDatasetsInput {
 }
 
 export interface ListDatasetsOutput {
-  datasets: Dataset[];
+  datasets: DatasetRecord[];
   pagination: PaginationInfo;
 }
 
@@ -1003,8 +1003,8 @@ export interface CreateItemVersionInput {
   datasetVersion: Date;
   snapshot?: {
     input?: unknown;
-    expectedOutput?: unknown;
-    context?: Record<string, unknown>;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
   };
   isDeleted?: boolean;
 }
@@ -1033,8 +1033,8 @@ export interface BulkAddItemsInput {
   datasetId: string;
   items: Array<{
     input: unknown;
-    expectedOutput?: unknown;
-    context?: Record<string, unknown>;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
   }>;
 }
 
@@ -1047,15 +1047,15 @@ export interface BulkDeleteItemsInput {
 // Experiment Types (Dataset Experiments)
 // ============================================
 
-export type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
 
-export interface Run {
+export interface Experiment {
   id: string;
   datasetId: string;
   datasetVersion: Date;
   targetType: TargetType;
   targetId: string;
-  status: RunStatus;
+  status: ExperimentStatus;
   totalItems: number;
   succeededCount: number;
   failedCount: number;
@@ -1065,14 +1065,14 @@ export interface Run {
   updatedAt: Date;
 }
 
-export interface RunResult {
+export interface ExperimentResult {
   id: string;
-  runId: string;
+  experimentId: string;
   itemId: string;
   itemVersion: Date;
   input: unknown;
   output: unknown;
-  expectedOutput: unknown;
+  groundTruth: unknown;
   latency: number;
   error: string | null;
   startedAt: Date;
@@ -1089,7 +1089,7 @@ export interface RunResult {
   createdAt: Date;
 }
 
-export interface CreateRunInput {
+export interface CreateExperimentInput {
   id?: string;
   datasetId: string;
   datasetVersion: Date;
@@ -1098,23 +1098,23 @@ export interface CreateRunInput {
   totalItems: number;
 }
 
-export interface UpdateRunInput {
+export interface UpdateExperimentInput {
   id: string;
-  status?: RunStatus;
+  status?: ExperimentStatus;
   succeededCount?: number;
   failedCount?: number;
   startedAt?: Date;
   completedAt?: Date;
 }
 
-export interface AddRunResultInput {
+export interface AddExperimentResultInput {
   id?: string;
-  runId: string;
+  experimentId: string;
   itemId: string;
   itemVersion: Date;
   input: unknown;
   output: unknown;
-  expectedOutput: unknown;
+  groundTruth: unknown;
   latency: number;
   error: string | null;
   startedAt: Date;
@@ -1130,22 +1130,22 @@ export interface AddRunResultInput {
   }>;
 }
 
-export interface ListRunsInput {
+export interface ListExperimentsInput {
   datasetId?: string;
   pagination: StoragePagination;
 }
 
-export interface ListRunsOutput {
-  runs: Run[];
+export interface ListExperimentsOutput {
+  experiments: Experiment[];
   pagination: PaginationInfo;
 }
 
-export interface ListRunResultsInput {
-  runId: string;
+export interface ListExperimentResultsInput {
+  experimentId: string;
   pagination: StoragePagination;
 }
 
-export interface ListRunResultsOutput {
-  results: RunResult[];
+export interface ListExperimentResultsOutput {
+  results: ExperimentResult[];
   pagination: PaginationInfo;
 }

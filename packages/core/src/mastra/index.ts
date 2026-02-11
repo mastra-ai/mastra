@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -335,9 +336,17 @@ export class Mastra<
   #storedAgentsCache: Map<string, Agent> = new Map();
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
+  #datasets?: DatasetsManager;
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get datasets(): DatasetsManager {
+    if (!this.#datasets) {
+      this.#datasets = new DatasetsManager(this);
+    }
+    return this.#datasets;
   }
 
   /**

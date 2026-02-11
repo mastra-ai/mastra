@@ -4,8 +4,8 @@ import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../../storage/base';
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
+import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
-import { RunsInMemory } from '../../../storage/domains/runs/inmemory';
 import { runExperiment } from '../index';
 
 // Mock isSupportedLanguageModel at module level
@@ -51,7 +51,7 @@ const createMockScorer = (id: string, delayMs = 0): MastraScorer<any, any, any, 
 // Shared test infrastructure
 let db: InMemoryDB;
 let datasetsStorage: DatasetsInMemory;
-let runsStorage: RunsInMemory;
+let experimentsStorage: ExperimentsInMemory;
 let mockStorage: MastraCompositeStore;
 let mastra: Mastra;
 let datasetId: string;
@@ -59,7 +59,7 @@ let datasetId: string;
 async function setupDataset(itemCount: number) {
   db = new InMemoryDB();
   datasetsStorage = new DatasetsInMemory({ db });
-  runsStorage = new RunsInMemory({ db });
+  experimentsStorage = new ExperimentsInMemory({ db });
 
   const dataset = await datasetsStorage.createDataset({
     name: 'P1 Test Dataset',
@@ -71,7 +71,7 @@ async function setupDataset(itemCount: number) {
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: `item-${i}` },
-      expectedOutput: null,
+      groundTruth: null,
     });
   }
 
@@ -79,11 +79,11 @@ async function setupDataset(itemCount: number) {
     id: 'test-storage',
     stores: {
       datasets: datasetsStorage,
-      runs: runsStorage,
+      experiments: experimentsStorage,
     } as unknown as StorageDomains,
     getStore: vi.fn().mockImplementation(async (name: keyof StorageDomains) => {
       if (name === 'datasets') return datasetsStorage;
-      if (name === 'runs') return runsStorage;
+      if (name === 'experiments') return experimentsStorage;
       return undefined;
     }),
   } as unknown as MastraCompositeStore;
@@ -247,17 +247,18 @@ describe('P1 Regression', () => {
     it('results maintain input order regardless of completion order', async () => {
       await setupDataset(5);
 
-      // Agent with variable delay — later items may finish first
-      let idx = 0;
+      // Agent echoes the input prompt so we can verify positional correspondence
       const agent = {
         id: 'variable-agent',
         name: 'Variable Agent',
         getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
-        generate: vi.fn().mockImplementation(async () => {
-          const myIdx = idx++;
-          // Reverse delay: item-0 slowest, item-4 fastest
-          await new Promise(r => setTimeout(r, (4 - myIdx) * 20));
-          return { text: `result-${myIdx}` };
+        generate: vi.fn().mockImplementation(async (input: any) => {
+          // input is { prompt: 'item-N' } — extract the prompt string
+          const promptStr = typeof input === 'object' ? (input?.prompt ?? JSON.stringify(input)) : String(input);
+          const idx = parseInt((promptStr.match(/item-(\d+)/) ?? ['', '0'])[1]!, 10);
+          // Variable delay — earlier items in the array finish later
+          await new Promise(r => setTimeout(r, (4 - idx) * 20));
+          return { text: `result-for-${promptStr}` };
         }),
       } as unknown as Agent;
 
@@ -271,8 +272,13 @@ describe('P1 Regression', () => {
       });
 
       expect(result.results).toHaveLength(5);
+      // All 5 items present
+      const prompts = result.results.map(r => (r.input as any).prompt as string);
+      expect(new Set(prompts).size).toBe(5);
+      // Each result's output corresponds to its own input, proving p-map preserved order
       for (let i = 0; i < 5; i++) {
-        expect((result.results[i]!.input as any).prompt).toBe(`item-${i}`);
+        const prompt = (result.results[i]!.input as any).prompt as string;
+        expect(result.results[i]!.output).toEqual({ text: `result-for-${prompt}` });
       }
     });
   });
@@ -352,12 +358,12 @@ describe('P1 Regression', () => {
 
   // T-6: Throttled progress updates
   describe('Issue 6: Throttled Progress Updates', () => {
-    it('calls updateRun during execution, not just at end', async () => {
+    it('calls updateExperiment during execution, not just at end', async () => {
       await setupDataset(5);
       const agent = createMockAgent({ delayMs: 50 });
       setupMastra(agent);
 
-      const updateRunSpy = vi.spyOn(runsStorage, 'updateRun');
+      const updateExperimentSpy = vi.spyOn(experimentsStorage, 'updateExperiment');
 
       await runExperiment(mastra, {
         datasetId,
@@ -366,11 +372,11 @@ describe('P1 Regression', () => {
         maxConcurrency: 1,
       });
 
-      // updateRun is called: once for 'running' status + at least one progress update + once for final
+      // updateExperiment is called: once for 'running' status + at least one progress update + once for final
       // With 5 items at 50ms each = 250ms total, should get at least 1 progress update (2s interval won't trigger)
       // But with concurrency 1 and sequential execution, the total time is ~250ms
       // Let's check there are at least 2 calls (running + final)
-      const calls = updateRunSpy.mock.calls;
+      const calls = updateExperimentSpy.mock.calls;
       expect(calls.length).toBeGreaterThanOrEqual(2);
 
       // The final call should have succeededCount
@@ -384,7 +390,7 @@ describe('P1 Regression', () => {
       const agent = createMockAgent({ delayMs: 300 });
       setupMastra(agent);
 
-      const updateRunSpy = vi.spyOn(runsStorage, 'updateRun');
+      const updateExperimentSpy = vi.spyOn(experimentsStorage, 'updateExperiment');
 
       await runExperiment(mastra, {
         datasetId,
@@ -394,7 +400,7 @@ describe('P1 Regression', () => {
       });
 
       // 10 items * 300ms = 3000ms, should get at least 1 progress update at 2s mark
-      const progressCalls = updateRunSpy.mock.calls.filter((call: any) => {
+      const progressCalls = updateExperimentSpy.mock.calls.filter((call: any) => {
         const arg = call[0] as any;
         // Progress calls have succeededCount but no status (or status is still running)
         return arg.succeededCount !== undefined && arg.status === undefined;

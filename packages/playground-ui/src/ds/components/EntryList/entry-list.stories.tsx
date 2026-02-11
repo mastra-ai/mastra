@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { EntryList } from './entry-list';
-import type { Column } from './types';
+import type { ColumnType as Column } from './types';
 
 const meta: Meta<typeof EntryList> = {
   title: 'DataDisplay/EntryList',

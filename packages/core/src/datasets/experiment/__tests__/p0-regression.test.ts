@@ -3,8 +3,8 @@ import type { Agent } from '../../../agent';
 import type { Mastra } from '../../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../../storage/base';
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
+import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
-import { RunsInMemory } from '../../../storage/domains/runs/inmemory';
 import { executeTarget } from '../executor';
 import { runExperiment } from '../index';
 
@@ -39,7 +39,7 @@ const createMockAgent = (opts: { delayMs?: number; shouldFail?: boolean; respons
 // Shared test infrastructure
 let db: InMemoryDB;
 let datasetsStorage: DatasetsInMemory;
-let runsStorage: RunsInMemory;
+let experimentsStorage: ExperimentsInMemory;
 let mockStorage: MastraCompositeStore;
 let mastra: Mastra;
 let datasetId: string;
@@ -47,7 +47,7 @@ let datasetId: string;
 async function setupDataset(itemCount: number) {
   db = new InMemoryDB();
   datasetsStorage = new DatasetsInMemory({ db });
-  runsStorage = new RunsInMemory({ db });
+  experimentsStorage = new ExperimentsInMemory({ db });
 
   const dataset = await datasetsStorage.createDataset({
     name: 'P0 Test Dataset',
@@ -59,7 +59,7 @@ async function setupDataset(itemCount: number) {
     await datasetsStorage.addItem({
       datasetId: dataset.id,
       input: { prompt: `item-${i}` },
-      expectedOutput: null,
+      groundTruth: null,
     });
   }
 
@@ -67,11 +67,11 @@ async function setupDataset(itemCount: number) {
     id: 'test-storage',
     stores: {
       datasets: datasetsStorage,
-      runs: runsStorage,
+      experiments: experimentsStorage,
     } as unknown as StorageDomains,
     getStore: vi.fn().mockImplementation(async (name: keyof StorageDomains) => {
       if (name === 'datasets') return datasetsStorage;
-      if (name === 'runs') return runsStorage;
+      if (name === 'experiments') return experimentsStorage;
       return undefined;
     }),
   } as unknown as MastraCompositeStore;
@@ -140,7 +140,7 @@ describe('P0 Regression', () => {
         id: 'item-1',
         datasetId: 'ds-1',
         input: 'test input',
-        expectedOutput: null,
+        groundTruth: null,
         version: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -227,8 +227,8 @@ describe('P0 Regression', () => {
       const agent = createMockAgent({ response: 'success' });
       setupMastra(agent);
 
-      // Override runsStorage.addResult to throw
-      runsStorage.addResult = vi.fn().mockRejectedValue(new Error('DB down'));
+      // Override experimentsStorage.addExperimentResult to throw
+      experimentsStorage.addExperimentResult = vi.fn().mockRejectedValue(new Error('DB down'));
 
       const result = await runExperiment(mastra, {
         datasetId,
@@ -242,8 +242,8 @@ describe('P0 Regression', () => {
       expect(result.succeededCount).toBe(3);
       expect(result.results.length).toBe(3);
 
-      // Verify addResult was attempted
-      expect(runsStorage.addResult).toHaveBeenCalledTimes(3);
+      // Verify addExperimentResult was attempted
+      expect(experimentsStorage.addExperimentResult).toHaveBeenCalledTimes(3);
     });
   });
 });

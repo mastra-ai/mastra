@@ -17,7 +17,7 @@ export interface EditDatasetDialogProps {
     name: string;
     description?: string;
     inputSchema?: Record<string, unknown> | null;
-    outputSchema?: Record<string, unknown> | null;
+    groundTruthSchema?: Record<string, unknown> | null;
   };
   onSuccess?: () => void;
 }
@@ -26,7 +26,7 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
   const [name, setName] = useState(dataset.name);
   const [description, setDescription] = useState(dataset.description ?? '');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(dataset.inputSchema ?? null);
-  const [outputSchema, setOutputSchema] = useState<Record<string, unknown> | null>(dataset.outputSchema ?? null);
+  const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(dataset.groundTruthSchema ?? null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const { updateDataset } = useDatasetMutations();
 
@@ -35,16 +35,16 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
     setName(dataset.name);
     setDescription(dataset.description ?? '');
     setInputSchema(dataset.inputSchema ?? null);
-    setOutputSchema(dataset.outputSchema ?? null);
+    setGroundTruthSchema(dataset.groundTruthSchema ?? null);
     setValidationError(null);
-  }, [dataset.name, dataset.description, dataset.inputSchema, dataset.outputSchema]);
+  }, [dataset.name, dataset.description, dataset.inputSchema, dataset.groundTruthSchema]);
 
   const handleSchemaChange = (schemas: {
     inputSchema: Record<string, unknown> | null;
     outputSchema: Record<string, unknown> | null;
   }) => {
     setInputSchema(schemas.inputSchema);
-    setOutputSchema(schemas.outputSchema);
+    setGroundTruthSchema(schemas.outputSchema);
     // Clear validation error when user changes schema
     setValidationError(null);
   };
@@ -64,7 +64,7 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
         name: name.trim(),
         description: description.trim() || undefined,
         inputSchema,
-        outputSchema,
+        groundTruthSchema,
       });
 
       toast.success('Dataset updated successfully');
@@ -87,7 +87,7 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
     setName(dataset.name);
     setDescription(dataset.description ?? '');
     setInputSchema(dataset.inputSchema ?? null);
-    setOutputSchema(dataset.outputSchema ?? null);
+    setGroundTruthSchema(dataset.groundTruthSchema ?? null);
     setValidationError(null);
     onOpenChange(false);
   };
@@ -123,10 +123,10 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
 
             <SchemaConfigSection
               inputSchema={inputSchema}
-              outputSchema={outputSchema}
+              outputSchema={groundTruthSchema}
               onChange={handleSchemaChange}
               disabled={updateDataset.isPending}
-              defaultOpen={!!(dataset.inputSchema || dataset.outputSchema)}
+              defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema)}
             />
 
             {validationError && (

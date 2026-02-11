@@ -5,10 +5,10 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
 import { DatasetsLibSQL } from './domains/datasets';
+import { ExperimentsLibSQL } from './domains/experiments';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
-import { RunsLibSQL } from './domains/runs';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
 
@@ -18,7 +18,7 @@ export {
   DatasetsLibSQL,
   MemoryLibSQL,
   ObservabilityLibSQL,
-  RunsLibSQL,
+  ExperimentsLibSQL,
   ScoresLibSQL,
   WorkflowsLibSQL,
   PromptBlocksLibSQL,
@@ -144,7 +144,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
     const datasets = new DatasetsLibSQL(domainConfig);
-    const runs = new RunsLibSQL(domainConfig);
+    const experiments = new ExperimentsLibSQL(domainConfig);
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
 
     this.stores = {
@@ -154,7 +154,7 @@ export class LibSQLStore extends MastraCompositeStore {
       observability,
       agents,
       datasets,
-      runs,
+      experiments,
       promptBlocks,
     };
   }

@@ -59,7 +59,7 @@ export function DuplicateDatasetDialog({
 
     try {
       // Fetch all items from source dataset
-      const allItems: Array<{ input: unknown; expectedOutput?: unknown; context?: Record<string, unknown> }> = [];
+      const allItems: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }> = [];
       let page = 0;
       const perPage = 100;
       let hasMore = true;
@@ -70,8 +70,8 @@ export function DuplicateDatasetDialog({
         allItems.push(
           ...items.map(item => ({
             input: item.input,
-            expectedOutput: item.expectedOutput,
-            context: item.context as Record<string, unknown> | undefined,
+            groundTruth: item.groundTruth,
+            metadata: item.metadata as Record<string, unknown> | undefined,
           })),
         );
 
@@ -100,8 +100,8 @@ export function DuplicateDatasetDialog({
         await addItem.mutateAsync({
           datasetId: dataset.id,
           input: item.input,
-          expectedOutput: item.expectedOutput,
-          context: item.context,
+          groundTruth: item.groundTruth,
+          metadata: item.metadata,
         });
         setProgress({ phase: 'copying', current: i + 1, total: allItems.length });
       }

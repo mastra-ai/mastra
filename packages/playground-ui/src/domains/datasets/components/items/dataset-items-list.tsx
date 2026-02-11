@@ -131,8 +131,8 @@ export function DatasetItemsList({
               const entry = {
                 id: item.id,
                 input: truncateValue(item.input, 60),
-                expectedOutput: item.expectedOutput ? truncateValue(item.expectedOutput, 40) : '-',
-                metadata: item.context ? Object.keys(item.context).length + ' keys' : '-',
+                groundTruth: item.groundTruth ? truncateValue(item.groundTruth, 40) : '-',
+                metadata: item.metadata ? Object.keys(item.metadata).length + ' keys' : '-',
                 date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
               };
 
@@ -159,7 +159,7 @@ export function DatasetItemsList({
                   >
                     <ItemList.TextCell>{entry.id}</ItemList.TextCell>
                     <ItemList.TextCell>{entry.input}</ItemList.TextCell>
-                    <ItemList.TextCell>{entry.expectedOutput}</ItemList.TextCell>
+                    <ItemList.TextCell>{entry.groundTruth}</ItemList.TextCell>
                     <ItemList.TextCell>{entry.date}</ItemList.TextCell>
                   </ItemList.RowButton>
                 </ItemList.Row>

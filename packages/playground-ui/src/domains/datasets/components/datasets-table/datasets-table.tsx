@@ -1,4 +1,4 @@
-import type { Dataset } from '@mastra/client-js';
+import type { DatasetRecord } from '@mastra/client-js';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
@@ -11,7 +11,7 @@ import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 import { EmptyDatasetsTable } from '../empty-datasets-table';
 
 export interface DatasetsTableProps {
-  datasets: Dataset[];
+  datasets: DatasetRecord[];
   isLoading: boolean;
   onCreateClick?: () => void;
 }

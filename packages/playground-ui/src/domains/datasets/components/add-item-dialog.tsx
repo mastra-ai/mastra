@@ -10,7 +10,7 @@ import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'expectedOutput';
+  field: 'input' | 'groundTruth';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -61,7 +61,7 @@ export interface AddItemDialogProps {
 
 export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddItemDialogProps) {
   const [input, setInput] = useState('{}');
-  const [expectedOutput, setExpectedOutput] = useState('');
+  const [groundTruth, setGroundTruth] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
 
@@ -77,13 +77,13 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       return;
     }
 
-    // Parse expectedOutput if provided
-    let parsedExpectedOutput: unknown | undefined;
-    if (expectedOutput.trim()) {
+    // Parse groundTruth if provided
+    let parsedGroundTruth: unknown | undefined;
+    if (groundTruth.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(expectedOutput);
+        parsedGroundTruth = JSON.parse(groundTruth);
       } catch {
-        toast.error('Expected Output must be valid JSON');
+        toast.error('Ground Truth must be valid JSON');
         return;
       }
     }
@@ -92,7 +92,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       await addItem.mutateAsync({
         datasetId,
         input: parsedInput,
-        expectedOutput: parsedExpectedOutput,
+        groundTruth: parsedGroundTruth,
       });
 
       toast.success('Item added successfully');
@@ -100,7 +100,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
 
       // Reset form
       setInput('{}');
-      setExpectedOutput('');
+      setGroundTruth('');
       onOpenChange(false);
 
       onSuccess?.();
@@ -123,17 +123,17 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     }
   };
 
-  // Clear validation errors when expectedOutput changes
-  const handleExpectedOutputChange = (value: string) => {
-    setExpectedOutput(value);
-    if (validationErrors?.field === 'expectedOutput') {
+  // Clear validation errors when groundTruth changes
+  const handleGroundTruthChange = (value: string) => {
+    setGroundTruth(value);
+    if (validationErrors?.field === 'groundTruth') {
       setValidationErrors(null);
     }
   };
 
   const handleCancel = () => {
     setInput('{}');
-    setExpectedOutput('');
+    setGroundTruth('');
     setValidationErrors(null);
     onOpenChange(false);
   };
@@ -155,15 +155,15 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="item-expected-output">Expected Output (JSON, optional)</Label>
+              <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
               <CodeEditor
-                value={expectedOutput}
-                onChange={handleExpectedOutputChange}
+                value={groundTruth}
+                onChange={handleGroundTruthChange}
                 showCopyButton={false}
                 className="min-h-[80px]"
               />
-              {validationErrors?.field === 'expectedOutput' && (
-                <ValidationErrors field="expectedOutput" errors={validationErrors.errors} />
+              {validationErrors?.field === 'groundTruth' && (
+                <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
               )}
             </div>
 

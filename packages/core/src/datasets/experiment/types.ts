@@ -1,31 +1,81 @@
 import type { MastraScorer } from '../../evals/base';
-import type { TargetType, RunStatus } from '../../storage/types';
+import type { Mastra } from '../../mastra';
+import type { TargetType, ExperimentStatus } from '../../storage/types';
 
 /**
- * Configuration for running a dataset experiment against a target.
+ * A single data item for inline experiment data.
+ * Internal — not publicly exported from @mastra/core.
  */
-export interface ExperimentConfig {
-  /** ID of the dataset to run */
-  datasetId: string;
-  /** Type of target to execute against */
-  targetType: TargetType;
-  /** ID of the target (agent, workflow, etc.) */
-  targetId: string;
-  /** Scorers to apply - can be instances or registered scorer IDs */
+export interface DataItem<I = unknown, E = unknown> {
+  /** Unique ID (auto-generated if omitted) */
+  id?: string;
+  /** Input data passed to task */
+  input: I;
+  /** Ground truth for scoring */
+  groundTruth?: E;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Internal configuration for running a dataset experiment.
+ * Not publicly exported — users interact via Dataset.startExperiment().
+ * All new fields are optional — existing internal callers are unaffected.
+ */
+export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
+  // === Data source (pick one — Dataset always injects datasetId) ===
+
+  /** ID of dataset in storage (injected by Dataset) */
+  datasetId?: string;
+  /** Override data source — inline array or async factory (bypasses storage load) */
+  data?: DataItem<I, E>[] | (() => Promise<DataItem<I, E>[]>);
+
+  // === Task execution (pick one) ===
+
+  /** Registry-based target type (existing) */
+  targetType?: TargetType;
+  /** Registry-based target ID (existing) */
+  targetId?: string;
+  /** Inline task function (sync or async) */
+  task?: (args: {
+    input: I;
+    mastra: Mastra;
+    groundTruth?: E;
+    metadata?: Record<string, unknown>;
+    signal?: AbortSignal;
+  }) => O | Promise<O>;
+
+  // === Scoring ===
+
+  /** Scorers — MastraScorer instances or string IDs */
   scorers?: (MastraScorer<any, any, any, any> | string)[];
-  /** Pin to specific dataset version (default: latest) */
+
+  // === Options ===
+
+  /** Pin to specific dataset version (default: latest). Only applies when datasetId is used. */
   version?: Date;
   /** Maximum concurrent executions (default: 5) */
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
-  /** Per-item execution timeout in milliseconds. Default: no timeout. */
+  /** Per-item execution timeout in milliseconds */
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
-  /** Pre-created experiment ID (for async trigger - skips run creation) */
-  runId?: string;
+  /** Pre-created experiment ID (for async trigger — skips experiment creation). */
+  experimentId?: string;
+  /** Experiment name (used for display / grouping) */
+  name?: string;
 }
+
+/**
+ * Configuration for starting an experiment on a dataset.
+ * The dataset is always the data source — no datasetId/data needed.
+ */
+export type StartExperimentConfig<I = unknown, O = unknown, E = unknown> = Omit<
+  ExperimentConfig<I, O, E>,
+  'datasetId' | 'data' | 'experimentId'
+>;
 
 /**
  * Result of executing a single dataset item.
@@ -40,7 +90,7 @@ export interface ItemResult {
   /** Output from the target (null if failed) */
   output: unknown | null;
   /** Expected output from the dataset item */
-  expectedOutput: unknown | null;
+  groundTruth: unknown | null;
   /** Execution time in milliseconds */
   latency: number;
   /** Error message if execution failed */
@@ -82,9 +132,9 @@ export interface ItemWithScores extends ItemResult {
  */
 export interface ExperimentSummary {
   /** Unique ID of this experiment */
-  runId: string;
+  experimentId: string;
   /** Final status of the experiment */
-  status: RunStatus;
+  status: ExperimentStatus;
   /** Total number of items in the dataset */
   totalItems: number;
   /** Number of items that succeeded */

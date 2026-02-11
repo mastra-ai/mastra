@@ -14,7 +14,7 @@ import { Column } from '@/ds/components/Columns';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'expectedOutput';
+  field: 'input' | 'groundTruth';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -66,7 +66,7 @@ export interface DatasetItemPanelProps {
 
 /**
  * Inline panel showing full details of a single dataset item.
- * Includes navigation to next/previous items and sections for Input, Expected Output, and Metadata.
+ * Includes navigation to next/previous items and sections for Input, Ground Truth, and Metadata.
  */
 export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose }: DatasetItemPanelProps) {
   const { Link } = useLinkComponent();
@@ -75,7 +75,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const [expectedOutputValue, setExpectedOutputValue] = useState('');
+  const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
 
   // Validation error state
@@ -88,8 +88,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   useEffect(() => {
     if (item) {
       setInputValue(JSON.stringify(item.input, null, 2));
-      setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-      setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
+      setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+      setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
       setValidationErrors(null); // Reset validation errors on item change
@@ -124,13 +124,13 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       return;
     }
 
-    // Parse expectedOutput if provided
-    let parsedExpectedOutput: unknown | undefined;
-    if (expectedOutputValue.trim()) {
+    // Parse groundTruth if provided
+    let parsedGroundTruth: unknown | undefined;
+    if (groundTruthValue.trim()) {
       try {
-        parsedExpectedOutput = JSON.parse(expectedOutputValue);
+        parsedGroundTruth = JSON.parse(groundTruthValue);
       } catch {
-        toast.error('Expected Output must be valid JSON');
+        toast.error('Ground Truth must be valid JSON');
         return;
       }
     }
@@ -151,8 +151,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
         datasetId,
         itemId: item.id,
         input: parsedInput,
-        expectedOutput: parsedExpectedOutput,
-        context: parsedMetadata,
+        groundTruth: parsedGroundTruth,
+        metadata: parsedMetadata,
       });
 
       toast.success('Item updated successfully');
@@ -172,8 +172,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const handleCancel = () => {
     // Reset to original values
     setInputValue(JSON.stringify(item.input, null, 2));
-    setExpectedOutputValue(item.expectedOutput ? JSON.stringify(item.expectedOutput, null, 2) : '');
-    setMetadataValue(item.context ? JSON.stringify(item.context, null, 2) : '');
+    setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
+    setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
   };
@@ -186,9 +186,9 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     }
   };
 
-  const handleExpectedOutputValueChange = (value: string) => {
-    setExpectedOutputValue(value);
-    if (validationErrors?.field === 'expectedOutput') {
+  const handleGroundTruthValueChange = (value: string) => {
+    setGroundTruthValue(value);
+    if (validationErrors?.field === 'groundTruth') {
       setValidationErrors(null);
     }
   };
@@ -231,8 +231,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
             <EditModeContent
               inputValue={inputValue}
               setInputValue={handleInputValueChange}
-              expectedOutputValue={expectedOutputValue}
-              setExpectedOutputValue={handleExpectedOutputValueChange}
+              groundTruthValue={groundTruthValue}
+              setGroundTruthValue={handleGroundTruthValueChange}
               metadataValue={metadataValue}
               setMetadataValue={setMetadataValue}
               validationErrors={validationErrors}

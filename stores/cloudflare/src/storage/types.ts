@@ -17,10 +17,8 @@ import type {
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_ITEM_VERSIONS,
   TABLE_DATASET_VERSIONS,
-  TABLE_RUNS,
-  TABLE_RUN_RESULTS,
-  TABLE_DATASET_EXPERIMENTS,
-  TABLE_DATASET_EXPERIMENT_RESULTS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
   TABLE_PROMPT_BLOCKS,
   TABLE_PROMPT_BLOCK_VERSIONS,
   SpanRecord,
@@ -128,10 +126,8 @@ export type RecordTypes = {
   [TABLE_DATASET_ITEMS]: Record<string, any>;
   [TABLE_DATASET_ITEM_VERSIONS]: Record<string, any>;
   [TABLE_DATASET_VERSIONS]: Record<string, any>;
-  [TABLE_RUNS]: Record<string, any>;
-  [TABLE_RUN_RESULTS]: Record<string, any>;
-  [TABLE_DATASET_EXPERIMENTS]: Record<string, any>;
-  [TABLE_DATASET_EXPERIMENT_RESULTS]: Record<string, any>;
+  [TABLE_EXPERIMENTS]: Record<string, any>;
+  [TABLE_EXPERIMENT_RESULTS]: Record<string, any>;
   [TABLE_PROMPT_BLOCKS]: StoragePromptBlockType;
   [TABLE_PROMPT_BLOCK_VERSIONS]: PromptBlockVersion;
 };
