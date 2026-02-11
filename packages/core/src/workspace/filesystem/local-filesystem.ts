@@ -113,22 +113,23 @@ export class LocalFilesystem extends MastraFilesystem {
   private resolvePath(inputPath: string): string {
     let absolutePath: string;
 
-    if (nodePath.isAbsolute(inputPath)) {
+    if (!this._contained && nodePath.isAbsolute(inputPath)) {
+      // Containment disabled — absolute paths are real filesystem paths
+      absolutePath = nodePath.normalize(inputPath);
+    } else if (this._contained && nodePath.isAbsolute(inputPath)) {
+      // Containment enabled — check if this is a real path within basePath
+      // (e.g. "/Users/foo/project/.mastracode/skills") vs the virtual-root
+      // convention (e.g. "/file.txt" meaning "basePath/file.txt")
       const normalized = nodePath.normalize(inputPath);
       const relative = nodePath.relative(this._basePath, normalized);
-      const isWithinBase = !relative.startsWith('..') && !nodePath.isAbsolute(relative);
-
-      if (isWithinBase || !this._contained) {
-        // Absolute path within basePath, or containment is disabled — use directly
+      if (!relative.startsWith('..') && !nodePath.isAbsolute(relative)) {
         absolutePath = normalized;
       } else {
-        // Absolute path outside basePath with containment enabled —
-        // fall through to legacy behavior (strip leading slashes, resolve
-        // relative to basePath) to preserve the "/file.txt" convention
         const cleanedPath = inputPath.replace(/^\/+/, '');
         absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
       }
     } else {
+      // Relative path — resolve against basePath
       const cleanedPath = inputPath.replace(/^\/+/, '');
       absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
     }
