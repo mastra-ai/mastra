@@ -166,7 +166,7 @@ export function DatasetItems({
   const itemsListColumns = [
     { name: 'id', label: 'ID', size: '5rem' },
     { name: 'input', label: 'Input', size: '1fr' },
-    { name: 'expectedOutput', label: 'Expected Output', size: '1fr' },
+    { name: 'groundTruth', label: 'Ground Truth', size: '1fr' },
     { name: 'date', label: 'Created', size: '5rem' },
   ];
 

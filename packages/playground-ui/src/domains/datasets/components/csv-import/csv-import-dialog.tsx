@@ -137,7 +137,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             return acc;
           }, {});
 
-    // Get expected output value(s)
+    // Get ground truth value(s)
     const groundTruthColumns = headers.filter(h => mapping[h] === 'groundTruth');
     let groundTruth: unknown | undefined;
     if (groundTruthColumns.length === 1) {
