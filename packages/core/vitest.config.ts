@@ -11,6 +11,7 @@ export default defineConfig({
           exclude: ['src/**/*.e2e.test.ts'],
           testTimeout: 120000,
           isolate: false,
+          restoreMocks: true,
         },
       },
       {

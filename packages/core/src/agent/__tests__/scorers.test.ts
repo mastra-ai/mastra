@@ -5,10 +5,9 @@ import { Mastra } from '../../mastra';
 import { Agent } from '../agent';
 import { getDummyResponseModel } from './mock-model';
 
-vi.mock('../../evals/hooks', async importOriginal => {
-  const actual: any = await importOriginal();
-  return { ...actual, runScorer: vi.fn() };
-});
+vi.mock('../../evals/hooks', () => ({
+  runScorer: vi.fn(),
+}));
 
 function scorersTests(version: 'v1' | 'v2') {
   const dummyModel = getDummyResponseModel(version);

@@ -3,9 +3,10 @@ import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
 
 // Mock the @openrouter/ai-sdk-provider-v5 module BEFORE importing it
-vi.mock('@openrouter/ai-sdk-provider-v5', async importOriginal => {
-  const actual: any = await importOriginal();
-  return { ...actual, createOpenRouter: vi.fn() };
+vi.mock('@openrouter/ai-sdk-provider-v5', async () => {
+  return {
+    createOpenRouter: vi.fn(),
+  };
 });
 
 // Now import the mocked module

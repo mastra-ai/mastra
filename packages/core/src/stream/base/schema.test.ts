@@ -21,10 +21,11 @@ import { z } from 'zod/v4';
 import { asJsonSchema } from './schema';
 
 // Mock zod to use zod/v4
-vi.mock('zod', async importOriginal => {
-  const actual: any = await importOriginal();
+vi.mock('zod', async () => {
   const zodV4 = await import('zod/v4');
-  return { ...actual, z: zodV4.z };
+  return {
+    z: zodV4.z,
+  };
 });
 
 describe('asJsonSchema - Zod v4 transform compatibility', () => {

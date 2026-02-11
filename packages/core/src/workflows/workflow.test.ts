@@ -19,9 +19,10 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } fro
 
 const testStorage = new MockStore();
 
-vi.mock('crypto', async importOriginal => {
-  const actual: any = await importOriginal();
-  return { ...actual, randomUUID: vi.fn(() => 'mock-uuid-1') };
+vi.mock('crypto', () => {
+  return {
+    randomUUID: vi.fn(() => 'mock-uuid-1'),
+  };
 });
 
 describe('Workflow', () => {
