@@ -599,7 +599,6 @@ describe('Koa Server Adapter', () => {
       // Request the custom route
       const response = await fetch(`http://localhost:${port}/hello`);
 
-      // BUG: This currently returns 404 because init() never registers customApiRoutes
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });

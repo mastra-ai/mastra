@@ -457,7 +457,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const fetchHeaders = new Headers();
     for (const [key, value] of Object.entries(headers)) {
       if (typeof value === 'string') fetchHeaders.set(key, value);
-      else if (Array.isArray(value)) value.forEach(v => fetchHeaders.append(key, v));
+      else if (Array.isArray(value))
+        value.forEach(v => {
+          fetchHeaders.append(key, v);
+        });
     }
 
     const init: RequestInit = { method, headers: fetchHeaders };
@@ -465,6 +468,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
       if (contentType.includes('application/json')) {
         init.body = JSON.stringify(body);
+      } else if (typeof body === 'string') {
+        init.body = body;
+      } else if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
+        init.body = body as any;
       }
     }
 
@@ -482,15 +489,21 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected async writeCustomRouteResponse(
     response: Response,
     nodeRes: {
-      writeHead(status: number, headers: Record<string, string>): void;
+      writeHead(status: number, headers: Record<string, string | string[]>): void;
       write(chunk: unknown): void;
       end(data?: string): void;
     },
   ): Promise<void> {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string | string[]> = {};
     response.headers.forEach((value, key) => {
-      headers[key] = value;
+      if (key.toLowerCase() !== 'set-cookie') {
+        headers[key] = value;
+      }
     });
+    const setCookies = response.headers.getSetCookie?.();
+    if (setCookies && setCookies.length > 0) {
+      headers['set-cookie'] = setCookies;
+    }
     nodeRes.writeHead(response.status, headers);
 
     if (response.body) {
