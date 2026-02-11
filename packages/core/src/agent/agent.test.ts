@@ -4795,6 +4795,14 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         // Should complete without throwing
         expect(result).toBeDefined();
+
+        // The steps should contain the tool-not-found error with available tool names
+        const toolResults = result.steps.flatMap(s => s.toolResults ?? []);
+        const notFoundResult = toolResults.find((tr: any) => tr.toolName === 'nonExistentTool');
+        if (notFoundResult) {
+          expect(String((notFoundResult as any).result)).toMatch(/not found/i);
+          expect(String((notFoundResult as any).result)).toMatch(/existingTool/);
+        }
       });
 
       it('should emit tool-error chunks in stream when model calls non-existent tool', async () => {
@@ -4810,9 +4818,15 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           }
         }
 
-        // Should have tool-error chunks with the "not found" message
+        // Should have tool-error chunks with the "not found" message and available tool names
         expect(toolErrorChunks.length).toBeGreaterThan(0);
-        expect(toolErrorChunks[0].payload.error.message).toMatch(/Tool "nonExistentTool" not found/i);
+        const notFoundChunk = toolErrorChunks.find(
+          (c: any) => c.payload.toolName === 'nonExistentTool' || c.payload.error.message.match(/nonExistentTool/i),
+        );
+        expect(notFoundChunk).toBeDefined();
+        expect(notFoundChunk.payload.error.message).toMatch(/Tool "nonExistentTool" not found/i);
+        expect(notFoundChunk.payload.error.message).toMatch(/existingTool/);
+        expect(notFoundChunk.payload.error.name).toBe('ToolNotFoundError');
       });
 
       it('should allow model to self-correct after calling non-existent tool in generate', async () => {

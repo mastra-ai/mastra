@@ -147,10 +147,55 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           errorResults?.length > 0 && errorResults.every(tc => tc.error instanceof ToolNotFoundError);
 
         if (allErrorsAreToolNotFound) {
+          // Process any successful tool results from this turn before continuing.
+          // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
+          // results need their chunks emitted and messages added to the messageList.
+          const successfulResults = inputData.filter(tc => tc.result !== undefined);
+          if (successfulResults.length) {
+            for (const toolCall of successfulResults) {
+              const chunk: ChunkType<OUTPUT> = {
+                type: 'tool-result',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  result: toolCall.result,
+                  providerMetadata: toolCall.providerMetadata,
+                  providerExecuted: toolCall.providerExecuted,
+                },
+              };
+              await processAndEnqueueChunk(chunk);
+            }
+
+            const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+            const successMessage: MastraDBMessage = {
+              id: successMessageId || '',
+              role: 'assistant' as const,
+              content: {
+                format: 2,
+                parts: successfulResults.map(toolCall => ({
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    args: toolCall.args,
+                    result: toolCall.result,
+                  },
+                  ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                })),
+              },
+              createdAt: new Date(),
+            };
+            rest.messageList.add(successMessage, 'response');
+          }
+
           // Continue the loop — the error messages are already in the messageList,
           // so the model will see them and can retry with correct tool names
           initialResult.stepResult.isContinued = true;
-          initialResult.stepResult.reason = 'tool-calls' as any;
+          initialResult.stepResult.reason = 'tool-calls';
           return {
             ...initialResult,
             messages: {
