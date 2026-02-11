@@ -108,14 +108,20 @@ export class MCPClientsLibSQL extends MCPClientsStorage {
       // Extract config fields for version 1
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = mcpClient;
       const versionId = crypto.randomUUID();
-      await this.createVersion({
-        id: versionId,
-        mcpClientId: mcpClient.id,
-        versionNumber: 1,
-        ...snapshotConfig,
-        changedFields: Object.keys(snapshotConfig),
-        changeMessage: 'Initial version',
-      });
+      try {
+        await this.createVersion({
+          id: versionId,
+          mcpClientId: mcpClient.id,
+          versionNumber: 1,
+          ...snapshotConfig,
+          changedFields: Object.keys(snapshotConfig),
+          changeMessage: 'Initial version',
+        });
+      } catch (versionError) {
+        // Clean up the orphaned client record
+        await this.#db.delete({ tableName: TABLE_MCP_CLIENTS, keys: { id: mcpClient.id } });
+        throw versionError;
+      }
 
       return {
         id: mcpClient.id,
@@ -200,15 +206,17 @@ export class MCPClientsLibSQL extends MCPClientsStorage {
               JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
         );
 
-        const newVersionId = crypto.randomUUID();
-        await this.createVersion({
-          id: newVersionId,
-          mcpClientId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
+        if (changedFields.length > 0) {
+          const newVersionId = crypto.randomUUID();
+          await this.createVersion({
+            id: newVersionId,
+            mcpClientId: id,
+            versionNumber: latestVersion.versionNumber + 1,
+            ...newConfig,
+            changedFields,
+            changeMessage: `Updated ${changedFields.join(', ')}`,
+          });
+        }
       }
 
       // Fetch and return updated MCP client
