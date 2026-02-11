@@ -1,10 +1,12 @@
 /**
  * Auth configuration for the example agent.
  *
- * Supports three authentication providers:
- * - SimpleAuth: Token-based authentication for development/testing
- * - Better Auth: Credentials-based authentication with SQLite
- * - WorkOS: Enterprise SSO (SAML, OIDC)
+ * Supports multiple authentication providers:
+ * - simple: Token-based authentication for development/testing
+ * - better-auth: Credentials-based authentication with SQLite
+ * - workos: Enterprise SSO (SAML, OIDC)
+ * - cloud: Mastra Cloud OAuth with PKCE
+ * - composite: Combines SimpleAuth + MastraCloudAuth via CompositeAuth
  *
  * Set AUTH_PROVIDER environment variable to switch between providers.
  */
@@ -26,6 +28,14 @@ async function initAuth(): Promise<AuthResult> {
     case 'workos': {
       const { initWorkOS } = await import('./workos');
       return initWorkOS();
+    }
+    case 'cloud': {
+      const { initCloud } = await import('./cloud');
+      return initCloud();
+    }
+    case 'composite': {
+      const { initComposite } = await import('./composite');
+      return initComposite();
     }
     default: {
       console.warn(`[Auth] Unknown provider "${AUTH_PROVIDER}", falling back to SimpleAuth`);
