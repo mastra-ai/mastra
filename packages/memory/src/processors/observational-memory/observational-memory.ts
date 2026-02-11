@@ -712,6 +712,40 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Await any in-flight async buffering operations for a given thread/resource.
+   * Returns once all buffering promises have settled (or after timeout).
+   */
+  static async awaitBuffering(
+    threadId: string | null | undefined,
+    resourceId: string | null | undefined,
+    scope: 'thread' | 'resource',
+    timeoutMs = 30000,
+  ): Promise<void> {
+    const lockKey = scope === 'resource' && resourceId ? `resource:${resourceId}` : `thread:${threadId ?? 'unknown'}`;
+    const obsKey = `obs:${lockKey}`;
+    const reflKey = `refl:${lockKey}`;
+
+    const promises: Promise<void>[] = [];
+    const obsOp = ObservationalMemory.asyncBufferingOps.get(obsKey);
+    if (obsOp) promises.push(obsOp);
+    const reflOp = ObservationalMemory.asyncBufferingOps.get(reflKey);
+    if (reflOp) promises.push(reflOp);
+
+    if (promises.length === 0) {
+      return;
+    }
+
+    try {
+      await Promise.race([
+        Promise.all(promises),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeoutMs)),
+      ]);
+    } catch {
+      // Timeout or error - continue silently
+    }
+  }
+
+  /**
    * Safely get bufferedObservationChunks as an array.
    * Handles cases where it might be a JSON string or undefined.
    */
@@ -1098,6 +1132,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         observationTokens: this.reflectionConfig.observationTokens,
       },
     };
+  }
+
+  /**
+   * Wait for any in-flight async buffering operations for the given thread/resource.
+   * Used by server endpoints to block until buffering completes so the UI can get final state.
+   */
+  async waitForBuffering(
+    threadId: string | null | undefined,
+    resourceId: string | null | undefined,
+    timeoutMs = 30000,
+  ): Promise<void> {
+    return ObservationalMemory.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
   }
 
   /**
@@ -1685,6 +1731,40 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         }
         return;
       }
+    }
+  }
+
+  /**
+   * Persist a marker to the last assistant message in storage.
+   * Unlike persistMarkerToMessage, this fetches messages directly from the DB
+   * so it works even when no MessageList is available (e.g. async buffering ops).
+   */
+  private async persistMarkerToStorage(
+    marker: { type: string; data: unknown },
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
+    try {
+      const result = await this.storage.listMessages({
+        threadId,
+        perPage: 20,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      const messages = result?.messages ?? [];
+      // Find the last assistant message
+      for (const msg of messages) {
+        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
+          msg.content.parts.push(marker as any);
+          await this.messageHistory.persistMessages({
+            messages: [msg],
+            threadId,
+            resourceId,
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
   }
 
@@ -4160,6 +4240,7 @@ ${formattedMessages}
           threadId,
         });
         void writer.custom(failedMarker).catch(() => {});
+        await this.persistMarkerToStorage(failedMarker, threadId, freshRecord.resourceId ?? undefined);
       }
       omError('[OM] Async buffered observation failed', error);
     }
@@ -4245,6 +4326,8 @@ ${formattedMessages}
         observations: newObservations,
       });
       void writer.custom(endMarker).catch(() => {});
+      // Persist so the badge state survives page reload even if the stream is already closed
+      await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
     }
   }
 
@@ -4418,7 +4501,7 @@ ${formattedMessages}
 
     // Start the async operation
     const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer)
-      .catch(error => {
+      .catch(async error => {
         // Emit buffering failed marker
         if (writer) {
           const failedMarker = this.createBufferingFailedMarker({
@@ -4431,6 +4514,7 @@ ${formattedMessages}
             threadId: record.threadId ?? '',
           });
           void writer.custom(failedMarker).catch(() => {});
+          await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         // Log but don't crash - async buffering failure is recoverable
         omError('[OM] Async buffered reflection failed', error);
@@ -4553,6 +4637,8 @@ ${formattedMessages}
         observations: reflectResult.observations,
       });
       void writer.custom(endMarker).catch(() => {});
+      // Persist so the badge state survives page reload even if the stream is already closed
+      await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
   }
 
