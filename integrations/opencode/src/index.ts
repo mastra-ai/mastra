@@ -22,8 +22,6 @@
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { ObservationalMemoryOptions } from '@mastra/core/memory';
-import type { Plugin } from '@opencode-ai/plugin';
-import { tool } from '@opencode-ai/plugin';
 import { LibSQLStore } from '@mastra/libsql';
 import {
   ObservationalMemory,
@@ -32,6 +30,8 @@ import {
   OBSERVATION_CONTINUATION_HINT,
   OBSERVATION_CONTEXT_PROMPT,
 } from '@mastra/memory/processors';
+import type { Plugin } from '@opencode-ai/plugin';
+import { tool } from '@opencode-ai/plugin';
 import type { Message, Part } from '@opencode-ai/sdk';
 
 export type { ObservationalMemoryOptions };
@@ -207,7 +207,7 @@ export const MastraPlugin: Plugin = async ctx => {
 
   // Notify user that OM is active (delayed to let TUI initialize)
   setTimeout(() => {
-    ctx.client.tui.showToast({
+    void ctx.client.tui.showToast({
       body: {
         title: 'Mastra',
         message: 'Observational Memory activated',
@@ -226,7 +226,7 @@ export const MastraPlugin: Plugin = async ctx => {
         try {
           await om.getOrCreateRecord(sessionId);
         } catch (err) {
-          ctx.client.tui.showToast({
+          void ctx.client.tui.showToast({
             body: {
               title: 'Mastra',
               message: `Failed to initialize Observational Memory: ${err instanceof Error ? err.message : String(err)}`,
@@ -260,7 +260,7 @@ export const MastraPlugin: Plugin = async ctx => {
             messages: mastraMessages,
             hooks: {
               onObservationStart: () => {
-                ctx.client.tui.showToast({
+                void ctx.client.tui.showToast({
                   body: {
                     title: 'Mastra',
                     message: 'Observing conversation...',
@@ -270,7 +270,7 @@ export const MastraPlugin: Plugin = async ctx => {
                 });
               },
               onObservationEnd: () => {
-                ctx.client.tui.showToast({
+                void ctx.client.tui.showToast({
                   body: {
                     title: 'Mastra',
                     message: 'Observation complete',
@@ -280,7 +280,7 @@ export const MastraPlugin: Plugin = async ctx => {
                 });
               },
               onReflectionStart: () => {
-                ctx.client.tui.showToast({
+                void ctx.client.tui.showToast({
                   body: {
                     title: 'Mastra',
                     message: 'Reflecting on observations...',
@@ -290,7 +290,7 @@ export const MastraPlugin: Plugin = async ctx => {
                 });
               },
               onReflectionEnd: () => {
-                ctx.client.tui.showToast({
+                void ctx.client.tui.showToast({
                   body: {
                     title: 'Mastra',
                     message: 'Reflection complete',
@@ -314,7 +314,7 @@ export const MastraPlugin: Plugin = async ctx => {
           });
         }
       } catch (err) {
-        ctx.client.tui.showToast({
+        void ctx.client.tui.showToast({
           body: {
             title: 'Mastra',
             message: `Observational Memory error: ${err instanceof Error ? err.message : String(err)}`,
