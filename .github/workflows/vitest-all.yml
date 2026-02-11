@@ -1,0 +1,172 @@
+name: Vitest All Tests
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: true
+
+# Explicitly restrict all permissions at workflow level
+permissions: {}
+
+jobs:
+  test:
+    name: UNIT Test (Shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    # Minimal permissions - read-only access
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+        env:
+          NODE_OPTIONS: '--max_old_space_size=6144'
+
+      - name: Run all tests (Shard ${{ matrix.shard }}/4)
+        run: |
+          pnpm vitest run \
+            --project 'unit:*' --project 'typecheck:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/4 \
+            --passWithNoTests
+        env:
+          NODE_OPTIONS: '--max_old_space_size=6144'
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+
+  e2e-test:
+    name: E2E Test (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          # Core packages
+          - packages/*
+          # Stores (external API required)
+          - stores/*
+          # Voice packages
+          - voice/*
+          # Workflows
+          - workflows/*
+          # Pubsub
+          - pubsub/*
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+    # Minimal permissions - read-only access
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+        env:
+          NODE_OPTIONS: '--max_old_space_size=6144'
+
+      - name: Normalize project name
+        id: normalize
+        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | sed 's/\*/_star_/g')" >> $GITHUB_OUTPUT
+
+      - name: Run all tests (${{ matrix.project }})
+        run: |
+          pnpm vitest run \
+            --project 'e2e:${{ matrix.project }}' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-${{ steps.normalize.outputs.project_id }}.json \
+            --passWithNoTests
+        env:
+          NODE_OPTIONS: '--max_old_space_size=6144'
+          # LLM API Keys
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          # Store API Keys
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+          # Upstash
+          KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.KV_REST_API_TOKEN }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-blob-${{ steps.normalize.outputs.project_id }}
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+
+  merge-reports:
+    name: Merge Test Reports
+    runs-on: ubuntu-latest
+    needs: [test, e2e-test]
+    if: always()
+    # Minimal permissions - read-only access
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vitest-blob-*
+          path: .vitest-reports
+          merge-multiple: true
+
+      - name: Merge reports
+        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
