@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/302ai',
+          label: '302.AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/abacus',
           label: 'Abacus',
         },
@@ -130,6 +135,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/baseten',
           label: 'Baseten',
+        },
+        {
+          type: 'doc',
+          id: 'providers/berget',
+          label: 'Berget.AI',
         },
         {
           type: 'doc',
@@ -228,6 +238,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/jiekou',
+          label: 'Jiekou.AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
         },
@@ -300,6 +315,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nebius',
           label: 'Nebius Token Factory',
+        },
+        {
+          type: 'doc',
+          id: 'providers/nova',
+          label: 'Nova',
         },
         {
           type: 'doc',

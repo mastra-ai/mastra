@@ -2,16 +2,14 @@ import { useForm } from 'react-hook-form'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@site/src/components/ui/forms'
 import { Spinner } from './spinner'
 import { cn } from '@site/src/lib/utils'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { AnimatePresence, motion } from 'motion/react'
+import { valibotResolver } from '@hookform/resolvers/valibot'
 import { useState } from 'react'
-import { toast } from './custom-toast'
-import { z } from 'zod/v4'
+import * as v from 'valibot'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import { Button } from './ui/button'
 
-export const formSchema = z.object({
-  email: z.email(),
+export const formSchema = v.object({
+  email: v.pipe(v.string(), v.email('The email is badly formatted.')),
 })
 
 const buttonCopy = ({
@@ -53,25 +51,20 @@ const SubscribeForm = ({
   }
 
   const [buttonState, setButtonState] = useState('idle')
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<v.InferInput<typeof formSchema>>({
+    resolver: valibotResolver(formSchema),
     defaultValues: {
       email: '',
     },
     reValidateMode: 'onSubmit',
   })
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: v.InferInput<typeof formSchema>) => {
     if (buttonState === 'success') return
 
     const sanitizedEmail = values.email.trim()
-    if (!sanitizedEmail) {
-      return toast({
-        title: 'Error Validating Email',
-        description: 'Please enter an email',
-      })
-    }
     setButtonState('loading')
+
     try {
       const response = await fetch(
         `https://api.hsforms.com/submissions/v3/integration/submit/${hsPortalId}/${hsFormGuid}`,
@@ -104,10 +97,6 @@ const SubscribeForm = ({
       await new Promise(resolve => setTimeout(resolve, 1750))
     } catch (error) {
       console.error('Error submitting form:', error)
-      toast({
-        title: 'Error Submitting Form',
-        description: 'Please try again',
-      })
       setButtonState('idle')
     } finally {
       setButtonState('idle')
@@ -142,7 +131,7 @@ const SubscribeForm = ({
                   placeholder={placeholder || 'you@example.com'}
                   {...field}
                   className={cn(
-                    'h-[35px] w-full flex-1 rounded-[10px] border border-(--border) bg-transparent px-4 py-[0.56rem] text-sm placeholder:text-sm placeholder:text-[#939393] focus:ring-2 focus:ring-(--mastra-green-accent)/50 focus:outline-none focus-visible:border-green-500 dark:border-[#343434] dark:text-white',
+                    'h-8.75 w-full flex-1 rounded-[10px] border border-(--border) bg-transparent px-4 py-[0.56rem] text-sm placeholder:text-sm placeholder:text-[#939393] focus:ring-2 focus:ring-(--mastra-green-accent)/50 focus:outline-none focus-visible:border-green-500 dark:border-[#343434] dark:text-white',
                     inputClassName,
                   )}
                 />
@@ -174,7 +163,7 @@ const SubscribeForm = ({
 
         <Button
           className={cn(
-            'flex h-[32px] w-full items-center justify-center rounded-[10px] bg-(--mastra-surface-3) px-4 text-[14px] hover:opacity-90 dark:text-white',
+            'flex h-8 w-full items-center justify-center rounded-[10px] bg-(--mastra-surface-3) px-4 text-[14px] hover:opacity-90 dark:text-white',
             buttonClassName,
           )}
           onClick={e => {
@@ -183,22 +172,12 @@ const SubscribeForm = ({
           }}
           disabled={buttonState === 'loading'}
         >
-          <AnimatePresence mode="popLayout" initial={false}>
-            <motion.span
-              transition={{ type: 'spring', duration: 0.3, bounce: 0 }}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              key={buttonState}
-            >
-              {
-                buttonCopy({
-                  idleIcon,
-                  successIcon,
-                })[buttonState as keyof typeof buttonCopy]
-              }
-            </motion.span>
-          </AnimatePresence>
+          {
+            buttonCopy({
+              idleIcon,
+              successIcon,
+            })[buttonState as keyof ReturnType<typeof buttonCopy>]
+          }
         </Button>
       </form>
     </Form>

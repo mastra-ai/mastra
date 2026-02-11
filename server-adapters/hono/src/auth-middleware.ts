@@ -22,7 +22,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
   const method = c.req.method;
   const getHeader = (name: string) => c.req.header(name);
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -69,7 +69,9 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
     return next();
   } catch (err) {
-    console.error(err);
+    mastra.getLogger()?.error('Authentication error', {
+      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    });
     return c.json({ error: 'Invalid or expired token' }, 401);
   }
 };
@@ -88,7 +90,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
   const method = c.req.method;
   const getHeader = (name: string) => c.req.header(name);
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }
@@ -114,7 +116,9 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
 
       return c.json({ error: 'Access denied' }, 403);
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorizeUser', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       return c.json({ error: 'Authorization error' }, 500);
     }
   }
@@ -130,7 +134,11 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
 
       return c.json({ error: 'Access denied' }, 403);
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorize', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        path,
+        method,
+      });
       return c.json({ error: 'Authorization error' }, 500);
     }
   }

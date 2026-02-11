@@ -166,9 +166,13 @@ const messageSchema = z.any();
 // ============================================================================
 
 /**
- * GET /memory/status
+ * GET /api/memory/status
+ * Includes optional resourceId and threadId for OM status lookup
  */
-export const getMemoryStatusQuerySchema = agentIdQuerySchema;
+export const getMemoryStatusQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+});
 
 /**
  * GET /memory/config
@@ -204,8 +208,11 @@ export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
 /**
  * GET /memory/threads/:threadId
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema;
+export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
  * GET /memory/threads/:threadId/messages
@@ -226,6 +233,24 @@ export const getWorkingMemoryQuerySchema = z.object({
   agentId: z.string(),
   resourceId: z.string().optional(),
   memoryConfig: memoryConfigSchema,
+});
+
+/**
+ * DELETE /memory/threads/:threadId
+ * agentId is required
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
+ */
+export const deleteThreadQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
+
+/**
+ * POST /memory/messages/delete
+ * agentId is required
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
+ */
+export const deleteMessagesQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
 });
 
 // ============================================================================
@@ -266,8 +291,11 @@ export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).ext
 /**
  * GET /memory/network/threads/:threadId
  * agentId is optional - can use storage fallback when not provided
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema;
+export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
  * GET /memory/network/threads/:threadId/messages
@@ -298,13 +326,19 @@ export const updateThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * DELETE /memory/network/threads/:threadId
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteThreadNetworkQuerySchema = agentIdQuerySchema;
+export const deleteThreadNetworkQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 /**
  * POST /memory/network/messages/delete
+ * resourceId is optional - used for ownership validation fallback when not set via middleware
  */
-export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema;
+export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema.extend({
+  resourceId: z.string().optional(),
+});
 
 // ============================================================================
 // Response Schemas
@@ -315,6 +349,31 @@ export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema;
  */
 export const memoryStatusResponseSchema = z.object({
   result: z.boolean(),
+  observationalMemory: z
+    .object({
+      enabled: z.boolean(),
+      hasRecord: z.boolean().optional(),
+      originType: z.string().optional(),
+      lastObservedAt: z.date().optional(),
+      tokenCount: z.number().optional(),
+      observationTokenCount: z.number().optional(),
+      isObserving: z.boolean().optional(),
+      isReflecting: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Observational Memory config schema for API responses
+ */
+const observationalMemoryConfigSchema = z.object({
+  enabled: z.boolean(),
+  scope: z.enum(['thread', 'resource']).optional(),
+  shareTokenBudget: z.boolean().optional(),
+  messageTokens: z.union([z.number(), z.object({ min: z.number(), max: z.number() })]).optional(),
+  observationTokens: z.union([z.number(), z.object({ min: z.number(), max: z.number() })]).optional(),
+  observationModel: z.string().optional(),
+  reflectionModel: z.string().optional(),
 });
 
 /**
@@ -326,6 +385,7 @@ export const memoryConfigResponseSchema = z.object({
     lastMessages: z.union([z.number(), z.literal(false)]).optional(),
     semanticRecall: z.union([z.boolean(), z.any()]).optional(),
     workingMemory: z.any().optional(),
+    observationalMemory: observationalMemoryConfigSchema.optional(),
   }),
 });
 
@@ -476,4 +536,51 @@ export const cloneThreadBodySchema = z.object({
 export const cloneThreadResponseSchema = z.object({
   thread: threadSchema,
   clonedMessages: z.array(messageSchema),
+});
+
+// ============================================================================
+// Observational Memory Schemas
+// ============================================================================
+
+/**
+ * Query schema for GET /api/memory/observational-memory
+ */
+export const getObservationalMemoryQuerySchema = z.object({
+  agentId: z.string(),
+  resourceId: z.string().optional(),
+  threadId: z.string().optional(),
+});
+
+/**
+ * Observational Memory record schema for API responses
+ * Matches the ObservationalMemoryRecord type from @mastra/core/storage
+ */
+const observationalMemoryRecordSchema = z.object({
+  id: z.string(),
+  scope: z.enum(['thread', 'resource']),
+  resourceId: z.string(),
+  threadId: z.string().nullable(),
+  activeObservations: z.string(),
+  bufferedObservations: z.string().optional(),
+  bufferedReflection: z.string().optional(),
+  originType: z.enum(['initial', 'observation', 'reflection']),
+  generationCount: z.number(),
+  lastObservedAt: z.date().optional(),
+  totalTokensObserved: z.number(),
+  observationTokenCount: z.number(),
+  pendingMessageTokens: z.number(),
+  isObserving: z.boolean(),
+  isReflecting: z.boolean(),
+  config: z.record(z.string(), z.unknown()),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+/**
+ * Response schema for GET /api/memory/observational-memory
+ */
+export const getObservationalMemoryResponseSchema = z.object({
+  record: observationalMemoryRecordSchema.nullable(),
+  history: z.array(observationalMemoryRecordSchema).optional(),
 });

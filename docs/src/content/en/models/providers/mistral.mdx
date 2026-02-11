@@ -1,5 +1,5 @@
 ---
-title: "Mistral | Models | Mastra"
+title: "Mistral | Models"
 description: "Use Mistral models with Mastra. 26 models available."
 ---
 
@@ -11,11 +11,11 @@ Access 26 Mistral models through Mastra's model router. Authentication is handle
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
-```bash
+```bash title=".env"
 MISTRAL_API_KEY=your-api-key
 ```
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts" {7}
 import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
@@ -60,8 +60,8 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.4,
+    "outputCost": 2
   },
   {
     "model": "mistral/devstral-medium-2507",
@@ -358,7 +358,7 @@ for await (const chunk of stream) {
 
 ### Custom Headers
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -375,7 +375,7 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-```typescript
+```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

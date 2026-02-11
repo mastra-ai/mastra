@@ -331,7 +331,7 @@ export const mastra = new Mastra({
 
 Tools are reusable functions that agents can use to interact with external systems. Each tool defines inputs, outputs, and execution logic.
 
-Visit the [Tools documentation](/docs/tools-mcp/overview) to learn more.
+Visit the [Tools documentation](/docs/agents/using-tools) to learn more.
 
 :::note
 Most users configure tools directly on agents. This top-level configuration is for defining reusable tools that can be shared across multiple agents.
@@ -425,6 +425,26 @@ export const mastra = new Mastra({
   workflows: {
     testWorkflow,
   },
+});
+```
+
+### workspace
+
+**Type:** `Workspace`
+
+A Mastra workspace gives agents a persistent environment for storing files and executing commands. Agents inherit the global workspace on the `Mastra` class unless they have their own workspace configured.
+
+See the [Workspace documentation](/docs/workspace/overview) for implementation details.
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+});
+
+const mastra = new Mastra({
+  workspace,
 });
 ```
 

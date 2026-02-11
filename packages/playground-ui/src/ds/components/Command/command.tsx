@@ -29,12 +29,32 @@ const CommandDialog = ({
   description = 'Search for commands and actions',
   ...props
 }: CommandDialogProps) => {
+  // Custom filter that preserves DOM order by returning 1 for all matches
+  // This prevents cmdk from reordering items by match score
+  const filter = React.useCallback((value: string, search: string) => {
+    const normalizedValue = value.toLowerCase();
+    const normalizedSearch = search.toLowerCase();
+    const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
+
+    // All search terms must be found in the value
+    const matches = searchTerms.every(term => normalizedValue.includes(term));
+    return matches ? 1 : 0;
+  }, []);
+
+  // Stop propagation to prevent keyboard events from reaching
+  // global document-level listeners (e.g., table keyboard nav)
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
     <Dialog {...props}>
       <DialogContent className="overflow-hidden p-0">
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
         <Command
+          filter={filter}
+          onKeyDown={handleKeyDown}
           className={cn(
             '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-neutral3',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2',

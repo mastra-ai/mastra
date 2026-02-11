@@ -7,8 +7,8 @@ import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/sc
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { StepResult } from './types';
-import type { Workflow } from './workflow';
+import type { OutputWriter, StepResult, StepMetadata } from './types';
+import type { AnyWorkflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
@@ -20,12 +20,20 @@ declare const SuspendBrand: unique symbol;
 // Create a branded type that can ONLY be produced by suspend()
 export type InnerOutput = void & { readonly [SuspendBrand]: never };
 
-export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSuspend, EngineType> = {
+export type ExecuteFunctionParams<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResume,
+  TSuspend,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   runId: string;
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
-  requestContext: RequestContext;
+  requestContext: RequestContext<TRequestContext>;
   inputData: TStepInput;
   state: TState;
   setState(state: TState): Promise<void>;
@@ -33,7 +41,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
   suspendData?: TSuspend;
   retryCount: number;
   tracingContext: TracingContext;
-  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any> ? InferZodLikeSchema<T['inputSchema']> : T;
+  getInitData<T>(): T extends AnyWorkflow ? InferZodLikeSchema<T['inputSchema']> : T;
   getStepResult<TOutput>(step: string): TOutput;
   getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
     step: TStep,
@@ -41,7 +49,8 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
   suspend: unknown extends TSuspend
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
-  bail: (result: TStepOutput) => InnerOutput;
+  bail(result: TStepOutput): InnerOutput;
+  bail(result?: unknown): InnerOutput;
   abort(): void;
   resume?: {
     steps: string[];
@@ -53,24 +62,81 @@ export type ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResume, TSus
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream;
+  outputWriter?: OutputWriter;
   validateSchemas?: boolean;
 };
 
-export type ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = Omit<
-  ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ConditionFunctionParams<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = Omit<
+  ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType, TRequestContext>,
   'setState' | 'suspend'
 >;
 
-export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ExecuteFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ExecuteFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  >,
 ) => Promise<TStepOutput | InnerOutput>;
 
-export type ConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ConditionFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ConditionFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  >,
 ) => Promise<boolean>;
 
-export type LoopConditionFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ConditionFunctionParams<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> & {
+export type LoopConditionFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = (
+  params: ConditionFunctionParams<
+    TState,
+    TStepInput,
+    TStepOutput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContext
+  > & {
     iterationCount: number;
   },
 ) => Promise<boolean>;
@@ -84,6 +150,7 @@ export interface Step<
   TResume = unknown,
   TSuspend = unknown,
   TEngineType = any,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TStepId;
   description?: string;
@@ -92,10 +159,16 @@ export interface Step<
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
-  execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  execute: ExecuteFunction<TState, TInput, TOutput, TResume, TSuspend, TEngineType, TRequestContext>;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
   component?: string;
+  metadata?: StepMetadata;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {

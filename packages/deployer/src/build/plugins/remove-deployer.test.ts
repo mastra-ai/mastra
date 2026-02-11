@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { removeDeployer } from './remove-deployer';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
+import { describe, it, expect } from 'vitest';
+import { removeDeployer } from './remove-deployer';
 
 describe('Remove deployer', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));

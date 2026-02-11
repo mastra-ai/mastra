@@ -1,8 +1,18 @@
 import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
-import type { StorageAgentType, StorageMessageType, StorageResourceType, StorageWorkflowRun } from '../types';
+import type {
+  StorageAgentType,
+  StorageMessageType,
+  StoragePromptBlockType,
+  StorageResourceType,
+  StorageScorerDefinitionType,
+  StorageWorkflowRun,
+  ObservationalMemoryRecord,
+} from '../types';
 import type { AgentVersion } from './agents';
 import type { TraceEntry } from './observability';
+import type { PromptBlockVersion } from './prompt-blocks';
+import type { ScorerDefinitionVersion } from './scorer-definitions';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
@@ -20,6 +30,12 @@ export class InMemoryDB {
   readonly traces = new Map<string, TraceEntry>();
   readonly agents = new Map<string, StorageAgentType>();
   readonly agentVersions = new Map<string, AgentVersion>();
+  readonly promptBlocks = new Map<string, StoragePromptBlockType>();
+  readonly promptBlockVersions = new Map<string, PromptBlockVersion>();
+  readonly scorerDefinitions = new Map<string, StorageScorerDefinitionType>();
+  readonly scorerDefinitionVersions = new Map<string, ScorerDefinitionVersion>();
+  /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
+  readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
   /**
    * Clears all data from all collections.
@@ -34,5 +50,10 @@ export class InMemoryDB {
     this.traces.clear();
     this.agents.clear();
     this.agentVersions.clear();
+    this.promptBlocks.clear();
+    this.promptBlockVersions.clear();
+    this.scorerDefinitions.clear();
+    this.scorerDefinitionVersions.clear();
+    this.observationalMemory.clear();
   }
 }

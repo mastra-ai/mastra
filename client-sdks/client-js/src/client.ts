@@ -16,6 +16,8 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  StoredScorer,
+  Workspace,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -54,8 +56,18 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredScorersParams,
+  ListStoredScorersResponse,
+  CreateStoredScorerParams,
+  StoredScorerResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  GetObservationalMemoryParams,
+  GetObservationalMemoryResponse,
+  GetMemoryStatusResponse,
+  ListWorkspacesResponse,
+  ListVectorsResponse,
+  ListEmbeddersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -88,11 +100,11 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/agents${queryString ? `?${queryString}` : ''}`);
   }
 
   public listAgentsModelProviders(): Promise<ListAgentsModelProvidersResponse> {
-    return this.request(`/api/agents/providers`);
+    return this.request(`/agents/providers`);
   }
 
   /**
@@ -130,7 +142,7 @@ export class MastraClient extends BaseResource {
 
     const queryString = queryParams.toString();
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
-      `/api/memory/threads${queryString ? `?${queryString}` : ''}${requestContextQueryString(params.requestContext, queryString ? '&' : '?')}`,
+      `/memory/threads${queryString ? `?${queryString}` : ''}${requestContextQueryString(params.requestContext, queryString ? '&' : '?')}`,
     );
 
     const actualResponse: ListMemoryThreadsResponse =
@@ -154,7 +166,7 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryConfig(params: GetMemoryConfigParams): Promise<GetMemoryConfigResponse> {
     return this.request(
-      `/api/memory/config?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
+      `/memory/config?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
     );
   }
 
@@ -165,7 +177,7 @@ export class MastraClient extends BaseResource {
    */
   public createMemoryThread(params: CreateMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
     return this.request(
-      `/api/memory/threads?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
+      `/memory/threads?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
       { method: 'POST', body: params },
     );
   }
@@ -195,11 +207,11 @@ export class MastraClient extends BaseResource {
   ): Promise<ListMemoryThreadMessagesResponse> {
     let url = '';
     if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
     } else if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
     } else {
-      url = `/api/memory/threads/${threadId}/messages${requestContextQueryString(opts.requestContext, '?')}`;
+      url = `/memory/threads/${threadId}/messages${requestContextQueryString(opts.requestContext, '?')}`;
     }
     return this.request(url);
   }
@@ -211,9 +223,9 @@ export class MastraClient extends BaseResource {
     let url = '';
 
     if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
     } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
     }
     return this.request(url, { method: 'DELETE' });
   }
@@ -225,7 +237,7 @@ export class MastraClient extends BaseResource {
    */
   public saveMessageToMemory(params: SaveMessageToMemoryParams): Promise<SaveMessageToMemoryResponse> {
     return this.request(
-      `/api/memory/save-messages?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
+      `/memory/save-messages?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
       {
         method: 'POST',
         body: params,
@@ -236,14 +248,37 @@ export class MastraClient extends BaseResource {
   /**
    * Gets the status of the memory system
    * @param agentId - The agent ID
-   * @param requestContext - Optional request context to pass as query parameter
-   * @returns Promise containing memory system status
+   * @param opts - Optional parameters including resourceId, threadId, and requestContext
+   * @returns Promise containing memory system status including observational memory info
    */
   public getMemoryStatus(
     agentId: string,
     requestContext?: RequestContext | Record<string, any>,
-  ): Promise<{ result: boolean }> {
-    return this.request(`/api/memory/status?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`);
+    opts?: {
+      resourceId?: string;
+      threadId?: string;
+    },
+  ): Promise<GetMemoryStatusResponse> {
+    const queryParams = new URLSearchParams({ agentId });
+    if (opts?.resourceId) queryParams.set('resourceId', opts.resourceId);
+    if (opts?.threadId) queryParams.set('threadId', opts.threadId);
+    const queryString = queryParams.toString();
+    return this.request(`/memory/status?${queryString}${requestContextQueryString(requestContext, '&')}`);
+  }
+
+  /**
+   * Gets observational memory data for a resource or thread
+   * @param params - Parameters containing agentId, resourceId, threadId, and optional request context
+   * @returns Promise containing the current OM record and history
+   */
+  public getObservationalMemory(params: GetObservationalMemoryParams): Promise<GetObservationalMemoryResponse> {
+    const queryParams = new URLSearchParams({ agentId: params.agentId });
+    if (params.resourceId) queryParams.set('resourceId', params.resourceId);
+    if (params.threadId) queryParams.set('threadId', params.threadId);
+    const queryString = queryParams.toString();
+    return this.request(
+      `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
+    );
   }
 
   /**
@@ -261,7 +296,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/tools${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/tools${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -290,7 +325,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/processors${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/processors${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -324,7 +359,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/workflows${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/workflows${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -341,7 +376,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of action IDs to action details
    */
   public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
-    return this.request('/api/agent-builder/');
+    return this.request('/agent-builder/');
   }
 
   /**
@@ -400,9 +435,9 @@ export class MastraClient extends BaseResource {
     }
 
     if (searchParams.size) {
-      return this.request(`/api/logs?${searchParams}`);
+      return this.request(`/logs?${searchParams}`);
     } else {
-      return this.request(`/api/logs`);
+      return this.request(`/logs`);
     }
   }
 
@@ -449,9 +484,9 @@ export class MastraClient extends BaseResource {
     }
 
     if (searchParams.size) {
-      return this.request(`/api/logs/${runId}?${searchParams}`);
+      return this.request(`/logs/${runId}?${searchParams}`);
     } else {
-      return this.request(`/api/logs/${runId}`);
+      return this.request(`/logs/${runId}`);
     }
   }
 
@@ -460,7 +495,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing list of log transports
    */
   public listLogTransports(): Promise<{ transports: string[] }> {
-    return this.request('/api/logs/transports');
+    return this.request('/logs/transports');
   }
 
   /**
@@ -491,7 +526,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('offset', String(params.offset));
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -506,7 +541,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('version', params.version);
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/mcp/v0/servers/${serverId}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/mcp/v0/servers/${serverId}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -515,7 +550,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the list of tools.
    */
   public getMcpServerTools(serverId: string): Promise<McpServerToolListResponse> {
-    return this.request(`/api/mcp/${serverId}/tools`);
+    return this.request(`/mcp/${serverId}/tools`);
   }
 
   /**
@@ -557,7 +592,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
+      `/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
     );
   }
 
@@ -590,7 +625,7 @@ export class MastraClient extends BaseResource {
       params.append('memoryConfig', JSON.stringify(memoryConfig));
     }
 
-    return this.request(`/api/memory/search?${params}${requestContextQueryString(requestContext, '&')}`);
+    return this.request(`/memory/search?${params}${requestContextQueryString(requestContext, '&')}`);
   }
 
   /**
@@ -614,7 +649,7 @@ export class MastraClient extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`,
+      `/memory/threads/${threadId}/working-memory?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`,
       {
         method: 'POST',
         body: {
@@ -630,7 +665,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing list of available scorers
    */
   public listScorers(): Promise<Record<string, GetScorerResponse>> {
-    return this.request('/api/scores/scorers');
+    return this.request('/scores/scorers');
   }
 
   /**
@@ -639,7 +674,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the scorer
    */
   public getScorer(scorerId: string): Promise<GetScorerResponse> {
-    return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
+    return this.request(`/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
   public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponseOld> {
@@ -660,7 +695,7 @@ export class MastraClient extends BaseResource {
       searchParams.set('perPage', String(perPage));
     }
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/scorer/${encodeURIComponent(scorerId)}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/scores/scorer/${encodeURIComponent(scorerId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -680,7 +715,7 @@ export class MastraClient extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/scores/run/${encodeURIComponent(runId)}${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/scores/run/${encodeURIComponent(runId)}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -701,7 +736,7 @@ export class MastraClient extends BaseResource {
 
     const queryString = searchParams.toString();
     return this.request(
-      `/api/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
+      `/scores/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}${queryString ? `?${queryString}` : ''}`,
     );
   }
 
@@ -711,7 +746,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the saved score
    */
   public saveScore(params: SaveScoreParams): Promise<SaveScoreResponse> {
-    return this.request('/api/scores', {
+    return this.request('/scores', {
       method: 'POST',
       body: params,
     });
@@ -781,9 +816,15 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/stored/agents${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/stored/agents${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -792,7 +833,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the created stored agent
    */
   public createStoredAgent(params: CreateStoredAgentParams): Promise<StoredAgentResponse> {
-    return this.request('/api/stored/agents', {
+    return this.request('/stored/agents', {
       method: 'POST',
       body: params,
     });
@@ -808,6 +849,64 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Stored Scorer Definitions
+  // ============================================================================
+
+  /**
+   * Lists all stored scorer definitions with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored scorer definitions
+   */
+  public listStoredScorers(params?: ListStoredScorersParams): Promise<ListStoredScorersResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/scorers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored scorer definition
+   * @param params - Scorer definition configuration
+   * @returns Promise containing the created stored scorer definition
+   */
+  public createStoredScorer(params: CreateStoredScorerParams): Promise<StoredScorerResponse> {
+    return this.request('/stored/scorers', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored scorer definition instance by ID for further operations (details, update, delete)
+   * @param storedScorerId - ID of the stored scorer definition
+   * @returns StoredScorer instance
+   */
+  public getStoredScorer(storedScorerId: string): StoredScorer {
+    return new StoredScorer(this.options, storedScorerId);
+  }
+
+  // ============================================================================
   // System
   // ============================================================================
 
@@ -816,6 +915,47 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing the list of installed Mastra packages
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
-    return this.request('/api/system/packages');
+    return this.request('/system/packages');
+  }
+
+  // ============================================================================
+  // Workspace
+  // ============================================================================
+
+  /**
+   * Lists all workspaces from both Mastra instance and agents
+   * @returns Promise containing array of workspace items
+   */
+  public listWorkspaces(): Promise<ListWorkspacesResponse> {
+    return this.request('/workspaces');
+  }
+
+  /**
+   * Gets the workspace resource for filesystem, search, and skills operations
+   * @param workspaceId - Workspace ID to target
+   * @returns Workspace instance
+   */
+  public getWorkspace(workspaceId: string): Workspace {
+    return new Workspace(this.options, workspaceId);
+  }
+
+  // ============================================================================
+  // Vectors & Embedders
+  // ============================================================================
+
+  /**
+   * Lists all available vector stores
+   * @returns Promise containing list of available vector stores
+   */
+  public listVectors(): Promise<ListVectorsResponse> {
+    return this.request('/vectors');
+  }
+
+  /**
+   * Lists all available embedding models
+   * @returns Promise containing list of available embedders
+   */
+  public listEmbedders(): Promise<ListEmbeddersResponse> {
+    return this.request('/embedders');
   }
 }

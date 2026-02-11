@@ -16,6 +16,7 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/editor": "latest",
     "@mastra/mcp": "latest",
     "zod": "^3.25.76"
   },
@@ -30,6 +31,7 @@
       "@mastra/loggers": "link:../../../../packages/loggers",
       "@mastra/memory": "link:../../../../packages/memory",
       "@mastra/libsql": "link:../../../../stores/libsql",
+      "@mastra/editor": "link:../../../../packages/editor",
       "@mastra/mcp": "link:../../../../packages/mcp"
     }
   },

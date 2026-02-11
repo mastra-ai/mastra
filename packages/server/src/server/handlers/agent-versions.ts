@@ -1,4 +1,4 @@
-import { deepEqual } from '@mastra/core/utils';
+import type { StorageAgentSnapshotType } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -21,15 +21,92 @@ import { handleError } from './error';
 // Default maximum versions per agent (can be made configurable in the future)
 export const DEFAULT_MAX_VERSIONS_PER_AGENT = 50;
 
+/**
+ * The config field names that live on version rows (StorageAgentSnapshotType fields).
+ * Used to extract config from a version record for comparison and restoration.
+ */
+const SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+  'requestContextSchema',
+] as const;
+
 // ============================================================================
 // Helper Functions (exported for use in stored-agents.ts)
 // ============================================================================
+
+/**
+ * Deep equality comparison for comparing two values.
+ * Handles primitives, arrays, objects, and Date instances.
+ * TODO: Move to a shared utils package that gets bundled into each package
+ */
+function deepEqual(a: unknown, b: unknown): boolean {
+  // Handle identical references and primitives
+  if (a === b) return true;
+
+  // Handle null/undefined
+  if (a == null || b == null) return a === b;
+
+  // Handle different types
+  if (typeof a !== typeof b) return false;
+
+  // Handle arrays
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, index) => deepEqual(item, b[index]));
+  }
+
+  // Handle dates (must check before generic objects since Date is also an object)
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+
+  // Handle objects (after Date check to avoid treating Dates as plain objects)
+  if (typeof a === 'object' && typeof b === 'object') {
+    const aObj = a as Record<string, unknown>;
+    const bObj = b as Record<string, unknown>;
+    const aKeys = Object.keys(aObj);
+    const bKeys = Object.keys(bObj);
+
+    if (aKeys.length !== bKeys.length) return false;
+
+    // Verify that bObj has the same keys as aObj before comparing values
+    return aKeys.every(key => Object.prototype.hasOwnProperty.call(bObj, key) && deepEqual(aObj[key], bObj[key]));
+  }
+
+  return false;
+}
 
 /**
  * Generates a unique ID for a version using crypto.randomUUID()
  */
 export function generateVersionId(): string {
   return crypto.randomUUID();
+}
+
+/**
+ * Extracts snapshot config fields from a version record (top-level fields).
+ * Strips version-metadata fields (id, agentId, versionNumber, changedFields, changeMessage, createdAt).
+ */
+function extractConfigFromVersion(version: Record<string, unknown>): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+  for (const field of SNAPSHOT_CONFIG_FIELDS) {
+    if (field in version) {
+      config[field] = version[field];
+    }
+  }
+  return config;
 }
 
 /**
@@ -66,14 +143,14 @@ export function calculateChangedFields(
 }
 
 /**
- * Computes detailed diffs between two agent snapshots.
+ * Computes detailed diffs between two agent config snapshots.
  */
 function computeVersionDiffs(
-  fromSnapshot: Record<string, unknown>,
-  toSnapshot: Record<string, unknown>,
+  fromConfig: Record<string, unknown>,
+  toConfig: Record<string, unknown>,
 ): Array<{ field: string; previousValue: unknown; currentValue: unknown }> {
   const diffs: Array<{ field: string; previousValue: unknown; currentValue: unknown }> = [];
-  const allKeys = new Set([...Object.keys(fromSnapshot), ...Object.keys(toSnapshot)]);
+  const allKeys = new Set([...Object.keys(fromConfig), ...Object.keys(toConfig)]);
 
   for (const key of allKeys) {
     // Skip metadata fields
@@ -81,8 +158,8 @@ function computeVersionDiffs(
       continue;
     }
 
-    const prevValue = fromSnapshot[key];
-    const currValue = toSnapshot[key];
+    const prevValue = fromConfig[key];
+    const currValue = toConfig[key];
 
     if (!deepEqual(prevValue, currValue)) {
       diffs.push({
@@ -178,27 +255,53 @@ function isVersionNumberConflictError(error: unknown): boolean {
 /**
  * Type for the agents store with version-related methods.
  * Uses generic types to work with any StorageAgentType-compatible structure.
+ *
+ * AgentVersion config fields are top-level (no nested snapshot object).
+ * getLatestVersion returns the version with config fields top-level.
  */
 export interface AgentsStoreWithVersions<TAgent = any> {
-  getLatestVersion: (agentId: string) => Promise<{ id: string; versionNumber: number; snapshot: TAgent } | null>;
-  createVersion: (params: {
-    id: string;
-    agentId: string;
-    versionNumber: number;
-    name?: string;
-    snapshot: TAgent;
-    changedFields?: string[];
-    changeMessage?: string;
-  }) => Promise<{ id: string; versionNumber: number }>;
-  updateAgent: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
+  getLatestVersion: (agentId: string) => Promise<
+    | (StorageAgentSnapshotType & {
+        id: string;
+        versionNumber: number;
+        [key: string]: any;
+      })
+    | null
+  >;
+  getVersion: (id: string) => Promise<
+    | (StorageAgentSnapshotType & {
+        id: string;
+        versionNumber: number;
+        [key: string]: any;
+      })
+    | null
+  >;
+  createVersion: (
+    params: StorageAgentSnapshotType & {
+      id: string;
+      agentId: string;
+      versionNumber: number;
+      changedFields?: string[];
+      changeMessage?: string;
+    },
+  ) => Promise<{ id: string; versionNumber: number }>;
+  update: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
   listVersions: (params: {
     agentId: string;
     page?: number;
     perPage?: number | false;
     orderBy?: { field?: 'versionNumber' | 'createdAt'; direction?: 'ASC' | 'DESC' };
   }) => Promise<{
-    versions: Array<{ id: string; versionNumber: number }>;
+    versions: Array<{
+      id: string;
+      agentId: string;
+      versionNumber: number;
+      [key: string]: any;
+    }>;
     total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
   }>;
   deleteVersion: (id: string) => Promise<void>;
 }
@@ -207,12 +310,13 @@ export interface AgentsStoreWithVersions<TAgent = any> {
  * Creates a new version with retry logic for race condition handling.
  * If a unique constraint violation occurs on versionNumber, retries with a fresh versionNumber.
  *
+ * Config fields are passed top-level (not nested in a snapshot object).
+ *
  * @param agentsStore - The agents storage domain
  * @param agentId - The agent ID to create a version for
- * @param snapshot - The agent configuration snapshot
+ * @param snapshotConfig - The agent configuration fields (StorageAgentSnapshotType)
  * @param changedFields - Array of field names that changed
  * @param options - Optional settings for the version
- * @param options.name - Optional vanity name for the version
  * @param options.changeMessage - Optional description of the changes
  * @param options.maxRetries - Maximum number of retry attempts (default: 3)
  * @returns The created version ID and version number
@@ -220,15 +324,14 @@ export interface AgentsStoreWithVersions<TAgent = any> {
 export async function createVersionWithRetry<TAgent>(
   agentsStore: AgentsStoreWithVersions<TAgent>,
   agentId: string,
-  snapshot: TAgent,
+  snapshotConfig: Record<string, unknown>,
   changedFields: string[],
   options: {
-    name?: string;
     changeMessage?: string;
     maxRetries?: number;
   } = {},
 ): Promise<{ versionId: string; versionNumber: number }> {
-  const { name, changeMessage, maxRetries = 3 } = options;
+  const { changeMessage, maxRetries = 3 } = options;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -240,16 +343,16 @@ export async function createVersionWithRetry<TAgent>(
       // Generate a unique version ID
       const versionId = generateVersionId();
 
-      // Create the version
+      // Create the version with config fields top-level
+      // snapshotConfig is guaranteed to contain name, instructions, model at runtime
       await agentsStore.createVersion({
+        ...snapshotConfig,
         id: versionId,
         agentId,
         versionNumber,
-        name,
-        snapshot,
         changedFields,
         changeMessage,
-      });
+      } as Parameters<AgentsStoreWithVersions<TAgent>['createVersion']>[0]);
 
       return { versionId, versionNumber };
     } catch (error) {
@@ -279,42 +382,74 @@ export async function createVersionWithRetry<TAgent>(
  *
  * @param agentsStore - The agents storage domain
  * @param agentId - The agent ID
- * @param existingAgent - The agent state before the update
- * @param updatedAgent - The agent state after the update
+ * @param existingAgent - The agent state before the update (thin record)
+ * @param updatedAgent - The agent state after the update (thin record)
+ * @param configFields - The config fields that were provided in the update (StorageAgentSnapshotType fields)
  * @returns The updated agent with the new activeVersionId, or the original if no changes
  */
 export async function handleAutoVersioning<TAgent>(
   agentsStore: AgentsStoreWithVersions<TAgent>,
   agentId: string,
-  existingAgent: TAgent,
+  existingAgent: TAgent & { activeVersionId?: string },
   updatedAgent: TAgent,
+  configFields?: Record<string, unknown>,
 ): Promise<{ agent: TAgent; versionCreated: boolean }> {
-  // Calculate what fields changed
-  const changedFields = calculateChangedFields(
-    existingAgent as unknown as Record<string, unknown>,
-    updatedAgent as unknown as Record<string, unknown>,
-  );
+  // If no config fields were provided, no version change needed
+  if (!configFields || Object.keys(configFields).length === 0) {
+    return { agent: updatedAgent, versionCreated: false };
+  }
 
-  // Only create version if there are actual changes (excluding metadata timestamps)
+  // Get the current active version to compare against
+  // IMPORTANT: Use the version that activeVersionId points to, not the "latest" version
+  // Otherwise we compare against newly created versions that aren't active yet
+  const activeVersion = existingAgent.activeVersionId
+    ? await agentsStore.getVersion(existingAgent.activeVersionId)
+    : null;
+
+  // Fall back to latest version if no active version is set
+  const versionToCompare = activeVersion || (await agentsStore.getLatestVersion(agentId));
+
+  const previousConfig = versionToCompare
+    ? extractConfigFromVersion(versionToCompare as unknown as Record<string, unknown>)
+    : null;
+
+  // Calculate what config fields changed by comparing provided fields against previous version
+  const changedFields = calculateChangedFields(previousConfig, configFields);
+
+  // Only create version if there are actual config changes
   if (changedFields.length === 0) {
     return { agent: updatedAgent, versionCreated: false };
   }
 
+  // Build the full snapshot config for the new version:
+  // Start with the previous version's config and overlay the provided changes
+  // Convert null values to undefined (null means "remove this field")
+  const fullConfig: Record<string, unknown> = previousConfig ? { ...previousConfig } : {};
+  for (const [key, value] of Object.entries(configFields)) {
+    fullConfig[key] = value === null ? undefined : value;
+  }
+
   // Create version with retry logic for race conditions
-  const { versionId } = await createVersionWithRetry(agentsStore, agentId, updatedAgent, changedFields, {
+  const { versionId } = await createVersionWithRetry(agentsStore, agentId, fullConfig, changedFields, {
     changeMessage: 'Auto-saved after edit',
   });
 
-  // Update the agent's activeVersionId
-  const finalAgent = await agentsStore.updateAgent({
+  // Update the agent's activeVersionId to point to the new version
+  await agentsStore.update({
     id: agentId,
     activeVersionId: versionId,
   });
 
-  // Enforce retention limit
+  // Update the updatedAgent object with the new activeVersionId
+  const agentWithNewVersion = {
+    ...updatedAgent,
+    activeVersionId: versionId,
+  };
+
+  // Enforce retention limit with the new activeVersionId
   await enforceRetentionLimit(agentsStore, agentId, versionId);
 
-  return { agent: finalAgent, versionCreated: true };
+  return { agent: agentWithNewVersion, versionCreated: true };
 }
 
 // ============================================================================
@@ -348,7 +483,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -380,7 +515,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
   summary: 'Create agent version',
   description: 'Creates a new version snapshot of the current agent configuration',
   tags: ['Agent Versions'],
-  handler: async ({ mastra, agentId, name, changeMessage }) => {
+  handler: async ({ mastra, agentId, changeMessage }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -393,26 +528,37 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      // Get the current agent configuration
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      // Get the current agent to find its active version
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
 
+      // Get the current active version to snapshot its config
+      let currentConfig: Record<string, unknown> = {};
+      if (agent.activeVersionId) {
+        const activeVersion = await agentsStore.getVersion(agent.activeVersionId);
+        if (activeVersion) {
+          currentConfig = extractConfigFromVersion(activeVersion as unknown as Record<string, unknown>);
+        }
+      }
+
       // Get the latest version to calculate changed fields
       const latestVersion = await agentsStore.getLatestVersion(agentId);
-      const changedFields = calculateChangedFields(
-        latestVersion?.snapshot as Record<string, unknown> | undefined,
-        agent as unknown as Record<string, unknown>,
-      );
+      const previousConfig = latestVersion
+        ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>)
+        : null;
+
+      const changedFields = calculateChangedFields(previousConfig, currentConfig);
 
       // Create the new version with retry logic to handle race conditions
+      // Config fields are passed top-level
       const { versionId } = await createVersionWithRetry(
         agentsStore,
         agentId,
-        agent,
+        currentConfig,
         changedFields.length > 0 ? changedFields : [],
-        { name, changeMessage },
+        { changeMessage },
       );
 
       // Get the created version to return
@@ -500,7 +646,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -514,10 +660,11 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
       }
 
-      // Update the agent's activeVersionId
-      await agentsStore.updateAgent({
+      // Update the agent's activeVersionId AND status to 'published'
+      await agentsStore.update({
         id: agentId,
         activeVersionId: versionId,
+        status: 'published',
       });
 
       return {
@@ -541,7 +688,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
   pathParamSchema: versionIdPathParams,
   responseSchema: restoreVersionResponseSchema,
   summary: 'Restore agent version',
-  description: 'Restores the agent configuration from a version snapshot, creating a new version',
+  description: 'Restores the agent configuration from a version, creating a new version',
   tags: ['Agent Versions'],
   handler: async ({ mastra, agentId, versionId }) => {
     try {
@@ -557,7 +704,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -571,50 +718,36 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
       }
 
-      // Update the agent with the snapshot from the version to restore
-      // Exclude id, createdAt, updatedAt, and activeVersionId from the snapshot
-      // (activeVersionId from old snapshot may reference a stale/deleted version)
-      const {
-        id: _id,
-        createdAt: _createdAt,
-        updatedAt: _updatedAt,
-        activeVersionId: _activeVersionId,
-        ...snapshotData
-      } = versionToRestore.snapshot;
-      await agentsStore.updateAgent({
-        id: agentId,
-        ...snapshotData,
-      });
+      // Extract the config fields from the version to restore (top-level, no .snapshot)
+      const restoredConfig = extractConfigFromVersion(versionToRestore as unknown as Record<string, unknown>);
 
-      // Get the updated agent
-      const updatedAgent = await agentsStore.getAgentById({ id: agentId });
-      if (!updatedAgent) {
-        throw new HTTPException(500, { message: 'Failed to retrieve updated agent' });
-      }
+      // Update the agent with the config from the version to restore
+      await agentsStore.update({
+        id: agentId,
+        ...restoredConfig,
+      });
 
       // Get the latest version to calculate changed fields
       const latestVersion = await agentsStore.getLatestVersion(agentId);
-      const changedFields = calculateChangedFields(
-        latestVersion?.snapshot as Record<string, unknown> | undefined,
-        updatedAgent as unknown as Record<string, unknown>,
-      );
+      const previousConfig = latestVersion
+        ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>)
+        : null;
+
+      const changedFields = calculateChangedFields(previousConfig, restoredConfig);
 
       // Create a new version with retry logic to handle race conditions
+      // Config fields are passed top-level
       const { versionId: newVersionId } = await createVersionWithRetry(
         agentsStore,
         agentId,
-        updatedAgent,
+        restoredConfig,
         changedFields,
         {
-          changeMessage: `Restored from version ${versionToRestore.versionNumber}${versionToRestore.name ? ` (${versionToRestore.name})` : ''}`,
+          changeMessage: `Restored from version ${versionToRestore.versionNumber}`,
         },
       );
 
-      // Update the agent's activeVersionId to the new version
-      await agentsStore.updateAgent({
-        id: agentId,
-        activeVersionId: newVersionId,
-      });
+      // Do NOT auto-activate the restored version - user must explicitly activate it
 
       // Get the created version to return
       const newVersion = await agentsStore.getVersion(newVersionId);
@@ -623,8 +756,8 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Enforce retention limit - delete oldest versions if we exceed the max
-      // Use the new version ID as the active version
-      await enforceRetentionLimit(agentsStore, agentId, newVersionId);
+      // Use the agent's existing activeVersionId
+      await enforceRetentionLimit(agentsStore, agentId, agent.activeVersionId);
 
       return newVersion;
     } catch (error) {
@@ -659,7 +792,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -735,11 +868,12 @@ export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Version with id ${to} not found for agent ${agentId}` });
       }
 
-      // Compute diffs
-      const diffs = computeVersionDiffs(
-        fromVersion.snapshot as unknown as Record<string, unknown>,
-        toVersion.snapshot as unknown as Record<string, unknown>,
-      );
+      // Extract config fields from both versions (top-level, no .snapshot)
+      const fromConfig = extractConfigFromVersion(fromVersion as unknown as Record<string, unknown>);
+      const toConfig = extractConfigFromVersion(toVersion as unknown as Record<string, unknown>);
+
+      // Compute diffs on the config fields
+      const diffs = computeVersionDiffs(fromConfig, toConfig);
 
       return {
         diffs,
