@@ -34,12 +34,24 @@
     "plugin"
   ],
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "integrations/opencode"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "dependencies": {
     "@mastra/memory": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*"
   },
   "peerDependencies": {
+    "@mastra/core": "workspace:*",
     "@opencode-ai/plugin": "*"
   },
   "devDependencies": {

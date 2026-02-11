@@ -73,24 +73,24 @@ The integration uses a **three-agent architecture** (Actor → Observer → Refl
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| [`integrations/opencode/src/index.ts`](integrations/opencode/src/index.ts) | Plugin implementation (413 lines). Defines `MastraOMPluginConfig`, message conversion, credential resolution, and three lifecycle hooks |
-| [`integrations/opencode/package.json`](integrations/opencode/package.json) | Package config for `@mastra/opencode@0.0.1`. Deps: `@mastra/memory`, `@mastra/core`, `@mastra/libsql` |
-| [`integrations/opencode/tsup.config.ts`](integrations/opencode/tsup.config.ts) | Build config |
-| [`integrations/opencode/eslint.config.js`](integrations/opencode/eslint.config.js) | Lint config |
-| [`integrations/opencode/tsconfig.json`](integrations/opencode/tsconfig.json) / [`tsconfig.build.json`](integrations/opencode/tsconfig.build.json) | TypeScript configs |
-| [`.opencode/mastra.json`](.opencode/mastra.json) | Plugin config (model: `google/gemini-2.5-flash`, scope: `thread`) |
-| [`opencode.json`](opencode.json) | Points opencode to the local plugin directory (dev-only, uses `file://` path) |
-| [`.changeset/metal-maps-watch.md`](.changeset/metal-maps-watch.md) | Changeset: `@mastra/memory` minor, `@mastra/opencode` patch |
+| File                                                                                                                                              | Purpose                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [`integrations/opencode/src/index.ts`](integrations/opencode/src/index.ts)                                                                        | Plugin implementation (413 lines). Defines `MastraOMPluginConfig`, message conversion, credential resolution, and three lifecycle hooks |
+| [`integrations/opencode/package.json`](integrations/opencode/package.json)                                                                        | Package config for `@mastra/opencode@0.0.1`. Deps: `@mastra/memory`, `@mastra/core`, `@mastra/libsql`                                   |
+| [`integrations/opencode/tsup.config.ts`](integrations/opencode/tsup.config.ts)                                                                    | Build config                                                                                                                            |
+| [`integrations/opencode/eslint.config.js`](integrations/opencode/eslint.config.js)                                                                | Lint config                                                                                                                             |
+| [`integrations/opencode/tsconfig.json`](integrations/opencode/tsconfig.json) / [`tsconfig.build.json`](integrations/opencode/tsconfig.build.json) | TypeScript configs                                                                                                                      |
+| [`.opencode/mastra.json`](.opencode/mastra.json)                                                                                                  | Plugin config (model: `google/gemini-2.5-flash`, scope: `thread`)                                                                       |
+| [`opencode.json`](opencode.json)                                                                                                                  | Points opencode to the local plugin directory (dev-only, uses `file://` path)                                                           |
+| [`.changeset/metal-maps-watch.md`](.changeset/metal-maps-watch.md)                                                                                | Changeset: `@mastra/memory` minor, `@mastra/opencode` patch                                                                             |
 
 ### Modified Files
 
-| File | What changed |
-|------|-------------|
-| [`packages/memory/src/processors/observational-memory/observational-memory.ts`](packages/memory/src/processors/observational-memory/observational-memory.ts) | **Core changes** — see details below |
-| [`packages/memory/src/processors/observational-memory/index.ts`](packages/memory/src/processors/observational-memory/index.ts) | New exports: `OBSERVATION_CONTINUATION_HINT`, `OBSERVATION_CONTEXT_PROMPT`, `ObserveHooks` |
-| `pnpm-lock.yaml` | Lockfile update for new package |
+| File                                                                                                                                                         | What changed                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| [`packages/memory/src/processors/observational-memory/observational-memory.ts`](packages/memory/src/processors/observational-memory/observational-memory.ts) | **Core changes** — see details below                                                       |
+| [`packages/memory/src/processors/observational-memory/index.ts`](packages/memory/src/processors/observational-memory/index.ts)                               | New exports: `OBSERVATION_CONTINUATION_HINT`, `OBSERVATION_CONTEXT_PROMPT`, `ObserveHooks` |
+| `pnpm-lock.yaml`                                                                                                                                             | Lockfile update for new package                                                            |
 
 ### Changes to `observational-memory.ts` (detail)
 
@@ -136,12 +136,14 @@ The integration uses a **three-agent architecture** (Actor → Observer → Refl
 ## Dependencies
 
 ### `@mastra/opencode` depends on:
+
 - `@mastra/memory` (workspace) — for `ObservationalMemory`, types, prompts
 - `@mastra/core` (workspace) — for `MastraDBMessage` type
 - `@mastra/libsql` (workspace) — for `LibSQLStore` (SQLite-backed storage)
 - `@opencode-ai/plugin` (peer) — plugin interface contract
 
 ### `@mastra/memory` changes:
+
 - No new dependencies
 - Expanded public API surface
 
