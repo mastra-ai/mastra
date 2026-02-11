@@ -39,8 +39,8 @@ const DEFAULT_PASS_THRESHOLD = 0.5;
  * @example
  * ```typescript
  * const result = await compareExperiments(mastra, {
- *   runIdA: 'baseline-run-id',
- *   runIdB: 'candidate-run-id',
+ *   experimentIdA: 'baseline-experiment-id',
+ *   experimentIdB: 'candidate-experiment-id',
  *   thresholds: {
  *     'accuracy': { value: 0.05, direction: 'higher-is-better' },
  *     'latency': { value: 100, direction: 'lower-is-better' },
@@ -53,7 +53,7 @@ const DEFAULT_PASS_THRESHOLD = 0.5;
  * ```
  */
 export async function compareExperiments(mastra: Mastra, config: CompareExperimentsConfig): Promise<ComparisonResult> {
-  const { runIdA, runIdB, thresholds = {} } = config;
+  const { experimentIdA, experimentIdB, thresholds = {} } = config;
   const warnings: string[] = [];
 
   // 1. Get storage
@@ -62,50 +62,53 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
     throw new Error('Storage not configured. Configure storage in Mastra instance.');
   }
 
-  const runsStore = await storage.getStore('runs');
+  const experimentsStore = await storage.getStore('experiments');
   const scoresStore = await storage.getStore('scores');
 
-  if (!runsStore) {
-    throw new Error('RunsStorage not configured.');
+  if (!experimentsStore) {
+    throw new Error('ExperimentsStorage not configured.');
   }
   if (!scoresStore) {
     throw new Error('ScoresStorage not configured.');
   }
 
   // 2. Load both experiments
-  const [runA, runB] = await Promise.all([runsStore.getRunById({ id: runIdA }), runsStore.getRunById({ id: runIdB })]);
+  const [experimentA, experimentB] = await Promise.all([
+    experimentsStore.getExperimentById({ id: experimentIdA }),
+    experimentsStore.getExperimentById({ id: experimentIdB }),
+  ]);
 
-  if (!runA) {
-    throw new Error(`Run not found: ${runIdA}`);
+  if (!experimentA) {
+    throw new Error(`Experiment not found: ${experimentIdA}`);
   }
-  if (!runB) {
-    throw new Error(`Run not found: ${runIdB}`);
+  if (!experimentB) {
+    throw new Error(`Experiment not found: ${experimentIdB}`);
   }
 
   // 3. Check version mismatch
-  const versionMismatch = runA.datasetVersion.getTime() !== runB.datasetVersion.getTime();
+  const versionMismatch = experimentA.datasetVersion.getTime() !== experimentB.datasetVersion.getTime();
   if (versionMismatch) {
     warnings.push(
-      `Runs have different dataset versions: ${runA.datasetVersion.toISOString()} vs ${runB.datasetVersion.toISOString()}`,
+      `Experiments have different dataset versions: ${experimentA.datasetVersion.toISOString()} vs ${experimentB.datasetVersion.toISOString()}`,
     );
   }
 
   // 4. Load results for both experiments
   const [resultsA, resultsB] = await Promise.all([
-    runsStore.listResults({ runId: runIdA, pagination: { page: 0, perPage: false } }),
-    runsStore.listResults({ runId: runIdB, pagination: { page: 0, perPage: false } }),
+    experimentsStore.listExperimentResults({ experimentId: experimentIdA, pagination: { page: 0, perPage: false } }),
+    experimentsStore.listExperimentResults({ experimentId: experimentIdB, pagination: { page: 0, perPage: false } }),
   ]);
 
   // 5. Load scores for both experiments
   const [scoresA, scoresB] = await Promise.all([
-    scoresStore.listScoresByRunId({ runId: runIdA, pagination: { page: 0, perPage: false } }),
-    scoresStore.listScoresByRunId({ runId: runIdB, pagination: { page: 0, perPage: false } }),
+    scoresStore.listScoresByRunId({ runId: experimentIdA, pagination: { page: 0, perPage: false } }),
+    scoresStore.listScoresByRunId({ runId: experimentIdB, pagination: { page: 0, perPage: false } }),
   ]);
 
   // 6. Handle empty experiments
   if (resultsA.results.length === 0 && resultsB.results.length === 0) {
     warnings.push('Both experiments have no results.');
-    return buildEmptyResult(runA, runB, versionMismatch, warnings);
+    return buildEmptyResult(experimentA, experimentB, versionMismatch, warnings);
   }
   if (resultsA.results.length === 0) {
     warnings.push('Experiment A has no results.');
@@ -173,7 +176,7 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
   const items: ItemComparison[] = [];
 
   for (const itemId of allItemIds) {
-    const inBothRuns = itemIdsA.has(itemId) && itemIdsB.has(itemId);
+    const inBothExperiments = itemIdsA.has(itemId) && itemIdsB.has(itemId);
 
     // Build scores for this item
     const itemScoresA: Record<string, number | null> = {};
@@ -189,20 +192,20 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
 
     items.push({
       itemId,
-      inBothRuns,
+      inBothExperiments,
       scoresA: itemScoresA,
       scoresB: itemScoresB,
     });
   }
 
   return {
-    runA: {
-      id: runA.id,
-      datasetVersion: runA.datasetVersion,
+    experimentA: {
+      id: experimentA.id,
+      datasetVersion: experimentA.datasetVersion,
     },
-    runB: {
-      id: runB.id,
-      datasetVersion: runB.datasetVersion,
+    experimentB: {
+      id: experimentB.id,
+      datasetVersion: experimentB.datasetVersion,
     },
     versionMismatch,
     hasRegression,
@@ -220,7 +223,7 @@ function groupScoresByScorerAndItem(scores: ScoreRowData[]): Record<string, Reco
 
   for (const score of scores) {
     const scorerId = score.scorerId;
-    const itemId = score.entityId; // entityId is the item ID for run scores
+    const itemId = score.entityId; // entityId is the item ID for experiment scores
 
     if (!result[scorerId]) {
       result[scorerId] = {};
@@ -235,19 +238,19 @@ function groupScoresByScorerAndItem(scores: ScoreRowData[]): Record<string, Reco
  * Build an empty comparison result for edge cases.
  */
 function buildEmptyResult(
-  runA: { id: string; datasetVersion: Date },
-  runB: { id: string; datasetVersion: Date },
+  experimentA: { id: string; datasetVersion: Date },
+  experimentB: { id: string; datasetVersion: Date },
   versionMismatch: boolean,
   warnings: string[],
 ): ComparisonResult {
   return {
-    runA: {
-      id: runA.id,
-      datasetVersion: runA.datasetVersion,
+    experimentA: {
+      id: experimentA.id,
+      datasetVersion: experimentA.datasetVersion,
     },
-    runB: {
-      id: runB.id,
-      datasetVersion: runB.datasetVersion,
+    experimentB: {
+      id: experimentB.id,
+      datasetVersion: experimentB.datasetVersion,
     },
     versionMismatch,
     hasRegression: false,

@@ -1,6 +1,6 @@
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
-import type { TargetType, RunStatus } from '../../storage/types';
+import type { TargetType, ExperimentStatus } from '../../storage/types';
 
 /**
  * A single data item for inline experiment data.
@@ -62,7 +62,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
-  /** Pre-created experiment ID (for async trigger — skips run creation). Renamed from runId. */
+  /** Pre-created experiment ID (for async trigger — skips experiment creation). */
   experimentId?: string;
   /** Experiment name (used for display / grouping) */
   name?: string;
@@ -134,7 +134,7 @@ export interface ExperimentSummary {
   /** Unique ID of this experiment */
   experimentId: string;
   /** Final status of the experiment */
-  status: RunStatus;
+  status: ExperimentStatus;
   /** Total number of items in the dataset */
   totalItems: number;
   /** Number of items that succeeded */

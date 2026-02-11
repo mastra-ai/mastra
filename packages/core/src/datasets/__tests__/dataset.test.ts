@@ -5,8 +5,8 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../storage/base';
 import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
+import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
-import { RunsInMemory } from '../../storage/domains/runs/inmemory';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
 import { Dataset } from '../dataset';
 import { SchemaValidationError, SchemaUpdateValidationError } from '../validation/errors';
@@ -34,7 +34,7 @@ const createMockAgent = (response: string, shouldFail = false) => ({
 describe('Dataset', () => {
   let db: InMemoryDB;
   let datasetsStorage: DatasetsInMemory;
-  let runsStorage: RunsInMemory;
+  let experimentsStorage: ExperimentsInMemory;
   let scoresStorage: ScoresInMemory;
   let mockStorage: MastraCompositeStore;
   let mastra: Mastra;
@@ -44,19 +44,19 @@ describe('Dataset', () => {
   beforeEach(async () => {
     db = new InMemoryDB();
     datasetsStorage = new DatasetsInMemory({ db });
-    runsStorage = new RunsInMemory({ db });
+    experimentsStorage = new ExperimentsInMemory({ db });
     scoresStorage = new ScoresInMemory({ db });
 
     mockStorage = {
       id: 'test-storage',
       stores: {
         datasets: datasetsStorage,
-        runs: runsStorage,
+        experiments: experimentsStorage,
         scores: scoresStorage,
       } as unknown as StorageDomains,
       getStore: vi.fn().mockImplementation(async (name: keyof StorageDomains) => {
         if (name === 'datasets') return datasetsStorage;
-        if (name === 'runs') return runsStorage;
+        if (name === 'experiments') return experimentsStorage;
         if (name === 'scores') return scoresStorage;
         return undefined;
       }),
@@ -301,7 +301,7 @@ describe('Dataset', () => {
     expect(experimentId).toBeTruthy();
 
     // Verify run record exists
-    const run = await runsStorage.getRunById({ id: experimentId });
+    const run = await experimentsStorage.getExperimentById({ id: experimentId });
     expect(run).not.toBeNull();
 
     // Wait for fire-and-forget to complete
@@ -317,7 +317,7 @@ describe('Dataset', () => {
     });
 
     const result = await ds.listExperiments();
-    expect(result.runs.length).toBeGreaterThanOrEqual(1);
+    expect(result.experiments.length).toBeGreaterThanOrEqual(1);
     expect(result.pagination).toBeDefined();
   });
 

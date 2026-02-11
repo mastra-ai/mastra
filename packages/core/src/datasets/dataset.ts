@@ -3,7 +3,7 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
-import type { RunsStorage } from '../storage/domains/runs/base.js';
+import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
 import type { DatasetRecord, DatasetItem, DatasetItemVersion, DatasetVersion } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
@@ -18,7 +18,7 @@ export class Dataset {
   readonly id: string;
   #mastra: Mastra;
   #datasetsStore?: DatasetsStorage;
-  #runsStore?: RunsStorage;
+  #experimentsStore?: ExperimentsStorage;
 
   constructor(id: string, mastra: Mastra) {
     this.id = id;
@@ -56,8 +56,8 @@ export class Dataset {
     return store;
   }
 
-  async #getRunsStore(): Promise<RunsStorage> {
-    if (this.#runsStore) return this.#runsStore;
+  async #getExperimentsStore(): Promise<ExperimentsStorage> {
+    if (this.#experimentsStore) return this.#experimentsStore;
 
     const storage = this.#mastra.getStorage();
     if (!storage) {
@@ -69,17 +69,17 @@ export class Dataset {
       });
     }
 
-    const store = await storage.getStore('runs');
+    const store = await storage.getStore('experiments');
     if (!store) {
       throw new MastraError({
-        id: 'RUNS_STORE_NOT_AVAILABLE',
-        text: 'Runs store not available. Ensure your storage adapter provides a runs domain.',
+        id: 'EXPERIMENTS_STORE_NOT_AVAILABLE',
+        text: 'Experiments store not available. Ensure your storage adapter provides an experiments domain.',
         domain: 'STORAGE',
         category: 'USER',
       });
     }
 
-    this.#runsStore = store;
+    this.#experimentsStore = store;
     return store;
   }
 
@@ -291,7 +291,7 @@ export class Dataset {
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending' }> {
-    const runsStore = await this.#getRunsStore();
+    const experimentsStore = await this.#getExperimentsStore();
     const datasetsStore = await this.#getDatasetsStore();
 
     const dataset = await datasetsStore.getDatasetById({ id: this.id });
@@ -304,7 +304,7 @@ export class Dataset {
       });
     }
 
-    const run = await runsStore.createRun({
+    const run = await experimentsStore.createExperiment({
       datasetId: this.id,
       datasetVersion: dataset.version,
       targetType: config.targetType ?? 'agent',
@@ -328,8 +328,8 @@ export class Dataset {
    * List all experiments (runs) for this dataset.
    */
   async listExperiments(args?: { page?: number; perPage?: number }) {
-    const runsStore = await this.#getRunsStore();
-    return runsStore.listRuns({
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.listExperiments({
       datasetId: this.id,
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
@@ -339,17 +339,17 @@ export class Dataset {
    * Get a specific experiment (run) by ID.
    */
   async getExperiment(args: { experimentId: string }) {
-    const runsStore = await this.#getRunsStore();
-    return runsStore.getRunById({ id: args.experimentId });
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.getExperimentById({ id: args.experimentId });
   }
 
   /**
    * List results for a specific experiment.
    */
   async listExperimentResults(args: { experimentId: string; page?: number; perPage?: number }) {
-    const runsStore = await this.#getRunsStore();
-    return runsStore.listResults({
-      runId: args.experimentId,
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.listExperimentResults({
+      experimentId: args.experimentId,
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }
@@ -358,7 +358,7 @@ export class Dataset {
    * Delete an experiment (run) by ID.
    */
   async deleteExperiment(args: { experimentId: string }) {
-    const runsStore = await this.#getRunsStore();
-    return runsStore.deleteRun({ id: args.experimentId });
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.deleteExperiment({ id: args.experimentId });
   }
 }

@@ -3,7 +3,7 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
-import type { RunsStorage } from '../storage/domains/runs/base.js';
+import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
 
@@ -16,7 +16,7 @@ import { compareExperiments as compareExperimentsInternal } from './experiment/a
 export class DatasetsManager {
   #mastra: Mastra;
   #datasetsStore?: DatasetsStorage;
-  #runsStore?: RunsStorage;
+  #experimentsStore?: ExperimentsStorage;
 
   constructor(mastra: Mastra) {
     this.#mastra = mastra;
@@ -53,8 +53,8 @@ export class DatasetsManager {
     return store;
   }
 
-  async #getRunsStore(): Promise<RunsStorage> {
-    if (this.#runsStore) return this.#runsStore;
+  async #getExperimentsStore(): Promise<ExperimentsStorage> {
+    if (this.#experimentsStore) return this.#experimentsStore;
 
     const storage = this.#mastra.getStorage();
     if (!storage) {
@@ -66,17 +66,17 @@ export class DatasetsManager {
       });
     }
 
-    const store = await storage.getStore('runs');
+    const store = await storage.getStore('experiments');
     if (!store) {
       throw new MastraError({
-        id: 'RUNS_STORE_NOT_AVAILABLE',
-        text: 'Runs store not available. Ensure your storage adapter provides a runs domain.',
+        id: 'EXPERIMENTS_STORE_NOT_AVAILABLE',
+        text: 'Experiments store not available. Ensure your storage adapter provides an experiments domain.',
         domain: 'STORAGE',
         category: 'USER',
       });
     }
 
-    this.#runsStore = store;
+    this.#experimentsStore = store;
     return store;
   }
 
@@ -159,8 +159,8 @@ export class DatasetsManager {
    * Get a specific experiment (run) by ID.
    */
   async getExperiment(args: { experimentId: string }) {
-    const runsStore = await this.#getRunsStore();
-    return runsStore.getRunById({ id: args.experimentId });
+    const experimentsStore = await this.#getExperimentsStore();
+    return experimentsStore.getExperimentById({ id: args.experimentId });
   }
 
   /**
@@ -185,15 +185,21 @@ export class DatasetsManager {
     const otherExperimentId = experimentIds.find(id => id !== resolvedBaseline) ?? experimentIds[1]!;
 
     const internal = await compareExperimentsInternal(this.#mastra, {
-      runIdA: resolvedBaseline,
-      runIdB: otherExperimentId,
+      experimentIdA: resolvedBaseline,
+      experimentIdB: otherExperimentId,
     });
 
     // Load results for both runs to get input/groundTruth/output
-    const runsStore = await this.#getRunsStore();
+    const experimentsStore = await this.#getExperimentsStore();
     const [resultsA, resultsB] = await Promise.all([
-      runsStore.listResults({ runId: resolvedBaseline, pagination: { page: 0, perPage: false } }),
-      runsStore.listResults({ runId: otherExperimentId, pagination: { page: 0, perPage: false } }),
+      experimentsStore.listExperimentResults({
+        experimentId: resolvedBaseline,
+        pagination: { page: 0, perPage: false },
+      }),
+      experimentsStore.listExperimentResults({
+        experimentId: otherExperimentId,
+        pagination: { page: 0, perPage: false },
+      }),
     ]);
 
     // Build results maps by itemId

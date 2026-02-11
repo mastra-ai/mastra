@@ -3,8 +3,8 @@ import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../../storage/base';
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
+import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
-import { RunsInMemory } from '../../../storage/domains/runs/inmemory';
 import { runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -35,7 +35,7 @@ const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<an
 describe('runExperiment', () => {
   let db: InMemoryDB;
   let datasetsStorage: DatasetsInMemory;
-  let runsStorage: RunsInMemory;
+  let experimentsStorage: ExperimentsInMemory;
   let mockStorage: MastraCompositeStore;
   let mastra: Mastra;
   let datasetId: string;
@@ -44,7 +44,7 @@ describe('runExperiment', () => {
     // Create fresh db and storage instances
     db = new InMemoryDB();
     datasetsStorage = new DatasetsInMemory({ db });
-    runsStorage = new RunsInMemory({ db });
+    experimentsStorage = new ExperimentsInMemory({ db });
 
     // Create test dataset with items
     const dataset = await datasetsStorage.createDataset({
@@ -69,11 +69,11 @@ describe('runExperiment', () => {
       id: 'test-storage',
       stores: {
         datasets: datasetsStorage,
-        runs: runsStorage,
+        experiments: experimentsStorage,
       } as unknown as StorageDomains,
       getStore: vi.fn().mockImplementation(async (name: keyof StorageDomains) => {
         if (name === 'datasets') return datasetsStorage;
-        if (name === 'runs') return runsStorage;
+        if (name === 'experiments') return experimentsStorage;
         return undefined;
       }),
     } as unknown as MastraCompositeStore;
@@ -136,7 +136,7 @@ describe('runExperiment', () => {
       expect(result.status).toBe('completed');
 
       // Verify run was persisted
-      const storedRun = await runsStorage.getRunById({ id: result.experimentId });
+      const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
       expect(storedRun?.status).toBe('completed');
       expect(storedRun?.succeededCount).toBe(2);
       expect(storedRun?.failedCount).toBe(0);
@@ -628,7 +628,7 @@ describe('runExperiment', () => {
     // Test 11 — experimentId field works
     it('uses provided experimentId', async () => {
       // Pre-create the run record (simulates async trigger path)
-      await runsStorage.createRun({
+      await experimentsStorage.createExperiment({
         id: 'pre-created-id',
         datasetId,
         datasetVersion: new Date(),
@@ -637,7 +637,7 @@ describe('runExperiment', () => {
         totalItems: 1,
       });
 
-      const createRunSpy = vi.spyOn(runsStorage, 'createRun');
+      const createExperimentSpy = vi.spyOn(experimentsStorage, 'createExperiment');
 
       const result = await runExperiment(mastra, {
         datasetId,
@@ -647,9 +647,9 @@ describe('runExperiment', () => {
       });
 
       expect(result.experimentId).toBe('pre-created-id');
-      // createRun should NOT have been called again (experimentId was provided)
-      expect(createRunSpy).not.toHaveBeenCalled();
-      createRunSpy.mockRestore();
+      // createExperiment should NOT have been called again (experimentId was provided)
+      expect(createExperimentSpy).not.toHaveBeenCalled();
+      createExperimentSpy.mockRestore();
     });
 
     // Test 12 — Inline data + scorers verify groundTruth pipeline

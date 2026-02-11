@@ -55,17 +55,17 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     signal,
     itemTimeout,
     maxRetries = 0,
-    experimentId: providedRunId,
+    experimentId: providedExperimentId,
   } = config;
 
   const startedAt = new Date();
   // Use provided experimentId (async trigger) or generate new one
-  const runId = providedRunId ?? crypto.randomUUID();
+  const experimentId = providedExperimentId ?? crypto.randomUUID();
 
   // 1. Get storage and resolve components
   const storage = mastra.getStorage();
   const datasetsStore = await storage?.getStore('datasets');
-  const runsStore = await storage?.getStore('runs');
+  const experimentsStore = await storage?.getStore('experiments');
 
   // Phase A — Resolve items
   let items: DatasetItem[];
@@ -145,12 +145,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Resolve scorers
   const scorers = resolveScorers(mastra, scorerInput);
 
-  // 5. Create run record (if storage available and not pre-created)
-  if (runsStore) {
-    if (!providedRunId) {
-      // Create new run record (sync trigger path)
-      await runsStore.createRun({
-        id: runId,
+  // 5. Create experiment record (if storage available and not pre-created)
+  if (experimentsStore) {
+    if (!providedExperimentId) {
+      // Create new experiment record (sync trigger path)
+      await experimentsStore.createExperiment({
+        id: experimentId,
         datasetId: datasetId ?? 'inline',
         datasetVersion,
         targetType: targetType ?? 'agent',
@@ -159,8 +159,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       });
     }
     // Update status to running (both sync and async paths)
-    await runsStore.updateRun({
-      id: runId,
+    await experimentsStore.updateExperiment({
+      id: experimentId,
       status: 'running',
       startedAt,
     });
@@ -248,7 +248,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           item,
           execResult.output,
           storage ?? null,
-          runId,
+          experimentId,
           targetType ?? 'agent',
           targetId ?? 'inline',
           execResult.scorerInput,
@@ -256,10 +256,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         );
 
         // Persist result with scores (if storage available)
-        if (runsStore) {
+        if (experimentsStore) {
           try {
-            await runsStore.addResult({
-              runId,
+            await experimentsStore.addExperimentResult({
+              experimentId,
               itemId: item.id,
               itemVersion: item.version,
               input: item.input,
@@ -282,8 +282,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           if (now - lastProgressUpdate >= PROGRESS_UPDATE_INTERVAL) {
             lastProgressUpdate = now;
             try {
-              await runsStore.updateRun({
-                id: runId,
+              await experimentsStore.updateExperiment({
+                id: experimentId,
                 succeededCount,
                 failedCount,
               });
@@ -306,9 +306,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     const completedAt = new Date();
     const skippedCount = items.length - succeededCount - failedCount;
 
-    if (runsStore) {
-      await runsStore.updateRun({
-        id: runId,
+    if (experimentsStore) {
+      await experimentsStore.updateExperiment({
+        id: experimentId,
         status: 'failed',
         succeededCount,
         failedCount,
@@ -317,7 +317,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     }
 
     return {
-      experimentId: runId,
+      experimentId,
       status: 'failed' as const,
       totalItems: items.length,
       succeededCount,
@@ -330,14 +330,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     };
   }
 
-  // 7. Finalize run record
+  // 7. Finalize experiment record
   const completedAt = new Date();
   const status = failedCount === items.length ? 'failed' : 'completed';
   const completedWithErrors = status === 'completed' && failedCount > 0;
 
-  if (runsStore) {
-    await runsStore.updateRun({
-      id: runId,
+  if (experimentsStore) {
+    await experimentsStore.updateExperiment({
+      id: experimentId,
       status,
       succeededCount,
       failedCount,
@@ -346,7 +346,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   }
 
   return {
-    experimentId: runId,
+    experimentId,
     status,
     totalItems: items.length,
     succeededCount,

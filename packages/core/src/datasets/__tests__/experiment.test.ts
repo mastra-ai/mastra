@@ -3,8 +3,8 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { MastraCompositeStore, StorageDomains } from '../../storage/base';
 import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
+import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
-import { RunsInMemory } from '../../storage/domains/runs/inmemory';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
 import { Dataset } from '../dataset';
 
@@ -31,7 +31,7 @@ const createMockAgent = (response: string, shouldFail = false) => ({
 describe('Experiment (via Dataset)', () => {
   let db: InMemoryDB;
   let datasetsStorage: DatasetsInMemory;
-  let runsStorage: RunsInMemory;
+  let experimentsStorage: ExperimentsInMemory;
   let scoresStorage: ScoresInMemory;
   let mockStorage: MastraCompositeStore;
   let mastra: Mastra;
@@ -41,19 +41,19 @@ describe('Experiment (via Dataset)', () => {
   beforeEach(async () => {
     db = new InMemoryDB();
     datasetsStorage = new DatasetsInMemory({ db });
-    runsStorage = new RunsInMemory({ db });
+    experimentsStorage = new ExperimentsInMemory({ db });
     scoresStorage = new ScoresInMemory({ db });
 
     mockStorage = {
       id: 'test-storage',
       stores: {
         datasets: datasetsStorage,
-        runs: runsStorage,
+        experiments: experimentsStorage,
         scores: scoresStorage,
       } as unknown as StorageDomains,
       getStore: vi.fn().mockImplementation(async (name: keyof StorageDomains) => {
         if (name === 'datasets') return datasetsStorage;
-        if (name === 'runs') return runsStorage;
+        if (name === 'experiments') return experimentsStorage;
         if (name === 'scores') return scoresStorage;
         return undefined;
       }),

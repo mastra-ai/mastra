@@ -1047,15 +1047,15 @@ export interface BulkDeleteItemsInput {
 // Experiment Types (Dataset Experiments)
 // ============================================
 
-export type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
 
-export interface Run {
+export interface Experiment {
   id: string;
   datasetId: string;
   datasetVersion: Date;
   targetType: TargetType;
   targetId: string;
-  status: RunStatus;
+  status: ExperimentStatus;
   totalItems: number;
   succeededCount: number;
   failedCount: number;
@@ -1065,9 +1065,9 @@ export interface Run {
   updatedAt: Date;
 }
 
-export interface RunResult {
+export interface ExperimentResult {
   id: string;
-  runId: string;
+  experimentId: string;
   itemId: string;
   itemVersion: Date;
   input: unknown;
@@ -1089,7 +1089,7 @@ export interface RunResult {
   createdAt: Date;
 }
 
-export interface CreateRunInput {
+export interface CreateExperimentInput {
   id?: string;
   datasetId: string;
   datasetVersion: Date;
@@ -1098,18 +1098,18 @@ export interface CreateRunInput {
   totalItems: number;
 }
 
-export interface UpdateRunInput {
+export interface UpdateExperimentInput {
   id: string;
-  status?: RunStatus;
+  status?: ExperimentStatus;
   succeededCount?: number;
   failedCount?: number;
   startedAt?: Date;
   completedAt?: Date;
 }
 
-export interface AddRunResultInput {
+export interface AddExperimentResultInput {
   id?: string;
-  runId: string;
+  experimentId: string;
   itemId: string;
   itemVersion: Date;
   input: unknown;
@@ -1130,22 +1130,22 @@ export interface AddRunResultInput {
   }>;
 }
 
-export interface ListRunsInput {
+export interface ListExperimentsInput {
   datasetId?: string;
   pagination: StoragePagination;
 }
 
-export interface ListRunsOutput {
-  runs: Run[];
+export interface ListExperimentsOutput {
+  experiments: Experiment[];
   pagination: PaginationInfo;
 }
 
-export interface ListRunResultsInput {
-  runId: string;
+export interface ListExperimentResultsInput {
+  experimentId: string;
   pagination: StoragePagination;
 }
 
-export interface ListRunResultsOutput {
-  results: RunResult[];
+export interface ListExperimentResultsOutput {
+  results: ExperimentResult[];
   pagination: PaginationInfo;
 }

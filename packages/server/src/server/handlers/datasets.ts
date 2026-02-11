@@ -403,7 +403,7 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
       const { page, perPage } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.listExperiments({ page: page ?? 0, perPage: perPage ?? 10 });
-      return { experiments: result.runs, pagination: result.pagination };
+      return { experiments: result.experiments, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
@@ -511,7 +511,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
       }
       const result = await ds.listExperimentResults({ experimentId, page: page ?? 0, perPage: perPage ?? 10 });
       return {
-        results: result.results.map(({ runId: _runId, ...rest }) => ({ experimentId, ...rest })),
+        results: result.results.map(({ experimentId: _eid, ...rest }) => ({ experimentId, ...rest })),
         pagination: result.pagination,
       };
     } catch (error) {

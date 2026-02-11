@@ -21,11 +21,9 @@ export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
 export const TABLE_DATASET_ITEM_VERSIONS = 'mastra_dataset_item_versions';
 export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 
-// Run tables
-export const TABLE_RUNS = 'mastra_runs';
-export const TABLE_RUN_RESULTS = 'mastra_run_results';
-export const TABLE_DATASET_EXPERIMENTS = 'mastra_dataset_experiments';
-export const TABLE_DATASET_EXPERIMENT_RESULTS = 'mastra_dataset_experiment_results';
+// Experiment tables
+export const TABLE_EXPERIMENTS = 'mastra_experiments';
+export const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -41,10 +39,8 @@ export type TABLE_NAMES =
   | typeof TABLE_DATASET_ITEMS
   | typeof TABLE_DATASET_ITEM_VERSIONS
   | typeof TABLE_DATASET_VERSIONS
-  | typeof TABLE_RUNS
-  | typeof TABLE_RUN_RESULTS
-  | typeof TABLE_DATASET_EXPERIMENTS
-  | typeof TABLE_DATASET_EXPERIMENT_RESULTS
+  | typeof TABLE_EXPERIMENTS
+  | typeof TABLE_EXPERIMENT_RESULTS
   | typeof TABLE_PROMPT_BLOCKS
   | typeof TABLE_PROMPT_BLOCK_VERSIONS;
 
@@ -236,8 +232,8 @@ export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false },
 };
 
-// Run schemas
-export const RUNS_SCHEMA: Record<string, StorageColumn> = {
+// Experiment schemas
+export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   datasetId: { type: 'text', nullable: false },
   datasetVersion: { type: 'timestamp', nullable: false },
@@ -253,9 +249,9 @@ export const RUNS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
-export const RUN_RESULTS_SCHEMA: Record<string, StorageColumn> = {
+export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
-  runId: { type: 'text', nullable: false },
+  experimentId: { type: 'text', nullable: false },
   itemId: { type: 'text', nullable: false },
   itemVersion: { type: 'timestamp', nullable: false },
   input: { type: 'jsonb', nullable: false },
@@ -270,10 +266,6 @@ export const RUN_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   scores: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
-
-// Aliases for experiment schemas (used by LibSQL runs adapter)
-export const DATASET_EXPERIMENTS_SCHEMA = RUNS_SCHEMA;
-export const DATASET_EXPERIMENT_RESULTS_SCHEMA = RUN_RESULTS_SCHEMA;
 
 /**
  * Schema definitions for all core tables.
@@ -345,10 +337,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
   [TABLE_DATASET_ITEM_VERSIONS]: DATASET_ITEM_VERSIONS_SCHEMA,
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
-  [TABLE_RUNS]: RUNS_SCHEMA,
-  [TABLE_RUN_RESULTS]: RUN_RESULTS_SCHEMA,
-  [TABLE_DATASET_EXPERIMENTS]: DATASET_EXPERIMENTS_SCHEMA,
-  [TABLE_DATASET_EXPERIMENT_RESULTS]: DATASET_EXPERIMENT_RESULTS_SCHEMA,
+  [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
+  [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
   [TABLE_PROMPT_BLOCKS]: PROMPT_BLOCKS_SCHEMA,
   [TABLE_PROMPT_BLOCK_VERSIONS]: PROMPT_BLOCK_VERSIONS_SCHEMA,
 };
