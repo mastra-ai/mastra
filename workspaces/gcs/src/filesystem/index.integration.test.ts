@@ -145,16 +145,24 @@ describe.skipIf(!canRunGCSTests)('GCSFilesystem Integration', () => {
  */
 describe.skipIf(!canRunGCSTests)('GCSFilesystem Prefix Isolation', () => {
   const testBucket = process.env.TEST_GCS_BUCKET!;
-  const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY
-    ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
-    : undefined;
+  const credentials = process.env.GCS_SERVICE_ACCOUNT_KEY ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY) : undefined;
   const basePrefix = `prefix-iso-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   let fsA: GCSFilesystem;
   let fsB: GCSFilesystem;
 
   beforeEach(() => {
-    fsA = new GCSFilesystem({ bucket: testBucket, credentials, prefix: `${basePrefix}-a`, endpoint: process.env.GCS_ENDPOINT });
-    fsB = new GCSFilesystem({ bucket: testBucket, credentials, prefix: `${basePrefix}-b`, endpoint: process.env.GCS_ENDPOINT });
+    fsA = new GCSFilesystem({
+      bucket: testBucket,
+      credentials,
+      prefix: `${basePrefix}-a`,
+      endpoint: process.env.GCS_ENDPOINT,
+    });
+    fsB = new GCSFilesystem({
+      bucket: testBucket,
+      credentials,
+      prefix: `${basePrefix}-b`,
+      endpoint: process.env.GCS_ENDPOINT,
+    });
   });
 
   afterEach(async () => {

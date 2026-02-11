@@ -124,10 +124,7 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
         await workspace.sandbox.executeCommand('mkdir', ['-p', getTestPath()]);
 
         // Write via sandbox (same path — mountPath baked into getTestPath)
-        const writeResult = await workspace.sandbox.executeCommand('sh', [
-          '-c',
-          `echo -n "${content}" > ${filePath}`,
-        ]);
+        const writeResult = await workspace.sandbox.executeCommand('sh', ['-c', `echo -n "${content}" > ${filePath}`]);
         expect(writeResult.exitCode).toBe(0);
 
         // Poll via API until consistent (FUSE caching may cause delay)
