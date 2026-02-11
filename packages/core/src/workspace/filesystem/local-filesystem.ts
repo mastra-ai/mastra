@@ -628,6 +628,7 @@ export class LocalFilesystem extends MastraFilesystem {
       provider: this.provider,
       readOnly: this.readOnly,
       status: this.status,
+      error: this.error,
       metadata: {
         basePath: this.basePath,
         contained: this._contained,

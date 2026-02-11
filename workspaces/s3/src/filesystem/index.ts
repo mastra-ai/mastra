@@ -288,6 +288,7 @@ export class S3Filesystem extends MastraFilesystem {
       provider: this.provider,
       status: this.status,
       error: this.error,
+      readOnly: this.readOnly,
       icon: this.icon,
       metadata: {
         bucket: this.bucket,
