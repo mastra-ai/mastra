@@ -88,8 +88,8 @@ function CmsAgentsCreatePage() {
                       om.observation?.messageTokens ||
                       om.observation?.maxTokensPerBatch ||
                       om.observation?.bufferTokens !== undefined ||
-                      om.observation?.bufferActivation ||
-                      om.observation?.blockAfter
+                      om.observation?.bufferActivation !== undefined ||
+                      om.observation?.blockAfter !== undefined
                         ? {
                             model: obsModelId,
                             messageTokens: om.observation?.messageTokens,
@@ -107,8 +107,8 @@ function CmsAgentsCreatePage() {
                     const reflection =
                       refModelId ||
                       om.reflection?.observationTokens ||
-                      om.reflection?.blockAfter ||
-                      om.reflection?.bufferActivation
+                      om.reflection?.blockAfter !== undefined ||
+                      om.reflection?.bufferActivation !== undefined
                         ? {
                             model: refModelId,
                             observationTokens: om.reflection?.observationTokens,
