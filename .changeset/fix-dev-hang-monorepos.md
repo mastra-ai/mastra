@@ -2,4 +2,4 @@
 '@mastra/deployer': patch
 ---
 
-Skip analyzeBundle in dev mode to prevent indefinite hang in large monorepos
+Skip bundle analysis in dev mode to prevent the dev server hanging in large monorepos (https://github.com/mastra-ai/mastra/issues/12843)
