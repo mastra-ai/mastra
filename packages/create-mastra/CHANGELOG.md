@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.3.0
+
+### Patch Changes
+
+- Supporting work to enable workflow step metadata ([#12508](https://github.com/mastra-ai/mastra/pull/12508))
+
 ## 1.3.0-alpha.3
 
 ## 1.3.0-alpha.2
