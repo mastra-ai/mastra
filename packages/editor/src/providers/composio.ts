@@ -14,6 +14,7 @@ import { Composio } from '@composio/core';
 import type {
   Tool as ComposioTool,
   ToolKitItem,
+  ToolListParams as ComposioToolListParams,
 } from '@composio/core';
 import { MastraProvider } from '@composio/mastra';
 import type { MastraTool, MastraToolCollection } from '@composio/mastra';
@@ -98,12 +99,15 @@ export class ComposioToolProvider implements ToolProvider {
   async listTools(options?: ListToolProviderToolsOptions): Promise<ToolProviderListResult<ToolProviderToolInfo>> {
     const composio = this.getRawClient();
 
-    // ToolListParams is a discriminated union — build the right variant
-    const query = options?.toolkit
-      ? { toolkits: [options.toolkit], limit: options?.perPage, search: options?.search }
+    // ToolListParams is a discriminated union in TypeScript but the
+    // underlying Zod schema accepts `limit` on every variant.  We cast
+    // through the base type so `limit` is always forwarded.
+    const limit = options?.perPage;
+    const query: ComposioToolListParams = (options?.toolkit
+      ? { toolkits: [options.toolkit], limit, search: options?.search }
       : options?.search
-        ? { search: options.search }
-        : { toolkits: [] as string[], limit: options?.perPage };
+        ? { search: options.search, limit }
+        : { toolkits: [] as string[], limit }) as ComposioToolListParams;
 
     const rawTools: ComposioTool[] = await composio.tools.getRawComposioTools(query);
 
@@ -118,8 +122,8 @@ export class ComposioToolProvider implements ToolProvider {
       data,
       pagination: {
         page: options?.page ?? 1,
-        perPage: options?.perPage,
-        hasMore: rawTools.length === (options?.perPage ?? rawTools.length),
+        perPage: limit,
+        hasMore: limit !== undefined && rawTools.length >= limit,
       },
     };
   }
@@ -158,9 +162,7 @@ export class ComposioToolProvider implements ToolProvider {
     const mastraTools: MastraToolCollection = await composio.tools.get(userId, { tools: toolSlugs });
 
     const result: Record<string, ToolAction<unknown, unknown>> = {};
-    const entries: [string, MastraTool][] = mastraTools instanceof Map
-      ? Array.from((mastraTools as unknown as Map<string, MastraTool>).entries())
-      : Object.entries(mastraTools ?? {});
+    const entries: [string, MastraTool][] = Object.entries(mastraTools ?? {});
 
     for (const [key, tool] of entries) {
       if (!tool) continue;
