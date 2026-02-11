@@ -645,7 +645,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                                     const v = e.target.value;
                                     field.onChange(v === '' ? undefined : parseFloat(v));
                                   }}
-                                  placeholder=""
+                                  placeholder="0.8"
                                   className="bg-surface3"
                                   disabled={readOnly}
                                 />
