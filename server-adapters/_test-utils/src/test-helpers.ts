@@ -472,6 +472,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         updatedAt: new Date(),
       }),
     },
+    scorer: {
+      clearCache: vi.fn(),
+    },
   } as any);
 
   await mockWorkflowRun(workflow);
