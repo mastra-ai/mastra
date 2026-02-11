@@ -474,6 +474,16 @@ async function formatAgentList({
     },
   }));
 
+  // Serialize requestContextSchema if present
+  let serializedRequestContextSchema: string | undefined;
+  if (agent.requestContextSchema) {
+    try {
+      serializedRequestContextSchema = stringify(zodToJsonSchema(agent.requestContextSchema));
+    } catch (error) {
+      logger.error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
+    }
+  }
+
   return {
     id: agent.id || id,
     name: agent.name,
@@ -494,6 +504,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
   };
 }

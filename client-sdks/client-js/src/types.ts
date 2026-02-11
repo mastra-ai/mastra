@@ -24,6 +24,7 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
+  AgentInstructionBlock,
   PaginationInfo,
   WorkflowRuns,
   StorageListMessagesInput,
@@ -745,7 +746,7 @@ export interface StoredAgentResponse {
   // Version snapshot config fields (resolved from active version)
   name: string;
   description?: string;
-  instructions: string;
+  instructions: string | AgentInstructionBlock[];
   model: ConditionalField<{
     provider: string;
     name: string;
@@ -815,7 +816,7 @@ export interface CreateStoredAgentParams {
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
-  instructions: string;
+  instructions: string | AgentInstructionBlock[];
   model: ConditionalField<{
     provider: string;
     name: string;
@@ -841,7 +842,7 @@ export interface UpdateStoredAgentParams {
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
-  instructions?: string;
+  instructions?: string | AgentInstructionBlock[];
   model?: ConditionalField<{
     provider: string;
     name: string;
@@ -1011,7 +1012,7 @@ export interface AgentVersionResponse {
   versionNumber: number;
   name: string;
   description?: string;
-  instructions: string;
+  instructions: string | AgentInstructionBlock[];
   model: ConditionalField<{
     provider: string;
     name: string;
