@@ -1,7 +1,7 @@
 'use client';
 
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Button } from '@/ds/components/Button';
+import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
 import {
   Plus,
@@ -16,10 +16,12 @@ import {
   Search,
   History,
   ArrowRightIcon,
+  ScaleIcon,
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Badge } from '@/ds/components/Badge';
 import { Input } from '@/ds/components/Input';
+import { Column } from '@/ds/components/Columns/column';
 
 interface ActionsMenuProps {
   onExportClick: () => void;
@@ -27,6 +29,7 @@ interface ActionsMenuProps {
   onCreateDatasetClick: () => void;
   onAddToDatasetClick: () => void;
   onDeleteClick: () => void;
+  onCompareClick: () => void;
 }
 
 function ActionsMenu({
@@ -35,6 +38,7 @@ function ActionsMenu({
   onCreateDatasetClick,
   onAddToDatasetClick,
   onDeleteClick,
+  onCompareClick,
 }: ActionsMenuProps) {
   return (
     <DropdownMenu>
@@ -44,6 +48,10 @@ function ActionsMenu({
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
+        <DropdownMenu.Item onSelect={onCompareClick}>
+          <ScaleIcon />
+          <span>Compare Items</span>
+        </DropdownMenu.Item>
         <DropdownMenu.Item onSelect={onExportClick}>
           <Download />
           <span>Export Items as CSV</span>
@@ -52,7 +60,6 @@ function ActionsMenu({
           <FileJson />
           <span>Export Items as JSON</span>
         </DropdownMenu.Item>
-
         <DropdownMenu.Item onSelect={onCreateDatasetClick}>
           <FolderPlus />
           <span>Create Dataset from Items</span>
@@ -61,7 +68,6 @@ function ActionsMenu({
           <FolderOutput />
           <span>Copy Items to Dataset</span>
         </DropdownMenu.Item>
-
         <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
           <Trash2 />
           <span>Delete Items</span>
@@ -71,7 +77,7 @@ function ActionsMenu({
   );
 }
 
-export type ItemsToolbarProps = {
+export type DatasetItemsToolbarProps = {
   // Normal mode actions
   onAddClick: () => void;
   onImportClick: () => void;
@@ -81,6 +87,7 @@ export type ItemsToolbarProps = {
   onCreateDatasetClick: () => void;
   onAddToDatasetClick: () => void;
   onDeleteClick: () => void;
+  onCompareClick: () => void;
   hasItems: boolean;
 
   // Search props
@@ -92,15 +99,16 @@ export type ItemsToolbarProps = {
   selectedCount: number;
   onExecuteAction: () => void;
   onCancelSelection: () => void;
-  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete';
+  selectionMode: 'idle' | 'export' | 'export-json' | 'create-dataset' | 'add-to-dataset' | 'delete' | 'compare-items';
 
   // Versions panel
   onVersionsClick: () => void;
+  isItemPanelOpen?: boolean;
   isVersionsPanelOpen?: boolean;
-  hideVersionsButton?: boolean;
+  isViewingOldVersion?: boolean;
 };
 
-export function ItemsToolbar({
+export function DatasetItemsToolbar({
   onAddClick,
   onImportClick,
   onImportJsonClick,
@@ -109,21 +117,23 @@ export function ItemsToolbar({
   onCreateDatasetClick,
   onAddToDatasetClick,
   onDeleteClick,
+  onCompareClick,
   hasItems,
   searchQuery,
-  onSearchChange,
   isSelectionActive,
+  onSearchChange,
   selectedCount,
   onExecuteAction,
   onCancelSelection,
   selectionMode,
   onVersionsClick,
+  isItemPanelOpen,
   isVersionsPanelOpen,
-  hideVersionsButton,
-}: ItemsToolbarProps) {
+  isViewingOldVersion,
+}: DatasetItemsToolbarProps) {
   if (isSelectionActive) {
     return (
-      <div className="flex items-center justify-between gap-4 w-full">
+      <Column.Toolbar>
         {/* Search input - always visible */}
         <div className="relative flex-1 max-w-xs">
           <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
@@ -144,19 +154,34 @@ export function ItemsToolbar({
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="standard" size="default" disabled={selectedCount === 0} onClick={onExecuteAction}>
+            <ButtonWithTooltip
+              variant="standard"
+              size="default"
+              disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
+              onClick={onExecuteAction}
+              tooltipContent={
+                selectionMode === 'compare-items'
+                  ? selectedCount !== 2
+                    ? 'Select exactly 2 items to compare'
+                    : undefined
+                  : selectedCount === 0
+                    ? 'Select at least one item'
+                    : undefined
+              }
+            >
+              {selectionMode === 'compare-items' && 'Compare Items'}
               {selectionMode === 'export' && 'Export Items as CSV'}
               {selectionMode === 'export-json' && 'Export Items as JSON'}
               {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
-            </Button>
+            </ButtonWithTooltip>
             <Button variant="secondary" size="default" onClick={onCancelSelection}>
               Cancel
             </Button>
           </ButtonsGroup>
         </div>
-      </div>
+      </Column.Toolbar>
     );
   }
 
@@ -175,49 +200,48 @@ export function ItemsToolbar({
         />
       </div>
 
-      <div className="flex justify-end gap-3">
-        <div className="flex items-center gap-[.1rem]">
-          <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
-            <Plus />
-            New Item
-          </Button>
+      <ButtonsGroup>
+        {!isItemPanelOpen && !isViewingOldVersion && (
+          <ButtonsGroup spacing="close">
+            <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
+              <Plus /> New Item
+            </Button>
+            <DropdownMenu>
+              <DropdownMenu.Trigger asChild>
+                <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
+                  <ChevronDownIcon />
+                </Button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end">
+                <DropdownMenu.Item onSelect={onImportClick}>
+                  <Upload /> Import CSV
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={onImportJsonClick}>
+                  <FileJson /> Import JSON
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </ButtonsGroup>
+        )}
 
-          <DropdownMenu>
-            <DropdownMenu.Trigger asChild>
-              <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
-                <ChevronDownIcon />
-              </Button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="end">
-              <DropdownMenu.Item onSelect={onImportClick}>
-                <Upload />
-                <span>Import CSV</span>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onImportJsonClick}>
-                <FileJson />
-                <span>Import JSON</span>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
-        </div>
-
-        {hasItems && (
+        {hasItems && !isViewingOldVersion && (
           <ActionsMenu
             onExportClick={onExportClick}
             onExportJsonClick={onExportJsonClick}
             onCreateDatasetClick={onCreateDatasetClick}
             onAddToDatasetClick={onAddToDatasetClick}
             onDeleteClick={onDeleteClick}
+            onCompareClick={onCompareClick}
           />
         )}
 
-        {!hideVersionsButton && (
+        {!isItemPanelOpen && !isVersionsPanelOpen && (
           <Button variant="secondary" size="default" onClick={onVersionsClick} aria-label="View versions">
             <History className="w-4 h-4" />
             Versions
           </Button>
         )}
-      </div>
+      </ButtonsGroup>
     </div>
   );
 }

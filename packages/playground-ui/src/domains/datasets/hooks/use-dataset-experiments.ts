@@ -1,15 +1,36 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
+export interface DatasetExperimentsFilters {
+  status?: string;
+  targetType?: string;
+  targetId?: string;
+}
+
 /**
- * Hook to list experiments for a dataset with optional pagination
+ * Hook to list experiments for a dataset with optional pagination and filters.
+ * Filters are applied client-side until the backend supports them.
  */
-export const useDatasetExperiments = (datasetId: string, pagination?: { page?: number; perPage?: number }) => {
+export const useDatasetExperiments = (
+  datasetId: string,
+  pagination?: { page?: number; perPage?: number },
+  filters?: DatasetExperimentsFilters,
+) => {
   const client = useMastraClient();
   return useQuery({
-    queryKey: ['dataset-experiments', datasetId, pagination],
+    queryKey: ['dataset-experiments', datasetId, pagination, filters],
     queryFn: () => client.listDatasetExperiments(datasetId, pagination),
     enabled: Boolean(datasetId),
+    select: data => {
+      if (!filters) return data;
+      const filtered = data.experiments.filter(exp => {
+        if (filters.status && exp.status !== filters.status) return false;
+        if (filters.targetType && exp.targetType !== filters.targetType) return false;
+        if (filters.targetId && exp.targetId !== filters.targetId) return false;
+        return true;
+      });
+      return { ...data, experiments: filtered };
+    },
   });
 };
 

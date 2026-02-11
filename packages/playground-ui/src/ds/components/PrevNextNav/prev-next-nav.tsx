@@ -2,19 +2,19 @@ import { ArrowUpIcon, ArrowDownIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '../ButtonsGroup';
 
-export type ListAndDetailsNextPrevNavigationProps = {
+export type PrevNextNavProps = {
   onPrevious?: () => void;
   onNext?: () => void;
   previousAriaLabel?: string;
   nextAriaLabel?: string;
 };
 
-export function ListAndDetailsNextPrevNavigation({
+export function PrevNextNav({
   onPrevious,
   onNext,
   previousAriaLabel = 'Previous',
   nextAriaLabel = 'Next',
-}: ListAndDetailsNextPrevNavigationProps): React.JSX.Element {
+}: PrevNextNavProps) {
   return (
     <ButtonsGroup spacing="close">
       <Button
@@ -40,8 +40,4 @@ export function ListAndDetailsNextPrevNavigation({
       </Button>
     </ButtonsGroup>
   );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <span className="hidden 3xl:inline">{children}</span>;
 }

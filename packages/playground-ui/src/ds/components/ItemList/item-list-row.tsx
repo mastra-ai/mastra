@@ -10,7 +10,7 @@ export function ItemListRow({ isSelected, children }: ItemListRowProps) {
   return (
     <li
       className={cn(
-        'border-t text-neutral5 border-border1 first:border-t-0 text-ui-md',
+        'flex border-t text-neutral5 border-border1 first:border-t-0 text-ui-md',
         '[&:last-child>button]:rounded-b-lg',
         transitions.colors,
         {

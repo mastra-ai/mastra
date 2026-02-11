@@ -1,7 +1,5 @@
-import { Check, X } from 'lucide-react';
 import { DatasetExperimentResult } from '@mastra/client-js';
 import { ItemList } from '@/ds/components/ItemList';
-import { Badge } from '@/ds/components/Badge';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -10,13 +8,6 @@ export type ExperimentResultsListProps = {
   onResultClick: (resultId: string) => void;
   columns: { name: string; label: string; size: string }[];
 };
-
-// const resultsListColumns = [
-//   { name: 'itemId', label: 'Item ID', size: '5rem' },
-//   { name: 'output', label: 'Output', size: '1fr' },
-//   { name: 'latency', label: 'Latency', size: '6rem' },
-//   { name: 'status', label: 'Status', size: '3rem' },
-// ];
 
 /**
  * List component for experiment results - controlled by parent for selection state.
@@ -36,13 +27,6 @@ export function ExperimentResultsList({
   if (results.length === 0) {
     return <div className="text-neutral4 text-sm text-center py-8">No results yet</div>;
   }
-
-  // const resultsListColumns = [
-  //   { name: 'itemId', label: 'Item ID', size: '5rem' },
-  //   { name: 'output', label: 'Output', size: '1fr' },
-  //   { name: 'latency', label: 'Latency', size: '6rem' },
-  //   { name: 'status', label: 'Status', size: '3rem' },
-  // ];
 
   return (
     <ItemList>
@@ -67,22 +51,12 @@ export function ExperimentResultsList({
                   columns={columns}
                   onClick={() => onResultClick(result.id)}
                 >
-                  <ItemList.ItemText>{result.itemId.slice(0, 8)}</ItemList.ItemText>
+                  <ItemList.TextCell>{result.itemId.slice(0, 8)}</ItemList.TextCell>
                   {columns.some(col => col.name === 'output') && (
-                    <ItemList.ItemText>{truncate(formatValue(result.output), 200)}</ItemList.ItemText>
+                    <ItemList.TextCell>{truncate(formatValue(result.output), 200)}</ItemList.TextCell>
                   )}
-                  <ItemList.ItemText>{Math.floor(result.latency)} ms</ItemList.ItemText>
-                  <div>
-                    {hasError ? (
-                      <Badge variant="error">
-                        <X className="w-3 h-3" />
-                      </Badge>
-                    ) : (
-                      <Badge variant="success">
-                        <Check className="w-3 h-3" />
-                      </Badge>
-                    )}
-                  </div>
+                  <ItemList.TextCell>{Math.floor(result.latency)} ms</ItemList.TextCell>
+                  <ItemList.StatusCell status={'success'} />
                 </ItemList.RowButton>
               </ItemList.Row>
             );
@@ -107,9 +81,9 @@ function ExperimentResultsListSkeleton({ columns }: { columns: { name: string; l
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={columns}>
               {columns.map((_, colIndex) => (
-                <ItemList.ItemText key={colIndex} isLoading>
+                <ItemList.TextCell key={colIndex} isLoading>
                   Loading...
-                </ItemList.ItemText>
+                </ItemList.TextCell>
               ))}
             </ItemList.RowButton>
           </ItemList.Row>
