@@ -125,9 +125,14 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
     const result = await sandbox.mount(mockFilesystem, '/data/s3-test');
     expect(result.success).toBe(true);
 
-    // Verify mount works by listing directory
-    const lsResult = await sandbox.executeCommand('ls', ['-la', '/data/s3-test']);
-    expect(lsResult.exitCode).toBe(0);
+    // Verify mount works by listing directory (FUSE mount may need a moment to become accessible)
+    let lsResult;
+    for (let i = 0; i < 5; i++) {
+      lsResult = await sandbox.executeCommand('ls', ['-la', '/data/s3-test']);
+      if (lsResult.exitCode === 0) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    expect(lsResult!.exitCode).toBe(0);
   }, 180000);
 
   it('S3 public bucket mounts with public_bucket=1', async () => {
