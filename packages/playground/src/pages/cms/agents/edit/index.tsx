@@ -138,6 +138,7 @@ function CmsAgentsEditForm({
           }
         : undefined,
       instructionBlocks,
+      variables: dataSource.requestContextSchema as AgentFormValues['variables'],
     };
   }, [agent, versionData, isViewingVersion]);
 
@@ -202,6 +203,7 @@ function CmsAgentsEditForm({
               },
             }
           : undefined,
+        requestContextSchema: values.variables as Record<string, unknown> | undefined,
       });
 
       toast.success('Agent updated successfully');

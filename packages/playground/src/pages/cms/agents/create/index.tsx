@@ -75,6 +75,7 @@ function CmsAgentsCreatePage() {
               },
             }
           : undefined,
+        requestContextSchema: values.variables as Record<string, unknown> | undefined,
       };
 
       const created = await createStoredAgent.mutateAsync(createParams);
