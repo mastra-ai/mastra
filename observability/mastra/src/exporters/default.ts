@@ -168,6 +168,10 @@ export class DefaultExporter extends BaseExporter {
       throw error;
     } finally {
       this.#isInitializing = false;
+      /**
+       * Assumes caller waits until export of a parent span is completed before calling
+       * export for child spans , order is not relvanat for resolve
+       */
       this.#initPromises.forEach(resolve => {
         resolve();
       });
