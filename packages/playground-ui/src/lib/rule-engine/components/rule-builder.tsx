@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Plus, X, Component } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import type { Rule, RuleGroup } from '../types';
+import type { Rule, RuleGroup, RuleGroupDepth1 } from '../types';
 import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
 
 import { RuleRow } from './rule-row';
@@ -24,9 +24,12 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   };
 
   const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
-    const newConditions = [...group.conditions];
-    newConditions[index] = condition;
-    onChange({ ...group, conditions: newConditions });
+    onChange({
+      ...group,
+      conditions: group.conditions.map((c, i) =>
+        i === index ? (condition as Rule | RuleGroupDepth1) : c,
+      ),
+    });
   };
 
   const handleRemoveCondition = (index: number) => {
@@ -45,7 +48,10 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   const handleAddGroup = () => {
     onChange({
       ...group,
-      conditions: [...group.conditions, createDefaultRuleGroup(group.operator === 'AND' ? 'OR' : 'AND')],
+      conditions: [
+        ...group.conditions,
+        createDefaultRuleGroup(group.operator === 'AND' ? 'OR' : 'AND') as RuleGroupDepth1,
+      ],
     });
   };
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { JsonSchema } from '@/lib/json-schema';
-import type { RuleGroup } from '@mastra/core/storage';
+import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
 
 export type InstructionBlock = {
   id: string;
@@ -29,12 +29,20 @@ const ruleSchema = z.object({
   value: z.unknown().optional(),
 });
 
-const ruleGroupSchema: z.ZodType<RuleGroup> = z.lazy(() =>
-  z.object({
-    operator: z.enum(['AND', 'OR']),
-    conditions: z.array(z.union([ruleSchema, ruleGroupSchema])),
-  }),
-);
+const ruleGroupDepth2Schema: z.ZodType<RuleGroupDepth2> = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(ruleSchema),
+});
+
+const ruleGroupDepth1Schema: z.ZodType<RuleGroupDepth1> = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth2Schema])),
+});
+
+const ruleGroupSchema: z.ZodType<RuleGroup> = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth1Schema])),
+});
 
 const instructionBlockSchema = z.object({
   id: z.string(),
