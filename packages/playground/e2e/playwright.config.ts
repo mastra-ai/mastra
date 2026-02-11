@@ -26,6 +26,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: 'html',
+  workers: '75%',
 
   use: {
     baseURL: BASE_URL,
@@ -41,7 +42,7 @@ export default defineConfig({
     {
       name: 'chromium-sequential',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: '**/agents/$agentId/**',
+      testMatch: ['**/agents/$agentId/**', '**/workflows/$workflowId/**'],
       fullyParallel: false,
       workers: 1,
     },
