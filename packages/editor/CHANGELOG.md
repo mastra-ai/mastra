@@ -1,5 +1,13 @@
 # @mastra/editor
 
+## 0.3.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`b31c922`](https://github.com/mastra-ai/mastra/commit/b31c922215b513791d98feaea1b98784aa00803a)]:
+  - @mastra/memory@1.2.0-alpha.1
+  - @mastra/core@1.3.0-alpha.2
+
 ## 0.3.0-alpha.1
 
 ### Minor Changes
