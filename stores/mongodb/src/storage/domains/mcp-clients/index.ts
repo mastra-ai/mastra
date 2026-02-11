@@ -178,14 +178,20 @@ export class MongoDBMCPClientsStorage extends MCPClientsStorage {
 
       // Create version 1
       const versionId = randomUUID();
-      await this.createVersion({
-        id: versionId,
-        mcpClientId: mcpClient.id,
-        versionNumber: 1,
-        ...snapshotConfig,
-        changedFields: Object.keys(snapshotConfig),
-        changeMessage: 'Initial version',
-      } as CreateMCPClientVersionInput);
+      try {
+        await this.createVersion({
+          id: versionId,
+          mcpClientId: mcpClient.id,
+          versionNumber: 1,
+          ...snapshotConfig,
+          changedFields: Object.keys(snapshotConfig),
+          changeMessage: 'Initial version',
+        } as CreateMCPClientVersionInput);
+      } catch (versionError) {
+        // Clean up the orphaned client record
+        await collection.deleteOne({ id: mcpClient.id });
+        throw versionError;
+      }
 
       return newMCPClient;
     } catch (error) {
