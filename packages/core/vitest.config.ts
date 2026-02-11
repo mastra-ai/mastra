@@ -25,6 +25,7 @@ export default defineConfig({
         test: {
           name: 'typecheck:packages/core',
           environment: 'node',
+          include: [],
           typecheck: {
             enabled: true,
             include: ['src/**/*.test-d.ts'],
