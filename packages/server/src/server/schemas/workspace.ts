@@ -207,7 +207,9 @@ export const workspaceInfoResponseSchema = z.object({
       name: z.string(),
       provider: z.string(),
       status: z.string().optional(),
+      error: z.string().optional(),
       readOnly: z.boolean().optional(),
+      icon: z.string().optional(),
       metadata: z.record(z.unknown()).optional(),
     })
     .optional(),

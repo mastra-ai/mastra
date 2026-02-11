@@ -20,7 +20,9 @@ export interface WorkspaceFilesystemInfo {
   name: string;
   provider: string;
   status?: string;
+  error?: string;
   readOnly?: boolean;
+  icon?: string;
   metadata?: Record<string, unknown>;
 }
 
