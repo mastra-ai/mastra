@@ -219,7 +219,7 @@
     "@isaacs/ttlcache": "^2.1.4",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@sindresorhus/slugify": "^2.2.1",
     "dotenv": "^17.2.3",
     "gray-matter": "^4.0.3",
