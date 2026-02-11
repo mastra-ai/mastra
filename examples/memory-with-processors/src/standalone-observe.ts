@@ -96,17 +96,14 @@ async function main() {
   // Simulate a conversation
   const messages: MastraDBMessage[] = [
     makeMessage('user', "Hey, I'm working on a TypeScript project using Mastra."),
-    makeMessage(
-      'assistant',
-      'That sounds great! Mastra is a modular AI framework. What are you building with it?',
-    ),
+    makeMessage('assistant', 'That sounds great! Mastra is a modular AI framework. What are you building with it?'),
     makeMessage(
       'user',
       "I'm building a coding assistant that uses observational memory to remember context across long sessions. I'm using the standalone observe() API so I can control exactly when observations happen.",
     ),
     makeMessage(
       'assistant',
-      "The standalone observe() API gives you fine-grained control. You call om.observe() with the threadId and messages, and it extracts observations when the token threshold is met. Then you can retrieve those observations and inject them into the system prompt yourself.",
+      'The standalone observe() API gives you fine-grained control. You call om.observe() with the threadId and messages, and it extracts observations when the token threshold is met. Then you can retrieve those observations and inject them into the system prompt yourself.',
     ),
     makeMessage(
       'user',
