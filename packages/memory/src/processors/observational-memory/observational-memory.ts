@@ -3817,25 +3817,45 @@ ${formattedMessages}
     const newThreadId = threadIdMatch[1]!;
     const newDate = dateMatch[1]!;
 
-    // Look for existing section with same thread ID and date
-    const existingPattern = new RegExp(
-      `<thread id="${newThreadId}">\\s*Date:\\s*${newDate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([\\s\\S]*?)</thread>`,
-    );
-    const existingMatch = existingObservations.match(existingPattern);
+    // Look for existing section with same thread ID and date.
+    // Use string search instead of regex to avoid polynomial backtracking (CodeQL).
+    const threadOpen = `<thread id="${newThreadId}">`;
+    const threadClose = '</thread>';
+    const startIdx = existingObservations.indexOf(threadOpen);
+    let existingSection: string | null = null;
+    let existingSectionStart = -1;
+    let existingSectionEnd = -1;
 
-    if (existingMatch) {
+    if (startIdx !== -1) {
+      const closeIdx = existingObservations.indexOf(threadClose, startIdx);
+      if (closeIdx !== -1) {
+        existingSectionEnd = closeIdx + threadClose.length;
+        existingSectionStart = startIdx;
+        const section = existingObservations.slice(startIdx, existingSectionEnd);
+        // Verify this section contains the matching date
+        if (section.includes(`Date: ${newDate}`) || section.includes(`Date:${newDate}`)) {
+          existingSection = section;
+        }
+      }
+    }
+
+    if (existingSection) {
       // Found existing section with same thread ID and date - merge observations
-      // Extract just the observations from the new section (after the Date: line)
-      const newObsMatch = newThreadSection.match(/<thread id="[^"]+">[\s\S]*?Date:[^\n]*\n([\s\S]*?)\n<\/thread>/);
-      if (newObsMatch && newObsMatch[1]) {
-        const newObsContent = newObsMatch[1].trim();
-        // Insert new observations at the end of the existing section (before </thread>)
-        const mergedSection = existingObservations.replace(existingPattern, match => {
-          // Remove closing </thread>, add new observations, add closing </thread>
-          const withoutClose = match.replace(/<\/thread>$/, '').trimEnd();
-          return `${withoutClose}\n${newObsContent}\n</thread>`;
-        });
-        return mergedSection;
+      // Extract observations from new section: everything after the Date: line, before </thread>
+      const dateLineEnd = newThreadSection.indexOf('\n', newThreadSection.indexOf('Date:'));
+      const newCloseIdx = newThreadSection.lastIndexOf(threadClose);
+      if (dateLineEnd !== -1 && newCloseIdx !== -1) {
+        const newObsContent = newThreadSection.slice(dateLineEnd + 1, newCloseIdx).trim();
+        if (newObsContent) {
+          // Insert new observations at the end of the existing section (before </thread>)
+          const withoutClose = existingSection.slice(0, existingSection.length - threadClose.length).trimEnd();
+          const merged = `${withoutClose}\n${newObsContent}\n${threadClose}`;
+          return (
+            existingObservations.slice(0, existingSectionStart) +
+            merged +
+            existingObservations.slice(existingSectionEnd)
+          );
+        }
       }
     }
 
