@@ -28,10 +28,8 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
   const semanticRecallEnabled = memoryConfig?.semanticRecall ?? false;
   const observationalMemoryEnabled = memoryConfig?.observationalMemory?.enabled ?? false;
   const omProvider = useWatch({ control, name: 'memory.observationalMemory.model.provider' }) ?? '';
-  const observerProvider =
-    useWatch({ control, name: 'memory.observationalMemory.observation.model.provider' }) ?? '';
-  const reflectorProvider =
-    useWatch({ control, name: 'memory.observationalMemory.reflection.model.provider' }) ?? '';
+  const observerProvider = useWatch({ control, name: 'memory.observationalMemory.observation.model.provider' }) ?? '';
+  const reflectorProvider = useWatch({ control, name: 'memory.observationalMemory.reflection.model.provider' }) ?? '';
 
   const { data: vectorsData } = useVectors();
   const { data: embeddersData } = useEmbedders();
@@ -222,19 +220,13 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                   <div className="ml-2 pl-3 border-l-2 border-border1 flex flex-col gap-4">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs text-icon4">Provider</Label>
-                      <span className="text-xs text-icon3">
-                        Provider for the observer and reflector agents
-                      </span>
+                      <span className="text-xs text-icon3">Provider for the observer and reflector agents</span>
                       <Controller
                         name="memory.observationalMemory.model.provider"
                         control={control}
                         render={({ field }) => (
                           <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                            <LLMProviders
-                              value={field.value ?? ''}
-                              onValueChange={field.onChange}
-                              variant="light"
-                            />
+                            <LLMProviders value={field.value ?? ''} onValueChange={field.onChange} variant="light" />
                           </div>
                         )}
                       />
@@ -242,9 +234,7 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
 
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs text-icon4">Model</Label>
-                      <span className="text-xs text-icon3">
-                        Model for the observer and reflector agents
-                      </span>
+                      <span className="text-xs text-icon3">Model for the observer and reflector agents</span>
                       <Controller
                         name="memory.observationalMemory.model.name"
                         control={control}
@@ -272,11 +262,7 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                           <span className="text-xs text-icon3">
                             Whether observations are scoped per thread or shared across all threads for a resource
                           </span>
-                          <Select
-                            value={field.value ?? 'thread'}
-                            onValueChange={field.onChange}
-                            disabled={readOnly}
-                          >
+                          <Select value={field.value ?? 'thread'} onValueChange={field.onChange} disabled={readOnly}>
                             <SelectTrigger id="memory-om-scope" className="bg-surface3">
                               <SelectValue placeholder="Select scope" />
                             </SelectTrigger>
@@ -344,9 +330,7 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
 
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-xs text-icon4">Model Override</Label>
-                            <span className="text-xs text-icon3">
-                              Override the default model for the observer
-                            </span>
+                            <span className="text-xs text-icon3">Override the default model for the observer</span>
                             <Controller
                               name="memory.observationalMemory.observation.model.name"
                               control={control}
@@ -430,8 +414,8 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
                                   Buffer Tokens
                                 </Label>
                                 <span className="text-xs text-icon3">
-                                  Token interval for async buffering (fraction of messageTokens or absolute count,
-                                  empty to use default 0.2, set 0 to disable)
+                                  Token interval for async buffering (fraction of messageTokens or absolute count, empty
+                                  to use default 0.2, set 0 to disable)
                                 </span>
                                 <Input
                                   id="memory-om-obs-buffer"
@@ -550,9 +534,7 @@ export function MemorySection({ control, readOnly = false }: MemorySectionProps)
 
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-xs text-icon4">Model Override</Label>
-                            <span className="text-xs text-icon3">
-                              Override the default model for the reflector
-                            </span>
+                            <span className="text-xs text-icon3">Override the default model for the reflector</span>
                             <Controller
                               name="memory.observationalMemory.reflection.model.name"
                               control={control}
