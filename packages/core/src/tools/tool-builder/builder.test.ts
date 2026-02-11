@@ -2,13 +2,12 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
+import { Observability, TestExporter } from '@mastra/observability';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../..';
-import { Observability } from '../../../../../observability/mastra/src/default';
-import { TestExporter } from '../../../../../observability/mastra/src/exporters';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -306,7 +305,7 @@ async function runSingleToolSchemaTest(
 const SUITE_TIMEOUT = 300000; // 5 minutes
 const TEST_TIMEOUT = 300000; // 5 minutes
 
-// if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
+if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
 const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
 
 const modelsToTestV1 = [
