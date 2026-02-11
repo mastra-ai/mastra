@@ -1087,7 +1087,6 @@ if (canRunSharedIntegration) {
 
   createWorkspaceIntegrationTests({
     suiteName: 'E2B + S3 Shared Integration',
-    mountPath: mountPoint,
     testTimeout: 120000,
     testScenarios: {
       fileSync: true,
@@ -1099,13 +1098,15 @@ if (canRunSharedIntegration) {
       const s3Config = getS3TestConfig();
 
       return new Workspace({
-        filesystem: new S3Filesystem({
-          bucket: s3Config.bucket,
-          region: s3Config.region,
-          accessKeyId: s3Config.accessKeyId,
-          secretAccessKey: s3Config.secretAccessKey,
-          endpoint: s3Config.endpoint,
-        }),
+        mounts: {
+          [mountPoint]: new S3Filesystem({
+            bucket: s3Config.bucket,
+            region: s3Config.region,
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+            endpoint: s3Config.endpoint,
+          }),
+        },
         sandbox: new E2BSandbox({
           id: `shared-int-${Date.now()}`,
           timeout: 180000,
@@ -1114,14 +1115,15 @@ if (canRunSharedIntegration) {
     },
     cleanupWorkspace: async workspace => {
       // Cleanup S3 test files
-      if (workspace.filesystem) {
+      const composite = workspace.filesystem as CompositeFilesystem;
+      for (const [, fs] of composite.mounts) {
         try {
-          const files = await workspace.filesystem.readdir('/');
+          const files = await fs.readdir('/');
           for (const file of files) {
             if (file.type === 'file') {
-              await workspace.filesystem.deleteFile(`/${file.name}`, { force: true });
+              await fs.deleteFile(`/${file.name}`, { force: true });
             } else if (file.type === 'directory') {
-              await workspace.filesystem.rmdir(`/${file.name}`, { recursive: true });
+              await fs.rmdir(`/${file.name}`, { recursive: true });
             }
           }
         } catch (e) {

@@ -27,20 +27,6 @@ export interface WorkspaceIntegrationTestConfig {
   fastOnly?: boolean;
 
   /**
-   * Mount path prefix for sandbox commands.
-   *
-   * When a filesystem is FUSE-mounted inside a sandbox (e.g. s3fs at /data/s3),
-   * the filesystem API uses object-store keys (e.g. /test/file.txt) while the
-   * sandbox sees files at the mount point (e.g. /data/s3/test/file.txt).
-   *
-   * Set this to the mount path (e.g. '/data/s3') so that scenarios prepend it
-   * to paths used in sandbox commands.
-   *
-   * @default '' (filesystem paths are used directly for sandbox commands)
-   */
-  mountPath?: string;
-
-  /**
    * Whether sandbox file paths align with filesystem API paths for multi-mount.
    *
    * When true: sandbox commands like `cat /mount1/file.txt` see the same files

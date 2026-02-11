@@ -75,22 +75,21 @@ export function createConcurrentOperationsTests(getContext: () => TestContext): 
     it(
       'interleaved API write and sandbox read',
       async () => {
-        const { workspace, getTestPath, mountPath } = getContext();
+        const { workspace, getTestPath } = getContext();
 
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
         const basePath = getTestPath();
         const files = Array.from({ length: 5 }, (_, i) => ({
-          fsPath: `${basePath}/interleaved-${i}.txt`,
-          sandboxPath: `${mountPath}${basePath}/interleaved-${i}.txt`,
+          path: `${basePath}/interleaved-${i}.txt`,
           content: `interleaved-${i}-${Date.now()}`,
         }));
 
         // Write all via API
-        await Promise.all(files.map(f => workspace.filesystem!.writeFile(f.fsPath, f.content)));
+        await Promise.all(files.map(f => workspace.filesystem!.writeFile(f.path, f.content)));
 
-        // Read all via sandbox concurrently
-        const results = await Promise.all(files.map(f => workspace.sandbox!.executeCommand!('cat', [f.sandboxPath])));
+        // Read all via sandbox concurrently (same path — mountPath baked into getTestPath)
+        const results = await Promise.all(files.map(f => workspace.sandbox!.executeCommand!('cat', [f.path])));
 
         for (let i = 0; i < files.length; i++) {
           expect(results[i]!.exitCode).toBe(0);

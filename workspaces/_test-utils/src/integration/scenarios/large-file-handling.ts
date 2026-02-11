@@ -71,14 +71,13 @@ export function createLargeFileHandlingTests(getContext: () => TestContext): voi
         if (ctx.fastOnly) return;
         if (!ctx.workspace.filesystem || !ctx.workspace.sandbox?.executeCommand) return;
 
-        const fsPath = `${ctx.getTestPath()}/large-sandbox-1mb.txt`;
-        const sandboxPath = `${ctx.mountPath}${fsPath}`;
+        const filePath = `${ctx.getTestPath()}/large-sandbox-1mb.txt`;
         const content = generateTextContent(ONE_MB);
 
-        await ctx.workspace.filesystem.writeFile(fsPath, content);
+        await ctx.workspace.filesystem.writeFile(filePath, content);
 
-        // Verify size via wc -c in sandbox
-        const result = await ctx.workspace.sandbox.executeCommand('wc', ['-c', sandboxPath]);
+        // Verify size via wc -c in sandbox (same path — mountPath baked into getTestPath)
+        const result = await ctx.workspace.sandbox.executeCommand('wc', ['-c', filePath]);
         expect(result.exitCode).toBe(0);
 
         // wc -c output is like "1048576 /path/to/file" or just "1048576"

@@ -55,7 +55,6 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
     testScenarios = {},
     testTimeout = 60000,
     fastOnly = false,
-    mountPath = '',
     sandboxPathsAligned = true,
   } = config;
 
@@ -80,13 +79,21 @@ export function createWorkspaceIntegrationTests(config: WorkspaceIntegrationTest
     let currentTestPath: string;
 
     beforeEach(() => {
-      currentTestPath = generateTestPath('int-test');
+      const basePath = generateTestPath('int-test');
+
+      // For CompositeFilesystem, put test files under the first mount
+      // so paths work for both filesystem API and sandbox commands.
+      if (workspace.filesystem instanceof CompositeFilesystem) {
+        const firstMount = workspace.filesystem.mountPaths[0]!;
+        currentTestPath = `${firstMount}${basePath}`;
+      } else {
+        currentTestPath = basePath;
+      }
     });
 
     const getContext = () => ({
       workspace,
       getTestPath: () => currentTestPath,
-      mountPath,
       testTimeout,
       fastOnly,
       sandboxPathsAligned,

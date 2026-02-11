@@ -93,17 +93,17 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
     it(
       'API write then sandbox read is consistent',
       async () => {
-        const { workspace, getTestPath, mountPath } = getContext();
+        const { workspace, getTestPath } = getContext();
 
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
-        const fsPath = `${getTestPath()}/api-to-sandbox-consistency.txt`;
-        const sandboxPath = `${mountPath}${fsPath}`;
+        const filePath = `${getTestPath()}/api-to-sandbox-consistency.txt`;
         const content = `api-write-${Date.now()}`;
 
-        await workspace.filesystem.writeFile(fsPath, content);
+        await workspace.filesystem.writeFile(filePath, content);
 
-        const result = await workspace.sandbox.executeCommand('cat', [sandboxPath]);
+        // Read via sandbox command (same path — mountPath baked into getTestPath)
+        const result = await workspace.sandbox.executeCommand('cat', [filePath]);
         expect(result.exitCode).toBe(0);
         expect(result.stdout.trim()).toBe(content);
       },
@@ -113,21 +113,20 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
     it(
       'sandbox write then API read is consistent',
       async () => {
-        const { workspace, getTestPath, mountPath } = getContext();
+        const { workspace, getTestPath } = getContext();
 
         if (!workspace.filesystem || !workspace.sandbox?.executeCommand) return;
 
-        const fsPath = `${getTestPath()}/sandbox-to-api-consistency.txt`;
-        const sandboxPath = `${mountPath}${fsPath}`;
+        const filePath = `${getTestPath()}/sandbox-to-api-consistency.txt`;
         const content = `sandbox-write-${Date.now()}`;
 
         // Ensure directory exists
-        await workspace.sandbox.executeCommand('mkdir', ['-p', `${mountPath}${getTestPath()}`]);
+        await workspace.sandbox.executeCommand('mkdir', ['-p', getTestPath()]);
 
-        // Write via sandbox
+        // Write via sandbox (same path — mountPath baked into getTestPath)
         const writeResult = await workspace.sandbox.executeCommand('sh', [
           '-c',
-          `echo -n "${content}" > ${sandboxPath}`,
+          `echo -n "${content}" > ${filePath}`,
         ]);
         expect(writeResult.exitCode).toBe(0);
 
@@ -136,7 +135,7 @@ export function createWriteReadConsistencyTests(getContext: () => TestContext): 
         await waitFor(
           async () => {
             try {
-              apiContent = (await workspace.filesystem!.readFile(fsPath, { encoding: 'utf-8' })) as string;
+              apiContent = (await workspace.filesystem!.readFile(filePath, { encoding: 'utf-8' })) as string;
               return apiContent === content;
             } catch {
               return false;
