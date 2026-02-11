@@ -40,6 +40,10 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-oss-120b',
     'gpt-oss-20b',
+    'kimi-k2-thinking',
+    'kimi-k2.5',
+    'zai-glm-4.7',
+    'zai-glm-4.7-flash',
   ];
   readonly nova: readonly ['nova-2-lite-v1', 'nova-2-pro-v1'];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
@@ -1006,12 +1010,17 @@ export type ProviderModelsMap = {
     'devstral-2512',
     'devstral-small-2512',
     'gemini-2.5-pro',
+    'glm-4p5',
+    'glm-4p5-air',
+    'glm-4p7',
     'gpt-4.1',
     'gpt-oss-120b',
     'intellect-3',
     'kimi-k2-instruct',
     'kimi-k2-thinking',
     'llama-3.1-405b-instruct',
+    'minimax-m2',
+    'minimax-m2p1',
     'nova-pro-v1',
     'qwen3-32b',
     'qwen3-coder-480b-a35b-instruct',
