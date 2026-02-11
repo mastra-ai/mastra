@@ -44,6 +44,18 @@ export interface LocalFilesystemOptions {
   /**
    * When true, all file operations are restricted to stay within basePath.
    * Prevents path traversal attacks and symlink escapes.
+   *
+   * Path resolution depends on this setting:
+   * - `contained: true` (default) — Absolute paths that fall within basePath are
+   *   used as-is; all other absolute paths are treated as virtual (resolved
+   *   relative to basePath, e.g. `/file.txt` → `basePath/file.txt`). Any
+   *   resolved path that escapes basePath throws a PermissionError.
+   * - `contained: false` — Absolute paths are always treated as real filesystem
+   *   paths. No containment check is applied.
+   *
+   * Set to `false` when the filesystem needs to access paths outside basePath,
+   * such as global skills directories or user home directories.
+   *
    * @default true
    */
   contained?: boolean;
