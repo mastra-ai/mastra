@@ -5,6 +5,7 @@ import type {
   QueryResult,
   IndexStats,
   CreateIndexParams,
+  CreateMetadataIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
   DescribeIndexParams,
@@ -991,5 +992,40 @@ export class QdrantVector extends MastraVector {
         error,
       );
     }
+  }
+
+  /**
+   * Create an index on a metadata field to improve query performance.
+   *
+   * For Qdrant, this creates a payload index on the specified field.
+   * This is a convenience wrapper around `createPayloadIndex`.
+   *
+   * @param params - Parameters including indexName and field to index
+   *
+   * @example
+   * ```ts
+   * await qdrantVector.createMetadataIndex({
+   *   indexName: 'memory_messages',
+   *   field: 'thread_id',
+   * });
+   * ```
+   */
+  async createMetadataIndex(params: CreateMetadataIndexParams): Promise<void> {
+    const { indexName, field, type = 'string' } = params;
+
+    // Map generic types to Qdrant payload schema types
+    const schemaTypeMap: Record<string, PayloadSchemaType> = {
+      string: 'keyword',
+      number: 'float',
+      boolean: 'bool',
+    };
+
+    const fieldSchema = schemaTypeMap[type] || 'keyword';
+
+    await this.createPayloadIndex({
+      indexName,
+      fieldName: field,
+      fieldSchema,
+    });
   }
 }
