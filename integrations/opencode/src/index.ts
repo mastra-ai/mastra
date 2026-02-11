@@ -127,10 +127,11 @@ function convertMessages(messages: { info: Message; parts: Part[] }[], sessionId
         .filter((p): p is NonNullable<typeof p> => p !== null);
 
       if (convertedParts.length === 0) return null;
+      if (info.role !== 'user' && info.role !== 'assistant') return null;
 
       return {
         id: info.id,
-        role: info.role as 'user' | 'assistant',
+        role: info.role,
         // opencode timestamps are already in milliseconds (JavaScript Date)
         createdAt: new Date(info.time.created),
         threadId: sessionId,
