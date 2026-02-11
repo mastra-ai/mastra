@@ -112,8 +112,8 @@ export class InMemoryMCPClientsStorage extends MCPClientsStorage {
       updatedAt: new Date(),
     };
 
-    // If activeVersionId is set, mark as published
-    if (activeVersionId !== undefined) {
+    // Auto-set status to 'published' when activeVersionId is set, only if status is not explicitly provided
+    if (activeVersionId !== undefined && status === undefined) {
       updatedConfig.status = 'published';
     }
 
