@@ -39,7 +39,7 @@ function CmsScorersEditForm({ scorer, scorerId }: CmsScorersEditFormProps) {
     () => ({
       name: scorer.name || '',
       description: scorer.description || '',
-      type: scorer.type,
+      type: 'llm-judge' as const, // TODO: Add support for other scorer types
       model: {
         provider: (scorer.model as { provider?: string; name?: string })?.provider || '',
         name: (scorer.model as { provider?: string; name?: string })?.name || '',

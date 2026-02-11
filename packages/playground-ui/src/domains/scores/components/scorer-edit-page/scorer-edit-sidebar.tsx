@@ -63,7 +63,7 @@ export function ScorerEditSidebar({
           {/* Description */}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="scorer-description" className="text-xs text-icon5">
-              Description
+              Description <span className="text-accent2">*</span>
             </Label>
             <Textarea
               id="scorer-description"
@@ -84,17 +84,10 @@ export function ScorerEditSidebar({
               name="model.provider"
               control={control}
               render={({ field }) => (
-                <LLMProviders
-                  value={field.value}
-                  onValueChange={field.onChange}
-                  variant="light"
-                  container={formRef}
-                />
+                <LLMProviders value={field.value} onValueChange={field.onChange} variant="light" container={formRef} />
               )}
             />
-            {errors.model?.provider && (
-              <span className="text-xs text-accent2">{errors.model.provider.message}</span>
-            )}
+            {errors.model?.provider && <span className="text-xs text-accent2">{errors.model.provider.message}</span>}
           </div>
 
           {/* Model */}
