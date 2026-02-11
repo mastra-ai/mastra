@@ -92,8 +92,8 @@ const workspace = new Workspace({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     }),
-    '/models': new GCSFilesystem({
-      bucket: 'ml-models',
+    '/skills': new GCSFilesystem({
+      bucket: 'agent-skills',
     }),
   },
   sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
@@ -103,9 +103,9 @@ const workspace = new Workspace({
 With this configuration:
 
 - `read_file('/data/input.csv')` reads from the S3 bucket
-- `write_file('/models/output.json', content)` writes to the GCS bucket
-- `list_directory('/')` returns virtual entries for `/data` and `/models`
-- Commands in the sandbox can access files at `/data` and `/models` via FUSE mounts
+- `write_file('/skills/guide.md', content)` writes to the GCS bucket
+- `list_directory('/')` returns virtual entries for `/data` and `/skills`
+- Commands in the sandbox can access files at `/data` and `/skills` via FUSE mounts
 
 ### Path routing
 
