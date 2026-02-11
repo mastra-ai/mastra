@@ -52,6 +52,7 @@ export function isMaybeClaude46(
  */
 export class TrailingAssistantGuard implements Processor<'trailing-assistant-guard'> {
   readonly id = 'trailing-assistant-guard' as const;
+  readonly name = 'Trailing Assistant Guard';
 
   processInputStep({ messages, structuredOutput }: ProcessInputStepArgs): ProcessInputStepResult | undefined {
     const willUseResponseFormat =

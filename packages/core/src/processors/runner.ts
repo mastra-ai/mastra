@@ -13,6 +13,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { ProcessorStepOutput } from './step-schema';
+import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
   ProcessInputStepResult,
@@ -785,8 +786,14 @@ export class ProcessorRunner {
       retryCount: args.retryCount ?? 0,
     };
 
+    // Append the trailing assistant guard when the resolved model is Claude 4.6
+    const processors =
+      stepInput.model && isMaybeClaude46(stepInput.model)
+        ? [...this.inputProcessors, new TrailingAssistantGuard()]
+        : this.inputProcessors;
+
     // Run through all input processors that have processInputStep
-    for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
+    for (const [index, processorOrWorkflow] of processors.entries()) {
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
