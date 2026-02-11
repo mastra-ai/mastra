@@ -7,13 +7,14 @@ import {
   AgentEditSidebar,
   AgentEditLayout,
   useAgentEditForm,
-  AgentEditMain,
   MainContentLayout,
+  AgentEditMainContentBlocks,
   Header,
   HeaderTitle,
   Icon,
   AgentIcon,
 } from '@mastra/playground-ui';
+import { CreateStoredAgentParams } from '@mastra/client-js';
 
 function CmsAgentsCreatePage() {
   const { navigate, paths } = useLinkComponent();
@@ -30,21 +31,41 @@ function CmsAgentsCreatePage() {
     }
 
     const values = form.getValues();
-    const agentId = crypto.randomUUID();
     setIsSubmitting(true);
 
     try {
-      const createParams = {
-        id: agentId,
+      const formScorers = values.scorers ? Object.entries(values.scorers) : undefined;
+      const scorers = formScorers
+        ? Object.fromEntries(
+            formScorers.map(([key, value]) => [
+              key,
+              {
+                description: value.description,
+                sampling: value.sampling
+                  ? {
+                      type: value.sampling.type,
+                      rate: value.sampling.rate || 0,
+                    }
+                  : undefined,
+              },
+            ]),
+          )
+        : undefined;
+
+      const createParams: CreateStoredAgentParams = {
         name: values.name,
         description: values.description || undefined,
-        instructions: values.instructions,
-        model: values.model as Record<string, unknown>,
-        tools: values.tools && Object.keys(values.tools).length > 0 ? Object.keys(values.tools) : undefined,
+        instructions: (values.instructionBlocks ?? []).map(block => ({
+          type: block.type,
+          content: block.content,
+          rules: block.rules,
+        })),
+        model: values.model,
+        tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         workflows:
           values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
-        scorers: values.scorers && Object.keys(values.scorers).length > 0 ? values.scorers : undefined,
+        scorers,
         memory: values.memory?.enabled
           ? {
               options: {
@@ -54,11 +75,12 @@ function CmsAgentsCreatePage() {
               },
             }
           : undefined,
+        requestContextSchema: values.variables as Record<string, unknown> | undefined,
       };
 
-      await createStoredAgent.mutateAsync(createParams);
+      const created = await createStoredAgent.mutateAsync(createParams);
       toast.success('Agent created successfully');
-      navigate(`${paths.agentLink(agentId)}/chat`);
+      navigate(`${paths.agentLink(created.id)}/chat`);
     } catch (error) {
       toast.error(`Failed to create agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -80,11 +102,9 @@ function CmsAgentsCreatePage() {
         leftSlot={
           <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
         }
-        rightSlot={<div />}
       >
         <form ref={formRef} className="h-full">
-          <AgentEditMain form={form} />
-          {/* <AgentEditMainContentBlocks form={form} /> */}
+          <AgentEditMainContentBlocks form={form} />
         </form>
       </AgentEditLayout>
     </MainContentLayout>

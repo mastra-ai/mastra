@@ -56,7 +56,10 @@ export class CoreToolBuilder extends MastraBase {
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
-    if (!isVercelTool(this.originalTool) && input.autoResumeSuspendedTools) {
+    if (
+      !isVercelTool(this.originalTool) &&
+      (input.autoResumeSuspendedTools || (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-'))
+    ) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {
         schema = schema();
@@ -327,6 +330,9 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             requestContext: options.requestContext ?? new RequestContext(),
+            // Workspace for file operations and command execution
+            // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
+            workspace: execOptions.workspace ?? options.workspace,
             writer: new ToolStream(
               {
                 prefix: 'tool',

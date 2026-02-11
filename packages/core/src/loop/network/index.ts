@@ -126,6 +126,7 @@ export async function getRoutingAgent({
   const toolsToUse = await agent.listTools({ requestContext: requestContext });
   const model = await agent.getModel({ requestContext: requestContext });
   const memoryToUse = await agent.getMemory({ requestContext: requestContext });
+  const clientToolsToUse = (await agent.getDefaultOptions({ requestContext: requestContext }))?.clientTools;
 
   // Get only user-configured processors (not memory processors) for the routing agent.
   // Memory processors (semantic recall, working memory) can interfere with routing decisions,
@@ -149,7 +150,7 @@ export async function getRoutingAgent({
     .join('\n');
 
   const memoryTools = await memoryToUse?.listTools?.();
-  const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
+  const toolList = Object.entries({ ...toolsToUse, ...memoryTools, ...(clientToolsToUse || {}) })
     .map(([name, tool]) => {
       // Use 'in' check for type narrowing, then nullish coalescing for undefined values
       const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
@@ -650,22 +651,6 @@ export async function createNetworkLoop({
       }
 
       const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
-
-      // When routing agent handles request itself (no delegation), emit text events
-      if (isComplete && object.selectionReason) {
-        await writer.write({
-          type: 'routing-agent-text-start',
-          payload: { runId: stepId },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-        await writer.write({
-          type: 'routing-agent-text-delta',
-          payload: { runId: stepId, text: object.selectionReason },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-      }
 
       // Extract conversation context from the memory-loaded messages only.
       const conversationContext = filterMessagesForSubAgent(result.rememberedMessages ?? []);
@@ -1423,7 +1408,8 @@ export async function createNetworkLoop({
       const agentTools = await agent.listTools({ requestContext });
       const memory = await agent.getMemory({ requestContext });
       const memoryTools = await memory?.listTools?.();
-      const toolsMap = { ...agentTools, ...memoryTools };
+      const clientTools = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
+      const toolsMap = { ...agentTools, ...memoryTools, ...(clientTools || {}) };
 
       let tool = toolsMap[inputData.primitiveId];
 
@@ -2409,41 +2395,44 @@ export async function networkLoop<OUTPUT = undefined>({
         });
       }
 
-      // Not complete - inject feedback for next iteration
+      // Format feedback (needed for return value even if not persisted)
       const feedback = formatCompletionFeedback(completionResult, !!maxIterationReached);
 
-      // Save feedback to memory so the next iteration can see it
-      const memoryInstance = await routingAgent.getMemory({ requestContext });
-      await saveMessagesWithProcessors(
-        memoryInstance,
-        [
-          {
-            id: generateId(),
-            type: 'text',
-            role: 'assistant',
-            content: {
-              parts: [
-                {
-                  type: 'text',
-                  text: feedback,
-                },
-              ],
-              format: 2,
-              metadata: {
-                mode: 'network',
-                completionResult: {
-                  passed: completionResult.complete,
+      // Not complete - inject feedback for next iteration (unless suppressed)
+      if (!validation?.suppressFeedback) {
+        // Save feedback to memory so the next iteration can see it
+        const memoryInstance = await routingAgent.getMemory({ requestContext });
+        await saveMessagesWithProcessors(
+          memoryInstance,
+          [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: feedback,
+                  },
+                ],
+                format: 2,
+                metadata: {
+                  mode: 'network',
+                  completionResult: {
+                    passed: completionResult.complete,
+                  },
                 },
               },
+              createdAt: new Date(),
+              threadId: inputData.threadId || runIdToUse,
+              resourceId: inputData.threadResourceId || networkName,
             },
-            createdAt: new Date(),
-            threadId: inputData.threadId || runIdToUse,
-            resourceId: inputData.threadResourceId || networkName,
-          },
-        ] as MastraDBMessage[],
-        processorRunner,
-        { requestContext },
-      );
+          ] as MastraDBMessage[],
+          processorRunner,
+          { requestContext },
+        );
+      }
 
       if (isComplete) {
         // Task is complete - use generatedFinalResult if LLM provided one,

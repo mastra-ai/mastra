@@ -1,5 +1,7 @@
 node_modules/
 dist/
+test-outputs/
+.vitest-reports/
 .DS_Store
 
 # IDE
@@ -51,3 +53,5 @@ storybook-static
 test-output.log
 
 .playwright-mcp
+om-debug.log
+om-reflector-fixture.json

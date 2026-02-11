@@ -1,6 +1,6 @@
 import { useForm, Resolver } from 'react-hook-form';
 
-import type { AgentFormValues } from './utils/form-validation';
+import { AgentFormValues, createInstructionBlock } from './utils/form-validation';
 
 // Simple validation resolver without zod to avoid version conflicts
 const agentFormResolver: Resolver<AgentFormValues> = async values => {
@@ -16,7 +16,12 @@ const agentFormResolver: Resolver<AgentFormValues> = async values => {
     errors.description = { type: 'maxLength', message: 'Description must be 500 characters or less' };
   }
 
-  if (!values.instructions || values.instructions.trim() === '') {
+  // Validate instructions: check blocks if present, otherwise check plain instructions string
+  const blocks = values.instructionBlocks;
+  const hasBlockContent = blocks && blocks.some(b => b.content.trim() !== '');
+  const hasPlainInstructions = values.instructions && values.instructions.trim() !== '';
+
+  if (!hasBlockContent && !hasPlainInstructions) {
     errors.instructions = { type: 'required', message: 'Instructions are required' };
   }
 
@@ -52,6 +57,8 @@ export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
       workflows: initialValues?.workflows ?? {},
       agents: initialValues?.agents ?? {},
       scorers: initialValues?.scorers ?? {},
+      variables: initialValues?.variables ?? {},
+      instructionBlocks: initialValues?.instructionBlocks ?? [createInstructionBlock()],
     },
   });
 

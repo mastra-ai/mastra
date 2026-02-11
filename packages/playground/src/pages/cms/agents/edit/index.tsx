@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import type { AgentVersionResponse } from '@mastra/client-js';
+import type { AgentInstructionBlock } from '@mastra/core/storage';
 
 import {
   toast,
   useLinkComponent,
   useStoredAgent,
   useStoredAgentMutations,
-  AgentEditMain,
+  AgentEditMainContentBlocks,
   AgentEditSidebar,
-  AgentVersionsPanel,
   AgentEditLayout,
   useAgentEditForm,
   Header,
   HeaderTitle,
+  HeaderAction,
   Icon,
   AgentIcon,
   Spinner,
@@ -24,6 +25,8 @@ import {
   Alert,
   Button,
   AlertTitle,
+  AgentVersionCombobox,
+  createInstructionBlock,
 } from '@mastra/playground-ui';
 
 // Type for the agent data (inferred from useStoredAgent)
@@ -38,12 +41,20 @@ const arrayToRecord = (arr: string[]): Record<string, { description?: string }> 
   return record;
 };
 
+// Helper to normalize tools from either string[] (legacy) or Record format
+const normalizeToolsToRecord = (
+  tools: string[] | Record<string, { description?: string }> | undefined,
+): Record<string, { description?: string }> => {
+  if (!tools) return {};
+  if (Array.isArray(tools)) return arrayToRecord(tools);
+  return { ...tools };
+};
+
 interface CmsAgentsEditFormProps {
   agent: StoredAgent;
   agentId: string;
   selectedVersionId: string | null;
   versionData?: AgentVersionResponse;
-  onVersionSelect: (versionId: string) => void;
   readOnly?: boolean;
 }
 
@@ -53,7 +64,6 @@ function CmsAgentsEditForm({
   agentId,
   selectedVersionId,
   versionData,
-  onVersionSelect,
   readOnly = false,
 }: CmsAgentsEditFormProps) {
   const { navigate, paths } = useLinkComponent();
@@ -70,12 +80,13 @@ function CmsAgentsEditForm({
     const dataSource = isViewingVersion ? versionData : agent;
 
     // Merge code-defined tools and integration tools
-    const allTools: string[] = [];
-    if (dataSource.tools && Array.isArray(dataSource.tools)) {
-      allTools.push(...dataSource.tools);
-    }
+    const toolsRecord = normalizeToolsToRecord(dataSource.tools);
     if (dataSource.integrationTools && Array.isArray(dataSource.integrationTools)) {
-      allTools.push(...dataSource.integrationTools);
+      for (const id of dataSource.integrationTools) {
+        if (!toolsRecord[id]) {
+          toolsRecord[id] = { description: undefined };
+        }
+      }
     }
 
     // Transform memory data from API format to form format
@@ -87,15 +98,32 @@ function CmsAgentsEditForm({
         }
       | undefined;
 
+    const instructionsRaw = dataSource.instructions;
+    const instructionsString = Array.isArray(instructionsRaw)
+      ? instructionsRaw
+          .map((b: AgentInstructionBlock) => (b.type === 'prompt_block' ? b.content : ''))
+          .filter(Boolean)
+          .join('\n\n')
+      : instructionsRaw || '';
+
+    const instructionBlocks = Array.isArray(instructionsRaw)
+      ? instructionsRaw
+          .filter(
+            (b: AgentInstructionBlock): b is Extract<AgentInstructionBlock, { type: 'prompt_block' }> =>
+              b.type === 'prompt_block',
+          )
+          .map(b => createInstructionBlock(b.content, b.rules))
+      : [createInstructionBlock(instructionsRaw || '')];
+
     return {
       name: dataSource.name || '',
       description: dataSource.description || '',
-      instructions: dataSource.instructions || '',
+      instructions: instructionsString,
       model: {
         provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
         name: (dataSource.model as { provider?: string; name?: string })?.name || '',
       },
-      tools: arrayToRecord(allTools),
+      tools: toolsRecord,
       workflows: arrayToRecord((dataSource.workflows as string[]) || []),
       agents: arrayToRecord((dataSource.agents as string[]) || []),
       scorers: dataSource.scorers || {},
@@ -109,6 +137,8 @@ function CmsAgentsEditForm({
             embedder: memoryData.embedder,
           }
         : undefined,
+      instructionBlocks,
+      variables: dataSource.requestContextSchema as AgentFormValues['variables'],
     };
   }, [agent, versionData, isViewingVersion]);
 
@@ -133,7 +163,7 @@ function CmsAgentsEditForm({
     try {
       // Separate code-defined tools from integration tools
       // Integration tools are identified by checking if they exist in the agent's integrationTools array
-      const codeDefinedTools: string[] = [];
+      const codeDefinedTools: Record<string, { description?: string }> = {};
       const integrationToolIds: string[] = [];
 
       const existingIntegrationTools = new Set(agent.integrationTools || []);
@@ -143,7 +173,7 @@ function CmsAgentsEditForm({
           if (existingIntegrationTools.has(toolId)) {
             integrationToolIds.push(toolId);
           } else {
-            codeDefinedTools.push(toolId);
+            codeDefinedTools[toolId] = values.tools[toolId]!;
           }
         }
       }
@@ -151,9 +181,13 @@ function CmsAgentsEditForm({
       await updateStoredAgent.mutateAsync({
         name: values.name,
         description: values.description,
-        instructions: values.instructions,
-        model: values.model as Record<string, unknown>,
-        tools: codeDefinedTools,
+        instructions: (values.instructionBlocks ?? []).map(block => ({
+          type: block.type,
+          content: block.content,
+          rules: block.rules,
+        })),
+        model: values.model,
+        tools: Object.keys(codeDefinedTools).length > 0 ? codeDefinedTools : undefined,
         integrationTools: integrationToolIds,
         workflows: Object.keys(values.workflows || {}),
         agents: Object.keys(values.agents || {}),
@@ -169,6 +203,7 @@ function CmsAgentsEditForm({
               },
             }
           : undefined,
+        requestContextSchema: values.variables as Record<string, unknown> | undefined,
       });
 
       toast.success('Agent updated successfully');
@@ -193,13 +228,6 @@ function CmsAgentsEditForm({
           readOnly={readOnly || isViewingVersion}
         />
       }
-      rightSlot={
-        <AgentVersionsPanel
-          agentId={agentId}
-          selectedVersionId={selectedVersionId ?? undefined}
-          onVersionSelect={onVersionSelect}
-        />
-      }
     >
       <form ref={formRef} className="h-full">
         {isViewingVersion && (
@@ -213,7 +241,7 @@ function CmsAgentsEditForm({
             </div>
           </Alert>
         )}
-        <AgentEditMain form={form} readOnly={readOnly || isViewingVersion} />
+        <AgentEditMainContentBlocks form={form} readOnly={readOnly || isViewingVersion} />
       </form>
     </AgentEditLayout>
   );
@@ -261,11 +289,6 @@ function CmsAgentsEditPage() {
               <Spinner className="h-8 w-8" />
             </div>
           }
-          rightSlot={
-            <div className="flex items-center justify-center h-full">
-              <Spinner className="h-8 w-8" />
-            </div>
-          }
         >
           <div className="flex items-center justify-center h-full">
             <Spinner className="h-8 w-8" />
@@ -289,7 +312,6 @@ function CmsAgentsEditPage() {
         </Header>
         <AgentEditLayout
           leftSlot={<div className="flex items-center justify-center h-full text-icon3">Agent not found</div>}
-          rightSlot={<div className="flex items-center justify-center h-full text-icon3">No versions</div>}
         >
           <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
         </AgentEditLayout>
@@ -307,6 +329,14 @@ function CmsAgentsEditPage() {
           </Icon>
           Edit agent: {agent.name}
         </HeaderTitle>
+        <HeaderAction>
+          <AgentVersionCombobox
+            agentId={agentId}
+            value={selectedVersionId ?? ''}
+            onValueChange={handleVersionSelect}
+            variant="outline"
+          />
+        </HeaderAction>
       </Header>
 
       <CmsAgentsEditForm
@@ -314,7 +344,6 @@ function CmsAgentsEditPage() {
         agentId={agentId}
         selectedVersionId={selectedVersionId}
         versionData={versionData}
-        onVersionSelect={handleVersionSelect}
         readOnly={isLoadingVersion}
       />
     </MainContentLayout>

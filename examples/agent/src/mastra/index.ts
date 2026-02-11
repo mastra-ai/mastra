@@ -13,6 +13,7 @@ import {
   evalAgent,
   dynamicToolsAgent,
   schemaValidatedAgent,
+  requestContextDemoAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
@@ -41,7 +42,6 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
-import { MastraEditor } from '@mastra/editor';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -65,6 +65,7 @@ const config = {
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
+    requestContextDemoAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
