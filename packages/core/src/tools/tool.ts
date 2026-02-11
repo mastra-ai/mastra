@@ -149,6 +149,11 @@ export class Tool<
   mcp?: MCPToolProperties;
 
   /**
+   * Examples of valid tool inputs passed through to the AI SDK.
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -173,6 +178,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
 
     // Tools receive two parameters:
