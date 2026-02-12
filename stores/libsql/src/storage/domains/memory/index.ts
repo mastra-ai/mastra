@@ -1625,6 +1625,14 @@ export class MemoryLibSQL extends MemoryStorage {
       const now = new Date();
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
+      // Defensive: the caller's record may be stale (e.g., fetched before swapBufferedToActive
+      // advanced lastObservedAt). Fetch the current DB record and use the latest cursor
+      // to prevent re-loading already-observed messages on the next turn.
+      const dbRecord = await this.getObservationalMemory(input.currentRecord.threadId, input.currentRecord.resourceId);
+      const inputTime = input.currentRecord.lastObservedAt?.getTime() ?? 0;
+      const dbTime = dbRecord?.lastObservedAt?.getTime() ?? 0;
+      const lastObservedAt = inputTime >= dbTime ? input.currentRecord.lastObservedAt : dbRecord?.lastObservedAt;
+
       const record: ObservationalMemoryRecord = {
         id,
         scope: input.currentRecord.scope,
@@ -1632,7 +1640,7 @@ export class MemoryLibSQL extends MemoryStorage {
         resourceId: input.currentRecord.resourceId,
         createdAt: now,
         updatedAt: now,
-        lastObservedAt: input.currentRecord.lastObservedAt,
+        lastObservedAt,
         originType: 'reflection',
         generationCount: input.currentRecord.generationCount + 1,
         activeObservations: input.reflection,

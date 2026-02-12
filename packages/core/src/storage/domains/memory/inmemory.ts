@@ -1040,6 +1040,14 @@ export class InMemoryMemory extends MemoryStorage {
     const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
     const now = new Date();
 
+    // Defensive: the caller's record may be stale (e.g., fetched before swapBufferedToActive
+    // advanced lastObservedAt). Compare with the actual DB record and use the latest cursor
+    // to prevent re-loading already-observed messages on the next turn.
+    const dbRecord = this.findObservationalMemoryRecordById(currentRecord.id);
+    const inputTime = currentRecord.lastObservedAt?.getTime() ?? 0;
+    const dbTime = dbRecord?.lastObservedAt?.getTime() ?? 0;
+    const lastObservedAt = inputTime >= dbTime ? currentRecord.lastObservedAt : dbRecord?.lastObservedAt;
+
     const newRecord: ObservationalMemoryRecord = {
       id: crypto.randomUUID(),
       scope: currentRecord.scope,
@@ -1048,7 +1056,7 @@ export class InMemoryMemory extends MemoryStorage {
       // Timestamps at top level
       createdAt: now,
       updatedAt: now,
-      lastObservedAt: currentRecord.lastObservedAt ?? now, // Carry over from observation (which always runs before reflection)
+      lastObservedAt: lastObservedAt ?? now, // Carry over from observation (which always runs before reflection)
       originType: 'reflection',
       generationCount: currentRecord.generationCount + 1,
       activeObservations: reflection,

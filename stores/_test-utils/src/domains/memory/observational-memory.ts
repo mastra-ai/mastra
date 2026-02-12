@@ -344,6 +344,45 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(retrieved?.id).toBe(newRecord.id);
         expect(retrieved?.originType).toBe('reflection');
       });
+
+      it('should not regress lastObservedAt when input record is stale', async () => {
+        // Regression test: if the caller holds a stale record snapshot with an older
+        // lastObservedAt (e.g., due to a race between swapBufferedToActive and
+        // createReflectionGeneration), the new generation must use the DB record's
+        // lastObservedAt — never go backward. Going backward causes
+        // loadHistoricalMessagesIfNeeded to re-load already-observed messages,
+        // inflating the context window instead of shrinking it.
+        const input = createSampleOMInput();
+        const initial = await memoryStorage.initializeObservationalMemory(input);
+
+        // Advance lastObservedAt to T_new via updateActiveObservations
+        const tNew = new Date('2025-06-01T12:00:00Z');
+        await memoryStorage.updateActiveObservations({
+          id: initial.id,
+          observations: 'Observations covering messages up to T_new',
+          tokenCount: 100,
+          lastObservedAt: tNew,
+        });
+
+        // Create a stale snapshot with T_old (before T_new)
+        const tOld = new Date('2025-06-01T10:00:00Z');
+        const staleRecord = {
+          ...(await memoryStorage.getObservationalMemory(input.threadId, input.resourceId))!,
+          lastObservedAt: tOld,
+        };
+
+        // createReflectionGeneration with stale record
+        const newRecord = await memoryStorage.createReflectionGeneration({
+          currentRecord: staleRecord,
+          reflection: 'Reflected observations',
+          tokenCount: 50,
+        });
+
+        // lastObservedAt must NOT go backward
+        const newLastObserved =
+          newRecord.lastObservedAt instanceof Date ? newRecord.lastObservedAt : new Date(newRecord.lastObservedAt ?? 0);
+        expect(newLastObserved.getTime()).toBeGreaterThanOrEqual(tNew.getTime());
+      });
     });
 
     describe('setReflectingFlag', () => {
