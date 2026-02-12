@@ -1757,35 +1757,17 @@ export interface DatasetVersionResponse {
 }
 
 export interface CompareExperimentsResponse {
-  experimentA: { id: string; datasetVersion: number | null };
-  experimentB: { id: string; datasetVersion: number | null };
-  versionMismatch: boolean;
-  hasRegression: boolean;
-  scorers: Record<
-    string,
-    {
-      statsA: ScorerStats;
-      statsB: ScorerStats;
-      delta: number;
-      regressed: boolean;
-      threshold: number;
-    }
-  >;
+  baselineId: string;
   items: Array<{
     itemId: string;
-    inBothExperiments: boolean;
-    scoresA: Record<string, number | null>;
-    scoresB: Record<string, number | null>;
+    input: unknown;
+    groundTruth: unknown;
+    results: Record<
+      string,
+      {
+        output: unknown;
+        scores: Record<string, number | null>;
+      } | null
+    >;
   }>;
-  warnings: string[];
-}
-
-interface ScorerStats {
-  errorRate: number;
-  errorCount: number;
-  passRate: number;
-  passCount: number;
-  avgScore: number;
-  scoreCount: number;
-  totalItems: number;
 }
