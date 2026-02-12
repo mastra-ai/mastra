@@ -13,7 +13,6 @@ import {
   GaugeIcon,
   CircleGaugeIcon,
   ListTreeIcon,
-  DatabaseIcon,
   SaveIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -243,12 +242,7 @@ export function TraceDialog({
           </TextAndIcon>
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-          <Button
-            variant="standard"
-            size="default"
-            className="ml-auto mr-8"
-            onClick={() => setDatasetDialogOpen(true)}
-          >
+          <Button variant="standard" size="default" className="ml-auto mr-8" onClick={() => setDatasetDialogOpen(true)}>
             <Icon>
               <SaveIcon />
             </Icon>

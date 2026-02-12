@@ -15,7 +15,13 @@ export type ExperimentResultSpanPaneProps = {
   onClose: () => void;
 };
 
-export function ExperimentResultSpanPane({ traceId, spanId, onNext, onPrevious, onClose }: ExperimentResultSpanPaneProps) {
+export function ExperimentResultSpanPane({
+  traceId,
+  spanId,
+  onNext,
+  onPrevious,
+  onClose,
+}: ExperimentResultSpanPaneProps) {
   const { data: traceData } = useExperimentTrace(traceId);
   const span = traceData?.spans?.find(s => s.spanId === spanId);
 

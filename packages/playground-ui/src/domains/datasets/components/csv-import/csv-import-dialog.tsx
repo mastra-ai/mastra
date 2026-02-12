@@ -210,7 +210,12 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setSchemaValidation({
         validCount: mappedRows.length,
         invalidCount: 0,
-        validRows: mappedRows.map((row: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }, i: number) => ({ rowNumber: i + 2, ...row })),
+        validRows: mappedRows.map(
+          (row: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }, i: number) => ({
+            rowNumber: i + 2,
+            ...row,
+          }),
+        ),
         invalidRows: [],
         totalRows: mappedRows.length,
       });
@@ -485,7 +490,12 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             <Button variant="standard" size="default" onClick={() => setStep('preview')}>
               Back
             </Button>
-            <Button variant="cta" size="default" onClick={handleValidateMapping} disabled={!columnMapping.isInputMapped}>
+            <Button
+              variant="cta"
+              size="default"
+              onClick={handleValidateMapping}
+              disabled={!columnMapping.isInputMapped}
+            >
               {dataset?.inputSchema || dataset?.groundTruthSchema ? 'Validate' : 'Next'}
             </Button>
           </>

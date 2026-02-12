@@ -33,9 +33,7 @@ export const columns: ColumnDef<DatasetTableColumn>[] = [
   {
     header: 'Version',
     accessorKey: 'version',
-    cell: ({ row }) => (
-      <Cell>v{row.original.version}</Cell>
-    ),
+    cell: ({ row }) => <Cell>v{row.original.version}</Cell>,
     size: 150,
   },
   {

@@ -24,7 +24,13 @@ export interface ExperimentTriggerDialogProps {
   onSuccess?: (experimentId: string) => void;
 }
 
-export function ExperimentTriggerDialog({ datasetId, version, open, onOpenChange, onSuccess }: ExperimentTriggerDialogProps) {
+export function ExperimentTriggerDialog({
+  datasetId,
+  version,
+  open,
+  onOpenChange,
+  onSuccess,
+}: ExperimentTriggerDialogProps) {
   const [targetType, setTargetType] = useState<TargetType | ''>('');
   const [targetId, setTargetId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);

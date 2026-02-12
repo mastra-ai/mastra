@@ -14,7 +14,8 @@ export function ScoreDelta({ delta }: ScoreDeltaProps) {
 
   return (
     <span className={cn('font-mono text-sm', 'text-neutral4')}>
-      {arrow} {delta > 0 ? '+' : ''}{delta.toFixed(2)}
+      {arrow} {delta > 0 ? '+' : ''}
+      {delta.toFixed(2)}
     </span>
   );
 }
