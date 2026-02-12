@@ -7,6 +7,7 @@
 
 import matter from 'gray-matter';
 
+import { isGlobPattern, extractGlobBase, createGlobMatcher } from '../glob';
 import type { IndexDocument, SearchResult } from '../search';
 import { validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
@@ -364,14 +365,75 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Discover skills from all skills paths.
    * Uses currently resolved paths (must be set before calling).
+   *
+   * Paths can be plain directories (e.g., '/skills') or glob patterns
+   * (e.g., '**\/skills'). Glob patterns resolve to directories that match
+   * the pattern, each of which is then scanned for skills.
    */
   async #discoverSkills(): Promise<void> {
     for (const skillsPath of this.#resolvedPaths) {
       const source = this.#determineSource(skillsPath);
-      await this.#discoverSkillsInPath(skillsPath, source);
+
+      if (isGlobPattern(skillsPath)) {
+        // Glob pattern: resolve to matching directories, then discover in each
+        const matchingDirs = await this.#resolveGlobToDirectories(skillsPath);
+        for (const dir of matchingDirs) {
+          await this.#discoverSkillsInPath(dir, source);
+        }
+      } else {
+        // Plain path: existing behavior
+        await this.#discoverSkillsInPath(skillsPath, source);
+      }
     }
     // Track when discovery completed for staleness check
     this.#lastDiscoveryTime = Date.now();
+  }
+
+  /**
+   * Resolve a glob pattern to a list of matching directories.
+   * Walks from extractGlobBase() and tests each directory against the pattern.
+   */
+  async #resolveGlobToDirectories(pattern: string): Promise<string[]> {
+    const walkRoot = extractGlobBase(pattern);
+    // Strip leading slash from pattern for relative matching
+    const normalizedPattern = pattern.startsWith('/') ? pattern.slice(1) : pattern;
+    const matcher = createGlobMatcher(normalizedPattern, { dot: true });
+    const matchingDirs: string[] = [];
+
+    await this.#walkForDirectories(walkRoot, dirPath => {
+      const relativePath = dirPath.startsWith('/') ? dirPath.slice(1) : dirPath;
+      if (matcher(relativePath)) {
+        matchingDirs.push(dirPath);
+      }
+    });
+
+    return matchingDirs;
+  }
+
+  /**
+   * Walk a directory tree and call callback for each directory found.
+   */
+  async #walkForDirectories(
+    basePath: string,
+    callback: (dirPath: string) => void,
+    depth: number = 0,
+    maxDepth: number = 20,
+  ): Promise<void> {
+    if (depth >= maxDepth) return;
+
+    try {
+      const entries = await this.#source.readdir(basePath);
+      for (const entry of entries) {
+        if (entry.type !== 'directory') continue;
+        // Use explicit path construction to handle root '/' correctly
+        // (#joinPath strips root '/', so we handle it directly)
+        const entryPath = basePath === '/' ? `/${entry.name}` : `${basePath}/${entry.name}`;
+        callback(entryPath);
+        await this.#walkForDirectories(entryPath, callback, depth + 1, maxDepth);
+      }
+    } catch {
+      // Directory doesn't exist or can't be read, skip
+    }
   }
 
   /**
@@ -417,6 +479,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Check if any skills path directory has been modified since last discovery.
    * Compares directory mtime to lastDiscoveryTime.
+   * For glob patterns, checks the walk root and expanded directories.
    */
   async #isSkillsPathStale(): Promise<boolean> {
     if (this.#lastDiscoveryTime === 0) {
@@ -425,8 +488,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
 
     for (const skillsPath of this.#resolvedPaths) {
+      // For glob patterns, check the walk root directory
+      const pathToCheck = isGlobPattern(skillsPath) ? extractGlobBase(skillsPath) : skillsPath;
+
       try {
-        const stat = await this.#source.stat(skillsPath);
+        const stat = await this.#source.stat(pathToCheck);
         const mtime = stat.modifiedAt.getTime();
 
         if (mtime > this.#lastDiscoveryTime) {
@@ -434,11 +500,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         }
 
         // Also check subdirectories (skill directories) for changes
-        const entries = await this.#source.readdir(skillsPath);
+        const entries = await this.#source.readdir(pathToCheck);
         for (const entry of entries) {
           if (entry.type !== 'directory') continue;
 
-          const entryPath = this.#joinPath(skillsPath, entry.name);
+          const entryPath = this.#joinPath(pathToCheck, entry.name);
           try {
             const entryStat = await this.#source.stat(entryPath);
             if (entryStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {

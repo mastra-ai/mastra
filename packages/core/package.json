@@ -230,6 +230,7 @@
     "lru-cache": "^11.2.2",
     "p-map": "^7.0.3",
     "p-retry": "^7.1.0",
+    "picomatch": "^4.0.3",
     "radash": "^12.1.1",
     "xxhash-wasm": "^1.1.0"
   },

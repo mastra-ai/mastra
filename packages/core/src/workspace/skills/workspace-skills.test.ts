@@ -1009,6 +1009,97 @@ Instructions for the new skill.`;
     });
   });
 
+  describe('glob skills paths', () => {
+    it('should discover skills in directories matching glob pattern', async () => {
+      const filesystem = createMockFilesystem({
+        '/project/src/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/project/lib/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['**/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should still work with plain paths (backward compat)', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('test-skill');
+    });
+
+    it('should return empty list when glob matches no directories', async () => {
+      const filesystem = createMockFilesystem({
+        '/other/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['**/nonexistent'],
+      });
+
+      const result = await skills.list();
+      expect(result).toEqual([]);
+    });
+
+    it('should mix plain paths and glob patterns', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/project/nested/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills', '**/nested/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should discover skills in dot-directories via glob', async () => {
+      const filesystem = createMockFilesystem({
+        '/.agents/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['**/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should handle glob pattern with non-existent base gracefully', async () => {
+      const filesystem = createMockFilesystem({});
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/nonexistent/**/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('dynamic skills paths', () => {
     const BASIC_SKILL_MD = `---
 name: basic-skill
