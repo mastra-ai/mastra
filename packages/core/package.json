@@ -267,6 +267,7 @@
     "@types/babel__core": "^7.20.5",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.7",
+    "@types/picomatch": "4.0.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

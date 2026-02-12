@@ -6,7 +6,6 @@
  * brace expansion, character classes, negation, and `**`.
  */
 
-// @ts-expect-error picomatch v4 has no types
 import picomatch from 'picomatch';
 
 // =============================================================================

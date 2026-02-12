@@ -91,9 +91,9 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /** Currently resolved skills paths (used to detect changes) */
   #resolvedPaths: string[] = [];
 
-  /** Cached glob-resolved directories and when they were last resolved */
+  /** Cached glob-resolved directories and per-pattern resolve timestamps */
   #globDirCache: Map<string, string[]> = new Map();
-  #lastGlobResolveTime = 0;
+  #globResolveTimes: Map<string, number> = new Map();
   static readonly GLOB_RESOLVE_INTERVAL = 5_000; // Re-walk glob dirs every 5s
 
   constructor(config: WorkspaceSkillsImplConfig) {
@@ -378,7 +378,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async #discoverSkills(): Promise<void> {
     // Clear glob cache so discovery gets fresh results
     this.#globDirCache.clear();
-    this.#lastGlobResolveTime = 0;
+    this.#globResolveTimes.clear();
 
     for (const skillsPath of this.#resolvedPaths) {
       const source = this.#determineSource(skillsPath);
@@ -388,7 +388,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
         const matchingDirs = await this.#resolveGlobToDirectories(skillsPath);
         // Cache for subsequent staleness checks
         this.#globDirCache.set(skillsPath, matchingDirs);
-        this.#lastGlobResolveTime = Date.now();
+        this.#globResolveTimes.set(skillsPath, Date.now());
         for (const dir of matchingDirs) {
           await this.#discoverSkillsInPath(dir, source);
         }
@@ -505,13 +505,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       if (isGlobPattern(skillsPath)) {
         // Use cached glob dirs, re-resolve periodically to discover new directories
         const now = Date.now();
-        if (
-          now - this.#lastGlobResolveTime > WorkspaceSkillsImpl.GLOB_RESOLVE_INTERVAL ||
-          !this.#globDirCache.has(skillsPath)
-        ) {
+        const lastResolved = this.#globResolveTimes.get(skillsPath) ?? 0;
+        if (now - lastResolved > WorkspaceSkillsImpl.GLOB_RESOLVE_INTERVAL || !this.#globDirCache.has(skillsPath)) {
           const dirs = await this.#resolveGlobToDirectories(skillsPath);
           this.#globDirCache.set(skillsPath, dirs);
-          this.#lastGlobResolveTime = now;
+          this.#globResolveTimes.set(skillsPath, now);
         }
         pathsToCheck = this.#globDirCache.get(skillsPath) ?? [];
       } else {
