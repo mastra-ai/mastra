@@ -54,7 +54,7 @@
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
-    "commander": "^14.0.2",
+    "commander": "^14.0.3",
     "dotenv": "^17.2.3",
     "execa": "^9.6.1",
     "fs-extra": "^11.3.3",

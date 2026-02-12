@@ -1,18 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
-import { Trash2, ChevronRight } from 'lucide-react';
+import { Trash2, ChevronRight, Plus } from 'lucide-react';
 
 import { JudgeIcon, Icon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { IconButton } from '@/ds/components/IconButton';
+import { Button } from '@/ds/components/Button';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 import type { AgentFormValues } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
+import { SideDialog } from '@/ds/components/SideDialog';
 
 interface ScorersSectionProps {
   control: Control<AgentFormValues>;
@@ -32,6 +35,7 @@ interface ScorerConfig {
 
 export function ScorersSection({ control, error, readOnly = false }: ScorersSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { data: scorers, isLoading } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
   const count = Object.keys(selectedScorers || {}).length;
@@ -52,90 +56,118 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
 
   return (
     <div className="rounded-md border border-border1 bg-surface2">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
-          <ChevronRight className="h-4 w-4 text-icon3" />
-          <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
-            Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
-          </SectionTitle>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="p-3 border-t border-border1">
-            <Controller
-              name="scorers"
-              control={control}
-              render={({ field }) => {
-                const selectedScorers = field.value || {};
-                const selectedIds = Object.keys(selectedScorers);
-                const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+      <Controller
+        name="scorers"
+        control={control}
+        render={({ field }) => {
+          const selectedScorers = field.value || {};
+          const selectedIds = Object.keys(selectedScorers);
+          const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
 
-                const handleValueChange = (newIds: string[]) => {
-                  const newScorers: Record<string, ScorerConfig> = {};
-                  for (const id of newIds) {
-                    newScorers[id] = selectedScorers[id] || {
-                      description: getOriginalDescription(id),
-                    };
-                  }
-                  field.onChange(newScorers);
-                };
+          const handleValueChange = (newIds: string[]) => {
+            const newScorers: Record<string, ScorerConfig> = {};
+            for (const id of newIds) {
+              newScorers[id] = selectedScorers[id] || {
+                description: getOriginalDescription(id),
+              };
+            }
+            field.onChange(newScorers);
+          };
 
-                const handleDescriptionChange = (scorerId: string, description: string) => {
-                  field.onChange({
-                    ...selectedScorers,
-                    [scorerId]: { ...selectedScorers[scorerId], description },
-                  });
-                };
+          const handleDescriptionChange = (scorerId: string, description: string) => {
+            field.onChange({
+              ...selectedScorers,
+              [scorerId]: { ...selectedScorers[scorerId], description },
+            });
+          };
 
-                const handleSamplingChange = (scorerId: string, samplingConfig: ScoringSamplingConfig | undefined) => {
-                  field.onChange({
-                    ...selectedScorers,
-                    [scorerId]: { ...selectedScorers[scorerId], sampling: samplingConfig },
-                  });
-                };
+          const handleSamplingChange = (scorerId: string, samplingConfig: ScoringSamplingConfig | undefined) => {
+            field.onChange({
+              ...selectedScorers,
+              [scorerId]: { ...selectedScorers[scorerId], sampling: samplingConfig },
+            });
+          };
 
-                const handleRemove = (scorerId: string) => {
-                  const newScorers = { ...selectedScorers };
-                  delete newScorers[scorerId];
-                  field.onChange(newScorers);
-                };
+          const handleRemove = (scorerId: string) => {
+            const newScorers = { ...selectedScorers };
+            delete newScorers[scorerId];
+            field.onChange(newScorers);
+          };
 
-                return (
-                  <div className="flex flex-col gap-2">
-                    <MultiCombobox
-                      options={options}
-                      value={selectedIds}
-                      onValueChange={handleValueChange}
-                      placeholder="Select scorers..."
-                      searchPlaceholder="Search scorers..."
-                      emptyText="No scorers available"
-                      disabled={isLoading || readOnly}
-                      error={error}
-                      variant="light"
-                    />
-                    {selectedOptions.length > 0 && (
-                      <div className="flex flex-col gap-3 mt-2">
-                        {selectedOptions.map(scorer => (
-                          <ScorerConfigPanel
-                            key={scorer.value}
-                            scorerId={scorer.value}
-                            scorerName={scorer.label}
-                            description={selectedScorers[scorer.value]?.description || ''}
-                            samplingConfig={selectedScorers[scorer.value]?.sampling}
-                            onDescriptionChange={desc => handleDescriptionChange(scorer.value, desc)}
-                            onSamplingChange={config => handleSamplingChange(scorer.value, config)}
-                            onRemove={() => handleRemove(scorer.value)}
-                            readOnly={readOnly}
-                          />
-                        ))}
-                      </div>
-                    )}
+          return (
+            <>
+              <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+                <div className="flex items-center justify-between p-3 bg-surface3">
+                  <CollapsibleTrigger className="flex items-center gap-1 w-full">
+                    <ChevronRight className="h-4 w-4 text-icon3" />
+                    <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
+                      Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
+                    </SectionTitle>
+                  </CollapsibleTrigger>
+
+                  {!readOnly && (
+                    <div className="flex justify-end items-center">
+                      <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+                        <Icon size="sm">
+                          <Plus />
+                        </Icon>
+                        Create
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <CollapsibleContent>
+                  <div className="p-3 border-t border-border1">
+                    <div className="flex flex-col gap-2">
+                      <MultiCombobox
+                        options={options}
+                        value={selectedIds}
+                        onValueChange={handleValueChange}
+                        placeholder="Select scorers..."
+                        searchPlaceholder="Search scorers..."
+                        emptyText="No scorers available"
+                        disabled={isLoading || readOnly}
+                        error={error}
+                        variant="light"
+                      />
+
+                      {selectedOptions.length > 0 && (
+                        <div className="flex flex-col gap-3 mt-2">
+                          {selectedOptions.map(scorer => (
+                            <ScorerConfigPanel
+                              key={scorer.value}
+                              scorerId={scorer.value}
+                              scorerName={scorer.label}
+                              description={selectedScorers[scorer.value]?.description || ''}
+                              samplingConfig={selectedScorers[scorer.value]?.sampling}
+                              onDescriptionChange={desc => handleDescriptionChange(scorer.value, desc)}
+                              onSamplingChange={config => handleSamplingChange(scorer.value, config)}
+                              onRemove={() => handleRemove(scorer.value)}
+                              readOnly={readOnly}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                );
-              }}
-            />
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+                </CollapsibleContent>
+              </Collapsible>
+              <ScorersSideDialog
+                isOpen={isCreateDialogOpen}
+                onClose={() => setIsCreateDialogOpen(false)}
+                onScorerCreated={scorer => {
+                  field.onChange({
+                    ...selectedScorers,
+                    [scorer.id]: { description: '' },
+                  });
+                  setIsCreateDialogOpen(false);
+                }}
+              />
+            </>
+          );
+        }}
+      />
     </div>
   );
 }
@@ -250,3 +282,27 @@ function ScorerConfigPanel({
     </div>
   );
 }
+
+interface ScorersSideDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onScorerCreated?: (scorer: { id: string }) => void;
+}
+
+const ScorersSideDialog = ({ isOpen, onClose, onScorerCreated }: ScorersSideDialogProps) => {
+  return (
+    <SideDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      dialogTitle="Create a new scorer"
+      dialogDescription="Create a new scorer to evaluate the performance of your agents."
+    >
+      <SideDialog.Top>
+        <SideDialog.Header>
+          <SideDialog.Heading>Create a new scorer</SideDialog.Heading>
+        </SideDialog.Header>
+      </SideDialog.Top>
+      <ScorerCreateContent onSuccess={onScorerCreated} />
+    </SideDialog>
+  );
+};
