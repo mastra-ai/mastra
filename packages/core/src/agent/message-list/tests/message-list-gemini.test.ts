@@ -514,6 +514,181 @@ describe('MessageList - Gemini Compatibility', () => {
     });
   });
 
+  describe('empty reasoning parts filtering - Issue #12980', () => {
+    // Gemini with reasoning tokens can produce empty reasoning parts: {"type":"reasoning","text":""}
+    // When stored in memory and sent back to Gemini on the next turn, Gemini rejects with:
+    // "Unable to submit request because it must include at least one parts field"
+    // Empty reasoning parts should be filtered out, similar to how empty text parts are handled.
+
+    it('should filter out empty reasoning parts from assistant messages in prompt()', () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+
+      // Simulate assistant response with empty reasoning part (from Gemini with reasoning tokens)
+      const assistantWithEmptyReasoning: MastraDBMessage = {
+        id: 'msg-empty-reasoning',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+            },
+            { type: 'text', text: 'Hello! How can I help you?' },
+          ],
+          content: 'Hello! How can I help you?',
+        },
+      };
+
+      list.add(assistantWithEmptyReasoning, 'memory');
+      list.add({ role: 'user', content: 'Follow up question' }, 'input');
+
+      const prompt = list.get.all.aiV5.prompt();
+
+      // Find the assistant message
+      const assistantMsg = prompt.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      // Empty reasoning parts should be filtered out
+      if (typeof assistantMsg!.content !== 'string') {
+        const reasoningParts = assistantMsg!.content.filter((p: any) => p.type === 'reasoning');
+        for (const rp of reasoningParts) {
+          // No reasoning part should have empty text
+          expect((rp as any).text).not.toBe('');
+        }
+      }
+
+      // Text part should still be present
+      if (typeof assistantMsg!.content !== 'string') {
+        const textParts = assistantMsg!.content.filter((p: any) => p.type === 'text');
+        expect(textParts.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should filter out empty reasoning parts from llmPrompt()', async () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+
+      const assistantWithEmptyReasoning: MastraDBMessage = {
+        id: 'msg-empty-reasoning-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+            },
+            { type: 'text', text: 'Here is my response' },
+          ],
+          content: 'Here is my response',
+        },
+      };
+
+      list.add(assistantWithEmptyReasoning, 'memory');
+      list.add({ role: 'user', content: 'Follow up' }, 'input');
+
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+
+      const assistantMsg = llmPrompt.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      if (typeof assistantMsg!.content !== 'string') {
+        const reasoningParts = assistantMsg!.content.filter((p: any) => p.type === 'reasoning');
+        for (const rp of reasoningParts) {
+          expect((rp as any).text).not.toBe('');
+        }
+      }
+    });
+
+    it('should remove assistant message entirely when only part is empty reasoning', () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+
+      // Simulate the exact scenario from the issue: {"role":"assistant","content":[{"type":"reasoning","text":""}]}
+      const assistantOnlyEmptyReasoning: MastraDBMessage = {
+        id: 'msg-only-empty-reasoning',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: '' }],
+            },
+          ],
+          content: '',
+        },
+      };
+
+      list.add(assistantOnlyEmptyReasoning, 'memory');
+      list.add({ role: 'user', content: 'Follow up question' }, 'input');
+
+      const prompt = list.get.all.aiV5.prompt();
+
+      // No messages should have empty content arrays (Gemini would reject)
+      for (const msg of prompt) {
+        if (typeof msg.content !== 'string') {
+          expect(msg.content.length).toBeGreaterThan(0);
+          // No empty reasoning parts
+          const emptyReasoningParts = msg.content.filter(
+            (p: any) => p.type === 'reasoning' && (!p.text || p.text === ''),
+          );
+          expect(emptyReasoningParts.length).toBe(0);
+        }
+      }
+    });
+
+    it('should preserve non-empty reasoning parts', () => {
+      const list = new MessageList();
+
+      list.add({ role: 'user', content: 'Hello' }, 'input');
+
+      const assistantWithReasoning: MastraDBMessage = {
+        id: 'msg-with-reasoning',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'reasoning',
+              reasoning: '',
+              details: [{ type: 'text', text: 'Let me think about this...' }],
+            },
+            { type: 'text', text: 'Here is my answer' },
+          ],
+          content: 'Here is my answer',
+        },
+      };
+
+      list.add(assistantWithReasoning, 'memory');
+      list.add({ role: 'user', content: 'Thanks' }, 'input');
+
+      const prompt = list.get.all.aiV5.prompt();
+
+      const assistantMsg = prompt.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+
+      // Non-empty reasoning should be preserved
+      if (typeof assistantMsg!.content !== 'string') {
+        const reasoningParts = assistantMsg!.content.filter((p: any) => p.type === 'reasoning');
+        expect(reasoningParts.length).toBe(1);
+        expect((reasoningParts[0] as any).text).toBe('Let me think about this...');
+      }
+    });
+  });
+
   describe('Agent Network scenarios', () => {
     it('should handle agent network memory pattern correctly', () => {
       const list = new MessageList();

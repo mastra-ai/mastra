@@ -74,6 +74,14 @@ export function sanitizeV5UIMessages(
           if (hasNonEmptyParts) return false;
         }
 
+        // Filter out empty reasoning parts without providerMetadata (Issue #12980)
+        // Gemini with reasoning tokens can produce empty reasoning parts that get stored in memory.
+        // When sent back, Gemini rejects with "must include at least one parts field".
+        // Preserve empty reasoning parts that have providerMetadata (e.g. OpenAI encrypted reasoning).
+        if (p.type === 'reasoning' && (!('text' in p) || !p.text) && !('providerMetadata' in p && p.providerMetadata)) {
+          return false;
+        }
+
         if (!AIV5.isToolUIPart(p)) return true;
 
         // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
