@@ -4,7 +4,7 @@ import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
-import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { LoopConfig, LoopOptions, PrepareStepFunction, RepairToolCallFunction } from '../loop/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -595,6 +595,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * ```
    */
   delegation?: DelegationConfig;
+
+  /** Hook to repair tool calls with malformed args or unknown tool names. */
+  repairToolCall?: RepairToolCallFunction;
 } & Partial<ObservabilityContext>;
 
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &

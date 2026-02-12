@@ -2,21 +2,15 @@
 '@mastra/core': patch
 ---
 
-Tool calls with malformed JSON arguments from certain LLM providers (e.g., Kimi/K2) are now automatically repaired instead of silently setting `args` to `undefined`. (#11078)
+Fix tool calls with malformed JSON arguments from certain LLM providers (e.g., Kimi/K2) silently failing. (#11078)
 
-The following malformation patterns are handled:
+**Auto-repair** — four common malformation patterns are now fixed before parsing:
 
-- **Missing opening quote on property names**: `{"a":"b",c":"d"}` → `{"a":"b","c":"d"}`
-- **Fully unquoted property names**: `{command:"ls"}` → `{"command":"ls"}`
-- **Single quotes instead of double quotes**: `{'key':'val'}` → `{"key":"val"}`
-- **Trailing commas**: `{"a":1,}` → `{"a":1}`
+- Missing opening quote on property names: `{"a":"b",c":"d"}` → `{"a":"b","c":"d"}`
+- Fully unquoted property names: `{command:"ls"}` → `{"command":"ls"}`
+- Single quotes instead of double quotes: `{'key':'val'}` → `{"key":"val"}`
+- Trailing commas: `{"a":1,}` → `{"a":1}`
 
-Repair is applied automatically in the V5 stream transform when `JSON.parse()` fails on tool call input. If repair also fails, the existing fallback (`args: undefined`) is preserved. A `tryRepairJson` utility is exported from `@mastra/core` for advanced use cases:
+**Model retry** — unrepairable JSON now returns a `parseError` through the error pipeline so the model can self-correct.
 
-```ts
-import { tryRepairJson } from '@mastra/core/stream/aisdk/v5/transform';
-
-const result = tryRepairJson('{command:"git status",verbose:true,}');
-// => { command: "git status", verbose: true }
-```
-
+**`repairToolCall` hook** — new option on agent execution for custom repair logic when auto-repair isn't enough or the tool name is unknown.
