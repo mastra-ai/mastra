@@ -34,6 +34,7 @@ import { isZodType } from '../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
+import { forwardAgentStreamChunk } from './stream-utils';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -479,7 +480,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         });
       } else {
         for await (const chunk of stream) {
-          await writer.write(chunk as any);
+          await forwardAgentStreamChunk({ writer, chunk });
           if (chunk.type === 'tripwire') {
             tripwireChunk = chunk;
             break;
