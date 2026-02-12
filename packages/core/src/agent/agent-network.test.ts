@@ -6101,13 +6101,26 @@ describe('Agent - network - requestContext propagation (issue #12330)', () => {
 
 describe('Agent - network - tracingContext propagation', () => {
   const createMockSpan = () => {
-    const span: any = {
+    let span: any;
+    const tracker = {
+      getTracingContext: () => ({ currentSpan: span }),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      wrapStream: <T>(stream: T) => stream,
+      startStep: vi.fn(),
+    };
+
+    span = {
       id: 'test-span-id',
       traceId: 'test-trace-id',
       isValid: true,
       externalTraceId: 'test-trace-id',
+      parent: undefined,
       createChildSpan: vi.fn(),
       createChildEvent: vi.fn(),
+      createEventSpan: vi.fn(),
+      createTracker: vi.fn(() => tracker),
+      findParent: vi.fn(),
       end: vi.fn(),
       update: vi.fn(),
       error: vi.fn(),
@@ -6117,6 +6130,8 @@ describe('Agent - network - tracingContext propagation', () => {
 
     span.createChildSpan.mockImplementation(() => createMockSpan());
     span.createChildEvent.mockImplementation(() => createMockSpan());
+    span.createEventSpan.mockImplementation(() => createMockSpan());
+    span.findParent.mockImplementation(() => undefined);
 
     return span;
   };
@@ -6221,7 +6236,10 @@ describe('Agent - network - tracingContext propagation', () => {
 
     expect(subAgentStreamSpy).toHaveBeenCalled();
     const subAgentStreamOptions = subAgentStreamSpy.mock.calls[0]?.[1] as any;
-    expect(subAgentStreamOptions?.tracingContext?.currentSpan).toBe(rootSpan);
+    const propagatedSpan = subAgentStreamOptions?.tracingContext?.currentSpan;
+    expect(propagatedSpan).toBeDefined();
+    expect(propagatedSpan).not.toBe(rootSpan);
+    expect(propagatedSpan?.traceId).toBe(rootSpan.traceId);
   });
 });
 
