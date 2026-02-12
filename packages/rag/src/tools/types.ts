@@ -50,8 +50,6 @@ export interface PgVectorConfig {
   minScore?: number;
   ef?: number; // HNSW search parameter
   probes?: number; // IVFFlat probe parameter
-  /** PostgreSQL text search configuration name for full-text queries (default: 'english') */
-  language?: string;
 }
 
 // Chroma types
