@@ -1,5 +1,5 @@
-import { SchemaValidationError, SchemaUpdateValidationError } from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
+import { coreFeatures } from '@mastra/core/features';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
@@ -36,6 +36,38 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 // ============================================================================
+// Feature gate + local type guards
+// ============================================================================
+
+function assertDatasetsAvailable(): void {
+  if (!coreFeatures.has('datasets')) {
+    throw new HTTPException(501, { message: 'Datasets require @mastra/core >= 1.4.0' });
+  }
+}
+
+interface SchemaValidationLike extends Error {
+  field: 'input' | 'groundTruth';
+  errors: Array<{ path: string; code: string; message: string }>;
+}
+
+interface SchemaUpdateValidationLike extends Error {
+  failingItems: Array<{
+    index: number;
+    data: unknown;
+    field: 'input' | 'groundTruth';
+    errors: Array<{ path: string; code: string; message: string }>;
+  }>;
+}
+
+function isSchemaValidationError(error: unknown): error is SchemaValidationLike {
+  return error instanceof Error && error.name === 'SchemaValidationError';
+}
+
+function isSchemaUpdateValidationError(error: unknown): error is SchemaUpdateValidationLike {
+  return error instanceof Error && error.name === 'SchemaUpdateValidationError';
+}
+
+// ============================================================================
 // Helper: Map MastraError IDs to HTTP status codes
 // ============================================================================
 
@@ -64,6 +96,7 @@ export const LIST_DATASETS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { page, perPage } = params;
       const result = await mastra.datasets.list({ page: page ?? 0, perPage: perPage ?? 10 });
@@ -91,6 +124,7 @@ export const CREATE_DATASET_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
         name: string;
@@ -128,6 +162,7 @@ export const GET_DATASET_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId }) => {
+    assertDatasetsAvailable();
     try {
       const ds = await mastra.datasets.get({ id: datasetId });
       return (await ds.getDetails()) as any;
@@ -152,6 +187,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
         name?: string;
@@ -170,13 +206,13 @@ export const UPDATE_DATASET_ROUTE = createRoute({
       });
       return result as any;
     } catch (error) {
-      if (error instanceof SchemaUpdateValidationError) {
+      if (isSchemaUpdateValidationError(error)) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { failingItems: error.failingItems },
         });
       }
-      if (error instanceof SchemaValidationError) {
+      if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
@@ -201,6 +237,7 @@ export const DELETE_DATASET_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId }) => {
+    assertDatasetsAvailable();
     try {
       await mastra.datasets.get({ id: datasetId }); // validates existence
       await mastra.datasets.delete({ id: datasetId });
@@ -230,6 +267,7 @@ export const LIST_ITEMS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { page, perPage, version, search } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -265,6 +303,7 @@ export const ADD_ITEM_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { input, groundTruth, metadata } = params as {
         input: unknown;
@@ -274,7 +313,7 @@ export const ADD_ITEM_ROUTE = createRoute({
       const ds = await mastra.datasets.get({ id: datasetId });
       return await ds.addItem({ input, groundTruth, metadata });
     } catch (error) {
-      if (error instanceof SchemaValidationError) {
+      if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
@@ -299,6 +338,7 @@ export const GET_ITEM_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId }) => {
+    assertDatasetsAvailable();
     try {
       const ds = await mastra.datasets.get({ id: datasetId });
       const item = await ds.getItem({ itemId });
@@ -327,6 +367,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { input, groundTruth, metadata } = params as {
         input?: unknown;
@@ -341,7 +382,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       }
       return await ds.updateItem({ itemId, input, groundTruth, metadata });
     } catch (error) {
-      if (error instanceof SchemaValidationError) {
+      if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
@@ -366,6 +407,7 @@ export const DELETE_ITEM_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId }) => {
+    assertDatasetsAvailable();
     try {
       const ds = await mastra.datasets.get({ id: datasetId });
       const existing = await ds.getItem({ itemId });
@@ -399,6 +441,7 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { page, perPage } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -426,6 +469,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { targetType, targetId, scorerIds, version, maxConcurrency } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
@@ -473,6 +517,7 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, experimentId }) => {
+    assertDatasetsAvailable();
     try {
       const ds = await mastra.datasets.get({ id: datasetId });
       const run = await ds.getExperiment({ experimentId });
@@ -501,6 +546,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { page, perPage } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -539,6 +585,7 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { experimentIdA, experimentIdB } = params as {
         experimentIdA: string;
@@ -576,6 +623,7 @@ export const LIST_DATASET_VERSIONS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { page, perPage } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -601,6 +649,7 @@ export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId }) => {
+    assertDatasetsAvailable();
     try {
       const ds = await mastra.datasets.get({ id: datasetId });
       const rows = await ds.getItemHistory({ itemId });
@@ -629,6 +678,7 @@ export const GET_ITEM_VERSION_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, itemId, datasetVersion }) => {
+    assertDatasetsAvailable();
     try {
       const ds = await mastra.datasets.get({ id: datasetId });
       const item = await ds.getItem({ itemId, version: datasetVersion });
@@ -664,6 +714,7 @@ export const BULK_ADD_ITEMS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { items } = params as {
         items: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }>;
@@ -672,7 +723,7 @@ export const BULK_ADD_ITEMS_ROUTE = createRoute({
       const addedItems = await ds.addItems({ items });
       return { items: addedItems, count: addedItems.length };
     } catch (error) {
-      if (error instanceof SchemaValidationError) {
+      if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
           message: error.message,
           cause: { field: error.field, errors: error.errors },
@@ -698,6 +749,7 @@ export const BULK_DELETE_ITEMS_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
+    assertDatasetsAvailable();
     try {
       const { itemIds } = params as { itemIds: string[] };
       const ds = await mastra.datasets.get({ id: datasetId });
