@@ -96,7 +96,7 @@ function execWithStreaming(
 /**
  * Local sandbox provider configuration.
  */
-export interface LocalSandboxOptions extends Pick<MastraSandboxOptions, 'onStart' | 'onStop' | 'onDestroy'> {
+export interface LocalSandboxOptions extends MastraSandboxOptions {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** Working directory for command execution */
@@ -206,7 +206,7 @@ export class LocalSandbox extends MastraSandbox {
   }
 
   constructor(options: LocalSandboxOptions = {}) {
-    super({ name: 'LocalSandbox', onStart: options.onStart, onStop: options.onStop, onDestroy: options.onDestroy });
+    super({ ...options, name: 'LocalSandbox' });
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles

@@ -471,6 +471,7 @@ export class AgentsPG extends AgentsStorage {
         'memory',
         'scorers',
         'mcpClients',
+        'requestContextSchema',
       ];
 
       // Check if any config fields are present in the update
@@ -708,9 +709,9 @@ export class AgentsPG extends AgentsStorage {
           name, description, instructions, model, tools,
           "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers,
-          "mcpClients", "changedFields", "changeMessage",
+          "mcpClients", "requestContextSchema", "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         [
           input.id,
           input.agentId,
@@ -729,6 +730,7 @@ export class AgentsPG extends AgentsStorage {
           input.memory ? JSON.stringify(input.memory) : null,
           input.scorers ? JSON.stringify(input.scorers) : null,
           input.mcpClients ? JSON.stringify(input.mcpClients) : null,
+          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -996,6 +998,7 @@ export class AgentsPG extends AgentsStorage {
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
       mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,

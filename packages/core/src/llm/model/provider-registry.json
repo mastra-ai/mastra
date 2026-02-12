@@ -202,6 +202,7 @@
         "gemma3:4b",
         "glm-4.6",
         "glm-4.7",
+        "glm-5",
         "gpt-oss:120b",
         "gpt-oss:20b",
         "kimi-k2-thinking",
@@ -1579,7 +1580,8 @@
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2.5",
         "zai-org/GLM-4.7",
-        "zai-org/GLM-4.7-Flash"
+        "zai-org/GLM-4.7-Flash",
+        "zai-org/GLM-5"
       ],
       "docUrl": "https://huggingface.co/docs/inference-providers",
       "gateway": "models.dev"
@@ -2058,7 +2060,6 @@
         "openai/gpt-oss-20b:free",
         "openai/gpt-oss-safeguard-20b",
         "openai/o4-mini",
-        "openrouter/pony-alpha",
         "openrouter/sherlock-dash-alpha",
         "openrouter/sherlock-think-alpha",
         "qwen/qwen-2.5-coder-32b-instruct",
@@ -2111,7 +2112,8 @@
         "z-ai/glm-4.6",
         "z-ai/glm-4.6:exacto",
         "z-ai/glm-4.7",
-        "z-ai/glm-4.7-flash"
+        "z-ai/glm-4.7-flash",
+        "z-ai/glm-5"
       ],
       "docUrl": "https://openrouter.ai/models",
       "gateway": "models.dev",
@@ -2273,8 +2275,8 @@
         "hf:moonshotai/Kimi-K2-Instruct-0905",
         "hf:moonshotai/Kimi-K2-Thinking",
         "hf:moonshotai/Kimi-K2.5",
+        "hf:nvidia/Kimi-K2.5-NVFP4",
         "hf:openai/gpt-oss-120b",
-        "hf:zai-org/GLM-4.5",
         "hf:zai-org/GLM-4.6",
         "hf:zai-org/GLM-4.7"
       ],
@@ -2359,6 +2361,8 @@
         "mistralai/mistral-large-3-675b-instruct-2512",
         "moonshotai/kimi-k2-instruct",
         "moonshotai/kimi-k2-thinking",
+        "moonshotai/kimi-k2.5",
+        "moonshotai/kimi-k2.5-thinking",
         "nousresearch/hermes-4-405b:thinking",
         "nvidia/llama-3_3-nemotron-super-49b-v1_5",
         "openai/gpt-oss-120b",
@@ -2369,7 +2373,9 @@
         "zai-org/glm-4.5-air",
         "zai-org/glm-4.5-air:thinking",
         "zai-org/glm-4.7",
-        "zai-org/glm-4.7:thinking"
+        "zai-org/glm-4.7:thinking",
+        "zai-org/glm-5",
+        "zai-org/glm-5:thinking"
       ],
       "docUrl": "https://docs.nano-gpt.com",
       "gateway": "models.dev"
@@ -2508,7 +2514,8 @@
         "Qwen/Qwen3-235B-A22B-Instruct-2507",
         "meta-llama/Llama-3.1-8B-Instruct",
         "meta-llama/Llama-3.3-70B-Instruct",
-        "zai-org/GLM-4.7"
+        "zai-org/GLM-4.7",
+        "zai-org/GLM-5"
       ],
       "docUrl": "https://friendli.ai/docs/guides/serverless_endpoints/introduction",
       "gateway": "models.dev"
@@ -2839,7 +2846,7 @@
     "cerebras": {
       "apiKeyEnvVar": "CEREBRAS_API_KEY",
       "name": "Cerebras",
-      "models": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"],
+      "models": ["gpt-oss-120b", "llama3.1-8b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"],
       "docUrl": "https://inference-docs.cerebras.ai/models/overview",
       "gateway": "models.dev",
       "npm": "@ai-sdk/cerebras"
@@ -3038,6 +3045,7 @@
       "gemma3:4b",
       "glm-4.6",
       "glm-4.7",
+      "glm-5",
       "gpt-oss:120b",
       "gpt-oss:20b",
       "kimi-k2-thinking",
@@ -4192,7 +4200,8 @@
       "moonshotai/Kimi-K2-Thinking",
       "moonshotai/Kimi-K2.5",
       "zai-org/GLM-4.7",
-      "zai-org/GLM-4.7-Flash"
+      "zai-org/GLM-4.7-Flash",
+      "zai-org/GLM-5"
     ],
     "opencode": [
       "big-pickle",
@@ -4569,7 +4578,6 @@
       "openai/gpt-oss-20b:free",
       "openai/gpt-oss-safeguard-20b",
       "openai/o4-mini",
-      "openrouter/pony-alpha",
       "openrouter/sherlock-dash-alpha",
       "openrouter/sherlock-think-alpha",
       "qwen/qwen-2.5-coder-32b-instruct",
@@ -4622,7 +4630,8 @@
       "z-ai/glm-4.6",
       "z-ai/glm-4.6:exacto",
       "z-ai/glm-4.7",
-      "z-ai/glm-4.7-flash"
+      "z-ai/glm-4.7-flash",
+      "z-ai/glm-5"
     ],
     "zenmux": [
       "anthropic/claude-3.5-haiku",
@@ -4741,8 +4750,8 @@
       "hf:moonshotai/Kimi-K2-Instruct-0905",
       "hf:moonshotai/Kimi-K2-Thinking",
       "hf:moonshotai/Kimi-K2.5",
+      "hf:nvidia/Kimi-K2.5-NVFP4",
       "hf:openai/gpt-oss-120b",
-      "hf:zai-org/GLM-4.5",
       "hf:zai-org/GLM-4.6",
       "hf:zai-org/GLM-4.7"
     ],
@@ -4796,6 +4805,8 @@
       "mistralai/mistral-large-3-675b-instruct-2512",
       "moonshotai/kimi-k2-instruct",
       "moonshotai/kimi-k2-thinking",
+      "moonshotai/kimi-k2.5",
+      "moonshotai/kimi-k2.5-thinking",
       "nousresearch/hermes-4-405b:thinking",
       "nvidia/llama-3_3-nemotron-super-49b-v1_5",
       "openai/gpt-oss-120b",
@@ -4806,7 +4817,9 @@
       "zai-org/glm-4.5-air",
       "zai-org/glm-4.5-air:thinking",
       "zai-org/glm-4.7",
-      "zai-org/glm-4.7:thinking"
+      "zai-org/glm-4.7:thinking",
+      "zai-org/glm-5",
+      "zai-org/glm-5:thinking"
     ],
     "zai": [
       "glm-4.5",
@@ -4881,7 +4894,8 @@
       "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "meta-llama/Llama-3.1-8B-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct",
-      "zai-org/GLM-4.7"
+      "zai-org/GLM-4.7",
+      "zai-org/GLM-5"
     ],
     "anthropic": [
       "claude-3-5-haiku-20241022",
@@ -5134,7 +5148,7 @@
       "xai/grok-code-fast-1"
     ],
     "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1"],
-    "cerebras": ["gpt-oss-120b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"],
+    "cerebras": ["gpt-oss-120b", "llama3.1-8b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"],
     "netlify": [
       "anthropic/claude-3-5-haiku-20241022",
       "anthropic/claude-3-7-sonnet-20250219",

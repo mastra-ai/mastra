@@ -145,6 +145,7 @@ export type ProviderModelsMap = {
     'gemma3:4b',
     'glm-4.6',
     'glm-4.7',
+    'glm-5',
     'gpt-oss:120b',
     'gpt-oss:20b',
     'kimi-k2-thinking',
@@ -1300,6 +1301,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.5',
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
+    'zai-org/GLM-5',
   ];
   readonly opencode: readonly [
     'big-pickle',
@@ -1676,7 +1678,6 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b:free',
     'openai/gpt-oss-safeguard-20b',
     'openai/o4-mini',
-    'openrouter/pony-alpha',
     'openrouter/sherlock-dash-alpha',
     'openrouter/sherlock-think-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
@@ -1730,6 +1731,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6:exacto',
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash',
+    'z-ai/glm-5',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
@@ -1848,8 +1850,8 @@ export type ProviderModelsMap = {
     'hf:moonshotai/Kimi-K2-Instruct-0905',
     'hf:moonshotai/Kimi-K2-Thinking',
     'hf:moonshotai/Kimi-K2.5',
+    'hf:nvidia/Kimi-K2.5-NVFP4',
     'hf:openai/gpt-oss-120b',
-    'hf:zai-org/GLM-4.5',
     'hf:zai-org/GLM-4.6',
     'hf:zai-org/GLM-4.7',
   ];
@@ -1903,6 +1905,8 @@ export type ProviderModelsMap = {
     'mistralai/mistral-large-3-675b-instruct-2512',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-thinking',
+    'moonshotai/kimi-k2.5',
+    'moonshotai/kimi-k2.5-thinking',
     'nousresearch/hermes-4-405b:thinking',
     'nvidia/llama-3_3-nemotron-super-49b-v1_5',
     'openai/gpt-oss-120b',
@@ -1914,6 +1918,8 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.5-air:thinking',
     'zai-org/glm-4.7',
     'zai-org/glm-4.7:thinking',
+    'zai-org/glm-5',
+    'zai-org/glm-5:thinking',
   ];
   readonly zai: readonly [
     'glm-4.5',
@@ -1989,6 +1995,7 @@ export type ProviderModelsMap = {
     'meta-llama/Llama-3.1-8B-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct',
     'zai-org/GLM-4.7',
+    'zai-org/GLM-5',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
@@ -2241,7 +2248,7 @@ export type ProviderModelsMap = {
     'xai/grok-code-fast-1',
   ];
   readonly 'minimax-cn-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
-  readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gpt-oss-120b', 'llama3.1-8b', 'qwen-3-235b-a22b-instruct-2507', 'zai-glm-4.7'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
     'anthropic/claude-3-7-sonnet-20250219',

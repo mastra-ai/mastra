@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { GaugeIcon } from 'lucide-react';
 
 import {
@@ -20,11 +20,10 @@ import type { CreateStoredScorerParams } from '@mastra/client-js';
 function CmsScorersCreatePage() {
   const { navigate, paths } = useLinkComponent();
   const { createStoredScorer } = useStoredScorerMutations();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   const { form } = useScorerEditForm();
 
-  const handlePublish = useCallback(async () => {
+  const handlePublish = async () => {
     const isValid = await form.trigger();
     if (!isValid) {
       toast.error('Please fill in all required fields');
@@ -32,7 +31,6 @@ function CmsScorersCreatePage() {
     }
 
     const values = form.getValues();
-    setIsSubmitting(true);
 
     try {
       const createParams: CreateStoredScorerParams = {
@@ -53,10 +51,8 @@ function CmsScorersCreatePage() {
       navigate(paths.scorerLink(created.id));
     } catch (error) {
       toast.error(`Failed to create scorer: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
     }
-  }, [form, createStoredScorer, navigate, paths]);
+  };
 
   return (
     <MainContentLayout>
@@ -70,7 +66,12 @@ function CmsScorersCreatePage() {
       </Header>
       <AgentEditLayout
         leftSlot={
-          <ScorerEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
+          <ScorerEditSidebar
+            form={form}
+            onPublish={handlePublish}
+            isSubmitting={createStoredScorer.isPending}
+            formRef={formRef}
+          />
         }
       >
         <form ref={formRef} className="h-full">

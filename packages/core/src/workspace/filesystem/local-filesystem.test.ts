@@ -457,6 +457,26 @@ describe('LocalFilesystem', () => {
       expect(content).toBe('content');
     });
 
+    it('should allow absolute paths inside base directory', async () => {
+      await localFs.writeFile('/abs-test.txt', 'absolute content');
+      const absolutePath = path.join(tempDir, 'abs-test.txt');
+      const content = await localFs.readFile(absolutePath, { encoding: 'utf-8' });
+      expect(content).toBe('absolute content');
+    });
+
+    it('should allow exists() with absolute paths inside base directory', async () => {
+      await localFs.writeFile('/exists-test.txt', 'content');
+      const absolutePath = path.join(tempDir, 'exists-test.txt');
+      const exists = await localFs.exists(absolutePath);
+      expect(exists).toBe(true);
+    });
+
+    it('should not throw on exists() for non-existent absolute path inside base directory', async () => {
+      const absolutePath = path.join(tempDir, 'nonexistent', 'file.txt');
+      const exists = await localFs.exists(absolutePath);
+      expect(exists).toBe(false);
+    });
+
     it('should allow access when containment is disabled', async () => {
       // Create a file in os.tmpdir() (parent of tempDir since tempDir is created via mkdtemp in tmpdir)
       const outsideFile = path.join(os.tmpdir(), 'outside-test.txt');
@@ -469,9 +489,26 @@ describe('LocalFilesystem', () => {
         });
 
         // This would be blocked in contained mode, but allowed when contained: false
-        // Note: We use a relative path that goes outside the base
-        const content = await uncontainedFs.readFile(`/../${path.basename(outsideFile)}`, { encoding: 'utf-8' });
+        const content = await uncontainedFs.readFile(outsideFile, { encoding: 'utf-8' });
         expect(content).toBe('outside content');
+      } finally {
+        await fs.unlink(outsideFile);
+      }
+    });
+
+    it('should allow absolute paths outside base directory when containment is disabled', async () => {
+      const outsideFile = path.join(os.tmpdir(), 'abs-outside-test.txt');
+      await fs.writeFile(outsideFile, 'absolute outside content');
+
+      try {
+        const uncontainedFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: false,
+        });
+
+        // Absolute path outside basePath should work with contained: false
+        const content = await uncontainedFs.readFile(outsideFile, { encoding: 'utf-8' });
+        expect(content).toBe('absolute outside content');
       } finally {
         await fs.unlink(outsideFile);
       }
