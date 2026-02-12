@@ -611,8 +611,8 @@ export class MemoryLibSQL extends MemoryStorage {
       // Compute lastMessageAt from the max createdAt of saved messages
       const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime()))).toISOString();
       batchStatements.push({
-        sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ?, "lastMessageAt" = MAX("lastMessageAt", ?) WHERE id = ?`,
-        args: [now, maxCreatedAt, threadId],
+        sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ?, "lastMessageAt" = COALESCE(MAX("lastMessageAt", ?), ?) WHERE id = ?`,
+        args: [now, maxCreatedAt, maxCreatedAt, threadId],
       });
 
       // Execute in batches to avoid potential limitations

@@ -606,7 +606,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Compute lastMessageAt from the max createdAt of saved messages
       const now = new Date();
-      const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime())));
+      const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt ?? now).getTime())));
       // Execute message inserts and thread update in parallel
       // Only advance lastMessageAt, never regress (use $max)
       await Promise.all([

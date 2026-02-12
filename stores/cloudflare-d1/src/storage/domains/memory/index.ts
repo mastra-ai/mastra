@@ -596,8 +596,8 @@ export class MemoryStorageD1 extends MemoryStorage {
         }),
         // Update thread's updatedAt and lastMessageAt timestamps (only advance lastMessageAt)
         this.#db.executeQuery({
-          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ?, lastMessageAt = MAX(lastMessageAt, ?) WHERE id = ?`,
-          params: [now.toISOString(), maxCreatedAt, threadId],
+          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ?, lastMessageAt = COALESCE(MAX(lastMessageAt, ?), ?) WHERE id = ?`,
+          params: [now.toISOString(), maxCreatedAt, maxCreatedAt, threadId],
         }),
       ]);
 

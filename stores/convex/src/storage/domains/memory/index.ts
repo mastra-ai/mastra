@@ -519,7 +519,7 @@ export class MemoryConvex extends MemoryStorage {
             id: threadId,
             resourceId: thread.resourceId,
             title: thread.title,
-            metadata: JSON.stringify(thread.metadata),
+            metadata: thread.metadata ?? {},
             createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
             updatedAt: new Date().toISOString(),
             lastMessageAt: lastMessageAt ? lastMessageAt.toISOString() : null,

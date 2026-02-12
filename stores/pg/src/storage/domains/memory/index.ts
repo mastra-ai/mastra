@@ -1109,8 +1109,8 @@ export class MemoryPG extends MemoryStorage {
                         SET
                             "updatedAt" = $1,
                             "updatedAtZ" = $2,
-                            "lastMessageAt" = GREATEST("lastMessageAt", $3::timestamptz),
-                            "lastMessageAtZ" = GREATEST("lastMessageAtZ", $4::timestamptz)
+                            "lastMessageAt" = GREATEST(COALESCE("lastMessageAt", $3::timestamptz), $3::timestamptz),
+                            "lastMessageAtZ" = GREATEST(COALESCE("lastMessageAtZ", $4::timestamptz), $4::timestamptz)
                         WHERE id = $5
                     `,
           [nowStr, nowStr, maxCreatedAt, maxCreatedAt, threadId],
