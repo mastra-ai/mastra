@@ -11,14 +11,14 @@ async function fillScorerFields(
   page: Page,
   options: {
     name?: string;
-    description?: string;
+    description: string;
     provider?: string;
     model?: string;
     scoreRangeMin?: string;
     scoreRangeMax?: string;
     samplingType?: 'ratio' | 'none';
     samplingRate?: string;
-    instructions?: string;
+    instructions: string;
   },
 ) {
   if (options.name !== undefined) {
@@ -83,8 +83,10 @@ async function fillScorerFields(
 async function fillRequiredFields(page: Page, scorerName?: string) {
   await fillScorerFields(page, {
     name: scorerName || uniqueScorerName(),
+    description: 'Test scorer description',
     provider: 'OpenAI',
     model: 'gpt-4o-mini',
+    instructions: 'Test instructions',
   });
 }
 
@@ -116,8 +118,10 @@ test.describe('Required Field Validation', () => {
 
   test('shows validation error when name is empty', async ({ page }) => {
     await fillScorerFields(page, {
+      description: 'Test description',
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
+      instructions: 'Test instructions',
     });
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
@@ -128,6 +132,8 @@ test.describe('Required Field Validation', () => {
   test('shows validation error when provider is not selected', async ({ page }) => {
     await fillScorerFields(page, {
       name: uniqueScorerName(),
+      description: 'Test description',
+      instructions: 'Test instructions',
     });
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
@@ -140,7 +146,9 @@ test.describe('Required Field Validation', () => {
   test('shows validation error when model is not selected', async ({ page }) => {
     await fillScorerFields(page, {
       name: uniqueScorerName(),
+      description: 'Test description',
       provider: 'OpenAI',
+      instructions: 'Test instructions',
     });
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
@@ -166,7 +174,7 @@ test.describe('Scorer Creation Persistence', () => {
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
     await expect(page.getByText('Scorer created successfully')).toBeVisible();
   });
 
@@ -191,7 +199,7 @@ test.describe('Scorer Creation Persistence', () => {
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
 
     // Click the Edit button on the detail page
     const editLink = page.getByRole('link', { name: 'Edit' });
@@ -199,7 +207,7 @@ test.describe('Scorer Creation Persistence', () => {
     await editLink.click();
 
     // Wait for the edit page to load
-    await expect(page).toHaveURL(/\/cms\/scorers\/[a-z0-9-]+\/edit/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 
     // Verify h1 contains the scorer name
     await expect(page.locator('h1')).toContainText(`Edit scorer: ${scorerName}`);
@@ -241,20 +249,21 @@ test.describe('Scorer Creation Persistence', () => {
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
 
-    // Extract scorer ID from the URL and navigate directly to the edit page
-    const url = page.url();
-    const scorerId = url.split('/scorers/')[1]?.split(/[/?#]/)[0];
-    await page.goto(`/cms/scorers/${scorerId}/edit`);
+    // Wait for Edit link to be visible before clicking
+    const editLink = page.getByRole('link', { name: 'Edit' });
+    await expect(editLink).toBeVisible({ timeout: 10000 });
+    await editLink.click();
 
-    await expect(page).toHaveURL(/\/cms\/scorers\/[a-z0-9-]+\/edit/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 
     // Verify name is set
-    await expect(page.locator('#scorer-name')).toHaveValue(scorerName, { timeout: 10000 });
+    await expect(page.locator('#scorer-name')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
 
-    // Verify description is empty
-    await expect(page.locator('#scorer-description')).toHaveValue('');
+    // Verify description has the value set by fillRequiredFields
+    await expect(page.locator('#scorer-description')).toHaveValue('Test scorer description');
 
     // Verify default score range (0-1)
     await expect(page.getByPlaceholder('Min')).toHaveValue('0');
@@ -272,6 +281,7 @@ test.describe('Scorer Creation Persistence', () => {
 
     await fillScorerFields(page, {
       name: scorerName,
+      description: 'Test description for reload',
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
       instructions,
@@ -279,14 +289,14 @@ test.describe('Scorer Creation Persistence', () => {
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
 
     // Navigate to edit page
     const editLink = page.getByRole('link', { name: 'Edit' });
     await expect(editLink).toBeVisible({ timeout: 10000 });
     await editLink.click();
 
-    await expect(page).toHaveURL(/\/cms\/scorers\/[a-z0-9-]+\/edit/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 
     // Reload the page
     await page.reload();
@@ -335,7 +345,7 @@ test.describe('Form Reset After Creation', () => {
     await fillRequiredFields(page, scorerName);
 
     await page.getByRole('button', { name: 'Create scorer' }).click();
-    await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+/, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
 
     // Navigate back to create page
     await page.goto('/cms/scorers/create');
