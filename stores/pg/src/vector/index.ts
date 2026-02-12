@@ -39,6 +39,8 @@ export interface PGIndexStats extends IndexStats {
     lists?: number;
     probes?: number;
   };
+  /** Whether this index has full-text search enabled */
+  hasFullTextSearch?: boolean;
 }
 
 interface PgQueryVectorParams extends QueryVectorParams<PGVectorFilter> {
@@ -66,6 +68,15 @@ interface PgCreateIndexParams extends CreateIndexParams {
    * Use 'halfvec' for large dimension models like text-embedding-3-large (3072 dimensions)
    */
   vectorType?: VectorType;
+  /**
+   * Enable full-text search on this index.
+   * When enabled, a `content` TEXT column and GIN tsvector index are created,
+   * allowing full-text and hybrid (vector + keyword) search modes.
+   */
+  fullTextSearch?: {
+    /** PostgreSQL text search configuration name (default: 'english') */
+    language?: string;
+  };
 }
 
 interface PgDefineIndexParams {
@@ -80,6 +91,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private describeIndexCache: Map<string, PGIndexStats> = new Map();
   private createdIndexes = new Map<string, number>();
   private indexVectorTypes = new Map<string, VectorType>();
+  private indexFullTextConfig = new Map<string, { language: string }>();
   private mutexesByName = new Map<string, Mutex>();
   private schema?: string;
   private setupSchemaPromise: Promise<void> | null = null;
@@ -305,12 +317,23 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     minScore = -1,
     ef,
     probes,
+    searchMode,
+    queryText,
+    hybridConfig,
   }: PgQueryVectorParams): Promise<QueryResult[]> {
+    const mode = searchMode ?? 'vector';
+
     try {
       // Validate topK parameter
       validateTopK('PG', topK);
-      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
-        throw new Error('queryVector must be an array of finite numbers');
+      // queryVector validation only required for vector and hybrid modes
+      if (mode !== 'fulltext') {
+        if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+          throw new Error('queryVector must be an array of finite numbers');
+        }
+      }
+      if ((mode === 'fulltext' || mode === 'hybrid') && !queryText) {
+        throw new Error(`queryText is required for '${mode}' search mode`);
       }
     } catch (error) {
       const mastraError = new MastraError(
@@ -331,16 +354,54 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+
+      const { tableName } = this.getTableName(indexName);
+      const indexInfo = await this.getIndexInfo({ indexName });
+
+      if (mode === 'fulltext' || mode === 'hybrid') {
+        if (!indexInfo.hasFullTextSearch) {
+          throw new Error(
+            `Index '${indexName}' does not support full-text search. ` +
+              `Create the index with fullTextSearch option enabled: createIndex({ ..., fullTextSearch: { language: 'english' } })`,
+          );
+        }
+        if (mode === 'fulltext') {
+          return await this.queryFullText({
+            client,
+            tableName,
+            indexName,
+            indexInfo,
+            queryText: queryText!,
+            topK,
+            filter,
+            includeVector,
+            minScore,
+          });
+        }
+        return await this.queryHybrid({
+          client,
+          tableName,
+          indexName,
+          indexInfo,
+          queryVector,
+          queryText: queryText!,
+          topK,
+          filter,
+          includeVector,
+          minScore,
+          ef,
+          probes,
+          hybridConfig,
+        });
+      }
+
+      // Default: pure vector search
       const vectorStr = `[${queryVector.join(',')}]`;
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
 
-      // Get index type and configuration
-      const indexInfo = await this.getIndexInfo({ indexName });
-
       // Set HNSW search parameter if applicable
       if (indexInfo.type === 'hnsw') {
-        // Calculate ef and clamp between 1 and 1000
         const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
         const searchEf = Math.min(1000, Math.max(1, calculatedEf));
         await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
@@ -350,10 +411,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
       }
 
-      const { tableName } = this.getTableName(indexName);
-
-      // Get the properly qualified vector type based on the index's vector type
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType);
+      const hasFts = indexInfo.hasFullTextSearch === true;
 
       const query = `
         WITH vector_scores AS (
@@ -361,6 +420,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             vector_id as id,
             1 - (embedding <=> '${vectorStr}'::${qualifiedVectorType}) as score,
             metadata
+            ${hasFts ? ', content' : ''}
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
           ${filterQuery}
@@ -373,10 +433,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const result = await client.query(query, filterValues);
       await client.query('COMMIT');
 
-      return result.rows.map(({ id, score, metadata, embedding }) => ({
+      return result.rows.map(({ id, score, metadata, embedding, content }: any) => ({
         id,
         score,
         metadata,
+        ...(hasFts && content && { document: content }),
         ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
       }));
     } catch (error) {
@@ -399,11 +460,199 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }
   }
 
+  /**
+   * Full-text search using PostgreSQL tsvector/tsquery.
+   * Ranks results by text relevance using ts_rank.
+   */
+  private async queryFullText({
+    client,
+    tableName,
+    indexName,
+    indexInfo: _indexInfo,
+    queryText,
+    topK,
+    filter,
+    includeVector,
+    minScore,
+  }: {
+    client: pg.PoolClient;
+    tableName: string;
+    indexName: string;
+    indexInfo: PGIndexStats;
+    queryText: string;
+    topK: number;
+    filter?: PGVectorFilter;
+    includeVector: boolean;
+    minScore: number;
+  }): Promise<QueryResult[]> {
+    const ftsConfig = this.indexFullTextConfig.get(indexName);
+    const language = ftsConfig?.language ?? 'english';
+
+    // Build metadata filter WHERE clause (no minScore/topK)
+    const filterClause = this.buildMetadataFilterClause(filter);
+
+    // Parameter ordering: [...filterValues, queryText, minScore, topK]
+    const queryTextIdx = filterClause.values.length + 1;
+    const minScoreIdx = queryTextIdx + 1;
+    const topKIdx = queryTextIdx + 2;
+
+    const ftsMatchClause = `to_tsvector('${language}', COALESCE(content, '')) @@ plainto_tsquery('${language}', $${queryTextIdx}::text)`;
+
+    const whereClause = filterClause.sql ? `${filterClause.sql} AND ${ftsMatchClause}` : `WHERE ${ftsMatchClause}`;
+
+    const sql = `
+      WITH fts_scores AS (
+        SELECT
+          vector_id as id,
+          ts_rank(to_tsvector('${language}', COALESCE(content, '')), plainto_tsquery('${language}', $${queryTextIdx}::text)) as score,
+          metadata,
+          content
+          ${includeVector ? ', embedding' : ''}
+        FROM ${tableName}
+        ${whereClause}
+      )
+      SELECT *
+      FROM fts_scores
+      WHERE score > $${minScoreIdx}
+      ORDER BY score DESC
+      LIMIT $${topKIdx}`;
+
+    const values = [...filterClause.values, queryText, minScore > 0 ? minScore : 0, topK];
+
+    const result = await client.query(sql, values);
+    await client.query('COMMIT');
+
+    return result.rows.map(({ id, score, metadata, embedding, content }: any) => ({
+      id,
+      score: parseFloat(score),
+      metadata,
+      ...(content && { document: content }),
+      ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+    }));
+  }
+
+  /**
+   * Hybrid search combining vector similarity and full-text relevance
+   * using weighted score combination.
+   */
+  private async queryHybrid({
+    client,
+    tableName,
+    indexName,
+    indexInfo,
+    queryVector,
+    queryText,
+    topK,
+    filter,
+    includeVector,
+    minScore,
+    ef,
+    probes,
+    hybridConfig,
+  }: {
+    client: pg.PoolClient;
+    tableName: string;
+    indexName: string;
+    indexInfo: PGIndexStats;
+    queryVector: number[];
+    queryText: string;
+    topK: number;
+    filter?: PGVectorFilter;
+    includeVector: boolean;
+    minScore: number;
+    ef?: number;
+    probes?: number;
+    hybridConfig?: { semanticWeight?: number; keywordWeight?: number };
+  }): Promise<QueryResult[]> {
+    const semanticWeight = hybridConfig?.semanticWeight ?? 0.5;
+    const keywordWeight = hybridConfig?.keywordWeight ?? 0.5;
+
+    const ftsConfig = this.indexFullTextConfig.get(indexName);
+    const language = ftsConfig?.language ?? 'english';
+
+    // Set HNSW/IVFFlat search parameters
+    if (indexInfo.type === 'hnsw') {
+      const calculatedEf = ef ?? Math.max(topK, (indexInfo?.config?.m ?? 16) * topK);
+      const searchEf = Math.min(1000, Math.max(1, calculatedEf));
+      await client.query(`SET LOCAL hnsw.ef_search = ${searchEf}`);
+    }
+    if (indexInfo.type === 'ivfflat' && probes) {
+      await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
+    }
+
+    const vectorStr = `[${queryVector.join(',')}]`;
+    const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType);
+
+    // Build metadata filter WHERE clause (no minScore/topK)
+    const filterClause = this.buildMetadataFilterClause(filter);
+
+    // Parameter ordering: [...filterValues, queryText, minScore, topK]
+    const queryTextIdx = filterClause.values.length + 1;
+    const minScoreIdx = queryTextIdx + 1;
+    const topKIdx = queryTextIdx + 2;
+
+    const hybridQuery = `
+      WITH base AS (
+        SELECT
+          vector_id as id,
+          1 - (embedding <=> '${vectorStr}'::${qualifiedVectorType}) as vector_score,
+          ts_rank(to_tsvector('${language}', COALESCE(content, '')), plainto_tsquery('${language}', $${queryTextIdx}::text)) as fts_score,
+          metadata,
+          content
+          ${includeVector ? ', embedding' : ''}
+        FROM ${tableName}
+        ${filterClause.sql}
+      ),
+      scored AS (
+        SELECT *,
+          (${semanticWeight} * vector_score + ${keywordWeight} * CASE WHEN fts_score > 0 THEN fts_score ELSE 0 END) as score
+        FROM base
+      )
+      SELECT *
+      FROM scored
+      WHERE score > $${minScoreIdx}
+      ORDER BY score DESC
+      LIMIT $${topKIdx}`;
+
+    const result = await client.query(hybridQuery, [
+      ...filterClause.values,
+      queryText,
+      minScore > 0 ? minScore : 0,
+      topK,
+    ]);
+    await client.query('COMMIT');
+
+    return result.rows.map(({ id, score, metadata, embedding, content }: any) => ({
+      id,
+      score: parseFloat(score),
+      metadata,
+      ...(content && { document: content }),
+      ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+    }));
+  }
+
+  /**
+   * Builds a WHERE clause for metadata filters only (no minScore/topK).
+   * Returns { sql: 'WHERE ...', values: [...] } or { sql: '', values: [] } if no filter.
+   */
+  private buildMetadataFilterClause(filter?: PGVectorFilter): { sql: string; values: any[] } {
+    if (!filter || Object.keys(filter).length === 0) {
+      return { sql: '', values: [] };
+    }
+
+    const translatedFilter = this.transformFilter(filter);
+    const { sql: deleteFilterSql, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+
+    // buildDeleteFilterQuery returns 'WHERE condition' with $1, $2, etc.
+    return { sql: deleteFilterSql, values: filterValues };
+  }
+
   async upsert({
     indexName,
     vectors,
     metadata,
     ids,
+    documents,
     deleteFilter,
   }: UpsertVectorParams<PGVectorFilter>): Promise<string[]> {
     // Validate input parameters
@@ -441,19 +690,48 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Get the properly qualified vector type for this index
       const indexInfo = await this.getIndexInfo({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType);
+      const hasDocuments = documents && documents.length > 0;
+
+      if (hasDocuments && !indexInfo.hasFullTextSearch) {
+        throw new Error(
+          `Cannot upsert documents to index '${indexName}' because it does not have a content column. ` +
+            `Create the index with fullTextSearch option enabled: createIndex({ ..., fullTextSearch: { language: 'english' } })`,
+        );
+      }
 
       for (let i = 0; i < vectors.length; i++) {
-        const query = `
-          INSERT INTO ${tableName} (vector_id, embedding, metadata)
-          VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
-          ON CONFLICT (vector_id)
-          DO UPDATE SET
-            embedding = $2::${qualifiedVectorType},
-            metadata = $3::jsonb
-          RETURNING embedding::text
-        `;
+        const doc = hasDocuments ? (documents[i] ?? null) : null;
 
-        await client.query(query, [vectorIds[i], `[${vectors[i]?.join(',')}]`, JSON.stringify(metadata?.[i] || {})]);
+        if (doc !== null) {
+          // Insert with content column for full-text search
+          const query = `
+            INSERT INTO ${tableName} (vector_id, embedding, metadata, content)
+            VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb, $4)
+            ON CONFLICT (vector_id)
+            DO UPDATE SET
+              embedding = $2::${qualifiedVectorType},
+              metadata = $3::jsonb,
+              content = $4
+            RETURNING embedding::text
+          `;
+          await client.query(query, [
+            vectorIds[i],
+            `[${vectors[i]?.join(',')}]`,
+            JSON.stringify(metadata?.[i] || {}),
+            doc,
+          ]);
+        } else {
+          const query = `
+            INSERT INTO ${tableName} (vector_id, embedding, metadata)
+            VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
+            ON CONFLICT (vector_id)
+            DO UPDATE SET
+              embedding = $2::${qualifiedVectorType},
+              metadata = $3::jsonb
+            RETURNING embedding::text
+          `;
+          await client.query(query, [vectorIds[i], `[${vectors[i]?.join(',')}]`, JSON.stringify(metadata?.[i] || {})]);
+        }
       }
 
       await client.query('COMMIT');
@@ -583,6 +861,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     indexConfig = {},
     buildIndex = true,
     vectorType = 'vector',
+    fullTextSearch,
   }: PgCreateIndexParams): Promise<void> {
     const { tableName } = this.getTableName(indexName);
 
@@ -674,14 +953,44 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           // Use the properly qualified vector type (vector or halfvec)
           const qualifiedVectorType = this.getVectorTypeName(vectorType);
 
-          await client.query(`
-          CREATE TABLE IF NOT EXISTS ${tableName} (
-            id SERIAL PRIMARY KEY,
-            vector_id TEXT UNIQUE NOT NULL,
-            embedding ${qualifiedVectorType}(${dimension}),
-            metadata JSONB DEFAULT '{}'::jsonb
-          );
-        `);
+          if (fullTextSearch) {
+            const ftsLanguage = fullTextSearch.language || 'english';
+            // Validate language to prevent SQL injection (must be a valid PG identifier)
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(ftsLanguage)) {
+              throw new Error(
+                `Invalid full-text search language '${ftsLanguage}'. Must be a valid PostgreSQL text search configuration name (e.g. 'english', 'simple', 'spanish').`,
+              );
+            }
+
+            // Create table with content column for full-text search
+            await client.query(`
+              CREATE TABLE IF NOT EXISTS ${tableName} (
+                id SERIAL PRIMARY KEY,
+                vector_id TEXT UNIQUE NOT NULL,
+                embedding ${qualifiedVectorType}(${dimension}),
+                metadata JSONB DEFAULT '{}'::jsonb,
+                content TEXT
+              );
+            `);
+
+            const ftsIndexName = `"${parseSqlIdentifier(indexName, 'index name')}_fts_idx"`;
+            await client.query(`
+              CREATE INDEX IF NOT EXISTS ${ftsIndexName}
+              ON ${tableName}
+              USING gin (to_tsvector('${ftsLanguage}', COALESCE(content, '')))
+            `);
+            this.indexFullTextConfig.set(indexName, { language: ftsLanguage });
+          } else {
+            await client.query(`
+              CREATE TABLE IF NOT EXISTS ${tableName} (
+                id SERIAL PRIMARY KEY,
+                vector_id TEXT UNIQUE NOT NULL,
+                embedding ${qualifiedVectorType}(${dimension}),
+                metadata JSONB DEFAULT '{}'::jsonb
+              );
+            `);
+          }
+
           this.createdIndexes.set(indexName, indexCacheKey);
           this.indexVectorTypes.set(indexName, vectorType);
 
@@ -1057,11 +1366,30 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             AND n.nspname = $2;
             `;
 
-      const [dimResult, countResult, indexResult] = await Promise.all([
+      // Check if the table has a content column (for full-text search)
+      const contentColumnQuery = `
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = $1
+            AND table_name = $2
+            AND column_name = 'content'
+            AND data_type = 'text'
+        ) as has_content;
+      `;
+
+      const [dimResult, countResult, indexResult, contentResult] = await Promise.all([
         client.query(dimensionQuery, [tableName]),
         client.query(countQuery),
         client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']),
+        client.query(contentColumnQuery, [this.schema || 'public', indexName]),
       ]);
+
+      const hasFullTextSearch = contentResult.rows[0]?.has_content === true;
+
+      // If FTS is detected but not in cache, add it with default language
+      if (hasFullTextSearch && !this.indexFullTextConfig.has(indexName)) {
+        this.indexFullTextConfig.set(indexName, { language: 'english' });
+      }
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
         index_method: 'flat',
@@ -1096,6 +1424,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         type: index_method as 'flat' | 'hnsw' | 'ivfflat',
         vectorType,
         config,
+        ...(hasFullTextSearch && { hasFullTextSearch }),
       };
     } catch (e: any) {
       await client.query('ROLLBACK');
