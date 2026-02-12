@@ -1359,7 +1359,7 @@ describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)
     const result = validateToolInput(schema, input);
 
     expect(result.error).toBeDefined();
-    expect(result.error?.message).toContain('Expected string, received number');
+    expect(result.error?.message).toContain('Invalid input: expected string, received number');
   });
 
   it('should handle deeply nested null values', () => {
