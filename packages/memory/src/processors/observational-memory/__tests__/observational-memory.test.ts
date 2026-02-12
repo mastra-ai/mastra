@@ -6737,4 +6737,522 @@ describe('Full Async Buffering Flow', () => {
         : (record?.bufferedObservationChunks ?? []);
     expect(newChunks.length).toBeGreaterThan(0);
   });
+
+  it('should preserve lastObservedAt through activation + reflection generation', async () => {
+    // Regression test: after swapBufferedToActive advances lastObservedAt and then
+    // createReflectionGeneration creates a new record, the new record's lastObservedAt
+    // must cover all activated messages. Otherwise loadHistoricalMessagesIfNeeded will
+    // re-load them on the next turn, causing a token count explosion.
+    const storage = createInMemoryStorage();
+    const threadId = 'test-thread';
+    const resourceId = 'test-resource';
+
+    // 1. Create messages at known timestamps
+    const baseTime = new Date('2025-01-01T10:00:00Z');
+    const messages: MastraDBMessage[] = [];
+    for (let i = 0; i < 10; i++) {
+      messages.push({
+        id: `msg-${i}`,
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: `Message ${i}: ` + 'x'.repeat(100) }] },
+        type: 'text',
+        createdAt: new Date(baseTime.getTime() + i * 60_000), // 1 min apart
+        threadId,
+        resourceId,
+      });
+    }
+    await storage.saveMessages({ messages });
+
+    // 2. Init OM record
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    // 3. Buffer observations referencing the first 5 messages
+    const chunk1Time = new Date(baseTime.getTime() + 2 * 60_000 + 1); // after msg-2
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: 'Chunk 1 observations',
+        tokenCount: 100,
+        messageIds: ['msg-0', 'msg-1', 'msg-2'],
+        messageTokens: 500,
+        lastObservedAt: chunk1Time,
+        cycleId: 'cycle-1',
+      },
+    });
+
+    const chunk2Time = new Date(baseTime.getTime() + 4 * 60_000 + 1); // after msg-4
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: 'Chunk 2 observations',
+        tokenCount: 100,
+        messageIds: ['msg-3', 'msg-4'],
+        messageTokens: 300,
+        lastObservedAt: chunk2Time,
+        cycleId: 'cycle-2',
+      },
+    });
+
+    // 4. Swap buffered to active — this should set lastObservedAt to chunk2Time
+    await storage.swapBufferedToActive({
+      id: record.id,
+      activationRatio: 1,
+      messageTokensThreshold: 100000,
+      currentPendingTokens: 100000,
+    });
+
+    const afterSwap = await storage.getObservationalMemory(threadId, resourceId);
+    expect(afterSwap!.lastObservedAt).toBeDefined();
+    expect(afterSwap!.lastObservedAt!.getTime()).toBe(chunk2Time.getTime());
+
+    // 5. Add buffered reflection content (simulating async reflection that ran earlier)
+    await storage.updateBufferedReflection({
+      id: record.id,
+      reflection: 'Reflected summary of observations',
+      tokenCount: 50,
+      inputTokenCount: 200,
+      reflectedObservationLineCount: 2,
+    });
+
+    // 6. Swap buffered reflection to active — this creates a NEW generation record
+    const newRecord = await storage.swapBufferedReflectionToActive({
+      currentRecord: afterSwap!,
+      tokenCount: 80,
+    });
+
+    // CRITICAL ASSERTION: the new generation's lastObservedAt must be at least chunk2Time
+    // If it's earlier, loadHistoricalMessagesIfNeeded will re-load activated messages.
+    expect(newRecord.lastObservedAt).toBeDefined();
+    expect(newRecord.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(chunk2Time.getTime());
+
+    // 7. Verify that listing messages after lastObservedAt excludes the activated messages
+    const startDate = new Date(newRecord.lastObservedAt!.getTime() + 1);
+    const result = await storage.listMessages({
+      threadId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      filter: { dateRange: { start: startDate } },
+    });
+
+    // Messages 0-4 were in the activated chunks and should be filtered out
+    const loadedIds = result.messages.map(m => m.id);
+    expect(loadedIds).not.toContain('msg-0');
+    expect(loadedIds).not.toContain('msg-1');
+    expect(loadedIds).not.toContain('msg-2');
+    expect(loadedIds).not.toContain('msg-3');
+    expect(loadedIds).not.toContain('msg-4');
+    // Messages 5-9 should still be loaded (they're after the chunks)
+    expect(loadedIds).toContain('msg-5');
+  });
+
+  it('should not inflate token count on the turn after activation + reflection', async () => {
+    // Regression test for the token jump bug:
+    // When BOTH buffered observation activation AND buffered reflection activation
+    // happen in the SAME handleThresholdReached call (step > 0), the next turn's
+    // loadHistoricalMessagesIfNeeded should NOT re-load activated chunk messages.
+    //
+    // Production scenario: at step 10, observation activation fires, then
+    // maybeAsyncReflect immediately fires and activates buffered reflection,
+    // creating a new generation — all in the same call stack.
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    // Clear static maps to avoid cross-test pollution
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'jump-thread';
+    const resourceId = 'jump-resource';
+
+    const observerCalls: string[] = [];
+    const reflectorCalls: string[] = [];
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        const promptText = JSON.stringify(prompt);
+        const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
+        if (isReflection) {
+          reflectorCalls.push(promptText.slice(0, 100));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+            content: [
+              {
+                type: 'text' as const,
+                text: '<reflection>\nDate: Jan 1, 2025\n* Reflected observation summary\n</reflection>',
+              },
+            ],
+            warnings: [],
+          };
+        }
+        observerCalls.push(promptText.slice(0, 100));
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>\nDate: Jan 1, 2025\n* Observed at call ${observerCalls.length}\n</observations>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: {
+        messageTokens: 2000,
+        bufferTokens: 400,
+        bufferActivation: 1.0,
+      },
+      reflection: {
+        // Very low threshold — triggers after any activation
+        observationTokens: 10,
+        // bufferActivation: 1.0 means async reflection is enabled and activates immediately
+        bufferActivation: 1.0,
+      },
+    });
+
+    // Create thread
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test Thread',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    // Save initial messages — enough to trigger async buffering but below the 2000 threshold
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    for (let i = 0; i < 10; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 9, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Shared state across steps
+    let sharedState: Record<string, unknown> = {};
+    let ml = new MessageList({ threadId, resourceId });
+
+    async function runStep(stepNumber: number, freshTurn = false) {
+      if (freshTurn) {
+        sharedState = {};
+        ml = new MessageList({ threadId, resourceId });
+      }
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
+      await om.processInputStep({
+        messageList: ml,
+        messages: [],
+        requestContext,
+        stepNumber,
+        state: sharedState,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        abort: (() => {
+          throw new Error('aborted');
+        }) as any,
+      });
+      return ml;
+    }
+
+    async function waitForAsyncOps(timeoutMs = 5000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    // ── Turn 1 ──────────────────────────────────────────────────────────
+    // Step 0: loads 10 messages, triggers async buffering of observation chunks
+    await runStep(0);
+    await waitForAsyncOps();
+    expect(observerCalls.length).toBeGreaterThan(0);
+
+    // Verify chunks were created
+    let record = await storage.getObservationalMemory(threadId, resourceId);
+    const chunks = Array.isArray(record?.bufferedObservationChunks) ? record!.bufferedObservationChunks : [];
+    expect(chunks.length).toBeGreaterThan(0);
+    const chunkMessageIds = new Set(chunks.flatMap((c: any) => c.messageIds ?? []));
+
+    // CRITICAL: Pre-seed a buffered reflection on the record.
+    // This simulates the async reflection having completed in the background
+    // BEFORE observation activation fires. When observation activates and
+    // maybeAsyncReflect runs, it will find this buffered reflection ready
+    // and activate it SIMULTANEOUSLY with the observation activation.
+    await storage.updateBufferedReflection({
+      id: record!.id,
+      reflection: '<reflection>\nDate: Jan 1, 2025\n* Pre-seeded reflection summary\n</reflection>',
+      tokenCount: 15,
+      inputTokenCount: 100,
+      reflectedObservationLineCount: (record!.activeObservations ?? '').split('\n').length,
+    });
+
+    // Steps 1-8: Add messages to push tokens above the 2000 threshold.
+    // When threshold is crossed at step > 0, handleThresholdReached fires,
+    // which activates buffered observations AND immediately activates the
+    // buffered reflection — both in the same call stack.
+    for (let stepNum = 1; stepNum <= 8; stepNum++) {
+      const msgIdx = 9 + stepNum;
+      const msg = {
+        id: `msg-${msgIdx}`,
+        role: (msgIdx % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: {
+          format: 2 as const,
+          parts: [{ type: 'text' as const, text: `Message ${msgIdx}: ${filler}` }],
+        },
+        type: 'text',
+        createdAt: new Date(Date.UTC(2025, 0, 1, 10, msgIdx)),
+        threadId,
+        resourceId,
+      };
+      await storage.saveMessages({ messages: [msg] });
+      ml.add(msg, 'response');
+      await runStep(stepNum);
+      await waitForAsyncOps();
+    }
+
+    // Both observation and reflection activation should have happened
+    record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record!.lastObservedAt).toBeDefined();
+    // Reflection activation should have created a new generation
+    expect(record!.generationCount).toBeGreaterThan(0);
+
+    const postReflectionLastObservedAt = record!.lastObservedAt;
+
+    // ── Turn 2 ──────────────────────────────────────────────────────────
+    // Add 2 new messages for the next turn
+    for (let i = 20; i < 22; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${filler}` }],
+            },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 12, i)),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Step 0 of turn 2: fresh messageList, loadHistoricalMessagesIfNeeded runs
+    const turn2ML = await runStep(0, true);
+    await waitForAsyncOps();
+
+    const turn2Messages = turn2ML.get.all.db();
+
+    // Count how many messages in the DB are AFTER lastObservedAt
+    const allDbMessages = (
+      await storage.listMessages({
+        threadId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      })
+    ).messages;
+    const expectedUnobservedCount = allDbMessages.filter(
+      (m: any) => !postReflectionLastObservedAt || new Date(m.createdAt) > postReflectionLastObservedAt,
+    ).length;
+
+    // The loaded messages should be approximately the unobserved messages,
+    // not ALL messages. A dramatic increase means old messages were re-loaded.
+    const maxReasonableMessages = expectedUnobservedCount + 5;
+    expect(turn2Messages.length).toBeLessThanOrEqual(maxReasonableMessages);
+
+    // Activated chunk messages from turn 1 should NOT appear in turn 2
+    const turn2MessageIds = new Set(turn2Messages.map((m: any) => m.id));
+    const reloadedActivatedIds = [...chunkMessageIds].filter(id => turn2MessageIds.has(id));
+    expect(reloadedActivatedIds).toEqual([]);
+  });
+
+  it('should not regress lastObservedAt when createReflectionGeneration receives a stale record', async () => {
+    // Regression test for cursor regression bug:
+    // LibSQL's swapBufferedReflectionToActive passes input.currentRecord (the caller's
+    // object) to createReflectionGeneration instead of the freshly-fetched DB row.
+    // If the caller holds a stale snapshot with an older lastObservedAt, the new
+    // generation inherits the stale cursor, causing loadHistoricalMessagesIfNeeded
+    // to re-load already-observed messages on the next turn.
+    //
+    // The fix: createReflectionGeneration should compare the input lastObservedAt
+    // with the DB record's lastObservedAt and use the latest (monotonic advance).
+    const storage = createInMemoryStorage();
+    const threadId = 'test-thread-cursor';
+    const resourceId = 'test-resource-cursor';
+
+    const baseTime = new Date('2025-06-01T10:00:00Z');
+
+    // Create 20 messages spanning a wide time range
+    for (let i = 0; i < 20; i++) {
+      await storage.saveMessages({
+        messages: [
+          {
+            id: `msg-${i}`,
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: `Message ${i}: ${'x'.repeat(200)}` }],
+            },
+            type: 'text',
+            createdAt: new Date(baseTime.getTime() + i * 60_000),
+            threadId,
+            resourceId,
+          },
+        ],
+      });
+    }
+
+    // Init OM record
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    // Buffer 2 chunks covering messages 0-9
+    const chunk1Time = new Date(baseTime.getTime() + 4 * 60_000 + 1);
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: 'Chunk 1 observations about messages 0-4',
+        tokenCount: 50,
+        messageIds: ['msg-0', 'msg-1', 'msg-2', 'msg-3', 'msg-4'],
+        messageTokens: 500,
+        lastObservedAt: chunk1Time,
+        cycleId: 'cycle-1',
+      },
+    });
+
+    const chunk2Time = new Date(baseTime.getTime() + 9 * 60_000 + 1);
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: 'Chunk 2 observations about messages 5-9',
+        tokenCount: 50,
+        messageIds: ['msg-5', 'msg-6', 'msg-7', 'msg-8', 'msg-9'],
+        messageTokens: 500,
+        lastObservedAt: chunk2Time,
+        cycleId: 'cycle-2',
+      },
+    });
+
+    // Activate chunks — sets lastObservedAt to chunk2Time (T_new)
+    await storage.swapBufferedToActive({
+      id: record.id,
+      activationRatio: 1,
+      messageTokensThreshold: 100000,
+      currentPendingTokens: 100000,
+    });
+
+    const afterSwap = await storage.getObservationalMemory(threadId, resourceId);
+    expect(afterSwap!.lastObservedAt!.getTime()).toBe(chunk2Time.getTime());
+
+    // Simulate a STALE record snapshot — as if freshRecord was fetched before
+    // the swap completed (race condition). This stale copy has the OLD lastObservedAt.
+    const staleRecord: ObservationalMemoryRecord = {
+      ...afterSwap!,
+      lastObservedAt: chunk1Time, // T_old — BEFORE the swap advanced it
+    };
+
+    // Add buffered reflection to the record
+    await storage.updateBufferedReflection({
+      id: record.id,
+      reflection: 'Reflected summary',
+      tokenCount: 30,
+      inputTokenCount: 100,
+      reflectedObservationLineCount: 2,
+    });
+
+    // Measure the "correct" context window — what loadHistoricalMessagesIfNeeded
+    // would load using the properly advanced cursor (chunk2Time).
+    const correctStartDate = new Date(chunk2Time.getTime() + 1);
+    const correctResult = await storage.listMessages({
+      threadId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      filter: { dateRange: { start: correctStartDate } },
+    });
+    const correctMessageCount = correctResult.messages.length;
+
+    // Directly call createReflectionGeneration with the stale record.
+    // This bypasses swapBufferedReflectionToActive's fresh fetch (which
+    // InMemory does correctly but LibSQL doesn't).
+    const newRecord = await storage.createReflectionGeneration({
+      currentRecord: staleRecord,
+      reflection: 'Reflected summary of observations',
+      tokenCount: 60,
+    });
+
+    // Measure what loadHistoricalMessagesIfNeeded would actually load
+    // using the new generation's (potentially regressed) cursor.
+    const actualStartDate = newRecord.lastObservedAt ? new Date(newRecord.lastObservedAt.getTime() + 1) : undefined;
+    const actualResult = await storage.listMessages({
+      threadId,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      filter: actualStartDate ? { dateRange: { start: actualStartDate } } : undefined,
+    });
+    const actualMessageCount = actualResult.messages.length;
+
+    // The context window should NOT grow after activation + reflection.
+    // If the cursor regressed, more messages are loaded than expected.
+    expect(actualMessageCount).toBeLessThanOrEqual(correctMessageCount);
+
+    // CRITICAL: lastObservedAt must NOT go backward.
+    // The new generation should use max(staleRecord.lastObservedAt, dbRecord.lastObservedAt)
+    expect(newRecord.lastObservedAt).toBeDefined();
+    expect(newRecord.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(chunk2Time.getTime());
+
+    // Verify that loading unobserved messages excludes messages 0-9
+    const loadedIds = actualResult.messages.map((m: any) => m.id);
+    // Messages 0-9 were in the activated chunks — they must NOT be re-loaded
+    for (let i = 0; i < 10; i++) {
+      expect(loadedIds).not.toContain(`msg-${i}`);
+    }
+    // Messages 10-19 should still be loaded
+    expect(loadedIds.length).toBeGreaterThan(0);
+    expect(loadedIds).toContain('msg-10');
+  });
 });
