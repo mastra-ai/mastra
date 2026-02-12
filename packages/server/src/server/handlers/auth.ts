@@ -52,13 +52,14 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
 /**
  * Get the public-facing origin from a request, respecting reverse proxy headers.
  * Behind a proxy (e.g. edge router), request.url contains the internal hostname.
- * X-Forwarded-Host and X-Forwarded-Proto tell us the real public origin.
+ * X-Forwarded-Host tells us the real public hostname.
+ * Always uses https when behind a proxy — Knative's queue-proxy overwrites
+ * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
  */
 function getPublicOrigin(request: Request): string {
   const forwardedHost = request.headers.get('x-forwarded-host');
   if (forwardedHost) {
-    const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
-    return `${forwardedProto}://${forwardedHost}`;
+    return `https://${forwardedHost}`;
   }
   return new URL(request.url).origin;
 }
