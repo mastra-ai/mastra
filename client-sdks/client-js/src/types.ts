@@ -1250,6 +1250,7 @@ export interface MastraPackage {
 
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
+  isDev: boolean;
 }
 
 // ============================================================================

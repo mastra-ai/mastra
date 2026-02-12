@@ -36,7 +36,7 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
 
-      expect(result).toEqual({ packages });
+      expect(result).toEqual({ packages, isDev: false });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE is not set', async () => {
@@ -44,7 +44,7 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
 
-      expect(result).toEqual({ packages: [] });
+      expect(result).toEqual({ packages: [], isDev: false });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE points to invalid JSON', async () => {
@@ -53,7 +53,7 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
 
-      expect(result).toEqual({ packages: [] });
+      expect(result).toEqual({ packages: [], isDev: false });
     });
 
     it('should return empty array when MASTRA_PACKAGES_FILE points to non-existent file', async () => {
@@ -61,7 +61,16 @@ describe('System Handlers', () => {
 
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
 
-      expect(result).toEqual({ packages: [] });
+      expect(result).toEqual({ packages: [], isDev: false });
+    });
+
+    it('should return isDev true when MASTRA_DEV is set', async () => {
+      process.env.MASTRA_DEV = 'true';
+      delete process.env.MASTRA_PACKAGES_FILE;
+
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler();
+
+      expect(result).toEqual({ packages: [], isDev: true });
     });
   });
 });
