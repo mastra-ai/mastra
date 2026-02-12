@@ -139,6 +139,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   outputProcessors: { type: 'jsonb', nullable: true },
   memory: { type: 'jsonb', nullable: true },
   scorers: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
   // Version metadata
   changedFields: { type: 'jsonb', nullable: true }, // Array of field names
   changeMessage: { type: 'text', nullable: true },
