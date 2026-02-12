@@ -18,6 +18,7 @@ import { MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useAgentPromptExperiment, useObservationalMemoryContext } from '@/domains/agents/context';
 import { useQueryClient } from '@tanstack/react-query';
+import { useMemoryConfig } from '@/domains/memory/hooks';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -413,6 +414,12 @@ export function MastraRuntimeProvider({
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
+
+  // Check if OM is enabled from the agent's memory config.
+  // The config value can be `true`, `false`, `undefined`, or an object with/without `.enabled`.
+  const { data: memoryConfigData } = useMemoryConfig(agentId);
+  const omConfig = memoryConfigData?.config?.observationalMemory;
+  const isOMEnabled = omConfig === true || (typeof omConfig === 'object' && omConfig !== null && omConfig.enabled !== false);
   const {
     setIsObservingFromStream,
     setIsReflectingFromStream,
@@ -805,7 +812,7 @@ export function MastraRuntimeProvider({
             });
 
             // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
-            if (threadId) {
+            if (threadId && isOMEnabled) {
               baseClient
                 .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
                 .then(result => {
@@ -1173,7 +1180,7 @@ export function MastraRuntimeProvider({
       }, 500);
 
       // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
-      if (threadId) {
+      if (threadId && isOMEnabled) {
         baseClient
           .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
           .then(result => {
@@ -1225,7 +1232,7 @@ export function MastraRuntimeProvider({
       cancelRun?.();
 
       // Fire-and-forget: await any in-flight buffering operations, then refresh sidebar
-      if (threadId) {
+      if (threadId && isOMEnabled) {
         baseClient
           .awaitBufferStatus({ agentId, resourceId: agentId, threadId })
           .then(result => {
