@@ -145,6 +145,7 @@ export type ProviderModelsMap = {
     'gemma3:4b',
     'glm-4.6',
     'glm-4.7',
+    'glm-5',
     'gpt-oss:120b',
     'gpt-oss:20b',
     'kimi-k2-thinking',
@@ -1677,7 +1678,6 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b:free',
     'openai/gpt-oss-safeguard-20b',
     'openai/o4-mini',
-    'openrouter/pony-alpha',
     'openrouter/sherlock-dash-alpha',
     'openrouter/sherlock-think-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
@@ -1731,6 +1731,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.6:exacto',
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash',
+    'z-ai/glm-5',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
@@ -1849,8 +1850,8 @@ export type ProviderModelsMap = {
     'hf:moonshotai/Kimi-K2-Instruct-0905',
     'hf:moonshotai/Kimi-K2-Thinking',
     'hf:moonshotai/Kimi-K2.5',
+    'hf:nvidia/Kimi-K2.5-NVFP4',
     'hf:openai/gpt-oss-120b',
-    'hf:zai-org/GLM-4.5',
     'hf:zai-org/GLM-4.6',
     'hf:zai-org/GLM-4.7',
   ];
