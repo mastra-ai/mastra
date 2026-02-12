@@ -329,30 +329,50 @@ export const supervisorAgent = new Agent({
           id: 'research-completeness',
           name: 'Research Completeness',
           description: 'Checks if research covers all key aspects',
-        }).generateScore(async context => {
-          console.dir({ 'research-completeness-Scorer': context }, { depth: null });
-          // const text = (context.run.output || '').toString();
-          // const hasResearch = text.includes('research') || text.includes('findings');
-          // const hasAnalysis = text.includes('analysis') || text.includes('insight');
-          // const hasRecommendations = text.includes('recommendation');
-          // return hasResearch && hasAnalysis && hasRecommendations ? 1 : 0.5;
-          supervisorScorerCount++;
-          return supervisorScorerCount > 2 ? 1 : 0.7;
-        }),
+        })
+          .generateScore(async context => {
+            const text = (context.run.output || '').toString();
+            console.dir({ 'research-completeness-Scorer': text }, { depth: null });
+            const hasResearch = text.includes('research') || text.includes('findings');
+            const hasAnalysis = text.includes('analysis') || text.includes('insight');
+            const hasRecommendations = text.includes('recommendation');
+            return (hasResearch && hasAnalysis) || hasRecommendations ? 1 : 0.5;
+            // supervisorScorerCount++;
+            // return supervisorScorerCount > 2 ? 1 : 0.7;
+            // return 1;
+          })
+          .generateReason(async context => {
+            const text = (context.run.output || '').toString();
+            const hasResearch = text.includes('research') || text.includes('findings');
+            const hasAnalysis = text.includes('analysis') || text.includes('insight');
+            const hasRecommendations = text.includes('recommendation');
+            return (hasResearch && hasAnalysis) || hasRecommendations
+              ? 'Research is complete'
+              : 'Research is not complete, please provide more details, ensure words like research/findings analysis/insight are added and add recommendations based on the research analysis';
+          }),
 
         // Scorer 2: Validate response has sufficient detail
         createScorer({
           id: 'response-quality',
           name: 'Response Quality',
           description: 'Validates response has sufficient detail',
-        }).generateScore(async context => {
-          console.dir({ 'response-quality-Scorer': context }, { depth: null });
-          // const text = (context.run.output || '').toString();
-          // const wordCount = text.split(/\s+/).length;
-          // return wordCount >= 200 ? 1 : wordCount / 200;
-          supervisorScorerCount++;
-          return supervisorScorerCount > 2 ? 1 : 0.7;
-        }),
+        })
+          .generateScore(async context => {
+            console.dir({ 'response-quality-Scorer': context }, { depth: null });
+            const text = (context.run.output || '').toString();
+            const wordCount = text.split(/\s+/).length;
+            return wordCount >= 200 ? 1 : wordCount / 200;
+            // supervisorScorerCount++;
+            // return supervisorScorerCount > 2 ? 1 : 0.7;
+            // return 1;
+          })
+          .generateReason(async context => {
+            const text = (context.run.output || '').toString();
+            const wordCount = text.split(/\s+/).length;
+            return wordCount >= 200
+              ? 'Response is sufficient'
+              : 'Response is not sufficient, please provide more details, at least 200 words';
+          }),
       ],
       strategy: 'all', // All scorers must pass
       onComplete: async result => {

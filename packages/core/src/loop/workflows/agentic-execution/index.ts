@@ -4,6 +4,7 @@ import { createWorkflow } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { createCompletionCheckStep } from './completion-check-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
 import { createToolCallStep } from './tool-call-step';
@@ -33,6 +34,12 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     },
     llmExecutionStep,
   );
+
+  const completionCheckStep = createCompletionCheckStep({
+    models,
+    _internal,
+    ...rest,
+  });
 
   // Sequential execution may be required for tool calls to avoid race conditions, otherwise concurrency is configurable
   let toolCallConcurrency = 10;
@@ -102,5 +109,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     )
     .foreach(toolCallStep, { concurrency: sequentialExecutionRequired ? 1 : toolCallConcurrency })
     .then(llmMappingStep)
+    .then(completionCheckStep)
     .commit();
 }

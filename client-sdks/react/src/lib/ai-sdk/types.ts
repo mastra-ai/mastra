@@ -22,6 +22,7 @@ export type MastraUIMessageMetadata = {
       mode: 'generate';
       completionResult?: {
         passed: boolean;
+        suppressFeedback?: boolean;
       };
       requireApprovalMetadata?: {
         [toolName: string]: {
@@ -44,6 +45,7 @@ export type MastraUIMessageMetadata = {
       mode: 'stream';
       completionResult?: {
         passed: boolean;
+        suppressFeedback?: boolean;
       };
       requireApprovalMetadata?: {
         [toolName: string]: {
@@ -70,6 +72,7 @@ export type MastraUIMessageMetadata = {
       hasMoreMessages?: boolean;
       completionResult?: {
         passed: boolean;
+        suppressFeedback?: boolean;
       };
       requireApprovalMetadata?: {
         [toolName: string]: {

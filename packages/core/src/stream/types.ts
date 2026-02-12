@@ -360,6 +360,8 @@ interface CompletionCheckPayload {
   reason?: string;
   /** Whether the maximum iteration was reached */
   maxIterationReached: boolean;
+  /** Whether to suppress the completion feedback message */
+  suppressFeedback: boolean;
 }
 
 // Network-specific payload interfaces
@@ -553,6 +555,7 @@ interface NetworkValidationEndPayload {
   timedOut: boolean;
   reason?: string;
   maxIterationReached: boolean;
+  suppressFeedback: boolean;
 }
 
 interface RoutingAgentAbortPayload {

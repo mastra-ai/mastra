@@ -530,6 +530,8 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
     }
 
     case 'completion-check': {
+      if (chunk.payload.suppressFeedback) return result;
+
       const feedback = formatStreamCompletionFeedback(
         {
           complete: chunk.payload.passed,

@@ -5,8 +5,6 @@ import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
 import type { OutputWriter } from '../../../workflows';
-import type { StreamCompletionContext, CompletionRunResult } from '../../network/validation';
-import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
@@ -163,129 +161,40 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
             // Add feedback if provided (only if we're continuing to next iteration)
             if (iterationResult.feedback && typedInputData.stepResult?.isContinued && !hasFinishedSteps) {
-              messageList.add({ role: 'assistant', content: iterationResult.feedback }, 'response');
+              messageList.add(
+                {
+                  id: rest.mastra?.generateId(),
+                  createdAt: new Date(new Date().getTime() + 1),
+                  type: 'text',
+                  role: 'assistant',
+                  content: {
+                    parts: [
+                      {
+                        type: 'text',
+                        text: iterationResult.feedback,
+                      },
+                    ],
+                    metadata: {
+                      mode: 'stream',
+                      completionResult: {
+                        passed: true,
+                        suppressFeedback: true,
+                      },
+                    },
+                    format: 2,
+                  },
+                } as MastraDBMessage,
+                'response',
+              );
+              if (iterationResult.continue && rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
+                hasFinishedSteps = false;
+                typedInputData.stepResult.isContinued = true;
+              }
             }
           }
         } catch (error) {
           // Log error but don't fail the iteration
           rest.logger?.error('Error in onIterationComplete hook:', error);
-        }
-      }
-
-      // Run completion scoring if configured and still continuing
-      let completionResult: CompletionRunResult | undefined;
-      const hasCompletionScorers = rest.completion?.scorers && rest.completion.scorers.length > 0;
-
-      if (hasCompletionScorers && (!typedInputData.stepResult?.isContinued || hasFinishedSteps)) {
-        // Get the original user message for context
-        const userMessages = messageList.get.input.db();
-        const firstUserMessage = userMessages[0];
-        let originalTask = 'Unknown task';
-        if (firstUserMessage) {
-          if (typeof firstUserMessage.content === 'string') {
-            originalTask = firstUserMessage.content;
-          } else if (firstUserMessage.content?.parts?.[0]?.type === 'text') {
-            originalTask = (firstUserMessage.content.parts[0] as { type: 'text'; text: string }).text;
-          }
-        }
-
-        // Build completion context
-        // Use any for toolCalls/toolResults to handle TypedToolCall/TypedToolResult complex generics
-        const toolCalls = (typedInputData.output.toolCalls || []) as Array<{ toolName: string; args?: unknown }>;
-        const toolResults = (typedInputData.output.toolResults || []) as Array<{
-          toolName: string;
-          result?: unknown;
-        }>;
-
-        const completionContext: StreamCompletionContext = {
-          iteration: accumulatedSteps.length,
-          maxIterations: rest.maxSteps,
-          originalTask,
-          currentText: typedInputData.output.text || '',
-          toolCalls: toolCalls.map(tc => ({
-            name: tc.toolName,
-            args: (tc.args || {}) as Record<string, unknown>,
-          })),
-          messages: messageList.get.all.db(),
-          toolResults: toolResults.map(tr => ({
-            name: tr.toolName,
-            result: tr.result,
-          })),
-          runId: runId,
-          threadId: _internal?.threadId,
-          resourceId: _internal?.resourceId,
-          agentId: rest.agentId,
-          agentName: rest.agentName,
-          customContext: rest.requestContext ? Object.fromEntries(rest.requestContext.entries()) : undefined,
-        };
-
-        // Run completion scorers
-        completionResult = await runStreamCompletionScorers(rest.completion!.scorers!, completionContext, {
-          strategy: rest.completion!.strategy,
-          parallel: rest.completion!.parallel,
-          timeout: rest.completion!.timeout,
-        });
-
-        // Call onComplete callback if configured
-        if (rest.completion!.onComplete) {
-          await rest.completion!.onComplete(completionResult);
-        }
-
-        if (completionResult.complete) {
-          // Task is complete - stop the loop
-          hasFinishedSteps = true;
-        } else {
-          // Continue loop
-          typedInputData.stepResult!.isContinued = true;
-          hasFinishedSteps = false;
-        }
-
-        // add feedback as assistant message for the LLM to see
-        const maxIterationReached = rest.maxSteps ? accumulatedSteps.length >= rest.maxSteps : false;
-        const feedback = formatStreamCompletionFeedback(completionResult, maxIterationReached);
-
-        // Add feedback as an assistant message so the LLM sees it in the next iteration
-        messageList.add(
-          {
-            id: rest.mastra?.generateId(),
-            createdAt: new Date(),
-            type: 'text',
-            role: 'assistant',
-            content: {
-              parts: [
-                {
-                  type: 'text',
-                  text: feedback,
-                },
-              ],
-              metadata: {
-                mode: 'stream',
-                completionResult: {
-                  passed: completionResult.complete,
-                },
-              },
-              format: 2,
-            },
-          } as MastraDBMessage,
-          'response',
-        );
-
-        // Emit completion-check event
-        if (isControllerOpen(controller)) {
-          controller.enqueue({
-            type: 'completion-check',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: {
-              iteration: accumulatedSteps.length,
-              passed: completionResult.complete,
-              results: completionResult.scorers,
-              duration: completionResult.totalDuration,
-              timedOut: completionResult.timedOut,
-              reason: completionResult.completionReason,
-              maxIterationReached: !!maxIterationReached,
-            },
-          } as ChunkType<OUTPUT>);
         }
       }
 
