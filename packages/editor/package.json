@@ -13,7 +13,7 @@
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
       }
     },
@@ -23,7 +23,7 @@
         "default": "./dist/composio.js"
       },
       "require": {
-        "types": "./dist/composio.d.cts",
+        "types": "./dist/composio.d.ts",
         "default": "./dist/composio.cjs"
       }
     },
@@ -33,7 +33,7 @@
         "default": "./dist/arcade.js"
       },
       "require": {
-        "types": "./dist/arcade.d.cts",
+        "types": "./dist/arcade.d.ts",
         "default": "./dist/arcade.cjs"
       }
     }
