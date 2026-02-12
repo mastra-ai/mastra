@@ -11,7 +11,12 @@ type CompareExperimentsOptions = Omit<CompareExperimentsParams, 'datasetId' | 'e
  * @param experimentIdB - ID of the second experiment (comparison)
  * @param options - Optional thresholds for regression detection
  */
-export const useCompareExperiments = (datasetId: string, experimentIdA: string, experimentIdB: string, options?: CompareExperimentsOptions) => {
+export const useCompareExperiments = (
+  datasetId: string,
+  experimentIdA: string,
+  experimentIdB: string,
+  options?: CompareExperimentsOptions,
+) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['compare-experiments', datasetId, experimentIdA, experimentIdB, options],

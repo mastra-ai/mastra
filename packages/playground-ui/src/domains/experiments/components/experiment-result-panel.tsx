@@ -4,14 +4,7 @@ import { DatasetExperimentResult } from '@mastra/client-js';
 import { Section } from '@/ds/components/Section';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { CopyButton } from '@/ds/components/CopyButton';
-import {
-  FileOutputIcon,
-  AlertCircleIcon,
-  Calendar1Icon,
-  PlayIcon,
-  FileCodeIcon,
-  PanelRightIcon,
-} from 'lucide-react';
+import { FileOutputIcon, AlertCircleIcon, Calendar1Icon, PlayIcon, FileCodeIcon, PanelRightIcon } from 'lucide-react';
 import { format } from 'date-fns/format';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { ListAndDetails } from '@/ds/components/ListAndDetails';

@@ -47,10 +47,7 @@ export function DatasetExperimentsToolbar({
   onFiltersChange,
   targetIds,
 }: DatasetExperimentsToolbarProps) {
-  const targetIdOptions = [
-    { value: 'all', label: 'All targets' },
-    ...targetIds.map(id => ({ value: id, label: id })),
-  ];
+  const targetIdOptions = [{ value: 'all', label: 'All targets' }, ...targetIds.map(id => ({ value: id, label: id }))];
 
   if (isSelectionActive) {
     return (

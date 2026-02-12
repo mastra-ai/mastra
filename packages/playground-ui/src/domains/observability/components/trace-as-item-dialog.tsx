@@ -153,12 +153,7 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose }: Tr
 
           <div className="grid gap-2">
             <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
-            <CodeEditor
-              value={groundTruth}
-              onChange={setGroundTruth}
-              showCopyButton={false}
-              className="min-h-[80px]"
-            />
+            <CodeEditor value={groundTruth} onChange={setGroundTruth} showCopyButton={false} className="min-h-[80px]" />
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

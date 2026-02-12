@@ -30,13 +30,15 @@ export const useDatasetVersions = (datasetId: string) => {
       return undefined;
     },
     select: data => {
-      return data.pages.flatMap(page => page?.versions ?? []).map((v, index) => ({
-        id: v.id,
-        datasetId: v.datasetId,
-        version: v.version,
-        createdAt: v.createdAt,
-        isCurrent: index === 0,
-      }));
+      return data.pages
+        .flatMap(page => page?.versions ?? [])
+        .map((v, index) => ({
+          id: v.id,
+          datasetId: v.datasetId,
+          version: v.version,
+          createdAt: v.createdAt,
+          isCurrent: index === 0,
+        }));
     },
     enabled: Boolean(datasetId),
   });

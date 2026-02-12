@@ -26,7 +26,9 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
   const [name, setName] = useState(dataset.name);
   const [description, setDescription] = useState(dataset.description ?? '');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(dataset.inputSchema ?? null);
-  const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(dataset.groundTruthSchema ?? null);
+  const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(
+    dataset.groundTruthSchema ?? null,
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
   const { updateDataset } = useDatasetMutations();
 

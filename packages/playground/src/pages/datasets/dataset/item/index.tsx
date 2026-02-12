@@ -2,6 +2,7 @@ import { useParams, useNavigate, Link } from 'react-router';
 import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import {
+  AlertTriangleIcon,
   ArrowRightToLineIcon,
   Calendar1Icon,
   DatabaseIcon,
@@ -36,6 +37,7 @@ import {
   CopyButton,
   Columns,
   Column,
+  Notice,
 } from '@mastra/playground-ui';
 
 function DatasetItemPage() {
@@ -297,13 +299,17 @@ function DatasetItemPage() {
                     <AlertTitle>This item was deleted at version v{latestVersion.datasetVersion}</AlertTitle>
                   </Alert>
                 )}
+
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <Alert variant="warning">
-                    <AlertTitle>Viewing version v{selectedVersion.datasetVersion}</AlertTitle>
-                    <Button variant="standard" size="tiny" className="mt-2 mb-1" onClick={handleReturnToLatest}>
-                      <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
-                    </Button>
-                  </Alert>
+                  <>
+                    <Notice variant="warning">
+                      <AlertTriangleIcon />
+                      <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                      <Notice.Button onClick={handleReturnToLatest}>
+                        <ArrowRightToLineIcon /> Return to the latest version
+                      </Notice.Button>
+                    </Notice>
+                  </>
                 )}
 
                 {isEditing ? (
