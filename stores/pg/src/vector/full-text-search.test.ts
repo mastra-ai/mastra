@@ -270,6 +270,60 @@ describe('PgVector Full-Text Search (Issue #10453)', () => {
     });
   });
 
+  describe('describeIndex language detection', () => {
+    it('should detect hasFullTextSearch on FTS-enabled index', async () => {
+      const stats = await vectorDB.describeIndex({ indexName: ftsIndex });
+      expect(stats.hasFullTextSearch).toBe(true);
+    });
+
+    it('should parse FTS language from GIN index definition on fresh instance', async () => {
+      // Simulate a fresh PgVector instance that has no in-memory cache
+      const freshDB = new PgVector({ connectionString, id: 'pg-fts-fresh' });
+      const spanishIndex = 'test_fts_spanish';
+
+      try {
+        await freshDB.createIndex({
+          indexName: spanishIndex,
+          dimension: 3,
+          fullTextSearch: { language: 'spanish' },
+        });
+
+        // Create a second fresh instance to force describeIndex to parse from DB
+        const freshDB2 = new PgVector({ connectionString, id: 'pg-fts-fresh2' });
+
+        // describeIndex should detect FTS and parse 'spanish' from the GIN index
+        const stats = await freshDB2.describeIndex({ indexName: spanishIndex });
+        expect(stats.hasFullTextSearch).toBe(true);
+
+        // Now query with fulltext to verify the correct language is used
+        await freshDB2.upsert({
+          indexName: spanishIndex,
+          vectors: [[1, 0, 0]],
+          metadata: [{ source: 'es1' }],
+          documents: ['La base de datos relacional es muy importante'],
+        });
+
+        const results = await freshDB2.query({
+          indexName: spanishIndex,
+          queryVector: [0, 0, 0],
+          searchMode: 'fulltext',
+          queryText: 'base datos',
+          topK: 5,
+        });
+
+        expect(results.length).toBeGreaterThanOrEqual(1);
+        await freshDB2.disconnect();
+      } finally {
+        try {
+          await freshDB.deleteIndex({ indexName: spanishIndex });
+        } catch {
+          // ignore
+        }
+        await freshDB.disconnect();
+      }
+    });
+  });
+
   describe('Default vector search mode (backward compatibility)', () => {
     it('should default to vector-only search when searchMode is not specified', async () => {
       // Existing behavior: pure vector similarity search
