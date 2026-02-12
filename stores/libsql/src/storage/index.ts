@@ -6,6 +6,7 @@ import { MastraCompositeStore } from '@mastra/core/storage';
 import { AgentsLibSQL } from './domains/agents';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
+import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
@@ -18,6 +19,7 @@ export {
   AgentsLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
+  MCPClientsLibSQL,
   MemoryLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
@@ -149,6 +151,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const experiments = new ExperimentsLibSQL(domainConfig);
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
     const scorerDefinitions = new ScorerDefinitionsLibSQL(domainConfig);
+    const mcpClients = new MCPClientsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -160,6 +163,7 @@ export class LibSQLStore extends MastraCompositeStore {
       experiments,
       promptBlocks,
       scorerDefinitions,
+      mcpClients,
     };
   }
 }

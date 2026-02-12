@@ -2,6 +2,7 @@ import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
 import type {
   StorageAgentType,
+  StorageMCPClientType,
   StorageMessageType,
   StoragePromptBlockType,
   StorageResourceType,
@@ -15,6 +16,7 @@ import type {
   ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
+import type { MCPClientVersion } from './mcp-clients';
 import type { TraceEntry } from './observability';
 import type { PromptBlockVersion } from './prompt-blocks';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
@@ -39,6 +41,8 @@ export class InMemoryDB {
   readonly promptBlockVersions = new Map<string, PromptBlockVersion>();
   readonly scorerDefinitions = new Map<string, StorageScorerDefinitionType>();
   readonly scorerDefinitionVersions = new Map<string, ScorerDefinitionVersion>();
+  readonly mcpClients = new Map<string, StorageMCPClientType>();
+  readonly mcpClientVersions = new Map<string, MCPClientVersion>();
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
@@ -68,6 +72,8 @@ export class InMemoryDB {
     this.promptBlockVersions.clear();
     this.scorerDefinitions.clear();
     this.scorerDefinitionVersions.clear();
+    this.mcpClients.clear();
+    this.mcpClientVersions.clear();
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();
