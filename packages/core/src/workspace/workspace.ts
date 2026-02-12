@@ -33,7 +33,7 @@
 import type { IMastraLogger } from '../logger';
 import type { MastraVector } from '../vector';
 
-import { WorkspaceError, SearchNotAvailableError } from './errors';
+import { WorkspaceError, SearchNotAvailableError, AccessRequestDeniedError } from './errors';
 import { CompositeFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
@@ -46,6 +46,12 @@ import type { WorkspaceSkills, SkillsResolver } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
+
+export type OnAccessRequestCallback = (request: {
+  path: string;
+  reason: string;
+  workspace: Workspace;
+}) => Promise<boolean> | boolean;
 
 // =============================================================================
 // Workspace Configuration
@@ -242,6 +248,13 @@ export interface WorkspaceConfig {
    */
   tools?: WorkspaceToolsConfig;
 
+  /**
+   * Callback invoked when an agent requests access to a path outside
+   * the filesystem's basePath. Return true to approve, false to deny.
+   * If not provided, the request_access tool will not be created.
+   */
+  onAccessRequest?: OnAccessRequestCallback;
+
   // ---------------------------------------------------------------------------
   // Lifecycle Options
   // ---------------------------------------------------------------------------
@@ -334,6 +347,7 @@ export class Workspace {
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
   private readonly _config: WorkspaceConfig;
+  private readonly _onAccessRequest?: OnAccessRequestCallback;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
@@ -344,6 +358,7 @@ export class Workspace {
     this.lastAccessedAt = new Date();
 
     this._config = config;
+    this._onAccessRequest = config.onAccessRequest;
     this._sandbox = config.sandbox;
 
     // Setup mounts - creates CompositeFilesystem and informs sandbox
@@ -454,6 +469,24 @@ export class Workspace {
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
+  }
+
+  get canRequestAccess(): boolean {
+    return this._onAccessRequest !== undefined;
+  }
+
+  async requestAccess(path: string, reason: string): Promise<{ granted: boolean }> {
+    if (!this._onAccessRequest) {
+      throw new AccessRequestDeniedError(path);
+    }
+
+    const granted = await this._onAccessRequest({ path, reason, workspace: this });
+
+    if (granted && this._fs && 'addAllowedPath' in this._fs) {
+      (this._fs as any).addAllowedPath(path);
+    }
+
+    return { granted };
   }
 
   /**

@@ -532,6 +532,38 @@ Examples:
         },
       });
     }
+
+    // Request access tool (only if onAccessRequest handler is configured)
+    if (workspace.canRequestAccess) {
+      const requestAccessConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.FILESYSTEM.REQUEST_ACCESS);
+      if (requestAccessConfig.enabled) {
+        tools[WORKSPACE_TOOLS.FILESYSTEM.REQUEST_ACCESS] = createTool({
+          id: WORKSPACE_TOOLS.FILESYSTEM.REQUEST_ACCESS,
+          description:
+            'Request access to a directory outside the workspace. The user will be prompted to approve or deny. Use this when you need to read or write files outside the workspace base directory.',
+          requireApproval: requestAccessConfig.requireApproval,
+          inputSchema: z.object({
+            path: z.string().describe('Absolute path to request access to'),
+            reason: z.string().describe('Why you need access to this path'),
+          }),
+          outputSchema: z.object({
+            granted: z.boolean(),
+            path: z.string(),
+            alreadyAllowed: z.boolean().optional(),
+          }),
+          execute: async ({ path, reason }) => {
+            const fs = workspace.filesystem!;
+            if ('isPathAllowed' in fs && typeof (fs as any).isPathAllowed === 'function') {
+              if ((fs as any).isPathAllowed(path)) {
+                return { granted: true, path, alreadyAllowed: true };
+              }
+            }
+            const result = await workspace.requestAccess(path, reason);
+            return { granted: result.granted, path };
+          },
+        });
+      }
+    }
   }
 
   // Only add search tools if search is available

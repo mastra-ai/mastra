@@ -138,6 +138,13 @@ export class PermissionError extends FilesystemError {
   }
 }
 
+export class AccessRequestDeniedError extends FilesystemError {
+  constructor(path: string) {
+    super(`Access request denied for path: ${path}`, 'EACCES_DENIED', path);
+    this.name = 'AccessRequestDeniedError';
+  }
+}
+
 export class FileReadRequiredError extends FilesystemError {
   constructor(path: string, reason: string) {
     super(reason, 'EREAD_REQUIRED', path);

@@ -66,6 +66,13 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * @default false
    */
   readOnly?: boolean;
+  /**
+   * Additional absolute paths outside basePath that are allowed when contained is true.
+   * Each path acts as an additional root — any path within it is valid.
+   * Paths are resolved to absolute at construction time.
+   * Has no effect when contained is false (all paths already allowed).
+   */
+  allowedPaths?: string[];
 }
 
 /**
@@ -96,6 +103,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private readonly _basePath: string;
   private readonly _contained: boolean;
+  private _allowedPaths: Set<string>;
 
   /**
    * The absolute base path on disk where files are stored.
@@ -105,12 +113,42 @@ export class LocalFilesystem extends MastraFilesystem {
     return this._basePath;
   }
 
+  get allowedPaths(): string[] {
+    return Array.from(this._allowedPaths);
+  }
+
+  addAllowedPath(path: string): boolean {
+    const resolved = nodePath.resolve(path);
+    if (this._allowedPaths.has(resolved)) return false;
+    // Skip if already within basePath
+    const rel = nodePath.relative(this._basePath, resolved);
+    if (!rel.startsWith('..') && !nodePath.isAbsolute(rel)) return false;
+    this._allowedPaths.add(resolved);
+    this.logger.debug('Added allowed path', { path: resolved });
+    return true;
+  }
+
+  removeAllowedPath(path: string): boolean {
+    const resolved = nodePath.resolve(path);
+    const removed = this._allowedPaths.delete(resolved);
+    if (removed) this.logger.debug('Removed allowed path', { path: resolved });
+    return removed;
+  }
+
+  isPathAllowed(targetPath: string): boolean {
+    if (!this._contained) return true;
+    const resolved = nodePath.resolve(targetPath);
+    const roots = [this._basePath, ...this._allowedPaths];
+    return roots.some(root => resolved === root || resolved.startsWith(root + nodePath.sep));
+  }
+
   constructor(options: LocalFilesystemOptions) {
     super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
+    this._allowedPaths = new Set((options.allowedPaths ?? []).map(p => nodePath.resolve(p)));
   }
 
   private generateId(): string {
@@ -121,6 +159,15 @@ export class LocalFilesystem extends MastraFilesystem {
     if (Buffer.isBuffer(content)) return content;
     if (content instanceof Uint8Array) return Buffer.from(content);
     return Buffer.from(content, 'utf-8');
+  }
+
+  private isWithinAllowedPath(absolutePath: string): boolean {
+    for (const allowed of this._allowedPaths) {
+      if (absolutePath === allowed || absolutePath.startsWith(allowed + nodePath.sep)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private resolvePath(inputPath: string): string {
@@ -137,6 +184,9 @@ export class LocalFilesystem extends MastraFilesystem {
       const relative = nodePath.relative(this._basePath, normalized);
       if (!relative.startsWith('..') && !nodePath.isAbsolute(relative)) {
         absolutePath = normalized;
+      } else if (this.isWithinAllowedPath(normalized)) {
+        // Path is within an allowed path — use as real path
+        absolutePath = normalized;
       } else {
         const cleanedPath = inputPath.replace(/^\/+/, '');
         absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
@@ -150,7 +200,9 @@ export class LocalFilesystem extends MastraFilesystem {
     if (this._contained) {
       const relative = nodePath.relative(this._basePath, absolutePath);
       if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
-        throw new PermissionError(inputPath, 'access');
+        if (!this.isWithinAllowedPath(absolutePath)) {
+          throw new PermissionError(inputPath, 'access');
+        }
       }
     }
 
@@ -213,9 +265,25 @@ export class LocalFilesystem extends MastraFilesystem {
       }
     }
 
-    if (targetReal !== baseReal && !targetReal.startsWith(baseReal + nodePath.sep)) {
-      throw new PermissionError(absolutePath, 'access');
+    // Check basePath
+    if (targetReal === baseReal || targetReal.startsWith(baseReal + nodePath.sep)) {
+      return;
     }
+
+    // Check allowed paths
+    for (const allowed of this._allowedPaths) {
+      let allowedReal: string;
+      try {
+        allowedReal = await fs.realpath(allowed);
+      } catch {
+        allowedReal = allowed; // Path may not exist yet
+      }
+      if (targetReal === allowedReal || targetReal.startsWith(allowedReal + nodePath.sep)) {
+        return;
+      }
+    }
+
+    throw new PermissionError(absolutePath, 'access');
   }
 
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
@@ -622,7 +690,7 @@ export class LocalFilesystem extends MastraFilesystem {
     // LocalFilesystem doesn't clean up files on destroy by default
   }
 
-  getInfo(): FilesystemInfo<{ basePath: string; contained: boolean }> {
+  getInfo(): FilesystemInfo<{ basePath: string; contained: boolean; allowedPaths: string[] }> {
     return {
       id: this.id,
       name: this.name,
@@ -633,13 +701,21 @@ export class LocalFilesystem extends MastraFilesystem {
       metadata: {
         basePath: this.basePath,
         contained: this._contained,
+        allowedPaths: this.allowedPaths,
       },
     };
   }
 
   getInstructions(): string {
     if (this._contained) {
-      return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+      const base = `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+      if (this._allowedPaths.size > 0) {
+        const paths = Array.from(this._allowedPaths)
+          .map(p => `"${p}"`)
+          .join(', ');
+        return `${base} Additional allowed paths: ${paths}. Use absolute paths to access these locations.`;
+      }
+      return base;
     }
     return `Local filesystem rooted at "${this.basePath}". Containment is disabled so absolute paths access the real filesystem. Use paths relative to "${this.basePath}" (e.g. "foo/bar.txt") for workspace files. Avoid unnecessary listing "/" as it would traverse the entire host filesystem.`;
   }
