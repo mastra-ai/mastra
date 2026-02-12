@@ -91,6 +91,68 @@ describe('watcher', () => {
       );
     });
 
+    describe('bundlerOptions forwarding', () => {
+      it('should default externalsPreset to true when bundlerOptions not provided', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+
+        await getInputOptions('test-entry.js', 'node');
+
+        expect(bundlerGetInputOptions).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Object),
+          'node',
+          undefined,
+          expect.objectContaining({
+            externalsPreset: true,
+          }),
+        );
+      });
+
+      it('should set externalsPreset to true when externals is true', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+
+        await getInputOptions('test-entry.js', 'node', undefined, {
+          bundlerOptions: {
+            enableSourcemap: false,
+            enableEsmShim: true,
+            externals: true,
+          },
+        });
+
+        expect(bundlerGetInputOptions).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Object),
+          'node',
+          undefined,
+          expect.objectContaining({
+            externalsPreset: true,
+          }),
+        );
+      });
+
+      it('should set externalsPreset to false when externals is an array', async () => {
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+
+        await getInputOptions('test-entry.js', 'node', undefined, {
+          bundlerOptions: {
+            enableSourcemap: false,
+            enableEsmShim: true,
+            externals: ['@prisma/client'],
+          },
+        });
+
+        expect(bundlerGetInputOptions).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Object),
+          'node',
+          undefined,
+          expect.objectContaining({
+            externalsPreset: false,
+          }),
+        );
+      });
+    });
+
     describe('platform parameter handling', () => {
       it('forwards "node" platform to bundler', async () => {
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
