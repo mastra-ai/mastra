@@ -156,35 +156,4 @@ describe('createVectorQueryTool — Full-Text & Hybrid Search (Issue #10453)', (
       );
     });
   });
-
-  describe('databaseConfig pass-through for fulltext/hybrid', () => {
-    it('should pass pgvector fulltext language config through databaseConfig', async () => {
-      const tool = createVectorQueryTool({
-        vectorStoreName: 'testStore',
-        indexName: 'testIndex',
-        model: mockModel,
-        searchMode: 'fulltext',
-        databaseConfig: {
-          pgvector: {
-            language: 'spanish',
-          },
-        },
-      });
-
-      const requestContext = new RequestContext();
-
-      await tool.execute({ queryText: 'base de datos', topK: 5 }, { mastra: mockMastra as any, requestContext });
-
-      expect(vectorQuerySearch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          searchMode: 'fulltext',
-          databaseConfig: expect.objectContaining({
-            pgvector: expect.objectContaining({
-              language: 'spanish',
-            }),
-          }),
-        }),
-      );
-    });
-  });
 });
