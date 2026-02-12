@@ -2,4 +2,4 @@
 '@mastra/e2b': patch
 ---
 
-Simplified `E2BSandboxOptions` to use `Omit<MastraSandboxOptions, 'name'>` instead of explicitly picking individual lifecycle callbacks. This ensures new callbacks added to `MastraSandboxOptions` are automatically available without updating the options type.
+`E2BSandboxOptions` now automatically inherits new lifecycle callbacks from `MastraSandboxOptions`, so new callbacks are available without updating the options type.
