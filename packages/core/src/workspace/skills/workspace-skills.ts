@@ -397,7 +397,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const walkRoot = extractGlobBase(pattern);
     // Strip leading slash from pattern for relative matching
     const normalizedPattern = pattern.startsWith('/') ? pattern.slice(1) : pattern;
-    const matcher = createGlobMatcher(normalizedPattern);
+    const matcher = createGlobMatcher(normalizedPattern, { dot: true });
     const matchingDirs: string[] = [];
 
     await this.#walkForDirectories(walkRoot, dirPath => {

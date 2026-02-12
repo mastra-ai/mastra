@@ -1071,6 +1071,22 @@ Instructions for the new skill.`;
       expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
+    it('should discover skills in dot-directories via glob', async () => {
+      const filesystem = createMockFilesystem({
+        '/.agents/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['**/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
     it('should handle glob pattern with non-existent base gracefully', async () => {
       const filesystem = createMockFilesystem({});
 
