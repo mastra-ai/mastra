@@ -43,6 +43,7 @@ export async function runScorersForItem(
   runId: string,
   targetType: TargetType,
   targetId: string,
+  itemId: string,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
 ): Promise<ScorerResult[]> {
@@ -63,7 +64,7 @@ export async function runScorersForItem(
             output,
             additionalContext: item.metadata,
             entityType: targetType.toUpperCase(),
-            entityId: targetId,
+            entityId: itemId,
             source: 'TEST',
             runId,
             scorer: {

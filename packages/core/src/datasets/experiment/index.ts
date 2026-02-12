@@ -274,6 +274,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           experimentId,
           targetType ?? 'agent',
           targetId ?? 'inline',
+          item.id,
           execResult.scorerInput,
           execResult.scorerOutput,
         );
