@@ -4,7 +4,7 @@
 
 Added Datasets and Experiments to core. Datasets let you store and version collections of test inputs with JSON Schema validation. Experiments let you run AI outputs against dataset items with configurable scorers to track quality over time.
 
-**New exports from `@mastra/core`:**
+**New exports from `@mastra/core/datasets`:**
 - `DatasetsManager` — orchestrates dataset CRUD, item versioning (SCD-2), and experiment execution
 - `Dataset` — single-dataset handle for adding items and running experiments
 
@@ -15,7 +15,8 @@ Added Datasets and Experiments to core. Datasets let you store and version colle
 **Example:**
 
 ```ts
-import { Mastra, DatasetsManager } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { DatasetsManager } from '@mastra/core/datasets';
 
 const mastra = new Mastra({ /* ... */ });
 const datasets = new DatasetsManager({ mastra });

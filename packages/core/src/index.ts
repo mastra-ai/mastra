@@ -24,5 +24,3 @@ export type {
   IEditorPromptNamespace,
   IEditorScorerNamespace,
 } from './editor';
-export { DatasetsManager, Dataset } from './datasets';
-export type { StartExperimentConfig } from './datasets';
