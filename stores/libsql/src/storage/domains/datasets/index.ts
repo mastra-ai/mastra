@@ -6,6 +6,8 @@ import {
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_ITEM_VERSIONS,
   TABLE_DATASET_VERSIONS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
   DATASETS_SCHEMA,
   DATASET_ITEMS_SCHEMA,
   DATASET_ITEM_VERSIONS_SCHEMA,
@@ -39,7 +41,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import { buildSelectColumns } from '../../db/utils';
+import { buildSelectColumns, prepareDeleteStatement, prepareUpdateStatement } from '../../db/utils';
 
 export class DatasetsLibSQL extends DatasetsStorage {
   #db: LibSQLDB;
@@ -274,23 +276,31 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async deleteDataset({ id }: { id: string }): Promise<void> {
     try {
-      // Cascade: delete item versions, dataset versions, items, then dataset
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_ITEM_VERSIONS} WHERE datasetId = ?`,
-        args: [id],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`,
-        args: [id],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`,
-        args: [id],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_DATASETS} WHERE id = ?`,
-        args: [id],
-      });
+      // Cascade: experiment results, experiments, item versions, dataset versions, items, dataset
+      // Experiment tables may not exist if experiment domain was never initialized — ignore errors
+      try {
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
+          args: [id],
+        });
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?`,
+          args: [id],
+        });
+      } catch {
+        // Experiment tables may not exist — safe to ignore
+      }
+
+      // Dataset cascade — atomic batch
+      await this.#client.batch(
+        [
+          { sql: `DELETE FROM ${TABLE_DATASET_ITEM_VERSIONS} WHERE datasetId = ?`, args: [id] },
+          { sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] },
+          { sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] },
+          { sql: `DELETE FROM ${TABLE_DATASETS} WHERE id = ?`, args: [id] },
+        ],
+        'write',
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -989,25 +999,23 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
       const items: DatasetItem[] = [];
+      const records: Record<string, any>[] = [];
 
       for (const itemInput of input.items) {
         const id = crypto.randomUUID();
 
-        await this.#db.insert({
-          tableName: TABLE_DATASET_ITEMS,
-          record: {
-            id,
-            datasetId: input.datasetId,
-            datasetVersion: nowIso,
-            input: itemInput.input,
-            groundTruth: itemInput.groundTruth,
-            metadata: itemInput.metadata,
-            createdAt: nowIso,
-            updatedAt: nowIso,
-          },
+        records.push({
+          id,
+          datasetId: input.datasetId,
+          datasetVersion: nowIso,
+          input: itemInput.input,
+          groundTruth: itemInput.groundTruth,
+          metadata: itemInput.metadata,
+          createdAt: nowIso,
+          updatedAt: nowIso,
         });
 
-        const item: DatasetItem = {
+        items.push({
           id,
           datasetId: input.datasetId,
           datasetVersion: now,
@@ -1016,11 +1024,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
           metadata: itemInput.metadata,
           createdAt: now,
           updatedAt: now,
-        };
-        items.push(item);
+        });
       }
 
-      // Update dataset lastModifiedAt once for entire bulk operation
+      // Batch insert all items + update dataset timestamp atomically
+      await this.#db.batchInsert({ tableName: TABLE_DATASET_ITEMS, records });
       await this.#client.execute({
         sql: `UPDATE ${TABLE_DATASETS} SET lastModifiedAt = ?, updatedAt = ? WHERE id = ?`,
         args: [nowIso, nowIso, input.datasetId],
@@ -1055,22 +1063,22 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
-      for (const itemId of input.itemIds) {
-        const item = await this.getItemById({ id: itemId });
-        if (!item || item.datasetId !== input.datasetId) continue;
+      // Build batch: delete each item + update dataset timestamp
+      const statements: { sql: string; args: InValue[] }[] = [];
 
-        // Delete from items table
-        await this.#client.execute({
-          sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE id = ?`,
-          args: [itemId],
-        });
+      for (const itemId of input.itemIds) {
+        statements.push(prepareDeleteStatement({ tableName: TABLE_DATASET_ITEMS, keys: { id: itemId } }));
       }
 
-      // Update dataset lastModifiedAt once for entire bulk operation
-      await this.#client.execute({
-        sql: `UPDATE ${TABLE_DATASETS} SET lastModifiedAt = ?, updatedAt = ? WHERE id = ?`,
-        args: [nowIso, nowIso, input.datasetId],
-      });
+      statements.push(
+        prepareUpdateStatement({
+          tableName: TABLE_DATASETS,
+          updates: { lastModifiedAt: nowIso, updatedAt: nowIso },
+          keys: { id: input.datasetId },
+        }),
+      );
+
+      await this.#client.batch(statements, 'write');
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
