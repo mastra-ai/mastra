@@ -1579,7 +1579,8 @@
         "moonshotai/Kimi-K2-Thinking",
         "moonshotai/Kimi-K2.5",
         "zai-org/GLM-4.7",
-        "zai-org/GLM-4.7-Flash"
+        "zai-org/GLM-4.7-Flash",
+        "zai-org/GLM-5"
       ],
       "docUrl": "https://huggingface.co/docs/inference-providers",
       "gateway": "models.dev"
@@ -2359,6 +2360,8 @@
         "mistralai/mistral-large-3-675b-instruct-2512",
         "moonshotai/kimi-k2-instruct",
         "moonshotai/kimi-k2-thinking",
+        "moonshotai/kimi-k2.5",
+        "moonshotai/kimi-k2.5-thinking",
         "nousresearch/hermes-4-405b:thinking",
         "nvidia/llama-3_3-nemotron-super-49b-v1_5",
         "openai/gpt-oss-120b",
@@ -2369,7 +2372,9 @@
         "zai-org/glm-4.5-air",
         "zai-org/glm-4.5-air:thinking",
         "zai-org/glm-4.7",
-        "zai-org/glm-4.7:thinking"
+        "zai-org/glm-4.7:thinking",
+        "zai-org/glm-5",
+        "zai-org/glm-5:thinking"
       ],
       "docUrl": "https://docs.nano-gpt.com",
       "gateway": "models.dev"
@@ -2508,7 +2513,8 @@
         "Qwen/Qwen3-235B-A22B-Instruct-2507",
         "meta-llama/Llama-3.1-8B-Instruct",
         "meta-llama/Llama-3.3-70B-Instruct",
-        "zai-org/GLM-4.7"
+        "zai-org/GLM-4.7",
+        "zai-org/GLM-5"
       ],
       "docUrl": "https://friendli.ai/docs/guides/serverless_endpoints/introduction",
       "gateway": "models.dev"
@@ -4192,7 +4198,8 @@
       "moonshotai/Kimi-K2-Thinking",
       "moonshotai/Kimi-K2.5",
       "zai-org/GLM-4.7",
-      "zai-org/GLM-4.7-Flash"
+      "zai-org/GLM-4.7-Flash",
+      "zai-org/GLM-5"
     ],
     "opencode": [
       "big-pickle",
@@ -4796,6 +4803,8 @@
       "mistralai/mistral-large-3-675b-instruct-2512",
       "moonshotai/kimi-k2-instruct",
       "moonshotai/kimi-k2-thinking",
+      "moonshotai/kimi-k2.5",
+      "moonshotai/kimi-k2.5-thinking",
       "nousresearch/hermes-4-405b:thinking",
       "nvidia/llama-3_3-nemotron-super-49b-v1_5",
       "openai/gpt-oss-120b",
@@ -4806,7 +4815,9 @@
       "zai-org/glm-4.5-air",
       "zai-org/glm-4.5-air:thinking",
       "zai-org/glm-4.7",
-      "zai-org/glm-4.7:thinking"
+      "zai-org/glm-4.7:thinking",
+      "zai-org/glm-5",
+      "zai-org/glm-5:thinking"
     ],
     "zai": [
       "glm-4.5",
@@ -4881,7 +4892,8 @@
       "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "meta-llama/Llama-3.1-8B-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct",
-      "zai-org/GLM-4.7"
+      "zai-org/GLM-4.7",
+      "zai-org/GLM-5"
     ],
     "anthropic": [
       "claude-3-5-haiku-20241022",
