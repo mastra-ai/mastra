@@ -96,7 +96,7 @@ function execWithStreaming(
 /**
  * Local sandbox provider configuration.
  */
-export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'name'> {
+export interface LocalSandboxOptions extends MastraSandboxOptions {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** Working directory for command execution */

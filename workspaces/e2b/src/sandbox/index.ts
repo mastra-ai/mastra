@@ -54,7 +54,7 @@ export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust'
 /**
  * E2B sandbox provider configuration.
  */
-export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'name'> {
+export interface E2BSandboxOptions extends MastraSandboxOptions {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**

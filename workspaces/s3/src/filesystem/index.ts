@@ -114,7 +114,7 @@ function isAccessDeniedError(error: unknown): boolean {
 /**
  * S3 filesystem provider configuration.
  */
-export interface S3FilesystemOptions extends Omit<MastraFilesystemOptions, 'name'> {
+export interface S3FilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** S3 bucket name */

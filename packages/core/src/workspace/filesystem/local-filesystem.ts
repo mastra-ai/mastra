@@ -37,7 +37,7 @@ import type { MastraFilesystemOptions } from './mastra-filesystem';
 /**
  * Local filesystem provider configuration.
  */
-export interface LocalFilesystemOptions extends Omit<MastraFilesystemOptions, 'name'> {
+export interface LocalFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** Base directory path on disk */

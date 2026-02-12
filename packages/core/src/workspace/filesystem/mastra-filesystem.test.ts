@@ -38,8 +38,8 @@ class TestFilesystem extends MastraFilesystem {
 
   private files = new Map<string, string | Buffer>();
 
-  constructor(options?: Pick<MastraFilesystemOptions, 'onInit' | 'onDestroy'>) {
-    super({ name: 'TestFilesystem', ...options });
+  constructor(options?: MastraFilesystemOptions) {
+    super({ ...options, name: 'TestFilesystem' });
   }
 
   async init(): Promise<void> {

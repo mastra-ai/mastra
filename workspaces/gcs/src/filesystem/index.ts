@@ -89,7 +89,7 @@ function getMimeType(path: string): string {
 /**
  * GCS filesystem provider configuration.
  */
-export interface GCSFilesystemOptions extends Omit<MastraFilesystemOptions, 'name'> {
+export interface GCSFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** GCS bucket name */

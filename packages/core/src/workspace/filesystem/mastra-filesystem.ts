@@ -47,7 +47,6 @@ export type FilesystemLifecycleHook = (args: { filesystem: WorkspaceFilesystem }
  * Providers extend this to add their own options while inheriting lifecycle hooks.
  */
 export interface MastraFilesystemOptions {
-  name: string;
   /** Called after the filesystem reaches 'ready' status */
   onInit?: FilesystemLifecycleHook;
   /** Called before the filesystem is destroyed */
@@ -116,7 +115,7 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   private readonly _onInit?: FilesystemLifecycleHook;
   private readonly _onDestroy?: FilesystemLifecycleHook;
 
-  constructor(options: MastraFilesystemOptions) {
+  constructor(options: { name: string } & MastraFilesystemOptions) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
 
     this._onInit = options.onInit;
