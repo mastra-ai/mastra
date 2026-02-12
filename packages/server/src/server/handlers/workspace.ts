@@ -1401,9 +1401,12 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 
       // Validate skill name to prevent path traversal
       const safeSkillName = assertSafeSkillName(skillName);
-      const skillPath = `${SKILLS_SH_DIR}/${safeSkillName}`;
 
-      // Check if skill exists
+      // Look up the skill's actual path from discovery (supports glob-discovered skills)
+      const skill = await workspace.skills?.get(safeSkillName);
+      const skillPath = skill?.path ?? `${SKILLS_SH_DIR}/${safeSkillName}`;
+
+      // Check if skill exists on filesystem
       try {
         await workspace.filesystem.stat(skillPath);
       } catch {

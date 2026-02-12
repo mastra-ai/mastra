@@ -91,6 +91,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /** Currently resolved skills paths (used to detect changes) */
   #resolvedPaths: string[] = [];
 
+  /** Cached glob-resolved directories and when they were last resolved */
+  #globDirCache: Map<string, string[]> = new Map();
+  #lastGlobResolveTime = 0;
+  static readonly GLOB_RESOLVE_INTERVAL = 5_000; // Re-walk glob dirs every 5s
+
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#source = config.source;
     this.#skillsResolver = config.skills;
@@ -371,12 +376,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * the pattern, each of which is then scanned for skills.
    */
   async #discoverSkills(): Promise<void> {
+    // Clear glob cache so discovery gets fresh results
+    this.#globDirCache.clear();
+    this.#lastGlobResolveTime = 0;
+
     for (const skillsPath of this.#resolvedPaths) {
       const source = this.#determineSource(skillsPath);
 
       if (isGlobPattern(skillsPath)) {
         // Glob pattern: resolve to matching directories, then discover in each
         const matchingDirs = await this.#resolveGlobToDirectories(skillsPath);
+        // Cache for subsequent staleness checks
+        this.#globDirCache.set(skillsPath, matchingDirs);
+        this.#lastGlobResolveTime = Date.now();
         for (const dir of matchingDirs) {
           await this.#discoverSkillsInPath(dir, source);
         }
@@ -488,35 +500,52 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
 
     for (const skillsPath of this.#resolvedPaths) {
-      // For glob patterns, check the walk root directory
-      const pathToCheck = isGlobPattern(skillsPath) ? extractGlobBase(skillsPath) : skillsPath;
+      let pathsToCheck: string[];
 
-      try {
-        const stat = await this.#source.stat(pathToCheck);
-        const mtime = stat.modifiedAt.getTime();
-
-        if (mtime > this.#lastDiscoveryTime) {
-          return true;
+      if (isGlobPattern(skillsPath)) {
+        // Use cached glob dirs, re-resolve periodically to discover new directories
+        const now = Date.now();
+        if (
+          now - this.#lastGlobResolveTime > WorkspaceSkillsImpl.GLOB_RESOLVE_INTERVAL ||
+          !this.#globDirCache.has(skillsPath)
+        ) {
+          const dirs = await this.#resolveGlobToDirectories(skillsPath);
+          this.#globDirCache.set(skillsPath, dirs);
+          this.#lastGlobResolveTime = now;
         }
+        pathsToCheck = this.#globDirCache.get(skillsPath) ?? [];
+      } else {
+        pathsToCheck = [skillsPath];
+      }
 
-        // Also check subdirectories (skill directories) for changes
-        const entries = await this.#source.readdir(pathToCheck);
-        for (const entry of entries) {
-          if (entry.type !== 'directory') continue;
+      for (const pathToCheck of pathsToCheck) {
+        try {
+          const stat = await this.#source.stat(pathToCheck);
+          const mtime = stat.modifiedAt.getTime();
 
-          const entryPath = this.#joinPath(pathToCheck, entry.name);
-          try {
-            const entryStat = await this.#source.stat(entryPath);
-            if (entryStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
-              return true;
-            }
-          } catch {
-            // Couldn't stat entry, skip it
+          if (mtime > this.#lastDiscoveryTime) {
+            return true;
           }
+
+          // Also check subdirectories (skill directories) for changes
+          const entries = await this.#source.readdir(pathToCheck);
+          for (const entry of entries) {
+            if (entry.type !== 'directory') continue;
+
+            const entryPath = this.#joinPath(pathToCheck, entry.name);
+            try {
+              const entryStat = await this.#source.stat(entryPath);
+              if (entryStat.modifiedAt.getTime() > this.#lastDiscoveryTime) {
+                return true;
+              }
+            } catch {
+              // Couldn't stat entry, skip it
+            }
+          }
+        } catch {
+          // Couldn't stat path (doesn't exist or error), skip to next
+          continue;
         }
-      } catch {
-        // Couldn't stat skillsPath (doesn't exist or error), skip to next path
-        continue;
       }
     }
 
