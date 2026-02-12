@@ -12,7 +12,6 @@ export function useWorkflowSchema(workflowId: string | null) {
     queryKey: ['workflow-schema', workflowId],
     queryFn: async () => {
       if (!workflowId) throw new Error('No workflow selected');
-      // @ts-expect-error -- getSchema not yet on Workflow type
       return client.getWorkflow(workflowId).getSchema();
     },
     enabled: !!workflowId,
