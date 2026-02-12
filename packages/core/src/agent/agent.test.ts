@@ -4798,10 +4798,13 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         // The steps should contain the tool-not-found error with available tool names
         const toolResults = result.steps.flatMap(s => s.toolResults ?? []);
-        const notFoundResult = toolResults.find((tr: any) => tr.toolName === 'nonExistentTool');
+        const notFoundResult = toolResults.find(
+          (tr: any) => (tr.payload?.toolName ?? tr.toolName) === 'nonExistentTool',
+        );
         if (notFoundResult) {
-          expect(String((notFoundResult as any).result)).toMatch(/not found/i);
-          expect(String((notFoundResult as any).result)).toMatch(/existingTool/);
+          const resultValue = (notFoundResult as any).payload?.result ?? (notFoundResult as any).result;
+          expect(String(resultValue)).toMatch(/not found/i);
+          expect(String(resultValue)).toMatch(/existingTool/);
         }
       });
 

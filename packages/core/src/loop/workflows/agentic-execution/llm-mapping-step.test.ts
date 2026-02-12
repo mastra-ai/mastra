@@ -17,7 +17,6 @@ type ToolCallOutput = {
   error?: Error;
   providerMetadata?: Record<string, any>;
   providerExecuted?: boolean;
-  toolNotFound?: boolean;
 };
 
 describe('createLLMMappingStep HITL behavior', () => {
@@ -333,6 +332,34 @@ describe('createLLMMappingStep HITL behavior', () => {
 
     // Should add both error and result messages to the messageList
     expect(messageList.add).toHaveBeenCalledTimes(2);
+  });
+
+  it('should bail when tool-not-found errors are mixed with pending HITL tools', async () => {
+    // Arrange: One hallucinated tool (ToolNotFoundError) + one HITL tool (no result, no error)
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError('Tool "creating:view" not found.'),
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'updateSummary',
+        args: { summary: 'test' },
+        result: undefined, // No result (HITL, no execute function)
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should bail (suspend) because HITL tool needs human input,
+    // even though the other error is a tool-not-found
+    expect(bail).toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(false);
   });
 
   it('should bail when errors are a mix of tool-not-found and other errors', async () => {

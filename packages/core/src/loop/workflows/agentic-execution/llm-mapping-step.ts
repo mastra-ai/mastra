@@ -146,7 +146,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         const allErrorsAreToolNotFound =
           errorResults?.length > 0 && errorResults.every(tc => tc.error instanceof ToolNotFoundError);
 
-        if (allErrorsAreToolNotFound) {
+        // Check for pending HITL tool calls (tools with no result and no error).
+        // In mixed turns with both ToolNotFoundError and pending HITL tools,
+        // the HITL suspension path should take priority over continuing the loop.
+        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error);
+
+        if (allErrorsAreToolNotFound && !hasPendingHITL) {
           // Process any successful tool results from this turn before continuing.
           // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
           // results need their chunks emitted and messages added to the messageList.
