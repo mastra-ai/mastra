@@ -11,7 +11,7 @@ import { useAgentEditForm } from './agent-edit-page/use-agent-edit-form';
 import { useStoredAgentMutations } from '../hooks/use-stored-agents';
 
 interface AgentCreateContentProps {
-  onSuccess?: (agent: { id: string }) => void;
+  onSuccess?: (agent: { id: string; description?: string }) => void;
   hideSubAgentCreate?: boolean;
 }
 

@@ -158,7 +158,7 @@ export function AgentsSection({
                 onAgentCreated={agent => {
                   field.onChange({
                     ...field.value,
-                    [agent.id]: { description: '' },
+                    [agent.id]: { description: agent.description || '' },
                   });
                   setIsCreateDialogOpen(false);
                 }}
@@ -174,7 +174,7 @@ export function AgentsSection({
 interface AgentsSideDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onAgentCreated?: (agent: { id: string }) => void;
+  onAgentCreated?: (agent: { id: string; description?: string }) => void;
 }
 
 function AgentsSideDialog({ isOpen, onClose, onAgentCreated }: AgentsSideDialogProps) {
