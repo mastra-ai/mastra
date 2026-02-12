@@ -22,7 +22,7 @@ const PER_PAGE = 10;
  * Hook to list items in a dataset with infinite scroll pagination and optional search
  * @param version - Optional version timestamp to view historical snapshot
  */
-export const useDatasetItems = (datasetId: string, search?: string, version?: Date | string | null) => {
+export const useDatasetItems = (datasetId: string, search?: string, version?: number | null) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 

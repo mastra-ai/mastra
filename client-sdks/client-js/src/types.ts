@@ -1609,7 +1609,7 @@ export class MastraClientError extends Error {
 export interface DatasetItem {
   id: string;
   datasetId: string;
-  version: string | Date;
+  datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
   metadata?: unknown;
@@ -1624,15 +1624,15 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown> | null;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
-  version: string | Date;
+  version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
 
 export interface DatasetExperiment {
   id: string;
-  datasetId: string;
-  datasetVersion: string | Date;
+  datasetId: string | null;
+  datasetVersion: number | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -1649,11 +1649,10 @@ export interface DatasetExperimentResult {
   id: string;
   experimentId: string;
   itemId: string;
-  itemVersion: string | Date;
+  itemDatasetVersion: number | null;
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
-  latency: number;
   error: string | null;
   startedAt: string | Date;
   completedAt: string | Date;
@@ -1720,7 +1719,7 @@ export interface TriggerDatasetExperimentParams {
   targetType: 'agent' | 'workflow' | 'scorer';
   targetId: string;
   scorerIds?: string[];
-  version?: Date | string;
+  version?: number;
   maxConcurrency?: number;
 }
 
@@ -1739,56 +1738,36 @@ export interface CompareExperimentsParams {
 
 export interface DatasetItemVersionResponse {
   id: string;
-  itemId: string;
   datasetId: string;
-  versionNumber: number;
-  datasetVersion: string | Date;
-  snapshot: {
-    input: unknown;
-    groundTruth?: unknown;
-    metadata?: Record<string, unknown>;
-  };
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  validTo: number | null;
   isDeleted: boolean;
   createdAt: string | Date;
+  updatedAt: string | Date;
 }
 
 export interface DatasetVersionResponse {
   id: string;
   datasetId: string;
-  version: string | Date;
+  version: number;
   createdAt: string | Date;
 }
 
 export interface CompareExperimentsResponse {
-  experimentA: { id: string; datasetVersion: string | Date };
-  experimentB: { id: string; datasetVersion: string | Date };
-  versionMismatch: boolean;
-  hasRegression: boolean;
-  scorers: Record<
-    string,
-    {
-      statsA: ScorerStats;
-      statsB: ScorerStats;
-      delta: number;
-      regressed: boolean;
-      threshold: number;
-    }
-  >;
+  baselineId: string;
   items: Array<{
     itemId: string;
-    inBothExperiments: boolean;
-    scoresA: Record<string, number | null>;
-    scoresB: Record<string, number | null>;
+    input: unknown;
+    groundTruth: unknown;
+    results: Record<
+      string,
+      {
+        output: unknown;
+        scores: Record<string, number | null>;
+      } | null
+    >;
   }>;
-  warnings: string[];
-}
-
-interface ScorerStats {
-  errorRate: number;
-  errorCount: number;
-  passRate: number;
-  passCount: number;
-  avgScore: number;
-  scoreCount: number;
-  totalItems: number;
 }

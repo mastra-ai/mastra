@@ -49,7 +49,7 @@ export const paginationQuerySchema = z.object({
 export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),
-  version: z.coerce.date().optional(), // Optional version filter for snapshot semantics
+  version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
 });
 
 // ============================================================================
@@ -88,7 +88,7 @@ export const triggerExperimentBodySchema = z.object({
   targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
   targetId: z.string().describe('ID of the target'),
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
-  version: z.coerce.date().optional().describe('Pin to specific dataset version'),
+  version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
 });
 
@@ -109,7 +109,7 @@ export const datasetResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   inputSchema: z.record(z.unknown()).optional().nullable(),
   groundTruthSchema: z.record(z.unknown()).optional().nullable(),
-  version: z.coerce.date(),
+  version: z.number().int(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -118,7 +118,7 @@ export const datasetResponseSchema = z.object({
 export const datasetItemResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string(),
-  version: z.coerce.date(),
+  datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -129,14 +129,18 @@ export const datasetItemResponseSchema = z.object({
 // Experiment entity schema
 export const experimentResponseSchema = z.object({
   id: z.string(),
-  datasetId: z.string(),
-  datasetVersion: z.coerce.date(),
+  datasetId: z.string().nullable(),
+  datasetVersion: z.number().int().nullable(),
   targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']),
   targetId: z.string(),
+  name: z.string().optional(),
+  description: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),
   succeededCount: z.number(),
   failedCount: z.number(),
+  skippedCount: z.number(),
   startedAt: z.coerce.date().nullable(),
   completedAt: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
@@ -157,17 +161,21 @@ export const experimentResultResponseSchema = z.object({
   id: z.string(),
   experimentId: z.string(),
   itemId: z.string(),
-  itemVersion: z.coerce.date(),
+  itemDatasetVersion: z.number().int().nullable(),
   input: z.unknown(),
   output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
-  latency: z.number(),
-  error: z.string().nullable(),
+  error: z
+    .object({
+      message: z.string(),
+      stack: z.string().optional(),
+      code: z.string().optional(),
+    })
+    .nullable(),
   startedAt: z.coerce.date(),
   completedAt: z.coerce.date(),
   retryCount: z.number(),
   traceId: z.string().nullable(),
-  scores: z.array(scorerResultSchema),
   createdAt: z.coerce.date(),
 });
 
@@ -206,11 +214,10 @@ export const experimentSummaryResponseSchema = z.object({
   results: z.array(
     z.object({
       itemId: z.string(),
-      itemVersion: z.coerce.date(),
+      itemDatasetVersion: z.number().int().nullable(),
       input: z.unknown(),
       output: z.unknown().nullable(),
       groundTruth: z.unknown().nullable(),
-      latency: z.number(),
       error: z.string().nullable(),
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),
@@ -260,35 +267,32 @@ export const listExperimentResultsResponseSchema = z.object({
 export const datasetItemVersionPathParams = z.object({
   datasetId: z.string().describe('Unique identifier for the dataset'),
   itemId: z.string().describe('Unique identifier for the dataset item'),
-  versionNumber: z.coerce.number().describe('Version number of the item'),
+  datasetVersion: z.coerce.number().int().describe('Dataset version number'),
 });
 
-// Item version response schema
+// Item history row response schema (SCD-2 DatasetItemRow shape)
 export const itemVersionResponseSchema = z.object({
   id: z.string(),
-  itemId: z.string(),
   datasetId: z.string(),
-  versionNumber: z.number(),
-  datasetVersion: z.coerce.date(),
-  snapshot: z.object({
-    input: z.unknown(),
-    groundTruth: z.unknown().optional(),
-    metadata: z.record(z.unknown()).optional(),
-  }),
+  datasetVersion: z.number().int(),
+  input: z.unknown(),
+  groundTruth: z.unknown().optional(),
+  metadata: z.record(z.unknown()).optional(),
+  validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 });
 
 export const listItemVersionsResponseSchema = z.object({
-  versions: z.array(itemVersionResponseSchema),
-  pagination: paginationInfoSchema,
+  history: z.array(itemVersionResponseSchema),
 });
 
 // Dataset version response schema
 export const datasetVersionResponseSchema = z.object({
   id: z.string(),
   datasetId: z.string(),
-  version: z.coerce.date(),
+  version: z.number().int(),
   createdAt: z.coerce.date(),
 });
 

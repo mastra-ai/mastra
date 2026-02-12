@@ -13,9 +13,12 @@ export interface DatasetCompareVersionToolbarProps {
   onVersionChange?: (versionA: string, versionB: string) => void;
 }
 
-function formatVersionLabel(version: Date | string): string {
-  const d = typeof version === 'string' ? new Date(version) : version;
-  return format(d, "MMM dd, yyyy 'at' H:mm:ss a");
+function formatVersionLabel(version: number, createdAt?: Date | string): string {
+  if (createdAt) {
+    const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
+    return `v${version} — ${format(d, "MMM dd, yyyy 'at' H:mm:ss a")}`;
+  }
+  return `v${version}`;
 }
 
 export function DatasetCompareVersionToolbar({
@@ -29,7 +32,7 @@ export function DatasetCompareVersionToolbar({
 
   const options = (versions ?? []).map(v => ({
     value: String(v.version),
-    label: `${formatVersionLabel(v.version)}${v.isCurrent ? ' (current)' : ''}`,
+    label: `${formatVersionLabel(v.version, v.createdAt)}${v.isCurrent ? ' (current)' : ''}`,
   }));
 
   return (

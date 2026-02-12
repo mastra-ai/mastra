@@ -44,6 +44,20 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
     });
+
+    // Indexes — idempotent, safe to run on every init
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_experiments_datasetid ON "${TABLE_EXPERIMENTS}" ("datasetId")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE INDEX IF NOT EXISTS idx_experiment_results_experimentid ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId")`,
+      args: [],
+    });
+    await this.#client.execute({
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_results_exp_item ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId", "itemId")`,
+      args: [],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -55,14 +69,18 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
   private transformExperimentRow(row: Record<string, unknown>): Experiment {
     return {
       id: row.id as string,
-      datasetId: row.datasetId as string,
-      datasetVersion: ensureDate(row.datasetVersion as string | Date)!,
+      datasetId: (row.datasetId as string | null) ?? null,
+      datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
+      name: (row.name as string) ?? undefined,
+      description: (row.description as string) ?? undefined,
+      metadata: row.metadata ? safelyParseJSON(row.metadata as string) : undefined,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems as number,
       succeededCount: row.succeededCount as number,
       failedCount: row.failedCount as number,
+      skippedCount: (row.skippedCount as number) ?? 0,
       startedAt: row.startedAt ? ensureDate(row.startedAt as string | Date)! : null,
       completedAt: row.completedAt ? ensureDate(row.completedAt as string | Date)! : null,
       createdAt: ensureDate(row.createdAt as string | Date)!,
@@ -76,17 +94,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       id: row.id as string,
       experimentId: row.experimentId as string,
       itemId: row.itemId as string,
-      itemVersion: ensureDate(row.itemVersion as string | Date)!,
+      itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
       input: safelyParseJSON(row.input as string),
       output: row.output ? safelyParseJSON(row.output as string) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth as string) : null,
-      latency: row.latency as number,
-      error: row.error as string | null,
+      error: row.error ? safelyParseJSON(row.error as string) : null,
       startedAt: ensureDate(row.startedAt as string | Date)!,
       completedAt: ensureDate(row.completedAt as string | Date)!,
       retryCount: row.retryCount as number,
       traceId: (row.traceId as string | null) ?? null,
-      scores: row.scores ? safelyParseJSON(row.scores as string) : [],
       createdAt: ensureDate(row.createdAt as string | Date)!,
     };
   }
@@ -102,14 +118,18 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         tableName: TABLE_EXPERIMENTS,
         record: {
           id,
-          datasetId: input.datasetId,
-          datasetVersion: input.datasetVersion.toISOString(),
+          datasetId: input.datasetId ?? null,
+          datasetVersion: input.datasetVersion ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
+          name: input.name ?? null,
+          description: input.description ?? null,
+          metadata: input.metadata ?? null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
           failedCount: 0,
+          skippedCount: 0,
           startedAt: null,
           completedAt: null,
           createdAt: nowIso,
@@ -123,10 +143,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         datasetVersion: input.datasetVersion,
         targetType: input.targetType,
         targetId: input.targetId,
+        name: input.name,
+        description: input.description,
+        metadata: input.metadata,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
         failedCount: 0,
+        skippedCount: 0,
         startedAt: null,
         completedAt: null,
         createdAt: now,
@@ -180,6 +204,22 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         updates.push('completedAt = ?');
         values.push(input.completedAt?.toISOString() ?? null);
       }
+      if (input.skippedCount !== undefined) {
+        updates.push('skippedCount = ?');
+        values.push(input.skippedCount);
+      }
+      if (input.name !== undefined) {
+        updates.push('name = ?');
+        values.push(input.name);
+      }
+      if (input.description !== undefined) {
+        updates.push('description = ?');
+        values.push(input.description);
+      }
+      if (input.metadata !== undefined) {
+        updates.push('metadata = ?');
+        values.push(JSON.stringify(input.metadata));
+      }
 
       values.push(input.id);
 
@@ -188,15 +228,9 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         args: values,
       });
 
-      return {
-        ...existing,
-        status: input.status ?? existing.status,
-        succeededCount: input.succeededCount ?? existing.succeededCount,
-        failedCount: input.failedCount ?? existing.failedCount,
-        startedAt: input.startedAt ?? existing.startedAt,
-        completedAt: input.completedAt ?? existing.completedAt,
-        updatedAt: new Date(now),
-      };
+      // Re-SELECT to get all fields correctly transformed (F2 fix)
+      const updated = await this.getExperimentById({ id: input.id });
+      return updated!;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -318,7 +352,6 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date();
       const nowIso = now.toISOString();
-      const scores = input.scores ?? [];
 
       await this.#db.insert({
         tableName: TABLE_EXPERIMENT_RESULTS,
@@ -326,17 +359,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           id,
           experimentId: input.experimentId,
           itemId: input.itemId,
-          itemVersion: input.itemVersion.toISOString(),
+          itemDatasetVersion: input.itemDatasetVersion ?? null,
           input: input.input,
           output: input.output,
           groundTruth: input.groundTruth,
-          latency: input.latency,
-          error: input.error,
+          error: input.error ?? null,
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
           traceId: input.traceId ?? null,
-          scores: JSON.stringify(scores),
           createdAt: nowIso,
         },
       });
@@ -345,17 +376,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         id,
         experimentId: input.experimentId,
         itemId: input.itemId,
-        itemVersion: input.itemVersion,
+        itemDatasetVersion: input.itemDatasetVersion,
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
-        latency: input.latency,
         error: input.error,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
         traceId: input.traceId ?? null,
-        scores,
         createdAt: now,
       };
     } catch (error) {

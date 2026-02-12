@@ -86,10 +86,10 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
   }
 
   // 3. Check version mismatch
-  const versionMismatch = experimentA.datasetVersion.getTime() !== experimentB.datasetVersion.getTime();
+  const versionMismatch = experimentA.datasetVersion !== experimentB.datasetVersion;
   if (versionMismatch) {
     warnings.push(
-      `Experiments have different dataset versions: ${experimentA.datasetVersion.toISOString()} vs ${experimentB.datasetVersion.toISOString()}`,
+      `Experiments have different dataset versions: ${experimentA.datasetVersion} vs ${experimentB.datasetVersion}`,
     );
   }
 
@@ -238,8 +238,8 @@ function groupScoresByScorerAndItem(scores: ScoreRowData[]): Record<string, Reco
  * Build an empty comparison result for edge cases.
  */
 function buildEmptyResult(
-  experimentA: { id: string; datasetVersion: Date },
-  experimentB: { id: string; datasetVersion: Date },
+  experimentA: { id: string; datasetVersion: number | null },
+  experimentB: { id: string; datasetVersion: number | null },
   versionMismatch: boolean,
   warnings: string[],
 ): ComparisonResult {

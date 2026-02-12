@@ -27,9 +27,9 @@ export function DatasetItemHeader({ item }: DatasetItemHeaderProps) {
           <TextAndIcon>
             <Calendar1Icon /> Created {format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa')}
           </TextAndIcon>
-          {item.version && (
+          {item.datasetVersion != null && (
             <TextAndIcon>
-              <HistoryIcon /> Version {format(new Date(item.version), 'MMM d, yyyy h:mm aaa')}
+              <HistoryIcon /> Version v{item.datasetVersion}
             </TextAndIcon>
           )}
         </MainHeader.Description>

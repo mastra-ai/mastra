@@ -21,12 +21,17 @@ import {
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams] = useSearchParams();
-  const versionTimestamps = searchParams.get('ids')?.split(',').map(decodeURIComponent).filter(Boolean) ?? [];
+  const versionNumbers =
+    searchParams
+      .get('ids')
+      ?.split(',')
+      .map(Number)
+      .filter(n => !isNaN(n) && n > 0) ?? [];
   const navigate = useNavigate();
   const { data: dataset } = useDataset(datasetId ?? '');
 
-  const versionA = useDatasetItems(datasetId ?? '', undefined, versionTimestamps[0]);
-  const versionB = useDatasetItems(datasetId ?? '', undefined, versionTimestamps[1]);
+  const versionA = useDatasetItems(datasetId ?? '', undefined, versionNumbers[0] ?? null);
+  const versionB = useDatasetItems(datasetId ?? '', undefined, versionNumbers[1] ?? null);
 
   const itemsA = useMemo(() => versionA.data ?? [], [versionA.data]);
   const itemsB = useMemo(() => versionB.data ?? [], [versionB.data]);
@@ -46,7 +51,7 @@ function DatasetCompareVersionsPage() {
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
 
-  if (!datasetId || versionTimestamps.length < 2) {
+  if (!datasetId || versionNumbers.length < 2) {
     return (
       <MainContentLayout>
         <Header>
@@ -74,14 +79,14 @@ function DatasetCompareVersionsPage() {
     );
   }
 
-  const handleItemClick = (itemId: string, itemA?: { version: string | Date }, itemB?: { version: string | Date }) => {
+  const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
     navigate(
-      `/datasets/${datasetId}/items/${itemId}/versions?dvs=${encodeURIComponent(String(itemA?.version))},${encodeURIComponent(String(itemB?.version))}`,
+      `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
     );
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${encodeURIComponent(newA)},${encodeURIComponent(newB)}`, {
+    navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };
@@ -117,7 +122,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Title>
               <MainHeader.Description>
                 <TextAndIcon>
-                  <HistoryIcon /> Comparing {versionTimestamps.length} versions of{' '}
+                  <HistoryIcon /> Comparing {versionNumbers.length} versions of{' '}
                   {dataset?.name || datasetId?.slice(0, 8)}
                 </TextAndIcon>
               </MainHeader.Description>
@@ -128,8 +133,8 @@ function DatasetCompareVersionsPage() {
             <Column>
               <DatasetCompareVersionToolbar
                 datasetId={datasetId}
-                versionA={versionTimestamps[0]}
-                versionB={versionTimestamps[1]}
+                versionA={String(versionNumbers[0])}
+                versionB={String(versionNumbers[1])}
                 onVersionChange={handleVersionChange}
               />
               <DatasetCompareVersionsList

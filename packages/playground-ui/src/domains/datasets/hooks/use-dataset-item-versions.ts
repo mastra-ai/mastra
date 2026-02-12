@@ -1,57 +1,43 @@
 import { useMastraClient } from '@mastra/react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 export interface DatasetItemVersion {
   id: string;
-  itemId: string;
   datasetId: string;
-  versionNumber: number;
-  /** Alias for datasetVersion for backward compatibility */
-  version: Date | string;
-  datasetVersion: Date | string;
-  snapshot: {
-    input: unknown;
-    groundTruth?: unknown;
-    metadata?: Record<string, unknown>;
-  };
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  validTo: number | null;
   isDeleted: boolean;
   createdAt: Date | string;
+  updatedAt: Date | string;
   isLatest: boolean;
 }
 
-const PER_PAGE = 5;
-
 /**
- * Hook to fetch dataset item versions from the API with infinite pagination.
+ * Hook to fetch full item history (SCD-2 rows).
  */
 export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
   const client = useMastraClient();
 
-  return useInfiniteQuery({
+  return useQuery({
     queryKey: ['dataset-item-versions', datasetId, itemId],
-    queryFn: async ({ pageParam }) => {
-      return client.listDatasetItemVersions(datasetId, itemId, { page: pageParam, perPage: PER_PAGE });
-    },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, _, lastPageParam) => {
-      if (lastPage?.pagination?.hasMore) {
-        return lastPageParam + 1;
-      }
-      return undefined;
-    },
-    select: data => {
-      return data.pages.flatMap(page => page?.versions ?? []).map((v, index) => ({
+    queryFn: async () => {
+      const res = await client.getItemHistory(datasetId, itemId);
+      return (res?.history ?? []).map((v, index) => ({
         id: v.id,
-        itemId: v.itemId,
         datasetId: v.datasetId,
-        versionNumber: v.versionNumber,
-        version: v.datasetVersion, // Alias for backward compatibility
         datasetVersion: v.datasetVersion,
-        snapshot: v.snapshot,
+        input: v.input,
+        groundTruth: v.groundTruth,
+        metadata: v.metadata,
+        validTo: v.validTo,
         isDeleted: v.isDeleted,
         createdAt: v.createdAt,
+        updatedAt: v.updatedAt,
         isLatest: index === 0,
-      }));
+      })) as DatasetItemVersion[];
     },
     enabled: Boolean(datasetId) && Boolean(itemId),
   });
@@ -60,26 +46,27 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
 /**
  * Hook to fetch a specific version of a dataset item.
  */
-export const useDatasetItemVersion = (datasetId: string, itemId: string, versionNumber: number) => {
+export const useDatasetItemVersion = (datasetId: string, itemId: string, datasetVersion: number) => {
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['dataset-item-version', datasetId, itemId, versionNumber],
+    queryKey: ['dataset-item-version', datasetId, itemId, datasetVersion],
     queryFn: async (): Promise<DatasetItemVersion> => {
-      const v = await client.getDatasetItemVersion(datasetId, itemId, versionNumber);
+      const v = await client.getDatasetItemVersion(datasetId, itemId, datasetVersion);
       return {
         id: v.id,
-        itemId: v.itemId,
         datasetId: v.datasetId,
-        versionNumber: v.versionNumber,
-        version: v.datasetVersion, // Alias for backward compatibility
         datasetVersion: v.datasetVersion,
-        snapshot: v.snapshot,
+        input: v.input,
+        groundTruth: v.groundTruth,
+        metadata: v.metadata,
+        validTo: v.validTo,
         isDeleted: v.isDeleted,
         createdAt: v.createdAt,
-        isLatest: false, // Not first in list, so not latest by default
+        updatedAt: v.updatedAt,
+        isLatest: false,
       };
     },
-    enabled: Boolean(datasetId) && Boolean(itemId) && versionNumber > 0,
+    enabled: Boolean(datasetId) && Boolean(itemId) && datasetVersion > 0,
   });
 };

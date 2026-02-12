@@ -117,7 +117,6 @@ describe('runExperiment', () => {
       expect(itemResult.itemId).toBeDefined();
       expect(itemResult.input).toBeDefined();
       expect(itemResult.output).toBeDefined();
-      expect(itemResult.latency).toBeGreaterThanOrEqual(0);
       expect(itemResult.error).toBeNull();
       expect(itemResult.startedAt).toBeInstanceOf(Date);
       expect(itemResult.completedAt).toBeInstanceOf(Date);
@@ -179,7 +178,7 @@ describe('runExperiment', () => {
       const failedItem = result.results.find(r => r.error !== null);
       const successItem = result.results.find(r => r.error === null);
 
-      expect(failedItem?.error).toBe('First call fails');
+      expect(failedItem?.error).toEqual(expect.objectContaining({ message: 'First call fails' }));
       expect(successItem?.output).toEqual({ text: 'Success' });
     });
 
@@ -580,7 +579,7 @@ describe('runExperiment', () => {
 
       const failedItem = result.results.find(r => r.error !== null);
       expect(failedItem?.output).toBeNull();
-      expect(failedItem?.error).toBe('Task failed for bad input');
+      expect(failedItem?.error).toEqual(expect.objectContaining({ message: 'Task failed for bad input' }));
 
       const successItems = result.results.filter(r => r.error === null);
       expect(successItems).toHaveLength(2);
@@ -631,7 +630,7 @@ describe('runExperiment', () => {
       await experimentsStorage.createExperiment({
         id: 'pre-created-id',
         datasetId,
-        datasetVersion: new Date(),
+        datasetVersion: null,
         targetType: 'agent',
         targetId: 'inline',
         totalItems: 1,

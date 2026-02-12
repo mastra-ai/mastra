@@ -22,6 +22,11 @@ export interface StorageColumn {
     column: string;
   };
 }
+
+export interface StorageTableConfig {
+  columns: Record<string, StorageColumn>;
+  compositePrimaryKey?: string[];
+}
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -1278,7 +1283,7 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
-  version: Date;
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1286,7 +1291,7 @@ export interface DatasetRecord {
 export interface DatasetItem {
   id: string;
   datasetId: string;
-  version: Date;
+  datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
   metadata?: Record<string, unknown>;
@@ -1294,25 +1299,23 @@ export interface DatasetItem {
   updatedAt: Date;
 }
 
-export interface DatasetItemVersion {
+export interface DatasetItemRow {
   id: string;
-  itemId: string;
   datasetId: string;
-  versionNumber: number;
-  datasetVersion: Date;
-  snapshot: {
-    input?: unknown;
-    groundTruth?: unknown;
-    metadata?: Record<string, unknown>;
-  };
+  datasetVersion: number;
+  validTo: number | null;
   isDeleted: boolean;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface DatasetVersion {
   id: string;
   datasetId: string;
-  version: Date;
+  version: number;
   createdAt: Date;
 }
 
@@ -1361,36 +1364,13 @@ export interface ListDatasetsOutput {
 
 export interface ListDatasetItemsInput {
   datasetId: string;
-  version?: Date;
+  version?: number;
   search?: string;
   pagination: StoragePagination;
 }
 
 export interface ListDatasetItemsOutput {
   items: DatasetItem[];
-  pagination: PaginationInfo;
-}
-
-export interface CreateItemVersionInput {
-  itemId: string;
-  datasetId: string;
-  versionNumber: number;
-  datasetVersion: Date;
-  snapshot?: {
-    input?: unknown;
-    groundTruth?: unknown;
-    metadata?: Record<string, unknown>;
-  };
-  isDeleted?: boolean;
-}
-
-export interface ListItemVersionsInput {
-  itemId: string;
-  pagination: StoragePagination;
-}
-
-export interface ListItemVersionsOutput {
-  versions: DatasetItemVersion[];
   pagination: PaginationInfo;
 }
 
@@ -1426,14 +1406,18 @@ export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface Experiment {
   id: string;
-  datasetId: string;
-  datasetVersion: Date;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  datasetId: string | null;
+  datasetVersion: number | null;
   targetType: TargetType;
   targetId: string;
   status: ExperimentStatus;
   totalItems: number;
   succeededCount: number;
   failedCount: number;
+  skippedCount: number;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -1444,30 +1428,25 @@ export interface ExperimentResult {
   id: string;
   experimentId: string;
   itemId: string;
-  itemVersion: Date;
+  itemDatasetVersion: number | null;
   input: unknown;
-  output: unknown;
-  groundTruth: unknown;
-  latency: number;
-  error: string | null;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
   traceId: string | null;
-  scores: Array<{
-    scorerId: string;
-    scorerName: string;
-    score: number | null;
-    reason: string | null;
-    error: string | null;
-  }>;
   createdAt: Date;
 }
 
 export interface CreateExperimentInput {
   id?: string;
-  datasetId: string;
-  datasetVersion: Date;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  datasetId: string | null;
+  datasetVersion: number | null;
   targetType: TargetType;
   targetId: string;
   totalItems: number;
@@ -1475,9 +1454,13 @@ export interface CreateExperimentInput {
 
 export interface UpdateExperimentInput {
   id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
   status?: ExperimentStatus;
   succeededCount?: number;
   failedCount?: number;
+  skippedCount?: number;
   startedAt?: Date;
   completedAt?: Date;
 }
@@ -1486,23 +1469,15 @@ export interface AddExperimentResultInput {
   id?: string;
   experimentId: string;
   itemId: string;
-  itemVersion: Date;
+  itemDatasetVersion: number | null;
   input: unknown;
-  output: unknown;
-  groundTruth: unknown;
-  latency: number;
-  error: string | null;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
   retryCount: number;
   traceId?: string | null;
-  scores?: Array<{
-    scorerId: string;
-    scorerName: string;
-    score: number | null;
-    reason: string | null;
-    error: string | null;
-  }>;
 }
 
 export interface ListExperimentsInput {

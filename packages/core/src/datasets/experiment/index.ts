@@ -1,5 +1,13 @@
 import type { Mastra } from '../../mastra';
-import type { DatasetItem } from '../../storage/types';
+
+/** Unified item shape used within experiment execution (bridges inline + versioned data) */
+type ExperimentItem = {
+  id: string; // item id (or generated for inline)
+  datasetVersion: number | null; // null for inline experiments
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+};
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
@@ -56,6 +64,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     itemTimeout,
     maxRetries = 0,
     experimentId: providedExperimentId,
+    name,
+    description,
+    metadata,
   } = config;
 
   const startedAt = new Date();
@@ -68,24 +79,23 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const experimentsStore = await storage?.getStore('experiments');
 
   // Phase A — Resolve items
-  let items: DatasetItem[];
-  let datasetVersion: Date;
+  let items: ExperimentItem[];
+  let datasetVersion: number | null;
 
   if (config.data) {
     // Inline data path — array or factory function
     const rawData = typeof config.data === 'function' ? await config.data() : config.data;
-    const now = new Date();
-    items = rawData.map(dataItem => ({
-      id: dataItem.id ?? crypto.randomUUID(),
-      datasetId: config.datasetId ?? 'inline',
-      version: now,
-      input: dataItem.input,
-      groundTruth: dataItem.groundTruth,
-      metadata: dataItem.metadata,
-      createdAt: now,
-      updatedAt: now,
-    }));
-    datasetVersion = now;
+    items = rawData.map(dataItem => {
+      const id = dataItem.id ?? crypto.randomUUID();
+      return {
+        id,
+        datasetVersion: null,
+        input: dataItem.input,
+        groundTruth: dataItem.groundTruth,
+        metadata: dataItem.metadata,
+      };
+    });
+    datasetVersion = null;
   } else if (datasetId) {
     // Storage-backed data path (existing)
     if (!datasetsStore) {
@@ -98,20 +108,28 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     }
 
     datasetVersion = version ?? dataset.version;
-    items = await datasetsStore.getItemsByVersion({
+    const versionItems = await datasetsStore.getItemsByVersion({
       datasetId,
       version: datasetVersion,
     });
 
-    if (items.length === 0) {
-      throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`);
+    if (versionItems.length === 0) {
+      throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion}`);
     }
+
+    items = versionItems.map(v => ({
+      id: v.id,
+      datasetVersion: v.datasetVersion,
+      input: v.input,
+      groundTruth: v.groundTruth,
+      metadata: v.metadata,
+    }));
   } else {
     throw new Error('No data source: provide datasetId or data');
   }
 
   // Phase B — Resolve task function
-  let execFn: (item: DatasetItem, signal?: AbortSignal) => Promise<ExecutionResult>;
+  let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
   if (config.task) {
     // Inline task path
@@ -127,8 +145,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         });
         return { output: result, error: null, traceId: null };
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { output: null, error: message, traceId: null };
+        return {
+          output: null,
+          error: {
+            message: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          },
+          traceId: null,
+        };
       }
     };
   } else if (targetType && targetId) {
@@ -151,7 +175,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       // Create new experiment record (sync trigger path)
       await experimentsStore.createExperiment({
         id: experimentId,
-        datasetId: datasetId ?? 'inline',
+        name,
+        description,
+        metadata,
+        datasetId: datasetId ?? null,
         datasetVersion,
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
@@ -188,8 +215,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         }
 
         const itemStartedAt = new Date();
-        const perfStart = performance.now();
-
         // Compose per-item signal (timeout + run-level abort)
         let itemSignal: AbortSignal | undefined = signal;
         if (itemTimeout) {
@@ -203,7 +228,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
         while (execResult.error && retryCount < maxRetries) {
           // Don't retry abort errors
-          if (execResult.error.toLowerCase().includes('abort')) break;
+          if (execResult.error.message.toLowerCase().includes('abort')) break;
 
           retryCount++;
           const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
@@ -218,7 +243,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           execResult = await execFn(item, itemSignal);
         }
 
-        const latency = performance.now() - perfStart;
         const itemCompletedAt = new Date();
 
         // Track success/failure
@@ -231,11 +255,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // Build item result
         const itemResult: ItemResult = {
           itemId: item.id,
-          itemVersion: item.version,
+          itemVersion: item.datasetVersion ?? 0,
           input: item.input,
           output: execResult.output,
           groundTruth: item.groundTruth ?? null,
-          latency,
           error: execResult.error,
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
@@ -251,6 +274,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           experimentId,
           targetType ?? 'agent',
           targetId ?? 'inline',
+          item.id,
           execResult.scorerInput,
           execResult.scorerOutput,
         );
@@ -261,17 +285,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             await experimentsStore.addExperimentResult({
               experimentId,
               itemId: item.id,
-              itemVersion: item.version,
+              itemDatasetVersion: item.datasetVersion,
               input: item.input,
               output: execResult.output,
               groundTruth: item.groundTruth ?? null,
-              latency,
               error: execResult.error,
               startedAt: itemStartedAt,
               completedAt: itemCompletedAt,
               retryCount,
               traceId: execResult.traceId,
-              scores: itemScores,
             });
           } catch (persistError) {
             console.warn(`Failed to persist result for item ${item.id}:`, persistError);
@@ -312,6 +334,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         status: 'failed',
         succeededCount,
         failedCount,
+        skippedCount,
         completedAt,
       });
     }
@@ -335,12 +358,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const status = failedCount === items.length ? 'failed' : 'completed';
   const completedWithErrors = status === 'completed' && failedCount > 0;
 
+  const skippedCount = items.length - succeededCount - failedCount;
   if (experimentsStore) {
     await experimentsStore.updateExperiment({
       id: experimentId,
       status,
       succeededCount,
       failedCount,
+      skippedCount,
       completedAt,
     });
   }
@@ -351,7 +376,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     totalItems: items.length,
     succeededCount,
     failedCount,
-    skippedCount: 0,
+    skippedCount,
     completedWithErrors,
     startedAt,
     completedAt,

@@ -34,11 +34,7 @@ export const columns: ColumnDef<DatasetTableColumn>[] = [
     header: 'Version',
     accessorKey: 'version',
     cell: ({ row }) => (
-      <Cell>
-        {row.original.version instanceof Date
-          ? row.original.version.toLocaleDateString()
-          : new Date(row.original.version).toLocaleDateString()}
-      </Cell>
+      <Cell>v{row.original.version}</Cell>
     ),
     size: 150,
   },

@@ -179,12 +179,11 @@ describe('Dataset', () => {
   });
 
   // 12. getItem — with version
-  it('getItem with version returns DatasetItemVersion', async () => {
+  it('getItem with version returns DatasetItem at that version', async () => {
     const added = await ds.addItem({ input: { x: 1 } });
-    const fetched = await ds.getItem({ itemId: added.id, version: 1 });
+    const fetched = await ds.getItem({ itemId: added.id, version: added.datasetVersion });
     expect(fetched).not.toBeNull();
-    // DatasetItemVersion has versionNumber
-    expect((fetched as any).versionNumber).toBe(1);
+    expect(fetched!.datasetVersion).toBe(added.datasetVersion);
   });
 
   // 13. getItem — nonexistent returns null
@@ -205,7 +204,7 @@ describe('Dataset', () => {
   // 15. listItems — with version
   it('listItems with version returns DatasetItem[]', async () => {
     const item = await ds.addItem({ input: { a: 1 } });
-    const result = await ds.listItems({ version: item.version });
+    const result = await ds.listItems({ version: item.datasetVersion });
     // When version is set, returns DatasetItem[] (from getItemsByVersion)
     expect(Array.isArray(result)).toBe(true);
     expect((result as any[]).length).toBeGreaterThanOrEqual(1);
@@ -247,14 +246,13 @@ describe('Dataset', () => {
     expect(result.versions.length).toBeGreaterThanOrEqual(1);
   });
 
-  // 20. listItemVersions
-  it('listItemVersions returns { versions, pagination }', async () => {
+  // 20. getItemHistory
+  it('getItemHistory returns SCD-2 row history', async () => {
     const added = await ds.addItem({ input: { a: 1 } });
     await ds.updateItem({ itemId: added.id, input: { a: 2 } });
-    const result = await ds.listItemVersions({ itemId: added.id });
-    expect(result.versions).toBeDefined();
-    expect(result.pagination).toBeDefined();
-    expect(result.versions.length).toBeGreaterThanOrEqual(2);
+    const history = await ds.getItemHistory({ itemId: added.id });
+    // SCD-2: at least 2 rows (original closed + updated current)
+    expect(history.length).toBeGreaterThanOrEqual(2);
   });
 
   // 21. startExperiment

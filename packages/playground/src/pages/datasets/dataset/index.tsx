@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { format } from 'date-fns';
 import type { DatasetItem } from '@mastra/client-js';
 import {
   MainContentLayout,
@@ -31,7 +30,7 @@ function DatasetPage() {
   const [itemToEdit, setItemToEdit] = useState<DatasetItem | null>(null);
 
   // Version selection state for run experiment button
-  const [activeVersion, setActiveVersion] = useState<Date | string | null>(null);
+  const [activeVersion, setActiveVersion] = useState<number | null>(null);
 
   // Fetch dataset for edit dialog
   const { data: dataset } = useDataset(datasetId ?? '');
@@ -85,7 +84,7 @@ function DatasetPage() {
           experimentTriggerSlot={
             <Button variant="standard" size="default" onClick={() => setExperimentDialogOpen(true)}>
               <Play />
-              {activeVersion ? `Run on ${format(new Date(activeVersion), 'MMM d, yyyy')}` : 'Run Experiment'}
+              {activeVersion != null ? `Run on v${activeVersion}` : 'Run Experiment'}
             </Button>
           }
         />

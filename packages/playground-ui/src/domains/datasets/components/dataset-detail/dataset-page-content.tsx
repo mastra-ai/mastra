@@ -30,7 +30,7 @@ export interface DatasetPageContentProps {
   experimentTriggerSlot?: React.ReactNode;
   onNavigateToDataset?: (datasetId: string) => void;
   // Controlled mode: parent manages version state
-  activeDatasetVersion?: Date | string | null;
+  activeDatasetVersion?: number | null;
   onVersionSelect?: (version: DatasetVersion | null) => void;
 }
 
@@ -63,7 +63,7 @@ export function DatasetPageContent({
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch] = useDebounce(searchQuery, 300);
   // Internal state only used when not in controlled mode
-  const [internalVersion, setInternalVersion] = useState<Date | string | null>(null);
+  const [internalVersion, setInternalVersion] = useState<number | null>(null);
   // Use controlled version if provided, otherwise internal state
   const isControlled = controlledVersion !== undefined;
   const activeDatasetVersion = isControlled ? controlledVersion : internalVersion;
@@ -137,8 +137,8 @@ export function DatasetPageContent({
   };
 
   // Handler for Compare Versions action from versions panel
-  const handleCompareVersionsClick = (versionTimestamps: string[]) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${versionTimestamps.map(encodeURIComponent).join(',')}`);
+  const handleCompareVersionsClick = (versionNumbers: string[]) => {
+    navigate(`/datasets/${datasetId}/versions?ids=${versionNumbers.join(',')}`);
   };
 
   // Handler for bulk delete action from selection

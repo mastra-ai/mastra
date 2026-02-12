@@ -3,7 +3,7 @@ import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../eval
 import type { Mastra } from '../../mastra';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { MastraCompositeStore } from '../../storage/base';
-import type { DatasetItem, TargetType } from '../../storage/types';
+import type { TargetType } from '../../storage/types';
 import type { ScorerResult } from './types';
 
 /**
@@ -37,12 +37,13 @@ export function resolveScorers(
  */
 export async function runScorersForItem(
   scorers: MastraScorer<any, any, any, any>[],
-  item: DatasetItem,
+  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
   output: unknown,
   storage: MastraCompositeStore | null,
   runId: string,
   targetType: TargetType,
   targetId: string,
+  itemId: string,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
 ): Promise<ScorerResult[]> {
@@ -63,7 +64,7 @@ export async function runScorersForItem(
             output,
             additionalContext: item.metadata,
             entityType: targetType.toUpperCase(),
-            entityId: targetId,
+            entityId: itemId,
             source: 'TEST',
             runId,
             scorer: {
@@ -98,7 +99,7 @@ export async function runScorersForItem(
  */
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
-  item: DatasetItem,
+  item: { input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> },
   output: unknown,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,

@@ -29,7 +29,6 @@ import {
   listExperimentResultsResponseSchema,
   listDatasetVersionsResponseSchema,
   listItemVersionsResponseSchema,
-  itemVersionResponseSchema,
   bulkAddItemsResponseSchema,
   bulkDeleteItemsResponseSchema,
 } from '../schemas/datasets';
@@ -237,9 +236,9 @@ export const LIST_ITEMS_ROUTE = createRoute({
       const result = await ds.listItems({
         page: page ?? 0,
         perPage: perPage ?? 10,
-        version: version instanceof Date ? version : undefined,
+        version,
       });
-      // listItems returns different shapes depending on version
+      // When version is specified, result is DatasetItem[] (flat). Otherwise paginated.
       if (Array.isArray(result)) {
         return { items: result, pagination: { total: result.length, page: 0, perPage: result.length, hasMore: false } };
       }
@@ -431,7 +430,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
         scorerIds?: string[];
-        version?: Date;
+        version?: number;
         maxConcurrency?: number;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -439,7 +438,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         targetType,
         targetId,
         scorers: scorerIds,
-        version: version instanceof Date ? version : undefined,
+        version,
         maxConcurrency,
       });
       // Return shape matching experimentSummaryResponseSchema
@@ -592,55 +591,53 @@ export const LIST_DATASET_VERSIONS_ROUTE = createRoute({
 
 export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/datasets/:datasetId/items/:itemId/versions',
+  path: '/datasets/:datasetId/items/:itemId/history',
   responseType: 'json',
   pathParamSchema: datasetAndItemIdPathParams,
-  queryParamSchema: paginationQuerySchema,
   responseSchema: listItemVersionsResponseSchema,
-  summary: 'List item versions',
-  description: 'Returns a paginated list of all versions for the item',
+  summary: 'Get item history',
+  description: 'Returns the full SCD-2 history of the item across all dataset versions',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, itemId, ...params }) => {
+  handler: async ({ mastra, datasetId, itemId }) => {
     try {
-      const { page, perPage } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
-      const result = await ds.listItemVersions({ itemId, page: page ?? 0, perPage: perPage ?? 10 });
-      // Check versions belong to this dataset
-      if (result.versions.length > 0 && result.versions[0]?.datasetId !== datasetId) {
+      const rows = await ds.getItemHistory({ itemId });
+      // Check rows belong to this dataset
+      if (rows.length > 0 && rows[0]?.datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
       }
-      return { versions: result.versions, pagination: result.pagination };
+      return { history: rows };
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
-      return handleError(error, 'Error listing item versions');
+      return handleError(error, 'Error listing item history');
     }
   },
 });
 
 export const GET_ITEM_VERSION_ROUTE = createRoute({
   method: 'GET',
-  path: '/datasets/:datasetId/items/:itemId/versions/:versionNumber',
+  path: '/datasets/:datasetId/items/:itemId/versions/:datasetVersion',
   responseType: 'json',
   pathParamSchema: datasetItemVersionPathParams,
-  responseSchema: itemVersionResponseSchema.nullable(),
-  summary: 'Get item version by number',
-  description: 'Returns a specific version of the item',
+  responseSchema: datasetItemResponseSchema.nullable(),
+  summary: 'Get item at specific dataset version',
+  description: 'Returns the item as it existed at a specific dataset version',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, itemId, versionNumber }) => {
+  handler: async ({ mastra, datasetId, itemId, datasetVersion }) => {
     try {
       const ds = await mastra.datasets.get({ id: datasetId });
-      const version = await ds.getItem({ itemId, version: versionNumber });
-      if (!version) {
-        throw new HTTPException(404, { message: `Version ${versionNumber} not found for item: ${itemId}` });
+      const item = await ds.getItem({ itemId, version: datasetVersion });
+      if (!item) {
+        throw new HTTPException(404, { message: `Item ${itemId} not found at version ${datasetVersion}` });
       }
-      if ((version as any).datasetId !== datasetId) {
+      if ((item as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found in dataset: ${itemId}` });
       }
-      return version as any;
+      return item as any;
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });

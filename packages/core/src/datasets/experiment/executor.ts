@@ -2,7 +2,7 @@ import type { Agent } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
-import type { DatasetItem, TargetType } from '../../storage/types';
+import type { TargetType } from '../../storage/types';
 import type { Workflow } from '../../workflows';
 
 /**
@@ -17,8 +17,8 @@ export type Target = Agent | Workflow | MastraScorer<any, any, any, any>;
 export interface ExecutionResult {
   /** Output from the target (null if failed) */
   output: unknown;
-  /** Error message if execution failed */
-  error: string | null;
+  /** Structured error if execution failed */
+  error: { message: string; stack?: string; code?: string } | null;
   /** Trace ID from agent/workflow execution (null for scorers or errors) */
   traceId: string | null;
   /** Structured input for scorers (extracted from agent scoring data) */
@@ -32,7 +32,10 @@ export interface ExecutionResult {
  * item.input should contain exactly what the scorer expects - direct passthrough.
  * For calibration: item.input = { input, output, groundTruth } (user structures it)
  */
-async function executeScorer(scorer: MastraScorer<any, any, any, any>, item: DatasetItem): Promise<ExecutionResult> {
+async function executeScorer(
+  scorer: MastraScorer<any, any, any, any>,
+  item: { input: unknown; groundTruth?: unknown },
+): Promise<ExecutionResult> {
   try {
     // Direct passthrough - scorer receives item.input exactly as provided
     // User structures item.input to match scorer's expected shape (e.g., { input, output, groundTruth })
@@ -56,7 +59,10 @@ async function executeScorer(scorer: MastraScorer<any, any, any, any>, item: Dat
   } catch (error) {
     return {
       output: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
       traceId: null,
     };
   }
@@ -69,7 +75,7 @@ async function executeScorer(scorer: MastraScorer<any, any, any, any>, item: Dat
 export async function executeTarget(
   target: Target,
   targetType: TargetType,
-  item: DatasetItem,
+  item: { input: unknown; groundTruth?: unknown },
   options?: { signal?: AbortSignal },
 ): Promise<ExecutionResult> {
   try {
@@ -107,7 +113,10 @@ export async function executeTarget(
   } catch (error) {
     return {
       output: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
       traceId: null,
     };
   }
@@ -145,7 +154,11 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
  * Execute a dataset item against an agent.
  * Uses generate() for both v1 and v2 models.
  */
-async function executeAgent(agent: Agent, item: DatasetItem, signal?: AbortSignal): Promise<ExecutionResult> {
+async function executeAgent(
+  agent: Agent,
+  item: { input: unknown; groundTruth?: unknown },
+  signal?: AbortSignal,
+): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
   // Use generate() - works for both v1 and v2 models
@@ -184,7 +197,10 @@ async function executeAgent(agent: Agent, item: DatasetItem, signal?: AbortSigna
  * Execute a dataset item against a workflow.
  * Creates a run with scorers disabled to avoid double-scoring.
  */
-async function executeWorkflow(workflow: Workflow, item: DatasetItem): Promise<ExecutionResult> {
+async function executeWorkflow(
+  workflow: Workflow,
+  item: { input: unknown; groundTruth?: unknown },
+): Promise<ExecutionResult> {
   const run = await workflow.createRun({ disableScorers: true });
   const result = await run.start({
     inputData: item.input,
@@ -199,22 +215,38 @@ async function executeWorkflow(workflow: Workflow, item: DatasetItem): Promise<E
 
   // Handle all non-success statuses (still include traceId for debugging)
   if (result.status === 'failed') {
-    return { output: null, error: result.error?.message ?? 'Workflow failed', traceId };
+    return {
+      output: null,
+      error: { message: result.error?.message ?? 'Workflow failed', stack: result.error?.stack },
+      traceId,
+    };
   }
 
   if (result.status === 'tripwire') {
-    return { output: null, error: `Workflow tripwire: ${result.tripwire?.reason ?? 'Unknown reason'}`, traceId };
+    return {
+      output: null,
+      error: { message: `Workflow tripwire: ${result.tripwire?.reason ?? 'Unknown reason'}` },
+      traceId,
+    };
   }
 
   if (result.status === 'suspended') {
-    return { output: null, error: 'Workflow suspended - not yet supported in dataset experiments', traceId };
+    return {
+      output: null,
+      error: { message: 'Workflow suspended - not yet supported in dataset experiments' },
+      traceId,
+    };
   }
 
   if (result.status === 'paused') {
-    return { output: null, error: 'Workflow paused - not yet supported in dataset experiments', traceId };
+    return { output: null, error: { message: 'Workflow paused - not yet supported in dataset experiments' }, traceId };
   }
 
   // Exhaustive check - should never reach here
   const _exhaustiveCheck: never = result;
-  return { output: null, error: `Workflow ended with unexpected status: ${(_exhaustiveCheck as any).status}`, traceId };
+  return {
+    output: null,
+    error: { message: `Workflow ended with unexpected status: ${(_exhaustiveCheck as any).status}` },
+    traceId,
+  };
 }

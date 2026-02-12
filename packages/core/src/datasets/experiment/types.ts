@@ -53,7 +53,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   // === Options ===
 
   /** Pin to specific dataset version (default: latest). Only applies when datasetId is used. */
-  version?: Date;
+  version?: number;
   /** Maximum concurrent executions (default: 5) */
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
@@ -66,6 +66,10 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   experimentId?: string;
   /** Experiment name (used for display / grouping) */
   name?: string;
+  /** Experiment description */
+  description?: string;
+  /** Arbitrary metadata for the experiment */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -83,18 +87,16 @@ export type StartExperimentConfig<I = unknown, O = unknown, E = unknown> = Omit<
 export interface ItemResult {
   /** ID of the dataset item */
   itemId: string;
-  /** Version of the item when executed */
-  itemVersion: Date;
+  /** Dataset version of the item when executed */
+  itemVersion: number;
   /** Input data that was passed to the target */
   input: unknown;
   /** Output from the target (null if failed) */
   output: unknown | null;
   /** Expected output from the dataset item */
   groundTruth: unknown | null;
-  /** Execution time in milliseconds */
-  latency: number;
-  /** Error message if execution failed */
-  error: string | null;
+  /** Structured error if execution failed */
+  error: { message: string; stack?: string; code?: string } | null;
   /** When execution started */
   startedAt: Date;
   /** When execution completed */
