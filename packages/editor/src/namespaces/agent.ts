@@ -654,11 +654,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
 
         // Fetch tools from the provider — pass slugs, configs, and request context
-        const providerTools = await provider.resolveTools(
-          slugsToResolve,
-          providerConfig.tools,
-          { requestContext },
-        );
+        const providerTools = await provider.resolveTools(slugsToResolve, providerConfig.tools, { requestContext });
 
         for (const [toolId, tool] of Object.entries(providerTools)) {
           // Apply description override if configured at the agent level
