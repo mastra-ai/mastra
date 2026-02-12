@@ -15,6 +15,17 @@ export interface WorkspaceSafety {
   readOnly: boolean;
 }
 
+export interface WorkspaceFilesystemInfo {
+  id: string;
+  name: string;
+  provider: string;
+  status?: string;
+  error?: string;
+  readOnly?: boolean;
+  icon?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface WorkspaceInfo {
   isWorkspaceConfigured: boolean;
   id?: string;
@@ -22,6 +33,7 @@ export interface WorkspaceInfo {
   status?: string;
   capabilities?: WorkspaceCapabilities;
   safety?: WorkspaceSafety;
+  filesystem?: WorkspaceFilesystemInfo;
 }
 
 export interface WorkspaceItem {

@@ -276,13 +276,19 @@ export class S3Filesystem extends MastraFilesystem {
   /**
    * Get filesystem info for status reporting.
    */
-  getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo<{
+    bucket: string;
+    region: string;
+    endpoint?: string;
+    prefix?: string;
+  }> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
       status: this.status,
       error: this.error,
+      readOnly: this.readOnly,
       icon: this.icon,
       metadata: {
         bucket: this.bucket,
