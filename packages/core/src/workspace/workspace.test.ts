@@ -82,62 +82,6 @@ describe('Workspace', () => {
   });
 
   // ===========================================================================
-  // Generic Type Inference
-  // ===========================================================================
-  describe('generic type inference', () => {
-    it('should preserve LocalFilesystem type on filesystem getter', () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({ filesystem });
-
-      // Type-level checks are in workspace.test-d.ts.
-      // Here we verify the runtime instance is preserved.
-      const fs = workspace.filesystem;
-      expect(fs).toBe(filesystem);
-
-      // Access LocalFilesystem-specific property
-      expect(fs?.basePath).toBe(path.resolve(tempDir));
-    });
-
-    it('should preserve LocalSandbox type on sandbox getter', () => {
-      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
-      const workspace = new Workspace({ sandbox });
-
-      const sb = workspace.sandbox;
-      expect(sb).toBe(sandbox);
-
-      // Access LocalSandbox-specific property
-      expect(sb?.workingDirectory).toBe(path.resolve(tempDir));
-    });
-
-    it('should preserve both types when both are provided', () => {
-      const filesystem = new LocalFilesystem({ basePath: tempDir });
-      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
-      const workspace = new Workspace({ filesystem, sandbox });
-
-      expect(workspace.filesystem?.basePath).toBe(path.resolve(tempDir));
-      expect(workspace.sandbox?.workingDirectory).toBe(path.resolve(tempDir));
-    });
-
-    it('should return CompositeFilesystem when mounts are used', () => {
-      const localFs = new LocalFilesystem({ basePath: tempDir });
-      const workspace = new Workspace({
-        mounts: {
-          '/local': localFs,
-        },
-      });
-
-      // filesystem should be CompositeFilesystem (compile-time check)
-      const cfs = workspace.filesystem;
-      expect(cfs).toBeInstanceOf(CompositeFilesystem);
-
-      // mounts.get() on CompositeFilesystem should return the concrete type
-      const mounted = cfs.mounts.get('/local');
-      expect(mounted).toBe(localFs);
-      expect(mounted.basePath).toBe(path.resolve(tempDir));
-    });
-  });
-
-  // ===========================================================================
   // File Operations (via filesystem property)
   // ===========================================================================
   describe('file operations', () => {
