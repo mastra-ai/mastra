@@ -15,8 +15,12 @@
 export {
   ObservationalMemory,
   OBSERVATIONAL_MEMORY_DEFAULTS,
+  OBSERVATION_CONTINUATION_HINT,
+  OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_INSTRUCTIONS,
   type ObservationalMemoryConfig,
   type ObservationDebugEvent,
+  type ObserveHooks,
 } from './observational-memory';
 
 // Types

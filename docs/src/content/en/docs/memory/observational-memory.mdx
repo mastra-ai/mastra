@@ -123,7 +123,7 @@ See [model configuration](/reference/memory/observational-memory#custom-model) f
 
 ### Thread scope (default)
 
-Each thread has its own observations.
+Each thread has its own observations. This scope is well tested and works well as a general purpose memory system, especially for long horizon agentic use-cases.
 
 ```typescript
 const memory = new Memory({
@@ -136,7 +136,7 @@ const memory = new Memory({
 });
 ```
 
-### Resource scope
+### Resource scope (experimental)
 
 Observations are shared across all threads for a resource (typically a user). Enables cross-conversation memory.
 
@@ -151,9 +151,17 @@ const memory = new Memory({
 });
 ```
 
+Resource scope works, however it's marked as experimental for now until we prove task adherence/continuity across multiple ongoing simultaneous threads.
+As of today, you may need to tweak your system prompt to prevent one thread from continuing the work that another had already started (but hadn't finished).
+
+This is because in resource scope, each thread is a perspective on _all_ threads for the resource.
+
+For your use-case this may not be a problem, so your mileage may vary.
+
 :::warning
 
 In resource scope, unobserved messages across *all* threads are processed together. For users with many existing threads, this can be slow. Use thread scope for existing apps.
+
 
 :::
 

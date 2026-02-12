@@ -73,6 +73,61 @@ function CmsAgentsCreatePage() {
                 semanticRecall: values.memory.semanticRecall,
                 readOnly: values.memory.readOnly,
               },
+              observationalMemory: values.memory.observationalMemory?.enabled
+                ? (() => {
+                    const om = values.memory.observationalMemory;
+                    const modelId =
+                      om.model?.provider && om.model?.name ? `${om.model.provider}/${om.model.name}` : undefined;
+
+                    const obsModelId =
+                      om.observation?.model?.provider && om.observation?.model?.name
+                        ? `${om.observation.model.provider}/${om.observation.model.name}`
+                        : undefined;
+                    const observation =
+                      obsModelId ||
+                      om.observation?.messageTokens ||
+                      om.observation?.maxTokensPerBatch ||
+                      om.observation?.bufferTokens !== undefined ||
+                      om.observation?.bufferActivation !== undefined ||
+                      om.observation?.blockAfter !== undefined
+                        ? {
+                            model: obsModelId,
+                            messageTokens: om.observation?.messageTokens,
+                            maxTokensPerBatch: om.observation?.maxTokensPerBatch,
+                            bufferTokens: om.observation?.bufferTokens,
+                            bufferActivation: om.observation?.bufferActivation,
+                            blockAfter: om.observation?.blockAfter,
+                          }
+                        : undefined;
+
+                    const refModelId =
+                      om.reflection?.model?.provider && om.reflection?.model?.name
+                        ? `${om.reflection.model.provider}/${om.reflection.model.name}`
+                        : undefined;
+                    const reflection =
+                      refModelId ||
+                      om.reflection?.observationTokens ||
+                      om.reflection?.blockAfter !== undefined ||
+                      om.reflection?.bufferActivation !== undefined
+                        ? {
+                            model: refModelId,
+                            observationTokens: om.reflection?.observationTokens,
+                            blockAfter: om.reflection?.blockAfter,
+                            bufferActivation: om.reflection?.bufferActivation,
+                          }
+                        : undefined;
+
+                    return modelId || om.scope || om.shareTokenBudget || observation || reflection
+                      ? {
+                          model: modelId,
+                          scope: om.scope,
+                          shareTokenBudget: om.shareTokenBudget,
+                          observation,
+                          reflection,
+                        }
+                      : true;
+                  })()
+                : undefined,
             }
           : undefined,
         requestContextSchema: values.variables as Record<string, unknown> | undefined,

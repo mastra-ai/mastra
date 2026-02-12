@@ -37,6 +37,57 @@ export const titleGenerationSchema = z.union([
 ]);
 
 /**
+ * Observation step configuration for observational memory
+ */
+export const serializedObservationConfigSchema = z.object({
+  model: z.string().optional().describe('Observer model ID'),
+  messageTokens: z.number().optional().describe('Token threshold that triggers observation'),
+  modelSettings: z.record(z.string(), z.unknown()).optional().describe('Model settings (temperature, etc.)'),
+  providerOptions: z
+    .record(z.string(), z.record(z.string(), z.unknown()).optional())
+    .optional()
+    .describe('Provider-specific options'),
+  maxTokensPerBatch: z.number().optional().describe('Maximum tokens per batch'),
+  bufferTokens: z
+    .union([z.number(), z.literal(false)])
+    .optional()
+    .describe('Async buffering interval or false'),
+  bufferActivation: z.number().optional().describe('Ratio of buffered observations to activate'),
+  blockAfter: z.number().optional().describe('Token threshold for synchronous blocking'),
+});
+
+/**
+ * Reflection step configuration for observational memory
+ */
+export const serializedReflectionConfigSchema = z.object({
+  model: z.string().optional().describe('Reflector model ID'),
+  observationTokens: z.number().optional().describe('Token threshold that triggers reflection'),
+  modelSettings: z.record(z.string(), z.unknown()).optional().describe('Model settings (temperature, etc.)'),
+  providerOptions: z
+    .record(z.string(), z.record(z.string(), z.unknown()).optional())
+    .optional()
+    .describe('Provider-specific options'),
+  blockAfter: z.number().optional().describe('Token threshold for synchronous blocking'),
+  bufferActivation: z.number().optional().describe('Ratio for async reflection buffering'),
+});
+
+/**
+ * Serialized observational memory configuration
+ */
+export const serializedObservationalMemoryConfigObjectSchema = z.object({
+  model: z.string().optional().describe('Model ID for both Observer and Reflector'),
+  scope: z.enum(['resource', 'thread']).optional().describe('Memory scope'),
+  shareTokenBudget: z.boolean().optional().describe('Share token budget between messages and observations'),
+  observation: serializedObservationConfigSchema.optional().describe('Observation step configuration'),
+  reflection: serializedReflectionConfigSchema.optional().describe('Reflection step configuration'),
+});
+
+export const serializedObservationalMemoryConfigSchema = z.union([
+  z.boolean(),
+  serializedObservationalMemoryConfigObjectSchema,
+]);
+
+/**
  * Serialized memory configuration matching SerializedMemoryConfig from @mastra/core
  *
  * Note: workingMemory and threads are omitted as they are not part of SerializedMemoryConfig
@@ -65,6 +116,9 @@ export const serializedMemoryConfigSchema = z
       .record(z.string(), z.unknown())
       .optional()
       .describe('Options to pass to the embedder, omitting telemetry'),
+    observationalMemory: serializedObservationalMemoryConfigSchema
+      .optional()
+      .describe('Serialized observational memory configuration'),
   })
   .refine(
     data => {

@@ -80,6 +80,47 @@ const memoryConfigSchema = z
     readOnly: z.boolean().optional(),
     vector: z.string().optional(),
     embedder: z.string().optional(),
+    observationalMemory: z
+      .object({
+        enabled: z.boolean().optional(),
+        model: z
+          .object({
+            provider: z.string().optional(),
+            name: z.string().optional(),
+          })
+          .optional(),
+        scope: z.enum(['resource', 'thread']).optional(),
+        shareTokenBudget: z.boolean().optional(),
+        observation: z
+          .object({
+            model: z
+              .object({
+                provider: z.string().optional(),
+                name: z.string().optional(),
+              })
+              .optional(),
+            messageTokens: z.number().min(1).optional(),
+            maxTokensPerBatch: z.number().min(1).optional(),
+            bufferTokens: z.union([z.number().min(0), z.literal(false)]).optional(),
+            bufferActivation: z.number().min(0).max(1).optional(),
+            blockAfter: z.number().min(0).optional(),
+          })
+          .optional(),
+        reflection: z
+          .object({
+            model: z
+              .object({
+                provider: z.string().optional(),
+                name: z.string().optional(),
+              })
+              .optional(),
+            observationTokens: z.number().min(1).optional(),
+            blockAfter: z.number().min(0).optional(),
+            bufferActivation: z.number().min(0).max(1).optional(),
+          })
+          .optional(),
+      })
+      .optional(),
   })
   .refine(
     data => {
