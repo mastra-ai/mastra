@@ -947,8 +947,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     metric,
     type,
     vectorType = 'vector',
-  }: Omit<CreateIndexParams, 'metric'> & { metric?: PgMetric; type: IndexType | undefined; vectorType?: VectorType }) {
-    const input = indexName + dimension + metric + (type || 'ivfflat') + vectorType; // ivfflat is default
+    fullTextSearch,
+  }: Omit<CreateIndexParams, 'metric'> & { metric?: PgMetric; type: IndexType | undefined; vectorType?: VectorType; fullTextSearch?: boolean }) {
+    const input = indexName + dimension + metric + (type || 'ivfflat') + vectorType + (fullTextSearch ? 'fts' : '');
     return (await this.hasher).h32(input);
   }
   private cachedIndexExists(indexName: string, newKey: number) {
@@ -1067,6 +1068,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       type: indexConfig.type,
       metric,
       vectorType,
+      fullTextSearch: !!fullTextSearch,
     });
     if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
@@ -1175,6 +1177,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 content TEXT
               );
             `);
+
+            // Ensure content column exists on pre-existing tables (upgrade path)
+            await client.query(`ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS content TEXT`);
 
             const ftsIndexName = `"${parseSqlIdentifier(indexName, 'index name')}_fts_idx"`;
             await client.query(`
@@ -1711,6 +1716,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       this.createdIndexes.delete(indexName);
       this.indexVectorTypes.delete(indexName);
       this.describeIndexCache.delete(indexName);
+      this.indexFullTextConfig.delete(indexName);
     } catch (error: any) {
       await client.query('ROLLBACK');
       const mastraError = new MastraError(
