@@ -4,6 +4,7 @@ import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
+import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
@@ -14,6 +15,7 @@ import { WorkflowsLibSQL } from './domains/workflows';
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsLibSQL,
+  MCPClientsLibSQL,
   MemoryLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
@@ -143,6 +145,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const agents = new AgentsLibSQL(domainConfig);
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
     const scorerDefinitions = new ScorerDefinitionsLibSQL(domainConfig);
+    const mcpClients = new MCPClientsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -152,6 +155,7 @@ export class LibSQLStore extends MastraCompositeStore {
       agents,
       promptBlocks,
       scorerDefinitions,
+      mcpClients,
     };
   }
 }

@@ -109,6 +109,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       'outputProcessors',
       'memory',
       'scorers',
+      'mcpClients',
       'requestContextSchema',
     ];
 

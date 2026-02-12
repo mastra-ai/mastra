@@ -16,6 +16,7 @@ import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
+import { MCPClientsPG } from './domains/mcp-clients';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { PromptBlocksPG } from './domains/prompt-blocks';
@@ -63,7 +64,16 @@ export function exportSchemas(schemaName?: string): string {
   return statements.join('\n');
 }
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsPG, MemoryPG, ObservabilityPG, PromptBlocksPG, ScorerDefinitionsPG, ScoresPG, WorkflowsPG };
+export {
+  AgentsPG,
+  MCPClientsPG,
+  MemoryPG,
+  ObservabilityPG,
+  PromptBlocksPG,
+  ScorerDefinitionsPG,
+  ScoresPG,
+  WorkflowsPG,
+};
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
@@ -132,6 +142,7 @@ export class PostgresStore extends MastraCompositeStore {
         agents: new AgentsPG(domainConfig),
         promptBlocks: new PromptBlocksPG(domainConfig),
         scorerDefinitions: new ScorerDefinitionsPG(domainConfig),
+        mcpClients: new MCPClientsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
