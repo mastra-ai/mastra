@@ -15,7 +15,7 @@ import {
   SchemaRequestContextProvider,
   type AgentSettingsType,
 } from '@mastra/playground-ui';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
@@ -28,7 +28,11 @@ function Agent() {
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
-  const [newThreadId, setNewThreadId] = useState<string>(() => uuid());
+
+  // Generate a stable thread ID for new threads. Regenerate when threadId
+  // changes (e.g., clicking "New Chat" navigates back to /chat/new).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
+  const newThreadId = useMemo(() => uuid(), [threadId]);
 
   const hasMemory = Boolean(memory?.result);
 
@@ -94,7 +98,6 @@ function Agent() {
     await refreshThreads();
 
     if (isNewThread) {
-      setNewThreadId(() => uuid());
       navigate(`/agents/${agentId}/chat/${newThreadId}`);
     }
   };

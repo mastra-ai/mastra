@@ -23,7 +23,7 @@ import type {
   ListVersionsInput,
   ListVersionsOutput,
 } from '@mastra/core/storage/domains/agents';
-import { PgDB, resolvePgConfig } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -44,6 +44,28 @@ export class AgentsPG extends AgentsStorage {
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (AgentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+
+    // Tables
+    for (const tableName of AgentsPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    return statements;
   }
 
   /**
@@ -470,6 +492,7 @@ export class AgentsPG extends AgentsStorage {
         'outputProcessors',
         'memory',
         'scorers',
+        'mcpClients',
         'requestContextSchema',
       ];
 
@@ -708,10 +731,9 @@ export class AgentsPG extends AgentsStorage {
           name, description, instructions, model, tools,
           "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers,
-          "requestContextSchema",
-          "changedFields", "changeMessage",
+          "mcpClients", "requestContextSchema", "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
         [
           input.id,
           input.agentId,
@@ -729,6 +751,7 @@ export class AgentsPG extends AgentsStorage {
           input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
           input.memory ? JSON.stringify(input.memory) : null,
           input.scorers ? JSON.stringify(input.scorers) : null,
+          input.mcpClients ? JSON.stringify(input.mcpClients) : null,
           input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
@@ -996,6 +1019,7 @@ export class AgentsPG extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
       requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
