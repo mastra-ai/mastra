@@ -394,6 +394,9 @@ export async function createHonoServer(
       indexHtml = indexHtml.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, `'${experimentalFeatures}'`);
 
+      const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
+      indexHtml = indexHtml.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, `'${autoDetectUrl}'`);
+
       // Inject the base path for frontend routing
       // The <base href> tag uses this to resolve all relative URLs correctly
       indexHtml = indexHtml.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', studioBasePath);

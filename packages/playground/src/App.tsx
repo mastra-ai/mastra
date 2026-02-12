@@ -15,6 +15,7 @@ declare global {
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_AUTO_DETECT_URL?: string;
   }
 }
 
@@ -217,7 +218,8 @@ export default function AppWrapper() {
   const port = window.MASTRA_SERVER_PORT || 4111;
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
-  const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
+  const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
+  const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
