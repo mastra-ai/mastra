@@ -2,7 +2,15 @@ export { Mastra, type Config } from './mastra';
 
 // Re-export types needed by editor package
 export { Agent } from './agent';
-export type { SharedMemoryConfig, MemoryConfig, MastraMemory, SerializedMemoryConfig } from './memory';
+export type {
+  SharedMemoryConfig,
+  MemoryConfig,
+  MastraMemory,
+  SerializedMemoryConfig,
+  SerializedObservationalMemoryConfig,
+  SerializedObservationalMemoryObservationConfig,
+  SerializedObservationalMemoryReflectionConfig,
+} from './memory';
 export type { MastraVector as MastraVectorProvider } from './vector';
 export type { IMastraLogger as Logger } from './logger';
 export type { ToolAction } from './tools';

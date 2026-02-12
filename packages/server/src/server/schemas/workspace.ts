@@ -201,6 +201,18 @@ export const workspaceInfoResponseSchema = z.object({
       readOnly: z.boolean(),
     })
     .optional(),
+  filesystem: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      provider: z.string(),
+      status: z.string().optional(),
+      error: z.string().optional(),
+      readOnly: z.boolean().optional(),
+      icon: z.string().optional(),
+      metadata: z.record(z.unknown()).optional(),
+    })
+    .optional(),
 });
 
 const workspaceItemSchema = z.object({

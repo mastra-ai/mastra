@@ -14,6 +14,7 @@ import type {
   SerializedMemoryConfig,
   SharedMemoryConfig,
   StorageToolConfig,
+  MemoryConfig,
 } from '@mastra/core';
 
 import type {
@@ -515,14 +516,23 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         }
       }
 
-      if (memoryConfig.options?.semanticRecall && (!vector || !memoryConfig.embedder)) {
+      // Build options, merging observationalMemory from serialized config
+      let options: MemoryConfig | undefined = memoryConfig.options ? { ...memoryConfig.options } : undefined;
+      if (memoryConfig.observationalMemory) {
+        options = {
+          ...options,
+          observationalMemory: memoryConfig.observationalMemory,
+        };
+      }
+
+      if (options?.semanticRecall && (!vector || !memoryConfig.embedder)) {
         this.logger?.warn(
           'Semantic recall is enabled but no vector store or embedder are configured. ' +
             'Creating memory without semantic recall. ' +
             'To use semantic recall, configure a vector store and embedder in your Mastra instance.',
         );
 
-        const adjustedOptions = { ...memoryConfig.options, semanticRecall: false };
+        const adjustedOptions = { ...options, semanticRecall: false };
         const sharedConfig: SharedMemoryConfig = {
           storage: this.mastra.getStorage(),
           vector,
@@ -536,7 +546,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const sharedConfig: SharedMemoryConfig = {
         storage: this.mastra.getStorage(),
         vector,
-        options: memoryConfig.options,
+        options,
         embedder: memoryConfig.embedder,
         embedderOptions: memoryConfig.embedderOptions,
       };

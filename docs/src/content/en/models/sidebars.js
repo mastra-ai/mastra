@@ -388,6 +388,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/stackit',
+          label: 'STACKIT',
+        },
+        {
+          type: 'doc',
           id: 'providers/submodel',
           label: 'submodel',
         },

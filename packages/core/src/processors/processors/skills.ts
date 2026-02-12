@@ -545,10 +545,10 @@ ${skillInstructions}`;
   /**
    * Process input step - inject available skills and provide skill tools
    */
-  async processInputStep({ messageList, tools, stepNumber }: ProcessInputStepArgs) {
+  async processInputStep({ messageList, tools, stepNumber, requestContext }: ProcessInputStepArgs) {
     // Refresh skills on first step only (not every step in the agentic loop)
     if (stepNumber === 0) {
-      await this.skills?.maybeRefresh();
+      await this.skills?.maybeRefresh({ requestContext });
     }
     const skillsList = await this.skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;

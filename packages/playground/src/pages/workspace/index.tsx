@@ -51,7 +51,6 @@ export default function Workspace() {
   const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
 
   // Get state from URL query params (path, file, tab are still query params)
-  const pathFromUrl = searchParams.get('path') || '/';
   const fileFromUrl = searchParams.get('file');
   const tabFromUrl = searchParams.get('tab') as TabType | null;
 
@@ -68,6 +67,12 @@ export default function Workspace() {
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
   } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // For uncontained local filesystems, default to basePath instead of / (which would show the real root)
+  const fsMetadata = workspaceInfo?.filesystem?.metadata;
+  const defaultPath =
+    fsMetadata?.contained === false && typeof fsMetadata?.basePath === 'string' ? fsMetadata.basePath : '/';
+  const pathFromUrl = searchParams.get('path') || defaultPath;
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
