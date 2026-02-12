@@ -790,7 +790,9 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
             const fullSkill = await skills.get(skillMeta.name);
             path = fullSkill?.path ?? '';
 
-            // For skills installed via skills.sh, read source info from .meta.json
+            // For skills installed via skills.sh, read source info from .meta.json.
+            // Uses includes() because glob-discovered paths may have a leading slash
+            // or be nested (e.g., '/.agents/skills/foo', '/src/.agents/skills/foo').
             if (path.includes(SKILLS_SH_PATH_PREFIX) && workspace.filesystem) {
               try {
                 const metaPath = `${path}/.meta.json`;
@@ -1569,6 +1571,9 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           });
         }
       }
+
+      // Refresh skills discovery so updated skills are immediately visible
+      await workspace.skills?.refresh();
 
       return { updated: results };
     } catch (error) {
