@@ -452,6 +452,30 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     );
   }
 
+  async registerCustomApiRoutes(): Promise<void> {
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (!routes || routes.length === 0) return;
+
+    for (const route of routes) {
+      const handler =
+        'handler' in route && route.handler
+          ? route.handler
+          : 'createHandler' in route
+            ? await route.createHandler({ mastra: this.mastra })
+            : undefined;
+      if (!handler) continue;
+
+      const middlewares: MiddlewareHandler[] = [];
+      if (route.middleware) {
+        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
+      }
+
+      const allHandlers = [...middlewares, handler];
+      const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
+      this.app[method](route.path, allHandlers[0]!, ...allHandlers.slice(1));
+    }
+  }
+
   registerContextMiddleware(): void {
     this.app.use('*', this.createContextMiddleware());
   }

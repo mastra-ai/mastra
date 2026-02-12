@@ -453,6 +453,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     );
   }
 
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    this.app.use(async (req: Request, res: Response, next: NextFunction) => {
+      const response = await this.handleCustomRouteRequest(
+        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        req.method,
+        req.headers as Record<string, string | string[] | undefined>,
+        req.body,
+        res.locals.requestContext,
+      );
+      if (!response) return next();
+      await this.writeCustomRouteResponse(response, res);
+    });
+  }
+
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
   }
