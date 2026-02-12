@@ -137,11 +137,17 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         try {
           toolCallInput = JSON.parse(value.input);
         } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
+          const repaired = tryRepairJson(value.input);
+          if (repaired) {
+            console.warn('[JSON Repair] Fixed malformed JSON for tool:', value.toolName);
+            toolCallInput = repaired;
+          } else {
+            console.error('Error converting tool call input to JSON', {
+              error,
+              input: value.input,
+            });
+            toolCallInput = undefined;
+          }
         }
       }
 
@@ -567,4 +573,55 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Attempts to repair common JSON errors produced by LLM providers (e.g., Kimi/K2).
+ *
+ * Handles these common malformations:
+ * - Missing opening quote before property name: {"a":"b",c":"d"} -> {"a":"b","c":"d"}
+ * - Fully unquoted property names: {command:"ls"} -> {"command":"ls"}
+ * - Trailing commas: {"a":1,} -> {"a":1}
+ * - Single quotes instead of double quotes: {'key':'val'} -> {"key":"val"}
+ *
+ * Single-quote replacement is applied as a second pass only when structural
+ * fixes alone are insufficient, so apostrophes inside double-quoted values
+ * (e.g. "it's fine") are preserved when possible.
+ *
+ * Returns the parsed object on success, or null if repair fails.
+ */
+export function tryRepairJson(input: string): Record<string, any> | null {
+  const repaired = applyStructuralFixes(input.trim());
+
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    // Structural fixes alone weren't enough — also try single-quote replacement.
+    // This handles {'key':'value'} patterns from some LLM providers.
+    const withDoubleQuotes = applyStructuralFixes(input.trim().replace(/'/g, '"'));
+    try {
+      return JSON.parse(withDoubleQuotes);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function applyStructuralFixes(input: string): string {
+  let result = input;
+
+  // Fix missing opening quote before property name (partial quote)
+  // {"a":"b",c":"d"} -> {"a":"b","c":"d"}
+  // Must run before the unquoted-key fix so the trailing " is consumed
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, '$1"$2":');
+
+  // Add missing quotes around fully unquoted property names
+  // {command:"value"} -> {"command":"value"}
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+  // Remove trailing commas before closing braces/brackets
+  // {"a":1,} -> {"a":1}
+  result = result.replace(/,(\s*[}\]])/g, '$1');
+
+  return result;
 }
