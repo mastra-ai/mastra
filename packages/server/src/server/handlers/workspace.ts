@@ -1382,7 +1382,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   summary: 'Remove an installed skill',
   description: 'Removes an installed skill by deleting its directory. Does not require sandbox.',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId, skillName }) => {
+  handler: async ({ mastra, workspaceId, skillName, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -1403,7 +1403,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       const safeSkillName = assertSafeSkillName(skillName);
 
       // Refresh discovery cache so the lookup reflects the latest filesystem state
-      await workspace.skills?.maybeRefresh();
+      await workspace.skills?.maybeRefresh({ requestContext });
 
       // Look up the skill's actual path from discovery (supports glob-discovered skills)
       const skill = await workspace.skills?.get(safeSkillName);

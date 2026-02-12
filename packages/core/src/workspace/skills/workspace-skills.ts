@@ -436,7 +436,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     try {
       const entries = await this.#source.readdir(basePath);
       for (const entry of entries) {
-        if (entry.type !== 'directory') continue;
+        // Skip symlink directories to prevent infinite recursion from cycles
+        if (entry.type !== 'directory' || entry.isSymlink) continue;
         // Use explicit path construction to handle root '/' correctly
         // (#joinPath strips root '/', so we handle it directly)
         const entryPath = basePath === '/' ? `/${entry.name}` : `${basePath}/${entry.name}`;

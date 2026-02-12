@@ -83,6 +83,7 @@ export class LocalSkillSource implements SkillSource {
     return entries.map(entry => ({
       name: entry.name,
       type: entry.isDirectory() ? 'directory' : 'file',
+      isSymlink: entry.isSymbolicLink() || undefined,
     }));
   }
 }
