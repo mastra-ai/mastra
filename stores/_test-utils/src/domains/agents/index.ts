@@ -72,6 +72,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(resolved?.outputProcessors).toEqual(agent.outputProcessors);
         expect(resolved?.memory).toEqual(agent.memory);
         expect(resolved?.scorers).toEqual(agent.scorers);
+        expect(resolved?.requestContextSchema).toEqual(agent.requestContextSchema);
         expect(resolved?.metadata).toEqual(agent.metadata);
       });
 

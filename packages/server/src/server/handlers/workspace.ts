@@ -311,6 +311,8 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         };
       }
 
+      const fsInfo = await workspace.filesystem?.getInfo?.();
+
       return {
         isWorkspaceConfigured: true,
         id: workspace.id,
@@ -327,6 +329,18 @@ export const GET_WORKSPACE_ROUTE = createRoute({
         safety: {
           readOnly: workspace.filesystem?.readOnly ?? false,
         },
+        filesystem: fsInfo
+          ? {
+              id: fsInfo.id,
+              name: fsInfo.name,
+              provider: fsInfo.provider,
+              status: fsInfo.status,
+              error: fsInfo.error,
+              readOnly: fsInfo.readOnly,
+              icon: fsInfo.icon,
+              metadata: fsInfo.metadata,
+            }
+          : undefined,
       };
     } catch (error) {
       return handleWorkspaceError(error, 'Error getting workspace info');

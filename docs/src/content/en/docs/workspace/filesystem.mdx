@@ -58,6 +58,26 @@ const agent = new Agent({
 const response = await agent.generate('List all files in the workspace');
 ```
 
+## Containment
+
+By default, `LocalFilesystem` runs in **contained mode** — all file operations are restricted to stay within `basePath`. This prevents path traversal attacks and symlink escapes.
+
+In contained mode, absolute paths that fall within `basePath` are used as-is, while other absolute paths are treated as virtual paths relative to `basePath` (e.g. `/file.txt` resolves to `basePath/file.txt`). Any resolved path that escapes `basePath` throws a `PermissionError`.
+
+If your agent needs to access paths outside `basePath` (for example, global skills directories or user home folders), disable containment:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    // highlight-next-line
+    contained: false,
+  }),
+});
+```
+
+When `contained` is `false`, absolute paths are treated as real filesystem paths with no restriction.
+
 ## Read-only mode
 
 To prevent agents from modifying files, enable read-only mode:

@@ -142,11 +142,11 @@ export function resolvePgConfig(config: PgDomainConfig): {
   };
 }
 
-function getSchemaName(schema?: string) {
+export function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
 }
 
-function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+export function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
   const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
   const quotedIndexName = `"${parsedIndexName}"`;
   const quotedSchemaName = schemaName;
@@ -164,7 +164,7 @@ function mapToSqlType(type: StorageColumn['type']): string {
   }
 }
 
-function generateTableSQL({
+export function generateTableSQL({
   tableName,
   schema,
   schemaName,
@@ -254,34 +254,71 @@ function generateTableSQL({
 }
 
 /**
- * Exports the Mastra database schema as SQL DDL statements.
- * Does not require a database connection.
+ * Generates a CREATE INDEX SQL statement from index options.
+ * Used by exportSchemas to produce index DDL without a database connection.
  */
-export function exportSchemas(schemaName?: string): string {
-  const statements: string[] = [];
+export function generateIndexSQL(options: CreateIndexOptions, schemaName?: string): string {
+  const { name, table, columns, unique = false, where, method = 'btree' } = options;
 
-  // Add schema creation if needed
-  if (schemaName) {
-    const quotedSchemaName = getSchemaName(schemaName);
-    statements.push(`-- Create schema if it doesn't exist`);
-    statements.push(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName};`);
-    statements.push('');
-  }
+  const quotedSchemaName = getSchemaName(schemaName);
+  const fullTableName = getTableName({ indexName: table, schemaName: quotedSchemaName });
 
-  // Generate SQL for all tables
-  for (const [tableName, schema] of Object.entries(TABLE_SCHEMAS)) {
-    statements.push(`-- Table: ${tableName}`);
-    const sql = generateTableSQL({
-      tableName: tableName as TABLE_NAMES,
-      schema,
-      schemaName,
-      includeAllConstraints: true, // Include all constraints for exports/documentation
-    });
-    statements.push(sql.trim());
-    statements.push('');
-  }
+  const uniqueStr = unique ? 'UNIQUE ' : '';
+  const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
-  return statements.join('\n');
+  const columnsStr = columns
+    .map(col => {
+      if (col.includes(' DESC') || col.includes(' ASC')) {
+        const [colName, ...modifiers] = col.split(' ');
+        if (!colName) {
+          throw new Error(`Invalid column specification: ${col}`);
+        }
+        return `"${parseSqlIdentifier(colName, 'column name')}" ${modifiers.join(' ')}`;
+      }
+      return `"${parseSqlIdentifier(col, 'column name')}"`;
+    })
+    .join(', ');
+
+  const whereStr = where ? ` WHERE ${where}` : '';
+  const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
+
+  return `CREATE ${uniqueStr}INDEX IF NOT EXISTS ${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${whereStr};`;
+}
+
+/**
+ * Generates the SQL for a timestamp trigger function and trigger on a table.
+ * Returns the DDL string without executing it.
+ */
+export function generateTimestampTriggerSQL(tableName: string, schemaName?: string): string {
+  const quotedSchemaName = getSchemaName(schemaName);
+  const fullTableName = getTableName({ indexName: tableName, schemaName: quotedSchemaName });
+  const functionName = `${quotedSchemaName}.trigger_set_timestamps`;
+  const triggerName = `"${parseSqlIdentifier(`${tableName}_timestamps`, 'trigger name')}"`;
+
+  return `CREATE OR REPLACE FUNCTION ${functionName}()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        NEW."createdAt" = NOW();
+        NEW."updatedAt" = NOW();
+        NEW."createdAtZ" = NOW();
+        NEW."updatedAtZ" = NOW();
+    ELSIF TG_OP = 'UPDATE' THEN
+        NEW."updatedAt" = NOW();
+        NEW."updatedAtZ" = NOW();
+        NEW."createdAt" = OLD."createdAt";
+        NEW."createdAtZ" = OLD."createdAtZ";
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS ${triggerName} ON ${fullTableName};
+
+CREATE TRIGGER ${triggerName}
+    BEFORE INSERT OR UPDATE ON ${fullTableName}
+    FOR EACH ROW
+    EXECUTE FUNCTION ${functionName}();`;
 }
 
 /**
@@ -627,38 +664,10 @@ export class PgDB extends MastraBase {
   }
 
   private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
-    const schemaName = getSchemaName(this.schemaName);
-    const fullTableName = getTableName({ indexName: tableName, schemaName });
-    const functionName = `${schemaName}.trigger_set_timestamps`;
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
 
     try {
-      const triggerSQL = `
-        CREATE OR REPLACE FUNCTION ${functionName}()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            IF TG_OP = 'INSERT' THEN
-                NEW."createdAt" = NOW();
-                NEW."updatedAt" = NOW();
-                NEW."createdAtZ" = NOW();
-                NEW."updatedAtZ" = NOW();
-            ELSIF TG_OP = 'UPDATE' THEN
-                NEW."updatedAt" = NOW();
-                NEW."updatedAtZ" = NOW();
-                NEW."createdAt" = OLD."createdAt";
-                NEW."createdAtZ" = OLD."createdAtZ";
-            END IF;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-
-        DROP TRIGGER IF EXISTS ${tableName}_timestamps ON ${fullTableName};
-
-        CREATE TRIGGER ${tableName}_timestamps
-            BEFORE INSERT OR UPDATE ON ${fullTableName}
-            FOR EACH ROW
-            EXECUTE FUNCTION ${functionName}();
-      `;
-
+      const triggerSQL = generateTimestampTriggerSQL(tableName, this.schemaName);
       await this.client.none(triggerSQL);
       this.logger?.debug?.(`Set up timestamp triggers for table ${fullTableName}`);
     } catch (error) {

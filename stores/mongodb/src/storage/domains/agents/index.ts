@@ -44,6 +44,7 @@ const SNAPSHOT_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'requestContextSchema',
 ] as const;
 
 export class MongoDBAgentsStorage extends AgentsStorage {
