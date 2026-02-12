@@ -8,7 +8,8 @@ import { coreFeatures } from '@mastra/core/features';
  */
 export const useExperimentalFeatures = () => {
   const envFlag =
-    typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_FEATURES === 'true';
+    typeof window !== 'undefined' &&
+    (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_FEATURES === 'true';
   const experimentalFeaturesEnabled = coreFeatures.has('datasets') && envFlag;
 
   return { experimentalFeaturesEnabled };

@@ -150,7 +150,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = ctx.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
