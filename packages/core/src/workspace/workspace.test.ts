@@ -130,8 +130,8 @@ describe('Workspace', () => {
       const cfs = workspace.filesystem;
       expect(cfs).toBeInstanceOf(CompositeFilesystem);
 
-      // getMount on CompositeFilesystem should return the concrete type
-      const mounted = cfs.getMount('/local');
+      // mounts.get() on CompositeFilesystem should return the concrete type
+      const mounted = cfs.mounts.get('/local');
       expect(mounted).toBe(localFs);
       expect(mounted.basePath).toBe(path.resolve(tempDir));
     });

@@ -57,7 +57,7 @@ interface ResolvedMount {
  * Supports cross-mount operations (copy/move between different filesystems).
  *
  * The generic parameter preserves the concrete types of mounted filesystems,
- * enabling typed access via `getMount()`.
+ * enabling typed access via `mounts.get()`.
  *
  * @example
  * ```typescript
@@ -68,8 +68,8 @@ interface ResolvedMount {
  *   },
  * });
  *
- * cfs.getMount('/local') // LocalFilesystem
- * cfs.getMount('/s3')    // S3Filesystem
+ * cfs.mounts.get('/local') // LocalFilesystem
+ * cfs.mounts.get('/s3')    // S3Filesystem
  * ```
  */
 export class CompositeFilesystem<
@@ -121,28 +121,6 @@ export class CompositeFilesystem<
    */
   get mounts(): ReadonlyMountMap<TMounts> {
     return this._mounts as unknown as ReadonlyMountMap<TMounts>;
-  }
-
-  /**
-   * Get a mounted filesystem by its mount path.
-   * Returns the concrete type of the filesystem at that mount point.
-   *
-   * @example
-   * ```typescript
-   * const cfs = new CompositeFilesystem({
-   *   mounts: {
-   *     '/local': new LocalFilesystem({ basePath: './data' }),
-   *     '/s3': new S3Filesystem({ bucket: 'my-bucket' }),
-   *   },
-   * });
-   *
-   * cfs.getMount('/local') // LocalFilesystem
-   * ```
-   */
-  getMount<K extends string & keyof TMounts>(mountPath: K): TMounts[K];
-  getMount(mountPath: string): WorkspaceFilesystem | undefined;
-  getMount(mountPath: string): WorkspaceFilesystem | undefined {
-    return this._mounts.get(this.normalizePath(mountPath));
   }
 
   /**
@@ -458,10 +436,32 @@ export class CompositeFilesystem<
 }
 
 /**
+ * Distributive mapped type that produces a union of correlated `[key, value]` tuples.
+ *
+ * For `{ '/local': LocalFilesystem, '/s3': S3Filesystem }` this yields:
+ * `['/local', LocalFilesystem] | ['/s3', S3Filesystem]`
+ *
+ * This enables discriminated-union narrowing when iterating entries without destructuring:
+ * ```typescript
+ * for (const entry of mounts.entries()) {
+ *   if (entry[0] === '/local') {
+ *     entry[1] // LocalFilesystem
+ *   }
+ * }
+ * ```
+ */
+export type MountMapEntry<TMounts extends Record<string, WorkspaceFilesystem>> = {
+  [K in string & keyof TMounts]: [K, TMounts[K]];
+}[string & keyof TMounts];
+
+/**
  * A read-only view of mounted filesystems with typed per-key access.
  *
  * Unlike `ReadonlyMap<string, WorkspaceFilesystem>`, this preserves the
  * concrete filesystem type for each mount path via an overloaded `get()`.
+ *
+ * Iteration methods return correlated `[key, value]` tuples ({@link MountMapEntry})
+ * so that checking `entry[0]` narrows `entry[1]` to the concrete filesystem type.
  *
  * @example
  * ```typescript
@@ -480,7 +480,7 @@ export interface ReadonlyMountMap<TMounts extends Record<string, WorkspaceFilesy
 
   keys(): IterableIterator<string & keyof TMounts>;
   values(): IterableIterator<TMounts[keyof TMounts & string]>;
-  entries(): IterableIterator<[string & keyof TMounts, TMounts[keyof TMounts & string]]>;
+  entries(): IterableIterator<MountMapEntry<TMounts>>;
   forEach(
     callbackfn: (
       value: TMounts[keyof TMounts & string],
@@ -488,5 +488,5 @@ export interface ReadonlyMountMap<TMounts extends Record<string, WorkspaceFilesy
       map: ReadonlyMountMap<TMounts>,
     ) => void,
   ): void;
-  [Symbol.iterator](): IterableIterator<[string & keyof TMounts, TMounts[keyof TMounts & string]]>;
+  [Symbol.iterator](): IterableIterator<MountMapEntry<TMounts>>;
 }

@@ -93,7 +93,7 @@ export interface WorkspaceConfig<
    *
    * Use the `onMount` hook to skip or customize mounting for specific filesystems.
    *
-   * The concrete mount types are preserved — use `workspace.filesystem.getMount()`
+   * The concrete mount types are preserved — use `workspace.filesystem.mounts.get()`
    * for typed access to individual mounts.
    *
    * @example
@@ -108,7 +108,7 @@ export interface WorkspaceConfig<
    *
    * await workspace.init();
    * workspace.filesystem                    // CompositeFilesystem<{ '/data': S3Filesystem, '/skills': S3Filesystem }>
-   * workspace.filesystem.getMount('/data')  // S3Filesystem
+   * workspace.filesystem.mounts.get('/data') // S3Filesystem
    * ```
    */
   mounts?: TMounts;
@@ -358,7 +358,7 @@ export interface WorkspaceInfo {
  *   },
  * });
  * ws2.filesystem                        // CompositeFilesystem<{ '/local': LocalFilesystem }>
- * ws2.filesystem.getMount('/local')     // LocalFilesystem
+ * ws2.filesystem.mounts.get('/local')    // LocalFilesystem
  * ```
  */
 export class Workspace<
