@@ -666,17 +666,16 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
-        const aValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field)
-          ? new Date(a[field]).getTime()
-          : a[field];
-        const bValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field)
-          ? new Date(b[field]).getTime()
-          : b[field];
+        const aRaw = a[field];
+        const bRaw = b[field];
 
-        // Handle null/undefined - treat as "smallest" values
-        if (aValue == null && bValue == null) return 0;
-        if (aValue == null) return direction === 'ASC' ? -1 : 1;
-        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+        // Handle null/undefined before conversion - nulls last for DESC, nulls first for ASC
+        if (aRaw == null && bRaw == null) return 0;
+        if (aRaw == null) return direction === 'DESC' ? 1 : -1;
+        if (bRaw == null) return direction === 'DESC' ? -1 : 1;
+
+        const aValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field) ? new Date(aRaw).getTime() : aRaw;
+        const bValue = ['createdAt', 'updatedAt', 'lastMessageAt'].includes(field) ? new Date(bRaw).getTime() : bRaw;
 
         if (typeof aValue === 'string' && typeof bValue === 'string') {
           return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);

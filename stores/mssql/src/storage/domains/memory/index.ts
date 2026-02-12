@@ -78,6 +78,20 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add lastMessageAt column for backwards compatibility
+    await this.db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: TABLE_SCHEMAS[TABLE_THREADS],
+      ifNotExists: ['lastMessageAt'],
+    });
+    // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+    const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+    await this.pool.request().query(
+      `UPDATE ${threadTableName} SET [lastMessageAt] = sub.max_created
+       FROM (SELECT [thread_id], MAX([createdAt]) as max_created FROM ${messageTableName} GROUP BY [thread_id]) sub
+       WHERE ${threadTableName}.[id] = sub.[thread_id] AND ${threadTableName}.[lastMessageAt] IS NULL`,
+    );
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
