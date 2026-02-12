@@ -703,7 +703,6 @@ export class Workspace {
         status: fsInfo?.status,
         error: fsInfo?.error,
         icon: fsInfo?.icon,
-        storage: fsInfo?.storage,
         metadata: fsInfo?.metadata,
       };
 

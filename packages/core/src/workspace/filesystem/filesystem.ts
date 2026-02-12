@@ -123,12 +123,6 @@ export interface FilesystemInfo<TMetadata extends Record<string, unknown> = Reco
   readOnly?: boolean;
   /** Icon identifier for UI display */
   icon?: FilesystemIcon;
-  /** Storage usage (if available) */
-  storage?: {
-    totalBytes?: number;
-    usedBytes?: number;
-    availableBytes?: number;
-  };
   /** Provider-specific metadata */
   metadata?: TMetadata;
 }
