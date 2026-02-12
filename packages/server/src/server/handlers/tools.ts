@@ -33,7 +33,8 @@ export const LIST_TOOLS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, registeredTools }) => {
     try {
-      const allTools = registeredTools || mastra.listTools() || {};
+      const allTools =
+        registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {

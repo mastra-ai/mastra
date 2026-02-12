@@ -1,5 +1,7 @@
 node_modules/
 dist/
+test-outputs/
+.vitest-reports/
 .DS_Store
 
 # IDE
@@ -45,9 +47,12 @@ CLAUDE.local.md
 
 # User json files
 mastra-cli.json
+opencode.json
 
 *storybook.log
 storybook-static
 test-output.log
 
 .playwright-mcp
+om-debug.log
+om-reflector-fixture.json

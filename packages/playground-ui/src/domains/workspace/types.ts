@@ -15,6 +15,17 @@ export interface WorkspaceSafety {
   readOnly: boolean;
 }
 
+export interface WorkspaceFilesystemInfo {
+  id: string;
+  name: string;
+  provider: string;
+  status?: string;
+  error?: string;
+  readOnly?: boolean;
+  icon?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface WorkspaceInfo {
   isWorkspaceConfigured: boolean;
   id?: string;
@@ -22,6 +33,7 @@ export interface WorkspaceInfo {
   status?: string;
   capabilities?: WorkspaceCapabilities;
   safety?: WorkspaceSafety;
+  filesystem?: WorkspaceFilesystemInfo;
 }
 
 export interface WorkspaceItem {
@@ -43,10 +55,32 @@ export interface WorkspacesListResponse {
 // Filesystem Types
 // =============================================================================
 
+/** Provider status values for mount points */
+export type ProviderStatus =
+  | 'pending'
+  | 'initializing'
+  | 'ready'
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'stopped'
+  | 'destroying'
+  | 'destroyed'
+  | 'error';
+
 export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
   size?: number;
+  /** Mount point metadata (only set for CompositeFilesystem mount points) */
+  mount?: {
+    provider: string;
+    icon?: string;
+    displayName?: string;
+    description?: string;
+    status?: ProviderStatus;
+    error?: string;
+  };
 }
 
 export interface FileReadResponse {

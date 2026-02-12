@@ -24,7 +24,7 @@ import type {
 function normalizeObservationalMemoryConfig(
   config: boolean | ObservationalMemoryOptions | undefined,
 ): ObservationalMemoryOptions | undefined {
-  if (config === true) return {};
+  if (config === true) return { model: 'google/gemini-2.5-flash' };
   if (config === false || config === undefined) return undefined;
   if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
   return config as ObservationalMemoryOptions;
@@ -1354,6 +1354,33 @@ Notes:
       await this.embedClonedMessages(result.clonedMessages, config);
     }
 
+    // Copy working memory from source thread to cloned thread.
+    // Thread-scoped: always copy since each thread has its own working memory.
+    // Resource-scoped: only copy when the clone uses a different resourceId (same resourceId shares memory naturally).
+    if (config.workingMemory?.enabled) {
+      const scope = config.workingMemory.scope || 'resource';
+      const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
+      const sourceResourceId = sourceThread?.resourceId;
+      const shouldCopy =
+        scope === 'thread' || (scope === 'resource' && args.resourceId && args.resourceId !== sourceResourceId);
+
+      if (shouldCopy) {
+        const sourceWm = await this.getWorkingMemory({
+          threadId: args.sourceThreadId,
+          resourceId: sourceResourceId,
+          memoryConfig,
+        });
+        if (sourceWm) {
+          await this.updateWorkingMemory({
+            threadId: result.thread.id,
+            resourceId: result.thread.resourceId,
+            workingMemory: sourceWm,
+            memoryConfig,
+          });
+        }
+      }
+    }
+
     return result;
   }
 
@@ -1658,6 +1685,17 @@ Notes:
           `Otherwise, use one of those adapters or disable observational memory.`,
       );
     }
+
+    // Async buffering is on by default. Check that core + storage support it
+    // unless the user explicitly disabled it with bufferTokens: false.
+    if (omConfig.observation?.bufferTokens !== false && !coreFeatures.has('asyncBuffering')) {
+      throw new Error(
+        'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
+          'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
+          'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
+      );
+    }
+
     // Dynamic import to avoid loading OM code when not needed and to prevent
     // import errors when paired with an older @mastra/core version
     const { ObservationalMemory } = await import('./processors/observational-memory');
@@ -1674,6 +1712,9 @@ Notes:
             modelSettings: omConfig.observation.modelSettings,
             maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
             providerOptions: omConfig.observation.providerOptions,
+            bufferTokens: omConfig.observation.bufferTokens,
+            bufferActivation: omConfig.observation.bufferActivation,
+            blockAfter: omConfig.observation.blockAfter,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1682,6 +1723,8 @@ Notes:
             observationTokens: omConfig.reflection.observationTokens,
             modelSettings: omConfig.reflection.modelSettings,
             providerOptions: omConfig.reflection.providerOptions,
+            bufferActivation: omConfig.reflection.bufferActivation,
+            blockAfter: omConfig.reflection.blockAfter,
           }
         : undefined,
     });

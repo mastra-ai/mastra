@@ -29,6 +29,11 @@ type LinkComponentPaths = {
   networkThreadLink: (networkId: string, threadId: string) => string;
 
   scorerLink: (scorerId: string) => string;
+  cmsScorersCreateLink: () => string;
+  cmsScorerEditLink: (scorerId: string) => string;
+
+  cmsAgentCreateLink: () => string;
+  cmsAgentEditLink: (agentId: string) => string;
 
   toolLink: (toolId: string) => string;
   skillLink: (skillName: string, workspaceId?: string) => string;
@@ -63,6 +68,10 @@ const LinkComponentContext = createContext<{
     networkNewThreadLink: () => '',
     networkThreadLink: () => '',
     scorerLink: () => '',
+    cmsScorersCreateLink: () => '',
+    cmsScorerEditLink: () => '',
+    cmsAgentCreateLink: () => '',
+    cmsAgentEditLink: () => '',
     toolLink: () => '',
     skillLink: () => '',
     workspacesLink: () => '',

@@ -6030,6 +6030,262 @@ describe('Workflow', () => {
       });
     });
 
+    it('should emit per-iteration progress events during foreach streaming', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData }: { inputData: { value: number } }) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return { value: inputData.value + 11 };
+      });
+
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({ finalValue: z.number() }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'foreach-progress-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({ finalValue: z.number() }),
+        options: { validateInputs: false },
+      });
+
+      counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'foreach-progress-workflow': counterWorkflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const streamResult = run.stream({
+        inputData: [{ value: 1 }, { value: 22 }, { value: 333 }],
+      });
+
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of streamResult.fullStream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+
+      // Filter for progress events on the foreach step
+      const progressEvents = collectedStreamData.filter(
+        (event: any) => event.type === 'workflow-step-progress' && event.payload?.id === 'map',
+      );
+
+      // Should have 3 progress events (one per iteration)
+      expect(progressEvents.length).toBe(3);
+
+      // Each progress event should include iteration tracking info
+      expect(progressEvents[0]).toMatchObject({
+        type: 'workflow-step-progress',
+        payload: {
+          id: 'map',
+          completedCount: 1,
+          totalCount: 3,
+          currentIndex: 0,
+          iterationStatus: 'success',
+        },
+      });
+
+      expect(progressEvents[1]).toMatchObject({
+        type: 'workflow-step-progress',
+        payload: {
+          id: 'map',
+          completedCount: 2,
+          totalCount: 3,
+          currentIndex: 1,
+          iterationStatus: 'success',
+        },
+      });
+
+      expect(progressEvents[2]).toMatchObject({
+        type: 'workflow-step-progress',
+        payload: {
+          id: 'map',
+          completedCount: 3,
+          totalCount: 3,
+          currentIndex: 2,
+          iterationStatus: 'success',
+        },
+      });
+
+      // Final result should still be correct
+      const result = await streamResult.result;
+      expect(result?.steps?.map).toMatchObject({
+        status: 'success',
+        output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+      });
+    });
+
+    it('should emit per-iteration progress events with concurrency during foreach streaming', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData }: { inputData: { value: number } }) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return { value: inputData.value + 11 };
+      });
+
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({ finalValue: z.number() }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'foreach-progress-concurrent-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({ finalValue: z.number() }),
+        options: { validateInputs: false },
+      });
+
+      // Use concurrency of 2 with 3 items = 2 batches
+      counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'foreach-progress-concurrent-workflow': counterWorkflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const streamResult = run.stream({
+        inputData: [{ value: 1 }, { value: 22 }, { value: 333 }],
+      });
+
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of streamResult.fullStream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+
+      const progressEvents = collectedStreamData.filter(
+        (event: any) => event.type === 'workflow-step-progress' && event.payload?.id === 'map',
+      );
+
+      // Should have 3 progress events even with concurrency
+      expect(progressEvents.length).toBe(3);
+
+      // All progress events should have totalCount: 3
+      for (const event of progressEvents) {
+        expect((event as any).payload.totalCount).toBe(3);
+        expect((event as any).payload.iterationStatus).toBe('success');
+      }
+
+      // The last progress event should show all completed
+      const lastProgress = progressEvents[progressEvents.length - 1] as any;
+      expect(lastProgress.payload.completedCount).toBe(3);
+    });
+
+    it('should emit progress event with failed iterationStatus when a foreach iteration fails', async () => {
+      const map = vi.fn().mockImplementation(async ({ inputData }: { inputData: { value: number } }) => {
+        if (inputData.value === 22) {
+          throw new Error('Iteration failed for value 22');
+        }
+        return { value: inputData.value + 11 };
+      });
+
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({ finalValue: z.number() }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0) };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'foreach-progress-fail-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({ finalValue: z.number() }),
+        options: { validateInputs: false },
+      });
+
+      counterWorkflow.foreach(mapStep).then(finalStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'foreach-progress-fail-workflow': counterWorkflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await counterWorkflow.createRun();
+      const streamResult = run.stream({
+        inputData: [{ value: 1 }, { value: 22 }, { value: 333 }],
+      });
+
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of streamResult.fullStream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+
+      const progressEvents = collectedStreamData.filter(
+        (event: any) => event.type === 'workflow-step-progress' && event.payload?.id === 'map',
+      );
+
+      // First iteration succeeds, second fails — foreach should stop at failure
+      expect(progressEvents.length).toBeGreaterThanOrEqual(1);
+
+      // The first progress event should show success for index 0
+      expect(progressEvents[0]).toMatchObject({
+        type: 'workflow-step-progress',
+        payload: {
+          id: 'map',
+          completedCount: 1,
+          totalCount: 3,
+          currentIndex: 0,
+          iterationStatus: 'success',
+        },
+      });
+
+      // There should be a progress event showing the failure
+      const failedProgress = progressEvents.find((e: any) => e.payload.iterationStatus === 'failed');
+      expect(failedProgress).toBeDefined();
+      expect(failedProgress).toMatchObject({
+        type: 'workflow-step-progress',
+        payload: {
+          id: 'map',
+          currentIndex: 1,
+          iterationStatus: 'failed',
+        },
+      });
+    });
+
     it('should run a all item concurrency for loop', async () => {
       const startTime = Date.now();
       const map = vi.fn().mockImplementation(async ({ inputData }) => {

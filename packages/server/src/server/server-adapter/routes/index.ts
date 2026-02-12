@@ -16,8 +16,11 @@ import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSORS_ROUTES } from './processors';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
+import { STORED_MCP_CLIENTS_ROUTES } from './stored-mcp-clients';
+import { STORED_SCORERS_ROUTES } from './stored-scorers';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
+import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
@@ -118,6 +121,9 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...STORED_MCP_CLIENTS_ROUTES,
+  ...STORED_SCORERS_ROUTES,
+  ...TOOL_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
 ];
 

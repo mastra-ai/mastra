@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "better-auth": "^1.4.5"
+    "better-auth": "^1.4.18"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

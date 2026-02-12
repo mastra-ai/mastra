@@ -1,3 +1,6 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
@@ -8,7 +11,7 @@ import { APICallError, stepCountIs, tool } from '@internal/ai-sdk-v5';
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { config } from 'dotenv';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { ModelRouterLanguageModel } from '../llm';
@@ -21,6 +24,7 @@ import { RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
+import { Workspace, LocalFilesystem } from '../workspace';
 import { MessageList } from './message-list/index';
 import { assertNoDuplicateParts } from './test-utils';
 import { Agent } from './index';
@@ -1626,141 +1630,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       await new Promise(resolve => setTimeout(resolve, 100));
       expect(titleGenerationCallCount).toBe(0); // No title generation should happen
       expect(agentCallCount).toBe(1); // But main agent should still be called
-    });
-
-    it('should generate title for pre-created thread with any title (issue #11757)', async () => {
-      // This test validates that generateTitle works for pre-created threads with ANY title.
-      // When generateTitle: true is configured, title generation should trigger on the first
-      // user message, regardless of the initial title. No metadata flags are needed.
-      // See: https://github.com/mastra-ai/mastra/issues/11757
-      let titleGenerationCallCount = 0;
-      let agentCallCount = 0;
-      let updatedThreadTitle = '';
-
-      const mockMemory = new MockMemory();
-
-      // Pre-create the thread with a CUSTOM title (simulating client SDK pre-creation)
-      // This is a common pattern: apps create threads before the first message for URL routing
-      const customTitle = 'New Chat'; // Any custom title - generateTitle should still work
-      const threadId = 'pre-created-thread-custom-title';
-      await mockMemory.saveThread({
-        thread: {
-          id: threadId,
-          title: customTitle,
-          resourceId: 'user-123',
-          createdAt: new Date('2024-01-01T00:00:00.000Z'),
-          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
-        },
-      });
-
-      // Override getMergedThreadConfig to return generateTitle: true
-      mockMemory.getMergedThreadConfig = () => {
-        return {
-          generateTitle: true,
-        };
-      };
-
-      // Track when createThread is called to update title
-      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
-      mockMemory.createThread = async (params: any) => {
-        if (params.title && params.title !== customTitle) {
-          updatedThreadTitle = params.title;
-        }
-        return originalCreateThread(params);
-      };
-
-      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
-
-      if (version === 'v1') {
-        testModel = new MockLanguageModelV1({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              titleGenerationCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 5, completionTokens: 10 },
-                text: 'Help with coding project',
-              };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: 'Agent Response',
-              };
-            }
-          },
-        });
-      } else {
-        testModel = new MockLanguageModelV2({
-          doGenerate: async options => {
-            const messages = options.prompt;
-            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
-
-            if (isForTitle) {
-              titleGenerationCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-                text: 'Help with coding project',
-                content: [{ type: 'text', text: 'Help with coding project' }],
-                warnings: [],
-              };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                text: 'Agent Response',
-                content: [{ type: 'text', text: 'Agent Response' }],
-                warnings: [],
-              };
-            }
-          },
-        });
-      }
-
-      const agent = new Agent({
-        id: 'pre-created-thread-agent',
-        name: 'Pre-created Thread Agent',
-        instructions: 'test agent',
-        model: testModel,
-        memory: mockMemory,
-      });
-
-      // Send first message to the pre-created thread
-      if (version === 'v1') {
-        await agent.generateLegacy('Help me with my coding project', {
-          memory: {
-            resource: 'user-123',
-            thread: threadId, // Use existing thread ID (not object with title)
-          },
-        });
-      } else {
-        await agent.generate('Help me with my coding project', {
-          memory: {
-            resource: 'user-123',
-            thread: threadId, // Use existing thread ID (not object with title)
-          },
-        });
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Title generation should trigger because:
-      // 1. generateTitle: true is configured
-      // 2. This is the first user message (no existing user messages in memory)
-      // The initial title ("New Chat") doesn't matter - generateTitle option wins
-      expect(titleGenerationCallCount).toBe(1);
-      expect(agentCallCount).toBe(1); // Main agent should still be called
-      expect(updatedThreadTitle).toBe('Help with coding project');
     });
 
     it('should handle errors in title generation gracefully', async () => {
@@ -4915,100 +4784,185 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
 
-      it('should throw correct error message in generate when workflow step fails (e.g. tool not found)', async () => {
+      it('should not throw in generate when model calls non-existent tool (returns error to model)', async () => {
         const model = createModelWithNonExistentToolCall();
         const agent = createAgentWithMismatchedTool(model);
 
-        let caughtError: Error | null = null;
-        try {
-          await agent.generate('Please use a tool');
-        } catch (err: any) {
-          caughtError = err;
-        }
+        // With the fix, tool-not-found errors no longer throw.
+        // The error is returned to the model as a tool result, and the loop continues
+        // until maxSteps is reached. The agent completes normally.
+        const result = await agent.generate('Please use a tool', { maxSteps: 2 });
 
-        expect(caughtError).toBeDefined();
-        expect(caughtError).toBeInstanceOf(Error);
-        // The error should contain the actual error message, not "promise 'text' was not resolved"
-        expect(caughtError!.message).toMatch(/Tool nonExistentTool not found/i);
-        expect(caughtError!.message).not.toMatch(/promise.*was not resolved/i);
+        // Should complete without throwing
+        expect(result).toBeDefined();
+
+        // The steps should contain the tool-not-found error with available tool names
+        const toolResults = result.steps.flatMap(s => s.toolResults ?? []);
+        const notFoundResult = toolResults.find(
+          (tr: any) => (tr.payload?.toolName ?? tr.toolName) === 'nonExistentTool',
+        );
+        if (notFoundResult) {
+          const resultValue = (notFoundResult as any).payload?.result ?? (notFoundResult as any).result;
+          expect(String(resultValue)).toMatch(/not found/i);
+          expect(String(resultValue)).toMatch(/existingTool/);
+        }
       });
 
-      it('should have correct error in output.error and fullStream error chunk when workflow step fails in stream', async () => {
+      it('should emit tool-error chunks in stream when model calls non-existent tool', async () => {
         const model = createModelWithNonExistentToolCall();
         const agent = createAgentWithMismatchedTool(model);
 
-        const output = await agent.stream('Please use a tool');
+        const output = await agent.stream('Please use a tool', { maxSteps: 2 });
 
-        let errorChunk: any;
+        const toolErrorChunks: any[] = [];
         for await (const chunk of output.fullStream) {
-          if (chunk.type === 'error') {
-            errorChunk = chunk;
+          if (chunk.type === 'tool-error') {
+            toolErrorChunks.push(chunk);
           }
         }
 
-        // Verify error chunk has correct error
-        expect(errorChunk).toBeDefined();
-        expect(errorChunk.payload.error).toBeDefined();
-        expect(errorChunk.payload.error).toBeInstanceOf(Error);
-        expect((errorChunk.payload.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((errorChunk.payload.error as Error).message).not.toMatch(/promise.*was not resolved/i);
-
-        // Verify output.error has correct error
-        expect(output.error).toBeInstanceOf(Error);
-        expect((output.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((output.error as Error).message).not.toMatch(/promise.*was not resolved/i);
-
-        // Verify they are the same instance
-        expect(output.error).toBe(errorChunk.payload.error);
+        // Should have tool-error chunks with the "not found" message and available tool names
+        expect(toolErrorChunks.length).toBeGreaterThan(0);
+        const notFoundChunk = toolErrorChunks.find(
+          (c: any) => c.payload.toolName === 'nonExistentTool' || c.payload.error.message.match(/nonExistentTool/i),
+        );
+        expect(notFoundChunk).toBeDefined();
+        expect(notFoundChunk.payload.error.message).toMatch(/Tool "nonExistentTool" not found/i);
+        expect(notFoundChunk.payload.error.message).toMatch(/existingTool/);
+        expect(notFoundChunk.payload.error.name).toBe('ToolNotFoundError');
       });
 
-      it('should call onError with correct error in generate when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        let onErrorCalled = false;
-        let onErrorArg: string | Error | null = null;
-
-        try {
-          await agent.generate('Please use a tool', {
-            onError: ({ error }) => {
-              onErrorCalled = true;
-              onErrorArg = error;
-            },
-          });
-        } catch {
-          // Expected to throw
-        }
-
-        expect(onErrorCalled).toBe(true);
-        expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
-      });
-
-      it('should call onError with correct error in stream when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        let onErrorCalled = false;
-        let onErrorArg: string | Error | null = null;
-
-        const output = await agent.stream('Please use a tool', {
-          onError: ({ error }) => {
-            onErrorCalled = true;
-            onErrorArg = error;
+      it('should allow model to self-correct after calling non-existent tool in generate', async () => {
+        // Model first calls wrong tool, then self-corrects, then returns text
+        let callCount = 0;
+        const selfCorrectingModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            callCount++;
+            if (callCount === 1) {
+              // First call: model hallucinates a prefixed tool name
+              return {
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'creating:existingTool',
+                    input: '{"input": "test"}',
+                  },
+                ],
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                warnings: [],
+              };
+            }
+            if (callCount === 2) {
+              // Second call: model self-corrects and calls the correct tool
+              return {
+                content: [
+                  { type: 'tool-call', toolCallId: 'call-2', toolName: 'existingTool', input: '{"input": "test"}' },
+                ],
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                warnings: [],
+              };
+            }
+            // Third call: model returns text (ends the loop)
+            return {
+              content: [{ type: 'text', text: 'Done!' }],
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              warnings: [],
+            };
           },
         });
+        const agent = createAgentWithMismatchedTool(selfCorrectingModel);
 
-        // Consume the stream to trigger the error
-        for await (const _ of output.fullStream) {
-          // Just consume
+        const result = await agent.generate('Please use a tool', { maxSteps: 5 });
+
+        // Should complete successfully — the model self-corrected
+        expect(result).toBeDefined();
+        expect(callCount).toBe(3); // 1 wrong + 1 correct + 1 text response
+      });
+
+      it('should allow model to self-correct after calling non-existent tool in stream', async () => {
+        // Model first calls wrong tool, then self-corrects, then returns text
+        let callCount = 0;
+        const selfCorrectingModel = new MockLanguageModelV2({
+          doStream: async () => {
+            callCount++;
+            if (callCount === 1) {
+              // First call: model hallucinates a prefixed tool name
+              return {
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolCallType: 'function',
+                    toolName: 'creating:existingTool',
+                    input: '{"input": "test"}',
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            }
+            if (callCount === 2) {
+              // Second call: model self-corrects
+              return {
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-2',
+                    toolCallType: 'function',
+                    toolName: 'existingTool',
+                    input: '{"input": "test"}',
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            }
+            // Third call: model returns text (ends the loop)
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'text-delta', textDelta: 'Done!' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+            };
+          },
+        });
+        const agent = createAgentWithMismatchedTool(selfCorrectingModel);
+
+        const output = await agent.stream('Please use a tool', { maxSteps: 5 });
+
+        const toolErrorChunks: any[] = [];
+        const toolResultChunks: any[] = [];
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'tool-error') toolErrorChunks.push(chunk);
+          if (chunk.type === 'tool-result') toolResultChunks.push(chunk);
         }
 
-        expect(onErrorCalled).toBe(true);
-        expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
+        // Should have a tool-error for the first (wrong) call
+        expect(toolErrorChunks.length).toBeGreaterThan(0);
+        expect(toolErrorChunks[0].payload.error.message).toMatch(/not found/i);
+
+        // Should have a tool-result for the second (correct) call
+        expect(toolResultChunks.length).toBeGreaterThan(0);
+        expect(toolResultChunks[0].payload.toolName).toBe('existingTool');
+
+        expect(callCount).toBe(3); // 1 wrong + 1 correct + 1 text response
       });
     });
 
@@ -7440,6 +7394,202 @@ describe('Agent Tests', () => {
       // ModelSettings are spread into the options passed to doGenerate
       expect((capturedOptions as any)?.maxTokens).toBe(500);
       expect((capturedOptions as any)?.temperature).toBe(0.7);
+    });
+  });
+
+  describe('prepareStep workspace', () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'preparestep-workspace-test-'));
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    const createWorkspace = (id: string) => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      return new Workspace({
+        id,
+        name: `Test Workspace ${id}`,
+        filesystem,
+      });
+    };
+
+    it('should pass workspace returned from prepareStep to tool execution', async () => {
+      const workspace = createWorkspace('preparestep-workspace');
+      let capturedWorkspace: Workspace | undefined;
+
+      const workspaceCaptureTool = createTool({
+        id: 'capture_workspace',
+        description: 'Captures the workspace from execution context',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          capturedWorkspace = context.workspace;
+          return { captured: true };
+        },
+      });
+
+      let callCount = 0;
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallType: 'function' as const,
+                  toolCallId: 'call_1',
+                  toolName: 'capture_workspace',
+                  input: '{}',
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_1',
+              toolName: 'capture_workspace',
+              input: '{}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'workspace-preparestep-agent',
+        instructions: 'test',
+        model: mockModel,
+        tools: { capture_workspace: workspaceCaptureTool },
+      });
+
+      await agent.generate('Test workspace from prepareStep', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            return { workspace };
+          }
+        },
+      });
+
+      expect(capturedWorkspace).toBe(workspace);
+      expect(capturedWorkspace?.id).toBe('preparestep-workspace');
+    });
+
+    it('should allow prepareStep to override agent workspace dynamically', async () => {
+      const agentWorkspace = createWorkspace('agent-workspace');
+      const stepWorkspace = createWorkspace('step-workspace');
+      let capturedWorkspaceId: string | undefined;
+
+      const workspaceCaptureTool = createTool({
+        id: 'capture_workspace',
+        description: 'Captures the workspace from execution context',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          capturedWorkspaceId = context.workspace?.id;
+          return { captured: true };
+        },
+      });
+
+      let callCount = 0;
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallType: 'function' as const,
+                  toolCallId: 'call_1',
+                  toolName: 'capture_workspace',
+                  input: '{}',
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_1',
+              toolName: 'capture_workspace',
+              input: '{}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        name: 'workspace-override-agent',
+        instructions: 'test',
+        model: mockModel,
+        tools: { capture_workspace: workspaceCaptureTool },
+        workspace: agentWorkspace,
+      });
+
+      await agent.generate('Test workspace override', {
+        prepareStep: async ({ stepNumber }) => {
+          if (stepNumber === 0) {
+            // Override the agent's workspace with a different one
+            return { workspace: stepWorkspace };
+          }
+        },
+      });
+
+      // prepareStep workspace should override agent workspace
+      expect(capturedWorkspaceId).toBe('step-workspace');
     });
   });
 

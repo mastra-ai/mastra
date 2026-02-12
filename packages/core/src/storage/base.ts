@@ -3,6 +3,8 @@ import { MastraBase } from '../base';
 import type {
   AgentsStorage,
   PromptBlocksStorage,
+  ScorerDefinitionsStorage,
+  MCPClientsStorage,
   ScoresStorage,
   WorkflowsStorage,
   MemoryStorage,
@@ -16,6 +18,8 @@ export type StorageDomains = {
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   promptBlocks?: PromptBlocksStorage;
+  scorerDefinitions?: ScorerDefinitionsStorage;
+  mcpClients?: MCPClientsStorage;
 };
 
 /**
@@ -207,6 +211,8 @@ export class MastraCompositeStore extends MastraBase {
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
         promptBlocks: domainOverrides.promptBlocks ?? defaultStores?.promptBlocks,
+        scorerDefinitions: domainOverrides.scorerDefinitions ?? defaultStores?.scorerDefinitions,
+        mcpClients: domainOverrides.mcpClients ?? defaultStores?.mcpClients,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -265,6 +271,14 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.promptBlocks) {
       initTasks.push(this.stores.promptBlocks.init());
+    }
+
+    if (this.stores?.scorerDefinitions) {
+      initTasks.push(this.stores.scorerDefinitions.init());
+    }
+
+    if (this.stores?.mcpClients) {
+      initTasks.push(this.stores.mcpClients.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);

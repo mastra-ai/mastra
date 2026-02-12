@@ -21,6 +21,7 @@ export const createSampleAgent = ({
   outputProcessors,
   memory,
   scorers,
+  requestContextSchema,
 }: Partial<StorageCreateAgentInput> = {}): StorageCreateAgentInput => ({
   id,
   name,
@@ -37,6 +38,7 @@ export const createSampleAgent = ({
   ...(outputProcessors && { outputProcessors }),
   ...(memory && { memory }),
   ...(scorers && { scorers }),
+  ...(requestContextSchema && { requestContextSchema }),
 });
 
 /**
@@ -57,7 +59,7 @@ export const createFullSampleAgent = ({
     temperature: 0.7,
     maxCompletionTokens: 2000,
   },
-  tools: ['calculator', 'webSearch'],
+  tools: { calculator: {}, webSearch: {} },
   defaultOptions: {
     maxSteps: 5,
   },
@@ -68,6 +70,14 @@ export const createFullSampleAgent = ({
   memory: { vector: 'default-vector' },
   scorers: {
     relevance: { sampling: { type: 'ratio', rate: 0.8 } },
+  },
+  requestContextSchema: {
+    type: 'object',
+    properties: {
+      tenantId: { type: 'string' },
+      role: { type: 'string', enum: ['admin', 'user'] },
+    },
+    required: ['tenantId'],
   },
   metadata: {
     category: 'test',

@@ -26,7 +26,7 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
-import { GaugeIcon } from 'lucide-react';
+import { GaugeIcon, PencilIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ClientScoreRowData } from '@mastra/client-js';
@@ -200,6 +200,14 @@ export default function Scorer() {
           </Breadcrumb>
 
           <HeaderAction>
+            {scorer?.isRegistered && (
+              <Button variant="light" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
+                <Icon>
+                  <PencilIcon />
+                </Icon>
+                Edit
+              </Button>
+            )}
             <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
               <Icon>
                 <DocsIcon />

@@ -368,6 +368,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/clerk',
               label: 'Clerk',
             },
@@ -418,6 +423,11 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/mastra-server',
           label: 'Mastra Server',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/studio',
+          label: 'Studio',
         },
         {
           type: 'doc',
