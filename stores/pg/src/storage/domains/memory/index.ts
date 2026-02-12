@@ -1101,9 +1101,10 @@ export class MemoryPG extends MemoryStorage {
         const nowStr = new Date().toISOString();
         // Compute lastMessageAt from the max createdAt of saved messages for this thread
         const threadMessages = messages.filter(m => m.threadId === threadId);
-        const maxCreatedAt = new Date(
-          Math.max(...threadMessages.map(m => new Date(m.createdAt).getTime())),
-        ).toISOString();
+        const maxCreatedAt =
+          threadMessages.length > 0
+            ? new Date(Math.max(...threadMessages.map(m => new Date(m.createdAt ?? nowStr).getTime()))).toISOString()
+            : nowStr;
         const threadUpdate = t.none(
           `UPDATE ${threadTableName}
                         SET
