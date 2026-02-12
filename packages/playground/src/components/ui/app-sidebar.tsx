@@ -99,6 +99,7 @@ const mainNavigation: NavSection[] = [
         url: '/datasets',
         icon: <DatabaseIcon />,
         isOnMastraPlatform: false,
+        isExperimental: true,
       },
     ],
   },
