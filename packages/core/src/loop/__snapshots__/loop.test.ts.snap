@@ -752,6 +752,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call-1",
@@ -928,6 +929,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -1104,6 +1106,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -3012,6 +3015,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       "args": {
         "value": "Sparkle Day",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3149,6 +3153,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3303,6 +3308,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3358,6 +3364,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": {
         "testProvider": {
@@ -3512,6 +3519,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": {
               "testProvider": {
@@ -3681,6 +3689,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": {
               "testProvider": {
@@ -3738,6 +3747,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call-1",
@@ -3914,6 +3924,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -4090,6 +4101,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -4774,6 +4786,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call-1",
@@ -4949,6 +4962,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -5125,6 +5139,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -5178,6 +5193,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call-1",
@@ -5313,6 +5329,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -5463,6 +5480,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -6173,6 +6191,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call-1",
@@ -6349,6 +6368,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -6525,6 +6545,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -8433,6 +8454,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "args": {
         "value": "Sparkle Day",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -8570,6 +8592,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -8724,6 +8747,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -8779,6 +8803,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": {
         "testProvider": {
@@ -8933,6 +8958,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": {
               "testProvider": {
@@ -9102,6 +9128,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": {
               "testProvider": {
@@ -9159,6 +9186,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "args": {
         "value": "value",
       },
+      "parseError": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call-1",
@@ -9335,6 +9363,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",
@@ -9511,6 +9540,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "value",
             },
+            "parseError": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call-1",

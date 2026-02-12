@@ -152,6 +152,8 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   args?: TArgs & {
     __mastraMetadata?: MastraMetadata;
   };
+  /** Set when tool call argument JSON could not be parsed. Flows back to the model as an error. */
+  parseError?: string;
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   output?: TOutput;
