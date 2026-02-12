@@ -20,7 +20,6 @@ export const TABLE_SCORER_DEFINITION_VERSIONS = 'mastra_scorer_definition_versio
 // Dataset tables
 export const TABLE_DATASETS = 'mastra_datasets';
 export const TABLE_DATASET_ITEMS = 'mastra_dataset_items';
-export const TABLE_DATASET_ITEM_VERSIONS = 'mastra_dataset_item_versions';
 export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
 
 // Experiment tables
@@ -43,7 +42,6 @@ export type TABLE_NAMES =
   | typeof TABLE_SCORER_DEFINITION_VERSIONS
   | typeof TABLE_DATASETS
   | typeof TABLE_DATASET_ITEMS
-  | typeof TABLE_DATASET_ITEM_VERSIONS
   | typeof TABLE_DATASET_VERSIONS
   | typeof TABLE_EXPERIMENTS
   | typeof TABLE_EXPERIMENT_RESULTS;
@@ -242,15 +240,17 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   inputSchema: { type: 'jsonb', nullable: true },
   groundTruthSchema: { type: 'jsonb', nullable: true },
-  lastModifiedAt: { type: 'timestamp', nullable: false },
+  version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
-  id: { type: 'text', nullable: false, primaryKey: true },
+  id: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
-  datasetVersion: { type: 'timestamp', nullable: false },
+  datasetVersion: { type: 'integer', nullable: false },
+  validTo: { type: 'integer', nullable: true },
+  isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
   groundTruth: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
@@ -258,21 +258,10 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
-export const DATASET_ITEM_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
-  id: { type: 'text', nullable: false, primaryKey: true },
-  itemId: { type: 'text', nullable: false, references: { table: 'mastra_dataset_items', column: 'id' } },
-  datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
-  versionNumber: { type: 'integer', nullable: false },
-  datasetVersion: { type: 'timestamp', nullable: false },
-  snapshot: { type: 'jsonb', nullable: false },
-  isDeleted: { type: 'boolean', nullable: false },
-  createdAt: { type: 'timestamp', nullable: false },
-};
-
 export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
-  version: { type: 'timestamp', nullable: false },
+  version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
 };
 
@@ -282,8 +271,8 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   name: { type: 'text', nullable: true },
   description: { type: 'text', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
-  datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
-  datasetVersion: { type: 'timestamp', nullable: false },
+  datasetId: { type: 'text', nullable: true, references: { table: 'mastra_datasets', column: 'id' } },
+  datasetVersion: { type: 'integer', nullable: true },
   targetType: { type: 'text', nullable: false },
   targetId: { type: 'text', nullable: false },
   status: { type: 'text', nullable: false },
@@ -301,8 +290,7 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   experimentId: { type: 'text', nullable: false, references: { table: 'mastra_experiments', column: 'id' } },
   itemId: { type: 'text', nullable: false, references: { table: 'mastra_dataset_items', column: 'id' } },
-  itemVersion: { type: 'timestamp', nullable: false },
-  itemVersionNumber: { type: 'integer', nullable: false },
+  itemDatasetVersion: { type: 'integer', nullable: true },
   input: { type: 'jsonb', nullable: false },
   output: { type: 'jsonb', nullable: true },
   groundTruth: { type: 'jsonb', nullable: true },
@@ -386,7 +374,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_SCORER_DEFINITION_VERSIONS]: SCORER_DEFINITION_VERSIONS_SCHEMA,
   [TABLE_DATASETS]: DATASETS_SCHEMA,
   [TABLE_DATASET_ITEMS]: DATASET_ITEMS_SCHEMA,
-  [TABLE_DATASET_ITEM_VERSIONS]: DATASET_ITEM_VERSIONS_SCHEMA,
   [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
@@ -396,7 +383,9 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
  * Table-level config for tables that need composite primary keys or other table-level settings.
  * Keyed by table name. Tables not listed here use single-column PKs from their schema.
  */
-export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {};
+export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
+  [TABLE_DATASET_ITEMS]: { columns: DATASET_ITEMS_SCHEMA, compositePrimaryKey: ['id', 'datasetVersion'] },
+};
 
 /**
  * Schema for the observational memory table.

@@ -52,23 +52,21 @@ function DatasetItemPage() {
   const latestVersion = versions?.[0] ?? null;
   const isDeleted = latestVersion?.isDeleted ?? false;
 
-  // Version viewing state - store full version object to use its snapshot
+  // Version viewing state
   const [selectedVersion, setSelectedVersion] = useState<DatasetItemVersion | null>(null);
 
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
     if (!latestVersion || isDeleted) return { input: '', groundTruth: '', metadata: '' };
     return {
-      input: JSON.stringify(latestVersion.snapshot.input, null, 2),
-      groundTruth: latestVersion.snapshot.groundTruth
-        ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2)
-        : '',
-      metadata: latestVersion.snapshot.metadata ? JSON.stringify(latestVersion.snapshot.metadata, null, 2) : '',
+      input: JSON.stringify(latestVersion.input, null, 2),
+      groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
+      metadata: latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
 
-  // Use version number as key to reset form state when version changes
-  const versionKey = latestVersion?.versionNumber ?? 0;
+  // Use datasetVersion as key to reset form state when version changes
+  const versionKey = latestVersion?.datasetVersion ?? 0;
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -169,11 +167,9 @@ function DatasetItemPage() {
   const handleCancel = () => {
     // Reset form values to latest version
     if (latestVersion) {
-      setInputValue(JSON.stringify(latestVersion.snapshot.input, null, 2));
-      setGroundTruthValue(
-        latestVersion.snapshot.groundTruth ? JSON.stringify(latestVersion.snapshot.groundTruth, null, 2) : '',
-      );
-      setMetadataValue(latestVersion.snapshot.metadata ? JSON.stringify(latestVersion.snapshot.metadata, null, 2) : '');
+      setInputValue(JSON.stringify(latestVersion.input, null, 2));
+      setGroundTruthValue(latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '');
+      setMetadataValue(latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '');
     }
     setIsEditing(false);
   };
@@ -193,16 +189,17 @@ function DatasetItemPage() {
   // Determine which version to display
   const versionToDisplay = selectedVersion ?? latestVersion;
 
-  // Build display item from version snapshot
+  // Build display item from flat version data
   const displayItem = versionToDisplay
     ? {
         id: itemId ?? '',
         datasetId: datasetId ?? '',
-        input: versionToDisplay.snapshot.input,
-        groundTruth: versionToDisplay.snapshot.groundTruth,
-        metadata: versionToDisplay.snapshot.metadata,
+        datasetVersion: versionToDisplay.datasetVersion,
+        input: versionToDisplay.input,
+        groundTruth: versionToDisplay.groundTruth,
+        metadata: versionToDisplay.metadata,
         createdAt: versionToDisplay.createdAt,
-        version: versionToDisplay.datasetVersion,
+        updatedAt: versionToDisplay.updatedAt,
       }
     : null;
 
@@ -263,10 +260,7 @@ function DatasetItemPage() {
                     {latestVersion?.createdAt ? format(new Date(latestVersion.createdAt), 'MMM d, yyyy') : ''}
                   </TextAndIcon>
                   <TextAndIcon>
-                    <HistoryIcon /> Latest version{' '}
-                    {latestVersion?.datasetVersion
-                      ? format(new Date(latestVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")
-                      : ''}
+                    <HistoryIcon /> Latest version v{latestVersion?.datasetVersion ?? ''}
                   </TextAndIcon>
                 </MainHeader.Description>
               </MainHeader.Column>
@@ -300,17 +294,12 @@ function DatasetItemPage() {
               <Column withRightSeparator={true}>
                 {isDeleted && latestVersion && (
                   <Alert variant="destructive">
-                    <AlertTitle>
-                      This item was deleted on{' '}
-                      {format(new Date(latestVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}
-                    </AlertTitle>
+                    <AlertTitle>This item was deleted at version v{latestVersion.datasetVersion}</AlertTitle>
                   </Alert>
                 )}
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
                   <Alert variant="warning">
-                    <AlertTitle>
-                      Viewing version from {format(new Date(selectedVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}
-                    </AlertTitle>
+                    <AlertTitle>Viewing version v{selectedVersion.datasetVersion}</AlertTitle>
                     <Button variant="standard" size="tiny" className="mt-2 mb-1" onClick={handleReturnToLatest}>
                       <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
                     </Button>
@@ -387,16 +376,13 @@ export default DatasetItemPage;
                 {isDeleted && latestVersion && (
                   <Alert variant="destructive">
                     <AlertTitle>
-                      This item was deleted on{' '}
-                      {format(new Date(latestVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}
+                      This item was deleted at version v{latestVersion.datasetVersion}
                     </AlertTitle>
                   </Alert>
                 )}
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
                   <Alert variant="warning">
-                    <AlertTitle>
-                      Viewing version from {format(new Date(selectedVersion.datasetVersion), "MMM d, yyyy 'at' h:mm a")}
-                    </AlertTitle>
+                    <AlertTitle>Viewing version v{selectedVersion.datasetVersion}</AlertTitle>
                     <Button variant="standard" size="tiny" className="mt-2 mb-1" onClick={handleReturnToLatest}>
                       <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
                     </Button>

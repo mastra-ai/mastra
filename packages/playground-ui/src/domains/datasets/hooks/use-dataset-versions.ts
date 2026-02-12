@@ -4,7 +4,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 export interface DatasetVersion {
   id?: string;
   datasetId?: string;
-  version: Date | string;
+  version: number;
   createdAt?: Date | string;
   isCurrent: boolean;
 }

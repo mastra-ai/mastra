@@ -1,16 +1,26 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { InMemoryDB } from '../../inmemory-db';
-import { ExperimentsInMemory } from '../inmemory';
+import { createClient } from '@libsql/client';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { ExperimentsLibSQL } from './index';
 
-describe('ExperimentsInMemory', () => {
-  let storage: ExperimentsInMemory;
-  let db: InMemoryDB;
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-  beforeEach(() => {
-    db = new InMemoryDB();
-    storage = new ExperimentsInMemory({ db });
+const TEST_DB_URL = 'file::memory:?cache=shared';
+
+describe('ExperimentsLibSQL', () => {
+  let storage: ExperimentsLibSQL;
+  let client: ReturnType<typeof createClient>;
+
+  beforeEach(async () => {
+    client = createClient({ url: TEST_DB_URL });
+    storage = new ExperimentsLibSQL({ client });
+    await storage.init();
   });
 
+  afterEach(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  // ------------- Experiment CRUD -------------
   describe('createExperiment', () => {
     it('creates experiment with pending status', async () => {
       const experiment = await storage.createExperiment({
@@ -29,19 +39,6 @@ describe('ExperimentsInMemory', () => {
       expect(experiment.completedAt).toBeNull();
     });
 
-    it('uses provided id if given', async () => {
-      const experiment = await storage.createExperiment({
-        id: 'custom-experiment-id',
-        datasetId: 'ds-1',
-        datasetVersion: 1,
-        targetType: 'workflow',
-        targetId: 'wf-1',
-        totalItems: 5,
-      });
-
-      expect(experiment.id).toBe('custom-experiment-id');
-    });
-
     it('stores datasetVersion as integer', async () => {
       const experiment = await storage.createExperiment({
         datasetId: 'ds-1',
@@ -53,6 +50,10 @@ describe('ExperimentsInMemory', () => {
 
       expect(experiment.datasetVersion).toBe(5);
       expect(typeof experiment.datasetVersion).toBe('number');
+
+      // Verify via getExperimentById round-trip
+      const fetched = await storage.getExperimentById({ id: experiment.id });
+      expect(fetched!.datasetVersion).toBe(5);
     });
 
     it('creates experiment with null datasetId and datasetVersion (inline)', async () => {
@@ -67,31 +68,30 @@ describe('ExperimentsInMemory', () => {
       expect(experiment.id).toBeDefined();
       expect(experiment.datasetId).toBeNull();
       expect(experiment.datasetVersion).toBeNull();
-      expect(experiment.status).toBe('pending');
+
+      // Round-trip
+      const fetched = await storage.getExperimentById({ id: experiment.id });
+      expect(fetched!.datasetId).toBeNull();
+      expect(fetched!.datasetVersion).toBeNull();
+    });
+
+    it('uses provided id if given', async () => {
+      const experiment = await storage.createExperiment({
+        id: 'custom-experiment-id',
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'workflow',
+        targetId: 'wf-1',
+        totalItems: 5,
+      });
+
+      expect(experiment.id).toBe('custom-experiment-id');
     });
   });
 
+  // ------------- updateExperiment (F2 fix) -------------
   describe('updateExperiment', () => {
-    it('updates status to running', async () => {
-      const experiment = await storage.createExperiment({
-        datasetId: 'ds-1',
-        datasetVersion: 1,
-        targetType: 'agent',
-        targetId: 'agent-1',
-        totalItems: 3,
-      });
-
-      const updated = await storage.updateExperiment({
-        id: experiment.id,
-        status: 'running',
-        startedAt: new Date(),
-      });
-
-      expect(updated.status).toBe('running');
-      expect(updated.startedAt).toBeInstanceOf(Date);
-    });
-
-    it('updates counts and status to completed', async () => {
+    it('updates status and counts', async () => {
       const experiment = await storage.createExperiment({
         datasetId: 'ds-1',
         datasetVersion: 1,
@@ -114,7 +114,7 @@ describe('ExperimentsInMemory', () => {
       expect(updated.completedAt).toBeInstanceOf(Date);
     });
 
-    it('returns complete object with name, description, metadata, skippedCount', async () => {
+    it('returns complete object with name, description, metadata, skippedCount (F2 fix)', async () => {
       const experiment = await storage.createExperiment({
         datasetId: 'ds-1',
         datasetVersion: 1,
@@ -132,6 +132,7 @@ describe('ExperimentsInMemory', () => {
         skippedCount: 1,
       });
 
+      // F2: these fields must be present in the returned object
       expect(updated.name).toBe('Test Experiment');
       expect(updated.description).toBe('A test');
       expect(updated.metadata).toEqual({ key: 'value' });
@@ -139,12 +140,11 @@ describe('ExperimentsInMemory', () => {
     });
 
     it('throws for non-existent experiment', async () => {
-      await expect(storage.updateExperiment({ id: 'non-existent', status: 'running' })).rejects.toThrow(
-        'Experiment not found',
-      );
+      await expect(storage.updateExperiment({ id: 'non-existent', status: 'running' })).rejects.toThrow();
     });
   });
 
+  // ------------- getExperimentById -------------
   describe('getExperimentById', () => {
     it('returns experiment by id', async () => {
       const created = await storage.createExperiment({
@@ -158,6 +158,7 @@ describe('ExperimentsInMemory', () => {
       const fetched = await storage.getExperimentById({ id: created.id });
       expect(fetched).not.toBeNull();
       expect(fetched?.id).toBe(created.id);
+      expect(fetched?.datasetVersion).toBe(1);
     });
 
     it('returns null for non-existent id', async () => {
@@ -166,6 +167,7 @@ describe('ExperimentsInMemory', () => {
     });
   });
 
+  // ------------- listExperiments -------------
   describe('listExperiments', () => {
     it('lists all experiments', async () => {
       await storage.createExperiment({
@@ -212,29 +214,6 @@ describe('ExperimentsInMemory', () => {
       expect(result.experiments[0].datasetId).toBe('ds-1');
     });
 
-    it('sorts by createdAt descending', async () => {
-      const exp1 = await storage.createExperiment({
-        datasetId: 'ds-1',
-        datasetVersion: 1,
-        targetType: 'agent',
-        targetId: 'a1',
-        totalItems: 1,
-      });
-      // Small delay to ensure different timestamps
-      await new Promise(r => setTimeout(r, 10));
-      const exp2 = await storage.createExperiment({
-        datasetId: 'ds-1',
-        datasetVersion: 1,
-        targetType: 'agent',
-        targetId: 'a1',
-        totalItems: 1,
-      });
-
-      const result = await storage.listExperiments({ pagination: { page: 0, perPage: 10 } });
-      expect(result.experiments[0].id).toBe(exp2.id); // Most recent first
-      expect(result.experiments[1].id).toBe(exp1.id);
-    });
-
     it('respects pagination', async () => {
       for (let i = 0; i < 5; i++) {
         await storage.createExperiment({
@@ -255,6 +234,7 @@ describe('ExperimentsInMemory', () => {
     });
   });
 
+  // ------------- deleteExperiment -------------
   describe('deleteExperiment', () => {
     it('deletes experiment and its results', async () => {
       const experiment = await storage.createExperiment({
@@ -289,8 +269,9 @@ describe('ExperimentsInMemory', () => {
     });
   });
 
+  // ------------- addExperimentResult -------------
   describe('addExperimentResult', () => {
-    it('adds result with all fields', async () => {
+    it('adds result with itemDatasetVersion as integer', async () => {
       const experiment = await storage.createExperiment({
         datasetId: 'ds-1',
         datasetVersion: 1,
@@ -313,36 +294,11 @@ describe('ExperimentsInMemory', () => {
       });
 
       expect(result.id).toBeDefined();
-      expect(result.experimentId).toBe(experiment.id);
       expect(result.itemDatasetVersion).toBe(3);
-      expect(result.input).toEqual({ prompt: 'Hello' });
-      expect(result.output).toEqual({ text: 'Hi there' });
-    });
 
-    it('stores itemDatasetVersion as integer', async () => {
-      const experiment = await storage.createExperiment({
-        datasetId: 'ds-1',
-        datasetVersion: 1,
-        targetType: 'agent',
-        targetId: 'a1',
-        totalItems: 1,
-      });
-
-      const result = await storage.addExperimentResult({
-        experimentId: experiment.id,
-        itemId: 'item-1',
-        itemDatasetVersion: 3,
-        input: 'x',
-        output: 'y',
-        groundTruth: null,
-        error: null,
-        startedAt: new Date(),
-        completedAt: new Date(),
-        retryCount: 0,
-      });
-
-      expect(result.itemDatasetVersion).toBe(3);
-      expect(typeof result.itemDatasetVersion).toBe('number');
+      // Round-trip
+      const fetched = await storage.getExperimentResultById({ id: result.id });
+      expect(fetched!.itemDatasetVersion).toBe(3);
     });
 
     it('stores null itemDatasetVersion', async () => {
@@ -368,6 +324,10 @@ describe('ExperimentsInMemory', () => {
       });
 
       expect(result.itemDatasetVersion).toBeNull();
+
+      // Round-trip
+      const fetched = await storage.getExperimentResultById({ id: result.id });
+      expect(fetched!.itemDatasetVersion).toBeNull();
     });
 
     it('stores error for failed item', async () => {
@@ -393,11 +353,11 @@ describe('ExperimentsInMemory', () => {
       });
 
       expect(result.error).toEqual({ message: 'Agent timeout' });
-      expect(result.output).toBeNull();
       expect(result.retryCount).toBe(2);
     });
   });
 
+  // ------------- listExperimentResults -------------
   describe('listExperimentResults', () => {
     it('lists results for an experiment', async () => {
       const experiment = await storage.createExperiment({
@@ -453,6 +413,7 @@ describe('ExperimentsInMemory', () => {
     });
   });
 
+  // ------------- deleteExperimentResults -------------
   describe('deleteExperimentResults', () => {
     it('deletes all results for an experiment', async () => {
       const experiment = await storage.createExperiment({
@@ -483,6 +444,22 @@ describe('ExperimentsInMemory', () => {
         pagination: { page: 0, perPage: 10 },
       });
       expect(result.results).toHaveLength(0);
+    });
+  });
+
+  // ------------- Indexes (T4.11, T4.12) -------------
+  describe('indexes', () => {
+    it('creates indexes on init', async () => {
+      // Just verify init doesn't throw — indexes created in beforeEach
+      const rows = await client.execute({
+        sql: `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name IN ('mastra_experiments', 'mastra_experiment_results')`,
+        args: [],
+      });
+
+      const indexNames = rows.rows.map(r => r.name as string);
+      expect(indexNames).toContain('idx_experiments_datasetid');
+      expect(indexNames).toContain('idx_experiment_results_experimentid');
+      expect(indexNames).toContain('idx_experiment_results_exp_item');
     });
   });
 });

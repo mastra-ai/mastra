@@ -55,8 +55,7 @@ export function ExperimentResultsList({
                   {columns.some(col => col.name === 'output') && (
                     <ItemList.TextCell>{truncate(formatValue(result.output), 200)}</ItemList.TextCell>
                   )}
-                  <ItemList.TextCell>{Math.floor(result.latency)} ms</ItemList.TextCell>
-                  <ItemList.StatusCell status={'success'} />
+                  <ItemList.StatusCell status={hasError ? 'error' : 'success'} />
                 </ItemList.RowButton>
               </ItemList.Row>
             );

@@ -125,7 +125,7 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Agent error');
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Agent error' }));
     });
 
     it('uses generateLegacy when model is not supported', async () => {
@@ -197,7 +197,7 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Workflow failed');
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Workflow failed' }));
     });
 
     it('captures tripwire reason on tripwire status', async () => {
@@ -217,7 +217,7 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Workflow tripwire: Limit exceeded');
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Workflow tripwire: Limit exceeded' }));
     });
 
     it('returns not-yet-supported error on suspended status', async () => {
@@ -236,7 +236,9 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Workflow suspended - not yet supported in dataset experiments');
+      expect(result.error).toEqual(
+        expect.objectContaining({ message: 'Workflow suspended - not yet supported in dataset experiments' }),
+      );
     });
 
     it('returns not-yet-supported error on paused status', async () => {
@@ -255,7 +257,9 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Workflow paused - not yet supported in dataset experiments');
+      expect(result.error).toEqual(
+        expect.objectContaining({ message: 'Workflow paused - not yet supported in dataset experiments' }),
+      );
     });
 
     it('handles empty object input', async () => {
@@ -397,7 +401,7 @@ describe('executeTarget', () => {
       });
 
       expect(result.output).toBeNull();
-      expect(result.error).toBe('Scorer error');
+      expect(result.error).toEqual(expect.objectContaining({ message: 'Scorer error' }));
     });
 
     it('handles null reason in scorer result', async () => {

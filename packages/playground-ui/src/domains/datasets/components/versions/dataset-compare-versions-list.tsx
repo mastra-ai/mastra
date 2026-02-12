@@ -21,13 +21,12 @@ const columns = [
 
 function formatVersion(item?: DatasetItem): string {
   if (!item) return '-';
-  const d = new Date(item.version);
-  return format(d, "MMM dd 'at' H:mm:ss a");
+  return `v${item.datasetVersion}`;
 }
 
 function getStatus(itemA?: DatasetItem, itemB?: DatasetItem): string {
-  if (itemA && itemB && itemA.version === itemB.version) return 'same';
-  if (itemA && itemB && itemA.version !== itemB.version) return 'changed';
+  if (itemA && itemB && itemA.datasetVersion === itemB.datasetVersion) return 'same';
+  if (itemA && itemB && itemA.datasetVersion !== itemB.datasetVersion) return 'changed';
   if (itemA) return 'added';
   return 'removed';
 }

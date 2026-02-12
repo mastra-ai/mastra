@@ -4,7 +4,7 @@ import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
-import type { DatasetRecord, DatasetItem, DatasetItemVersion, DatasetVersion } from '../storage/types.js';
+import type { DatasetRecord, DatasetItem, DatasetItemRow, DatasetVersion } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
 
@@ -175,24 +175,20 @@ export class Dataset {
   /**
    * Get a single item by ID, optionally at a specific version.
    */
-  async getItem(args: { itemId: string; version?: number }): Promise<DatasetItem | DatasetItemVersion | null> {
+  async getItem(args: { itemId: string; version?: number }): Promise<DatasetItem | null> {
     const store = await this.#getDatasetsStore();
-    if (args.version !== undefined) {
-      return store.getItemVersion(args.itemId, args.version);
-    }
-    return store.getItemById({ id: args.itemId });
+    return store.getItemById({ id: args.itemId, datasetVersion: args.version });
   }
 
   /**
    * List items in the dataset, optionally at a specific version.
    */
   async listItems(args?: {
-    version?: Date;
+    version?: number;
     page?: number;
     perPage?: number;
   }): Promise<
     | DatasetItem[]
-    | DatasetItemVersion[]
     | { items: DatasetItem[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }
   > {
     const store = await this.#getDatasetsStore();
@@ -259,17 +255,11 @@ export class Dataset {
   }
 
   /**
-   * List all versions of a specific item.
+   * Get full SCD-2 history of a specific item across all dataset versions.
    */
-  async listItemVersions(args: { itemId: string; page?: number; perPage?: number }): Promise<{
-    versions: DatasetItemVersion[];
-    pagination: { total: number; page: number; perPage: number | false; hasMore: boolean };
-  }> {
+  async getItemHistory(args: { itemId: string }): Promise<DatasetItemRow[]> {
     const store = await this.#getDatasetsStore();
-    return store.listItemVersions({
-      itemId: args.itemId,
-      pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
-    });
+    return store.getItemHistory(args.itemId);
   }
 
   // ---------------------------------------------------------------------------
@@ -307,7 +297,7 @@ export class Dataset {
 
     const run = await experimentsStore.createExperiment({
       datasetId: this.id,
-      datasetVersion: dataset.lastModifiedAt,
+      datasetVersion: dataset.version,
       targetType: config.targetType ?? 'agent',
       targetId: config.targetId ?? 'inline',
       totalItems: 0,

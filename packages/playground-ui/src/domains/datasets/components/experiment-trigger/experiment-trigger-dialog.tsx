@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 
 export interface ExperimentTriggerDialogProps {
   datasetId: string;
-  version?: Date | string;
+  version?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (experimentId: string) => void;

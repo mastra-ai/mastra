@@ -70,12 +70,12 @@ export interface ComparisonResult {
   /** Experiment A metadata */
   experimentA: {
     id: string;
-    datasetVersion: Date;
+    datasetVersion: number | null;
   };
   /** Experiment B metadata */
   experimentB: {
     id: string;
-    datasetVersion: Date;
+    datasetVersion: number | null;
   };
   /** True if experiments used different dataset versions */
   versionMismatch: boolean;

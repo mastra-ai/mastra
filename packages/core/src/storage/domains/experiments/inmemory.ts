@@ -122,17 +122,15 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       id: input.id ?? crypto.randomUUID(),
       experimentId: input.experimentId,
       itemId: input.itemId,
-      itemVersion: input.itemVersion,
+      itemDatasetVersion: input.itemDatasetVersion,
       input: input.input,
       output: input.output,
       groundTruth: input.groundTruth,
-      latency: input.latency,
       error: input.error,
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,
       traceId: input.traceId ?? null,
-      itemVersionNumber: input.itemVersionNumber,
       createdAt: now,
     };
     this.db.experimentResults.set(result.id, result);

@@ -2,7 +2,7 @@ import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datase
 import type {
   DatasetRecord,
   DatasetItem,
-  DatasetItemVersion,
+  DatasetItemRow,
   DatasetVersion,
   CreateDatasetInput,
   UpdateDatasetInput,
@@ -12,9 +12,6 @@ import type {
   ListDatasetsOutput,
   ListDatasetItemsInput,
   ListDatasetItemsOutput,
-  CreateItemVersionInput,
-  ListItemVersionsInput,
-  ListItemVersionsOutput,
   ListDatasetVersionsInput,
   ListDatasetVersionsOutput,
   BulkAddItemsInput,
@@ -27,7 +24,8 @@ import { StorageDomain } from '../base';
  * Provides the contract for dataset and dataset item CRUD operations.
  *
  * Schema validation is handled in this base class via Template Method pattern.
- * Subclasses implement protected _do* methods for actual storage operations.
+ * Subclasses implement protected _do* methods for actual storage operations,
+ * including SCD-2 versioning (version bump, row ops, dataset_version insert).
  */
 export abstract class DatasetsStorage extends StorageDomain {
   constructor() {
@@ -104,8 +102,7 @@ export abstract class DatasetsStorage extends StorageDomain {
 
   /**
    * Add an item to a dataset. Validates input/groundTruth against dataset schemas.
-   * Creates version records for history tracking.
-   * Subclasses implement _doAddItem for actual storage operation.
+   * Subclasses implement _doAddItem which handles SCD-2 versioning internally.
    */
   async addItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     const dataset = await this.getDatasetById({ id: args.datasetId });
@@ -125,35 +122,15 @@ export abstract class DatasetsStorage extends StorageDomain {
       validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
     }
 
-    // Add the item
-    const item = await this._doAddItem(args);
-
-    // Create version records for history tracking
-    const now = item.datasetVersion; // Use the item's datasetVersion timestamp
-    await this.createItemVersion({
-      itemId: item.id,
-      datasetId: item.datasetId,
-      versionNumber: 1,
-      datasetVersion: now,
-      snapshot: {
-        input: item.input,
-        groundTruth: item.groundTruth,
-        metadata: item.metadata,
-      },
-      isDeleted: false,
-    });
-    await this.createDatasetVersion(item.datasetId, now);
-
-    return item;
+    return this._doAddItem(args);
   }
 
-  /** Subclasses implement actual storage add logic */
+  /** Subclasses implement actual storage add logic with SCD-2 versioning */
   protected abstract _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem>;
 
   /**
    * Update an item in a dataset. Validates changed fields against dataset schemas.
-   * Creates version records for history tracking.
-   * Subclasses implement _doUpdateItem for actual storage operation.
+   * Subclasses implement _doUpdateItem which handles SCD-2 versioning internally.
    */
   async updateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
     const dataset = await this.getDatasetById({ id: args.datasetId });
@@ -173,94 +150,37 @@ export abstract class DatasetsStorage extends StorageDomain {
       validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
     }
 
-    // Get current version number before update
-    const latestVersion = await this.getLatestItemVersion(args.id);
-    const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-    // Update the item
-    const item = await this._doUpdateItem(args);
-
-    // Create version records for history tracking
-    const now = item.datasetVersion; // Use the item's datasetVersion timestamp
-    await this.createItemVersion({
-      itemId: item.id,
-      datasetId: item.datasetId,
-      versionNumber: nextVersionNumber,
-      datasetVersion: now,
-      snapshot: {
-        input: item.input,
-        groundTruth: item.groundTruth,
-        metadata: item.metadata,
-      },
-      isDeleted: false,
-    });
-    await this.createDatasetVersion(item.datasetId, now);
-
-    return item;
+    return this._doUpdateItem(args);
   }
 
-  /** Subclasses implement actual storage update logic */
+  /** Subclasses implement actual storage update logic with SCD-2 versioning */
   protected abstract _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem>;
 
   /**
-   * Delete an item from a dataset. Creates a tombstone version for history tracking.
-   * Subclasses implement _doDeleteItem for actual storage operation.
+   * Delete an item from a dataset. Creates a tombstone row via SCD-2.
+   * Subclasses implement _doDeleteItem which handles SCD-2 versioning internally.
    */
   async deleteItem(args: { id: string; datasetId: string }): Promise<void> {
-    // Get item before delete to capture snapshot
-    const item = await this.getItemById({ id: args.id });
-    if (!item) {
-      // Item doesn't exist, nothing to delete
-      return;
-    }
-
-    // Get current version number
-    const latestVersion = await this.getLatestItemVersion(args.id);
-    const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-    const now = new Date();
-
-    // Create tombstone version record
-    await this.createItemVersion({
-      itemId: args.id,
-      datasetId: args.datasetId,
-      versionNumber: nextVersionNumber,
-      datasetVersion: now,
-      snapshot: {
-        input: item.input,
-        groundTruth: item.groundTruth,
-        metadata: item.metadata,
-      },
-      isDeleted: true, // Tombstone marker
-    });
-    await this.createDatasetVersion(args.datasetId, now);
-
-    // Delete from items table
-    await this._doDeleteItem(args);
+    return this._doDeleteItem(args);
   }
 
-  /** Subclasses implement actual storage delete logic */
+  /** Subclasses implement actual storage delete logic with SCD-2 versioning */
   protected abstract _doDeleteItem(args: { id: string; datasetId: string }): Promise<void>;
 
   abstract listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput>;
-  abstract getItemById(args: { id: string }): Promise<DatasetItem | null>;
+  abstract getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null>;
 
-  // Version-aware queries (snapshot semantics: items at or before version timestamp)
-  abstract getItemsByVersion(args: { datasetId: string; version: Date }): Promise<DatasetItemVersion[]>;
-
-  // Item version methods
-  abstract createItemVersion(input: CreateItemVersionInput): Promise<DatasetItemVersion>;
-  abstract getItemVersion(itemId: string, versionNumber?: number): Promise<DatasetItemVersion | null>;
-  abstract getLatestItemVersion(itemId: string): Promise<DatasetItemVersion | null>;
-  abstract listItemVersions(input: ListItemVersionsInput): Promise<ListItemVersionsOutput>;
+  // SCD-2 queries
+  abstract getItemsByVersion(args: { datasetId: string; version: number }): Promise<DatasetItem[]>;
+  abstract getItemHistory(itemId: string): Promise<DatasetItemRow[]>;
 
   // Dataset version methods
-  abstract createDatasetVersion(datasetId: string, version: Date): Promise<DatasetVersion>;
+  abstract createDatasetVersion(datasetId: string, version: number): Promise<DatasetVersion>;
   abstract listDatasetVersions(input: ListDatasetVersionsInput): Promise<ListDatasetVersionsOutput>;
 
   /**
    * Bulk add items to a dataset. Validates all items against dataset schemas,
-   * then delegates to subclass for storage. Creates version records for each item.
+   * then delegates to subclass which handles SCD-2 versioning internally.
    */
   async bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
     const dataset = await this.getDatasetById({ id: input.datasetId });
@@ -281,40 +201,15 @@ export abstract class DatasetsStorage extends StorageDomain {
       }
     }
 
-    // Delegate to subclass for actual storage
-    const items = await this._doBulkAddItems(input);
-
-    // Create version records — shared timestamp for entire bulk operation
-    const now = items[0]?.datasetVersion ?? new Date();
-    for (const item of items) {
-      await this.createItemVersion({
-        itemId: item.id,
-        datasetId: item.datasetId,
-        versionNumber: 1,
-        datasetVersion: now,
-        snapshot: {
-          input: item.input,
-          groundTruth: item.groundTruth,
-          metadata: item.metadata,
-        },
-        isDeleted: false,
-      });
-    }
-
-    // Single dataset version entry for the bulk operation
-    if (items.length > 0) {
-      await this.createDatasetVersion(input.datasetId, now);
-    }
-
-    return items;
+    return this._doBulkAddItems(input);
   }
 
-  /** Subclasses implement raw bulk insert — no validation or versioning */
+  /** Subclasses implement bulk insert with SCD-2 versioning */
   protected abstract _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]>;
 
   /**
-   * Bulk delete items from a dataset. Creates tombstone versions for history,
-   * then delegates to subclass for actual deletion.
+   * Bulk delete items from a dataset. Creates tombstone rows via SCD-2.
+   * Subclasses implement _doBulkDeleteItems which handles SCD-2 versioning internally.
    */
   async bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
     const dataset = await this.getDatasetById({ id: input.datasetId });
@@ -322,37 +217,9 @@ export abstract class DatasetsStorage extends StorageDomain {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }
 
-    const now = new Date();
-
-    // Create tombstone versions for each item
-    for (const itemId of input.itemIds) {
-      const item = await this.getItemById({ id: itemId });
-      if (!item || item.datasetId !== input.datasetId) continue;
-
-      const latestVersion = await this.getLatestItemVersion(itemId);
-      const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-      await this.createItemVersion({
-        itemId,
-        datasetId: input.datasetId,
-        versionNumber: nextVersionNumber,
-        datasetVersion: now,
-        snapshot: {
-          input: item.input,
-          groundTruth: item.groundTruth,
-          metadata: item.metadata,
-        },
-        isDeleted: true,
-      });
-    }
-
-    // Delegate actual deletion to subclass
-    await this._doBulkDeleteItems(input);
-
-    // Single dataset version entry for the bulk operation
-    await this.createDatasetVersion(input.datasetId, now);
+    return this._doBulkDeleteItems(input);
   }
 
-  /** Subclasses implement raw bulk delete — no versioning */
+  /** Subclasses implement bulk delete with SCD-2 versioning */
   protected abstract _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void>;
 }

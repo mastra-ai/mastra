@@ -15,20 +15,12 @@ export interface DatasetVersionsPanelProps {
   datasetId: string;
   onClose: () => void;
   onVersionSelect?: (version: DatasetVersion) => void;
-  onCompareVersionsClick?: (versionTimestamps: string[]) => void;
-  activeVersion?: Date | string | null;
+  onCompareVersionsClick?: (versionNumbers: string[]) => void;
+  activeVersion?: number | null;
 }
 
 const versionsListColumns = [{ name: 'version', label: 'Dataset Versions', size: '1fr' }];
 const versionsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '1.25rem' }, ...versionsListColumns];
-
-function getVersionTime(version: Date | string): number {
-  return typeof version === 'string' ? new Date(version).getTime() : version.getTime();
-}
-
-function getVersionKey(version: DatasetVersion): string {
-  return typeof version.version === 'string' ? version.version : version.version.toISOString();
-}
 
 /**
  * Panel showing dataset version history with optional compare selection.
@@ -50,8 +42,8 @@ export function DatasetVersionsPanel({
   };
 
   const isVersionSelected = (version: DatasetVersion): boolean => {
-    if (!activeVersion) return version.isCurrent;
-    return getVersionTime(version.version) === getVersionTime(activeVersion);
+    if (activeVersion == null) return version.isCurrent;
+    return version.version === activeVersion;
   };
 
   const handleToggleSelection = (key: string) => {
@@ -139,12 +131,18 @@ export function DatasetVersionsPanel({
             <ItemList.Scroller>
               <ItemList.Items>
                 {versions?.map((item, index) => {
-                  const versionDate = typeof item.version === 'string' ? new Date(item.version) : item.version;
-                  const key = getVersionKey(item);
+                  const key = String(item.version);
+                  const createdAtDate = item.createdAt
+                    ? typeof item.createdAt === 'string'
+                      ? new Date(item.createdAt)
+                      : item.createdAt
+                    : null;
 
                   const entry = {
                     id: `version-${index}`,
-                    version: format(versionDate, 'MMM d, yyyy HH:mm'),
+                    version: createdAtDate
+                      ? `v${item.version} — ${format(createdAtDate, 'MMM d, yyyy HH:mm')}`
+                      : `v${item.version}`,
                     status: item.isCurrent ? 'current' : '',
                   };
 

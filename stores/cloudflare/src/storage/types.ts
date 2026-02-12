@@ -15,7 +15,6 @@ import type {
   TABLE_AGENT_VERSIONS,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
-  TABLE_DATASET_ITEM_VERSIONS,
   TABLE_DATASET_VERSIONS,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
@@ -128,7 +127,6 @@ export type RecordTypes = {
   [TABLE_AGENT_VERSIONS]: AgentVersion;
   [TABLE_DATASETS]: Record<string, any>;
   [TABLE_DATASET_ITEMS]: Record<string, any>;
-  [TABLE_DATASET_ITEM_VERSIONS]: Record<string, any>;
   [TABLE_DATASET_VERSIONS]: Record<string, any>;
   [TABLE_EXPERIMENTS]: Record<string, any>;
   [TABLE_EXPERIMENT_RESULTS]: Record<string, any>;

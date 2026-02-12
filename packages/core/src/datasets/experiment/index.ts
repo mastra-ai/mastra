@@ -1,12 +1,9 @@
 import type { Mastra } from '../../mastra';
-import type { DatasetItemVersion } from '../../storage/types';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
 type ExperimentItem = {
-  id: string; // item version id (or generated for inline)
-  itemId: string; // dataset item id
-  versionNumber: number;
-  datasetVersion: Date;
+  id: string; // item id (or generated for inline)
+  datasetVersion: number | null; // null for inline experiments
   input: unknown;
   groundTruth?: unknown;
   metadata?: Record<string, unknown>;
@@ -83,25 +80,22 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
   // Phase A — Resolve items
   let items: ExperimentItem[];
-  let datasetVersion: Date;
+  let datasetVersion: number | null;
 
   if (config.data) {
     // Inline data path — array or factory function
     const rawData = typeof config.data === 'function' ? await config.data() : config.data;
-    const now = new Date();
     items = rawData.map(dataItem => {
       const id = dataItem.id ?? crypto.randomUUID();
       return {
         id,
-        itemId: id,
-        versionNumber: 1,
-        datasetVersion: now,
+        datasetVersion: null,
         input: dataItem.input,
         groundTruth: dataItem.groundTruth,
         metadata: dataItem.metadata,
       };
     });
-    datasetVersion = now;
+    datasetVersion = null;
   } else if (datasetId) {
     // Storage-backed data path (existing)
     if (!datasetsStore) {
@@ -113,24 +107,22 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       throw new Error(`Dataset not found: ${datasetId}`);
     }
 
-    datasetVersion = version ?? dataset.lastModifiedAt;
-    const versionItems: DatasetItemVersion[] = await datasetsStore.getItemsByVersion({
+    datasetVersion = version ?? dataset.version;
+    const versionItems = await datasetsStore.getItemsByVersion({
       datasetId,
       version: datasetVersion,
     });
 
     if (versionItems.length === 0) {
-      throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion.toISOString()}`);
+      throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion}`);
     }
 
     items = versionItems.map(v => ({
       id: v.id,
-      itemId: v.itemId,
-      versionNumber: v.versionNumber,
       datasetVersion: v.datasetVersion,
-      input: v.snapshot.input,
-      groundTruth: v.snapshot.groundTruth,
-      metadata: v.snapshot.metadata,
+      input: v.input,
+      groundTruth: v.groundTruth,
+      metadata: v.metadata,
     }));
   } else {
     throw new Error('No data source: provide datasetId or data');
@@ -186,7 +178,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         name,
         description,
         metadata,
-        datasetId: datasetId ?? 'inline',
+        datasetId: datasetId ?? null,
         datasetVersion,
         targetType: targetType ?? 'agent',
         targetId: targetId ?? 'inline',
@@ -223,8 +215,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         }
 
         const itemStartedAt = new Date();
-        const perfStart = performance.now();
-
         // Compose per-item signal (timeout + run-level abort)
         let itemSignal: AbortSignal | undefined = signal;
         if (itemTimeout) {
@@ -253,7 +243,6 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           execResult = await execFn(item, itemSignal);
         }
 
-        const latency = performance.now() - perfStart;
         const itemCompletedAt = new Date();
 
         // Track success/failure
@@ -265,12 +254,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
         // Build item result
         const itemResult: ItemResult = {
-          itemId: item.itemId,
-          itemVersion: item.datasetVersion,
+          itemId: item.id,
+          itemVersion: item.datasetVersion ?? 0,
           input: item.input,
           output: execResult.output,
           groundTruth: item.groundTruth ?? null,
-          latency,
           error: execResult.error,
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
@@ -295,13 +283,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           try {
             await experimentsStore.addExperimentResult({
               experimentId,
-              itemId: item.itemId,
-              itemVersion: item.datasetVersion,
-              itemVersionNumber: item.versionNumber,
+              itemId: item.id,
+              itemDatasetVersion: item.datasetVersion,
               input: item.input,
               output: execResult.output,
               groundTruth: item.groundTruth ?? null,
-              latency,
               error: execResult.error,
               startedAt: itemStartedAt,
               completedAt: itemCompletedAt,
@@ -309,7 +295,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               traceId: execResult.traceId,
             });
           } catch (persistError) {
-            console.warn(`Failed to persist result for item ${item.itemId}:`, persistError);
+            console.warn(`Failed to persist result for item ${item.id}:`, persistError);
           }
 
           // Throttled progress update

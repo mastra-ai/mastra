@@ -1283,7 +1283,7 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
-  lastModifiedAt: Date;
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1291,7 +1291,7 @@ export interface DatasetRecord {
 export interface DatasetItem {
   id: string;
   datasetId: string;
-  datasetVersion: Date;
+  datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
   metadata?: Record<string, unknown>;
@@ -1299,25 +1299,23 @@ export interface DatasetItem {
   updatedAt: Date;
 }
 
-export interface DatasetItemVersion {
+export interface DatasetItemRow {
   id: string;
-  itemId: string;
   datasetId: string;
-  versionNumber: number;
-  datasetVersion: Date;
-  snapshot: {
-    input?: unknown;
-    groundTruth?: unknown;
-    metadata?: Record<string, unknown>;
-  };
+  datasetVersion: number;
+  validTo: number | null;
   isDeleted: boolean;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface DatasetVersion {
   id: string;
   datasetId: string;
-  version: Date;
+  version: number;
   createdAt: Date;
 }
 
@@ -1366,36 +1364,13 @@ export interface ListDatasetsOutput {
 
 export interface ListDatasetItemsInput {
   datasetId: string;
-  version?: Date;
+  version?: number;
   search?: string;
   pagination: StoragePagination;
 }
 
 export interface ListDatasetItemsOutput {
   items: DatasetItem[];
-  pagination: PaginationInfo;
-}
-
-export interface CreateItemVersionInput {
-  itemId: string;
-  datasetId: string;
-  versionNumber: number;
-  datasetVersion: Date;
-  snapshot: {
-    input?: unknown;
-    groundTruth?: unknown;
-    metadata?: Record<string, unknown>;
-  };
-  isDeleted: boolean;
-}
-
-export interface ListItemVersionsInput {
-  itemId: string;
-  pagination: StoragePagination;
-}
-
-export interface ListItemVersionsOutput {
-  versions: DatasetItemVersion[];
   pagination: PaginationInfo;
 }
 
@@ -1434,8 +1409,8 @@ export interface Experiment {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  datasetId: string;
-  datasetVersion: Date;
+  datasetId: string | null;
+  datasetVersion: number | null;
   targetType: TargetType;
   targetId: string;
   status: ExperimentStatus;
@@ -1453,8 +1428,7 @@ export interface ExperimentResult {
   id: string;
   experimentId: string;
   itemId: string;
-  itemVersion: Date;
-  itemVersionNumber: number;
+  itemDatasetVersion: number | null;
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
@@ -1471,8 +1445,8 @@ export interface CreateExperimentInput {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  datasetId: string;
-  datasetVersion: Date;
+  datasetId: string | null;
+  datasetVersion: number | null;
   targetType: TargetType;
   targetId: string;
   totalItems: number;
@@ -1495,8 +1469,7 @@ export interface AddExperimentResultInput {
   id?: string;
   experimentId: string;
   itemId: string;
-  itemVersion: Date;
-  itemVersionNumber: number;
+  itemDatasetVersion: number | null;
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;

@@ -9,8 +9,7 @@ import type {
   StorageWorkflowRun,
   ObservationalMemoryRecord,
   DatasetRecord,
-  DatasetItem,
-  DatasetItemVersion,
+  DatasetItemRow,
   DatasetVersion,
   Experiment,
   ExperimentResult,
@@ -45,8 +44,7 @@ export class InMemoryDB {
 
   // Dataset domain maps
   readonly datasets = new Map<string, DatasetRecord>();
-  readonly datasetItems = new Map<string, DatasetItem>();
-  readonly itemVersions = new Map<string, DatasetItemVersion>();
+  readonly datasetItems = new Map<string, DatasetItemRow[]>();
   readonly datasetVersions = new Map<string, DatasetVersion>();
 
   // Experiment domain maps
@@ -73,7 +71,6 @@ export class InMemoryDB {
     this.observationalMemory.clear();
     this.datasets.clear();
     this.datasetItems.clear();
-    this.itemVersions.clear();
     this.datasetVersions.clear();
     this.experiments.clear();
     this.experimentResults.clear();

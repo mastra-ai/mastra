@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { Database, ScaleIcon, ArrowLeft, FileCodeIcon, HistoryIcon } from 'lucide-react';
 import { format } from 'date-fns';
@@ -15,7 +14,6 @@ import {
   TextAndIcon,
   useDataset,
   useDatasetItemVersion,
-  useDatasetItemVersions,
   DatasetItemContent,
   useLinkComponent,
   Columns,
@@ -23,49 +21,17 @@ import {
   type DatasetItemVersion,
 } from '@mastra/playground-ui';
 
-/**
- * Resolve dataset version timestamps to item version numbers.
- * Used when navigating from the dataset versions compare page (dvs param).
- */
-function useResolveDatasetVersions(datasetId: string, itemId: string, datasetVersionTimestamps: string[]) {
-  const { data: allVersions } = useDatasetItemVersions(datasetId, itemId);
-
-  return useMemo(() => {
-    if (!allVersions || datasetVersionTimestamps.length === 0) return [];
-
-    return datasetVersionTimestamps
-      .map(ts => {
-        const tsTime = new Date(ts).getTime();
-        const match = allVersions.find(v => {
-          const vTime =
-            typeof v.datasetVersion === 'string' ? new Date(v.datasetVersion).getTime() : v.datasetVersion.getTime();
-          return vTime === tsTime;
-        });
-        return match?.versionNumber ?? 0;
-      })
-      .filter(n => n > 0);
-  }, [allVersions, datasetVersionTimestamps]);
-}
-
 function DatasetCompareVersions() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
   const [searchParams] = useSearchParams();
 
-  // Support two URL formats:
-  // ?ids=2,1 — direct version numbers (from item versions panel)
-  // ?dvs=ts1,ts2 — dataset version timestamps (from dataset versions compare page)
-  const directVersionNumbers =
+  // ?ids=2,5 — direct dataset version numbers
+  const versionNumbers =
     searchParams
       .get('ids')
       ?.split(',')
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
-
-  const datasetVersionTimestamps = searchParams.get('dvs')?.split(',').map(decodeURIComponent).filter(Boolean) ?? [];
-
-  const resolvedVersionNumbers = useResolveDatasetVersions(datasetId ?? '', itemId ?? '', datasetVersionTimestamps);
-
-  const versionNumbers = directVersionNumbers.length > 0 ? directVersionNumbers : resolvedVersionNumbers;
 
   const { data: dataset } = useDataset(datasetId ?? '');
   const { Link: FrameworkLink } = useLinkComponent();
@@ -151,12 +117,12 @@ function DatasetCompareVersions() {
           </MainHeader>
 
           <Columns className="grid-cols-2">
-            {versionNumbers.map((versionNumber, idx) => (
+            {versionNumbers.map((datasetVersion, idx) => (
               <CompareVersionColumn
-                key={versionNumber}
+                key={datasetVersion}
                 datasetId={datasetId}
                 itemId={itemId}
-                versionNumber={versionNumber}
+                datasetVersion={datasetVersion}
                 Link={FrameworkLink}
                 idx={idx}
               />
@@ -171,34 +137,35 @@ function DatasetCompareVersions() {
 function CompareVersionColumn({
   datasetId,
   itemId,
-  versionNumber,
+  datasetVersion,
   Link,
   idx,
 }: {
   datasetId: string;
   itemId: string;
-  versionNumber: number;
+  datasetVersion: number;
   Link: ReturnType<typeof useLinkComponent>['Link'];
   idx: number;
 }) {
-  const { data: version, isLoading } = useDatasetItemVersion(datasetId, itemId, versionNumber);
+  const { data: version, isLoading } = useDatasetItemVersion(datasetId, itemId, datasetVersion);
 
   if (isLoading) {
     return <div className="text-neutral4 text-sm">Loading...</div>;
   }
 
   if (!version) {
-    return <div className="text-neutral4 text-sm">Version {versionNumber} not found</div>;
+    return <div className="text-neutral4 text-sm">Version {datasetVersion} not found</div>;
   }
 
   const displayItem = {
-    id: itemId,
+    id: version.id,
     datasetId,
-    input: version.snapshot.input,
-    groundTruth: version.snapshot.groundTruth,
-    metadata: version.snapshot.metadata,
+    datasetVersion: version.datasetVersion,
+    input: version.input,
+    groundTruth: version.groundTruth,
+    metadata: version.metadata,
     createdAt: version.createdAt,
-    version: version.datasetVersion,
+    updatedAt: version.updatedAt,
   };
 
   return (
@@ -210,14 +177,12 @@ function CompareVersionColumn({
 }
 
 function VersionHeader({ version }: { version: DatasetItemVersion }) {
-  const versionDate =
-    typeof version.datasetVersion === 'string' ? new Date(version.datasetVersion) : version.datasetVersion;
+  const versionDate = typeof version.createdAt === 'string' ? new Date(version.createdAt) : version.createdAt;
 
   return (
     <div className="flex items-center gap-3 py-3 px-4 border-b border-border1">
       <div className="flex items-center gap-2 text-ui-md text-neutral1">
-        <HistoryIcon className="w-4 h-4 text-neutral4" />
-        Version {version.versionNumber}
+        <HistoryIcon className="w-4 h-4 text-neutral4" />v{version.datasetVersion}
       </div>
       <span className="text-ui-sm text-neutral4">{format(versionDate, "MMM d, yyyy 'at' h:mm a")}</span>
       {version.isLatest && <span className="text-ui-xs bg-neutral6 text-neutral2 px-2 py-0.5 rounded">latest</span>}

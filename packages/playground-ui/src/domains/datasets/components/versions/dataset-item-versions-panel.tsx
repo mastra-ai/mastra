@@ -17,15 +17,11 @@ export interface DatasetItemVersionsPanelProps {
   onClose: () => void;
   onVersionSelect?: (version: DatasetItemVersion) => void;
   onCompareVersionsClick?: (versionIds: string[]) => void;
-  activeVersion?: Date | string | null;
+  activeVersion?: number | null;
 }
 
 const versionsListColumns = [{ name: 'version', label: 'Item Version History', size: '1fr' }];
 const versionsListColumnsWithCheckbox = [{ name: 'checkbox', label: '', size: '1.25rem' }, ...versionsListColumns];
-
-function getVersionTime(version: Date | string): number {
-  return typeof version === 'string' ? new Date(version).getTime() : version.getTime();
-}
 
 /**
  * Panel showing dataset item version history.
@@ -37,13 +33,7 @@ export function DatasetItemVersionsPanel({
   onCompareVersionsClick,
   activeVersion,
 }: DatasetItemVersionsPanelProps) {
-  const {
-    data: versions,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useDatasetItemVersions(datasetId, itemId);
+  const { data: versions, isLoading } = useDatasetItemVersions(datasetId, itemId);
 
   const [isSelectionActive, setIsSelectionActive] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -53,8 +43,8 @@ export function DatasetItemVersionsPanel({
   };
 
   const isVersionSelected = (version: DatasetItemVersion): boolean => {
-    if (!activeVersion) return version.isLatest;
-    return getVersionTime(version.version) === getVersionTime(activeVersion);
+    if (activeVersion == null) return version.isLatest;
+    return version.datasetVersion === activeVersion;
   };
 
   const handleToggleSelection = (id: string) => {
@@ -79,9 +69,8 @@ export function DatasetItemVersionsPanel({
   };
 
   const handleExecuteCompare = () => {
-    if (selectedIds.size === 2 && versions) {
-      const selectedVersionNumbers = versions.filter(v => selectedIds.has(v.id)).map(v => String(v.versionNumber));
-      onCompareVersionsClick?.(selectedVersionNumbers);
+    if (selectedIds.size === 2) {
+      onCompareVersionsClick?.([...selectedIds]);
     }
   };
 
@@ -138,27 +127,28 @@ export function DatasetItemVersionsPanel({
           <ItemList.Scroller>
             <ItemList.Items>
               {versions?.map((item, index) => {
-                const versionDate = typeof item.version === 'string' ? new Date(item.version) : item.version;
+                const versionKey = String(item.datasetVersion);
+                const versionDate = typeof item.createdAt === 'string' ? new Date(item.createdAt) : item.createdAt;
 
                 const entry = {
                   id: `version-${index}`,
-                  version: format(versionDate, 'MMM d, yyyy HH:mm'),
+                  version: `v${item.datasetVersion} — ${format(versionDate, 'MMM d, yyyy HH:mm')}`,
                   status: item.isLatest ? 'current' : '',
                 };
 
                 return (
                   <ItemList.Row
                     key={entry.id}
-                    isSelected={isSelectionActive ? selectedIds.has(item.id) : isVersionSelected(item)}
+                    isSelected={isSelectionActive ? selectedIds.has(versionKey) : isVersionSelected(item)}
                   >
                     {isSelectionActive && (
                       <ItemList.FlexCell className="w-12 pl-4">
                         <Checkbox
-                          checked={selectedIds.has(item.id)}
+                          checked={selectedIds.has(versionKey)}
                           onCheckedChange={() => {}}
                           onClick={e => {
                             e.stopPropagation();
-                            handleToggleSelection(item.id);
+                            handleToggleSelection(versionKey);
                           }}
                           aria-label={`Select version ${entry.version}`}
                         />
@@ -167,7 +157,7 @@ export function DatasetItemVersionsPanel({
                     <ItemList.RowButton
                       entry={entry}
                       columns={versionsListColumns}
-                      isSelected={isSelectionActive ? selectedIds.has(item.id) : isVersionSelected(item)}
+                      isSelected={isSelectionActive ? selectedIds.has(versionKey) : isVersionSelected(item)}
                       onClick={() => handleVersionClick(item)}
                       className="py-3"
                     >
@@ -186,17 +176,6 @@ export function DatasetItemVersionsPanel({
                 );
               })}
             </ItemList.Items>
-            {hasNextPage && (
-              <Button
-                variant="secondary"
-                size="default"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-                className="w-full mt-2"
-              >
-                {isFetchingNextPage ? 'Loading...' : 'Load More'}
-              </Button>
-            )}
           </ItemList.Scroller>
         </ItemList>
       )}

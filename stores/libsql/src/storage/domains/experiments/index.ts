@@ -69,8 +69,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
   private transformExperimentRow(row: Record<string, unknown>): Experiment {
     return {
       id: row.id as string,
-      datasetId: row.datasetId as string,
-      datasetVersion: ensureDate(row.datasetVersion as string | Date)!,
+      datasetId: (row.datasetId as string | null) ?? null,
+      datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       name: (row.name as string) ?? undefined,
@@ -94,12 +94,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       id: row.id as string,
       experimentId: row.experimentId as string,
       itemId: row.itemId as string,
-      itemVersion: ensureDate(row.itemVersion as string | Date)!,
-      itemVersionNumber: (row.itemVersionNumber as number) ?? 0,
+      itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
       input: safelyParseJSON(row.input as string),
       output: row.output ? safelyParseJSON(row.output as string) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth as string) : null,
-      latency: row.latency as number,
       error: row.error ? safelyParseJSON(row.error as string) : null,
       startedAt: ensureDate(row.startedAt as string | Date)!,
       completedAt: ensureDate(row.completedAt as string | Date)!,
@@ -120,13 +118,13 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         tableName: TABLE_EXPERIMENTS,
         record: {
           id,
-          datasetId: input.datasetId,
-          datasetVersion: input.datasetVersion.toISOString(),
+          datasetId: input.datasetId ?? null,
+          datasetVersion: input.datasetVersion ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
           name: input.name ?? null,
           description: input.description ?? null,
-          metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+          metadata: input.metadata ?? null,
           status: 'pending',
           totalItems: input.totalItems,
           succeededCount: 0,
@@ -230,15 +228,9 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         args: values,
       });
 
-      return {
-        ...existing,
-        status: input.status ?? existing.status,
-        succeededCount: input.succeededCount ?? existing.succeededCount,
-        failedCount: input.failedCount ?? existing.failedCount,
-        startedAt: input.startedAt ?? existing.startedAt,
-        completedAt: input.completedAt ?? existing.completedAt,
-        updatedAt: new Date(now),
-      };
+      // Re-SELECT to get all fields correctly transformed (F2 fix)
+      const updated = await this.getExperimentById({ id: input.id });
+      return updated!;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -367,13 +359,11 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           id,
           experimentId: input.experimentId,
           itemId: input.itemId,
-          itemVersion: input.itemVersion.toISOString(),
-          itemVersionNumber: input.itemVersionNumber,
+          itemDatasetVersion: input.itemDatasetVersion ?? null,
           input: input.input,
           output: input.output,
           groundTruth: input.groundTruth,
-          latency: input.latency,
-          error: input.error ? JSON.stringify(input.error) : null,
+          error: input.error ?? null,
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
@@ -386,12 +376,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         id,
         experimentId: input.experimentId,
         itemId: input.itemId,
-        itemVersion: input.itemVersion,
-        itemVersionNumber: input.itemVersionNumber,
+        itemDatasetVersion: input.itemDatasetVersion,
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
-        latency: input.latency,
         error: input.error,
         startedAt: input.startedAt,
         completedAt: input.completedAt,

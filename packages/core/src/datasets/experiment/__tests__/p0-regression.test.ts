@@ -150,7 +150,7 @@ describe('P0 Regression', () => {
 
       expect(result.output).toBeNull();
       expect(result.error).toBeTruthy();
-      expect(result.error).toContain('generateLegacy');
+      expect(result.error!.message).toContain('generateLegacy');
     });
   });
 
@@ -183,7 +183,7 @@ describe('P0 Regression', () => {
       // Each item should have a timeout-related error
       for (const item of result.results) {
         expect(item.error).toBeTruthy();
-        expect(item.error!.toLowerCase()).toContain('timeout');
+        expect(item.error!.message.toLowerCase()).toContain('timeout');
       }
     });
   });

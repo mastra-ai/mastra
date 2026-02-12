@@ -52,11 +52,11 @@ function DatasetItemContent({ item, Link }: { item: DatasetItem; Link: ReturnTyp
               value: format(new Date(item.createdAt), 'MMM d, yyyy h:mm aaa'),
               key: 'createdAt',
             },
-            ...(item.version
+            ...(item.datasetVersion != null
               ? [
                   {
                     label: 'Version',
-                    value: format(new Date(item.version), 'MMM d, yyyy h:mm aaa'),
+                    value: `v${item.datasetVersion}`,
                     key: 'version',
                   },
                 ]

@@ -24,14 +24,14 @@ describe('DatasetsInMemory', () => {
       expect(dataset.name).toBe('test-dataset');
       expect(dataset.description).toBe('Test description');
       expect(dataset.metadata).toEqual({ key: 'value' });
-      expect(dataset.version).toBeInstanceOf(Date);
+      expect(dataset.version).toBe(0);
       expect(dataset.createdAt).toBeInstanceOf(Date);
       expect(dataset.updatedAt).toBeInstanceOf(Date);
     });
 
-    it('createDataset initializes version as Date', async () => {
+    it('createDataset initializes version as 0', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      expect(dataset.version).toBeInstanceOf(Date);
+      expect(dataset.version).toBe(0);
     });
 
     it('getDatasetById returns dataset or null', async () => {
@@ -121,7 +121,7 @@ describe('DatasetsInMemory', () => {
       expect(item.input).toEqual({ prompt: 'hello' });
       expect(item.groundTruth).toEqual({ response: 'world' });
       expect(item.metadata).toEqual({ user: 'test' });
-      expect(item.version).toBeInstanceOf(Date);
+      expect(item.datasetVersion).toBe(1);
       expect(item.createdAt).toBeInstanceOf(Date);
       expect(item.updatedAt).toBeInstanceOf(Date);
     });
@@ -174,7 +174,7 @@ describe('DatasetsInMemory', () => {
       );
     });
 
-    it('deleteItem removes item', async () => {
+    it('deleteItem removes item (getItemById returns null)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: {} });
 
@@ -184,9 +184,9 @@ describe('DatasetsInMemory', () => {
       expect(fetched).toBeNull();
     });
 
-    it('deleteItem throws for non-existent item', async () => {
+    it('deleteItem is a no-op for non-existent item', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      await expect(storage.deleteItem({ id: 'non-existent', datasetId: dataset.id })).rejects.toThrow('Item not found');
+      await expect(storage.deleteItem({ id: 'non-existent', datasetId: dataset.id })).resolves.not.toThrow();
     });
 
     it('deleteItem throws when item does not belong to dataset', async () => {
@@ -213,145 +213,294 @@ describe('DatasetsInMemory', () => {
     });
   });
 
-  // ------------- Timestamp Versioning -------------
-  describe('timestamp versioning', () => {
-    it('version is Date instance on create', async () => {
+  // ------------- SCD-2 Versioning -------------
+  describe('SCD-2 versioning', () => {
+    it('addItem increments dataset.version by 1 (T3.7)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      expect(dataset.version).toBeInstanceOf(Date);
+      expect(dataset.version).toBe(0);
+
+      await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      const after1 = await storage.getDatasetById({ id: dataset.id });
+      expect(after1?.version).toBe(1);
+
+      await storage.addItem({ datasetId: dataset.id, input: { n: 2 } });
+      const after2 = await storage.getDatasetById({ id: dataset.id });
+      expect(after2?.version).toBe(2);
     });
 
-    it('updates version timestamp on addItem', async () => {
-      const dataset = await storage.createDataset({ name: 'test' });
-      const initialVersion = dataset.version;
-
-      await new Promise(r => setTimeout(r, 10));
-
-      await storage.addItem({ datasetId: dataset.id, input: { prompt: 'hello' } });
-      const updated = await storage.getDatasetById({ id: dataset.id });
-      expect(updated?.version).toBeInstanceOf(Date);
-      expect(updated?.version.getTime()).toBeGreaterThan(initialVersion.getTime());
-    });
-
-    it('updates version timestamp on updateItem', async () => {
-      const dataset = await storage.createDataset({ name: 'test' });
-      const item = await storage.addItem({ datasetId: dataset.id, input: { a: 1 } });
-      const afterAddVersion = (await storage.getDatasetById({ id: dataset.id }))?.version;
-
-      await new Promise(r => setTimeout(r, 10));
-
-      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { a: 2 } });
-      const updated = await storage.getDatasetById({ id: dataset.id });
-      expect(updated?.version.getTime()).toBeGreaterThan(afterAddVersion!.getTime());
-    });
-
-    it('updates version timestamp on deleteItem', async () => {
-      const dataset = await storage.createDataset({ name: 'test' });
-      const item = await storage.addItem({ datasetId: dataset.id, input: {} });
-      const afterAddVersion = (await storage.getDatasetById({ id: dataset.id }))?.version;
-
-      await new Promise(r => setTimeout(r, 10));
-
-      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
-      const updated = await storage.getDatasetById({ id: dataset.id });
-      expect(updated?.version.getTime()).toBeGreaterThan(afterAddVersion!.getTime());
-    });
-
-    it('item stores version timestamp when added', async () => {
-      const dataset = await storage.createDataset({ name: 'test' });
-
-      const item1 = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
-      expect(item1.version).toBeInstanceOf(Date);
-      const v1 = item1.version;
-
-      await new Promise(r => setTimeout(r, 10));
-
-      const item2 = await storage.addItem({ datasetId: dataset.id, input: { n: 2 } });
-      expect(item2.version).toBeInstanceOf(Date);
-      expect(item2.version.getTime()).toBeGreaterThan(v1.getTime());
-    });
-
-    it('item version updates on updateItem', async () => {
+    it('addItem creates row with validTo=null, isDeleted=false (T3.7)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
       const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
-      const originalVersion = item.version;
 
-      await new Promise(r => setTimeout(r, 10));
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(1);
+      expect(history[0].validTo).toBeNull();
+      expect(history[0].isDeleted).toBe(false);
+      expect(history[0].datasetVersion).toBe(1);
+    });
 
-      const updated = await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
-      expect(updated.version.getTime()).toBeGreaterThan(originalVersion.getTime());
+    it('updateItem closes old row and creates new row (T3.8)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(2);
+
+      // New row current (DESC — newest first)
+      expect(history[0].datasetVersion).toBe(2);
+      expect(history[0].validTo).toBeNull();
+      expect(history[0].isDeleted).toBe(false);
+      expect(history[0].input).toEqual({ n: 2 });
+
+      // Old row closed
+      expect(history[1].datasetVersion).toBe(1);
+      expect(history[1].validTo).toBe(2);
+      expect(history[1].input).toEqual({ n: 1 });
+    });
+
+    it('deleteItem creates tombstone row with isDeleted=true (T3.9)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(2);
+
+      // Tombstone row (newest first)
+      expect(history[0].datasetVersion).toBe(2);
+      expect(history[0].validTo).toBeNull();
+      expect(history[0].isDeleted).toBe(true);
+
+      // Old row closed
+      expect(history[1].validTo).toBe(2);
+    });
+
+    it('deleteItem causes getItemById to return null (T3.12)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
+
+      const fetched = await storage.getItemById({ id: item.id });
+      expect(fetched).toBeNull();
+    });
+
+    it('getItemById with datasetVersion returns exact row (T3.13)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+
+      // Version 1 — original data
+      const atV1 = await storage.getItemById({ id: item.id, datasetVersion: 1 });
+      expect(atV1).not.toBeNull();
+      expect(atV1?.input).toEqual({ n: 1 });
+
+      // Version 2 — updated data
+      const atV2 = await storage.getItemById({ id: item.id, datasetVersion: 2 });
+      expect(atV2).not.toBeNull();
+      expect(atV2?.input).toEqual({ n: 2 });
+
+      // Version 99 — doesn't exist
+      const atV99 = await storage.getItemById({ id: item.id, datasetVersion: 99 });
+      expect(atV99).toBeNull();
+    });
+
+    it('every mutation inserts a dataset_version row (T3.11)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
+
+      const versions = await storage.listDatasetVersions({
+        datasetId: dataset.id,
+        pagination: { page: 0, perPage: false },
+      });
+      expect(versions.versions).toHaveLength(3);
+    });
+
+    it('item mutations do NOT update dataset.updatedAt (T3.26)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const initialUpdatedAt = dataset.updatedAt;
+
+      await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      const after = await storage.getDatasetById({ id: dataset.id });
+      expect(after?.updatedAt.getTime()).toBe(initialUpdatedAt.getTime());
+      expect(after?.version).toBe(1);
     });
   });
 
-  // ------------- Version Query Semantics -------------
+  // ------------- Version Query Semantics (SCD-2) -------------
   describe('version query semantics', () => {
-    it('getItemsByVersion returns snapshot at timestamp', async () => {
+    it('getItemsByVersion(1) after add(v1), update(v2) returns v1 data (T3.14)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const item1 = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
-      const item1Version = item1.version;
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
 
-      await new Promise(r => setTimeout(r, 10));
-
-      const item2 = await storage.addItem({ datasetId: dataset.id, input: { n: 2 } });
-
-      // Query at item1's version timestamp should only return item1
-      const itemsAtV1 = await storage.getItemsByVersion({ datasetId: dataset.id, version: item1Version });
+      const itemsAtV1 = await storage.getItemsByVersion({ datasetId: dataset.id, version: 1 });
       expect(itemsAtV1).toHaveLength(1);
-      expect(itemsAtV1[0].id).toBe(item1.id);
-
-      // Query at item2's version timestamp should return both
-      const itemsAtV2 = await storage.getItemsByVersion({ datasetId: dataset.id, version: item2.version });
-      expect(itemsAtV2).toHaveLength(2);
+      expect(itemsAtV1[0].input).toEqual({ n: 1 });
     });
 
-    it('listItems with version filter uses snapshot semantics', async () => {
+    it('getItemsByVersion(2) after add(v1), update(v2) returns v2 data (T3.14)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const item1 = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
-      const snapshotTime = item1.version;
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
 
-      await new Promise(r => setTimeout(r, 10));
-
-      await storage.addItem({ datasetId: dataset.id, input: { n: 2 } });
-
-      // Page 0 is the first page
-      const result = await storage.listItems({
-        datasetId: dataset.id,
-        version: snapshotTime,
-        pagination: { page: 0, perPage: 100 },
-      });
-      expect(result.items).toHaveLength(1);
-      expect(result.items[0].id).toBe(item1.id);
+      const itemsAtV2 = await storage.getItemsByVersion({ datasetId: dataset.id, version: 2 });
+      expect(itemsAtV2).toHaveLength(1);
+      expect(itemsAtV2[0].input).toEqual({ n: 2 });
     });
 
-    it('items added after version N not returned for version N query', async () => {
+    it('getItemsByVersion(3) after delete(v3) returns empty (T3.14)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const snapshotTime = new Date(); // Snapshot before any items
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
 
-      await new Promise(r => setTimeout(r, 10));
+      const itemsAtV3 = await storage.getItemsByVersion({ datasetId: dataset.id, version: 3 });
+      expect(itemsAtV3).toHaveLength(0);
+    });
 
+    it('getItemsByVersion at version 0 (before items) returns empty', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+
+      const items = await storage.getItemsByVersion({ datasetId: dataset.id, version: 0 });
+      expect(items).toHaveLength(0);
+    });
+
+    it('getItemHistory returns all rows including tombstones (T3.15)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+      await storage.deleteItem({ id: item.id, datasetId: dataset.id });
+
+      const history = await storage.getItemHistory(item.id);
+      expect(history).toHaveLength(3);
+      // Ordered by datasetVersion DESC (newest first)
+      expect(history[0].datasetVersion).toBe(3);
+      expect(history[0].isDeleted).toBe(true);
+      expect(history[1].datasetVersion).toBe(2);
+      expect(history[1].isDeleted).toBe(false);
+      expect(history[2].datasetVersion).toBe(1);
+      expect(history[2].isDeleted).toBe(false);
+    });
+
+    it('listItems with version filter uses SCD-2 range query', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
       await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
       await storage.addItem({ datasetId: dataset.id, input: { n: 2 } });
 
-      const itemsAtSnapshot = await storage.getItemsByVersion({ datasetId: dataset.id, version: snapshotTime });
-      expect(itemsAtSnapshot).toHaveLength(0);
+      // At version 1, only first item exists
+      const result = await storage.listItems({
+        datasetId: dataset.id,
+        version: 1,
+        pagination: { page: 0, perPage: 100 },
+      });
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].input).toEqual({ n: 1 });
+
+      // At version 2, both items exist
+      const result2 = await storage.listItems({
+        datasetId: dataset.id,
+        version: 2,
+        pagination: { page: 0, perPage: 100 },
+      });
+      expect(result2.items).toHaveLength(2);
     });
 
-    it('updated items not included in old version snapshot', async () => {
+    it('default listing returns only current items (T3.16)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const item = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
-      const v1 = item.version;
+      const item1 = await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+      await storage.addItem({ datasetId: dataset.id, input: { n: 2 } });
+      await storage.deleteItem({ id: item1.id, datasetId: dataset.id });
 
-      await new Promise(r => setTimeout(r, 10));
+      const result = await storage.listItems({
+        datasetId: dataset.id,
+        pagination: { page: 0, perPage: 100 },
+      });
+      // Only item2 is current; item1 is deleted
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].input).toEqual({ n: 2 });
+    });
+  });
 
-      // Update item - changes its version timestamp
-      await storage.updateItem({ id: item.id, datasetId: dataset.id, input: { n: 2 } });
+  // ------------- Bulk Operations -------------
+  describe('bulk operations', () => {
+    it('bulkAddItems increments dataset.version once (T3.19)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      await storage.bulkAddItems({
+        datasetId: dataset.id,
+        items: [{ input: { n: 1 } }, { input: { n: 2 } }, { input: { n: 3 } }],
+      });
 
-      // Query at original version - item had version v1 originally, so it should be included
-      // But wait - after update, the item's version changed to a newer timestamp
-      // So at v1, the original item (with v1) should still appear
-      const itemsAtV1 = await storage.getItemsByVersion({ datasetId: dataset.id, version: v1 });
-      // After update, item's version changed, so querying at v1 won't find it anymore
-      // This tests snapshot semantics: updated items have new version, old snapshot doesn't see them
-      expect(itemsAtV1).toHaveLength(0);
+      const after = await storage.getDatasetById({ id: dataset.id });
+      expect(after?.version).toBe(1); // Only incremented once
+    });
+
+    it('bulkAddItems — all items share the same datasetVersion', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const items = await storage.bulkAddItems({
+        datasetId: dataset.id,
+        items: [{ input: { n: 1 } }, { input: { n: 2 } }],
+      });
+
+      expect(items[0].datasetVersion).toBe(1);
+      expect(items[1].datasetVersion).toBe(1);
+    });
+
+    it('bulkDeleteItems increments dataset.version once (T3.20)', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const items = await storage.bulkAddItems({
+        datasetId: dataset.id,
+        items: [{ input: { n: 1 } }, { input: { n: 2 } }],
+      });
+
+      await storage.bulkDeleteItems({
+        datasetId: dataset.id,
+        itemIds: items.map(i => i.id),
+      });
+
+      const after = await storage.getDatasetById({ id: dataset.id });
+      expect(after?.version).toBe(2); // 1 for add, 1 for delete
+    });
+  });
+
+  // ------------- Cascade (F3 fix) -------------
+  describe('cascade delete', () => {
+    it('deleteDataset detaches experiments (sets datasetId/datasetVersion to null) (T3.17)', async () => {
+      const dataset = await storage.createDataset({ name: 'cascade-test' });
+      await storage.addItem({ datasetId: dataset.id, input: { n: 1 } });
+
+      // Set up an experiment in the InMemoryDB directly
+      const expId = crypto.randomUUID();
+      db.experiments.set(expId, {
+        id: expId,
+        name: 'test-exp',
+        datasetId: dataset.id,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        status: 'completed',
+        totalItems: 1,
+        processedItems: 1,
+        succeededItems: 1,
+        failedItems: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await storage.deleteDataset({ id: dataset.id });
+
+      // Experiment should still exist but with null datasetId/datasetVersion
+      const exp = db.experiments.get(expId);
+      expect(exp).toBeDefined();
+      expect(exp?.datasetId).toBeNull();
+      expect(exp?.datasetVersion).toBeNull();
     });
   });
 
@@ -393,7 +542,6 @@ describe('DatasetsInMemory', () => {
         },
       });
 
-      // Valid item succeeds
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: 'prompt',
@@ -401,12 +549,11 @@ describe('DatasetsInMemory', () => {
       });
       expect(item.groundTruth).toEqual({ score: 0.9 });
 
-      // Invalid item throws
       await expect(
         storage.addItem({
           datasetId: dataset.id,
           input: 'prompt',
-          groundTruth: { score: 'high' }, // wrong type
+          groundTruth: { score: 'high' },
         }),
       ).rejects.toThrow('Validation failed for groundTruth');
     });
@@ -426,7 +573,6 @@ describe('DatasetsInMemory', () => {
         input: { name: 'Alice' },
       });
 
-      // Valid update succeeds
       const updated = await storage.updateItem({
         id: item.id,
         datasetId: dataset.id,
@@ -434,12 +580,11 @@ describe('DatasetsInMemory', () => {
       });
       expect(updated.input).toEqual({ name: 'Bob' });
 
-      // Invalid update throws
       await expect(
         storage.updateItem({
           id: item.id,
           datasetId: dataset.id,
-          input: { name: 123 }, // wrong type
+          input: { name: 123 },
         }),
       ).rejects.toThrow('Validation failed for input');
     });
@@ -447,11 +592,9 @@ describe('DatasetsInMemory', () => {
     it('validates existing items when schema is added', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
 
-      // Add items without schema
       await storage.addItem({ datasetId: dataset.id, input: { name: 'Alice' } });
-      await storage.addItem({ datasetId: dataset.id, input: { name: 123 } }); // would fail with schema
+      await storage.addItem({ datasetId: dataset.id, input: { name: 123 } });
 
-      // Try to add schema - should fail due to invalid item
       await expect(
         storage.updateDataset({
           id: dataset.id,
@@ -470,7 +613,6 @@ describe('DatasetsInMemory', () => {
       await storage.addItem({ datasetId: dataset.id, input: { name: 'Alice' } });
       await storage.addItem({ datasetId: dataset.id, input: { name: 'Bob' } });
 
-      // Add schema - should succeed
       const updated = await storage.updateDataset({
         id: dataset.id,
         inputSchema: {
@@ -485,7 +627,6 @@ describe('DatasetsInMemory', () => {
     it('allows schema update on empty dataset', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
 
-      // No items - schema update should succeed
       const updated = await storage.updateDataset({
         id: dataset.id,
         inputSchema: {
@@ -507,11 +648,9 @@ describe('DatasetsInMemory', () => {
         },
       });
 
-      // Item without groundTruth should succeed
       const item = await storage.addItem({
         datasetId: dataset.id,
         input: 'prompt',
-        // no groundTruth
       });
       expect(item.id).toBeDefined();
     });
@@ -525,7 +664,6 @@ describe('DatasetsInMemory', () => {
     });
 
     it('deleteDataset with non-existent ID is a no-op', async () => {
-      // Should not throw
       await storage.deleteDataset({ id: 'non-existent-uuid' });
     });
 

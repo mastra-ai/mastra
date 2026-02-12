@@ -6,7 +6,6 @@ import { TextAndIcon, getShortId } from '@/ds/components/Text';
 import { CopyButton } from '@/ds/components/CopyButton';
 import {
   FileOutputIcon,
-  ClockIcon,
   AlertCircleIcon,
   Calendar1Icon,
   PlayIcon,
@@ -70,13 +69,6 @@ export function ExperimentResultPanel({
         </MainHeader>
 
         <SideDialog.CodeSection title="Input" icon={<FileOutputIcon />} codeStr={outputStr} />
-
-        <div className="grid gap-2">
-          <h4 className="text-sm font-medium text-neutral5 flex items-center gap-2">
-            <ClockIcon className="w-4 h-4" /> Latency
-          </h4>
-          <p className="text-sm text-neutral4">{Math.floor(result.latency)}ms</p>
-        </div>
 
         <div className="grid gap-2">
           <h4 className="text-sm font-medium text-neutral5 flex items-center gap-2">

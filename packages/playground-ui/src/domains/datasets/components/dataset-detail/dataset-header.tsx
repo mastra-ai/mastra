@@ -46,8 +46,7 @@ export function DatasetHeader({
             <Calendar1Icon /> Created at {dataset?.createdAt ? format(new Date(dataset.createdAt), 'MMM d, yyyy') : ''}
           </TextAndIcon>
           <TextAndIcon>
-            <HistoryIcon /> Latest version{' '}
-            {dataset?.version ? format(new Date(dataset.version), "MMM d, yyyy 'at' h:mm a") : ''}
+            <HistoryIcon /> Latest version v{dataset?.version ?? ''}
           </TextAndIcon>
         </MainHeader.Description>
       </MainHeader.Column>

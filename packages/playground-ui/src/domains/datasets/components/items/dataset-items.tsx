@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
 import type { DatasetItem } from '@mastra/client-js';
 import { Alert, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
@@ -51,10 +50,10 @@ export interface DatasetItemsProps {
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
   // Version props
-  activeDatasetVersion?: Date | string | null;
-  currentDatasetVersion?: Date | string;
+  activeDatasetVersion?: number | null;
+  currentDatasetVersion?: number;
   onVersionSelect?: (version: DatasetVersion) => void;
-  onCompareVersionsClick?: (versionTimestamps: string[]) => void;
+  onCompareVersionsClick?: (versionNumbers: string[]) => void;
 }
 
 /**
@@ -105,7 +104,7 @@ export function DatasetItems({
   const isViewingOldVersion =
     activeDatasetVersion != null &&
     currentDatasetVersion != null &&
-    new Date(activeDatasetVersion).getTime() !== new Date(currentDatasetVersion).getTime();
+    activeDatasetVersion !== currentDatasetVersion;
 
   const handleItemClick = (itemId: string) => {
     if (itemId === featuredItemId) {
@@ -202,11 +201,9 @@ export function DatasetItems({
           isViewingOldVersion={isViewingOldVersion}
         />
 
-        {isViewingOldVersion && activeDatasetVersion && (
+        {isViewingOldVersion && activeDatasetVersion != null && (
           <Alert variant="warning">
-            <AlertTitle>
-              Viewing version from {format(new Date(activeDatasetVersion), "MMM d, yyyy 'at' h:mm a")}
-            </AlertTitle>
+            <AlertTitle>Viewing version v{activeDatasetVersion}</AlertTitle>
 
             <Button
               variant="default"

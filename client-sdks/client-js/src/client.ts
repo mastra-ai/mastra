@@ -1056,15 +1056,14 @@ export class MastraClient extends BaseResource {
    */
   public listDatasetItems(
     datasetId: string,
-    params?: { page?: number; perPage?: number; search?: string; version?: Date | string | null },
+    params?: { page?: number; perPage?: number; search?: string; version?: number | null },
   ): Promise<{ items: DatasetItem[]; pagination: PaginationInfo }> {
     const searchParams = new URLSearchParams();
     if (params?.page !== undefined) searchParams.set('page', String(params.page));
     if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.search) searchParams.set('search', params.search);
-    if (params?.version) {
-      const v = params.version instanceof Date ? params.version.toISOString() : params.version;
-      searchParams.set('version', v);
+    if (params?.version != null) {
+      searchParams.set('version', String(params.version));
     }
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/items${qs ? `?${qs}` : ''}`);
@@ -1139,18 +1138,8 @@ export class MastraClient extends BaseResource {
   /**
    * Lists versions for a dataset item
    */
-  public listDatasetItemVersions(
-    datasetId: string,
-    itemId: string,
-    pagination?: { page?: number; perPage?: number },
-  ): Promise<{ versions: DatasetItemVersionResponse[]; pagination: PaginationInfo }> {
-    const searchParams = new URLSearchParams();
-    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
-    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
-    const qs = searchParams.toString();
-    return this.request(
-      `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions${qs ? `?${qs}` : ''}`,
-    );
+  public getItemHistory(datasetId: string, itemId: string): Promise<{ history: DatasetItemVersionResponse[] }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/history`);
   }
 
   /**
@@ -1159,10 +1148,10 @@ export class MastraClient extends BaseResource {
   public getDatasetItemVersion(
     datasetId: string,
     itemId: string,
-    versionNumber: number,
+    datasetVersion: number,
   ): Promise<DatasetItemVersionResponse> {
     return this.request(
-      `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions/${versionNumber}`,
+      `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions/${datasetVersion}`,
     );
   }
 
@@ -1239,11 +1228,10 @@ export class MastraClient extends BaseResource {
     completedAt: string | Date | null;
     results: Array<{
       itemId: string;
-      itemVersion: string | Date;
+      itemDatasetVersion: number | null;
       input: unknown;
       output: unknown | null;
       groundTruth: unknown | null;
-      latency: number;
       error: string | null;
       startedAt: string | Date;
       completedAt: string | Date;
