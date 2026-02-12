@@ -110,7 +110,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...STORED_AGENTS_ROUTES,
   ...STORED_SCORERS_ROUTES,
   ...SYSTEM_ROUTES,
-  ...(process.env.EXPERIMENTAL_FEATURES === 'true' ? DATASETS_ROUTES : []),
+  ...DATASETS_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

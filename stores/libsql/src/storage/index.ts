@@ -145,9 +145,8 @@ export class LibSQLStore extends MastraCompositeStore {
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
-    const isExperimental = process.env.EXPERIMENTAL_FEATURES === 'true';
-    const datasets = isExperimental ? new DatasetsLibSQL(domainConfig) : undefined;
-    const experiments = isExperimental ? new ExperimentsLibSQL(domainConfig) : undefined;
+    const datasets = new DatasetsLibSQL(domainConfig);
+    const experiments = new ExperimentsLibSQL(domainConfig);
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
     const scorerDefinitions = new ScorerDefinitionsLibSQL(domainConfig);
 
