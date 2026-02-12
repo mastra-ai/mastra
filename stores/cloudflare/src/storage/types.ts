@@ -13,6 +13,11 @@ import type {
   TABLE_SPANS,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
   TABLE_PROMPT_BLOCKS,
   TABLE_PROMPT_BLOCK_VERSIONS,
   TABLE_SCORER_DEFINITIONS,
@@ -124,6 +129,11 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
+  [TABLE_DATASETS]: Record<string, any>;
+  [TABLE_DATASET_ITEMS]: Record<string, any>;
+  [TABLE_DATASET_VERSIONS]: Record<string, any>;
+  [TABLE_EXPERIMENTS]: Record<string, any>;
+  [TABLE_EXPERIMENT_RESULTS]: Record<string, any>;
   [TABLE_PROMPT_BLOCKS]: StoragePromptBlockType;
   [TABLE_PROMPT_BLOCK_VERSIONS]: PromptBlockVersion;
   [TABLE_SCORER_DEFINITIONS]: StorageScorerDefinitionType;
