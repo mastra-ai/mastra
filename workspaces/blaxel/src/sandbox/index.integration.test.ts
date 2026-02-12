@@ -373,9 +373,13 @@ describe.skipIf(!hasBlaxelCredentials || !hasGCSCredentials)('BlaxelSandbox GCS 
 
     const result = await sandbox.mount(mockFilesystem, '/data/gcs-public');
     // Public GCS bucket mount may or may not succeed depending on gcsfuse version
-    // The important thing is it attempts the right mount command
-    if (result.success) {
-      expect(result.success).toBe(true);
+    // and network conditions. Verify we get a well-formed result either way.
+    expect(typeof result.success).toBe('boolean');
+    expect(typeof result.mountPath).toBe('string');
+    if (!result.success) {
+      // If it failed, make sure we got a meaningful error message
+      expect(result.error).toBeDefined();
+      expect(result.error!.length).toBeGreaterThan(0);
     }
   }, 180000);
 });

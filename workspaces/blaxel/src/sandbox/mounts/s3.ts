@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { LOG_PREFIX, validateBucketName, validateEndpoint, runCommand } from './types';
@@ -47,7 +49,13 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
       `${LOG_PREFIX} Tip: For faster startup, pre-install s3fs in your sandbox image`,
     );
 
-    await runCommand(sandbox, 'apt-get update 2>&1', { timeout: 60000 });
+    const updateResult = await runCommand(sandbox, 'apt-get update 2>&1', { timeout: 60000 });
+    if (updateResult.exitCode !== 0) {
+      throw new Error(
+        `Failed to update package lists for s3fs installation.\n` +
+          `Error details: ${updateResult.stderr || updateResult.stdout}`,
+      );
+    }
 
     const installResult = await runCommand(
       sandbox,
@@ -67,11 +75,17 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
 
   // Get user's uid/gid for proper file ownership
   const idResult = await runCommand(sandbox, 'id -u && id -g');
+  if (idResult.exitCode !== 0) {
+    throw new Error(`Failed to get uid/gid: ${idResult.stderr || idResult.stdout}`);
+  }
   const [uid, gid] = idResult.stdout.trim().split('\n');
 
   // Determine if we have credentials or using public bucket mode
   const hasCredentials = config.accessKeyId && config.secretAccessKey;
-  const credentialsPath = '/tmp/.passwd-s3fs';
+
+  // Use a mount-specific credentials path to avoid races with concurrent mounts
+  const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+  const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 
   // S3-compatible services (R2, MinIO, etc.) require credentials
   // public_bucket=1 only works for truly public AWS S3 buckets
@@ -124,23 +138,13 @@ export async function mountS3(mountPath: string, config: BlaxelS3MountConfig, ct
   const mountCmd = `s3fs ${config.bucket} ${mountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
-  try {
-    const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
-    logger.debug(`${LOG_PREFIX} s3fs result:`, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
-    }
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.startsWith('Failed to mount S3 bucket:')) {
-      throw error;
-    }
-    const stderr = (error as any)?.stderr || '';
-    const stdout = (error as any)?.stdout || '';
-    logger.error(`${LOG_PREFIX} s3fs error:`, { stderr, stdout, error: String(error) });
-    throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
+  const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
+  logger.debug(`${LOG_PREFIX} s3fs result:`, {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to mount S3 bucket: ${result.stderr || result.stdout}`);
   }
 }

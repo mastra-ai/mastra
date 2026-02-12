@@ -1,4 +1,8 @@
+import crypto from 'node:crypto';
+
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
+
+import { shellQuote } from '../../utils/shell-quote';
 
 import { LOG_PREFIX, validateBucketName, runCommand } from './types';
 import type { MountContext } from './types';
@@ -25,6 +29,8 @@ export async function mountGCS(mountPath: string, config: BlaxelGCSMountConfig, 
 
   // Validate inputs before interpolating into shell commands
   validateBucketName(config.bucket);
+
+  const quotedMountPath = shellQuote(mountPath);
 
   // Install gcsfuse if not present
   const checkResult = await runCommand(sandbox, 'which gcsfuse || echo "not found"');
@@ -83,6 +89,9 @@ export async function mountGCS(mountPath: string, config: BlaxelGCSMountConfig, 
 
   // Get user's uid/gid for proper file ownership
   const idResult = await runCommand(sandbox, 'id -u && id -g');
+  if (idResult.exitCode !== 0) {
+    throw new Error(`Failed to get uid/gid: ${idResult.stderr || idResult.stdout}`);
+  }
   const [uid, gid] = idResult.stdout.trim().split('\n');
 
   // Build gcsfuse flags
@@ -93,40 +102,32 @@ export async function mountGCS(mountPath: string, config: BlaxelGCSMountConfig, 
   let mountCmd: string;
 
   if (hasCredentials) {
-    const keyPath = '/tmp/gcs-key.json';
+    // Use a mount-specific key path to avoid races with concurrent mounts
+    const mountHash = crypto.createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+    const keyPath = `/tmp/gcs-key-${mountHash}.json`;
     await runCommand(sandbox, `rm -f ${keyPath}`);
     await sandbox.fs.write(keyPath, config.serviceAccountKey!);
 
     // Mount with credentials using --key-file flag
     // -o allow_other lets non-root users access the FUSE mount
-    mountCmd = `gcsfuse --key-file=${keyPath} -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    mountCmd = `gcsfuse --key-file=${keyPath} -o allow_other ${uidGidFlags} ${config.bucket} ${quotedMountPath}`;
   } else {
     // Public bucket mode - read-only access without credentials
     // Use --anonymous-access flag (not -o option)
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting GCS as public bucket (read-only)`);
 
-    mountCmd = `gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    mountCmd = `gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${config.bucket} ${quotedMountPath}`;
   }
 
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);
 
-  try {
-    const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
-    logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
-    }
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.startsWith('Failed to mount GCS bucket:')) {
-      throw error;
-    }
-    const stderr = (error as any)?.stderr || '';
-    const stdout = (error as any)?.stdout || '';
-    logger.error(`${LOG_PREFIX} gcsfuse error:`, { stderr, stdout, error: String(error) });
-    throw new Error(`Failed to mount GCS bucket: ${stderr || stdout || error}`);
+  const result = await runCommand(sandbox, mountCmd, { timeout: 60_000 });
+  logger.debug(`${LOG_PREFIX} gcsfuse result:`, {
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to mount GCS bucket: ${result.stderr || result.stdout}`);
   }
 }

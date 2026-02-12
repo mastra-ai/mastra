@@ -266,19 +266,19 @@ export class BlaxelSandbox extends MastraSandbox {
     }
 
     // Create mount directory (Blaxel sandboxes run as root by default)
-    try {
-      this.logger.debug(`${LOG_PREFIX} Creating mount directory for ${mountPath}...`);
-      const mkdirCommand = `mkdir -p "${mountPath}"`;
+    this.logger.debug(`${LOG_PREFIX} Creating mount directory for ${mountPath}...`);
+    const mkdirCommand = `mkdir -p "${mountPath}"`;
 
-      this.logger.debug(`${LOG_PREFIX} Running command: ${mkdirCommand}`);
-      const mkdirResult = await runCommand(this._sandbox, mkdirCommand);
+    this.logger.debug(`${LOG_PREFIX} Running command: ${mkdirCommand}`);
+    const mkdirResult = await runCommand(this._sandbox, mkdirCommand);
 
-      this.logger.debug(`${LOG_PREFIX} Created mount directory for mount path "${mountPath}":`, mkdirResult);
-    } catch (mkdirError) {
+    if (mkdirResult.exitCode !== 0) {
+      const mkdirError = `Failed to create mount directory "${mountPath}": ${mkdirResult.stderr || mkdirResult.stdout}`;
       this.logger.debug(`${LOG_PREFIX} mkdir error for "${mountPath}":`, mkdirError);
-      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: String(mkdirError) });
-      return { success: false, mountPath, error: String(mkdirError) };
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: mkdirError });
+      return { success: false, mountPath, error: mkdirError };
     }
+    this.logger.debug(`${LOG_PREFIX} Created mount directory for mount path "${mountPath}":`, mkdirResult);
 
     // Create mount context for mount operations
     const mountCtx: MountContext = {
@@ -395,8 +395,8 @@ export class BlaxelSandbox extends MastraSandbox {
     await runCommand(this._sandbox, `rm -f "${markerPath}" 2>/dev/null || true`);
 
     // Remove empty mount directory (only if empty, rmdir fails on non-empty)
-    // Clean up the mount directory
-    const rmdirResult = await runCommand(this._sandbox, `rmdir "${mountPath}" 2>&1`);
+    // Use || true so a non-empty or missing directory doesn't abort unmount
+    const rmdirResult = await runCommand(this._sandbox, `rmdir "${mountPath}" 2>&1 || true`);
     if (rmdirResult.exitCode === 0) {
       this.logger.debug(`${LOG_PREFIX} Unmounted and removed ${mountPath}`);
     } else {
@@ -429,9 +429,10 @@ export class BlaxelSandbox extends MastraSandbox {
     this.logger.debug(`${LOG_PREFIX} Reconciling mounts. Expected paths:`, expectedMountPaths);
 
     // Get current FUSE mounts in the sandbox
+    // Use || true to prevent failure when no FUSE mounts exist (grep exits 1 on no match)
     const mountsResult = await runCommand(
       this._sandbox,
-      `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
+      `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}' || true`,
     );
     const currentMounts = mountsResult.stdout
       .trim()
@@ -629,7 +630,11 @@ export class BlaxelSandbox extends MastraSandbox {
    * Blaxel sandbox names must be DNS-safe (lowercase alphanumeric and hyphens).
    */
   private toSandboxName(id: string): string {
-    return id.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 63);
+    const name = id.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 63);
+    if (!name) {
+      throw new Error(`Cannot derive a valid sandbox name from id "${id}". ID must contain at least one alphanumeric character.`);
+    }
+    return name;
   }
 
   /**

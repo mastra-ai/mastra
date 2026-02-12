@@ -51,18 +51,25 @@ export function validateBucketName(bucket: string): void {
 
 /**
  * Validate an endpoint URL before interpolating into shell commands.
+ * Only http and https schemes are allowed.
  */
 export function validateEndpoint(endpoint: string): void {
+  let parsed: URL;
   try {
-    new URL(endpoint);
+    parsed = new URL(endpoint);
   } catch {
     throw new Error(`Invalid endpoint URL: "${endpoint}"`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Invalid endpoint URL scheme: "${parsed.protocol}". Only http: and https: are allowed.`);
   }
 }
 
 /**
  * Run a command in the Blaxel sandbox and return the result.
  * Wraps the process.exec API to match the command execution pattern used in mount operations.
+ *
+ * Does NOT throw on non-zero exit codes — callers should check `exitCode` themselves.
  */
 export async function runCommand(
   sandbox: SandboxInstance,
@@ -75,9 +82,6 @@ export async function runCommand(
     ...(options?.timeout && { timeout: Math.ceil(options.timeout / 1000) }),
   });
 
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to run command: ${command}\n${result.stderr}\n${result.stdout}`);
-  }
   return {
     exitCode: result.exitCode ?? 0,
     stdout: result.stdout ?? '',
