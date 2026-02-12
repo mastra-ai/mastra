@@ -238,6 +238,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/jiekou',
+          label: 'Jiekou.AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
         },
@@ -380,6 +385,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/siliconflow-cn',
           label: 'SiliconFlow (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stackit',
+          label: 'STACKIT',
         },
         {
           type: 'doc',

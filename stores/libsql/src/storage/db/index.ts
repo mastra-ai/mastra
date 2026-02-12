@@ -919,7 +919,9 @@ export class LibSQLDB extends MastraBase {
         if (!existingColumns.has(columnName.toLowerCase()) && schema[columnName]) {
           const columnDef = schema[columnName];
           const sqlType = this.getSqlType(columnDef.type);
-          const defaultValue = this.getDefaultValue(columnDef.type);
+          // SQLite requires constant defaults for ALTER TABLE ADD COLUMN.
+          // Nullable columns use DEFAULT NULL; non-nullable use the type's default.
+          const defaultValue = columnDef.nullable ? 'DEFAULT NULL' : this.getDefaultValue(columnDef.type);
 
           // SQLite doesn't support ADD COLUMN IF NOT EXISTS, but we checked above
           const alterSql = `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${defaultValue}`;

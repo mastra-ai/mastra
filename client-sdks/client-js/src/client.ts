@@ -16,6 +16,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  StoredScorer,
   Workspace,
 } from './resources';
 import type {
@@ -55,10 +56,16 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredScorersParams,
+  ListStoredScorersResponse,
+  CreateStoredScorerParams,
+  StoredScorerResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
+  AwaitBufferStatusParams,
+  AwaitBufferStatusResponse,
   GetMemoryStatusResponse,
   ListWorkspacesResponse,
   ListVectorsResponse,
@@ -273,6 +280,25 @@ export class MastraClient extends BaseResource {
     const queryString = queryParams.toString();
     return this.request(
       `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
+    );
+  }
+
+  /**
+   * Blocks until any in-flight observational memory buffering completes, then returns the updated record
+   * @param params - Parameters containing agentId, resourceId, threadId
+   * @returns Promise containing the updated OM record after buffering completes
+   */
+  public awaitBufferStatus(params: AwaitBufferStatusParams): Promise<AwaitBufferStatusResponse> {
+    return this.request(
+      `/memory/observational-memory/buffer-status${requestContextQueryString(params.requestContext)}`,
+      {
+        method: 'POST',
+        body: {
+          agentId: params.agentId,
+          resourceId: params.resourceId,
+          threadId: params.threadId,
+        },
+      },
     );
   }
 
@@ -811,6 +837,12 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
 
     const queryString = searchParams.toString();
     return this.request(`/stored/agents${queryString ? `?${queryString}` : ''}`);
@@ -835,6 +867,64 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Stored Scorer Definitions
+  // ============================================================================
+
+  /**
+   * Lists all stored scorer definitions with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored scorer definitions
+   */
+  public listStoredScorers(params?: ListStoredScorersParams): Promise<ListStoredScorersResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/scorers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored scorer definition
+   * @param params - Scorer definition configuration
+   * @returns Promise containing the created stored scorer definition
+   */
+  public createStoredScorer(params: CreateStoredScorerParams): Promise<StoredScorerResponse> {
+    return this.request('/stored/scorers', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored scorer definition instance by ID for further operations (details, update, delete)
+   * @param storedScorerId - ID of the stored scorer definition
+   * @returns StoredScorer instance
+   */
+  public getStoredScorer(storedScorerId: string): StoredScorer {
+    return new StoredScorer(this.options, storedScorerId);
   }
 
   // ============================================================================
