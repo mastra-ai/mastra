@@ -43,7 +43,6 @@ const ALL_DOMAINS = [
   PromptBlocksPG,
   AgentsPG,
   WorkflowsPG,
-  MCPClientsPG,
   DatasetsPG,
   ExperimentsPG,
 ] as const;
