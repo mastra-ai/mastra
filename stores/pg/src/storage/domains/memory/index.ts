@@ -2002,7 +2002,7 @@ export class MemoryPG extends MemoryStorage {
 
       if (lastBufferedAtTokens !== undefined) {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "lastBufferedAtTokens" = $2, "updatedAt" = $3, "updatedAtZ" = $4 WHERE id = $5`;
-        values = [isBuffering, lastBufferedAtTokens, nowStr, nowStr, id];
+        values = [isBuffering, Math.round(lastBufferedAtTokens), nowStr, nowStr, id];
       } else {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`;
         values = [isBuffering, nowStr, nowStr, id];
