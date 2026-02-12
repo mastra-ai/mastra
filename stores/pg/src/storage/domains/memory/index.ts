@@ -1838,8 +1838,8 @@ export class MemoryPG extends MemoryStorage {
           input.observations,
           lastObservedAtStr,
           lastObservedAtStr,
-          input.tokenCount,
-          input.tokenCount,
+          Math.round(input.tokenCount),
+          Math.round(input.tokenCount),
           observedMessageIdsJson,
           nowStr,
           nowStr,
@@ -1934,8 +1934,8 @@ export class MemoryPG extends MemoryStorage {
           nowStr, // lastReflectionAt
           nowStr, // lastReflectionAtZ
           record.pendingMessageTokens,
-          record.totalTokensObserved,
-          record.observationTokenCount,
+          Math.round(record.totalTokensObserved),
+          Math.round(record.observationTokenCount),
           false, // isObserving
           false, // isReflecting
           false, // isBufferingObservation
@@ -2051,7 +2051,7 @@ export class MemoryPG extends MemoryStorage {
 
       if (lastBufferedAtTokens !== undefined) {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "lastBufferedAtTokens" = $2, "updatedAt" = $3, "updatedAtZ" = $4 WHERE id = $5`;
-        values = [isBuffering, lastBufferedAtTokens, nowStr, nowStr, id];
+        values = [isBuffering, Math.round(lastBufferedAtTokens), nowStr, nowStr, id];
       } else {
         query = `UPDATE ${tableName} SET "isBufferingObservation" = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`;
         values = [isBuffering, nowStr, nowStr, id];
@@ -2155,7 +2155,7 @@ export class MemoryPG extends MemoryStorage {
           "updatedAt" = $2,
           "updatedAtZ" = $3
         WHERE id = $4`,
-        [tokenCount, nowStr, nowStr, id],
+        [Math.round(tokenCount), nowStr, nowStr, id],
       );
 
       if (result.rowCount === 0) {
@@ -2200,9 +2200,9 @@ export class MemoryPG extends MemoryStorage {
         id: `ombuf-${randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
-        tokenCount: input.chunk.tokenCount,
+        tokenCount: Math.round(input.chunk.tokenCount),
         messageIds: input.chunk.messageIds,
-        messageTokens: input.chunk.messageTokens,
+        messageTokens: Math.round(input.chunk.messageTokens ?? 0),
         lastObservedAt: input.chunk.lastObservedAt,
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
@@ -2346,8 +2346,8 @@ export class MemoryPG extends MemoryStorage {
 
       // Combine activated observations
       const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
-      const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
-      const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const activatedTokens = Math.round(activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0));
+      const activatedMessageTokens = Math.round(activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0));
       const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
       const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
       const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
@@ -2448,8 +2448,8 @@ export class MemoryPG extends MemoryStorage {
         WHERE id = $7`,
         [
           input.reflection,
-          input.tokenCount,
-          input.inputTokenCount,
+          Math.round(input.tokenCount),
+          Math.round(input.inputTokenCount),
           input.reflectedObservationLineCount,
           nowStr,
           nowStr,

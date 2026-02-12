@@ -1,0 +1,198 @@
+---
+title: "Deploying Studio | Deployment"
+description: "Learn how to deploy and use Studio on your own infrastructure."
+packages:
+  - "mastra"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Deploying Studio
+
+[Studio](/docs/getting-started/studio) provides an interactive UI for building and testing your agents. It's a React-based Single Page Application (SPA) that runs in the browser and connects to a running [Mastra server](/docs/deployment/mastra-server).
+
+There are two primary ways of deploying Studio:
+
+- [Mastra Cloud](/docs/mastra-cloud/overview) hosts Studio for you and allows you to share access with your team via link
+- You can self-host Studio on your own infrastructure, either alongside your Mastra server or separately as a standalone SPA
+
+On this page you'll learn how to deploy Studio on your own infrastructure. As the finer details of deployment can vary widely based on your needs and setup, we'll cover the general principles and options available to you.
+
+## Fundamentals
+
+The easiest way to run Studio is the [`mastra studio`](/reference/cli/mastra#mastra-studio) command.
+
+Whereas `mastra dev` runs both Studio and an API for development purposes, the purpose of `mastra studio` is to serve a standalone, static UI that connects to an already-running Mastra server. This allows you to deploy Studio on its own, separate from the Mastra server, if desired.
+
+Open a terminal and install the `mastra` CLI globally:
+
+```bash npm2yarn
+npm install -g mastra
+```
+
+Run the `mastra studio` command:
+
+```bash
+mastra studio
+```
+
+Open [localhost:3000](http://localhost:3000) in your browser to see the Studio UI. By default, it will attempt to connect to a Mastra server running at `http://localhost:4111`. If it doesn't find one there, you'll see a form where you can enter your Mastra instance URL and API prefix.
+
+The command uses Node's built-in `http` module and [`serve-handler`](https://www.npmjs.com/package/serve-handler) to serve the static files.
+
+## Running a server
+
+Running `mastra studio` as a long-running process is no different from running any other Node.js service. All the best practices, tools, and options for deployment apply here as well. You can use process managers like PM2, use Docker, or cloud services that support Node.js applications. You'll need to ensure CORS is configured correctly and errors are monitored, just like with any web service.
+
+:::warning
+
+Once Studio is connected to your Mastra server, it has full access to your agents, workflows, and tools. Be sure to secure it properly in production (e.g. behind authentication, VPN, etc.) to prevent unauthorized access.
+
+:::
+
+### Alongside your API
+
+Alternatively, you can serve Studio alongside your [Mastra server](/docs/deployment/mastra-server). This way you only have one service to deploy and manage.
+
+To do this, run `mastra build` with the `--studio` flag:
+
+```bash
+mastra build --studio
+```
+
+It'll create a `.mastra/output/studio` folder with the built Studio assets. By defining the `MASTRA_STUDIO_PATH` environment variable, the Mastra server can serve the Studio UI, too.
+
+```bash
+MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs
+```
+
+## Using a CDN
+
+Currently, you can't directly deploy the built Studio assets to a CDN, as the UI relies on some dynamic configuration. With a bit of extra setup, you can create a standalone SPA out of the built assets and deploy it to any static hosting service like Netlify, Vercel, etc.
+
+Follow the example below to create a SPA using Vite.
+
+<Steps>
+
+<StepItem>
+
+Create a new folder and initialize a new Node.js project:
+
+```bash npm2yarn
+mkdir studio-spa
+cd studio-spa
+npm init
+```
+
+</StepItem>
+
+<StepItem>
+
+Install `vite` and `mastra` as dependencies:
+
+```bash npm2yarn
+npm install vite mastra
+```
+
+</StepItem>
+
+<StepItem>
+
+Add a build script to your `package.json`:
+
+```json title="package.json"
+{
+  "scripts": {
+    "build": "vite build"
+  }
+}
+```
+
+</StepItem>
+
+<StepItem>
+
+Create a placeholder `index.html` file:
+
+```html title="index.html"
+<!doctype html>
+<html><head></head>
+<body></body></html>
+```
+
+</StepItem>
+
+<StepItem>
+
+Create a `vite.config.js` file. It copies the built Studio assets to the `dist` folder and replaces any `%%PLACEHOLDER%%` values in the HTML with environment variable values.
+
+```js title="vite.config.js"
+import { defineConfig, loadEnv } from 'vite'
+import { readFileSync, cpSync, writeFileSync } from 'node:fs'
+import { resolve, join } from 'node:path'
+
+const studioDir = resolve(import.meta.dirname, 'node_modules/mastra/dist/studio')
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'MASTRA_')
+
+  return {
+    plugins: [
+      {
+        name: 'mastra-studio',
+        closeBundle() {
+          const outDir = resolve(import.meta.dirname, 'dist')
+          cpSync(studioDir, outDir, { recursive: true })
+
+          const indexPath = join(outDir, 'index.html')
+          const html = readFileSync(indexPath, 'utf-8')
+          writeFileSync(indexPath, html.replaceAll(/%%(\w+)%%/g, (_, key) => env[key] ?? ''))
+        },
+      },
+    ],
+    build: {
+      emptyOutDir: true,
+    },
+  }
+})
+```
+
+</StepItem>
+
+<StepItem>
+
+Create a `.env` file with the necessary environment variables.
+
+```env title=".env"
+MASTRA_SERVER_HOST=localhost
+MASTRA_SERVER_PORT=4111
+MASTRA_SERVER_PROTOCOL=http
+MASTRA_API_PREFIX=/api
+MASTRA_STUDIO_BASE_PATH=
+MASTRA_TELEMETRY_DISABLED=true
+MASTRA_HIDE_CLOUD_CTA=false
+MASTRA_CLOUD_API_ENDPOINT=
+MASTRA_EXPERIMENTAL_FEATURES=false
+MASTRA_REQUEST_CONTEXT_PRESETS=
+```
+
+</StepItem>
+
+<StepItem>
+
+Run the build script to generate the static files in the `dist` folder:
+
+```bash npm2yarn
+npm run build
+```
+
+</StepItem>
+
+<StepItem>
+
+Point your hosting provider to the `dist` folder and deploy!
+
+</StepItem>
+
+</Steps>
