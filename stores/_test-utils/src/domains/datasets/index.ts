@@ -2,8 +2,12 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import type { MastraStorage, DatasetsStorage, DatasetRecord, DatasetItem } from '@mastra/core/storage';
 
 export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
+  // Skip tests if storage doesn't have datasets domain
+  const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
+
   let datasetsStorage: DatasetsStorage;
 
+  describeDatasets('Datasets Storage', () => {
   beforeAll(async () => {
     const store = await storage.getStore('datasets');
     if (!store) {
@@ -447,4 +451,5 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
       expect(result.pagination.hasMore).toBe(true);
     });
   });
+  }); // describeDatasets
 }

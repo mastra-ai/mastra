@@ -2,10 +2,14 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import type { MastraStorage, ExperimentsStorage, DatasetsStorage, Experiment } from '@mastra/core/storage';
 
 export function createExperimentsTests({ storage }: { storage: MastraStorage }) {
+  // Skip tests if storage doesn't have experiments domain
+  const describeExperiments = storage.stores?.experiments ? describe : describe.skip;
+
   let experimentsStorage: ExperimentsStorage;
   // Optional — needed for cascade / filter-by-datasetId tests
   let datasetsStorage: DatasetsStorage | undefined;
 
+  describeExperiments('Experiments Storage', () => {
   beforeAll(async () => {
     const store = await storage.getStore('experiments');
     if (!store) {
@@ -445,4 +449,5 @@ export function createExperimentsTests({ storage }: { storage: MastraStorage }) 
       expect(list.experiments).toHaveLength(0);
     });
   });
+  }); // describeExperiments
 }
