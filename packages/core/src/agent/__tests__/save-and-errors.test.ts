@@ -625,16 +625,12 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
     });
 
     it('should save thread but not messages if error occurs during LLM generation', async () => {
-      // v2: Threads are now created upfront to prevent race conditions with storage backends
-      // like PostgresStore that validate thread existence before saving messages.
-      // When an error occurs during LLM generation, the thread will exist but no messages
-      // will be saved since the response never completed.
-      //
-      // v1 (legacy): Does not use memory processors, so the old behavior applies where
-      // threads are not saved until the request completes successfully.
+      // Both v1 and v2: Threads are now created upfront to prevent race conditions with
+      // storage backends like PostgresStore that validate thread existence before saving
+      // messages. When an error occurs during LLM generation, the thread will exist but
+      // no messages will be saved since the response never completed.
       const mockMemory = new MockMemory();
       const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
-      const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
       if (version === 'v1') {
@@ -691,17 +687,12 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err' });
 
-      if (version === 'v1') {
-        // v1 (legacy): Thread should NOT exist - old behavior preserved
-        expect(saveThreadSpy).not.toHaveBeenCalled();
-        expect(thread).toBeNull();
-      } else {
-        // v2: Thread should exist (created upfront to prevent race condition)
-        expect(thread).not.toBeNull();
-        expect(thread?.id).toBe('thread-err');
-        // But no messages should be saved since the LLM call failed
-        expect(saveMessagesSpy).not.toHaveBeenCalled();
-      }
+      // Both v1 and v2: Thread should exist (created upfront to prevent race conditions
+      // with storage backends like PostgresStore that validate thread existence before saving messages)
+      expect(thread).not.toBeNull();
+      expect(thread?.id).toBe('thread-err');
+      // But no messages should be saved since the LLM call failed
+      expect(saveMessagesSpy).not.toHaveBeenCalled();
     });
   });
 

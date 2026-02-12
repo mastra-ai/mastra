@@ -1,0 +1,233 @@
+---
+title: "Guide: Building a Docs Manager"
+description: Build an AI documentation manager that creates, updates, and organizes markdown documentation files using workspace filesystem.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building a Docs Manager
+
+In this guide, you'll build a documentation manager that maintains your project's docs. It creates well-structured markdown files, keeps documentation organized, and prevents accidental overwrites. You'll learn how to set up a workspace filesystem, create an agent with document management instructions, and use it to generate and update documentation through conversational prompts.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+
+## Set up the workspace
+
+The workspace uses a local filesystem to manage documentation files. The agent reads and writes files within the workspace directory. In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspace/workspace-class) and [`LocalFilesystem`](/reference/workspace/local-filesystem) classes.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+// highlight-start
+import { resolve } from 'node:path';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-end
+
+// highlight-start
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: resolve(import.meta.dirname, '../../workspace'),
+  }),
+});
+// highlight-end
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  workspace,
+});
+```
+
+At the root of your project, create a new folder called `workspace`. This is where all documentation files will be stored and managed by the agent.
+
+## Add example documentation
+
+Inside the `workspace` directory, create the following folders:
+
+- `docs/guides/`: For how-to guides
+- `docs/api/`: For API reference documentation
+- `docs/tutorials/`: For step-by-step tutorials
+
+Create a `workspace/docs/README.md` file that serves as the documentation index:
+
+```markdown title="workspace/docs/README.md"
+# Project Documentation
+
+Welcome to the documentation!
+
+## Sections
+
+- [Guides](./guides/): How-to guides
+- [API](./api/): API reference
+- [Tutorials](./tutorials/): Step-by-step tutorials
+```
+
+Add a sample guide so the agent can see the existing documentation style:
+
+````markdown title="workspace/docs/guides/getting-started.md"
+# Getting Started
+
+Quick start guide for the project.
+
+## Installation
+
+```bash
+npm install example-package
+```
+
+## Quick Example
+
+```typescript
+import { Example } from 'example-package';
+
+const example = new Example();
+example.run();
+```
+````
+
+## Create the docs manager
+
+Now it's time to create the documentation manager agent. This agent will have instructions for creating and updating markdown files in the workspace. Create a new file `src/mastra/agents/docs-manager.ts` and define the agent:
+
+```typescript title="src/mastra/agents/docs-manager.ts"
+import { Agent } from '@mastra/core/agent';
+
+export const docsManager = new Agent({
+  id: 'docs-manager',
+  name: 'Docs Manager',
+  instructions: `You are a documentation manager that creates and maintains markdown docs.
+
+When creating new docs:
+1. Ask for topic and target audience
+2. Create well-structured markdown with clear sections
+3. Include relevant code examples with syntax highlighting
+4. Save in the appropriate directory:
+   - /docs/guides/ for user guides and how-tos
+   - /docs/api/ for API reference
+   - /docs/tutorials/ for step-by-step tutorials
+
+When updating existing docs:
+1. ALWAYS read the file first
+2. Make targeted updates without removing unrelated content
+3. Preserve existing structure and formatting
+
+Use kebab-case naming for files (getting-started.md).
+Always explain what you're creating and why.`,
+  model: 'openai/gpt-4o',
+});
+```
+
+Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { resolve } from 'node:path';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-next-line
+import { docsManager } from './agents/docs-manager';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: resolve(import.meta.dirname, '../../workspace'),
+  }),
+});
+
+export const mastra = new Mastra({
+  workspace,
+  // highlight-next-line
+  agents: { docsManager },
+});
+```
+
+## Test the docs manager
+
+Start Mastra Studio and interact with the agent to see it in action.
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [localhost:4111](http://localhost:4111) and navigate to the docs manager.
+
+### Create a new document
+
+Ask the agent to create a tutorial:
+
+```text
+Create a tutorial for setting up authentication. Cover installation, configuration, and a basic example.
+```
+
+The agent should create a file like `docs/tutorials/authentication-setup.md`. Since agent responses are non-deterministic, the exact content will vary, but you should see something similar to:
+
+````md
+# Authentication Setup
+
+Learn how to add authentication to your application.
+
+## Installation
+
+Install the auth package:
+
+```bash
+npm install @example/auth
+```
+
+## Configuration
+
+Create a config file:
+
+```typescript
+// auth.config.ts
+export const authConfig = {
+  provider: 'oauth',
+  clientId: process.env.AUTH_CLIENT_ID,
+  secret: process.env.AUTH_SECRET,
+};
+```
+
+## Basic Example
+
+```typescript
+import { createAuth } from '@example/auth';
+import { authConfig } from './auth.config';
+
+const auth = createAuth(authConfig);
+
+app.get('/protected', auth.requireAuth(), (req, res) => {
+  res.json({ user: req.user });
+});
+```
+````
+
+### Update an existing document
+
+Try updating an existing document:
+
+```
+Update the getting started guide to include a section on configuration after the Quick Example
+```
+
+The agent should read the existing `getting-started.md` file, find the right insertion point, and add the new section without disrupting existing content.
+
+### Organize documentation
+
+Ask the agent to create an index:
+
+```
+List all tutorial files and create an index page that links to all of them
+```
+
+The agent should create a file like `/docs/tutorials/index.md` that links to all available tutorials.
+
+## Next steps
+
+You can extend this manager to:
+
+- Add BM25 or vector search to find relevant documentation
+- Create skills for documentation templates
+- Build automated doc generation from source code
+- Integrate with GitHub to update docs on commits
+- Add validation to check links and formatting

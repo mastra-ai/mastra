@@ -203,11 +203,24 @@ export class ProcessorRunner {
 
     // Check for execution failure
     if (result.status !== 'success') {
+      // Collect error details from the workflow result and failed steps
+      const details: string[] = [];
+      if (result.status === 'failed') {
+        if (result.error) {
+          details.push(result.error.message || JSON.stringify(result.error));
+        }
+        for (const [stepId, step] of Object.entries(result.steps)) {
+          if (step.status === 'failed' && step.error?.message) {
+            details.push(`step ${stepId}: ${step.error.message}`);
+          }
+        }
+      }
+      const detailStr = details.length > 0 ? ` — ${details.join('; ')}` : '';
       throw new MastraError({
         category: 'USER',
         domain: 'AGENT',
         id: 'PROCESSOR_WORKFLOW_FAILED',
-        text: `Processor workflow ${workflow.id} failed with status: ${result.status}`,
+        text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
       });
     }
 

@@ -66,7 +66,7 @@ describe('tree-formatter', () => {
 
       const result = await formatAsTree(filesystem, '/');
 
-      // Directories first, then files, all alphabetical (ASCII order: uppercase before lowercase)
+      // Directories first, then files, all ASCII alphabetical (to match native tree's strcmp)
       expect(result.tree).toBe(
         `.
 ├── src
@@ -650,6 +650,8 @@ describe('tree-formatter', () => {
      * Cached at describe-time for use with it.skipIf.
      */
     const treeAvailable = (() => {
+      // Only run native tree comparison in CI (Linux) to avoid macOS sort-order differences
+      if (!process.env.CI) return false;
       try {
         execSync('which tree', { encoding: 'utf-8' });
         return true;
