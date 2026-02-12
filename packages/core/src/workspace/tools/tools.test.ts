@@ -825,6 +825,35 @@ describe('createWorkspaceTools', () => {
       expect((result as any).error).toContain('Invalid regex');
     });
 
+    it('should reject excessively long patterns', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'a'.repeat(1001),
+      });
+
+      expect(result.matchCount).toBe(0);
+      expect((result as any).error).toContain('Pattern too long');
+    });
+
+    it('should return error for unsupported glob patterns', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'test',
+        glob: '**/*.ts',
+      });
+
+      expect(result.matchCount).toBe(0);
+      expect((result as any).error).toContain('Unsupported glob pattern');
+    });
+
     it('should skip binary/non-text files', async () => {
       const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       await fs.writeFile(path.join(tempDir, 'image.png'), buffer);
@@ -855,22 +884,6 @@ describe('createWorkspaceTools', () => {
       expect(result.matchCount).toBe(0);
       expect(result.fileCount).toBe(0);
       expect(result.truncated).toBe(false);
-    });
-
-    it('should appear when filesystem is available', () => {
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-      });
-      const tools = createWorkspaceTools(workspace);
-      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
-    });
-
-    it('should not appear when filesystem is absent', () => {
-      const workspace = new Workspace({
-        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
-      });
-      const tools = createWorkspaceTools(workspace);
-      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
     });
 
     it('should report correct column for match', async () => {

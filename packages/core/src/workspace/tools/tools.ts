@@ -601,6 +601,18 @@ Examples:
           maxResults = 100,
           caseSensitive = true,
         }) => {
+          // Guard against excessively long patterns as a cheap ReDoS heuristic
+          const MAX_PATTERN_LENGTH = 1000;
+          if (pattern.length > MAX_PATTERN_LENGTH) {
+            return {
+              matches: [],
+              fileCount: 0,
+              matchCount: 0,
+              truncated: false,
+              error: `Pattern too long (${pattern.length} chars). Maximum allowed length is ${MAX_PATTERN_LENGTH}.`,
+            };
+          }
+
           // Validate regex
           let regex: RegExp;
           try {
@@ -616,11 +628,20 @@ Examples:
           }
 
           // Extract extension filter from glob pattern (e.g., "*.ts" → ".ts")
+          // Only simple "*.ext" patterns are supported.
           let extensionFilter: string | undefined;
           if (globPattern) {
             const match = globPattern.match(/^\*(\.\w+)$/);
             if (match) {
               extensionFilter = match[1];
+            } else {
+              return {
+                matches: [],
+                fileCount: 0,
+                matchCount: 0,
+                truncated: false,
+                error: `Unsupported glob pattern: "${globPattern}". Use simple extension filters like "*.ts".`,
+              };
             }
           }
 
