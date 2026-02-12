@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { AgentModelManagerConfig } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { ProviderConfig } from '@mastra/core/llm/model/gateways/base';
 import type { SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -63,14 +64,20 @@ import {
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
  * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
  * @param providerId - The provider identifier (may include a suffix like ".chat" or be from a custom gateway)
+ * @param customProviders - Optional record of custom gateway providers to check
  * @returns true if all required environment variables are set, false otherwise
  */
-export function isProviderConnected(providerId: string): boolean {
+export function isProviderConnected(providerId: string, customProviders?: Record<string, ProviderConfig>): boolean {
   // Clean provider ID (e.g., "openai.chat" -> "openai")
   const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
 
-  // First, try direct lookup
+  // First, try direct lookup in static registry
   let provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+
+  // If not found, check custom providers
+  if (!provider && customProviders) {
+    provider = customProviders[cleanId];
+  }
 
   // If not found and doesn't contain a slash, check if it exists with a gateway prefix
   // This handles custom gateway providers stored as "gateway/provider" in the registry
@@ -85,6 +92,16 @@ export function isProviderConnected(providerId: string): boolean {
 
     if (matchingKey) {
       provider = PROVIDER_REGISTRY[matchingKey as keyof typeof PROVIDER_REGISTRY];
+    }
+
+    if (!provider && customProviders) {
+      const customMatchingKey = Object.keys(customProviders).find(key => {
+        const parts = key.split('/');
+        return parts.length === 2 && parts[1] === cleanId;
+      });
+      if (customMatchingKey) {
+        provider = customProviders[customMatchingKey];
+      }
     }
   }
 
@@ -1085,18 +1102,44 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
   requiresAuth: true,
-  handler: async () => {
+  handler: async ({ mastra }) => {
     try {
-      const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
+      const allProviders: Record<string, ProviderConfig> = {};
+      
+      for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+        allProviders[id] = provider;
+      }
+
+      if (mastra) {
+        const customGateways = mastra.listGateways();
+        if (customGateways) {
+          const gatewayList = Object.values(customGateways);
+          
+          if (gatewayList.length > 0) {
+            try {
+              const { fetchProvidersFromGateways } = await import('@mastra/core/llm/model/registry-generator');
+              const { providers: customProviders } = await fetchProvidersFromGateways(gatewayList);
+              
+              for (const [providerId, config] of Object.entries(customProviders)) {
+                allProviders[providerId] = config;
+              }
+            } catch (error) {
+              console.warn('Failed to fetch providers from custom gateways:', error);
+            }
+          }
+        }
+      }
+
+      const providers = Object.entries(allProviders).map(([id, provider]) => {
         return {
           id,
           name: provider.name,
           label: (provider as any).label || provider.name,
           description: (provider as any).description || '',
           envVar: provider.apiKeyEnvVar,
-          connected: isProviderConnected(id),
+          connected: isProviderConnected(id, allProviders),
           docUrl: provider.docUrl,
-          models: [...provider.models], // Convert readonly array to regular array
+          models: [...provider.models],
         };
       });
       return { providers };
