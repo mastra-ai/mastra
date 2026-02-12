@@ -404,6 +404,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   /**
    * Resolve a glob pattern to a list of matching directories.
    * Walks from extractGlobBase() and tests each directory against the pattern.
+   *
+   * Note: Broad patterns like `/** /skills` resolve to a walk root of `/`,
+   * scanning the entire workspace tree. This is cached per-pattern with a
+   * TTL (GLOB_RESOLVE_INTERVAL) to limit I/O. For large workspaces, prefer
+   * more specific patterns like `/src/** /skills` to narrow the walk root.
    */
   async #resolveGlobToDirectories(pattern: string): Promise<string[]> {
     const walkRoot = extractGlobBase(pattern);
@@ -664,7 +669,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     for (const entry of entries) {
       const entryPath = this.#joinPath(dirPath, entry.name);
 
-      if (entry.type === 'directory') {
+      if (entry.type === 'directory' && !entry.isSymlink) {
         await this.#walkDirectory(basePath, entryPath, callback, depth + 1, maxDepth);
       } else {
         // Get relative path from base

@@ -1346,6 +1346,9 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
       await workspace.filesystem.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
       filesWritten++;
 
+      // Refresh skills discovery so the new skill is immediately visible
+      await workspace.skills?.refresh();
+
       return {
         success: true,
         skillName: result.skillId,
