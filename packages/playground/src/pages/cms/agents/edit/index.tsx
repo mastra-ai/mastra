@@ -95,6 +95,27 @@ function CmsAgentsEditForm({
           vector?: string;
           embedder?: string;
           options?: { lastMessages?: number | false; semanticRecall?: boolean; readOnly?: boolean };
+          observationalMemory?:
+            | boolean
+            | {
+                model?: string;
+                scope?: 'resource' | 'thread';
+                shareTokenBudget?: boolean;
+                observation?: {
+                  model?: string;
+                  messageTokens?: number;
+                  maxTokensPerBatch?: number;
+                  bufferTokens?: number | false;
+                  bufferActivation?: number;
+                  blockAfter?: number;
+                };
+                reflection?: {
+                  model?: string;
+                  observationTokens?: number;
+                  blockAfter?: number;
+                  bufferActivation?: number;
+                };
+              };
         }
       | undefined;
 
@@ -135,6 +156,41 @@ function CmsAgentsEditForm({
             readOnly: memoryData.options.readOnly,
             vector: memoryData.vector,
             embedder: memoryData.embedder,
+            observationalMemory: memoryData.observationalMemory
+              ? (() => {
+                  const om = typeof memoryData.observationalMemory === 'object' ? memoryData.observationalMemory : {};
+                  const splitModel = (id?: string) => {
+                    if (!id) return undefined;
+                    const [p, ...rest] = id.split('/');
+                    const n = rest.join('/');
+                    return p && n ? { provider: p, name: n } : undefined;
+                  };
+                  return {
+                    enabled: true as const,
+                    model: splitModel(om.model),
+                    scope: om.scope,
+                    shareTokenBudget: om.shareTokenBudget,
+                    observation: om.observation
+                      ? {
+                          model: splitModel(om.observation.model),
+                          messageTokens: om.observation.messageTokens,
+                          maxTokensPerBatch: om.observation.maxTokensPerBatch,
+                          bufferTokens: om.observation.bufferTokens,
+                          bufferActivation: om.observation.bufferActivation,
+                          blockAfter: om.observation.blockAfter,
+                        }
+                      : undefined,
+                    reflection: om.reflection
+                      ? {
+                          model: splitModel(om.reflection.model),
+                          observationTokens: om.reflection.observationTokens,
+                          blockAfter: om.reflection.blockAfter,
+                          bufferActivation: om.reflection.bufferActivation,
+                        }
+                      : undefined,
+                  };
+                })()
+              : undefined,
           }
         : undefined,
       instructionBlocks,
@@ -201,6 +257,56 @@ function CmsAgentsEditForm({
                 semanticRecall: values.memory.semanticRecall,
                 readOnly: values.memory.readOnly,
               },
+              observationalMemory: values.memory.observationalMemory?.enabled
+                ? (() => {
+                    const om = values.memory.observationalMemory;
+                    const joinModel = (m?: { provider?: string; name?: string }) =>
+                      m?.provider && m?.name ? `${m.provider}/${m.name}` : undefined;
+                    const modelId = joinModel(om.model);
+
+                    const obsModelId = joinModel(om.observation?.model);
+                    const observation =
+                      obsModelId ||
+                      om.observation?.messageTokens ||
+                      om.observation?.maxTokensPerBatch ||
+                      om.observation?.bufferTokens !== undefined ||
+                      om.observation?.bufferActivation !== undefined ||
+                      om.observation?.blockAfter !== undefined
+                        ? {
+                            model: obsModelId,
+                            messageTokens: om.observation?.messageTokens,
+                            maxTokensPerBatch: om.observation?.maxTokensPerBatch,
+                            bufferTokens: om.observation?.bufferTokens,
+                            bufferActivation: om.observation?.bufferActivation,
+                            blockAfter: om.observation?.blockAfter,
+                          }
+                        : undefined;
+
+                    const refModelId = joinModel(om.reflection?.model);
+                    const reflection =
+                      refModelId ||
+                      om.reflection?.observationTokens ||
+                      om.reflection?.blockAfter !== undefined ||
+                      om.reflection?.bufferActivation !== undefined
+                        ? {
+                            model: refModelId,
+                            observationTokens: om.reflection?.observationTokens,
+                            blockAfter: om.reflection?.blockAfter,
+                            bufferActivation: om.reflection?.bufferActivation,
+                          }
+                        : undefined;
+
+                    return modelId || om.scope || om.shareTokenBudget || observation || reflection
+                      ? {
+                          model: modelId,
+                          scope: om.scope,
+                          shareTokenBudget: om.shareTokenBudget,
+                          observation,
+                          reflection,
+                        }
+                      : true;
+                  })()
+                : undefined,
             }
           : undefined,
         requestContextSchema: values.variables as Record<string, unknown> | undefined,
