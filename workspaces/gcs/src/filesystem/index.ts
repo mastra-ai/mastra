@@ -21,7 +21,7 @@ import type {
   FilesystemIcon,
   ProviderStatus,
 } from '@mastra/core/workspace';
-import { MastraFilesystem, FileNotFoundError } from '@mastra/core/workspace';
+import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
 
 /**
  * GCS mount configuration.
@@ -333,9 +333,13 @@ export class GCSFilesystem extends MastraFilesystem {
     }
   }
 
-  async writeFile(path: string, content: FileContent, _options?: WriteOptions): Promise<void> {
+  async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
+
+    if (options?.overwrite === false && (await this.exists(path))) {
+      throw new FileExistsError(path);
+    }
 
     const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
     const contentType = getMimeType(path);
@@ -386,10 +390,14 @@ export class GCSFilesystem extends MastraFilesystem {
     }
   }
 
-  async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
+  async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const bucket = await this.getReadyBucket();
     const srcFile = bucket.file(this.toKey(src));
     const destFile = bucket.file(this.toKey(dest));
+
+    if (options?.overwrite === false && (await this.exists(dest))) {
+      throw new FileExistsError(dest);
+    }
 
     try {
       await srcFile.copy(destFile);
