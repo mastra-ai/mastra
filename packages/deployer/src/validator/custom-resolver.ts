@@ -15,7 +15,11 @@ const transpileCache = new Map<string, string>();
 
 function shouldTranspile(filePath: string): boolean {
   if (!transpileConfig?.packages.length) return false;
-  return transpileConfig.packages.some(pkg => filePath.startsWith(pkg.path));
+  const normalizedFilePath = filePath.replaceAll('\\', '/');
+  return transpileConfig.packages.some(pkg => {
+    const pkgPath = pkg.path.replace(/\/+$/, '');
+    return normalizedFilePath === pkgPath || normalizedFilePath.startsWith(`${pkgPath}/`);
+  });
 }
 
 function isTypeScriptFile(url: string): boolean {
@@ -142,6 +146,10 @@ export async function load(
     return nextLoad(url, context);
   }
 
+  if (url.endsWith('.cts')) {
+    return nextLoad(url, context);
+  }
+
   const cached = transpileCache.get(url);
   if (cached) {
     return { format: 'module', source: cached, shortCircuit: true };
@@ -149,7 +157,7 @@ export async function load(
 
   const source = await readFile(filePath, 'utf-8');
   const result = await transform(source, {
-    loader: url.endsWith('.tsx') ? 'tsx' : 'ts',
+    loader: url.endsWith('.tsx') ? 'tsx' : url.endsWith('.mts') ? 'ts' : 'ts',
     format: 'esm',
     target: 'node20',
     sourcemap: 'inline',

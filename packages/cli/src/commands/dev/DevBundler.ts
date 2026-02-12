@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
@@ -162,12 +162,14 @@ export class DevBundler extends Bundler {
   async generateTranspileConfig(entryFile: string, outputDirectory: string): Promise<string> {
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
     const transpilePackages = bundlerOptions?.transpilePackages ?? [];
-    const { workspaceMap } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
+    const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
 
     const packages: Array<{ name: string; path: string }> = [];
 
+    const resolveRoot = workspaceRoot ?? dirname(entryFile);
+
     for (const pkg of transpilePackages) {
-      const dir = await getPackageRootPath(pkg);
+      const dir = await getPackageRootPath(pkg, resolveRoot);
       if (dir) {
         packages.push({ name: pkg, path: slash(dir) });
       }

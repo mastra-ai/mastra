@@ -3,8 +3,22 @@
 "mastra": patch
 ---
 
-Fix runtime TypeScript imports for transpilePackages during mastra dev
+**Fixed** `mastra dev` now runs TypeScript packages listed in `transpilePackages` without a separate build step.
 
-Added a Node.js ESM load hook that transpiles TypeScript files from transpilePackages on-the-fly using esbuild. Previously, transpilePackages only worked at build time but failed at runtime because Node.js tried to load raw .ts files directly.
+**Why** Dev mode previously tried to execute `.ts` files directly, which caused runtime failures. Fixes #12617.
 
-Fixes #12617
+**Example**
+
+Before:
+```ts
+// mastra.config.ts
+export default { bundler: { transpilePackages: ['@acme/foo'] } };
+// mastra dev required a separate build for `@acme/foo`
+```
+
+After:
+```ts
+// mastra.config.ts
+export default { bundler: { transpilePackages: ['@acme/foo'] } };
+// mastra dev runs without an extra build step
+```
