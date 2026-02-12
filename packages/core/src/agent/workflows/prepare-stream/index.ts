@@ -9,6 +9,7 @@ import { MastraModelOutput } from '../../../stream';
 import { createWorkflow } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { RepairToolCallFunction } from '../../../loop/types';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
@@ -33,6 +34,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
   toolCallConcurrency?: number;
+  repairToolCall?: RepairToolCallFunction;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -59,6 +61,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   saveQueueManager,
   requireToolApproval,
   toolCallConcurrency,
+  repairToolCall,
   resumeContext,
   agentId,
   agentName,
@@ -97,6 +100,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     returnScorerData,
     requireToolApproval,
     toolCallConcurrency,
+    repairToolCall,
     resumeContext,
     agentId,
     agentName,

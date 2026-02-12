@@ -6,6 +6,7 @@ import type { MemoryConfig } from '../../../memory/types';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import { createStep } from '../../../workflows';
+import type { RepairToolCallFunction } from '../../../loop/types';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
@@ -17,6 +18,7 @@ interface StreamStepOptions {
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
   toolCallConcurrency?: number;
+  repairToolCall?: RepairToolCallFunction;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -39,6 +41,7 @@ export function createStreamStep<OUTPUT = undefined>({
   returnScorerData,
   requireToolApproval,
   toolCallConcurrency,
+  repairToolCall,
   resumeContext,
   agentId,
   agentName,
@@ -82,6 +85,7 @@ export function createStreamStep<OUTPUT = undefined>({
         tracingContext,
         requireToolApproval,
         toolCallConcurrency,
+        repairToolCall,
         resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,

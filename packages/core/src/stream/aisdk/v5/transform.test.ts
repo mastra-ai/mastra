@@ -24,16 +24,14 @@ describe('convertFullStreamChunkToMastra', () => {
           toolCallId: 'call-1',
           toolName: 'get_weather',
           args: { location: 'New York', unit: 'celsius' },
+          parseError: undefined,
           providerExecuted: false,
           providerMetadata: undefined,
         },
       });
     });
 
-    it('should gracefully handle unterminated JSON string in input - simulating streaming race condition', () => {
-      // This simulates when a tool-call chunk arrives with partial JSON
-      // BUG: Currently this throws "Unterminated string in JSON" error
-      // EXPECTED: Should handle gracefully without crashing
+    it('should set parseError when JSON is unterminated and unrepairable', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
         toolCallId: 'call-1',
@@ -42,20 +40,14 @@ describe('convertFullStreamChunkToMastra', () => {
         providerExecuted: false,
       };
 
-      // Should NOT throw - should handle gracefully
       const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
 
-      // When JSON is incomplete, we should either:
-      // 1. Return undefined args, or
-      // 2. Return the raw string for later processing
       expect(result).toBeDefined();
       expect(result?.type).toBe('tool-call');
-
-      if (result?.type === 'tool-call') {
-        expect(result?.payload.toolCallId).toBe('call-1');
-        // Args should be undefined or the raw string, not throw
-        expect(() => result?.payload.args).not.toThrow();
-      }
+      expect((result as any).payload.toolCallId).toBe('call-1');
+      expect((result as any).payload.args).toEqual({});
+      expect((result as any).payload.parseError).toContain('malformed JSON');
+      expect((result as any).payload.parseError).toContain('get_weather');
     });
 
     it('should handle unterminated JSON at different positions without throwing', () => {
@@ -96,15 +88,16 @@ describe('convertFullStreamChunkToMastra', () => {
           providerExecuted: false,
         };
 
-        // Should NOT throw - should handle gracefully
         const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
 
         expect(result, `Test case: ${name}`).toBeDefined();
         expect(result?.type, `Test case: ${name}`).toBe('tool-call');
+        // Unrepairable JSON should have parseError set
+        expect((result as any).payload.parseError, `Test case: ${name}`).toBeDefined();
       });
     });
 
-    it('should handle malformed JSON without crashing', () => {
+    it('should set parseError for completely invalid JSON', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
         toolCallId: 'call-1',
@@ -113,17 +106,35 @@ describe('convertFullStreamChunkToMastra', () => {
         providerExecuted: false,
       };
 
-      // Should handle gracefully, not throw
       const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
 
       expect(result).toBeDefined();
       expect(result?.type).toBe('tool-call');
+      expect((result as any).payload.args).toEqual({});
+      expect((result as any).payload.parseError).toContain('malformed JSON');
+    });
+
+    it('should truncate long raw input in parseError message', () => {
+      const longInput = '{"key": "' + 'A'.repeat(500) + '"}broken';
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'test_tool',
+        input: longInput,
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      const parseError = (result as any).payload.parseError as string;
+      expect(parseError).toContain('...');
+      // The full raw input (500+ chars) should not appear in the message
+      expect(parseError).not.toContain(longInput);
     });
 
     describe('should repair common LLM malformed JSON errors (issue #11078)', () => {
       it('should repair missing quote before property name after comma', () => {
-        // Kimi/K2 pattern: {"command":"git diff HEAD",description":"Check changes"}
-        // Missing opening quote before "description"
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-repair-1',
@@ -136,16 +147,14 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result).toBeDefined();
         expect(result?.type).toBe('tool-call');
-        if (result?.type === 'tool-call') {
-          expect(result.payload.args).toEqual({
-            command: 'git diff HEAD',
-            description: 'Check changes',
-          });
-        }
+        expect((result as any).payload.args).toEqual({
+          command: 'git diff HEAD',
+          description: 'Check changes',
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
       });
 
       it('should repair unquoted property names', () => {
-        // {command:"ls -la", path:"/tmp"}
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-repair-2',
@@ -158,16 +167,14 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result).toBeDefined();
         expect(result?.type).toBe('tool-call');
-        if (result?.type === 'tool-call') {
-          expect(result.payload.args).toEqual({
-            command: 'ls -la',
-            path: '/tmp',
-          });
-        }
+        expect((result as any).payload.args).toEqual({
+          command: 'ls -la',
+          path: '/tmp',
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
       });
 
       it('should repair single quotes used instead of double quotes', () => {
-        // {'key':'value','count':42}
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-repair-3',
@@ -180,16 +187,14 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result).toBeDefined();
         expect(result?.type).toBe('tool-call');
-        if (result?.type === 'tool-call') {
-          expect(result.payload.args).toEqual({
-            key: 'value',
-            count: 42,
-          });
-        }
+        expect((result as any).payload.args).toEqual({
+          key: 'value',
+          count: 42,
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
       });
 
       it('should repair trailing commas', () => {
-        // {"name":"test","value":123,}
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-repair-4',
@@ -202,17 +207,14 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result).toBeDefined();
         expect(result?.type).toBe('tool-call');
-        if (result?.type === 'tool-call') {
-          expect(result.payload.args).toEqual({
-            name: 'test',
-            value: 123,
-          });
-        }
+        expect((result as any).payload.args).toEqual({
+          name: 'test',
+          value: 123,
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
       });
 
       it('should repair multiple issues combined', () => {
-        // Multiple issues: unquoted key + trailing comma
-        // {command:"git status",verbose:true,}
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-repair-5',
@@ -225,16 +227,14 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result).toBeDefined();
         expect(result?.type).toBe('tool-call');
-        if (result?.type === 'tool-call') {
-          expect(result.payload.args).toEqual({
-            command: 'git status',
-            verbose: true,
-          });
-        }
+        expect((result as any).payload.args).toEqual({
+          command: 'git status',
+          verbose: true,
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
       });
 
       it('should repair trailing comma in nested arrays', () => {
-        // {"items":["a","b","c",],"count":3}
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-repair-6',
@@ -247,16 +247,14 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result).toBeDefined();
         expect(result?.type).toBe('tool-call');
-        if (result?.type === 'tool-call') {
-          expect(result.payload.args).toEqual({
-            items: ['a', 'b', 'c'],
-            count: 3,
-          });
-        }
+        expect((result as any).payload.args).toEqual({
+          items: ['a', 'b', 'c'],
+          count: 3,
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
       });
 
       it('should not break valid JSON when repair is attempted', () => {
-        // Valid JSON should still parse correctly
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-valid',
@@ -269,13 +267,12 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result).toBeDefined();
         expect(result?.type).toBe('tool-call');
-        if (result?.type === 'tool-call') {
-          expect(result.payload.args).toEqual({
-            location: 'New York',
-            unit: 'celsius',
-            nested: { key: 'value' },
-          });
-        }
+        expect((result as any).payload.args).toEqual({
+          location: 'New York',
+          unit: 'celsius',
+          nested: { key: 'value' },
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
       });
     });
 
@@ -291,9 +288,10 @@ describe('convertFullStreamChunkToMastra', () => {
       const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
 
       expect(result).toBeDefined();
-      if (result?.type === 'tool-call') {
-        expect(result.payload).toHaveProperty('args', undefined);
-      }
+      expect(result?.type).toBe('tool-call');
+      expect((result as any).payload.args).toBeUndefined();
+      // Empty input doesn't trigger JSON parsing, so no parseError
+      expect((result as any).payload.parseError).toBeUndefined();
     });
 
     it('should handle undefined input', () => {
@@ -309,35 +307,27 @@ describe('convertFullStreamChunkToMastra', () => {
       const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
 
       expect(result).toBeDefined();
-      if (result?.type === 'tool-call') {
-        expect(result.payload).toHaveProperty('args', undefined);
-      }
+      expect(result?.type).toBe('tool-call');
+      expect((result as any).payload.args).toBeUndefined();
+      expect((result as any).payload.parseError).toBeUndefined();
     });
 
     it('should handle complex nested JSON with long strings - position 871 error simulation from GitHub issue #9958', () => {
-      // The original error from issue #9958 shows "position 871 (line 5 column 41)"
-      // This simulates a larger JSON payload that gets cut off at a similar position
-      // This is the EXACT scenario reported by users
       const longString = 'A'.repeat(800);
       const chunk: StreamPart = {
         type: 'tool-call',
         toolCallId: 'call-1',
         toolName: 'generate_content',
-        // Cut the string in the middle of a value to simulate the unterminated string
         input: `{"content": "${longString}", "metadata": {"author": "John`,
         providerExecuted: false,
       };
 
-      // Should NOT throw - should handle gracefully
       const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
 
       expect(result).toBeDefined();
       expect(result?.type).toBe('tool-call');
-      if (result?.type === 'tool-call') {
-        expect(result?.payload.toolCallId).toBe('call-1');
-      } else {
-        throw new Error('Result is not a tool-call');
-      }
+      expect((result as any).payload.toolCallId).toBe('call-1');
+      expect((result as any).payload.parseError).toContain('malformed JSON');
     });
   });
 
@@ -383,9 +373,7 @@ describe('convertFullStreamChunkToMastra', () => {
       const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
 
       expect(result?.type).toBe('finish');
-      if (result?.type === 'finish') {
-        expect(result.payload.stepResult.reason).toBe('stop');
-      }
+      expect((result as any).payload.stepResult.reason).toBe('stop');
     });
   });
 });
@@ -396,6 +384,20 @@ describe('tryRepairJson', () => {
     expect(tryRepairJson('not json at all')).toBeNull();
     expect(tryRepairJson('{{{')).toBeNull();
     expect(tryRepairJson('undefined')).toBeNull();
+  });
+
+  it('should return null for non-object JSON values', () => {
+    // Arrays, primitives, and null should not be returned as tool call args
+    expect(tryRepairJson('[1,2,3]')).toBeNull();
+    expect(tryRepairJson('"just a string"')).toBeNull();
+    expect(tryRepairJson('42')).toBeNull();
+    expect(tryRepairJson('true')).toBeNull();
+    expect(tryRepairJson('null')).toBeNull();
+  });
+
+  it('should return null for arrays with trailing commas (non-object result)', () => {
+    // Even if repair succeeds, arrays should not be returned
+    expect(tryRepairJson('[1,2,3,]')).toBeNull();
   });
 
   it('should parse valid JSON without modification', () => {
@@ -409,7 +411,6 @@ describe('tryRepairJson', () => {
   });
 
   it('should fix missing opening quote on property name (Kimi/K2 pattern)', () => {
-    // {"command":"git diff HEAD",description":"Check changes"}
     expect(tryRepairJson('{"command":"git diff HEAD",description":"Check changes"}')).toEqual({
       command: 'git diff HEAD',
       description: 'Check changes',
@@ -417,7 +418,6 @@ describe('tryRepairJson', () => {
   });
 
   it('should fix multiple missing opening quotes', () => {
-    // {"a":"1",b":"2",c":"3"}
     expect(tryRepairJson('{"a":"1",b":"2",c":"3"}')).toEqual({
       a: '1',
       b: '2',
@@ -482,6 +482,30 @@ describe('tryRepairJson', () => {
     expect(tryRepairJson('{message:"it\'s working",count:1}')).toEqual({
       message: "it's working",
       count: 1,
+    });
+  });
+
+  it('should preserve apostrophes inside double-quoted values when single-quoted keys are present', () => {
+    // Single-quoted keys + apostrophe in a double-quoted value
+    // {'name': "it's a test", 'value': 1}
+    expect(tryRepairJson("{  'name': \"it's a test\", 'value': 1}")).toEqual({
+      name: "it's a test",
+      value: 1,
+    });
+  });
+
+  it('should handle mixed single and double quotes correctly', () => {
+    // Some keys single-quoted, some double-quoted
+    expect(tryRepairJson("{\"name\": 'hello', 'count': 42}")).toEqual({
+      name: 'hello',
+      count: 42,
+    });
+  });
+
+  it('should escape double quotes inside single-quoted strings', () => {
+    // Single-quoted value containing a double quote: {'key': 'say "hi"'}
+    expect(tryRepairJson("{'key': 'say \"hi\"'}")).toEqual({
+      key: 'say "hi"',
     });
   });
 

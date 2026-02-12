@@ -132,6 +132,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
     case 'tool-call': {
       let toolCallInput: Record<string, any> | undefined = undefined;
+      let parseError: string | undefined = undefined;
 
       if (value.input) {
         try {
@@ -146,7 +147,11 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
               error,
               input: value.input,
             });
-            toolCallInput = undefined;
+            toolCallInput = {};
+            const truncated = value.input.length > 200 ? value.input.slice(0, 200) + '...' : value.input;
+            parseError =
+              `Tool call arguments for "${value.toolName}" contained malformed JSON that could not be parsed. ` +
+              `Please provide valid JSON arguments. Raw input: ${truncated}`;
           }
         }
       }
@@ -159,6 +164,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           toolCallId: value.toolCallId,
           toolName: value.toolName,
           args: toolCallInput,
+          parseError,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
         },
@@ -576,35 +582,95 @@ function normalizeFinishReason(
 }
 
 /**
- * Attempts to repair common JSON errors produced by LLM providers (e.g., Kimi/K2).
- *
- * Handles these common malformations:
- * - Missing opening quote before property name: {"a":"b",c":"d"} -> {"a":"b","c":"d"}
- * - Fully unquoted property names: {command:"ls"} -> {"command":"ls"}
- * - Trailing commas: {"a":1,} -> {"a":1}
- * - Single quotes instead of double quotes: {'key':'val'} -> {"key":"val"}
- *
- * Single-quote replacement is applied as a second pass only when structural
- * fixes alone are insufficient, so apostrophes inside double-quoted values
- * (e.g. "it's fine") are preserved when possible.
- *
- * Returns the parsed object on success, or null if repair fails.
+ * Attempts to repair common JSON malformations from LLM providers (unquoted keys,
+ * single quotes, trailing commas). Returns parsed object or null.
  */
 export function tryRepairJson(input: string): Record<string, any> | null {
   const repaired = applyStructuralFixes(input.trim());
 
   try {
-    return JSON.parse(repaired);
+    const parsed = JSON.parse(repaired);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
   } catch {
-    // Structural fixes alone weren't enough — also try single-quote replacement.
-    // This handles {'key':'value'} patterns from some LLM providers.
-    const withDoubleQuotes = applyStructuralFixes(input.trim().replace(/'/g, '"'));
+    const withDoubleQuotes = applyStructuralFixes(replaceSingleQuoteDelimiters(input.trim()));
     try {
-      return JSON.parse(withDoubleQuotes);
+      const parsed = JSON.parse(withDoubleQuotes);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
   }
+}
+
+/**
+ * Converts single-quote JSON delimiters to double quotes while preserving
+ * apostrophes inside double-quoted values (e.g. "it's fine" stays unchanged).
+ */
+function replaceSingleQuoteDelimiters(input: string): string {
+  const chars: string[] = [];
+  let i = 0;
+
+  while (i < input.length) {
+    const ch = input[i]!;
+
+    if (ch === '"') {
+      chars.push(ch);
+      i++;
+      while (i < input.length) {
+        const inner = input[i]!;
+        if (inner === '\\') {
+          chars.push(inner);
+          i++;
+          if (i < input.length) {
+            chars.push(input[i]!);
+            i++;
+          }
+        } else if (inner === '"') {
+          chars.push(inner);
+          i++;
+          break;
+        } else {
+          chars.push(inner);
+          i++;
+        }
+      }
+    } else if (ch === "'") {
+      chars.push('"');
+      i++;
+      while (i < input.length) {
+        const inner = input[i]!;
+        if (inner === '\\') {
+          chars.push(inner);
+          i++;
+          if (i < input.length) {
+            chars.push(input[i]!);
+            i++;
+          }
+        } else if (inner === "'") {
+          chars.push('"');
+          i++;
+          break;
+        } else if (inner === '"') {
+          chars.push('\\"');
+          i++;
+        } else {
+          chars.push(inner);
+          i++;
+        }
+      }
+    } else {
+      chars.push(ch);
+      i++;
+    }
+  }
+
+  return chars.join('');
 }
 
 function applyStructuralFixes(input: string): string {

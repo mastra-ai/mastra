@@ -426,3 +426,298 @@ describe('createToolCallStep requestContext forwarding', () => {
     expect(capturedOptions!.requestContext).toBe(requestContext);
   });
 });
+
+describe('createToolCallStep repairToolCall hook', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    runId: 'test-run-id',
+    workflowId: 'test-workflow-id',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend,
+    bail: vi.fn(),
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'test-tool',
+      runId: 'test-run-id',
+    }),
+    validateSchemas: false,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    suspend = vi.fn().mockReturnValue(new Promise(() => {}));
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [] },
+      },
+    } as unknown as MessageList;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('repairs a parseError and executes the tool with fixed args', async () => {
+    const repairToolCall = vi.fn().mockResolvedValue({
+      toolCallId: 'call-1',
+      toolName: 'test-tool',
+      args: { fixed: true },
+    });
+    const tools = {
+      'test-tool': { execute: vi.fn().mockResolvedValue('success') },
+    };
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      repairToolCall,
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'test-tool',
+          args: {},
+          parseError: 'Malformed JSON',
+        },
+      }),
+    );
+
+    expect(repairToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: 'call-1',
+        toolName: 'test-tool',
+        args: {},
+        error: expect.any(Error),
+        messages: [],
+        tools,
+      }),
+    );
+    expect(tools['test-tool'].execute).toHaveBeenCalledWith({ fixed: true }, expect.anything());
+    expect(result).toEqual(expect.objectContaining({ result: 'success' }));
+  });
+
+  it('repairs a tool-not-found error by remapping to a different tool', async () => {
+    const repairToolCall = vi.fn().mockResolvedValue({
+      toolCallId: 'call-1',
+      toolName: 'real-tool',
+      args: { param: 'value' },
+    });
+    const tools = {
+      'real-tool': { execute: vi.fn().mockResolvedValue('fixed-result') },
+    };
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      repairToolCall,
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'unknown-tool',
+          args: { param: 'value' },
+        },
+      }),
+    );
+
+    expect(repairToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'unknown-tool',
+        error: expect.any(Error),
+      }),
+    );
+    expect(tools['real-tool'].execute).toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({ result: 'fixed-result' }));
+  });
+
+  it('returns error when repair hook returns null for parseError', async () => {
+    const repairToolCall = vi.fn().mockResolvedValue(null);
+    const tools = {
+      'test-tool': { execute: vi.fn() },
+    };
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      repairToolCall,
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'test-tool',
+          args: {},
+          parseError: 'Malformed JSON',
+        },
+      }),
+    );
+
+    expect(repairToolCall).toHaveBeenCalled();
+    expect(tools['test-tool'].execute).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: 'Malformed JSON' }),
+      }),
+    );
+  });
+
+  it('throws when repair hook returns null for tool-not-found', async () => {
+    const repairToolCall = vi.fn().mockResolvedValue(null);
+
+    const step = createToolCallStep({
+      tools: {},
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      repairToolCall,
+    });
+
+    await expect(
+      step.execute(
+        makeExecuteParams({
+          inputData: {
+            toolCallId: 'call-1',
+            toolName: 'missing-tool',
+            args: {},
+          },
+        }),
+      ),
+    ).rejects.toThrow('missing-tool');
+  });
+
+  it('returns error when repair hook itself throws for parseError', async () => {
+    const repairToolCall = vi.fn().mockRejectedValue(new Error('repair failed'));
+    const tools = {
+      'test-tool': { execute: vi.fn() },
+    };
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      repairToolCall,
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'test-tool',
+          args: {},
+          parseError: 'Malformed JSON',
+        },
+      }),
+    );
+
+    expect(tools['test-tool'].execute).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: 'Malformed JSON' }),
+      }),
+    );
+  });
+
+  it('returns error when repaired tool name still not found', async () => {
+    const repairToolCall = vi.fn().mockResolvedValue({
+      toolCallId: 'call-1',
+      toolName: 'still-missing',
+      args: { fixed: true },
+    });
+
+    const step = createToolCallStep({
+      tools: { 'other-tool': { execute: vi.fn() } },
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      repairToolCall,
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'bad-tool',
+          args: {},
+          parseError: 'Malformed JSON',
+        },
+      }),
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: expect.any(Error),
+      }),
+    );
+  });
+
+  it('falls through to default parseError handling without repair hook', async () => {
+    const tools = {
+      'test-tool': { execute: vi.fn() },
+    };
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      // no repairToolCall
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'test-tool',
+          args: {},
+          parseError: 'Bad JSON',
+        },
+      }),
+    );
+
+    expect(tools['test-tool'].execute).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: 'Bad JSON' }),
+      }),
+    );
+  });
+});

@@ -157,6 +157,7 @@ export const toolCallInputSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
   args: z.record(z.any()),
+  parseError: z.string().optional(),
   providerMetadata: z.record(z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
