@@ -114,7 +114,7 @@ function isAccessDeniedError(error: unknown): boolean {
 /**
  * S3 filesystem provider configuration.
  */
-export interface S3FilesystemOptions extends Pick<MastraFilesystemOptions, 'onInit' | 'onDestroy'> {
+export interface S3FilesystemOptions extends Omit<MastraFilesystemOptions, 'name'> {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** S3 bucket name */
@@ -232,7 +232,7 @@ export class S3Filesystem extends MastraFilesystem {
   private _client: S3Client | null = null;
 
   constructor(options: S3FilesystemOptions) {
-    super({ name: 'S3Filesystem', onInit: options.onInit, onDestroy: options.onDestroy });
+    super({ ...options, name: 'S3Filesystem' });
     this.id = options.id ?? `s3-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.bucket = options.bucket;
     this.region = options.region;

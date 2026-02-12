@@ -37,7 +37,7 @@ import type { MastraFilesystemOptions } from './mastra-filesystem';
 /**
  * Local filesystem provider configuration.
  */
-export interface LocalFilesystemOptions extends Pick<MastraFilesystemOptions, 'onInit' | 'onDestroy'> {
+export interface LocalFilesystemOptions extends Omit<MastraFilesystemOptions, 'name'> {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** Base directory path on disk */
@@ -106,7 +106,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   constructor(options: LocalFilesystemOptions) {
-    super({ name: 'LocalFilesystem', onInit: options.onInit, onDestroy: options.onDestroy });
+    super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
     this._contained = options.contained ?? true;

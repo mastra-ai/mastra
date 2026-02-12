@@ -54,7 +54,7 @@ export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust'
 /**
  * E2B sandbox provider configuration.
  */
-export interface E2BSandboxOptions extends Pick<MastraSandboxOptions, 'onStart' | 'onStop' | 'onDestroy'> {
+export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'name'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**
@@ -162,7 +162,7 @@ export class E2BSandbox extends MastraSandbox {
   private _templatePreparePromise?: Promise<string>;
 
   constructor(options: E2BSandboxOptions = {}) {
-    super({ name: 'E2BSandbox', onStart: options.onStart, onStop: options.onStop, onDestroy: options.onDestroy });
+    super({ ...options, name: 'E2BSandbox' });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;

@@ -89,7 +89,7 @@ function getMimeType(path: string): string {
 /**
  * GCS filesystem provider configuration.
  */
-export interface GCSFilesystemOptions extends Pick<MastraFilesystemOptions, 'onInit' | 'onDestroy'> {
+export interface GCSFilesystemOptions extends Omit<MastraFilesystemOptions, 'name'> {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** GCS bucket name */
@@ -200,7 +200,7 @@ export class GCSFilesystem extends MastraFilesystem {
   private _bucket: Bucket | null = null;
 
   constructor(options: GCSFilesystemOptions) {
-    super({ name: 'GCSFilesystem', onInit: options.onInit, onDestroy: options.onDestroy });
+    super({ ...options, name: 'GCSFilesystem' });
     this.id = options.id ?? `gcs-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.bucketName = options.bucket;
     this.projectId = options.projectId;
