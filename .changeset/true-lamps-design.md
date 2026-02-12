@@ -11,9 +11,9 @@ The shared `Lifecycle` interface has been split into provider-specific types tha
 
 The base `Lifecycle` type is still exported for backward compatibility.
 
-**Added `onInit` / `onDestroy` callbacks to filesystem providers**
+**Added `onInit` / `onDestroy` callbacks to `MastraFilesystem`**
 
-Filesystem providers now accept optional lifecycle callbacks, matching the existing `onStart` / `onStop` / `onDestroy` callbacks on sandbox providers.
+The `MastraFilesystem` base class now accepts optional lifecycle callbacks via `MastraFilesystemOptions`, matching the existing `onStart` / `onStop` / `onDestroy` callbacks on `MastraSandbox`.
 
 ```ts
 const fs = new LocalFilesystem({

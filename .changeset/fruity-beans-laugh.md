@@ -3,4 +3,4 @@
 '@mastra/s3': minor
 ---
 
-Update peer dependencies to match core package version bump (1.4.0)
+Updated minimum `@mastra/core` peer dependency to support the new `FilesystemLifecycle` and `SandboxLifecycle` interfaces.
