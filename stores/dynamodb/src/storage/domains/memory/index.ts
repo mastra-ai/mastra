@@ -191,7 +191,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
       updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
-      lastMessageAt: thread.lastMessageAt ? thread.lastMessageAt.toISOString() : null,
+      lastMessageAt: thread.lastMessageAt ? thread.lastMessageAt.toISOString() : undefined,
       ...getTtlProps('thread', this.ttlConfig),
     };
 

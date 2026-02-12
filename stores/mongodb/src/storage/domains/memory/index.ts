@@ -961,6 +961,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           resourceId: thread.resourceId,
           createdAt: formatDateForMongoDB(thread.createdAt),
           updatedAt: formatDateForMongoDB(thread.updatedAt),
+          lastMessageAt: thread.lastMessageAt ? formatDateForMongoDB(thread.lastMessageAt) : null,
           metadata: thread.metadata || {},
         })),
         total,
