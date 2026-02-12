@@ -3,7 +3,7 @@
 Congratulations! You've successfully enhanced your Mastra agent with MCP servers, giving it powerful capabilities including:
 
 1. Email and social media integration through Zapier
-2. GitHub monitoring through the Composio GitHub MCP server
+2. GitHub monitoring through the Smithery GitHub MCP server
 3. Tech news access through the Hacker News MCP server
 4. Local file management through the Filesystem MCP server
 5. Enhanced memory for personalized interactions
