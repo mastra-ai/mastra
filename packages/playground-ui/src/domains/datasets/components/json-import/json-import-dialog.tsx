@@ -194,7 +194,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
-            <Button variant="ghost" onClick={handleCancelImport}>
+            <Button variant="standard" size="default" onClick={handleCancelImport}>
               Cancel
             </Button>
           </div>
@@ -226,7 +226,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
     switch (step) {
       case 'upload':
         return (
-          <Button variant="ghost" onClick={handleClose}>
+          <Button variant="standard" size="default" onClick={handleClose}>
             Cancel
           </Button>
         );
@@ -234,10 +234,10 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
       case 'preview':
         return (
           <>
-            <Button variant="ghost" onClick={() => setStep('upload')}>
+            <Button variant="standard" size="default" onClick={() => setStep('upload')}>
               Back
             </Button>
-            <Button variant="primary" onClick={handleImport} disabled={!canImport}>
+            <Button variant="cta" size="default" onClick={handleImport} disabled={!canImport}>
               Import {parsedJSON?.items.length ?? 0} Item{parsedJSON?.items.length !== 1 ? 's' : ''}
             </Button>
           </>
@@ -248,7 +248,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
 
       case 'complete':
         return (
-          <Button variant="primary" onClick={handleDone}>
+          <Button variant="cta" size="default" onClick={handleDone}>
             Done
           </Button>
         );

@@ -194,10 +194,10 @@ export function DuplicateDatasetDialog({
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleCancel} disabled={isDuplicating}>
+              <Button type="button" variant="standard" size="default" onClick={handleCancel} disabled={isDuplicating}>
                 Cancel
               </Button>
-              <Button type="submit" variant="light" disabled={isDuplicating || !name.trim()}>
+              <Button type="submit" variant="cta" size="default" disabled={isDuplicating || !name.trim()}>
                 {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
               </Button>
             </div>

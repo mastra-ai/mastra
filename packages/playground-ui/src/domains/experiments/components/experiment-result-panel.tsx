@@ -46,7 +46,7 @@ export function ExperimentResultPanel({
           nextAriaLabel="View next result details"
         />
         <ButtonsGroup>
-          <Button variant="secondary" size="default" onClick={onShowTrace} disabled={!result.traceId}>
+          <Button variant="standard" size="default" onClick={onShowTrace} disabled={!result.traceId}>
             <PanelRightIcon />
             Show Trace
           </Button>

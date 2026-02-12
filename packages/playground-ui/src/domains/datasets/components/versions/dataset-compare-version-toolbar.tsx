@@ -37,7 +37,7 @@ export function DatasetCompareVersionToolbar({
 
   return (
     <Column.Toolbar>
-      <Button as={Link} to={`/datasets/${datasetId}`} variant="standard" size="default">
+      <Button as={Link} to={`/datasets/${datasetId}`} variant="cta" size="default">
         <ArrowLeft />
         Back to Dataset
       </Button>

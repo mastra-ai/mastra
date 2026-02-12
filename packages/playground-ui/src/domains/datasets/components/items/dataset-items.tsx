@@ -169,11 +169,13 @@ export function DatasetItems({
     { name: 'date', label: 'Created', size: '5rem' },
   ];
 
+  console.log('____', !!featuredItem, isVersionsPanelOpen);
+
   return (
     <Columns
       className={cn({
         'grid-cols-[1fr_1fr]': !!featuredItem,
-        'grid-cols-[1fr_auto]': isVersionsPanelOpen,
+        'grid-cols-[1fr_auto]': isVersionsPanelOpen && !featuredItem,
       })}
     >
       <Column>

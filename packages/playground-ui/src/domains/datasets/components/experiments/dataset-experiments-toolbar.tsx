@@ -62,11 +62,11 @@ export function DatasetExperimentsToolbar({
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="standard" size="default" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
+            <Button variant="cta" size="default" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
               <GitCompare className="w-4 h-4" />
               Compare Experiments
             </Button>
-            <Button variant="secondary" size="default" onClick={onCancelSelection}>
+            <Button variant="standard" size="default" onClick={onCancelSelection}>
               Cancel
             </Button>
           </ButtonsGroup>
@@ -105,7 +105,7 @@ export function DatasetExperimentsToolbar({
         )}
 
         {(filters.status || filters.targetType || filters.targetId) && (
-          <Button variant="secondary" size="default" onClick={() => onFiltersChange({})}>
+          <Button variant="standard" size="default" onClick={() => onFiltersChange({})}>
             <Icon>
               <XIcon />
             </Icon>
@@ -115,7 +115,7 @@ export function DatasetExperimentsToolbar({
       </div>
 
       {hasExperiments && (
-        <Button variant="secondary" size="default" onClick={onCompareClick}>
+        <Button variant="standard" size="default" onClick={onCompareClick}>
           <GitCompare className="w-4 h-4" />
           Compare
         </Button>

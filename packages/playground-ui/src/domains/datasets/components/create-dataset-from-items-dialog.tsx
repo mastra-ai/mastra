@@ -135,10 +135,10 @@ export function CreateDatasetFromItemsDialog({
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleCancel} disabled={isCreating}>
+              <Button type="button" variant="standard" size="default" onClick={handleCancel} disabled={isCreating}>
                 Cancel
               </Button>
-              <Button type="submit" variant="light" disabled={isCreating || !name.trim()}>
+              <Button type="submit" variant="cta" size="default" disabled={isCreating || !name.trim()}>
                 {isCreating ? `Creating... (${progress}/${items.length})` : 'Create Dataset'}
               </Button>
             </div>

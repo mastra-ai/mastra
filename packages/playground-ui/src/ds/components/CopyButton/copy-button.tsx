@@ -48,7 +48,7 @@ export function CopyButton({
           type="button"
           //    className={cn('rounded-lg p-1', transitions.all, focusRing.visible, 'hover:bg-surface4', className)}
           size={size}
-          variant="secondary"
+          variant="standard"
         >
           {copied ? <CheckIcon /> : <CopyIcon />}
         </Button>
