@@ -233,6 +233,98 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
     });
   });
 
+  describe('requestContextSchema persistence', () => {
+    it('should persist requestContextSchema through create and resolve', async () => {
+      const agentId = 'test-rcs-create';
+      const schema = {
+        type: 'object',
+        properties: {
+          tenantId: { type: 'string' },
+          role: { type: 'string', enum: ['admin', 'user'] },
+        },
+        required: ['tenantId'],
+      };
+
+      await storage.create({
+        agent: {
+          id: agentId,
+          name: 'RCS Agent',
+          instructions: 'You are a helpful assistant',
+          model: { provider: 'openai', name: 'gpt-4' },
+          requestContextSchema: schema,
+        },
+      });
+
+      const resolved = await storage.getByIdResolved(agentId);
+      expect(resolved?.requestContextSchema).toEqual(schema);
+    });
+
+    it('should persist requestContextSchema through createVersion and getVersion', async () => {
+      const agentId = 'test-rcs-version';
+      await storage.create({
+        agent: {
+          id: agentId,
+          name: 'RCS Agent',
+          instructions: 'You are a helpful assistant',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const schema = {
+        type: 'object',
+        properties: { userId: { type: 'string' } },
+      };
+
+      const versionId = 'rcs-version-2';
+      await storage.createVersion({
+        id: versionId,
+        agentId,
+        versionNumber: 2,
+        name: 'RCS Agent',
+        instructions: 'Updated instructions',
+        model: { provider: 'openai', name: 'gpt-4' },
+        requestContextSchema: schema,
+        changedFields: ['instructions', 'requestContextSchema'],
+        changeMessage: 'Added requestContextSchema',
+      });
+
+      const version = await storage.getVersion(versionId);
+      expect(version?.requestContextSchema).toEqual(schema);
+    });
+
+    it('should detect requestContextSchema as a config field change in update', async () => {
+      const agentId = 'test-rcs-update';
+      await storage.create({
+        agent: {
+          id: agentId,
+          name: 'RCS Agent',
+          instructions: 'You are a helpful assistant',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const versionCountBefore = await storage.countVersions(agentId);
+      expect(versionCountBefore).toBe(1);
+
+      const schema = {
+        type: 'object',
+        properties: { tenantId: { type: 'string' } },
+      };
+
+      await storage.update({
+        id: agentId,
+        requestContextSchema: schema,
+      });
+
+      // Should create new version for config change
+      const versionCountAfter = await storage.countVersions(agentId);
+      expect(versionCountAfter).toBe(2);
+
+      const resolved = await storage.getByIdResolved(agentId);
+      expect(resolved?.requestContextSchema).toEqual(schema);
+    });
+  });
+
   describe('delete', () => {
     it('should cascade delete all versions', async () => {
       const agentId = 'test-delete';
