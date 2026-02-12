@@ -1483,7 +1483,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
 
-      const newStepResults = await workflowsStore?.updateWorkflowResults({
+      await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId: step.step.id,
@@ -1491,11 +1491,21 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
       });
 
-      if (!newStepResults) {
+      // Re-read from storage to get the authoritative state.
+      // This prevents a race condition in parallel step completion where
+      // concurrent branches each only see their own result from the write's
+      // return value (stale read), causing both to return early and the
+      // workflow to hang permanently.
+      const freshSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId,
+      });
+
+      if (!freshSnapshot?.context) {
         return;
       }
 
-      stepResults = newStepResults;
+      stepResults = freshSnapshot.context;
     }
 
     // Update stepResults with current state
@@ -1841,57 +1851,67 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    switch (type) {
-      case 'workflow.cancel':
-        await this.processWorkflowCancel({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.start':
-        await this.processWorkflowStart({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.resume':
-        await this.processWorkflowStart({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.end':
-        await this.processWorkflowEnd({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.step.end':
-        await this.processWorkflowStepEnd({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.step.run':
-        await this.processWorkflowStepRun({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.suspend':
-        await this.processWorkflowSuspend({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      case 'workflow.fail':
-        await this.processWorkflowFail({
-          workflow,
-          ...workflowData,
-        });
-        break;
-      default:
-        break;
+    try {
+      switch (type) {
+        case 'workflow.cancel':
+          await this.processWorkflowCancel({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.start':
+          await this.processWorkflowStart({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.resume':
+          await this.processWorkflowStart({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.end':
+          await this.processWorkflowEnd({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.step.end':
+          await this.processWorkflowStepEnd({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.step.run':
+          await this.processWorkflowStepRun({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.suspend':
+          await this.processWorkflowSuspend({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        case 'workflow.fail':
+          await this.processWorkflowFail({
+            workflow,
+            ...workflowData,
+          });
+          break;
+        default:
+          break;
+      }
+    } catch (e) {
+      this.mastra.getLogger()?.error(`Error processing workflow event ${type} for run ${workflowData.runId}`, e);
+      // Publish workflow.fail so the execution engine's result promise resolves
+      // instead of hanging forever. Guard against workflow.fail itself throwing
+      // to avoid infinite loops.
+      if (type !== 'workflow.fail') {
+        await this.errorWorkflow(workflowData, e instanceof Error ? e : new Error(String(e)));
+      }
     }
 
     try {
