@@ -791,7 +791,7 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
             path = fullSkill?.path ?? '';
 
             // For skills installed via skills.sh, read source info from .meta.json
-            if (path.startsWith(SKILLS_SH_PATH_PREFIX) && workspace.filesystem) {
+            if (path.includes(SKILLS_SH_PATH_PREFIX) && workspace.filesystem) {
               try {
                 const metaPath = `${path}/.meta.json`;
                 const metaContent = await workspace.filesystem.readFile(metaPath);
@@ -1408,9 +1408,15 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       // Refresh discovery cache so the lookup reflects the latest filesystem state
       await workspace.skills?.maybeRefresh({ requestContext });
 
-      // Look up the skill's actual path from discovery (supports glob-discovered skills)
+      // Look up the skill's actual path from discovery (supports glob-discovered skills).
+      // Only use the discovered path if it's under the skills.sh directory to avoid
+      // accidentally deleting a locally-authored skill with the same name.
       const skill = await workspace.skills?.get(safeSkillName);
-      const skillPath = skill?.path ?? `${SKILLS_SH_DIR}/${safeSkillName}`;
+      const discoveredPath = skill?.path;
+      const skillPath =
+        discoveredPath && discoveredPath.includes(SKILLS_SH_PATH_PREFIX)
+          ? discoveredPath
+          : `${SKILLS_SH_DIR}/${safeSkillName}`;
 
       // Check if skill exists on filesystem
       try {
@@ -1421,6 +1427,9 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 
       // Delete the skill directory
       await workspace.filesystem.rmdir(skillPath, { recursive: true });
+
+      // Refresh skills discovery so the removed skill is no longer visible
+      await workspace.skills?.refresh();
 
       return {
         success: true,
