@@ -16,12 +16,10 @@ Added Datasets and Experiments to core. Datasets let you store and version colle
 
 ```ts
 import { Mastra } from '@mastra/core';
-import { DatasetsManager } from '@mastra/core/datasets';
 
 const mastra = new Mastra({ /* ... */ });
-const datasets = new DatasetsManager({ mastra });
 
-const dataset = await datasets.create({ name: 'my-eval-set' });
+const dataset = await mastra.datasets.create({ name: 'my-eval-set' });
 await dataset.addItems([
   { input: { query: 'What is 2+2?' }, groundTruth: { answer: '4' } },
 ]);
