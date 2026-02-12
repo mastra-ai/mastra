@@ -564,8 +564,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     probes?: number;
     hybridConfig?: { semanticWeight?: number; keywordWeight?: number };
   }): Promise<QueryResult[]> {
-    const semanticWeight = hybridConfig?.semanticWeight ?? 0.5;
-    const keywordWeight = hybridConfig?.keywordWeight ?? 0.5;
+    const rawSemantic = Number(hybridConfig?.semanticWeight ?? 0.5);
+    const rawKeyword = Number(hybridConfig?.keywordWeight ?? 0.5);
+    const semanticWeight = Number.isFinite(rawSemantic) ? rawSemantic : 0.5;
+    const keywordWeight = Number.isFinite(rawKeyword) ? rawKeyword : 0.5;
 
     const ftsConfig = this.indexFullTextConfig.get(indexName);
     const language = ftsConfig?.language ?? 'english';
@@ -1377,18 +1379,35 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         ) as has_content;
       `;
 
-      const [dimResult, countResult, indexResult, contentResult] = await Promise.all([
+      // Get the FTS GIN index definition to parse the language config
+      const ftsIndexQuery = `
+        SELECT indexdef FROM pg_indexes
+        WHERE schemaname = $1
+          AND indexname = $2;
+      `;
+
+      const [dimResult, countResult, indexResult, contentResult, ftsIndexResult] = await Promise.all([
         client.query(dimensionQuery, [tableName]),
         client.query(countQuery),
         client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']),
         client.query(contentColumnQuery, [this.schema || 'public', indexName]),
+        client.query(ftsIndexQuery, [this.schema || 'public', `${indexName}_fts_idx`]),
       ]);
 
       const hasFullTextSearch = contentResult.rows[0]?.has_content === true;
 
-      // If FTS is detected but not in cache, add it with default language
+      // If FTS is detected but not in cache, parse the language from the GIN index definition
       if (hasFullTextSearch && !this.indexFullTextConfig.has(indexName)) {
-        this.indexFullTextConfig.set(indexName, { language: 'english' });
+        let ftsLanguage = 'english';
+        const ftsIndexDef = ftsIndexResult.rows[0]?.indexdef;
+        if (ftsIndexDef) {
+          // Parse language from: to_tsvector('spanish'::regconfig, ...)  or  to_tsvector('spanish', ...)
+          const langMatch = ftsIndexDef.match(/to_tsvector\('([a-zA-Z_][a-zA-Z0-9_]*)'/);
+          if (langMatch?.[1]) {
+            ftsLanguage = langMatch[1];
+          }
+        }
+        this.indexFullTextConfig.set(indexName, { language: ftsLanguage });
       }
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
