@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import type { AgentVersionResponse } from '@mastra/client-js';
+import type { AgentInstructionBlock } from '@mastra/core/storage';
 
 import {
   toast,
   useLinkComponent,
   useStoredAgent,
   useStoredAgentMutations,
-  AgentEditMain,
+  AgentEditMainContentBlocks,
   AgentEditSidebar,
   AgentEditLayout,
   useAgentEditForm,
@@ -25,6 +26,7 @@ import {
   Button,
   AlertTitle,
   AgentVersionCombobox,
+  createInstructionBlock,
 } from '@mastra/playground-ui';
 
 // Type for the agent data (inferred from useStoredAgent)
@@ -93,13 +95,51 @@ function CmsAgentsEditForm({
           vector?: string;
           embedder?: string;
           options?: { lastMessages?: number | false; semanticRecall?: boolean; readOnly?: boolean };
+          observationalMemory?:
+            | boolean
+            | {
+                model?: string;
+                scope?: 'resource' | 'thread';
+                shareTokenBudget?: boolean;
+                observation?: {
+                  model?: string;
+                  messageTokens?: number;
+                  maxTokensPerBatch?: number;
+                  bufferTokens?: number | false;
+                  bufferActivation?: number;
+                  blockAfter?: number;
+                };
+                reflection?: {
+                  model?: string;
+                  observationTokens?: number;
+                  blockAfter?: number;
+                  bufferActivation?: number;
+                };
+              };
         }
       | undefined;
+
+    const instructionsRaw = dataSource.instructions;
+    const instructionsString = Array.isArray(instructionsRaw)
+      ? instructionsRaw
+          .map((b: AgentInstructionBlock) => (b.type === 'prompt_block' ? b.content : ''))
+          .filter(Boolean)
+          .join('\n\n')
+      : instructionsRaw || '';
+
+    const instructionBlocks = Array.isArray(instructionsRaw)
+      ? instructionsRaw
+          .filter(
+            (b: AgentInstructionBlock): b is Extract<AgentInstructionBlock, { type: 'prompt_block' }> =>
+              b.type === 'prompt_block',
+          )
+          .map(b => createInstructionBlock(b.content, b.rules))
+      : [createInstructionBlock(instructionsRaw || '')];
 
     return {
       name: dataSource.name || '',
       description: dataSource.description || '',
-      instructions: dataSource.instructions || '',
+      instructions: instructionsString,
       model: {
         provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
         name: (dataSource.model as { provider?: string; name?: string })?.name || '',
@@ -116,8 +156,45 @@ function CmsAgentsEditForm({
             readOnly: memoryData.options.readOnly,
             vector: memoryData.vector,
             embedder: memoryData.embedder,
+            observationalMemory: memoryData.observationalMemory
+              ? (() => {
+                  const om = typeof memoryData.observationalMemory === 'object' ? memoryData.observationalMemory : {};
+                  const splitModel = (id?: string) => {
+                    if (!id) return undefined;
+                    const [p, ...rest] = id.split('/');
+                    const n = rest.join('/');
+                    return p && n ? { provider: p, name: n } : undefined;
+                  };
+                  return {
+                    enabled: true as const,
+                    model: splitModel(om.model),
+                    scope: om.scope,
+                    shareTokenBudget: om.shareTokenBudget,
+                    observation: om.observation
+                      ? {
+                          model: splitModel(om.observation.model),
+                          messageTokens: om.observation.messageTokens,
+                          maxTokensPerBatch: om.observation.maxTokensPerBatch,
+                          bufferTokens: om.observation.bufferTokens,
+                          bufferActivation: om.observation.bufferActivation,
+                          blockAfter: om.observation.blockAfter,
+                        }
+                      : undefined,
+                    reflection: om.reflection
+                      ? {
+                          model: splitModel(om.reflection.model),
+                          observationTokens: om.reflection.observationTokens,
+                          blockAfter: om.reflection.blockAfter,
+                          bufferActivation: om.reflection.bufferActivation,
+                        }
+                      : undefined,
+                  };
+                })()
+              : undefined,
           }
         : undefined,
+      instructionBlocks,
+      variables: dataSource.requestContextSchema as AgentFormValues['variables'],
     };
   }, [agent, versionData, isViewingVersion]);
 
@@ -160,7 +237,11 @@ function CmsAgentsEditForm({
       await updateStoredAgent.mutateAsync({
         name: values.name,
         description: values.description,
-        instructions: values.instructions,
+        instructions: (values.instructionBlocks ?? []).map(block => ({
+          type: block.type,
+          content: block.content,
+          rules: block.rules,
+        })),
         model: values.model,
         tools: Object.keys(codeDefinedTools).length > 0 ? codeDefinedTools : undefined,
         integrationTools: integrationToolIds,
@@ -176,8 +257,59 @@ function CmsAgentsEditForm({
                 semanticRecall: values.memory.semanticRecall,
                 readOnly: values.memory.readOnly,
               },
+              observationalMemory: values.memory.observationalMemory?.enabled
+                ? (() => {
+                    const om = values.memory.observationalMemory;
+                    const joinModel = (m?: { provider?: string; name?: string }) =>
+                      m?.provider && m?.name ? `${m.provider}/${m.name}` : undefined;
+                    const modelId = joinModel(om.model);
+
+                    const obsModelId = joinModel(om.observation?.model);
+                    const observation =
+                      obsModelId ||
+                      om.observation?.messageTokens ||
+                      om.observation?.maxTokensPerBatch ||
+                      om.observation?.bufferTokens !== undefined ||
+                      om.observation?.bufferActivation !== undefined ||
+                      om.observation?.blockAfter !== undefined
+                        ? {
+                            model: obsModelId,
+                            messageTokens: om.observation?.messageTokens,
+                            maxTokensPerBatch: om.observation?.maxTokensPerBatch,
+                            bufferTokens: om.observation?.bufferTokens,
+                            bufferActivation: om.observation?.bufferActivation,
+                            blockAfter: om.observation?.blockAfter,
+                          }
+                        : undefined;
+
+                    const refModelId = joinModel(om.reflection?.model);
+                    const reflection =
+                      refModelId ||
+                      om.reflection?.observationTokens ||
+                      om.reflection?.blockAfter !== undefined ||
+                      om.reflection?.bufferActivation !== undefined
+                        ? {
+                            model: refModelId,
+                            observationTokens: om.reflection?.observationTokens,
+                            blockAfter: om.reflection?.blockAfter,
+                            bufferActivation: om.reflection?.bufferActivation,
+                          }
+                        : undefined;
+
+                    return modelId || om.scope || om.shareTokenBudget || observation || reflection
+                      ? {
+                          model: modelId,
+                          scope: om.scope,
+                          shareTokenBudget: om.shareTokenBudget,
+                          observation,
+                          reflection,
+                        }
+                      : true;
+                  })()
+                : undefined,
             }
           : undefined,
+        requestContextSchema: values.variables as Record<string, unknown> | undefined,
       });
 
       toast.success('Agent updated successfully');
@@ -215,7 +347,7 @@ function CmsAgentsEditForm({
             </div>
           </Alert>
         )}
-        <AgentEditMain form={form} readOnly={readOnly || isViewingVersion} />
+        <AgentEditMainContentBlocks form={form} readOnly={readOnly || isViewingVersion} />
       </form>
     </AgentEditLayout>
   );

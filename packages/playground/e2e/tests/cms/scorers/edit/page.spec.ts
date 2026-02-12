@@ -74,7 +74,7 @@ async function fillScorerFields(
   if (options.instructions !== undefined) {
     const editor = page.locator('.cm-content');
     await editor.click();
-    await page.keyboard.press('Meta+a');
+    await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type(options.instructions);
   }
 }
