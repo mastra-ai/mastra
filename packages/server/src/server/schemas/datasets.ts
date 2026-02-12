@@ -50,6 +50,7 @@ export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),
   version: z.coerce.number().int().optional(), // Optional version filter for snapshot semantics
+  search: z.string().optional(),
 });
 
 // ============================================================================

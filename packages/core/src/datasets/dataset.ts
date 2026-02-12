@@ -187,6 +187,7 @@ export class Dataset {
     version?: number;
     page?: number;
     perPage?: number;
+    search?: string;
   }): Promise<
     | DatasetItem[]
     | { items: DatasetItem[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }
@@ -197,6 +198,7 @@ export class Dataset {
     }
     return store.listItems({
       datasetId: this.id,
+      search: args?.search,
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }

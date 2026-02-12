@@ -65,7 +65,12 @@ interface UseDatasetExperimentResultsParams {
  * Hook to list results for a dataset experiment with optional pagination
  * Polls every 2 seconds while experiment status is 'pending' or 'running'
  */
-export const useDatasetExperimentResults = ({ datasetId, experimentId, pagination, experimentStatus }: UseDatasetExperimentResultsParams) => {
+export const useDatasetExperimentResults = ({
+  datasetId,
+  experimentId,
+  pagination,
+  experimentStatus,
+}: UseDatasetExperimentResultsParams) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset-experiment-results', datasetId, experimentId, pagination],
