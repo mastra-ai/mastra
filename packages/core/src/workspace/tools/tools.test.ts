@@ -97,6 +97,26 @@ describe('createWorkspaceTools', () => {
       expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     });
 
+    it('should create grep tool when filesystem is available', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
+    });
+
+    it('should not create grep tool when no filesystem', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+      });
+
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
+    });
+
     it('should create all tools when all capabilities available', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
@@ -116,6 +136,7 @@ describe('createWorkspaceTools', () => {
       // Search tools
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
       // Sandbox tools
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     });
@@ -674,6 +695,198 @@ describe('createWorkspaceTools', () => {
   });
 
   // ===========================================================================
+  // Grep Tool
+  // ===========================================================================
+  describe('workspace_grep', () => {
+    it('should find basic regex matches across files', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'src', 'main.ts'), 'const foo = 1;\nconst bar = 2;\nconst fooBar = 3;');
+      await fs.writeFile(path.join(tempDir, 'src', 'util.ts'), 'export function foo() {}\nexport function bar() {}');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'foo' });
+
+      expect(result.matchCount).toBe(3);
+      expect(result.fileCount).toBe(2);
+      expect(result.truncated).toBe(false);
+      expect(result.matches[0]).toMatchObject({
+        file: expect.stringContaining('main.ts'),
+        line: 1,
+        content: 'const foo = 1;',
+      });
+    });
+
+    it('should support case-insensitive search', async () => {
+      await fs.writeFile(path.join(tempDir, 'test.ts'), 'Hello World\nhello world\nHELLO WORLD');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const sensitive = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'hello',
+        caseSensitive: true,
+      });
+      expect(sensitive.matchCount).toBe(1);
+
+      const insensitive = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'hello',
+        caseSensitive: false,
+      });
+      expect(insensitive.matchCount).toBe(3);
+    });
+
+    it('should scope search to a subdirectory via path', async () => {
+      await fs.mkdir(path.join(tempDir, 'a'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'b'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'a', 'file.ts'), 'target');
+      await fs.writeFile(path.join(tempDir, 'b', 'file.ts'), 'target');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'target',
+        path: '/a',
+      });
+
+      expect(result.matchCount).toBe(1);
+      expect(result.matches[0].file).toContain('/a/');
+    });
+
+    it('should filter files by glob pattern', async () => {
+      await fs.writeFile(path.join(tempDir, 'app.ts'), 'match here');
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'match here');
+      await fs.writeFile(path.join(tempDir, 'style.css'), 'match here');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'match',
+        glob: '*.ts',
+      });
+
+      expect(result.matchCount).toBe(1);
+      expect(result.matches[0].file).toContain('app.ts');
+    });
+
+    it('should include context lines', async () => {
+      await fs.writeFile(path.join(tempDir, 'ctx.ts'), 'line1\nline2\nTARGET\nline4\nline5');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'TARGET',
+        contextLines: 2,
+      });
+
+      expect(result.matchCount).toBe(1);
+      expect(result.matches[0].context).toBeDefined();
+      expect(result.matches[0].context!.before).toEqual(['line1', 'line2']);
+      expect(result.matches[0].context!.after).toEqual(['line4', 'line5']);
+    });
+
+    it('should truncate at maxResults', async () => {
+      const lines = Array.from({ length: 200 }, (_, i) => `match_${i}`).join('\n');
+      await fs.writeFile(path.join(tempDir, 'big.ts'), lines);
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'match_',
+        maxResults: 10,
+      });
+
+      expect(result.matchCount).toBe(10);
+      expect(result.truncated).toBe(true);
+    });
+
+    it('should return error for invalid regex', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: '[invalid',
+      });
+
+      expect(result.matchCount).toBe(0);
+      expect((result as any).error).toContain('Invalid regex');
+    });
+
+    it('should skip binary/non-text files', async () => {
+      const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      await fs.writeFile(path.join(tempDir, 'image.png'), buffer);
+      await fs.writeFile(path.join(tempDir, 'code.ts'), 'findme');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'findme' });
+
+      expect(result.matchCount).toBe(1);
+      expect(result.matches[0].file).toContain('code.ts');
+    });
+
+    it('should work with empty directories', async () => {
+      await fs.mkdir(path.join(tempDir, 'empty'), { recursive: true });
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'anything',
+        path: '/empty',
+      });
+
+      expect(result.matchCount).toBe(0);
+      expect(result.fileCount).toBe(0);
+      expect(result.truncated).toBe(false);
+    });
+
+    it('should appear when filesystem is available', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
+    });
+
+    it('should not appear when filesystem is absent', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
+    });
+
+    it('should report correct column for match', async () => {
+      await fs.writeFile(path.join(tempDir, 'col.ts'), '    findme here');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'findme' });
+
+      expect(result.matches[0].column).toBe(5);
+    });
+  });
+
+  // ===========================================================================
   // Search Tools
   // ===========================================================================
   describe('workspace_search', () => {
@@ -802,6 +1015,7 @@ describe('createWorkspaceTools', () => {
       // Search tools
       expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
       expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
+      expect(WORKSPACE_TOOLS.SEARCH.GREP).toBe('mastra_workspace_grep');
       // Sandbox tools
       expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
     });

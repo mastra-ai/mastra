@@ -12,6 +12,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { InMemoryFileReadTracker } from '../filesystem';
 import type { FileReadTracker } from '../filesystem';
+import { isTextFile } from '../filesystem/fs-utils';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -539,6 +540,191 @@ Examples:
         execute: async ({ path, recursive }) => {
           await workspace.filesystem!.mkdir(path, { recursive });
           return { success: true, path };
+        },
+      });
+    }
+
+    // Grep tool - regex-based content search across files
+    const grepConfig = resolveToolConfig(toolsConfig, WORKSPACE_TOOLS.SEARCH.GREP);
+    if (grepConfig.enabled) {
+      tools[WORKSPACE_TOOLS.SEARCH.GREP] = createTool({
+        id: WORKSPACE_TOOLS.SEARCH.GREP,
+        description:
+          'Search file contents using a regex pattern. Walks the filesystem and returns matching lines with file paths and line numbers.',
+        requireApproval: grepConfig.requireApproval,
+        inputSchema: z.object({
+          pattern: z.string().describe('Regex pattern to search for'),
+          path: z.string().optional().default('/').describe('Directory to search within (default: "/")'),
+          glob: z.string().optional().describe('File filter pattern (e.g., "*.ts"). Filters files by extension.'),
+          contextLines: z
+            .number()
+            .optional()
+            .default(0)
+            .describe('Number of lines of context to include before and after each match (default: 0)'),
+          maxResults: z
+            .number()
+            .optional()
+            .default(100)
+            .describe('Maximum number of matching lines to return (default: 100)'),
+          caseSensitive: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe('Whether the search is case-sensitive (default: true)'),
+        }),
+        outputSchema: z.object({
+          matches: z.array(
+            z.object({
+              file: z.string().describe('File path'),
+              line: z.number().describe('Line number (1-indexed)'),
+              column: z.number().describe('Column of first match (1-indexed)'),
+              content: z.string().describe('The matching line content'),
+              context: z
+                .object({
+                  before: z.array(z.string()).describe('Lines before the match'),
+                  after: z.array(z.string()).describe('Lines after the match'),
+                })
+                .optional()
+                .describe('Surrounding context lines'),
+            }),
+          ),
+          fileCount: z.number().describe('Number of files with matches'),
+          matchCount: z.number().describe('Total number of matches found'),
+          truncated: z.boolean().describe('Whether results were truncated at maxResults'),
+          error: z.string().optional().describe('Error message if the pattern is invalid'),
+        }),
+        execute: async ({
+          pattern,
+          path: searchPath = '/',
+          glob: globPattern,
+          contextLines = 0,
+          maxResults = 100,
+          caseSensitive = true,
+        }) => {
+          // Validate regex
+          let regex: RegExp;
+          try {
+            regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
+          } catch (e) {
+            return {
+              matches: [],
+              fileCount: 0,
+              matchCount: 0,
+              truncated: false,
+              error: `Invalid regex pattern: ${(e as Error).message}`,
+            };
+          }
+
+          // Extract extension filter from glob pattern (e.g., "*.ts" → ".ts")
+          let extensionFilter: string | undefined;
+          if (globPattern) {
+            const match = globPattern.match(/^\*(\.\w+)$/);
+            if (match) {
+              extensionFilter = match[1];
+            }
+          }
+
+          // Recursively collect files
+          const fs = workspace.filesystem!;
+          const collectFiles = async (dir: string): Promise<string[]> => {
+            const files: string[] = [];
+            let entries;
+            try {
+              entries = await fs.readdir(dir);
+            } catch {
+              return files;
+            }
+
+            for (const entry of entries) {
+              // Skip hidden files/dirs
+              if (entry.name.startsWith('.')) continue;
+
+              const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+              if (entry.type === 'file') {
+                // Skip non-text files
+                if (!isTextFile(entry.name)) continue;
+                // Apply extension filter
+                if (extensionFilter && !entry.name.endsWith(extensionFilter)) continue;
+                files.push(fullPath);
+              } else if (entry.type === 'directory' && !entry.isSymlink) {
+                files.push(...(await collectFiles(fullPath)));
+              }
+            }
+            return files;
+          };
+
+          const filePaths = await collectFiles(searchPath);
+
+          const matches: Array<{
+            file: string;
+            line: number;
+            column: number;
+            content: string;
+            context?: { before: string[]; after: string[] };
+          }> = [];
+          const filesWithMatches = new Set<string>();
+          let truncated = false;
+          const MAX_LINE_LENGTH = 500;
+
+          for (const filePath of filePaths) {
+            if (truncated) break;
+
+            let content: string;
+            try {
+              const raw = await fs.readFile(filePath, { encoding: 'utf-8' });
+              if (typeof raw !== 'string') continue;
+              content = raw;
+            } catch {
+              continue;
+            }
+
+            const lines = content.split('\n');
+
+            for (let i = 0; i < lines.length; i++) {
+              const currentLine = lines[i]!;
+              // Reset regex lastIndex for each line since we use 'g' flag
+              regex.lastIndex = 0;
+              const lineMatch = regex.exec(currentLine);
+              if (!lineMatch) continue;
+
+              filesWithMatches.add(filePath);
+
+              let lineContent = currentLine;
+              if (lineContent.length > MAX_LINE_LENGTH) {
+                lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+              }
+
+              const entry: (typeof matches)[number] = {
+                file: filePath,
+                line: i + 1,
+                column: lineMatch.index + 1,
+                content: lineContent,
+              };
+
+              if (contextLines > 0) {
+                const beforeStart = Math.max(0, i - contextLines);
+                const afterEnd = Math.min(lines.length - 1, i + contextLines);
+                entry.context = {
+                  before: lines.slice(beforeStart, i),
+                  after: lines.slice(i + 1, afterEnd + 1),
+                };
+              }
+
+              matches.push(entry);
+
+              if (matches.length >= maxResults) {
+                truncated = true;
+                break;
+              }
+            }
+          }
+
+          return {
+            matches,
+            fileCount: filesWithMatches.size,
+            matchCount: matches.length,
+            truncated,
+          };
         },
       });
     }
