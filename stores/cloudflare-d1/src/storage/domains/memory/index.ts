@@ -587,7 +587,11 @@ export class MemoryStorageD1 extends MemoryStorage {
       });
 
       // Compute lastMessageAt from the max createdAt of saved messages
-      const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime()))).toISOString();
+      const nowIso = now.toISOString();
+      const maxCreatedAt =
+        messages.length > 0
+          ? new Date(Math.max(...messages.map(m => new Date(m.createdAt ?? now).getTime()))).toISOString()
+          : nowIso;
       // Insert messages and update thread's updatedAt in parallel
       await Promise.all([
         this.#db.batchUpsert({
