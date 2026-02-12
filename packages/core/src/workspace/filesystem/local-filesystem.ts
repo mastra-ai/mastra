@@ -45,6 +45,18 @@ export interface LocalFilesystemOptions extends Pick<MastraFilesystemOptions, 'o
   /**
    * When true, all file operations are restricted to stay within basePath.
    * Prevents path traversal attacks and symlink escapes.
+   *
+   * Path resolution depends on this setting:
+   * - `contained: true` (default) — Absolute paths that fall within basePath are
+   *   used as-is; all other absolute paths are treated as virtual (resolved
+   *   relative to basePath, e.g. `/file.txt` → `basePath/file.txt`). Any
+   *   resolved path that escapes basePath throws a PermissionError.
+   * - `contained: false` — Absolute paths are always treated as real filesystem
+   *   paths. No containment check is applied.
+   *
+   * Set to `false` when the filesystem needs to access paths outside basePath,
+   * such as global skills directories or user home directories.
+   *
    * @default true
    */
   contained?: boolean;
@@ -112,9 +124,28 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private resolvePath(inputPath: string): string {
-    const cleanedPath = inputPath.replace(/^\/+/, '');
-    const normalizedInput = nodePath.normalize(cleanedPath);
-    const absolutePath = nodePath.resolve(this._basePath, normalizedInput);
+    let absolutePath: string;
+
+    if (!this._contained && nodePath.isAbsolute(inputPath)) {
+      // Containment disabled — absolute paths are real filesystem paths
+      absolutePath = nodePath.normalize(inputPath);
+    } else if (this._contained && nodePath.isAbsolute(inputPath)) {
+      // Containment enabled — check if this is a real path within basePath
+      // (e.g. "/Users/foo/project/.mastracode/skills") vs the virtual-root
+      // convention (e.g. "/file.txt" meaning "basePath/file.txt")
+      const normalized = nodePath.normalize(inputPath);
+      const relative = nodePath.relative(this._basePath, normalized);
+      if (!relative.startsWith('..') && !nodePath.isAbsolute(relative)) {
+        absolutePath = normalized;
+      } else {
+        const cleanedPath = inputPath.replace(/^\/+/, '');
+        absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+      }
+    } else {
+      // Relative path — resolve against basePath
+      const cleanedPath = inputPath.replace(/^\/+/, '');
+      absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+    }
 
     if (this._contained) {
       const relative = nodePath.relative(this._basePath, absolutePath);
@@ -591,18 +622,25 @@ export class LocalFilesystem extends MastraFilesystem {
     // LocalFilesystem doesn't clean up files on destroy by default
   }
 
-  getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo<{ basePath: string; contained: boolean }> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
       readOnly: this.readOnly,
-      basePath: this.basePath,
       status: this.status,
+      error: this.error,
+      metadata: {
+        basePath: this.basePath,
+        contained: this._contained,
+      },
     };
   }
 
   getInstructions(): string {
-    return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+    if (this._contained) {
+      return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+    }
+    return `Local filesystem rooted at "${this.basePath}". Containment is disabled so absolute paths access the real filesystem. Use paths relative to "${this.basePath}" (e.g. "foo/bar.txt") for workspace files. Avoid unnecessary listing "/" as it would traverse the entire host filesystem.`;
   }
 }

@@ -1300,6 +1300,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.5',
     'zai-org/GLM-4.7',
     'zai-org/GLM-4.7-Flash',
+    'zai-org/GLM-5',
   ];
   readonly opencode: readonly [
     'big-pickle',
@@ -1903,6 +1904,8 @@ export type ProviderModelsMap = {
     'mistralai/mistral-large-3-675b-instruct-2512',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-thinking',
+    'moonshotai/kimi-k2.5',
+    'moonshotai/kimi-k2.5-thinking',
     'nousresearch/hermes-4-405b:thinking',
     'nvidia/llama-3_3-nemotron-super-49b-v1_5',
     'openai/gpt-oss-120b',
@@ -1914,6 +1917,8 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.5-air:thinking',
     'zai-org/glm-4.7',
     'zai-org/glm-4.7:thinking',
+    'zai-org/glm-5',
+    'zai-org/glm-5:thinking',
   ];
   readonly zai: readonly [
     'glm-4.5',
@@ -1989,6 +1994,7 @@ export type ProviderModelsMap = {
     'meta-llama/Llama-3.1-8B-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct',
     'zai-org/GLM-4.7',
+    'zai-org/GLM-5',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
