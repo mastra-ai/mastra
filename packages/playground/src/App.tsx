@@ -1,3 +1,4 @@
+import { coreFeatures } from '@mastra/core/features';
 import { v4 as uuid } from '@lukeed/uuid';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 
@@ -14,7 +15,6 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
-    MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
   }
 }
@@ -121,7 +121,7 @@ const RootLayout = () => {
 
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
-const isExperimentalFeatures = window.MASTRA_EXPERIMENTAL_FEATURES === 'true';
+const isExperimentalFeatures = coreFeatures.has('datasets');
 
 const routes = [
   {
