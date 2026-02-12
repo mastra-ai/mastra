@@ -60,7 +60,7 @@ import type { WorkspaceStatus } from './types';
  * you passed in.
  */
 export interface WorkspaceConfig<
-  TFs extends WorkspaceFilesystem | undefined = undefined,
+  TFilesystem extends WorkspaceFilesystem | undefined = undefined,
   TSandbox extends WorkspaceSandbox | undefined = undefined,
   TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
 > {
@@ -75,7 +75,7 @@ export interface WorkspaceConfig<
    * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
    * Extend MastraFilesystem for automatic logger integration.
    */
-  filesystem?: TFs;
+  filesystem?: TFilesystem;
 
   /**
    * Sandbox provider instance.
@@ -338,7 +338,7 @@ export interface WorkspaceInfo {
  *
  * The generic type parameters preserve the concrete types of filesystem and
  * sandbox providers so that accessors return the exact type you passed in.
- * TypeScript infers `TFs`, `TSandbox`, and `TMounts` from the constructor
+ * TypeScript infers `TFilesystem`, `TSandbox`, and `TMounts` from the constructor
  * argument — no explicit generic params needed.
  *
  * @example
@@ -362,7 +362,7 @@ export interface WorkspaceInfo {
  * ```
  */
 export class Workspace<
-  TFs extends WorkspaceFilesystem | undefined = undefined,
+  TFilesystem extends WorkspaceFilesystem | undefined = undefined,
   TSandbox extends WorkspaceSandbox | undefined = undefined,
   TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
 > {
@@ -378,7 +378,7 @@ export class Workspace<
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
-  constructor(config: WorkspaceConfig<TFs, TSandbox, TMounts>) {
+  constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
     this.createdAt = new Date();
@@ -482,7 +482,9 @@ export class Workspace<
    * When `mounts` is used instead of `filesystem`, returns `CompositeFilesystem`
    * parameterized with the concrete mount types.
    */
-  get filesystem(): [TMounts] extends [Record<string, WorkspaceFilesystem>] ? CompositeFilesystem<TMounts> : TFs {
+  get filesystem(): [TMounts] extends [Record<string, WorkspaceFilesystem>]
+    ? CompositeFilesystem<TMounts>
+    : TFilesystem {
     return this._fs as any;
   }
 
