@@ -89,8 +89,8 @@ describe('Workspace', () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem });
 
-      // This is a compile-time test — if generics are wrong, this won't compile.
-      // At runtime we verify the instance is preserved.
+      // Type-level checks are in workspace.test-d.ts.
+      // Here we verify the runtime instance is preserved.
       const fs = workspace.filesystem;
       expect(fs).toBe(filesystem);
 
