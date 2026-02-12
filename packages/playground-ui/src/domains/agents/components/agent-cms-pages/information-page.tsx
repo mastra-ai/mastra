@@ -23,7 +23,11 @@ export function InformationPage() {
       <div className="flex flex-col gap-8 p-4">
         {/* Identity Section */}
         <section className="flex flex-col gap-6">
-          <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." icon={<AgentIcon />} />
+          <SectionHeader
+            title="Identity"
+            subtitle="Define your agent's name, description, and model."
+            icon={<AgentIcon />}
+          />
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="agent-name" className="text-xs text-icon5">
@@ -68,9 +72,7 @@ export function InformationPage() {
                 </div>
               )}
             />
-            {errors.model?.provider && (
-              <span className="text-xs text-accent2">{errors.model.provider.message}</span>
-            )}
+            {errors.model?.provider && <span className="text-xs text-accent2">{errors.model.provider.message}</span>}
           </div>
 
           <div className="flex flex-col gap-1.5">

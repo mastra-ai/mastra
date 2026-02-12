@@ -86,8 +86,8 @@ export function VariablesPage() {
               subtitle={
                 <>
                   Variables are dynamic values that change based on the context of each request. Use them in your
-                  agent's instructions with the{' '}
-                  <code className="text-[#F59E0B] font-medium">{'{{variableName}}'}</code> syntax.
+                  agent's instructions with the <code className="text-[#F59E0B] font-medium">{'{{variableName}}'}</code>{' '}
+                  syntax.
                 </>
               }
             />

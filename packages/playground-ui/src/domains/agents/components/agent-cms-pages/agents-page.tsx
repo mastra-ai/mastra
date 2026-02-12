@@ -125,9 +125,7 @@ export function AgentsPage() {
                         name={agent.label}
                         icon={<AgentIcon className="text-accent1" />}
                         description={field.value?.[agent.value]?.description || ''}
-                        onDescriptionChange={
-                          readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)
-                        }
+                        onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)}
                         onRemove={readOnly ? undefined : () => handleRemove(agent.value)}
                       />
                     ))}

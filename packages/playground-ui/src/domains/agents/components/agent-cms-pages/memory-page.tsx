@@ -239,7 +239,12 @@ export function MemoryPage() {
                       control={control}
                       render={({ field }) => (
                         <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                          <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} variant="light" />
+                          <LLMModels
+                            value={field.value ?? ''}
+                            onValueChange={field.onChange}
+                            llmId={omProvider}
+                            variant="light"
+                          />
                         </div>
                       )}
                     />
