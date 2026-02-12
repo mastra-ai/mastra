@@ -113,6 +113,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'auth/auth0', label: 'Auth0' },
+        { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
@@ -632,7 +633,18 @@ const sidebars = {
           id: 'workspace/local-filesystem',
           label: 'LocalFilesystem',
         },
+        {
+          type: 'doc',
+          id: 'workspace/s3-filesystem',
+          label: 'S3Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/gcs-filesystem',
+          label: 'GCSFilesystem',
+        },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
         {
           type: 'doc',
           id: 'workspace/filesystem',

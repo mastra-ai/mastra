@@ -15,7 +15,11 @@ import type {
   ObservationalMemoryRecord,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
-  // UpdateBufferedObservationsInput, // Buffering disabled
+  UpdateBufferedObservationsInput,
+  UpdateBufferedReflectionInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
+  SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
 } from '../../types';
 import { StorageDomain } from '../base';
@@ -200,44 +204,31 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   // ============================================
-  // Buffering Methods (DISABLED - not currently used)
-  // These methods were designed for async observation buffering
-  // which has been disabled. Keeping commented for future reference.
+  // Buffering Methods (for async observation/reflection)
+  // These methods support async buffering when `bufferTokens` is configured.
   // ============================================
 
-  // /**
-  //  * Update buffered observations.
-  //  * Called when observations are created asynchronously.
-  //  */
-  // async updateBufferedObservations(_input: UpdateBufferedObservationsInput): Promise<void> {
-  //   throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
-  // }
+  /**
+   * Update buffered observations.
+   * Called when observations are created asynchronously via `bufferTokens`.
+   */
+  async updateBufferedObservations(_input: UpdateBufferedObservationsInput): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
 
-  // /**
-  //  * Swap buffered observations to active.
-  //  * Atomic operation that:
-  //  * 1. Moves bufferedObservations → activeObservations
-  //  * 2. Moves bufferedMessageIds → observedMessageIds
-  //  * 3. Clears buffered state
-  //  */
-  // async swapBufferedToActive(_id: string): Promise<void> {
-  //   throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
-  // }
-
-  // /**
-  //  * Mark messages as currently being observed (in-flight).
-  //  */
-  // async markMessagesAsBuffering(_id: string, _messageIds: string[]): Promise<void> {
-  //   throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
-  // }
-
-  // /**
-  //  * Mark messages as buffered (observation complete but not active).
-  //  * Moves messageIds from bufferingMessageIds → bufferedMessageIds.
-  //  */
-  // async markMessagesAsBuffered(_id: string, _messageIds: string[]): Promise<void> {
-  //   throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
-  // }
+  /**
+   * Swap buffered observations to active.
+   * Atomic operation that:
+   * 1. Appends bufferedObservations → activeObservations (based on activationRatio)
+   * 2. Moves activated bufferedMessageIds → observedMessageIds
+   * 3. Keeps remaining buffered content if activationRatio < 100
+   * 4. Updates lastObservedAt
+   *
+   * Returns info about what was activated for UI feedback.
+   */
+  async swapBufferedToActive(_input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
 
   /**
    * Create a new generation from a reflection.
@@ -250,20 +241,24 @@ export abstract class MemoryStorage extends StorageDomain {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 
-  // /**
-  //  * Update buffered reflection (async reflection in progress).
-  //  */
-  // async updateBufferedReflection(_id: string, _reflection: string): Promise<void> {
-  //   throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
-  // }
+  /**
+   * Update buffered reflection (async reflection in progress).
+   * Called when reflection runs asynchronously via `bufferTokens`.
+   */
+  async updateBufferedReflection(_input: UpdateBufferedReflectionInput): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
 
-  // /**
-  //  * Swap buffered reflection to active observations.
-  //  * Creates a new generation and makes it the active one.
-  //  */
-  // async swapReflectionToActive(_id: string): Promise<ObservationalMemoryRecord> {
-  //   throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
-  // }
+  /**
+   * Swap buffered reflection to active observations.
+   * Creates a new generation where activeObservations = bufferedReflection + unreflected observations.
+   * The `tokenCount` in input is the processor-computed token count for the combined content.
+   */
+  async swapBufferedReflectionToActive(
+    _input: SwapBufferedReflectionToActiveInput,
+  ): Promise<ObservationalMemoryRecord> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
 
   /**
    * Set the isReflecting flag.
@@ -280,6 +275,25 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
+   * Set the isBufferingObservation flag and update lastBufferedAtTokens.
+   * Called when async observation buffering starts (true) or ends/fails (false).
+   * @param id - Record ID
+   * @param isBuffering - Whether buffering is in progress
+   * @param lastBufferedAtTokens - The pending token count at which this buffer was triggered (only set when isBuffering=true)
+   */
+  async setBufferingObservationFlag(_id: string, _isBuffering: boolean, _lastBufferedAtTokens?: number): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
+   * Set the isBufferingReflection flag.
+   * Called when async reflection buffering starts (true) or ends/fails (false).
+   */
+  async setBufferingReflectionFlag(_id: string, _isBuffering: boolean): Promise<void> {
+    throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
+  }
+
+  /**
    * Clear all observational memory for a thread/resource.
    * Removes all records and history.
    */
@@ -288,11 +302,11 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * Add to the pending message token count.
-   * Called when messages are processed but observation hasn't triggered yet.
-   * This allows accumulating tokens across multiple sessions.
+   * Set the pending message token count.
+   * Called at the end of each OM processing step to persist the current
+   * context window token count so the UI can display it on page load.
    */
-  async addPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
+  async setPendingMessageTokens(_id: string, _tokenCount: number): Promise<void> {
     throw new Error(`Observational memory is not implemented by this storage adapter (${this.constructor.name}).`);
   }
 

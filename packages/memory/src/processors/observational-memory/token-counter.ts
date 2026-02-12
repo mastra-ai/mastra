@@ -92,7 +92,7 @@ export class TokenCounter {
     }
 
     // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
-    return this.encoder.encode(tokenString, 'all').length + overhead;
+    return Math.round(this.encoder.encode(tokenString, 'all').length + overhead);
   }
 
   /**

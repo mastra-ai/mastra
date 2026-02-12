@@ -2395,41 +2395,44 @@ export async function networkLoop<OUTPUT = undefined>({
         });
       }
 
-      // Not complete - inject feedback for next iteration
+      // Format feedback (needed for return value even if not persisted)
       const feedback = formatCompletionFeedback(completionResult, !!maxIterationReached);
 
-      // Save feedback to memory so the next iteration can see it
-      const memoryInstance = await routingAgent.getMemory({ requestContext });
-      await saveMessagesWithProcessors(
-        memoryInstance,
-        [
-          {
-            id: generateId(),
-            type: 'text',
-            role: 'assistant',
-            content: {
-              parts: [
-                {
-                  type: 'text',
-                  text: feedback,
-                },
-              ],
-              format: 2,
-              metadata: {
-                mode: 'network',
-                completionResult: {
-                  passed: completionResult.complete,
+      // Not complete - inject feedback for next iteration (unless suppressed)
+      if (!validation?.suppressFeedback) {
+        // Save feedback to memory so the next iteration can see it
+        const memoryInstance = await routingAgent.getMemory({ requestContext });
+        await saveMessagesWithProcessors(
+          memoryInstance,
+          [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'assistant',
+              content: {
+                parts: [
+                  {
+                    type: 'text',
+                    text: feedback,
+                  },
+                ],
+                format: 2,
+                metadata: {
+                  mode: 'network',
+                  completionResult: {
+                    passed: completionResult.complete,
+                  },
                 },
               },
+              createdAt: new Date(),
+              threadId: inputData.threadId || runIdToUse,
+              resourceId: inputData.threadResourceId || networkName,
             },
-            createdAt: new Date(),
-            threadId: inputData.threadId || runIdToUse,
-            resourceId: inputData.threadResourceId || networkName,
-          },
-        ] as MastraDBMessage[],
-        processorRunner,
-        { requestContext },
-      );
+          ] as MastraDBMessage[],
+          processorRunner,
+          { requestContext },
+        );
+      }
 
       if (isComplete) {
         // Task is complete - use generatedFinalResult if LLM provided one,

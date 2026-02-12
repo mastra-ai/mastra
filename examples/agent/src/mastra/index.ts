@@ -13,6 +13,7 @@ import {
   evalAgent,
   dynamicToolsAgent,
   schemaValidatedAgent,
+  requestContextDemoAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
@@ -64,6 +65,7 @@ const config = {
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
+    requestContextDemoAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
