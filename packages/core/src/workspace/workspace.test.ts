@@ -150,7 +150,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      const content = await workspace.filesystem!.readFile('/test.txt');
+      const content = await workspace.filesystem.readFile('/test.txt');
       expect(content.toString()).toBe('Hello World');
     });
 
@@ -160,7 +160,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      await workspace.filesystem!.writeFile('/test.txt', 'Hello World');
+      await workspace.filesystem.writeFile('/test.txt', 'Hello World');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('Hello World');
@@ -176,7 +176,7 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      const entries = await workspace.filesystem!.readdir('/dir');
+      const entries = await workspace.filesystem.readdir('/dir');
       expect(entries).toHaveLength(1);
       expect(entries[0]?.name).toBe('file.txt');
     });
@@ -189,8 +189,8 @@ describe('Workspace', () => {
       });
       const workspace = new Workspace({ filesystem });
 
-      expect(await workspace.filesystem!.exists('/exists.txt')).toBe(true);
-      expect(await workspace.filesystem!.exists('/notexists.txt')).toBe(false);
+      expect(await workspace.filesystem.exists('/exists.txt')).toBe(true);
+      expect(await workspace.filesystem.exists('/notexists.txt')).toBe(false);
     });
 
     it('should expose filesystem as undefined when not configured', async () => {
@@ -210,7 +210,7 @@ describe('Workspace', () => {
       const workspace = new Workspace({ sandbox });
 
       await workspace.init();
-      const result = await workspace.sandbox!.executeCommand!('echo', ['hello']);
+      const result = await workspace.sandbox.executeCommand('echo', ['hello']);
 
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('hello');
@@ -973,12 +973,12 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem: cfs });
       await workspace.init();
 
-      await workspace.filesystem!.writeFile('/local/doc.txt', 'hello from workspace');
-      const content = await workspace.filesystem!.readFile('/local/doc.txt', { encoding: 'utf-8' });
+      await workspace.filesystem.writeFile('/local/doc.txt', 'hello from workspace');
+      const content = await workspace.filesystem.readFile('/local/doc.txt', { encoding: 'utf-8' });
       expect(content).toBe('hello from workspace');
 
       // Verify isolation — file shouldn't exist in the other mount
-      expect(await workspace.filesystem!.exists('/backup/doc.txt')).toBe(false);
+      expect(await workspace.filesystem.exists('/backup/doc.txt')).toBe(false);
 
       await workspace.destroy();
     });
@@ -992,7 +992,7 @@ Line 3 conclusion`;
       });
       const workspace = new Workspace({ filesystem: cfs });
 
-      const entries = await workspace.filesystem!.readdir('/');
+      const entries = await workspace.filesystem.readdir('/');
       const names = entries.map(e => e.name).sort();
       expect(names).toEqual(['backup', 'local']);
     });
@@ -1007,14 +1007,14 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem: cfs });
       await workspace.init();
 
-      await workspace.filesystem!.writeFile('/local/important.txt', 'critical data');
-      await workspace.filesystem!.copyFile('/local/important.txt', '/backup/important.txt');
+      await workspace.filesystem.writeFile('/local/important.txt', 'critical data');
+      await workspace.filesystem.copyFile('/local/important.txt', '/backup/important.txt');
 
-      const backupContent = await workspace.filesystem!.readFile('/backup/important.txt', { encoding: 'utf-8' });
+      const backupContent = await workspace.filesystem.readFile('/backup/important.txt', { encoding: 'utf-8' });
       expect(backupContent).toBe('critical data');
 
       // Source still exists
-      expect(await workspace.filesystem!.exists('/local/important.txt')).toBe(true);
+      expect(await workspace.filesystem.exists('/local/important.txt')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1093,13 +1093,13 @@ Line 3 conclusion`;
       const workspace = new Workspace({ filesystem: cfs });
       await workspace.init();
 
-      await workspace.filesystem!.writeFile('/local/moveme.txt', 'moving data');
-      await workspace.filesystem!.moveFile('/local/moveme.txt', '/backup/moveme.txt');
+      await workspace.filesystem.writeFile('/local/moveme.txt', 'moving data');
+      await workspace.filesystem.moveFile('/local/moveme.txt', '/backup/moveme.txt');
 
       // Source should be gone
-      expect(await workspace.filesystem!.exists('/local/moveme.txt')).toBe(false);
+      expect(await workspace.filesystem.exists('/local/moveme.txt')).toBe(false);
       // Dest should have the content
-      const content = await workspace.filesystem!.readFile('/backup/moveme.txt', { encoding: 'utf-8' });
+      const content = await workspace.filesystem.readFile('/backup/moveme.txt', { encoding: 'utf-8' });
       expect(content).toBe('moving data');
 
       await workspace.destroy();
@@ -1120,15 +1120,15 @@ Line 3 conclusion`;
         await workspace.init();
 
         // Reads work
-        const content = await workspace.filesystem!.readFile('/ro/protected.txt', { encoding: 'utf-8' });
+        const content = await workspace.filesystem.readFile('/ro/protected.txt', { encoding: 'utf-8' });
         expect(content).toBe('do not modify');
 
         // Writes fail
-        await expect(workspace.filesystem!.writeFile('/ro/new.txt', 'fail')).rejects.toThrow();
+        await expect(workspace.filesystem.writeFile('/ro/new.txt', 'fail')).rejects.toThrow();
 
         // Can still write to the read-write mount
-        await workspace.filesystem!.writeFile('/rw/ok.txt', 'success');
-        expect(await workspace.filesystem!.readFile('/rw/ok.txt', { encoding: 'utf-8' })).toBe('success');
+        await workspace.filesystem.writeFile('/rw/ok.txt', 'success');
+        expect(await workspace.filesystem.readFile('/rw/ok.txt', { encoding: 'utf-8' })).toBe('success');
 
         await workspace.destroy();
       } finally {
@@ -1151,11 +1151,11 @@ Line 3 conclusion`;
       expect(workspace.sandbox).toBe(sandbox);
 
       // Filesystem works
-      await workspace.filesystem!.writeFile('/local/test.txt', 'via composite');
-      expect(await workspace.filesystem!.readFile('/local/test.txt', { encoding: 'utf-8' })).toBe('via composite');
+      await workspace.filesystem.writeFile('/local/test.txt', 'via composite');
+      expect(await workspace.filesystem.readFile('/local/test.txt', { encoding: 'utf-8' })).toBe('via composite');
 
       // Sandbox works — the file written via composite is on disk in tempDirA
-      const result = await workspace.sandbox!.executeCommand!('cat', ['test.txt']);
+      const result = await workspace.sandbox.executeCommand('cat', ['test.txt']);
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('via composite');
 
@@ -1185,26 +1185,26 @@ Line 3 conclusion`;
       await workspace.init();
 
       // Create nested structure in source
-      await workspace.filesystem!.writeFile('/src/project/config.json', '{"key":"value"}');
-      await workspace.filesystem!.writeFile('/src/project/lib/utils.ts', 'export const x = 1;');
+      await workspace.filesystem.writeFile('/src/project/config.json', '{"key":"value"}');
+      await workspace.filesystem.writeFile('/src/project/lib/utils.ts', 'export const x = 1;');
 
       // Pre-create empty files at dest to ensure parent directories exist
       // (cross-mount copyFile doesn't auto-create parent dirs, writeFile does)
-      await workspace.filesystem!.writeFile('/dest/project/config.json', '');
-      await workspace.filesystem!.copyFile('/src/project/config.json', '/dest/project/config.json');
-      await workspace.filesystem!.writeFile('/dest/project/lib/utils.ts', '');
-      await workspace.filesystem!.copyFile('/src/project/lib/utils.ts', '/dest/project/lib/utils.ts');
+      await workspace.filesystem.writeFile('/dest/project/config.json', '');
+      await workspace.filesystem.copyFile('/src/project/config.json', '/dest/project/config.json');
+      await workspace.filesystem.writeFile('/dest/project/lib/utils.ts', '');
+      await workspace.filesystem.copyFile('/src/project/lib/utils.ts', '/dest/project/lib/utils.ts');
 
       // Verify the nested structure was created correctly
-      const config = await workspace.filesystem!.readFile('/dest/project/config.json', { encoding: 'utf-8' });
+      const config = await workspace.filesystem.readFile('/dest/project/config.json', { encoding: 'utf-8' });
       expect(config).toBe('{"key":"value"}');
 
-      const utils = await workspace.filesystem!.readFile('/dest/project/lib/utils.ts', { encoding: 'utf-8' });
+      const utils = await workspace.filesystem.readFile('/dest/project/lib/utils.ts', { encoding: 'utf-8' });
       expect(utils).toBe('export const x = 1;');
 
       // Verify source is untouched
-      expect(await workspace.filesystem!.exists('/src/project/config.json')).toBe(true);
-      expect(await workspace.filesystem!.exists('/src/project/lib/utils.ts')).toBe(true);
+      expect(await workspace.filesystem.exists('/src/project/config.json')).toBe(true);
+      expect(await workspace.filesystem.exists('/src/project/lib/utils.ts')).toBe(true);
 
       await workspace.destroy();
     });
@@ -1243,13 +1243,12 @@ Line 3 conclusion`;
 
       expect(workspace.filesystem).toBeInstanceOf(CompositeFilesystem);
 
-      const composite = workspace.filesystem as CompositeFilesystem;
-      expect(composite.mountPaths.sort()).toEqual(['/a', '/b']);
+      expect(workspace.filesystem.mountPaths.sort()).toEqual(['/a', '/b']);
 
       // Verify operations work through the auto-created composite
-      await workspace.filesystem!.writeFile('/a/test.txt', 'from mount a');
-      expect(await workspace.filesystem!.readFile('/a/test.txt', { encoding: 'utf-8' })).toBe('from mount a');
-      expect(await workspace.filesystem!.exists('/b/test.txt')).toBe(false);
+      await workspace.filesystem.writeFile('/a/test.txt', 'from mount a');
+      expect(await workspace.filesystem.readFile('/a/test.txt', { encoding: 'utf-8' })).toBe('from mount a');
+      expect(await workspace.filesystem.exists('/b/test.txt')).toBe(false);
 
       await workspace.destroy();
     });
