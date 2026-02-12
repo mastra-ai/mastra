@@ -2,6 +2,6 @@
 '@mastra/pg': minor
 ---
 
-Added composite primary key support to the PostgreSQL storage layer. `generateTableSQL` and `createTable` now accept a `compositePrimaryKey` option for tables that require multi-column primary keys (used by dataset item versioning).
+Added datasets and experiments storage implementation for PostgreSQL. Includes dataset CRUD, item versioning with SCD-2, experiment runs with scorer results, and composite primary key support.
 
 **Requires `@mastra/core` >= 1.4.0**
