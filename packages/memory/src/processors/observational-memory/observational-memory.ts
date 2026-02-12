@@ -524,6 +524,34 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
 } as const;
 
 /**
+ * Continuation hint injected after observations to guide the model's behavior.
+ * Prevents the model from awkwardly acknowledging the memory system or treating
+ * the conversation as new after observed messages are removed.
+ */
+export const OBSERVATION_CONTINUATION_HINT = `This message is not from the user, the conversation history grew too long and wouldn't fit in context! Thankfully the entire conversation is stored in your memory observations. Please continue from where the observations left off. Do not refer to your "memory observations" directly, the user doesn't know about them, they are your memories! Just respond naturally as if you're remembering the conversation (you are!). Do not say "Hi there!" or "based on our previous conversation" as if the conversation is just starting, this is not a new conversation. This is an ongoing conversation, keep continuity by responding based on your memory. For example do not say "I understand. I've reviewed my memory observations", or "I remember [...]". Answer naturally following the suggestion from your memory. Note that your memory may contain a suggested first response, which you should follow.
+
+IMPORTANT: this system reminder is NOT from the user. The system placed it here as part of your memory system. This message is part of you remembering your conversation with the user.
+
+NOTE: Any messages following this system reminder are newer than your memories.`;
+
+/**
+ * Preamble that introduces the observations block.
+ * Use before `<observations>`, with instructions after.
+ * Full pattern: `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${obs}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`
+ */
+export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
+
+/**
+ * Instructions that tell the model how to interpret and use observations.
+ * Place AFTER the `<observations>` block so the model sees the data before the rules.
+ */
+export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
+
+KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
+
+PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.`;
+
+/**
  * ObservationalMemory - A three-agent memory system for long conversations.
  *
  * This processor:
@@ -562,6 +590,13 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
  * });
  * ```
  */
+export interface ObserveHooks {
+  onObservationStart?: () => void;
+  onObservationEnd?: () => void;
+  onReflectionStart?: () => void;
+  onReflectionEnd?: () => void;
+}
+
 export class ObservationalMemory implements Processor<'observational-memory'> {
   readonly id = 'observational-memory' as const;
   readonly name = 'Observational Memory';
@@ -708,6 +743,40 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       ObservationalMemory.asyncBufferingOps.delete(obsBufKey);
       ObservationalMemory.asyncBufferingOps.delete(reflBufKey);
       ObservationalMemory.reflectionBufferCycleIds.delete(obsBufKey);
+    }
+  }
+
+  /**
+   * Await any in-flight async buffering operations for a given thread/resource.
+   * Returns once all buffering promises have settled (or after timeout).
+   */
+  static async awaitBuffering(
+    threadId: string | null | undefined,
+    resourceId: string | null | undefined,
+    scope: 'thread' | 'resource',
+    timeoutMs = 30000,
+  ): Promise<void> {
+    const lockKey = scope === 'resource' && resourceId ? `resource:${resourceId}` : `thread:${threadId ?? 'unknown'}`;
+    const obsKey = `obs:${lockKey}`;
+    const reflKey = `refl:${lockKey}`;
+
+    const promises: Promise<void>[] = [];
+    const obsOp = ObservationalMemory.asyncBufferingOps.get(obsKey);
+    if (obsOp) promises.push(obsOp);
+    const reflOp = ObservationalMemory.asyncBufferingOps.get(reflKey);
+    if (reflOp) promises.push(reflOp);
+
+    if (promises.length === 0) {
+      return;
+    }
+
+    try {
+      await Promise.race([
+        Promise.all(promises),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeoutMs)),
+      ]);
+    } catch {
+      // Timeout or error - continue silently
     }
   }
 
@@ -1101,6 +1170,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Wait for any in-flight async buffering operations for the given thread/resource.
+   * Used by server endpoints to block until buffering completes so the UI can get final state.
+   */
+  async waitForBuffering(
+    threadId: string | null | undefined,
+    resourceId: string | null | undefined,
+    timeoutMs = 30000,
+  ): Promise<void> {
+    return ObservationalMemory.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
+  }
+
+  /**
    * Get the full config including resolved model names.
    * This is async because it needs to resolve the model configs.
    */
@@ -1330,6 +1411,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Check whether the unobserved message tokens meet the observation threshold.
+   */
+  private meetsObservationThreshold(opts: {
+    record: ObservationalMemoryRecord;
+    unobservedTokens: number;
+    extraTokens?: number;
+  }): boolean {
+    const { record, unobservedTokens, extraTokens = 0 } = opts;
+    const pendingTokens = (record.pendingMessageTokens ?? 0) + unobservedTokens + extraTokens;
+    const currentObservationTokens = record.observationTokenCount ?? 0;
+    const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    return pendingTokens >= threshold;
+  }
+
+  /**
    * Get or create the Observer agent
    */
   private getObserverAgent(): Agent {
@@ -1380,9 +1476,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Get or create the observational memory record
+   * Get or create the observational memory record.
+   * Returns the existing record if one exists, otherwise initializes a new one.
    */
-  private async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
+  async getOrCreateRecord(threadId: string, resourceId?: string): Promise<ObservationalMemoryRecord> {
     const ids = this.getStorageIds(threadId, resourceId);
     let record = await this.storage.getObservationalMemory(ids.threadId, ids.resourceId);
 
@@ -1685,6 +1782,40 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         }
         return;
       }
+    }
+  }
+
+  /**
+   * Persist a marker to the last assistant message in storage.
+   * Unlike persistMarkerToMessage, this fetches messages directly from the DB
+   * so it works even when no MessageList is available (e.g. async buffering ops).
+   */
+  private async persistMarkerToStorage(
+    marker: { type: string; data: unknown },
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
+    try {
+      const result = await this.storage.listMessages({
+        threadId,
+        perPage: 20,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      const messages = result?.messages ?? [];
+      // Find the last assistant message
+      for (const msg of messages) {
+        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
+          msg.content.parts.push(marker as any);
+          await this.messageHistory.persistMessages({
+            messages: [msg],
+            threadId,
+            resourceId,
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
   }
 
@@ -2295,17 +2426,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     let content = `
-The following observations block contains your memory of past conversations with this user.
+${OBSERVATION_CONTEXT_PROMPT}
 
 <observations>
 ${optimized}
 </observations>
 
-IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
-
-KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
-
-PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.`;
+${OBSERVATION_CONTEXT_INSTRUCTIONS}`;
 
     // Add unobserved context from other threads (resource scope only)
     if (unobservedContextBlocks) {
@@ -2706,16 +2833,22 @@ ${suggestedResponse}
       if (freshUnobservedMessages.length > 0) {
         try {
           if (this.scope === 'resource' && resourceId) {
-            await this.doResourceScopedObservation(
-              freshRecord,
-              threadId,
+            await this.doResourceScopedObservation({
+              record: freshRecord,
+              currentThreadId: threadId,
               resourceId,
-              freshUnobservedMessages,
+              currentThreadMessages: freshUnobservedMessages,
               writer,
               abortSignal,
-            );
+            });
           } else {
-            await this.doSynchronousObservation(freshRecord, threadId, freshUnobservedMessages, writer, abortSignal);
+            await this.doSynchronousObservation({
+              record: freshRecord,
+              threadId,
+              unobservedMessages: freshUnobservedMessages,
+              writer,
+              abortSignal,
+            });
           }
           // Check if observation actually updated lastObservedAt
           updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
@@ -2928,12 +3061,7 @@ ${suggestedResponse}
         parts: [
           {
             type: 'text',
-            text: `<system-reminder>This message is not from the user, the conversation history grew too long and wouldn't fit in context! Thankfully the entire conversation is stored in your memory observations. Please continue from where the observations left off. Do not refer to your "memory observations" directly, the user doesn't know about them, they are your memories! Just respond naturally as if you're remembering the conversation (you are!). Do not say "Hi there!" or "based on our previous conversation" as if the conversation is just starting, this is not a new conversation. This is an ongoing conversation, keep continuity by responding based on your memory. For example do not say "I understand. I've reviewed my memory observations", or "I remember [...]". Answer naturally following the suggestion from your memory. Note that your memory may contain a suggested first response, which you should follow.
-
-IMPORTANT: this system reminder is NOT from the user. The system placed it here as part of your memory system. This message is part of you remembering your conversation with the user.
-
-NOTE: Any messages following this system reminder are newer than your memories.
-</system-reminder>`,
+            text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`,
           },
         ],
       },
@@ -3167,14 +3295,13 @@ NOTE: Any messages following this system reminder are newer than your memories.
             this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
 
             // Check if reflection should be triggered or activated
-            await this.maybeReflect(
+            await this.maybeReflect({
               record,
-              record.observationTokenCount ?? 0,
+              observationTokens: record.observationTokenCount ?? 0,
               threadId,
               writer,
-              undefined,
               messageList,
-            );
+            });
             // Re-fetch record — reflection may have created a new generation with lower obsTokens
             record = await this.getOrCreateRecord(threadId, resourceId);
           }
@@ -3195,7 +3322,7 @@ NOTE: Any messages following this system reminder are newer than your memories.
       const obsTokens = record.observationTokenCount ?? 0;
       if (this.shouldReflect(obsTokens)) {
         omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} over reflectThreshold, triggering reflection`);
-        await this.maybeReflect(record, obsTokens, threadId, writer, undefined, messageList);
+        await this.maybeReflect({ record, observationTokens: obsTokens, threadId, writer, messageList });
         // Re-fetch record after reflection may have created a new generation
         record = await this.getOrCreateRecord(threadId, resourceId);
       } else if (this.isAsyncReflectionEnabled()) {
@@ -3384,6 +3511,9 @@ NOTE: Any messages following this system reminder are newer than your memories.
         },
         currentObservationTokens,
       );
+
+      // Persist the computed token count so the UI can display it on page load
+      this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
     }
 
     return messageList;
@@ -3687,25 +3817,45 @@ ${formattedMessages}
     const newThreadId = threadIdMatch[1]!;
     const newDate = dateMatch[1]!;
 
-    // Look for existing section with same thread ID and date
-    const existingPattern = new RegExp(
-      `<thread id="${newThreadId}">\\s*Date:\\s*${newDate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([\\s\\S]*?)</thread>`,
-    );
-    const existingMatch = existingObservations.match(existingPattern);
+    // Look for existing section with same thread ID and date.
+    // Use string search instead of regex to avoid polynomial backtracking (CodeQL).
+    const threadOpen = `<thread id="${newThreadId}">`;
+    const threadClose = '</thread>';
+    const startIdx = existingObservations.indexOf(threadOpen);
+    let existingSection: string | null = null;
+    let existingSectionStart = -1;
+    let existingSectionEnd = -1;
 
-    if (existingMatch) {
+    if (startIdx !== -1) {
+      const closeIdx = existingObservations.indexOf(threadClose, startIdx);
+      if (closeIdx !== -1) {
+        existingSectionEnd = closeIdx + threadClose.length;
+        existingSectionStart = startIdx;
+        const section = existingObservations.slice(startIdx, existingSectionEnd);
+        // Verify this section contains the matching date
+        if (section.includes(`Date: ${newDate}`) || section.includes(`Date:${newDate}`)) {
+          existingSection = section;
+        }
+      }
+    }
+
+    if (existingSection) {
       // Found existing section with same thread ID and date - merge observations
-      // Extract just the observations from the new section (after the Date: line)
-      const newObsMatch = newThreadSection.match(/<thread id="[^"]+">[\s\S]*?Date:[^\n]*\n([\s\S]*?)\n<\/thread>/);
-      if (newObsMatch && newObsMatch[1]) {
-        const newObsContent = newObsMatch[1].trim();
-        // Insert new observations at the end of the existing section (before </thread>)
-        const mergedSection = existingObservations.replace(existingPattern, match => {
-          // Remove closing </thread>, add new observations, add closing </thread>
-          const withoutClose = match.replace(/<\/thread>$/, '').trimEnd();
-          return `${withoutClose}\n${newObsContent}\n</thread>`;
-        });
-        return mergedSection;
+      // Extract observations from new section: everything after the Date: line, before </thread>
+      const dateLineEnd = newThreadSection.indexOf('\n', newThreadSection.indexOf('Date:'));
+      const newCloseIdx = newThreadSection.lastIndexOf(threadClose);
+      if (dateLineEnd !== -1 && newCloseIdx !== -1) {
+        const newObsContent = newThreadSection.slice(dateLineEnd + 1, newCloseIdx).trim();
+        if (newObsContent) {
+          // Insert new observations at the end of the existing section (before </thread>)
+          const withoutClose = existingSection.slice(0, existingSection.length - threadClose.length).trimEnd();
+          const merged = `${withoutClose}\n${newObsContent}\n${threadClose}`;
+          return (
+            existingObservations.slice(0, existingSectionStart) +
+            merged +
+            existingObservations.slice(existingSectionEnd)
+          );
+        }
       }
     }
 
@@ -3735,13 +3885,15 @@ ${formattedMessages}
   /**
    * Do synchronous observation (fallback when no buffering)
    */
-  private async doSynchronousObservation(
-    record: ObservationalMemoryRecord,
-    threadId: string,
-    unobservedMessages: MastraDBMessage[],
-    writer?: ProcessorStreamWriter,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
+  private async doSynchronousObservation(opts: {
+    record: ObservationalMemoryRecord;
+    threadId: string;
+    unobservedMessages: MastraDBMessage[];
+    writer?: ProcessorStreamWriter;
+    abortSignal?: AbortSignal;
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  }): Promise<void> {
+    const { record, threadId, unobservedMessages, writer, abortSignal, reflectionHooks } = opts;
     // Emit debug event for observation triggered
     this.emitDebugEvent({
       type: 'observation_triggered',
@@ -3923,13 +4075,14 @@ ${formattedMessages}
       });
 
       // Check for reflection
-      await this.maybeReflect(
-        { ...record, activeObservations: newObservations },
-        totalTokenCount,
+      await this.maybeReflect({
+        record: { ...record, activeObservations: newObservations },
+        observationTokens: totalTokenCount,
         threadId,
         writer,
         abortSignal,
-      );
+        reflectionHooks,
+      });
     } catch (error) {
       // Insert FAILED marker on error
       if (lastMessage?.id) {
@@ -4157,6 +4310,7 @@ ${formattedMessages}
           threadId,
         });
         void writer.custom(failedMarker).catch(() => {});
+        await this.persistMarkerToStorage(failedMarker, threadId, freshRecord.resourceId ?? undefined);
       }
       omError('[OM] Async buffered observation failed', error);
     }
@@ -4242,6 +4396,8 @@ ${formattedMessages}
         observations: newObservations,
       });
       void writer.custom(endMarker).catch(() => {});
+      // Persist so the badge state survives page reload even if the stream is already closed
+      await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
     }
   }
 
@@ -4415,7 +4571,7 @@ ${formattedMessages}
 
     // Start the async operation
     const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer)
-      .catch(error => {
+      .catch(async error => {
         // Emit buffering failed marker
         if (writer) {
           const failedMarker = this.createBufferingFailedMarker({
@@ -4428,6 +4584,7 @@ ${formattedMessages}
             threadId: record.threadId ?? '',
           });
           void writer.custom(failedMarker).catch(() => {});
+          await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
         }
         // Log but don't crash - async buffering failure is recoverable
         omError('[OM] Async buffered reflection failed', error);
@@ -4550,6 +4707,8 @@ ${formattedMessages}
         observations: reflectResult.observations,
       });
       void writer.custom(endMarker).catch(() => {});
+      // Persist so the badge state survives page reload even if the stream is already closed
+      await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
   }
 
@@ -4675,14 +4834,16 @@ ${formattedMessages}
    * 3. Only updates lastObservedAt AFTER all threads are observed
    * 4. Only triggers reflection AFTER all threads are observed
    */
-  private async doResourceScopedObservation(
-    record: ObservationalMemoryRecord,
-    currentThreadId: string,
-    resourceId: string,
-    currentThreadMessages: MastraDBMessage[],
-    writer?: ProcessorStreamWriter,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
+  private async doResourceScopedObservation(opts: {
+    record: ObservationalMemoryRecord;
+    currentThreadId: string;
+    resourceId: string;
+    currentThreadMessages: MastraDBMessage[];
+    writer?: ProcessorStreamWriter;
+    abortSignal?: AbortSignal;
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  }): Promise<void> {
+    const { record, currentThreadId, resourceId, currentThreadMessages, writer, abortSignal, reflectionHooks } = opts;
     // Clear debug entries at start of observation cycle
 
     // ════════════════════════════════════════════════════════════
@@ -5114,13 +5275,14 @@ ${formattedMessages}
       }
 
       // Check for reflection AFTER all threads are observed
-      await this.maybeReflect(
-        { ...record, activeObservations: currentObservations },
-        totalTokenCount,
-        currentThreadId,
+      await this.maybeReflect({
+        record: { ...record, activeObservations: currentObservations },
+        observationTokens: totalTokenCount,
+        threadId: currentThreadId,
         writer,
         abortSignal,
-      );
+        reflectionHooks,
+      });
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
       for (const [threadId, msgs] of threadsWithMessages) {
@@ -5217,14 +5379,16 @@ ${formattedMessages}
    * When async buffering is enabled via `bufferTokens`, reflection is triggered
    * in the background at intervals, and activated when the threshold is reached.
    */
-  private async maybeReflect(
-    record: ObservationalMemoryRecord,
-    observationTokens: number,
-    _threadId?: string,
-    writer?: ProcessorStreamWriter,
-    abortSignal?: AbortSignal,
-    messageList?: MessageList,
-  ): Promise<void> {
+  private async maybeReflect(opts: {
+    record: ObservationalMemoryRecord;
+    observationTokens: number;
+    threadId?: string;
+    writer?: ProcessorStreamWriter;
+    abortSignal?: AbortSignal;
+    messageList?: MessageList;
+    reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  }): Promise<void> {
+    const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks } = opts;
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
 
@@ -5289,13 +5453,14 @@ ${formattedMessages}
     // ════════════════════════════════════════════════════════════
     // SYNC PATH: Do synchronous reflection (blocking)
     // ════════════════════════════════════════════════════════════
+    reflectionHooks?.onReflectionStart?.();
     await this.storage.setReflectingFlag(record.id, true);
     registerOp(record.id, 'reflecting');
 
     // Generate unique cycle ID for this reflection
     const cycleId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    const threadId = _threadId ?? 'unknown';
+    const threadId = opts.threadId ?? 'unknown';
 
     // Stream START marker for reflection
     if (writer) {
@@ -5395,41 +5560,88 @@ ${formattedMessages}
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
+      reflectionHooks?.onReflectionEnd?.();
       unregisterOp(record.id, 'reflecting');
     }
   }
 
   /**
    * Manually trigger observation.
+   *
+   * When `messages` is provided, those are used directly (filtered for unobserved)
+   * instead of reading from storage. This allows external systems (e.g., opencode)
+   * to pass conversation messages without duplicating them into Mastra's DB.
    */
-  async observe(threadId: string, resourceId?: string, _prompt?: string): Promise<void> {
+  async observe(opts: {
+    threadId: string;
+    resourceId?: string;
+    messages?: MastraDBMessage[];
+    hooks?: ObserveHooks;
+  }): Promise<void> {
+    const { threadId, resourceId, messages, hooks } = opts;
     const lockKey = this.getLockKey(threadId, resourceId);
+    const reflectionHooks = hooks
+      ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
+      : undefined;
 
     await this.withLock(lockKey, async () => {
       // Re-fetch record inside lock to get latest state
       const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
 
       if (this.scope === 'resource' && resourceId) {
-        // Resource scope: observe all threads with unobserved messages
-        await this.doResourceScopedObservation(
-          freshRecord,
-          threadId,
-          resourceId,
-          [], // no in-flight messages — everything is already in the DB
-        );
+        // Resource scope: check threshold before observing
+        const currentMessages = messages ?? [];
+        if (
+          !this.meetsObservationThreshold({
+            record: freshRecord,
+            unobservedTokens: this.tokenCounter.countMessages(currentMessages),
+          })
+        ) {
+          return;
+        }
+
+        hooks?.onObservationStart?.();
+        try {
+          await this.doResourceScopedObservation({
+            record: freshRecord,
+            currentThreadId: threadId,
+            resourceId,
+            currentThreadMessages: currentMessages,
+            reflectionHooks,
+          });
+        } finally {
+          hooks?.onObservationEnd?.();
+        }
       } else {
-        // Thread scope: observe unobserved messages for this thread
-        const unobservedMessages = await this.loadUnobservedMessages(
-          threadId,
-          resourceId,
-          freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
-        );
+        // Thread scope: use provided messages or load from storage
+        const unobservedMessages = messages
+          ? this.getUnobservedMessages(messages, freshRecord)
+          : await this.loadUnobservedMessages(
+              threadId,
+              resourceId,
+              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+            );
 
         if (unobservedMessages.length === 0) {
           return;
         }
 
-        await this.doSynchronousObservation(freshRecord, threadId, unobservedMessages);
+        // Check token threshold before observing
+        if (
+          !this.meetsObservationThreshold({
+            record: freshRecord,
+            unobservedTokens: this.tokenCounter.countMessages(unobservedMessages),
+          })
+        ) {
+          return;
+        }
+
+        hooks?.onObservationStart?.();
+        try {
+          await this.doSynchronousObservation({ record: freshRecord, threadId, unobservedMessages, reflectionHooks });
+        } finally {
+          hooks?.onObservationEnd?.();
+        }
       }
     });
   }

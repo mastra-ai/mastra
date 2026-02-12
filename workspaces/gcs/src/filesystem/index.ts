@@ -20,8 +20,9 @@ import type {
   FilesystemMountConfig,
   FilesystemIcon,
   ProviderStatus,
+  MastraFilesystemOptions,
 } from '@mastra/core/workspace';
-import { MastraFilesystem, FileNotFoundError } from '@mastra/core/workspace';
+import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
 
 /**
  * GCS mount configuration.
@@ -88,7 +89,7 @@ function getMimeType(path: string): string {
 /**
  * GCS filesystem provider configuration.
  */
-export interface GCSFilesystemOptions {
+export interface GCSFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** GCS bucket name */
@@ -199,7 +200,7 @@ export class GCSFilesystem extends MastraFilesystem {
   private _bucket: Bucket | null = null;
 
   constructor(options: GCSFilesystemOptions) {
-    super({ name: 'GCSFilesystem' });
+    super({ ...options, name: 'GCSFilesystem' });
     this.id = options.id ?? `gcs-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.bucketName = options.bucket;
     this.projectId = options.projectId;
@@ -236,12 +237,18 @@ export class GCSFilesystem extends MastraFilesystem {
   /**
    * Get filesystem info for status reporting.
    */
-  getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo<{
+    bucket: string;
+    endpoint?: string;
+    prefix?: string;
+  }> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
       status: this.status,
+      error: this.error,
+      readOnly: this.readOnly,
       icon: this.icon,
       metadata: {
         bucket: this.bucketName,
@@ -333,9 +340,13 @@ export class GCSFilesystem extends MastraFilesystem {
     }
   }
 
-  async writeFile(path: string, content: FileContent, _options?: WriteOptions): Promise<void> {
+  async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const bucket = await this.getReadyBucket();
     const file = bucket.file(this.toKey(path));
+
+    if (options?.overwrite === false && (await this.exists(path))) {
+      throw new FileExistsError(path);
+    }
 
     const body = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
     const contentType = getMimeType(path);
@@ -386,10 +397,14 @@ export class GCSFilesystem extends MastraFilesystem {
     }
   }
 
-  async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
+  async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const bucket = await this.getReadyBucket();
     const srcFile = bucket.file(this.toKey(src));
     const destFile = bucket.file(this.toKey(dest));
+
+    if (options?.overwrite === false && (await this.exists(dest))) {
+      throw new FileExistsError(dest);
+    }
 
     try {
       await srcFile.copy(destFile);
