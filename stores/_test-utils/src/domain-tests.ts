@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { MemoryStorage, WorkflowsStorage, ScoresStorage, DatasetsStorage, ExperimentsStorage } from '@mastra/core/storage';
+import type {
+  MemoryStorage,
+  WorkflowsStorage,
+  ScoresStorage,
+  DatasetsStorage,
+  ExperimentsStorage,
+} from '@mastra/core/storage';
 
 /**
  * Configuration for the domain-level pre-configured client test factory
