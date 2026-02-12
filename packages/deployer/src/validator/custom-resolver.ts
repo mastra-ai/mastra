@@ -160,16 +160,21 @@ export async function load(
     return { format: 'module', source: cached, shortCircuit: true };
   }
 
-  const source = await readFile(filePath, 'utf-8');
-  const result = await transform(source, {
-    loader: url.endsWith('.tsx') ? 'tsx' : url.endsWith('.mts') ? 'ts' : 'ts',
-    format: 'esm',
-    target: 'node20',
-    sourcemap: 'inline',
-    sourcefile: filePath,
-  });
+  try {
+    const source = await readFile(filePath, 'utf-8');
+    const result = await transform(source, {
+      loader: url.endsWith('.tsx') ? 'tsx' : 'ts',
+      format: 'esm',
+      target: 'node20',
+      sourcemap: 'inline',
+      sourcefile: filePath,
+    });
 
-  transpileCache.set(url, result.code);
+    transpileCache.set(url, result.code);
 
-  return { format: 'module', source: result.code, shortCircuit: true };
+    return { format: 'module', source: result.code, shortCircuit: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`[mastra] Failed to transpile TypeScript file.\n  File: ${filePath}\n  URL: ${url}\n  Error: ${message}`);
+  }
 }
