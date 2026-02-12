@@ -231,12 +231,13 @@ export const LIST_ITEMS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, datasetId, ...params }) => {
     try {
-      const { page, perPage, version } = params;
+      const { page, perPage, version, search } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.listItems({
         page: page ?? 0,
         perPage: perPage ?? 10,
         version,
+        search,
       });
       // When version is specified, result is DatasetItem[] (flat). Otherwise paginated.
       if (Array.isArray(result)) {
