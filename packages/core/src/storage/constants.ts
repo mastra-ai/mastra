@@ -1,6 +1,6 @@
 import { spanRecordSchema } from './domains/observability/types';
 import { buildStorageSchema } from './types';
-import type { StorageColumn } from './types';
+import type { StorageColumn, StorageTableConfig } from './types';
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshot';
 export const TABLE_MESSAGES = 'mastra_messages';
@@ -306,7 +306,6 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   input: { type: 'jsonb', nullable: false },
   output: { type: 'jsonb', nullable: true },
   groundTruth: { type: 'jsonb', nullable: true },
-  latency: { type: 'integer', nullable: false },
   error: { type: 'jsonb', nullable: true },
   startedAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: false },
@@ -392,6 +391,12 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_EXPERIMENTS]: EXPERIMENTS_SCHEMA,
   [TABLE_EXPERIMENT_RESULTS]: EXPERIMENT_RESULTS_SCHEMA,
 };
+
+/**
+ * Table-level config for tables that need composite primary keys or other table-level settings.
+ * Keyed by table name. Tables not listed here use single-column PKs from their schema.
+ */
+export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {};
 
 /**
  * Schema for the observational memory table.

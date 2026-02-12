@@ -22,6 +22,11 @@ export interface StorageColumn {
     column: string;
   };
 }
+
+export interface StorageTableConfig {
+  columns: Record<string, StorageColumn>;
+  compositePrimaryKey?: string[];
+}
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -1453,7 +1458,6 @@ export interface ExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
-  latency: number;
   error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
@@ -1496,7 +1500,6 @@ export interface AddExperimentResultInput {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
-  latency: number;
   error: { message: string; stack?: string; code?: string } | null;
   startedAt: Date;
   completedAt: Date;
