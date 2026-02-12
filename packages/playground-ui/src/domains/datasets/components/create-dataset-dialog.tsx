@@ -107,10 +107,10 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
             />
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleCancel}>
+              <Button type="button" variant="standard" size="default" onClick={handleCancel}>
                 Cancel
               </Button>
-              <Button type="submit" variant="light" disabled={createDataset.isPending || !name.trim()}>
+              <Button type="submit" variant="cta" size="default" disabled={createDataset.isPending || !name.trim()}>
                 {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
               </Button>
             </div>

@@ -11,11 +11,11 @@ export interface DatasetCompareVersionsListProps {
 }
 
 const columns = [
-  { name: 'id', label: 'ID', size: '1fr' },
+  { name: 'id', label: 'ID', size: '10rem' },
   { name: 'versionA', label: 'Version A', size: '13rem' },
   { name: 'versionB', label: 'Version B', size: '13rem' },
-  { name: 'date', label: 'Created', size: '7rem' },
   { name: 'status', label: 'Status', size: '7rem' },
+  { name: 'date', label: 'Created', size: '7rem' },
   { name: 'compare', label: 'Compare', size: '4rem' },
 ];
 
@@ -61,10 +61,22 @@ export function DatasetCompareVersionsList({
                   disabled={status !== 'changed'}
                 >
                   <ItemList.TextCell>{id}</ItemList.TextCell>
-                  <ItemList.TextCell>{formatVersion(itemA)}</ItemList.TextCell>
-                  <ItemList.TextCell>{formatVersion(itemB)}</ItemList.TextCell>
-                  <ItemList.TextCell>{format(createdAt, 'MMM dd')}</ItemList.TextCell>
+                  {status !== 'same' ? (
+                    <>
+                      <ItemList.TextCell className="justify-center flex">
+                        v{itemA?.datasetVersion || ''}
+                      </ItemList.TextCell>
+                      <ItemList.TextCell className="justify-center flex">
+                        v{itemB?.datasetVersion || ''}
+                      </ItemList.TextCell>
+                    </>
+                  ) : (
+                    <ItemList.TextCell className="col-span-2 justify-center flex">
+                      v{itemB?.datasetVersion || ''}
+                    </ItemList.TextCell>
+                  )}
                   <ItemList.TextCell>{status}</ItemList.TextCell>
+                  <ItemList.TextCell>{format(createdAt, 'MMM dd')}</ItemList.TextCell>
                   <ItemList.FlexCell className="justify-center">
                     {status === 'changed' ? (
                       <SearchCodeIcon className="w-5 h-5 opacity-50" />

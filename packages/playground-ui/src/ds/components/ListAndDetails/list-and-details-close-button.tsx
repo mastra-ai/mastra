@@ -13,7 +13,7 @@ export function ListAndDetailsCloseButton({
   label = 'Close',
 }: ListAndDetailsCloseButtonProps): React.JSX.Element {
   return (
-    <Button variant="secondary" size="default" onClick={onClick} aria-label={ariaLabel}>
+    <Button variant="standard" size="default" onClick={onClick} aria-label={ariaLabel}>
       <XIcon />
       {label}
     </Button>

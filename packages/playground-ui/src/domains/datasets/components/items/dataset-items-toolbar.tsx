@@ -43,7 +43,7 @@ function ActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button variant="secondary" size="default" aria-label="Actions menu">
+        <Button variant="standard" size="default" aria-label="Actions menu">
           <ArrowRightIcon /> Select and ...
         </Button>
       </DropdownMenu.Trigger>
@@ -68,6 +68,7 @@ function ActionsMenu({
           <FolderOutput />
           <span>Copy Items to Dataset</span>
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
         <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
           <Trash2 />
           <span>Delete Items</span>
@@ -155,7 +156,7 @@ export function DatasetItemsToolbar({
           </div>
           <ButtonsGroup>
             <ButtonWithTooltip
-              variant="standard"
+              variant="cta"
               size="default"
               disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
               onClick={onExecuteAction}
@@ -176,7 +177,7 @@ export function DatasetItemsToolbar({
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
             </ButtonWithTooltip>
-            <Button variant="secondary" size="default" onClick={onCancelSelection}>
+            <Button variant="standard" size="default" onClick={onCancelSelection}>
               Cancel
             </Button>
           </ButtonsGroup>
@@ -203,12 +204,12 @@ export function DatasetItemsToolbar({
       <ButtonsGroup>
         {!isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
-            <Button variant="secondary" size="default" hasRightSibling={true} onClick={onAddClick}>
+            <Button variant="standard" size="default" onClick={onAddClick}>
               <Plus /> New Item
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Dataset actions menu">
+                <Button variant="standard" size="default" aria-label="Dataset actions menu">
                   <ChevronDownIcon />
                 </Button>
               </DropdownMenu.Trigger>
@@ -236,7 +237,7 @@ export function DatasetItemsToolbar({
         )}
 
         {!isItemPanelOpen && !isVersionsPanelOpen && (
-          <Button variant="secondary" size="default" onClick={onVersionsClick} aria-label="View versions">
+          <Button variant="standard" size="default" onClick={onVersionsClick} aria-label="View versions">
             <History className="w-4 h-4" />
             Versions
           </Button>

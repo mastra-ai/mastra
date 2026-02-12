@@ -9,12 +9,12 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   to?: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
+  // 'tiny' | 'small' | 'default' | 'large' are experimental values do not use it yet
   size?: FormElementSize | 'tiny' | 'small' | 'default' | 'large';
-  variant?: 'default' | 'light' | 'outline' | 'ghost' | 'primary' | 'standard' | 'secondary';
+  // 'cta' and 'standard' are experimental variants do not use it yet
+  variant?: 'default' | 'light' | 'outline' | 'ghost' | 'primary' | 'cta' | 'standard';
   target?: string;
   type?: 'button' | 'submit' | 'reset';
-  hasLeftSibling?: boolean;
-  hasRightSibling?: boolean;
 }
 
 const sizeClasses = {
@@ -38,10 +38,9 @@ const variantClasses = {
     'bg-transparent border-transparent hover:bg-surface2 text-neutral3 hover:text-neutral6 disabled:opacity-50 disabled:cursor-not-allowed',
   primary:
     'bg-accent1 hover:bg-accent1/90 text-surface1 font-medium hover:shadow-glow-accent1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none',
+  cta: 'bg-white/20  hover:text-white hover:bg-white/25 disabled:opacity-50 disabled:cursor-not-allowed active:bg-white/30 text-neutral5',
   standard:
-    'bg-white/20 text-white/80 hover:text-white hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed',
-  secondary:
-    'bg-white/10 text-white/80 hover:text-white hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed',
+    'bg-white/10  hover:text-white hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed active:bg-white/20 text-neutral4',
 };
 
 // Base button styles with transitions
@@ -49,10 +48,13 @@ const baseButtonStyles =
   'border border-border1 px-2 text-ui-md inline-flex items-center justify-center rounded-md transition-all duration-normal ease-out-custom active:scale-[0.98]';
 
 const newBaseButtonStyles = cn(
-  'flex items-center justify-center font-medium rounded-lg gap-[.75em] px-[1em] leading-0 transition-colors duration-200 ease-out-custom ',
+  'flex items-center justify-center rounded-lg gap-[.75em] px-[1em] leading-0 transition-colors duration-200 ease-out-custom ',
   '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-50 [&>svg]:mx-[-.25em]',
   '[&:hover>svg]:opacity-100',
 );
+
+const newFocusStyle =
+  'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1/50 focus-visible:shadow-[inset_0_0_0_4px_rgba(34,197,94,0.25)]';
 
 export function buttonVariants(options?: { variant?: ButtonProps['variant']; size?: ButtonProps['size'] }) {
   const variant = options?.variant || 'default';
@@ -62,24 +64,22 @@ export function buttonVariants(options?: { variant?: ButtonProps['variant']; siz
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, as, size = 'md', variant = 'default', disabled, hasLeftSibling, hasRightSibling, ...props }, ref) => {
+  ({ className, as, size = 'md', variant = 'default', disabled, ...props }, ref) => {
     const Component = as || 'button';
 
-    const isNewButton = ['standard', 'secondary'].includes(variant);
+    const isExperimentalButton = ['cta', 'standard'].includes(variant);
 
     return (
       <Component
         ref={ref}
         disabled={disabled}
         className={cn(
-          isNewButton ? newBaseButtonStyles : baseButtonStyles,
-          formElementFocus,
+          isExperimentalButton ? newBaseButtonStyles : baseButtonStyles,
+          isExperimentalButton ? newFocusStyle : formElementFocus,
           variantClasses[variant],
           sizeClasses[size],
           // Remove active scale when disabled
           disabled && 'active:scale-100',
-          hasLeftSibling && 'rounded-l-none',
-          hasRightSibling && 'rounded-r-none',
           className,
         )}
         {...props}

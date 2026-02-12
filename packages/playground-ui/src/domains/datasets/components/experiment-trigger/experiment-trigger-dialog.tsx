@@ -101,10 +101,10 @@ export function ExperimentTriggerDialog({ datasetId, version, open, onOpenChange
         </DialogBody>
 
         <DialogFooter className="px-6 pt-4">
-          <Button variant="ghost" onClick={handleClose} disabled={isRunning}>
+          <Button variant="standard" size="default" onClick={handleClose} disabled={isRunning}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
+          <Button variant="cta" size="default" onClick={handleRun} disabled={!canRun || isRunning}>
             {isRunning ? (
               <>
                 <Spinner className="w-4 h-4" />

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { ScaleIcon, MoveRightIcon } from 'lucide-react';
+import { ScaleIcon, MoveRightIcon, XIcon } from 'lucide-react';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
 import { ItemList } from '@/ds/components/ItemList';
 import { Checkbox } from '@/ds/components/Checkbox';
@@ -77,17 +77,17 @@ export function DatasetItemVersionsPanel({
   const columnsToRender = isSelectionActive ? versionsListColumnsWithCheckbox : versionsListColumns;
 
   return (
-    <Column>
+    <Column className="min-w-[20rem]">
       {isSelectionActive ? (
-        <Column.Toolbar>
-          <div className="text-sm text-neutral3 flex items-center gap-2">
+        <Column.Toolbar className="grid justify-stretch gap-3 w-full">
+          {/* <div className="text-sm text-neutral3 flex items-center gap-2">
             <Badge className="text-ui-md">{selectedIds.size}</Badge>
             <span>selected</span>
             <MoveRightIcon />
-          </div>
+          </div> */}
           <ButtonsGroup>
             <ButtonWithTooltip
-              variant="standard"
+              variant="cta"
               size="default"
               disabled={selectedIds.size !== 2}
               onClick={handleExecuteCompare}
@@ -95,14 +95,14 @@ export function DatasetItemVersionsPanel({
             >
               Compare Versions
             </ButtonWithTooltip>
-            <Button variant="secondary" size="default" onClick={handleCancelSelection}>
+            <Button variant="standard" size="default" onClick={handleCancelSelection}>
               Cancel
             </Button>
           </ButtonsGroup>
         </Column.Toolbar>
       ) : (
         <Column.Toolbar>
-          <Button variant="secondary" size="default" onClick={handleCompareClick}>
+          <Button variant="standard" size="default" onClick={handleCompareClick}>
             <ScaleIcon /> Compare
           </Button>
         </Column.Toolbar>
@@ -128,17 +128,17 @@ export function DatasetItemVersionsPanel({
             <ItemList.Items>
               {versions?.map((item, index) => {
                 const versionKey = String(item.datasetVersion);
-                const versionDate = typeof item.createdAt === 'string' ? new Date(item.createdAt) : item.createdAt;
+                const createdAtDate = typeof item.createdAt === 'string' ? new Date(item.createdAt) : item.createdAt;
 
-                const entry = {
-                  id: `version-${index}`,
-                  version: `v${item.datasetVersion} — ${format(versionDate, 'MMM d, yyyy HH:mm')}`,
-                  status: item.isLatest ? 'current' : '',
-                };
+                // const entry = {
+                //   id: `version-${index}`,
+                //   version: `v${item.datasetVersion} — ${format(versionDate, 'MMM d, yyyy HH:mm')}`,
+                //   status: item.isLatest ? 'current' : '',
+                // };
 
                 return (
                   <ItemList.Row
-                    key={entry.id}
+                    key={String(item.datasetVersion)}
                     isSelected={isSelectionActive ? selectedIds.has(versionKey) : isVersionSelected(item)}
                   >
                     {isSelectionActive && (
@@ -150,18 +150,33 @@ export function DatasetItemVersionsPanel({
                             e.stopPropagation();
                             handleToggleSelection(versionKey);
                           }}
-                          aria-label={`Select version ${entry.version}`}
+                          aria-label={`Select version ${item.datasetVersion}`}
                         />
                       </ItemList.FlexCell>
                     )}
                     <ItemList.RowButton
-                      entry={entry}
+                      entry={item}
                       columns={versionsListColumns}
                       isSelected={isSelectionActive ? selectedIds.has(versionKey) : isVersionSelected(item)}
                       onClick={() => handleVersionClick(item)}
                       className="py-3"
                     >
-                      <ItemList.TextCell>
+                      <ItemList.FlexCell className="w-full text-neutral flex gap-4 items-baseline text-neutral3">
+                        <strong className="min-w-8">v{item.datasetVersion}</strong>
+                        <em>{createdAtDate ? format(createdAtDate, 'MMM d, yyyy HH:mm') : null}</em>
+                        {item.isLatest && (
+                          <span className="ml-auto inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-cyan-800">
+                            Latest
+                          </span>
+                        )}
+                        {/* <em>{createdAtDate ? format(createdAtDate, 'MMM d, yyyy HH:mm') : null}</em>
+                        {item.isCurrent && (
+                          <span className="ml-auto inline-block text-neutral4 text-xs p-1 px-2 leading-none rounded-sm bg-cyan-800">
+                            Latest
+                          </span>
+                        )} */}
+                      </ItemList.FlexCell>
+                      {/* <ItemList.TextCell>
                         <div className="flex gap-2 items-center justify-between w-full text-ui-sm">
                           {entry.version}
                           {item.isDeleted ? (
@@ -170,7 +185,7 @@ export function DatasetItemVersionsPanel({
                             item.isLatest && <Badge>latest</Badge>
                           )}
                         </div>
-                      </ItemList.TextCell>
+                      </ItemList.TextCell> */}
                     </ItemList.RowButton>
                   </ItemList.Row>
                 );

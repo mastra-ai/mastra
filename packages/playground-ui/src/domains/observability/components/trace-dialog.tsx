@@ -244,7 +244,7 @@ export function TraceDialog({
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
           <Button
-            variant="secondary"
+            variant="standard"
             size="default"
             className="ml-auto mr-8"
             onClick={() => setDatasetDialogOpen(true)}

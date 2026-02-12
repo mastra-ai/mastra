@@ -18,23 +18,15 @@ export function ListAndDetailsNextPrevNavigation({
   return (
     <ButtonsGroup spacing="close">
       <Button
-        variant="secondary"
+        variant="standard"
         size="default"
         onClick={onPrevious}
         disabled={!onPrevious}
         aria-label={previousAriaLabel}
-        hasRightSibling={true}
       >
         <ArrowUpIcon /> Prev
       </Button>
-      <Button
-        variant="secondary"
-        hasLeftSibling={true}
-        size="default"
-        onClick={onNext}
-        disabled={!onNext}
-        aria-label={nextAriaLabel}
-      >
+      <Button variant="standard" size="default" onClick={onNext} disabled={!onNext} aria-label={nextAriaLabel}>
         Next
         <ArrowDownIcon />
       </Button>

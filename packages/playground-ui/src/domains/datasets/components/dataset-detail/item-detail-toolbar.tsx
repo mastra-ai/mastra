@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/ds/components/Button';
-import { Pencil, Trash2, Copy, ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, XIcon, History } from 'lucide-react';
+import { Pencil, Trash2, Copy, ChevronDownIcon, XIcon, History } from 'lucide-react';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { useLinkComponent } from '@/lib/framework';
 import { Column } from '@/ds/components/Columns';
@@ -41,20 +41,20 @@ export function ItemDetailToolbar({
       <ButtonsGroup>
         {!isEditing && (
           <>
-            <Button variant="secondary" size="default" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
+            <Button variant="standard" size="default" href={`/datasets/${datasetId}/items/${itemId}`} as={Link}>
               <History />
               History
             </Button>
 
             <ButtonsGroup spacing="close">
-              <Button variant="secondary" hasRightSibling={true} size="default" onClick={onEdit}>
+              <Button variant="standard" size="default" onClick={onEdit}>
                 <Pencil />
                 Edit
               </Button>
 
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="secondary" hasLeftSibling={true} size="default" aria-label="Actions menu">
+                  <Button variant="standard" size="default" aria-label="Actions menu">
                     <ChevronDownIcon />
                   </Button>
                 </DropdownMenu.Trigger>
@@ -73,7 +73,7 @@ export function ItemDetailToolbar({
           </>
         )}
 
-        <Button variant="secondary" size="default" onClick={onClose} aria-label="Close detail panel">
+        <Button variant="standard" size="default" onClick={onClose} aria-label="Close detail panel">
           <XIcon />
         </Button>
       </ButtonsGroup>

@@ -62,7 +62,7 @@ export function DatasetHeader({
           ) : null}
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
-              <Button variant="secondary" size="default" aria-label="Dataset actions menu">
+              <Button variant="standard" size="default" aria-label="Dataset actions menu">
                 <MoreVertical />
               </Button>
             </DropdownMenu.Trigger>

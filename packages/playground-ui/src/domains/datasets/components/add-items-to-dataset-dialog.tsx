@@ -138,12 +138,13 @@ export function AddItemsToDatasetDialog({
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleCancel} disabled={isAdding}>
+              <Button type="button" variant="standard" size="default" onClick={handleCancel} disabled={isAdding}>
                 Cancel
               </Button>
               <Button
                 type="submit"
-                variant="light"
+                variant="cta"
+                size="default"
                 disabled={isAdding || !selectedDatasetId || availableDatasets.length === 0}
               >
                 {isAdding ? `Adding... (${progress}/${items.length})` : 'Add Items'}

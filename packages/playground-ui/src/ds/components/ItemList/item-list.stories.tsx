@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ItemList } from './item-list';
-import type { ItemListColumn as Column } from './types';
+import type { ItemListColumn } from './types';
 
 const meta: Meta<typeof ItemList> = {
   title: 'DataDisplay/ItemList',
@@ -14,12 +14,12 @@ const meta: Meta<typeof ItemList> = {
 export default meta;
 type Story = StoryObj<typeof ItemList>;
 
-const columns: Column[] = [
+const columns: ItemListColumn[] = [
   { name: 'name', label: 'Name', size: '1fr' },
   { name: 'status', label: 'Status', size: '100px' },
 ];
 
-const agentColumns: Column[] = [
+const agentColumns: ItemListColumn[] = [
   { name: 'name', label: 'Agent', size: '1fr' },
   { name: 'model', label: 'Model', size: '120px' },
   { name: 'status', label: 'Status', size: '100px' },

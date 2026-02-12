@@ -82,7 +82,7 @@ function DatasetPage() {
           activeDatasetVersion={activeVersion}
           onVersionSelect={handleVersionSelect}
           experimentTriggerSlot={
-            <Button variant="standard" size="default" onClick={() => setExperimentDialogOpen(true)}>
+            <Button variant="cta" size="default" onClick={() => setExperimentDialogOpen(true)}>
               <Play />
               {activeVersion != null ? `Run on v${activeVersion}` : 'Run Experiment'}
             </Button>

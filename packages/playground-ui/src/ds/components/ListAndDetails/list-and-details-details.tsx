@@ -116,7 +116,7 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
     >
       <Button
         onClick={onClick}
-        variant="secondary"
+        variant="standard"
         size="large"
         className="w-full h-full px-0"
         aria-label={`Scroll ${direction}`}

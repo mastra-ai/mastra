@@ -67,10 +67,7 @@ export {
   ExperimentResultsListAndDetails,
   type ExperimentResultsListAndDetailsProps,
 } from '../experiments/components/experiment-results-list-and-details';
-export {
-  ExperimentPageHeader,
-  type ExperimentPageHeaderProps,
-} from '../experiments/components/experiment-page-header';
+export { ExperimentPageHeader, type ExperimentPageHeaderProps } from '../experiments/components/experiment-page-header';
 export { ExperimentStats, type ExperimentStatsProps } from '../experiments/components/experiment-stats';
 export {
   ExperimentResultTracePanel,

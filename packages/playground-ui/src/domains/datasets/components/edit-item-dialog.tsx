@@ -103,10 +103,10 @@ export function EditItemDialog({ datasetId, open, onOpenChange, item, onSuccess 
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={handleCancel}>
+              <Button type="button" variant="standard" size="default" onClick={handleCancel}>
                 Cancel
               </Button>
-              <Button type="submit" variant="light" disabled={updateItem.isPending}>
+              <Button type="submit" variant="cta" size="default" disabled={updateItem.isPending}>
                 {updateItem.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
