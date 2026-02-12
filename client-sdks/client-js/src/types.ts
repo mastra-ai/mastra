@@ -1892,7 +1892,7 @@ export interface UpdateDatasetItemParams {
   metadata?: Record<string, unknown>;
 }
 
-export interface BulkAddDatasetItemsParams {
+export interface BatchInsertDatasetItemsParams {
   datasetId: string;
   items: Array<{
     input: unknown;
@@ -1901,7 +1901,7 @@ export interface BulkAddDatasetItemsParams {
   }>;
 }
 
-export interface BulkDeleteDatasetItemsParams {
+export interface BatchDeleteDatasetItemsParams {
   datasetId: string;
   itemIds: string[];
 }

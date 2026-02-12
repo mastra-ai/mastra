@@ -166,7 +166,7 @@ export class Dataset {
     }>;
   }): Promise<DatasetItem[]> {
     const store = await this.#getDatasetsStore();
-    return store.bulkAddItems({
+    return store.batchInsertItems({
       datasetId: this.id,
       items: input.items,
     });
@@ -235,7 +235,7 @@ export class Dataset {
    */
   async deleteItems(args: { itemIds: string[] }): Promise<void> {
     const store = await this.#getDatasetsStore();
-    return store.bulkDeleteItems({ datasetId: this.id, itemIds: args.itemIds });
+    return store.batchDeleteItems({ datasetId: this.id, itemIds: args.itemIds });
   }
 
   // ---------------------------------------------------------------------------

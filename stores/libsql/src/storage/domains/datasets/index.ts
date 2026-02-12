@@ -31,8 +31,8 @@ import type {
   ListDatasetItemsOutput,
   ListDatasetVersionsInput,
   ListDatasetVersionsOutput,
-  BulkAddItemsInput,
-  BulkDeleteItemsInput,
+  BatchInsertItemsInput,
+  BatchDeleteItemsInput,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -844,7 +844,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   // --- Bulk operations (SCD-2 internally) ---
 
-  protected async _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+  protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     try {
       const dataset = await this.getDatasetById({ id: input.datasetId });
       if (!dataset) {
@@ -868,7 +868,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         },
       ];
 
-      const items: { id: string; input: BulkAddItemsInput['items'][number] }[] = [];
+      const items: { id: string; input: BatchInsertItemsInput['items'][number] }[] = [];
       for (const itemInput of input.items) {
         const id = crypto.randomUUID();
         items.push({ id, input: itemInput });
@@ -919,7 +919,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  protected async _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+  protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     try {
       const dataset = await this.getDatasetById({ id: input.datasetId });
       if (!dataset) {

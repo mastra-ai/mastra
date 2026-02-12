@@ -16,8 +16,8 @@ import {
   updateItemBodySchema,
   triggerExperimentBodySchema,
   compareExperimentsBodySchema,
-  bulkAddItemsBodySchema,
-  bulkDeleteItemsBodySchema,
+  batchInsertItemsBodySchema,
+  batchDeleteItemsBodySchema,
   datasetResponseSchema,
   datasetItemResponseSchema,
   experimentResponseSchema,
@@ -29,8 +29,8 @@ import {
   listExperimentResultsResponseSchema,
   listDatasetVersionsResponseSchema,
   listItemVersionsResponseSchema,
-  bulkAddItemsResponseSchema,
-  bulkDeleteItemsResponseSchema,
+  batchInsertItemsResponseSchema,
+  batchDeleteItemsResponseSchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -699,17 +699,17 @@ export const GET_ITEM_VERSION_ROUTE = createRoute({
 });
 
 // ============================================================================
-// Bulk Operations Routes
+// Batch Operations Routes
 // ============================================================================
 
-export const BULK_ADD_ITEMS_ROUTE = createRoute({
+export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
   method: 'POST',
-  path: '/datasets/:datasetId/items/bulk',
+  path: '/datasets/:datasetId/items/batch',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
-  bodySchema: bulkAddItemsBodySchema,
-  responseSchema: bulkAddItemsResponseSchema,
-  summary: 'Bulk add items to dataset',
+  bodySchema: batchInsertItemsBodySchema,
+  responseSchema: batchInsertItemsResponseSchema,
+  summary: 'Batch insert items to dataset',
   description: 'Adds multiple items to the dataset in a single operation (single version entry)',
   tags: ['Datasets'],
   requiresAuth: true,
@@ -732,19 +732,19 @@ export const BULK_ADD_ITEMS_ROUTE = createRoute({
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
       }
-      return handleError(error, 'Error bulk adding items');
+      return handleError(error, 'Error batch inserting items');
     }
   },
 });
 
-export const BULK_DELETE_ITEMS_ROUTE = createRoute({
+export const BATCH_DELETE_ITEMS_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/datasets/:datasetId/items/bulk',
+  path: '/datasets/:datasetId/items/batch',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
-  bodySchema: bulkDeleteItemsBodySchema,
-  responseSchema: bulkDeleteItemsResponseSchema,
-  summary: 'Bulk delete items from dataset',
+  bodySchema: batchDeleteItemsBodySchema,
+  responseSchema: batchDeleteItemsResponseSchema,
+  summary: 'Batch delete items from dataset',
   description: 'Deletes multiple items from the dataset in a single operation (single version entry)',
   tags: ['Datasets'],
   requiresAuth: true,

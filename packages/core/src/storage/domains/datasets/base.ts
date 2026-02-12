@@ -14,8 +14,8 @@ import type {
   ListDatasetItemsOutput,
   ListDatasetVersionsInput,
   ListDatasetVersionsOutput,
-  BulkAddItemsInput,
-  BulkDeleteItemsInput,
+  BatchInsertItemsInput,
+  BatchDeleteItemsInput,
 } from '../../types';
 import { StorageDomain } from '../base';
 
@@ -179,10 +179,10 @@ export abstract class DatasetsStorage extends StorageDomain {
   abstract listDatasetVersions(input: ListDatasetVersionsInput): Promise<ListDatasetVersionsOutput>;
 
   /**
-   * Bulk add items to a dataset. Validates all items against dataset schemas,
+   * Batch insert items to a dataset. Validates all items against dataset schemas,
    * then delegates to subclass which handles SCD-2 versioning internally.
    */
-  async bulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+  async batchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     const dataset = await this.getDatasetById({ id: input.datasetId });
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
@@ -201,25 +201,25 @@ export abstract class DatasetsStorage extends StorageDomain {
       }
     }
 
-    return this._doBulkAddItems(input);
+    return this._doBatchInsertItems(input);
   }
 
-  /** Subclasses implement bulk insert with SCD-2 versioning */
-  protected abstract _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]>;
+  /** Subclasses implement batch insert with SCD-2 versioning */
+  protected abstract _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]>;
 
   /**
-   * Bulk delete items from a dataset. Creates tombstone rows via SCD-2.
-   * Subclasses implement _doBulkDeleteItems which handles SCD-2 versioning internally.
+   * Batch delete items from a dataset. Creates tombstone rows via SCD-2.
+   * Subclasses implement _doBatchDeleteItems which handles SCD-2 versioning internally.
    */
-  async bulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+  async batchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     const dataset = await this.getDatasetById({ id: input.datasetId });
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }
 
-    return this._doBulkDeleteItems(input);
+    return this._doBatchDeleteItems(input);
   }
 
-  /** Subclasses implement bulk delete with SCD-2 versioning */
-  protected abstract _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void>;
+  /** Subclasses implement batch delete with SCD-2 versioning */
+  protected abstract _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void>;
 }

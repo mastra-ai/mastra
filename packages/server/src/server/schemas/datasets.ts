@@ -303,10 +303,10 @@ export const listDatasetVersionsResponseSchema = z.object({
 });
 
 // ============================================================================
-// Bulk Operation Schemas
+// Batch Operation Schemas
 // ============================================================================
 
-export const bulkAddItemsBodySchema = z.object({
+export const batchInsertItemsBodySchema = z.object({
   items: z.array(
     z.object({
       input: z.unknown(),
@@ -316,16 +316,16 @@ export const bulkAddItemsBodySchema = z.object({
   ),
 });
 
-export const bulkAddItemsResponseSchema = z.object({
+export const batchInsertItemsResponseSchema = z.object({
   items: z.array(datasetItemResponseSchema),
   count: z.number(),
 });
 
-export const bulkDeleteItemsBodySchema = z.object({
+export const batchDeleteItemsBodySchema = z.object({
   itemIds: z.array(z.string()),
 });
 
-export const bulkDeleteItemsResponseSchema = z.object({
+export const batchDeleteItemsResponseSchema = z.object({
   success: z.boolean(),
   deletedCount: z.number(),
 });

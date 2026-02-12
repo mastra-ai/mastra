@@ -161,7 +161,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
 
       it('listItems paginates current items', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'list-items' });
-        await datasetsStorage.bulkAddItems({
+        await datasetsStorage.batchInsertItems({
           datasetId: ds.id,
           items: [{ input: { q: 'a' } }, { input: { q: 'b' } }, { input: { q: 'c' } }],
         });
@@ -327,10 +327,10 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         await datasetsStorage.dangerouslyClearAll();
       });
 
-      it('bulkAddItems uses single version bump for all items', async () => {
+      it('batchInsertItems uses single version bump for all items', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'bulk-add' });
 
-        const items = await datasetsStorage.bulkAddItems({
+        const items = await datasetsStorage.batchInsertItems({
           datasetId: ds.id,
           items: [{ input: { q: 'a' } }, { input: { q: 'b' } }, { input: { q: 'c' } }],
         });
@@ -352,7 +352,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(dv.versions).toHaveLength(1);
       });
 
-      it('bulkAddItems validates against inputSchema', async () => {
+      it('batchInsertItems validates against inputSchema', async () => {
         const ds = await datasetsStorage.createDataset({
           name: 'schema-test',
           inputSchema: {
@@ -362,28 +362,28 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
           },
         });
 
-        const validResult = await datasetsStorage.bulkAddItems({
+        const validResult = await datasetsStorage.batchInsertItems({
           datasetId: ds.id,
           items: [{ input: { prompt: 'hello' } }, { input: { prompt: 'world' } }],
         });
         expect(validResult).toHaveLength(2);
 
         await expect(
-          datasetsStorage.bulkAddItems({
+          datasetsStorage.batchInsertItems({
             datasetId: ds.id,
             items: [{ input: { notPrompt: 123 } }],
           }),
         ).rejects.toThrow();
       });
 
-      it('bulkDeleteItems creates tombstones for all items', async () => {
+      it('batchDeleteItems creates tombstones for all items', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'bulk-delete' });
-        const items = await datasetsStorage.bulkAddItems({
+        const items = await datasetsStorage.batchInsertItems({
           datasetId: ds.id,
           items: [{ input: { q: 'x' } }, { input: { q: 'y' } }],
         });
 
-        await datasetsStorage.bulkDeleteItems({
+        await datasetsStorage.batchDeleteItems({
           datasetId: ds.id,
           itemIds: items.map(i => i.id),
         });

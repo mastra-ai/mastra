@@ -32,8 +32,8 @@ import type {
   ListDatasetItemsOutput,
   ListDatasetVersionsInput,
   ListDatasetVersionsOutput,
-  BulkAddItemsInput,
-  BulkDeleteItemsInput,
+  BatchInsertItemsInput,
+  BatchDeleteItemsInput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
@@ -655,7 +655,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  protected async _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+  protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     try {
       const dataset = await this.getDatasetById({ id: input.datasetId });
       if (!dataset) {
@@ -740,7 +740,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  protected async _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+  protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     try {
       const dataset = await this.getDatasetById({ id: input.datasetId });
       if (!dataset) {

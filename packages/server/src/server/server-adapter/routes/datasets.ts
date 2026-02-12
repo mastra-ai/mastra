@@ -17,8 +17,8 @@ import {
   LIST_DATASET_VERSIONS_ROUTE,
   LIST_ITEM_VERSIONS_ROUTE,
   GET_ITEM_VERSION_ROUTE,
-  BULK_ADD_ITEMS_ROUTE,
-  BULK_DELETE_ITEMS_ROUTE,
+  BATCH_INSERT_ITEMS_ROUTE,
+  BATCH_DELETE_ITEMS_ROUTE,
 } from '../../handlers/datasets';
 import type { ServerRoute } from '.';
 
@@ -32,9 +32,9 @@ export const DATASETS_ROUTES: ServerRoute<any, any, any>[] = [
   // Item list and add
   LIST_ITEMS_ROUTE,
   ADD_ITEM_ROUTE,
-  // Bulk operations - MUST come before item-specific routes to avoid /items/bulk matching /items/:itemId
-  BULK_ADD_ITEMS_ROUTE,
-  BULK_DELETE_ITEMS_ROUTE,
+  // Batch operations - MUST come before item-specific routes to avoid /items/batch matching /items/:itemId
+  BATCH_INSERT_ITEMS_ROUTE,
+  BATCH_DELETE_ITEMS_ROUTE,
   // Item-specific CRUD (uses :itemId param)
   GET_ITEM_ROUTE,
   UPDATE_ITEM_ROUTE,

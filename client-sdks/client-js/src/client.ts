@@ -84,8 +84,8 @@ import type {
   UpdateDatasetParams,
   AddDatasetItemParams,
   UpdateDatasetItemParams,
-  BulkAddDatasetItemsParams,
-  BulkDeleteDatasetItemsParams,
+  BatchInsertDatasetItemsParams,
+  BatchDeleteDatasetItemsParams,
   TriggerDatasetExperimentParams,
   CompareExperimentsParams,
   CompareExperimentsResponse,
@@ -1194,24 +1194,26 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Bulk adds items to a dataset
+   * Batch inserts items to a dataset
    */
-  public bulkAddDatasetItems(params: BulkAddDatasetItemsParams): Promise<{ items: DatasetItem[]; count: number }> {
+  public batchInsertDatasetItems(
+    params: BatchInsertDatasetItemsParams,
+  ): Promise<{ items: DatasetItem[]; count: number }> {
     const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/bulk`, {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/batch`, {
       method: 'POST',
       body,
     });
   }
 
   /**
-   * Bulk deletes items from a dataset
+   * Batch deletes items from a dataset
    */
-  public bulkDeleteDatasetItems(
-    params: BulkDeleteDatasetItemsParams,
+  public batchDeleteDatasetItems(
+    params: BatchDeleteDatasetItemsParams,
   ): Promise<{ success: boolean; deletedCount: number }> {
     const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/bulk`, {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/batch`, {
       method: 'DELETE',
       body,
     });

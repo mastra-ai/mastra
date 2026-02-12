@@ -6,8 +6,8 @@ import type {
   AddDatasetItemParams,
   UpdateDatasetItemParams,
   TriggerDatasetExperimentParams,
-  BulkAddDatasetItemsParams,
-  BulkDeleteDatasetItemsParams,
+  BatchInsertDatasetItemsParams,
+  BatchDeleteDatasetItemsParams,
 } from '@mastra/client-js';
 
 /**
@@ -67,9 +67,9 @@ export const useDatasetMutations = () => {
     },
   });
 
-  // Bulk add items using the bulk endpoint
-  const bulkAddItems = useMutation({
-    mutationFn: (params: BulkAddDatasetItemsParams) => client.bulkAddDatasetItems(params),
+  // Batch insert items using the batch endpoint
+  const batchInsertItems = useMutation({
+    mutationFn: (params: BatchInsertDatasetItemsParams) => client.batchInsertDatasetItems(params),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
@@ -77,9 +77,9 @@ export const useDatasetMutations = () => {
     },
   });
 
-  // Bulk delete items using the bulk endpoint
-  const bulkDeleteItems = useMutation({
-    mutationFn: (params: BulkDeleteDatasetItemsParams) => client.bulkDeleteDatasetItems(params),
+  // Batch delete items using the batch endpoint
+  const batchDeleteItems = useMutation({
+    mutationFn: (params: BatchDeleteDatasetItemsParams) => client.batchDeleteDatasetItems(params),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
       queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
@@ -87,10 +87,10 @@ export const useDatasetMutations = () => {
     },
   });
 
-  // @deprecated - use bulkDeleteItems instead
+  // @deprecated - use batchDeleteItems mutation instead
   const deleteItems = useMutation({
     mutationFn: async ({ datasetId, itemIds }: { datasetId: string; itemIds: string[] }) => {
-      return client.bulkDeleteDatasetItems({ datasetId, itemIds });
+      return client.batchDeleteDatasetItems({ datasetId, itemIds });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
@@ -114,8 +114,8 @@ export const useDatasetMutations = () => {
     updateItem,
     deleteItem,
     deleteItems,
-    bulkAddItems,
-    bulkDeleteItems,
+    batchInsertItems,
+    batchDeleteItems,
     triggerExperiment,
   };
 };

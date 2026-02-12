@@ -14,8 +14,8 @@ import type {
   ListDatasetItemsOutput,
   ListDatasetVersionsInput,
   ListDatasetVersionsOutput,
-  BulkAddItemsInput,
-  BulkDeleteItemsInput,
+  BatchInsertItemsInput,
+  BatchDeleteItemsInput,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
 import { DatasetsStorage } from './base';
@@ -399,7 +399,7 @@ export class DatasetsInMemory extends DatasetsStorage {
 
   // --- Bulk operations (SCD-2 internally) ---
 
-  protected async _doBulkAddItems(input: BulkAddItemsInput): Promise<DatasetItem[]> {
+  protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     const dataset = this.db.datasets.get(input.datasetId);
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
@@ -436,7 +436,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return items;
   }
 
-  protected async _doBulkDeleteItems(input: BulkDeleteItemsInput): Promise<void> {
+  protected async _doBatchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
     const dataset = this.db.datasets.get(input.datasetId);
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);

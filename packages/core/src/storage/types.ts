@@ -1528,7 +1528,7 @@ export interface ListDatasetVersionsOutput {
   pagination: PaginationInfo;
 }
 
-export interface BulkAddItemsInput {
+export interface BatchInsertItemsInput {
   datasetId: string;
   items: Array<{
     input: unknown;
@@ -1537,7 +1537,7 @@ export interface BulkAddItemsInput {
   }>;
 }
 
-export interface BulkDeleteItemsInput {
+export interface BatchDeleteItemsInput {
   datasetId: string;
   itemIds: string[];
 }

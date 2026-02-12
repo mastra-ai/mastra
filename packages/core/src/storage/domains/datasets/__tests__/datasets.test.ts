@@ -429,11 +429,11 @@ describe('DatasetsInMemory', () => {
     });
   });
 
-  // ------------- Bulk Operations -------------
-  describe('bulk operations', () => {
-    it('bulkAddItems increments dataset.version once (T3.19)', async () => {
+  // ------------- Batch Operations -------------
+  describe('batch operations', () => {
+    it('batchInsertItems increments dataset.version once (T3.19)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      await storage.bulkAddItems({
+      await storage.batchInsertItems({
         datasetId: dataset.id,
         items: [{ input: { n: 1 } }, { input: { n: 2 } }, { input: { n: 3 } }],
       });
@@ -442,9 +442,9 @@ describe('DatasetsInMemory', () => {
       expect(after?.version).toBe(1); // Only incremented once
     });
 
-    it('bulkAddItems — all items share the same datasetVersion', async () => {
+    it('batchInsertItems — all items share the same datasetVersion', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const items = await storage.bulkAddItems({
+      const items = await storage.batchInsertItems({
         datasetId: dataset.id,
         items: [{ input: { n: 1 } }, { input: { n: 2 } }],
       });
@@ -453,14 +453,14 @@ describe('DatasetsInMemory', () => {
       expect(items[1].datasetVersion).toBe(1);
     });
 
-    it('bulkDeleteItems increments dataset.version once (T3.20)', async () => {
+    it('batchDeleteItems increments dataset.version once (T3.20)', async () => {
       const dataset = await storage.createDataset({ name: 'test' });
-      const items = await storage.bulkAddItems({
+      const items = await storage.batchInsertItems({
         datasetId: dataset.id,
         items: [{ input: { n: 1 } }, { input: { n: 2 } }],
       });
 
-      await storage.bulkDeleteItems({
+      await storage.batchDeleteItems({
         datasetId: dataset.id,
         itemIds: items.map(i => i.id),
       });
