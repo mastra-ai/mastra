@@ -1,13 +1,17 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
+import { PlusIcon } from 'lucide-react';
 
 import { EntityAccordionItem, SectionHeader } from '@/domains/cms';
 import { AgentIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Button } from '@/ds/components/Button';
+import { SideDialog } from '@/ds/components/SideDialog';
 import { useAgents } from '../../hooks/use-agents';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { AgentCreateContent } from '../agent-create-content';
 
 interface EntityConfig {
   description?: string;
@@ -19,6 +23,7 @@ export function AgentsPage() {
   const { data: agents, isLoading } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
   const count = Object.keys(selectedAgents || {}).length;
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const options = useMemo(() => {
     if (!agents) return [];
@@ -43,14 +48,31 @@ export function AgentsPage() {
     return option?.description || '';
   };
 
+  const handleAgentCreated = useCallback(
+    (agent: { id: string }) => {
+      const current = form.getValues('agents') || {};
+      form.setValue('agents', { ...current, [agent.id]: { description: '' } }, { shouldDirty: true });
+      setIsCreateDialogOpen(false);
+    },
+    [form],
+  );
+
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6 p-4">
-        <SectionHeader
-          title="Sub-Agents"
-          subtitle={`Select sub-agents for this agent to delegate to.${count > 0 ? ` (${count} selected)` : ''}`}
-          icon={<AgentIcon className="text-accent1" />}
-        />
+        <div className="flex items-center justify-between">
+          <SectionHeader
+            title="Sub-Agents"
+            subtitle={`Select sub-agents for this agent to delegate to.${count > 0 ? ` (${count} selected)` : ''}`}
+            icon={<AgentIcon className="text-accent1" />}
+          />
+          {!readOnly && (
+            <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+              <PlusIcon className="w-3 h-3 mr-1" />
+              Create
+            </Button>
+          )}
+        </div>
 
         <Controller
           name="agents"
@@ -116,6 +138,17 @@ export function AgentsPage() {
           }}
         />
       </div>
+
+      <SideDialog
+        dialogTitle="Create Sub-Agent"
+        dialogDescription="Create a new agent to use as a sub-agent"
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+      >
+        <SideDialog.Content className="p-0 overflow-hidden">
+          <AgentCreateContent onSuccess={handleAgentCreated} hideSubAgentCreate />
+        </SideDialog.Content>
+      </SideDialog>
     </ScrollArea>
   );
 }

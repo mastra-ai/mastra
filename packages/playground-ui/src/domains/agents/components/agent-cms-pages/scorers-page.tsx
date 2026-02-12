@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
-import { Trash2 } from 'lucide-react';
+import { Trash2, PlusIcon } from 'lucide-react';
 
 import { SectionHeader } from '@/domains/cms';
 import { JudgeIcon, Icon } from '@/ds/icons';
@@ -11,7 +11,10 @@ import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
+import { Button } from '@/ds/components/Button';
+import { SideDialog } from '@/ds/components/SideDialog';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
@@ -31,6 +34,7 @@ export function ScorersPage() {
   const { data: scorers, isLoading } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
   const count = Object.keys(selectedScorers || {}).length;
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const options = useMemo(() => {
     if (!scorers) return [];
@@ -46,14 +50,31 @@ export function ScorersPage() {
     return option?.description || '';
   };
 
+  const handleScorerCreated = useCallback(
+    (scorer: { id: string }) => {
+      const current = form.getValues('scorers') || {};
+      form.setValue('scorers', { ...current, [scorer.id]: { description: '' } }, { shouldDirty: true });
+      setIsCreateDialogOpen(false);
+    },
+    [form],
+  );
+
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6 p-4">
-        <SectionHeader
-          title="Scorers"
-          subtitle={`Configure scorers for evaluating agent responses.${count > 0 ? ` (${count} selected)` : ''}`}
-          icon={<JudgeIcon className="text-neutral3" />}
-        />
+        <div className="flex items-center justify-between">
+          <SectionHeader
+            title="Scorers"
+            subtitle={`Configure scorers for evaluating agent responses.${count > 0 ? ` (${count} selected)` : ''}`}
+            icon={<JudgeIcon className="text-neutral3" />}
+          />
+          {!readOnly && (
+            <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+              <PlusIcon className="w-3 h-3 mr-1" />
+              Create
+            </Button>
+          )}
+        </div>
 
         <Controller
           name="scorers"
@@ -127,6 +148,17 @@ export function ScorersPage() {
           }}
         />
       </div>
+
+      <SideDialog
+        dialogTitle="Create Scorer"
+        dialogDescription="Create a new scorer for evaluating agent responses"
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+      >
+        <SideDialog.Content className="p-0 overflow-hidden">
+          <ScorerCreateContent onSuccess={handleScorerCreated} />
+        </SideDialog.Content>
+      </SideDialog>
     </ScrollArea>
   );
 }
