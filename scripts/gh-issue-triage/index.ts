@@ -88,21 +88,27 @@ async function main() {
 
   if (result.status === 'success') {
     const workflowOutput = result.result;
-    const assignees = workflowOutput.result.assignees
-      .map((assignee: string) => mappings[assignee])
-      .filter(Boolean)
-      .map(assignee => `<@${assignee}>`);
+    const assigneesList = workflowOutput?.assignees ?? workflowOutput?.result?.assignees;
 
-    await tools['slack_slack_post_message'].execute({
-      context: {
-        channel_id: CHANNEL_ID,
-        text: `
+    if (Array.isArray(assigneesList) && assigneesList.length > 0) {
+      const assignees = assigneesList
+        .map((assignee: string) => mappings[assignee])
+        .filter(Boolean)
+        .map(assignee => `<@${assignee}>`);
+
+      if (assignees.length > 0) {
+        await tools['slack_slack_post_message'].execute({
+          context: {
+            channel_id: CHANNEL_ID,
+            text: `
                 New issue assigned to ${assignees.join(', ')}
                 * Title: ${issue.data.title}
                 * Link: https://github.com/${OWNER}/${REPO}/issues/${ISSUE_NUMBER}
             `,
-      },
-    });
+          },
+        });
+      }
+    }
   }
 }
 
