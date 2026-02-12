@@ -1288,9 +1288,9 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async network(
+  async network<OUTPUT>(
     messages: MessageListInput,
-    params: Omit<NetworkStreamParams, 'messages'>,
+    params: Omit<NetworkStreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1300,12 +1300,21 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const processedParams = {
+      ...params,
+      messages,
+      requestContext: parseClientRequestContext(params.requestContext),
+      structuredOutput: params.structuredOutput
+        ? {
+            ...params.structuredOutput,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          }
+        : undefined,
+    };
+
     const response: Response = await this.request(`/agents/${this.agentId}/network`, {
       method: 'POST',
-      body: {
-        messages,
-        ...params,
-      },
+      body: processedParams,
       stream: true,
     });
 
