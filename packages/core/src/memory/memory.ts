@@ -425,6 +425,7 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId,
     title,
     metadata,
+    customColumns,
     memoryConfig,
     saveThread = true,
   }: {
@@ -432,6 +433,8 @@ https://mastra.ai/en/docs/memory/overview`,
     threadId?: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    /** Values for user-defined custom columns declared via schemaExtensions */
+    customColumns?: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
@@ -448,6 +451,7 @@ https://mastra.ai/en/docs/memory/overview`,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata,
+      customColumns,
     };
 
     return saveThread ? this.saveThread({ thread, memoryConfig }) : thread;

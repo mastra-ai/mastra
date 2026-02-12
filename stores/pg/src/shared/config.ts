@@ -1,5 +1,5 @@
 import type { ConnectionOptions } from 'node:tls';
-import type { CreateIndexOptions } from '@mastra/core/storage';
+import type { CreateIndexOptions, SchemaExtensions } from '@mastra/core/storage';
 import type { ClientConfig, Pool, PoolConfig } from 'pg';
 
 /**
@@ -57,6 +57,24 @@ export interface PostgresBaseConfig {
    * ```
    */
   indexes?: CreateIndexOptions[];
+  /**
+   * Custom columns to add to Mastra's built-in database tables.
+   * These columns are created as real database columns during initialization,
+   * enabling proper indexing, type checking, and efficient queries.
+   *
+   * @example
+   * ```typescript
+   * const store = new PostgresStore({
+   *   connectionString: '...',
+   *   schemaExtensions: {
+   *     mastra_threads: {
+   *       organizationId: { type: 'text', nullable: false },
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  schemaExtensions?: SchemaExtensions;
 }
 
 /**

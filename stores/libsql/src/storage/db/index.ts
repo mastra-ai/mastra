@@ -9,7 +9,7 @@ import {
   TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageColumn, SchemaExtensions } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
   buildSelectColumns,
@@ -34,6 +34,11 @@ export type LibSQLDomainBaseConfig = {
    * @default 100
    */
   initialBackoffMs?: number;
+  /**
+   * Optional schema extensions to add custom columns to built-in tables.
+   * Keys are table names, values are column definitions.
+   */
+  schemaExtensions?: SchemaExtensions;
 };
 
 /**
