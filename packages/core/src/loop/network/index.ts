@@ -34,7 +34,13 @@ function schemaToJsonSchema(schema: StandardSchemaWithJSON | unknown): unknown {
     return standardSchemaToJSONSchema(schema);
   }
 
-  throw new Error('We could not convert the schema to a JSONSChema');
+  // Try to convert raw Zod schema (v3 or v4) to StandardSchema
+  try {
+    const standardSchema = toStandardSchema(schema);
+    return standardSchemaToJSONSchema(standardSchema);
+  } catch {
+    throw new Error('We could not convert the schema to a JSONSchema');
+  }
 }
 import type { CompletionConfig, CompletionContext } from './validation';
 import {
