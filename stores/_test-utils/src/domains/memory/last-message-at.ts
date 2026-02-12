@@ -152,9 +152,7 @@ export function createLastMessageAtTests({ storage }: { storage: MastraStorage }
 
       const msgTime = new Date('2025-04-01T08:00:00Z');
       await memoryStorage.saveMessages({
-        messages: [
-          createSampleMessageV2({ threadId: thread.id, createdAt: msgTime, role: 'user' }),
-        ],
+        messages: [createSampleMessageV2({ threadId: thread.id, createdAt: msgTime, role: 'user' })],
       });
 
       const { threads } = await memoryStorage.listThreads({
