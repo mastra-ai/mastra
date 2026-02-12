@@ -353,6 +353,14 @@ export class Mastra<
   }
 
   get datasets(): DatasetsManager {
+    if (process.env.EXPERIMENTAL_FEATURES !== 'true') {
+      throw new MastraError({
+        id: 'DATASETS_FEATURE_NOT_ENABLED',
+        text: 'Datasets require the EXPERIMENTAL_FEATURES=true environment variable.',
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
     if (!this.#datasets) {
       this.#datasets = new DatasetsManager(this);
     }
