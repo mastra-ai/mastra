@@ -2332,11 +2332,11 @@ Ask about preferred brewing method
       createTestMessage('What kind do you prefer?', 'assistant', 'msg-2'),
     ];
 
-    await (om as any).doSynchronousObservation(
-      await storage.getObservationalMemory(null, 'resource-1'),
-      'thread-1',
-      messages,
-    );
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory(null, 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
 
     // Check stored observations have thread tag
     const record = await storage.getObservationalMemory(null, 'resource-1');
@@ -2400,11 +2400,11 @@ Ask about preferred brewing method
 
     const messages = [createTestMessage('I love tea!', 'user', 'msg-1')];
 
-    await (om as any).doSynchronousObservation(
-      await storage.getObservationalMemory('thread-1', 'resource-1'),
-      'thread-1',
-      messages,
-    );
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
 
     const record = await storage.getObservationalMemory('thread-1', 'resource-1');
     // Should NOT have thread tags in thread scope
@@ -2496,10 +2496,10 @@ describe('Locking Behavior', () => {
 
     // Try to reflect — stale isReflecting should be detected and cleared,
     // because no operation is registered in this process's activeOps registry
-    await (om as any).maybeReflect(
-      { ...record, isReflecting: true },
-      500, // Token count exceeds threshold
-    );
+    await (om as any).maybeReflect({
+      record: { ...record, isReflecting: true },
+      observationTokens: 500, // Token count exceeds threshold
+    });
 
     // Reflector SHOULD be called because the stale flag was cleared
     expect(reflectorCalled).toBe(true);
@@ -2656,7 +2656,7 @@ describe('Reflection with Thread Attribution', () => {
     // Trigger reflection via maybeReflect (called internally)
     const record = await storage.getObservationalMemory(null, 'resource-1');
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect(record!, 500);
+    await om.maybeReflect({ record: record!, observationTokens: 500 });
 
     // Get all records for this resource
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -2745,7 +2745,7 @@ describe('Reflection with Thread Attribution', () => {
     // Trigger reflection
     const record = await storage.getObservationalMemory(null, 'resource-1');
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect(record!, 500);
+    await om.maybeReflect({ record: record!, observationTokens: 500 });
 
     // Get the new reflection record
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -2816,7 +2816,7 @@ describe('Reflection with Thread Attribution', () => {
 
     // Trigger reflection
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect(recordBeforeReflection!, 500);
+    await om.maybeReflect({ record: recordBeforeReflection!, observationTokens: 500 });
 
     // Get the new reflection record
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
