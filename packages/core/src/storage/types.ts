@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
@@ -1340,18 +1340,33 @@ function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boo
 
 /**
  * Extract checks array from Zod schema, compatible with both Zod 3 and Zod 4.
- * Zod 3 uses _def.checks, Zod 4 uses _zod.def.checks.
+ * Zod 3 uses _def.checks with {kind: "..."} objects
+ * Zod 4 uses _zod.def.checks with {def: {check: "..."}} objects
  */
 function getZodChecks(schema: z.ZodTypeAny): Array<{ kind: string }> {
   const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.checks) {
-    return schemaAny._zod.def.checks;
+
+  // Zod 4 structure: checks have def.check instead of kind
+  if (schemaAny._zod?.def?.checks && Array.isArray(schemaAny._zod.def.checks)) {
+    return schemaAny._zod.def.checks.map((check: any) => {
+      // For number checks in Zod 4, format:"safeint" means int()
+      if (check.def?.check === 'number_format' && check.def?.format === 'safeint') {
+        return { kind: 'int' };
+      }
+      // For string checks in Zod 4, check type is the format name
+      if (check.def?.check === 'string_format') {
+        return { kind: check.def.format }; // e.g., "uuid", "email", etc.
+      }
+      // Generic mapping: use the check type as kind
+      return { kind: check.def?.check || check.kind || 'unknown' };
+    });
   }
-  // Zod 3 structure
-  if (schemaAny._def?.checks) {
+
+  // Zod 3 structure: checks already have kind property
+  if (schemaAny._def?.checks && Array.isArray(schemaAny._def.checks)) {
     return schemaAny._def.checks;
   }
+
   return [];
 }
 
@@ -1374,7 +1389,8 @@ function zodToStorageType(schema: z.ZodTypeAny): StorageColumnType {
     const checks = getZodChecks(schema);
     return checks.some(c => c.kind === 'int') ? 'integer' : 'float';
   }
-  if (typeName === 'ZodBigInt') {
+  // Both ZodBigInt (v3) and ZodBigint (v4) should map to bigint
+  if (typeName === 'ZodBigInt' || typeName === 'ZodBigint') {
     return 'bigint';
   }
   if (typeName === 'ZodDate') {

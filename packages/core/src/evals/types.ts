@@ -1,5 +1,5 @@
 import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent';
 import { SpanType } from '../observability';
 import type { TracingContext } from '../observability';

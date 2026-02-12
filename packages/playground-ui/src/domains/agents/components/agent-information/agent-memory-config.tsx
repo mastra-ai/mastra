@@ -74,22 +74,25 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
 
     // Observational Memory section
     const omConfig = config.observationalMemory;
-    if (omConfig?.enabled) {
+    if (typeof omConfig === 'object' && omConfig?.enabled) {
       const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
         if (!threshold) return 'Default';
         if (typeof threshold === 'number') return `${threshold.toLocaleString()} tokens`;
         return `${threshold.min.toLocaleString()}-${threshold.max.toLocaleString()} tokens`;
       };
 
+      const observationModel = omConfig.model || omConfig.observation?.model;
+      const reflectionModel = omConfig.model || omConfig.reflection?.model;
+
       sections.push({
         title: 'Observational Memory',
         items: [
           { label: 'Enabled', value: true, badge: 'success' },
-          { label: 'Scope', value: omConfig.scope || 'resource' },
-          { label: 'Message Tokens', value: formatThreshold(omConfig.messageTokens) },
-          { label: 'Observation Tokens', value: formatThreshold(omConfig.observationTokens) },
-          ...(omConfig.observationModel ? [{ label: 'Observation Model', value: omConfig.observationModel }] : []),
-          ...(omConfig.reflectionModel ? [{ label: 'Reflection Model', value: omConfig.reflectionModel }] : []),
+          { label: 'Scope', value: omConfig.scope || 'thread' },
+          { label: 'Message Tokens', value: formatThreshold(omConfig.observation?.messageTokens) },
+          { label: 'Observation Tokens', value: formatThreshold(omConfig.reflection?.observationTokens) },
+          ...(observationModel ? [{ label: 'Observation Model', value: String(observationModel) }] : []),
+          ...(reflectionModel ? [{ label: 'Reflection Model', value: String(reflectionModel) }] : []),
         ],
       });
     }

@@ -1,7 +1,7 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
@@ -27,7 +27,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;

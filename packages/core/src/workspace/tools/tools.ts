@@ -5,7 +5,7 @@
  * These tools provide filesystem and sandbox capabilities.
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -601,7 +601,10 @@ Examples:
         inputSchema: z.object({
           path: z.string().describe('The document ID/path for search results'),
           content: z.string().describe('The text content to index'),
-          metadata: z.record(z.unknown()).optional().describe('Optional metadata to store with the document'),
+          metadata: z
+            .record(z.string(), z.unknown())
+            .optional()
+            .describe('Optional metadata to store with the document'),
         }),
         outputSchema: z.object({
           success: z.boolean(),

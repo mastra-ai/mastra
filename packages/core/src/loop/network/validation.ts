@@ -26,7 +26,7 @@
  * ```
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import type { MastraDBMessage, Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';

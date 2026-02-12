@@ -9,15 +9,16 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { FullOutput, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType } from 'zod';
+import type { ZodType } from 'zod/v3';
 import type {
   GenerateLegacyParams,
   GetAgentResponse,
@@ -32,6 +33,7 @@ import type {
   StreamParamsBaseWithoutMessages,
   CloneAgentParams,
   StoredAgentResponse,
+  StructuredOutputOptions,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
@@ -229,16 +231,17 @@ export class Agent extends BaseResource {
   async generateLegacy(
     params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
+  // Use `any` in overload return types to avoid "Type instantiation is excessively deep" errors
   async generateLegacy<Output extends JSONSchema7 | ZodType>(
     params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, Output, undefined>>;
+  ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
     params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
+  ): Promise<GenerateReturn<any, any, any>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
+    _StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
+  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, any, any>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
@@ -249,13 +252,10 @@ export class Agent extends BaseResource {
 
     const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
-    const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
-      `/agents/${this.agentId}/generate-legacy`,
-      {
-        method: 'POST',
-        body: processedParams,
-      },
-    );
+    const response: GenerateReturn<any, any, any> = await this.request(`/agents/${this.agentId}/generate-legacy`, {
+      method: 'POST',
+      body: processedParams,
+    });
 
     if (response.finishReason === 'tool-calls') {
       const toolCalls = (
@@ -301,8 +301,9 @@ export class Agent extends BaseResource {
               ],
             },
           ];
-          // @ts-expect-error - tool-result message type differs from generate() overload signatures
-          return this.generate({
+          // Recursive call to generateLegacy with updated messages
+          // Using type assertion to handle the complex overload types
+          return (this.generateLegacy as any)({
             ...params,
             messages: updatedMessages,
           });
@@ -313,16 +314,18 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generate(messages: MessageListInput, options?: StreamParamsBaseWithoutMessages): Promise<FullOutput<undefined>>;
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: StreamParamsBaseWithoutMessages<OUTPUT> & {
-      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<FullOutput<OUTPUT>>;
-  async generate<OUTPUT>(
+  async generate(messages: MessageListInput, options?: StreamParamsBaseWithoutMessages): Promise<FullOutput<undefined>>;
+  async generate<OUTPUT = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: StreamParamsBaseWithoutMessages<OUTPUT> & {
+      structuredOutput?: StructuredOutputOptions<OUTPUT>;
+    },
   ): Promise<FullOutput<OUTPUT>> {
     // Handle both new signature (messages, options) and old signature (single param object)
     const params = {
@@ -336,7 +339,7 @@ export class Agent extends BaseResource {
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema),
+            schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
           }
         : undefined,
     };
@@ -1441,7 +1444,7 @@ export class Agent extends BaseResource {
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
-      structuredOutput: SerializableStructuredOutputOptions<OUTPUT>;
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
     },
   ): Promise<
     Response & {
@@ -1452,20 +1455,20 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  // async stream<OUTPUT>(
-  //   messages: MessageListInput,
-  //   streamOptions: Omit<StreamParams<any>, 'messages' | 'structuredOutput'> & {
-  //     structuredOutput?: SerializableStructuredOutputOptions<any>;
-  //   },
-  // ): Promise<
-  //   Response & {
-  //     processDataStream: ({
-  //       onChunk,
-  //     }: {
-  //       onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-  //     }) => Promise<void>;
-  //   }
-  // >;
+  async stream(
+    messages: MessageListInput,
+    streamOptions: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+    },
+  ): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  >;
   async stream(
     messages: MessageListInput,
     streamOptions?: StreamParamsBaseWithoutMessages,
@@ -1480,7 +1483,9 @@ export class Agent extends BaseResource {
   >;
   async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    },
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1495,16 +1500,19 @@ export class Agent extends BaseResource {
       messages: messagesOrParams as MessageListInput,
       ...options,
     } as StreamParams<OUTPUT>;
+
+    let structuredOutput: SerializableStructuredOutputOptions<OUTPUT> | undefined = undefined;
+    if (params.structuredOutput?.schema) {
+      structuredOutput = {
+        ...params.structuredOutput,
+        schema: standardSchemaToJSONSchema(toStandardSchema(params.structuredOutput.schema)),
+      } as SerializableStructuredOutputOptions<OUTPUT>;
+    }
     const processedParams: StreamParams<OUTPUT> = {
       ...params,
       requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
-      structuredOutput: params.structuredOutput
-        ? ({
-            ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema),
-          } as SerializableStructuredOutputOptions<OUTPUT>)
-        : undefined,
+      structuredOutput,
     };
 
     // Create a manually controlled readable stream

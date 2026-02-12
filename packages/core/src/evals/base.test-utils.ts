@@ -1,5 +1,5 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import z from 'zod';
+import z from 'zod/v4';
 import { createScorer } from './base';
 
 // Function-based scorer builders

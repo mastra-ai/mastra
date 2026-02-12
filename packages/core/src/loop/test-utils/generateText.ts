@@ -2,7 +2,7 @@ import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sd
 import type { generateText as generateText5, ToolSet } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
-import z from 'zod';
+import z from 'zod/v4';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
 import {

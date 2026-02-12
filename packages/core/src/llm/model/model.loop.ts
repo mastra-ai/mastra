@@ -10,7 +10,7 @@ import {
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -18,8 +18,8 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType } from '../../observability';
+import type { StandardSchemaWithJSON } from '../../schema/schema';
 import type { MastraModelOutput } from '../../stream/base/output';
-import type { OutputSchema } from '../../stream/base/schema';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
@@ -89,7 +89,12 @@ export class MastraLLMVNext extends MastraBase {
     return this.#firstModel.model;
   }
 
-  private _applySchemaCompat(schema: OutputSchema): Schema {
+  private _applySchemaCompat(schema: StandardSchemaWithJSON | undefined): Schema | undefined {
+    // Guard against undefined schemas - return undefined early
+    if (!schema) {
+      return undefined;
+    }
+
     const model = this.#firstModel.model;
 
     const schemaCompatLayers = [];

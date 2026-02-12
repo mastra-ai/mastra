@@ -64,7 +64,8 @@
     "koa-bodyparser": "^4.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.1.0-0 <2.0.0-0",

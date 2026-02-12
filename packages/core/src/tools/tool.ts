@@ -1,6 +1,7 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { SchemaWithValidation } from '../stream/base/schema';
+import { toStandardSchema } from '../schema/schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema/schema';
 import type { SuspendOptions } from '../workflows';
 import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
@@ -76,22 +77,22 @@ export class Tool<
   description: string;
 
   /** Schema for validating input parameters */
-  inputSchema?: SchemaWithValidation<TSchemaIn>;
+  inputSchema?: StandardSchemaWithJSON<TSchemaIn>;
 
   /** Schema for validating output structure */
-  outputSchema?: SchemaWithValidation<TSchemaOut>;
+  outputSchema?: StandardSchemaWithJSON<TSchemaOut>;
 
   /** Schema for suspend operation data */
-  suspendSchema?: SchemaWithValidation<TSuspendSchema>;
+  suspendSchema?: StandardSchemaWithJSON<TSuspendSchema>;
 
   /** Schema for resume operation data */
-  resumeSchema?: SchemaWithValidation<TResumeSchema>;
+  resumeSchema?: StandardSchemaWithJSON<TResumeSchema>;
 
   /**
    * Schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
 
   /**
    * Tool execution function
@@ -165,10 +166,10 @@ export class Tool<
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>) {
     this.id = opts.id;
     this.description = opts.description;
-    this.inputSchema = opts.inputSchema;
-    this.outputSchema = opts.outputSchema;
-    this.suspendSchema = opts.suspendSchema;
-    this.resumeSchema = opts.resumeSchema;
+    this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
+    this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;
+    this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;
+    this.resumeSchema = opts.resumeSchema ? toStandardSchema(opts.resumeSchema) : undefined;
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
@@ -180,11 +181,11 @@ export class Tool<
     // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (inputData: unknown, context?: any) => {
+      this.execute = async (inputData: TSchemaIn, context?: any) => {
         // Validate input if schema exists
         const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
-          return error as any;
+          return error;
         }
 
         // Validate request context if schema exists
@@ -314,6 +315,7 @@ export class Tool<
 
         // Validate output if schema exists
         const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
+
         if (outputValidation.error) {
           return outputValidation.error as any;
         }

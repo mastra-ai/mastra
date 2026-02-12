@@ -1,8 +1,8 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig } from '../../../memory/types';
+import type { MemoryConfigInternal } from '../../../memory/types';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import { createStep } from '../../../workflows';
@@ -26,7 +26,7 @@ interface StreamStepOptions {
   toolCallId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   resourceId?: string;
   autoResumeSuspendedTools?: boolean;
