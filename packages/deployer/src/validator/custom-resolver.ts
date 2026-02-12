@@ -136,7 +136,12 @@ export async function load(
   if (transpileConfig === null) {
     const configPath = process.env.MASTRA_TRANSPILE_CONFIG;
     if (configPath && existsSync(configPath)) {
-      transpileConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+      try {
+        transpileConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+      } catch (err) {
+        console.warn(`[mastra] Failed to parse transpile config at ${configPath}:`, err);
+        transpileConfig = { packages: [] };
+      }
     } else {
       transpileConfig = { packages: [] };
     }
