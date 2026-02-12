@@ -3,6 +3,7 @@ export type {
   MastraEditorConfig,
   GetByIdOptions,
   IEditorAgentNamespace,
+  IEditorMCPNamespace,
   IEditorPromptNamespace,
   IEditorScorerNamespace,
 } from './types';

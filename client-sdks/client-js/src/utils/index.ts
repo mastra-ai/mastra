@@ -126,7 +126,11 @@ export function parseClientRequestContext(requestContext?: RequestContext | Reco
 
 export function base64RequestContext(requestContext?: Record<string, any>): string | undefined {
   if (requestContext) {
-    return btoa(JSON.stringify(requestContext));
+    // Encode as UTF-8 bytes first so non-Latin1 characters (e.g. CJK, em-dashes)
+    // don't cause btoa() to throw InvalidCharacterError.
+    // Server-side decode already uses Buffer.from(str, 'base64').toString('utf-8').
+    const bytes = new TextEncoder().encode(JSON.stringify(requestContext));
+    return btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
   }
   return undefined;
 }

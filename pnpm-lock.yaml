@@ -1410,7 +1410,7 @@ importers:
         version: link:../mastra
       langsmith:
         specifier: '>=0.3.79'
-        version: 0.3.81(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@5.23.2(ws@8.19.0)(zod@3.25.76))
+        version: 0.3.81(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@3.25.76))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.35
@@ -2213,8 +2213,8 @@ importers:
         specifier: workspace:^
         version: link:../loggers
       commander:
-        specifier: ^14.0.2
-        version: 14.0.2
+        specifier: ^14.0.3
+        version: 14.0.3
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -2263,7 +2263,7 @@ importers:
     devDependencies:
       '@commander-js/extra-typings':
         specifier: ^14.0.0
-        version: 14.0.0(commander@14.0.2)
+        version: 14.0.0(commander@14.0.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2325,8 +2325,8 @@ importers:
         specifier: 1.0.0-alpha.9
         version: 1.0.0-alpha.9
       commander:
-        specifier: ^14.0.2
-        version: 14.0.2
+        specifier: ^14.0.3
+        version: 14.0.3
       debug:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2336,7 +2336,7 @@ importers:
     devDependencies:
       '@commander-js/extra-typings':
         specifier: ^14.0.0
-        version: 14.0.0(commander@14.0.2)
+        version: 14.0.0(commander@14.0.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2429,7 +2429,7 @@ importers:
         version: 7.0.3
       p-retry:
         specifier: ^7.1.0
-        version: 7.1.0
+        version: 7.1.1
       radash:
         specifier: ^12.1.1
         version: 12.1.1
@@ -2561,8 +2561,8 @@ importers:
   packages/create-mastra:
     dependencies:
       commander:
-        specifier: ^14.0.2
-        version: 14.0.2
+        specifier: ^14.0.3
+        version: 14.0.3
       execa:
         specifier: ^9.6.1
         version: 9.6.1
@@ -2766,6 +2766,18 @@ importers:
 
   packages/editor:
     dependencies:
+      '@arcadeai/arcadejs':
+        specifier: ^2.2.0
+        version: 2.2.0
+      '@composio/core':
+        specifier: ^0.6.3
+        version: 0.6.3(ws@8.19.0)(zod@3.25.76)
+      '@composio/mastra':
+        specifier: ^0.6.3
+        version: 0.6.3(@composio/core@0.6.3(ws@8.19.0)(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)
+      '@mastra/mcp':
+        specifier: '>=1.0.0-0 <2.0.0-0'
+        version: 1.0.0(@mastra/core@packages+core)(@types/json-schema@7.0.15)(zod@3.25.76)
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -5368,7 +5380,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.40.0
+        version: 1.41.0
       google-auth-library:
         specifier: ^10.2.1
         version: 10.5.0
@@ -6286,6 +6298,10 @@ packages:
 
   '@apm-js-collab/tracing-hooks@0.3.1':
     resolution: {integrity: sha512-Vu1CbmPURlN5fTboVuKMoJjbO5qcq9fA5YXpskx3dXe/zTBvjODFoerw+69rVBlRLrJpwPqSDqEuJDEKIrTldw==}
+
+  '@arcadeai/arcadejs@2.2.0':
+    resolution: {integrity: sha512-UHtOAdioiO7nGAOcFZo9sSiiFPCBjZcJDWcnyOq6z4lvZX7jqpCEHBDOfp/KHkLGwCEedycUAsRbYp+9McQtpA==}
+    hasBin: true
 
   '@arizeai/openinference-genai@0.1.6':
     resolution: {integrity: sha512-SYXKe/wKS5rrXfq2nrxvNqy3qtJzZeIp3AWAMWzmkKqd5e0R/jAquuAawhIY8Jxof0jhuhYm/QBsE+tqEg8fkg==}
@@ -7704,6 +7720,26 @@ packages:
     resolution: {integrity: sha512-hIn0ncNaJRLkZrxBIp5AsW/eXEHNKYQBh0aPdoUqNgD+Io3NIykQqpKFyKcuasZhicGaEZJX/JBSIkZ4e5x8Dg==}
     peerDependencies:
       commander: ~14.0.0
+
+  '@composio/client@0.1.0-alpha.56':
+    resolution: {integrity: sha512-hNgChB5uhdvT4QXNzzfUuvtG6vrfanQQFY2hPyKwbeR4x6mEmIGFiZ4y2qynErdUWldAZiB/7pY/MBMg6Q9E0g==}
+
+  '@composio/core@0.6.3':
+    resolution: {integrity: sha512-PZm4LQGMaaDFHWUouMHqKPg5fNfgjM2l0zF0Vw/vfWJ34KYyo1ne6YjhGvBDmOIKPByT6Dal4/ff7AHpjedL/w==}
+    peerDependencies:
+      zod: ^3.25 || ^4
+
+  '@composio/json-schema-to-zod@0.1.20':
+    resolution: {integrity: sha512-d4V34itLrUWG/VBh7ciznKcxF/T22MBLHmuEzHoX0zsBOHsUmjYz5qtDh20S2p3FE+HHvLZxpXiv8yfdd4yI+Q==}
+    peerDependencies:
+      zod: '>=3.25.76 <5'
+
+  '@composio/mastra@0.6.3':
+    resolution: {integrity: sha512-KaJe/mlT09AX93mqTJ7jO6dH1r2U4c7MKDnRj+GwwJVM05thMhPvmanCfKcZ6U/HdB9kTx2isMf2NCN6MStg7A==}
+    peerDependencies:
+      '@composio/core': 0.6.3
+      '@mastra/core': ^1.0.4
+      zod: ^3.25 || ^4
 
   '@connectrpc/connect-web@2.0.0-rc.3':
     resolution: {integrity: sha512-w88P8Lsn5CCsA7MFRl2e6oLY4J/5toiNtJns/YJrlyQaWOy3RO8pDgkz+iIkG98RPMhj2thuBvsd3Cn4DKKCkw==}
@@ -9232,8 +9268,8 @@ packages:
     resolution: {integrity: sha512-gAcNqVL6E6V+d7yZbv5pQAPh5ZTE66UB0n2AZB3QaVaQDo9H8yalja3u2v3NE4QTVt03DkpoIuyvzs4i3w/b7A==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.40.0':
-    resolution: {integrity: sha512-fhIww8smT0QYRX78qWOiz/nIQhHMF5wXOrlXvj33HBrz3vKDBb+wibLcEmTA+L9dmPD4KmfNr7UF3LDQVTXNjA==}
+  '@google/genai@1.41.0':
+    resolution: {integrity: sha512-S4WGil+PG0NBQRAx+0yrQuM/TWOLn2gGEy5wn4IsoOI6ouHad0P61p3OWdhJ3aqr9kfj8o904i/jevfaGoGuIQ==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -9833,6 +9869,19 @@ packages:
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
+
+  '@mastra/mcp@1.0.0':
+    resolution: {integrity: sha512-g+N3L61Sq4dQGLjMlQmVAnAPVOi1fJHmSe+gJxamxTGJ/r8Tdl6Za0gOj4faSeDUAn2sim0dCz2FEDjXDvoDsQ==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@mastra/core': '>=1.0.0-0 <2.0.0-0'
+      zod: ^3.25.0 || ^4.0.0
+
+  '@mastra/schema-compat@1.1.0':
+    resolution: {integrity: sha512-2v8nTaAC/279jHs0ux2Emp+lNgBFq3QeNbZCGSHFeeBhbqqM5aWJCPY2Xgw8Z/dY3mTpFxBbmXQz3oRyYStnqg==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
 
   '@mdx-js/mdx@3.1.1':
     resolution: {integrity: sha512-f6ZO2ifpwAQIpzGWaBQT2TXxPv6z3RBzQKpVftEWN78Vl/YweF1uwussDx8ECAXVtr3Rs89fKyG9YlzUs9DyGQ==}
@@ -15005,8 +15054,8 @@ packages:
     resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
     engines: {node: '>=18'}
 
-  commander@14.0.2:
-    resolution: {integrity: sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ==}
+  commander@14.0.3:
+    resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
     engines: {node: '>=20'}
 
   commander@2.20.3:
@@ -18906,6 +18955,18 @@ packages:
       zod:
         optional: true
 
+  openai@6.21.0:
+    resolution: {integrity: sha512-26dQFi76dB8IiN/WKGQOV+yKKTTlRCxQjoi2WLt0kMcH8pvxVyvfdBDkld5GTl7W1qvBpwVOtFcsqktj3fBRpA==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   openapi-fetch@0.14.1:
     resolution: {integrity: sha512-l7RarRHxlEZYjMLd/PR0slfMVse2/vvIAGm75/F7J6MlQ8/b9uUQmUF2kCPrQhJqMXSxmYWObVgeYXbFYzZR+A==}
 
@@ -19009,8 +19070,8 @@ packages:
     resolution: {integrity: sha512-hEt02O4hUct5wtwg4H4KcWgDdm+l1bOaEy/hWzd8xtXB9BqxTWBBhb+2ImAtH4Cv4rPjV76xN3Zumqk3k3AhhQ==}
     engines: {node: '>=16.17'}
 
-  p-retry@7.1.0:
-    resolution: {integrity: sha512-xL4PiFRQa/f9L9ZvR4/gUCRNus4N8YX80ku8kv9Jqz+ZokkiZLM0bcvX0gm1F3PDi9SPRsww1BDsTWgE6Y1GLQ==}
+  p-retry@7.1.1:
+    resolution: {integrity: sha512-J5ApzjyRkkf601HpEeykoiCvzHQjWxPAHhyjFcEUP2SWq0+35NKh8TLhpLw+Dkq5TZBFvUM6UigdE9hIVYTl5w==}
     engines: {node: '>=20'}
 
   p-timeout@3.2.0:
@@ -19936,6 +19997,9 @@ packages:
   pupa@3.3.0:
     resolution: {integrity: sha512-LjgDO2zPtoXP2wJpDjZrGdojii1uqO0cnwKoIoUzkfS98HDmbeiGmYiXo3lXeFlq2xvne1QFQhwYXSUCLKtEuA==}
     engines: {node: '>=12.20'}
+
+  pusher-js@8.4.0:
+    resolution: {integrity: sha512-wp3HqIIUc1GRyu1XrP6m2dgyE9MoCsXVsWNlohj0rjSkLf+a0jLvEyVubdg58oMk7bhjBWnFClgp8jfAa6Ak4Q==}
 
   pvtsutils@1.3.6:
     resolution: {integrity: sha512-PLgQXQ6H2FWCaeRak8vvk1GW462lMxB5s3Jm673N82zI4vqtVUPuZdffdZbPDFRoU8kAhItWFtPCWiPpp4/EDg==}
@@ -21491,6 +21555,9 @@ packages:
   tweetnacl@0.14.5:
     resolution: {integrity: sha512-KXXFFdAbFXY4geFIwoyNK+f5Z1b7swfXABfL7HXCmoIWMKU3dmS26672A4EeQtDzLKy7SXmfBu51JolvEKwtGA==}
 
+  tweetnacl@1.0.3:
+    resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
+
   typanion@3.14.0:
     resolution: {integrity: sha512-ZW/lVMRabETuYCd9O9ZvMhAh8GslSqaUjxmK/JLPCh6l73CvLBiuXswj/+7LdnWOgYsQ130FqLzFz5aGT4I3Ug==}
 
@@ -22899,6 +22966,8 @@ snapshots:
       module-details-from-path: 1.0.4
     transitivePeerDependencies:
       - supports-color
+
+  '@arcadeai/arcadejs@2.2.0': {}
 
   '@arizeai/openinference-genai@0.1.6(@opentelemetry/api@1.9.0)(@opentelemetry/semantic-conventions@1.38.0)':
     dependencies:
@@ -25415,9 +25484,36 @@ snapshots:
   '@colors/colors@1.5.0':
     optional: true
 
-  '@commander-js/extra-typings@14.0.0(commander@14.0.2)':
+  '@commander-js/extra-typings@14.0.0(commander@14.0.3)':
     dependencies:
-      commander: 14.0.2
+      commander: 14.0.3
+
+  '@composio/client@0.1.0-alpha.56': {}
+
+  '@composio/core@0.6.3(ws@8.19.0)(zod@3.25.76)':
+    dependencies:
+      '@composio/client': 0.1.0-alpha.56
+      '@composio/json-schema-to-zod': 0.1.20(zod@3.25.76)
+      '@types/json-schema': 7.0.15
+      chalk: 4.1.2
+      openai: 6.21.0(ws@8.19.0)(zod@3.25.76)
+      pusher-js: 8.4.0
+      semver: 7.7.3
+      zod: 3.25.76
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
+    transitivePeerDependencies:
+      - ws
+
+  '@composio/json-schema-to-zod@0.1.20(zod@3.25.76)':
+    dependencies:
+      zod: 3.25.76
+
+  '@composio/mastra@0.6.3(@composio/core@0.6.3(ws@8.19.0)(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)':
+    dependencies:
+      '@composio/core': 0.6.3(ws@8.19.0)(zod@3.25.76)
+      '@mastra/core': link:packages/core
+      '@mastra/schema-compat': 1.1.0(zod@3.25.76)
+      zod: 3.25.76
 
   '@connectrpc/connect-web@2.0.0-rc.3(@bufbuild/protobuf@2.10.0)(@connectrpc/connect@2.0.0-rc.3(@bufbuild/protobuf@2.10.0))':
     dependencies:
@@ -27442,9 +27538,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.40.0':
+  '@google/genai@1.41.0':
     dependencies:
       google-auth-library: 10.5.0
+      p-retry: 7.1.1
       protobufjs: 7.5.4
       ws: 8.19.0
     transitivePeerDependencies:
@@ -28073,6 +28170,29 @@ snapshots:
       tinyglobby: 0.2.15
 
   '@marijn/find-cluster-break@1.0.2': {}
+
+  '@mastra/mcp@1.0.0(@mastra/core@packages+core)(@types/json-schema@7.0.15)(zod@3.25.76)':
+    dependencies:
+      '@apidevtools/json-schema-ref-parser': 14.2.1(@types/json-schema@7.0.15)
+      '@mastra/core': link:packages/core
+      '@modelcontextprotocol/sdk': 1.20.1
+      exit-hook: 5.0.1
+      fast-deep-equal: 3.1.3
+      uuid: 13.0.0
+      zod: 3.25.76
+      zod-from-json-schema: 0.5.0
+      zod-from-json-schema-v3: zod-from-json-schema@0.0.5
+    transitivePeerDependencies:
+      - '@types/json-schema'
+      - supports-color
+
+  '@mastra/schema-compat@1.1.0(zod@3.25.76)':
+    dependencies:
+      json-schema-to-zod: 2.7.0
+      zod: 3.25.76
+      zod-from-json-schema: 0.5.0
+      zod-from-json-schema-v3: zod-from-json-schema@0.0.5
+      zod-to-json-schema: 3.25.1(zod@3.25.76)
 
   '@mdx-js/mdx@3.1.1':
     dependencies:
@@ -34556,7 +34676,7 @@ snapshots:
 
   commander@12.1.0: {}
 
-  commander@14.0.2: {}
+  commander@14.0.3: {}
 
   commander@2.20.3: {}
 
@@ -37920,7 +38040,7 @@ snapshots:
     dependencies:
       langfuse-core: 3.38.6
 
-  langsmith@0.3.81(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@5.23.2(ws@8.19.0)(zod@3.25.76)):
+  langsmith@0.3.81(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@3.25.76)):
     dependencies:
       '@types/uuid': 10.0.0
       chalk: 4.1.2
@@ -37933,7 +38053,7 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/exporter-trace-otlp-proto': 0.208.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-trace-base': 2.2.0(@opentelemetry/api@1.9.0)
-      openai: 5.23.2(ws@8.19.0)(zod@3.25.76)
+      openai: 6.21.0(ws@8.19.0)(zod@3.25.76)
 
   latest-version@7.0.0:
     dependencies:
@@ -38031,7 +38151,7 @@ snapshots:
 
   lint-staged@16.2.5:
     dependencies:
-      commander: 14.0.2
+      commander: 14.0.3
       listr2: 9.0.5
       micromatch: 4.0.8
       nano-spawn: 2.0.0
@@ -39520,6 +39640,11 @@ snapshots:
       ws: 8.19.0
       zod: 3.25.76
 
+  openai@6.21.0(ws@8.19.0)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.19.0
+      zod: 3.25.76
+
   openapi-fetch@0.14.1:
     dependencies:
       openapi-typescript-helpers: 0.0.15
@@ -39625,7 +39750,7 @@ snapshots:
       is-network-error: 1.3.0
       retry: 0.13.1
 
-  p-retry@7.1.0:
+  p-retry@7.1.1:
     dependencies:
       is-network-error: 1.3.0
 
@@ -40575,6 +40700,10 @@ snapshots:
   pupa@3.3.0:
     dependencies:
       escape-goat: 4.0.0
+
+  pusher-js@8.4.0:
+    dependencies:
+      tweetnacl: 1.0.3
 
   pvtsutils@1.3.6:
     dependencies:
@@ -42572,6 +42701,8 @@ snapshots:
   tw-animate-css@1.4.0: {}
 
   tweetnacl@0.14.5: {}
+
+  tweetnacl@1.0.3: {}
 
   typanion@3.14.0: {}
 

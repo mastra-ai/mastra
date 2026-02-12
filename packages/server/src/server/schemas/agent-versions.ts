@@ -10,6 +10,10 @@ import {
   toolsConfigSchema,
 } from './stored-agents';
 
+const mcpClientToolsConfigSchema = z.object({
+  tools: z.record(z.string(), z.object({ description: z.string().optional() })).optional(),
+});
+
 // ============================================================================
 // Path Parameter Schemas
 // ============================================================================
@@ -100,10 +104,12 @@ export const agentVersionSchema = z.object({
   agents: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of agent keys — static or conditional'),
-  integrationTools: z
-    .array(z.string())
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
   inputProcessors: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of processor keys — static or conditional'),

@@ -276,6 +276,16 @@ export interface StorageToolConfig {
 }
 
 /**
+ * Per-MCP-client tool configuration stored in agent snapshots.
+ * Specifies which tools from an MCP client are enabled and their overrides.
+ * When `tools` is omitted, all tools from the MCP client/server are included.
+ */
+export interface StorageMCPClientToolsConfig {
+  /** When omitted, all tools from the source are included. */
+  tools?: Record<string, StorageToolConfig>;
+}
+
+/**
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
@@ -384,10 +394,11 @@ export interface StorageAgentSnapshotType {
   /** Array of agent keys to resolve from Mastra's agent registry — static or conditional on request context */
   agents?: StorageConditionalField<string[]>;
   /**
-   * Array of specific integration tool IDs selected for this agent.
-   * Format: "provider_toolkitSlug_toolSlug" (e.g., "composio_hackernews_HACKERNEWS_GET_FRONTPAGE")
+   * Map of tool provider IDs to their tool configurations.
+   * Keys are provider IDs (e.g., "composio"), values configure which tools from that provider to include.
+   * Static or conditional on request context.
    */
-  integrationTools?: string[];
+  integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
   inputProcessors?: StorageConditionalField<string[]>;
   /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
@@ -396,6 +407,8 @@ export interface StorageAgentSnapshotType {
   memory?: StorageConditionalField<SerializedMemoryConfig>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
   scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional on request context */
+  mcpClients?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** JSON Schema for validating request context values. Stored as JSON Schema since Zod is not serializable. */
   requestContextSchema?: Record<string, unknown>;
 }
@@ -1160,6 +1173,137 @@ export interface CreateReflectionGenerationInput {
   reflection: string;
   tokenCount: number;
 }
+
+// ============================================
+// MCP Client Storage Types
+// ============================================
+
+/**
+ * Serializable MCP server transport definition for storage.
+ * Only includes fields that can be safely serialized to JSON.
+ * Non-serializable fields (fetch, authProvider, logger, etc.) must be
+ * provided via code-defined MCP clients.
+ */
+export interface StorageMCPServerConfig {
+  /** Transport type discriminator */
+  type: 'stdio' | 'http';
+  /** Command to execute (stdio transport) */
+  command?: string;
+  /** Arguments to pass to the command (stdio transport) */
+  args?: string[];
+  /** Environment variables for the subprocess (stdio transport) */
+  env?: Record<string, string>;
+  /** URL of the MCP server endpoint (http transport) — stored as string */
+  url?: string;
+  /** Timeout in milliseconds for server operations */
+  timeout?: number;
+  /**
+   * Optional tool selection/filtering at the server level.
+   * When provided, only tools listed here are exposed by this server.
+   * When omitted, all tools from the server are exposed.
+   */
+  tools?: Record<string, StorageToolConfig>;
+}
+
+/**
+ * MCP client version snapshot containing ALL configuration fields.
+ * These fields live exclusively in version snapshot rows, not on the MCP client record.
+ */
+export interface StorageMCPClientSnapshotType {
+  /** Display name of the MCP client configuration */
+  name: string;
+  /** Purpose description */
+  description?: string;
+  /** MCP servers keyed by server name */
+  servers: Record<string, StorageMCPServerConfig>;
+}
+
+/**
+ * Thin stored MCP client record type containing only metadata fields.
+ * All configuration lives in version snapshots (StorageMCPClientSnapshotType).
+ */
+export interface StorageMCPClientType {
+  /** Unique, immutable identifier */
+  id: string;
+  /** Client status: 'draft' on creation, 'published' when a version is activated */
+  status: 'draft' | 'published' | 'archived';
+  /** FK to mcp_client_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP client */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Resolved stored MCP client type that combines the thin record with version snapshot config.
+ * Returned by getMCPClientByIdResolved and listMCPClientsResolved.
+ */
+export type StorageResolvedMCPClientType = StorageMCPClientType & StorageMCPClientSnapshotType;
+
+/**
+ * Input for creating a new stored MCP client. Flat union of thin record fields
+ * and initial configuration (used to create version 1).
+ */
+export type StorageCreateMCPClientInput = {
+  /** Unique identifier for the MCP client */
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP client */
+  metadata?: Record<string, unknown>;
+} & StorageMCPClientSnapshotType;
+
+/**
+ * Input for updating a stored MCP client. Includes metadata-level fields and optional config fields.
+ * The handler layer separates these into record updates vs new-version creation.
+ */
+export type StorageUpdateMCPClientInput = {
+  id: string;
+  /** Author identifier for multi-tenant filtering */
+  authorId?: string;
+  /** Additional metadata for the MCP client */
+  metadata?: Record<string, unknown>;
+  /** FK to mcp_client_versions.id - the currently active version */
+  activeVersionId?: string;
+  /** Client status */
+  status?: 'draft' | 'published' | 'archived';
+} & Partial<StorageMCPClientSnapshotType>;
+
+export type StorageListMCPClientsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+  /**
+   * Filter MCP clients by author identifier.
+   */
+  authorId?: string;
+  /**
+   * Filter MCP clients by metadata key-value pairs.
+   * All specified key-value pairs must match (AND logic).
+   */
+  metadata?: Record<string, unknown>;
+};
+
+/** Paginated list output for thin stored MCP client records */
+export type StorageListMCPClientsOutput = PaginationInfo & {
+  mcpClients: StorageMCPClientType[];
+};
+
+/** Paginated list output for resolved stored MCP clients */
+export type StorageListMCPClientsResolvedOutput = PaginationInfo & {
+  mcpClients: StorageResolvedMCPClientType[];
+};
 
 // ============================================
 // Workflow Storage Types

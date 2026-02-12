@@ -87,10 +87,10 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
-export type NetworkStreamParams = {
+export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions;
+} & MultiPrimitiveExecutionOptions<OUTPUT>;
 
 export interface GetAgentResponse {
   id: string;
@@ -751,6 +751,16 @@ export interface StoredAgentToolConfig {
 }
 
 /**
+ * Per-MCP-client/integration tool configuration stored in agent snapshots.
+ * Specifies which tools from an MCP client or integration provider are enabled and their overrides.
+ * When `tools` is omitted, all tools from the source are included.
+ */
+export interface StoredMCPClientToolsConfig {
+  /** When omitted, all tools from the source are included. */
+  tools?: Record<string, StoredAgentToolConfig>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -792,7 +802,8 @@ export interface StoredAgentResponse {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -862,7 +873,8 @@ export interface CreateStoredAgentParams {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -888,7 +900,8 @@ export interface UpdateStoredAgentParams {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -1039,6 +1052,94 @@ export interface DeleteStoredScorerResponse {
 }
 
 // ============================================================================
+// Stored MCP Client Types
+// ============================================================================
+
+/**
+ * MCP server transport configuration
+ */
+export interface StoredMCPServerConfig {
+  type: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  timeout?: number;
+}
+
+/**
+ * Stored MCP client data returned from API
+ */
+export interface StoredMCPClientResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsResponse {
+  mcpClients: StoredMCPClientResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored MCP client
+ */
+export interface CreateStoredMCPClientParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for updating a stored MCP client
+ */
+export interface UpdateStoredMCPClientParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  servers?: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Response for deleting a stored MCP client
+ */
+export interface DeleteStoredMCPClientResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // Agent Version Types
 // ============================================================================
 
@@ -1058,7 +1159,8 @@ export interface AgentVersionResponse {
   defaultOptions?: ConditionalField<DefaultOptions>;
   workflows?: ConditionalField<string[]>;
   agents?: ConditionalField<string[]>;
-  integrationTools?: string[];
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
   outputProcessors?: ConditionalField<string[]>;
   memory?: ConditionalField<SerializedMemoryConfig>;
@@ -1596,6 +1698,60 @@ export interface ListEmbeddersResponse {
     maxInputTokens: number;
   }>;
 }
+
+// ============================================================================
+// Tool Provider Types
+// ============================================================================
+
+export interface ToolProviderInfo {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ToolProviderToolkit {
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface ToolProviderToolInfo {
+  slug: string;
+  name: string;
+  description?: string;
+  toolkit?: string;
+}
+
+export interface ToolProviderPagination {
+  total?: number;
+  page?: number;
+  perPage?: number;
+  hasMore: boolean;
+}
+
+export interface ListToolProvidersResponse {
+  providers: ToolProviderInfo[];
+}
+
+export interface ListToolProviderToolkitsResponse {
+  data: ToolProviderToolkit[];
+  pagination?: ToolProviderPagination;
+}
+
+export interface ListToolProviderToolsParams {
+  toolkit?: string;
+  search?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListToolProviderToolsResponse {
+  data: ToolProviderToolInfo[];
+  pagination?: ToolProviderPagination;
+}
+
+export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
 
 // ============================================================================
 // Error Types
