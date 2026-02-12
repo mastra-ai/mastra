@@ -1,29 +1,26 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef } from 'react';
 
-import {
-  toast,
-  useLinkComponent,
-  useStoredAgentMutations,
-  AgentEditSidebar,
-  AgentEditLayout,
-  useAgentEditForm,
-  MainContentLayout,
-  AgentEditMainContentBlocks,
-  Header,
-  HeaderTitle,
-  Icon,
-  AgentIcon,
-} from '@mastra/playground-ui';
-import { CreateStoredAgentParams } from '@mastra/client-js';
+import type { CreateStoredAgentParams } from '@mastra/client-js';
 
-function CmsAgentsCreatePage() {
-  const { navigate, paths } = useLinkComponent();
+import { toast } from '@/lib/toast';
+
+import { AgentEditLayout } from './agent-edit-page/agent-edit-layout';
+import { AgentEditSidebar } from './agent-edit-page/agent-edit-sidebar';
+import { AgentEditMainContentBlocks } from './agent-edit-page/agent-edit-main-blocks';
+import { useAgentEditForm } from './agent-edit-page/use-agent-edit-form';
+import { useStoredAgentMutations } from '../hooks/use-stored-agents';
+
+interface AgentCreateContentProps {
+  onSuccess?: (agent: { id: string; description?: string }) => void;
+  hideSubAgentCreate?: boolean;
+}
+
+export function AgentCreateContent({ onSuccess, hideSubAgentCreate }: AgentCreateContentProps) {
   const { createStoredAgent } = useStoredAgentMutations();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   const { form } = useAgentEditForm();
 
-  const handlePublish = useCallback(async () => {
+  const handlePublish = async () => {
     const isValid = await form.trigger();
     if (!isValid) {
       toast.error('Please fill in all required fields');
@@ -31,7 +28,6 @@ function CmsAgentsCreatePage() {
     }
 
     const values = form.getValues();
-    setIsSubmitting(true);
 
     try {
       const formScorers = values.scorers ? Object.entries(values.scorers) : undefined;
@@ -135,37 +131,27 @@ function CmsAgentsCreatePage() {
 
       const created = await createStoredAgent.mutateAsync(createParams);
       toast.success('Agent created successfully');
-      navigate(`${paths.agentLink(created.id)}/chat`);
+      onSuccess?.(created);
     } catch (error) {
       toast.error(`Failed to create agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
     }
-  }, [form, createStoredAgent, navigate, paths]);
+  };
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <AgentIcon />
-          </Icon>
-          Create an agent
-        </HeaderTitle>
-      </Header>
-      <AgentEditLayout
-        leftSlot={
-          <AgentEditSidebar form={form} onPublish={handlePublish} isSubmitting={isSubmitting} formRef={formRef} />
-        }
-      >
-        <form ref={formRef} className="h-full">
-          <AgentEditMainContentBlocks form={form} />
-        </form>
-      </AgentEditLayout>
-    </MainContentLayout>
+    <AgentEditLayout
+      leftSlot={
+        <AgentEditSidebar
+          form={form}
+          onPublish={handlePublish}
+          isSubmitting={createStoredAgent.isPending}
+          formRef={formRef}
+          hideSubAgentCreate={hideSubAgentCreate}
+        />
+      }
+    >
+      <form ref={formRef} className="h-full">
+        <AgentEditMainContentBlocks form={form} />
+      </form>
+    </AgentEditLayout>
   );
 }
-
-export { CmsAgentsCreatePage };
-
-export default CmsAgentsCreatePage;

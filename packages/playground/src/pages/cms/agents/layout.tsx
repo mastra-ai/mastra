@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Outlet, useLocation, useParams, useSearchParams } from 'react-router';
 import type { AgentVersionResponse } from '@mastra/client-js';
 import type { AgentInstructionBlock } from '@mastra/core/storage';
 
@@ -8,29 +8,26 @@ import {
   useLinkComponent,
   useStoredAgent,
   useStoredAgentMutations,
-  AgentEditMainContentBlocks,
-  AgentEditSidebar,
-  AgentEditLayout,
   useAgentEditForm,
+  useAgentVersion,
+  AgentsCmsLayout,
+  AgentEditFormProvider,
   Header,
   HeaderTitle,
   HeaderAction,
   Icon,
   AgentIcon,
   Spinner,
-  useAgentVersion,
   MainContentLayout,
   Skeleton,
-  type AgentFormValues,
   Alert,
   Button,
   AlertTitle,
   AgentVersionCombobox,
   createInstructionBlock,
+  type AgentFormValues,
 } from '@mastra/playground-ui';
-
-// Type for the agent data (inferred from useStoredAgent)
-type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
+import { CreateStoredAgentParams } from '@mastra/client-js';
 
 // Helper function to convert array to record format expected by form sections
 const arrayToRecord = (arr: string[]): Record<string, { description?: string }> => {
@@ -50,36 +47,181 @@ const normalizeToolsToRecord = (
   return { ...tools };
 };
 
-interface CmsAgentsEditFormProps {
-  agent: StoredAgent;
-  agentId: string;
-  selectedVersionId: string | null;
-  versionData?: AgentVersionResponse;
-  readOnly?: boolean;
+// Type for the agent data (inferred from useStoredAgent)
+type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
+
+function CreateLayoutWrapper() {
+  const { navigate, paths } = useLinkComponent();
+  const { createStoredAgent } = useStoredAgentMutations();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { form } = useAgentEditForm();
+  const location = useLocation();
+
+  const handlePublish = useCallback(async () => {
+    const isValid = await form.trigger();
+    if (!isValid) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    const values = form.getValues();
+    setIsSubmitting(true);
+
+    try {
+      const formScorers = values.scorers ? Object.entries(values.scorers) : undefined;
+      const scorers = formScorers
+        ? Object.fromEntries(
+            formScorers.map(([key, value]) => [
+              key,
+              {
+                description: value.description,
+                sampling: value.sampling
+                  ? {
+                      type: value.sampling.type,
+                      rate: value.sampling.rate || 0,
+                    }
+                  : undefined,
+              },
+            ]),
+          )
+        : undefined;
+
+      const createParams: CreateStoredAgentParams = {
+        name: values.name,
+        description: values.description || undefined,
+        instructions: (values.instructionBlocks ?? []).map(block => ({
+          type: block.type,
+          content: block.content,
+          rules: block.rules,
+        })),
+        model: values.model,
+        tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
+        workflows:
+          values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
+        agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
+        scorers,
+        memory: values.memory?.enabled
+          ? {
+              options: {
+                lastMessages: values.memory.lastMessages,
+                semanticRecall: values.memory.semanticRecall,
+                readOnly: values.memory.readOnly,
+              },
+              observationalMemory: values.memory.observationalMemory?.enabled
+                ? (() => {
+                    const om = values.memory.observationalMemory;
+                    const modelId =
+                      om.model?.provider && om.model?.name ? `${om.model.provider}/${om.model.name}` : undefined;
+
+                    const obsModelId =
+                      om.observation?.model?.provider && om.observation?.model?.name
+                        ? `${om.observation.model.provider}/${om.observation.model.name}`
+                        : undefined;
+                    const observation =
+                      obsModelId ||
+                      om.observation?.messageTokens ||
+                      om.observation?.maxTokensPerBatch ||
+                      om.observation?.bufferTokens !== undefined ||
+                      om.observation?.bufferActivation !== undefined ||
+                      om.observation?.blockAfter !== undefined
+                        ? {
+                            model: obsModelId,
+                            messageTokens: om.observation?.messageTokens,
+                            maxTokensPerBatch: om.observation?.maxTokensPerBatch,
+                            bufferTokens: om.observation?.bufferTokens,
+                            bufferActivation: om.observation?.bufferActivation,
+                            blockAfter: om.observation?.blockAfter,
+                          }
+                        : undefined;
+
+                    const refModelId =
+                      om.reflection?.model?.provider && om.reflection?.model?.name
+                        ? `${om.reflection.model.provider}/${om.reflection.model.name}`
+                        : undefined;
+                    const reflection =
+                      refModelId ||
+                      om.reflection?.observationTokens ||
+                      om.reflection?.blockAfter !== undefined ||
+                      om.reflection?.bufferActivation !== undefined
+                        ? {
+                            model: refModelId,
+                            observationTokens: om.reflection?.observationTokens,
+                            blockAfter: om.reflection?.blockAfter,
+                            bufferActivation: om.reflection?.bufferActivation,
+                          }
+                        : undefined;
+
+                    return modelId || om.scope || om.shareTokenBudget || observation || reflection
+                      ? {
+                          model: modelId,
+                          scope: om.scope,
+                          shareTokenBudget: om.shareTokenBudget,
+                          observation,
+                          reflection,
+                        }
+                      : true;
+                  })()
+                : undefined,
+            }
+          : undefined,
+        requestContextSchema: values.variables as Record<string, unknown> | undefined,
+      };
+
+      const created = await createStoredAgent.mutateAsync(createParams);
+      toast.success('Agent created successfully');
+      navigate(`${paths.agentLink(created.id)}/chat`);
+    } catch (error) {
+      toast.error(`Failed to create agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [form, createStoredAgent, navigate, paths]);
+
+  const basePath = '/cms/agents/create';
+
+  return (
+    <MainContentLayout>
+      <Header>
+        <HeaderTitle>
+          <Icon>
+            <AgentIcon />
+          </Icon>
+          Create an agent
+        </HeaderTitle>
+      </Header>
+      <AgentEditFormProvider form={form} mode="create" isSubmitting={isSubmitting} handlePublish={handlePublish}>
+        <AgentsCmsLayout basePath={basePath} currentPath={location.pathname}>
+          <Outlet />
+        </AgentsCmsLayout>
+      </AgentEditFormProvider>
+    </MainContentLayout>
+  );
 }
 
-// Form component - only rendered when agent data is available
-function CmsAgentsEditForm({
+function EditFormContent({
   agent,
   agentId,
   selectedVersionId,
   versionData,
   readOnly = false,
-}: CmsAgentsEditFormProps) {
+}: {
+  agent: StoredAgent;
+  agentId: string;
+  selectedVersionId: string | null;
+  versionData?: AgentVersionResponse;
+  readOnly?: boolean;
+}) {
   const { navigate, paths } = useLinkComponent();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const formRef = useRef<HTMLFormElement | null>(null);
   const [, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
 
-  // Transform agent data to form initial values
-  // Use version data when viewing a version, otherwise use current agent data
   const initialValues: AgentFormValues = useMemo(() => {
     const dataSource = isViewingVersion ? versionData : agent;
 
-    // Merge code-defined tools and integration tools
     const toolsRecord = normalizeToolsToRecord(dataSource.tools);
     if (dataSource.integrationTools && Array.isArray(dataSource.integrationTools)) {
       for (const id of dataSource.integrationTools) {
@@ -89,7 +231,6 @@ function CmsAgentsEditForm({
       }
     }
 
-    // Transform memory data from API format to form format
     const memoryData = dataSource.memory as
       | {
           vector?: string;
@@ -217,11 +358,8 @@ function CmsAgentsEditForm({
     setIsSubmitting(true);
 
     try {
-      // Separate code-defined tools from integration tools
-      // Integration tools are identified by checking if they exist in the agent's integrationTools array
       const codeDefinedTools: Record<string, { description?: string }> = {};
       const integrationToolIds: string[] = [];
-
       const existingIntegrationTools = new Set(agent.integrationTools || []);
 
       if (values.tools) {
@@ -321,25 +459,21 @@ function CmsAgentsEditForm({
     }
   }, [form, agent, updateStoredAgent, navigate, paths, agentId]);
 
+  const basePath = `/cms/agents/${agentId}/edit`;
+
   return (
-    <AgentEditLayout
-      leftSlot={
-        <AgentEditSidebar
-          form={form}
-          currentAgentId={agentId}
-          onPublish={handlePublish}
-          isSubmitting={isSubmitting}
-          formRef={formRef}
-          mode="edit"
-          readOnly={readOnly || isViewingVersion}
-        />
-      }
+    <AgentEditFormProvider
+      form={form}
+      mode="edit"
+      agentId={agentId}
+      isSubmitting={isSubmitting}
+      handlePublish={handlePublish}
+      readOnly={readOnly || isViewingVersion}
     >
-      <form ref={formRef} className="h-full">
+      <AgentsCmsLayout basePath={basePath} currentPath={location.pathname}>
         {isViewingVersion && (
           <Alert variant="info" className="mb-4 mx-4">
             <AlertTitle>You are seeing a specific version of the agent.</AlertTitle>
-
             <div className="pt-2">
               <Button type="button" variant="light" onClick={() => setSearchParams({})}>
                 View latest version
@@ -347,14 +481,13 @@ function CmsAgentsEditForm({
             </div>
           </Alert>
         )}
-        <AgentEditMainContentBlocks form={form} readOnly={readOnly || isViewingVersion} />
-      </form>
-    </AgentEditLayout>
+        <Outlet />
+      </AgentsCmsLayout>
+    </AgentEditFormProvider>
   );
 }
 
-// Wrapper component - handles data fetching and loading states
-function CmsAgentsEditPage() {
+function EditLayoutWrapper() {
   const { agentId } = useParams<{ agentId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
@@ -376,7 +509,6 @@ function CmsAgentsEditPage() {
     [setSearchParams],
   );
 
-  // Loading state
   if (isLoadingAgent) {
     return (
       <MainContentLayout>
@@ -388,23 +520,13 @@ function CmsAgentsEditPage() {
             <Skeleton className="h-6 w-[200px]" />
           </HeaderTitle>
         </Header>
-
-        <AgentEditLayout
-          leftSlot={
-            <div className="flex items-center justify-center h-full">
-              <Spinner className="h-8 w-8" />
-            </div>
-          }
-        >
-          <div className="flex items-center justify-center h-full">
-            <Spinner className="h-8 w-8" />
-          </div>
-        </AgentEditLayout>
+        <div className="flex items-center justify-center h-full">
+          <Spinner className="h-8 w-8" />
+        </div>
       </MainContentLayout>
     );
   }
 
-  // Agent not found state
   if (!agent || !agentId) {
     return (
       <MainContentLayout>
@@ -416,16 +538,11 @@ function CmsAgentsEditPage() {
             Agent not found
           </HeaderTitle>
         </Header>
-        <AgentEditLayout
-          leftSlot={<div className="flex items-center justify-center h-full text-icon3">Agent not found</div>}
-        >
-          <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
-        </AgentEditLayout>
+        <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
       </MainContentLayout>
     );
   }
 
-  // Render form only when agent data is available
   return (
     <MainContentLayout>
       <Header>
@@ -445,7 +562,7 @@ function CmsAgentsEditPage() {
         </HeaderAction>
       </Header>
 
-      <CmsAgentsEditForm
+      <EditFormContent
         agent={agent}
         agentId={agentId}
         selectedVersionId={selectedVersionId}
@@ -456,6 +573,4 @@ function CmsAgentsEditPage() {
   );
 }
 
-export { CmsAgentsEditPage };
-
-export default CmsAgentsEditPage;
+export { CreateLayoutWrapper, EditLayoutWrapper };
