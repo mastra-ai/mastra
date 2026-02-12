@@ -121,6 +121,7 @@ const RootLayout = () => {
 
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
+const isExperimentalFeatures = window.MASTRA_EXPERIMENTAL_FEATURES === 'true';
 
 const routes = [
   {
@@ -194,14 +195,18 @@ const routes = [
         ],
       },
 
-      { path: '/datasets', element: <Datasets /> },
-      { path: '/datasets/:datasetId', element: <DatasetPage /> },
-      { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
-      { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetCompareVersions /> },
-      { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
-      { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
-      { path: '/datasets/:datasetId/items', element: <DatasetCompareItems /> },
-      { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+      ...(isExperimentalFeatures
+        ? [
+            { path: '/datasets', element: <Datasets /> },
+            { path: '/datasets/:datasetId', element: <DatasetPage /> },
+            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetCompareVersions /> },
+            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
+            { path: '/datasets/:datasetId/items', element: <DatasetCompareItems /> },
+            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+          ]
+        : []),
 
       { index: true, loader: () => redirect('/agents') },
       { path: '/request-context', element: <RequestContext /> },
