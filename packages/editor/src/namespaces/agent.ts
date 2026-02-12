@@ -644,9 +644,18 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
         // `tools: {}` = all tools; `tools: { slug: ... }` = specific tools
         const wantedSlugs = Object.keys(providerConfig.tools);
 
+        let slugsToResolve: string[];
+        if (wantedSlugs.length === 0) {
+          // "All tools" — ask the provider for its full catalog
+          const allAvailable = await provider.listTools();
+          slugsToResolve = allAvailable.data.map(t => t.slug);
+        } else {
+          slugsToResolve = wantedSlugs;
+        }
+
         // Fetch tools from the provider — pass slugs, configs, and request context
         const providerTools = await provider.resolveTools(
-          wantedSlugs.length > 0 ? wantedSlugs : [],
+          slugsToResolve,
           providerConfig.tools,
           { requestContext },
         );

@@ -243,7 +243,15 @@ describe('Integration Tools (tool providers)', () => {
       const tools = await agent!.listTools();
 
       // composio: { tools: {} } = all tools from provider
-      expect(mockProvider.resolveTools).toHaveBeenCalledWith([], {}, { requestContext: undefined });
+      // Should first call listTools() to discover all slugs, then resolveTools with those slugs
+      expect(mockProvider.listTools).toHaveBeenCalled();
+      expect(mockProvider.resolveTools).toHaveBeenCalledWith(
+        expect.arrayContaining(['GITHUB_CREATE_ISSUE', 'GITHUB_LIST_REPOS', 'SLACK_SEND_MESSAGE']),
+        {},
+        { requestContext: undefined },
+      );
+      // All 3 tools should be resolved
+      expect(Object.keys(tools).length).toBe(3);
     });
 
     it('should warn when referenced provider is not registered', async () => {
