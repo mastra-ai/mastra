@@ -32,6 +32,7 @@ describe('createWorkspaceTools', () => {
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
   });
 
   it('should not create filesystem tools when no filesystem', () => {
@@ -42,6 +43,7 @@ describe('createWorkspaceTools', () => {
 
     expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
     expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
   });
 
   it('should create search tools when BM25 is enabled', () => {
@@ -97,6 +99,7 @@ describe('createWorkspaceTools', () => {
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.GREP);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
     expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
@@ -110,6 +113,7 @@ describe('createWorkspaceTools', () => {
     expect(WORKSPACE_TOOLS.FILESYSTEM.DELETE).toBe('mastra_workspace_delete');
     expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT).toBe('mastra_workspace_file_stat');
     expect(WORKSPACE_TOOLS.FILESYSTEM.MKDIR).toBe('mastra_workspace_mkdir');
+    expect(WORKSPACE_TOOLS.SEARCH.GREP).toBe('mastra_workspace_grep');
     expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
     expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
     expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
