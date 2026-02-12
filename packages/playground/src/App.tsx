@@ -56,8 +56,15 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
-import CmsAgentsCreatePage from './pages/cms/agents/create';
-import CmsAgentsEditPage from './pages/cms/agents/edit';
+import { CreateLayoutWrapper, EditLayoutWrapper } from './pages/cms/agents/layout';
+import CmsAgentInformationPage from './pages/cms/agents/information';
+import CmsAgentToolsPage from './pages/cms/agents/tools';
+import CmsAgentAgentsPage from './pages/cms/agents/agents';
+import CmsAgentScorersPage from './pages/cms/agents/scorers';
+import CmsAgentWorkflowsPage from './pages/cms/agents/workflows';
+import CmsAgentMemoryPage from './pages/cms/agents/memory';
+import CmsAgentVariablesPage from './pages/cms/agents/variables';
+import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
 
@@ -80,6 +87,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
+  cmsAgentCreateLink: () => '/cms/agents/create',
+  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
   skillLink: (skillName: string, workspaceId?: string) =>
     workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
@@ -127,8 +136,34 @@ const routes = [
       { path: '/scorers/:scorerId', element: <Scorer /> },
       { path: '/observability', element: <Observability /> },
       { path: '/agents', element: <Agents /> },
-      { path: '/cms/agents/create', element: <CmsAgentsCreatePage /> },
-      { path: '/cms/agents/:agentId/edit', element: <CmsAgentsEditPage /> },
+      {
+        path: '/cms/agents/create',
+        element: <CreateLayoutWrapper />,
+        children: [
+          { index: true, element: <CmsAgentInformationPage /> },
+          { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
+          { path: 'tools', element: <CmsAgentToolsPage /> },
+          { path: 'agents', element: <CmsAgentAgentsPage /> },
+          { path: 'scorers', element: <CmsAgentScorersPage /> },
+          { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
+          { path: 'memory', element: <CmsAgentMemoryPage /> },
+          { path: 'variables', element: <CmsAgentVariablesPage /> },
+        ],
+      },
+      {
+        path: '/cms/agents/:agentId/edit',
+        element: <EditLayoutWrapper />,
+        children: [
+          { index: true, element: <CmsAgentInformationPage /> },
+          { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
+          { path: 'tools', element: <CmsAgentToolsPage /> },
+          { path: 'agents', element: <CmsAgentAgentsPage /> },
+          { path: 'scorers', element: <CmsAgentScorersPage /> },
+          { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
+          { path: 'memory', element: <CmsAgentMemoryPage /> },
+          { path: 'variables', element: <CmsAgentVariablesPage /> },
+        ],
+      },
       { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
       { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
       { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },

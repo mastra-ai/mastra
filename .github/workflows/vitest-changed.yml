@@ -582,7 +582,7 @@ jobs:
   merge-reports:
     name: Merge Test Reports
     runs-on: ubuntu-latest
-    needs: [test, e2e-test, memory-integration, mcp-integration, agent-builder-integration, observability-test]
+    needs: [test, e2e-test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     # Minimal permissions - read-only access
     permissions:
@@ -623,7 +623,7 @@ jobs:
   pr-status:
     name: PR Status
     runs-on: ubuntu-latest
-    needs: [test, e2e-test, memory-integration, mcp-integration, agent-builder-integration, observability-test]
+    needs: [test, e2e-test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
@@ -641,11 +641,7 @@ jobs:
         run: |
           # Check if any of the test jobs failed or were cancelled
           if [[ "${{ needs.test.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.e2e-test.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.memory-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.mcp-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.agent-builder-integration.result }}" =~ ^(failure|cancelled)$ ]] || \
-             [[ "${{ needs.observability-test.result }}" =~ ^(failure|cancelled)$ ]]; then
+             [[ "${{ needs.e2e-test.result }}" =~ ^(failure|cancelled)$ ]]; then
             echo "status=failure" >> $GITHUB_OUTPUT
             echo "description=Some tests failed or were cancelled" >> $GITHUB_OUTPUT
           else

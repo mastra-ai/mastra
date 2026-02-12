@@ -8,41 +8,33 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
 import { cleanupTestPath } from '../../test-helpers';
-import type { WorkspaceSetup } from '../types';
-
-interface TestContext {
-  setup: WorkspaceSetup;
-  getTestPath: () => string;
-  /** Mount path prefix for sandbox commands (e.g. '/data/s3'). Empty string if paths match. */
-  mountPath: string;
-  testTimeout: number;
-  fastOnly: boolean;
-}
+import type { TestContext } from './test-context';
 
 export function createFileSyncTests(getContext: () => TestContext): void {
   describe('File Sync', () => {
     afterEach(async () => {
-      const { setup, getTestPath } = getContext();
-      await cleanupTestPath(setup.filesystem, getTestPath());
+      const { workspace, getTestPath } = getContext();
+      if (workspace.filesystem) {
+        await cleanupTestPath(workspace.filesystem, getTestPath());
+      }
     });
 
     it(
       'file written via API is readable via sandbox cat',
       async () => {
-        const { setup, getTestPath, mountPath } = getContext();
-        const fsPath = `${getTestPath()}/api-to-sandbox.txt`;
-        const sandboxPath = `${mountPath}${fsPath}`;
+        const { workspace, getTestPath } = getContext();
+        const filePath = `${getTestPath()}/api-to-sandbox.txt`;
         const content = 'Hello from API!';
 
-        if (!setup.sandbox.executeCommand) {
+        if (!workspace.filesystem || !workspace.sandbox?.executeCommand) {
           return; // Sandbox doesn't support command execution
         }
 
         // Write via filesystem API
-        await setup.filesystem.writeFile(fsPath, content);
+        await workspace.filesystem.writeFile(filePath, content);
 
-        // Read via sandbox command (uses sandbox path which includes mount prefix)
-        const result = await setup.sandbox.executeCommand('cat', [sandboxPath]);
+        // Read via sandbox command (same path — mountPath baked into getTestPath)
+        const result = await workspace.sandbox.executeCommand('cat', [filePath]);
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout.trim()).toBe(content);
@@ -53,25 +45,24 @@ export function createFileSyncTests(getContext: () => TestContext): void {
     it(
       'file written via sandbox is readable via API',
       async () => {
-        const { setup, getTestPath, mountPath } = getContext();
-        const fsPath = `${getTestPath()}/sandbox-to-api.txt`;
-        const sandboxPath = `${mountPath}${fsPath}`;
+        const { workspace, getTestPath } = getContext();
+        const filePath = `${getTestPath()}/sandbox-to-api.txt`;
         const content = 'Hello from sandbox!';
 
-        if (!setup.sandbox.executeCommand) {
+        if (!workspace.filesystem || !workspace.sandbox?.executeCommand) {
           return; // Sandbox doesn't support command execution
         }
 
-        // Ensure directory exists via sandbox (uses sandbox path)
-        const mkdirResult = await setup.sandbox.executeCommand('mkdir', ['-p', `${mountPath}${getTestPath()}`]);
+        // Ensure directory exists via sandbox
+        const mkdirResult = await workspace.sandbox.executeCommand('mkdir', ['-p', getTestPath()]);
         expect(mkdirResult.exitCode).toBe(0);
 
-        // Write via sandbox command (uses sandbox path)
-        const writeResult = await setup.sandbox.executeCommand('sh', ['-c', `echo "${content}" > ${sandboxPath}`]);
+        // Write via sandbox command
+        const writeResult = await workspace.sandbox.executeCommand('sh', ['-c', `echo "${content}" > ${filePath}`]);
         expect(writeResult.exitCode).toBe(0);
 
-        // Read via filesystem API (uses filesystem path)
-        const readContent = await setup.filesystem.readFile(fsPath, { encoding: 'utf-8' });
+        // Read via filesystem API (same path — mountPath baked into getTestPath)
+        const readContent = await workspace.filesystem.readFile(filePath, { encoding: 'utf-8' });
 
         expect((readContent as string).trim()).toBe(content);
       },
@@ -81,21 +72,20 @@ export function createFileSyncTests(getContext: () => TestContext): void {
     it(
       'directory created via API is listable via sandbox ls',
       async () => {
-        const { setup, getTestPath, mountPath } = getContext();
-        const fsDirPath = `${getTestPath()}/test-dir`;
-        const fsFilePath = `${fsDirPath}/file.txt`;
-        const sandboxDirPath = `${mountPath}${fsDirPath}`;
+        const { workspace, getTestPath } = getContext();
+        const dirPath = `${getTestPath()}/test-dir`;
+        const filePath = `${dirPath}/file.txt`;
 
-        if (!setup.sandbox.executeCommand) {
+        if (!workspace.filesystem || !workspace.sandbox?.executeCommand) {
           return; // Sandbox doesn't support command execution
         }
 
         // Create directory and file via API
-        await setup.filesystem.mkdir(fsDirPath, { recursive: true });
-        await setup.filesystem.writeFile(fsFilePath, 'content');
+        await workspace.filesystem.mkdir(dirPath, { recursive: true });
+        await workspace.filesystem.writeFile(filePath, 'content');
 
-        // List via sandbox command (uses sandbox path)
-        const result = await setup.sandbox.executeCommand('ls', [sandboxDirPath]);
+        // List via sandbox command (same path)
+        const result = await workspace.sandbox.executeCommand('ls', [dirPath]);
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('file.txt');
@@ -106,26 +96,25 @@ export function createFileSyncTests(getContext: () => TestContext): void {
     it(
       'file deleted via API is not accessible via sandbox',
       async () => {
-        const { setup, getTestPath, mountPath } = getContext();
-        const fsPath = `${getTestPath()}/delete-me.txt`;
-        const sandboxPath = `${mountPath}${fsPath}`;
+        const { workspace, getTestPath } = getContext();
+        const filePath = `${getTestPath()}/delete-me.txt`;
 
-        if (!setup.sandbox.executeCommand) {
+        if (!workspace.filesystem || !workspace.sandbox?.executeCommand) {
           return; // Sandbox doesn't support command execution
         }
 
         // Create file via API
-        await setup.filesystem.writeFile(fsPath, 'delete me');
+        await workspace.filesystem.writeFile(filePath, 'delete me');
 
         // Verify it exists via sandbox
-        const beforeResult = await setup.sandbox.executeCommand('cat', [sandboxPath]);
+        const beforeResult = await workspace.sandbox.executeCommand('cat', [filePath]);
         expect(beforeResult.exitCode).toBe(0);
 
         // Delete via API
-        await setup.filesystem.deleteFile(fsPath);
+        await workspace.filesystem.deleteFile(filePath);
 
         // Verify it's gone (cat should fail)
-        const afterResult = await setup.sandbox.executeCommand('cat', [sandboxPath]);
+        const afterResult = await workspace.sandbox.executeCommand('cat', [filePath]);
         expect(afterResult.exitCode).not.toBe(0);
       },
       getContext().testTimeout,

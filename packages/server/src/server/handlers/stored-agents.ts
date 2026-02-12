@@ -133,6 +133,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     workflows,
     agents,
     integrationTools,
+    mcpClients,
     inputProcessors,
     outputProcessors,
     memory,
@@ -166,9 +167,6 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Only include integrationTools if they're actually arrays from the body (not {} from adapter)
-      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
-
       // Create agent with flat StorageCreateAgentInput
       // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
       await agentsStore.create({
@@ -184,7 +182,8 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           defaultOptions,
           workflows,
           agents,
-          integrationTools: integrationToolsFromBody,
+          integrationTools,
+          mcpClients,
           inputProcessors,
           outputProcessors,
           memory,
@@ -239,6 +238,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     workflows,
     agents,
     integrationTools,
+    mcpClients,
     inputProcessors,
     outputProcessors,
     memory,
@@ -263,9 +263,6 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include integrationTools if they're actually arrays from the body (not {} from adapter)
-      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
-
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
       // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
@@ -281,7 +278,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         defaultOptions,
         workflows,
         agents,
-        integrationTools: integrationToolsFromBody,
+        integrationTools,
+        mcpClients,
         inputProcessors,
         outputProcessors,
         memory,
@@ -299,7 +297,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         defaultOptions,
         workflows,
         agents,
-        integrationTools: integrationToolsFromBody,
+        integrationTools,
+        mcpClients,
         inputProcessors,
         outputProcessors,
         memory,

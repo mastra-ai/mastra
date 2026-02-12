@@ -16,21 +16,23 @@ import { GCSFilesystem } from './index';
 
 // Mock the Google Cloud Storage SDK
 vi.mock('@google-cloud/storage', () => ({
-  Storage: vi.fn().mockImplementation(() => ({
-    bucket: vi.fn().mockReturnValue({
-      file: vi.fn().mockReturnValue({
-        download: vi.fn(),
-        save: vi.fn(),
-        delete: vi.fn(),
-        copy: vi.fn(),
-        exists: vi.fn(),
-        getMetadata: vi.fn(),
+  Storage: vi.fn().mockImplementation(function () {
+    return {
+      bucket: vi.fn().mockReturnValue({
+        file: vi.fn().mockReturnValue({
+          download: vi.fn(),
+          save: vi.fn(),
+          delete: vi.fn(),
+          copy: vi.fn(),
+          exists: vi.fn(),
+          getMetadata: vi.fn(),
+        }),
+        exists: vi.fn().mockResolvedValue([true]),
+        getFiles: vi.fn().mockResolvedValue([[]]),
+        deleteFiles: vi.fn(),
       }),
-      exists: vi.fn().mockResolvedValue([true]),
-      getFiles: vi.fn().mockResolvedValue([[]]),
-      deleteFiles: vi.fn(),
-    }),
-  })),
+    };
+  }),
 }));
 
 describe('GCSFilesystem', () => {

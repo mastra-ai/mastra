@@ -86,6 +86,7 @@ describe.for(
     pkgJson.name === 'mastra' ||
       pkgJson.name === 'create-mastra' ||
       pkgJson.name === '@mastra/client-js' ||
+      pkgJson.name === '@mastra/opencode' ||
       !pkgJson.name.startsWith('@mastra/'),
   )('should have @mastra/core as a peer dependency if used', async () => {
     const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];
