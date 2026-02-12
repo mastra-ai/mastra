@@ -20,6 +20,7 @@ import type {
   FilesystemMountConfig,
   FilesystemIcon,
   ProviderStatus,
+  MastraFilesystemOptions,
 } from '@mastra/core/workspace';
 import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
 
@@ -88,7 +89,7 @@ function getMimeType(path: string): string {
 /**
  * GCS filesystem provider configuration.
  */
-export interface GCSFilesystemOptions {
+export interface GCSFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** GCS bucket name */
@@ -199,7 +200,7 @@ export class GCSFilesystem extends MastraFilesystem {
   private _bucket: Bucket | null = null;
 
   constructor(options: GCSFilesystemOptions) {
-    super({ name: 'GCSFilesystem' });
+    super({ ...options, name: 'GCSFilesystem' });
     this.id = options.id ?? `gcs-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.bucketName = options.bucket;
     this.projectId = options.projectId;

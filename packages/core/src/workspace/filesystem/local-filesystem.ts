@@ -32,11 +32,12 @@ import type {
 } from './filesystem';
 import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
+import type { MastraFilesystemOptions } from './mastra-filesystem';
 
 /**
  * Local filesystem provider configuration.
  */
-export interface LocalFilesystemOptions {
+export interface LocalFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** Base directory path on disk */
@@ -105,7 +106,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   constructor(options: LocalFilesystemOptions) {
-    super({ name: 'LocalFilesystem' });
+    super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
     this._contained = options.contained ?? true;

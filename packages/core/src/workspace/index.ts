@@ -7,7 +7,7 @@ export { CompositeFilesystem, type CompositeFilesystemConfig } from './filesyste
 export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
-export { MastraFilesystem } from './filesystem';
+export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
 export { MastraSandbox } from './sandbox';
 
 // Errors
