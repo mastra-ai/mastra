@@ -14,7 +14,7 @@ import type { TracingContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON } from '../../schema/schema';
-import type { StandardSchemaWithJSON } from '../../schema/schema';
+import type { PublicSchema } from '../../schema/schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
@@ -26,10 +26,10 @@ import type { Step, SuspendOptions } from '../../workflows';
 import { PRIMITIVE_TYPES } from '../types';
 
 /**
- * Convert a schema (StandardSchemaWithJSON or Zod) to JSON Schema.
- * Works with both StandardSchemaWithJSON types and raw Zod schemas.
+ * Convert a schema (PublicSchema) to JSON Schema.
+ * Handles Zod v3/v4, AI SDK schemas, JSON Schema, and StandardSchemaWithJSON.
  */
-function schemaToJsonSchema(schema: StandardSchemaWithJSON | unknown): unknown {
+function schemaToJsonSchema(schema: PublicSchema): unknown {
   if (isStandardSchemaWithJSON(schema)) {
     return standardSchemaToJSONSchema(schema);
   }
