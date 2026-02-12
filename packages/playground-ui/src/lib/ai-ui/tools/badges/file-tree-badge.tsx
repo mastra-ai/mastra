@@ -208,7 +208,7 @@ export const FileTreeBadge = ({
           )}
 
           {/* Loading state */}
-          {toolCalled && !hasResult && (
+          {toolCalled && !hasResult && !hasError && (
             <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
               <span className="text-xs text-icon6">Loading...</span>
             </div>

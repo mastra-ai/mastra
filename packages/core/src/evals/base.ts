@@ -190,6 +190,12 @@ class MastraScorer<
   #mastra?: Mastra;
   #rawConfig?: Record<string, unknown>;
 
+  /**
+   * Tracks whether this scorer was defined in code or loaded from storage.
+   * Set by `Mastra.addScorer()` when the `source` option is provided.
+   */
+  public source?: 'code' | 'stored';
+
   constructor(
     public config: ScorerConfig<TID, TInput, TRunOutput>,
     private steps: Array<ScorerStepDefinition> = [],

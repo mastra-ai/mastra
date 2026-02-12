@@ -127,6 +127,7 @@ program
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
   .option('-s, --https', 'Enable local HTTPS')
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
   .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 
@@ -160,6 +161,7 @@ program
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .option('--server-api-prefix <serverApiPrefix>', 'API route prefix of the Mastra server (default: /api)')
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
   .action(studio);
 
 program

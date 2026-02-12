@@ -30,7 +30,7 @@ import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
-import type { Workflow } from '../workflows';
+import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import type { Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
@@ -99,10 +99,7 @@ function createUndefinedPrimitiveError(
  */
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
-    string,
-    Workflow<any, any, any, any, any, any, any>
-  >,
+  TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -293,10 +290,7 @@ export interface Config<
  */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
-    string,
-    Workflow<any, any, any, any, any, any, any>
-  >,
+  TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -345,6 +339,8 @@ export class Mastra<
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
+  // Cache for stored scorers to allow in-memory modifications to persist across requests
+  #storedScorersCache: Map<string, MastraScorer<any, any, any, any>> = new Map();
   // Registry for prompt blocks (stored or code-defined)
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
@@ -392,6 +388,14 @@ export class Mastra<
    */
   public getStoredAgentCache() {
     return this.#storedAgentsCache;
+  }
+
+  /**
+   * Gets the stored scorers cache
+   * @internal
+   */
+  public getStoredScorerCache() {
+    return this.#storedScorersCache;
   }
 
   /**
@@ -1491,7 +1495,11 @@ export class Mastra<
    * mastra.addScorer(newScorer, 'customKey'); // Uses custom key
    * ```
    */
-  public addScorer<S extends MastraScorer<any, any, any, any>>(scorer: S, key?: string): void {
+  public addScorer<S extends MastraScorer<any, any, any, any>>(
+    scorer: S,
+    key?: string,
+    options?: { source?: 'code' | 'stored' },
+  ): void {
     if (!scorer) {
       throw createUndefinedPrimitiveError('scorer', scorer, key);
     }
@@ -1505,6 +1513,11 @@ export class Mastra<
 
     // Register Mastra instance with scorer to enable custom gateway access
     scorer.__registerMastra(this);
+
+    // Set the source if provided
+    if (options?.source) {
+      scorer.source = options.source;
+    }
 
     scorers[scorerKey] = scorer;
   }
@@ -1616,14 +1629,24 @@ export class Mastra<
 
     // Try direct key lookup first
     if (scorers[keyOrId]) {
+      const scorerId = scorers[keyOrId]?.id;
       delete scorers[keyOrId];
+      // Clear from stored scorers cache to prevent stale data
+      if (scorerId) {
+        this.#storedScorersCache.delete(scorerId);
+      }
       return true;
     }
 
     // Try finding by ID or name
     const key = Object.keys(scorers).find(k => scorers[k]?.id === keyOrId || scorers[k]?.name === keyOrId);
     if (key) {
+      const scorerId = scorers[key]?.id;
       delete scorers[key];
+      // Clear from stored scorers cache to prevent stale data
+      if (scorerId) {
+        this.#storedScorersCache.delete(scorerId);
+      }
       return true;
     }
 
@@ -2254,12 +2277,12 @@ export class Mastra<
    * mastra.addWorkflow(newWorkflow, 'customKey'); // Uses custom key
    * ```
    */
-  public addWorkflow(workflow: Workflow<any, any, any, any, any, any, any>, key?: string): void {
+  public addWorkflow(workflow: AnyWorkflow, key?: string): void {
     if (!workflow) {
       throw createUndefinedPrimitiveError('workflow', workflow, key);
     }
     const workflowKey = key || workflow.id;
-    const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any, any>>;
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
     if (workflows[workflowKey]) {
       const logger = this.getLogger();
       logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);
@@ -2337,12 +2360,24 @@ export class Mastra<
       });
     }
 
+    if (this.#workflows) {
+      Object.keys(this.#workflows).forEach(key => {
+        this.#workflows?.[key]?.__setLogger(this.#logger);
+      });
+    }
+
     if (this.#serverAdapter) {
       this.#serverAdapter.__setLogger(this.#logger);
     }
 
     if (this.#workspace) {
       this.#workspace.__setLogger(this.#logger);
+    }
+
+    if (this.#memory) {
+      Object.keys(this.#memory).forEach(key => {
+        this.#memory?.[key]?.__setLogger(this.#logger);
+      });
     }
 
     this.#observability.setLogger({ logger: this.#logger });

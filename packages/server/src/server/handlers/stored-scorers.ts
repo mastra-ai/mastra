@@ -247,6 +247,12 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
         defaultSampling,
       });
 
+      // Clear the cached scorer instance so the next request gets the updated config
+      const editor = mastra.getEditor();
+      if (editor) {
+        editor.scorer.clearCache(storedScorerId);
+      }
+
       // Return the resolved scorer definition with the updated config
       const resolved = await scorerStore.getByIdResolved(storedScorerId);
       if (!resolved) {
@@ -293,6 +299,9 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
       }
 
       await scorerStore.delete(storedScorerId);
+
+      // Clear the cached scorer instance
+      mastra.getEditor()?.scorer.clearCache(storedScorerId);
 
       return { success: true, message: `Scorer definition ${storedScorerId} deleted successfully` };
     } catch (error) {

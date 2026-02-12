@@ -15,6 +15,7 @@ declare global {
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_REQUEST_CONTEXT_PRESETS?: string;
   }
 }
 
@@ -57,6 +58,8 @@ import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
 import CmsAgentsCreatePage from './pages/cms/agents/create';
 import CmsAgentsEditPage from './pages/cms/agents/edit';
+import CmsScorersCreatePage from './pages/cms/scorers/create';
+import CmsScorersEditPage from './pages/cms/scorers/edit';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -75,6 +78,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
+  cmsScorersCreateLink: () => '/cms/scorers/create',
+  cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
   skillLink: (skillName: string, workspaceId?: string) =>
     workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
@@ -124,6 +129,8 @@ const routes = [
       { path: '/agents', element: <Agents /> },
       { path: '/cms/agents/create', element: <CmsAgentsCreatePage /> },
       { path: '/cms/agents/:agentId/edit', element: <CmsAgentsEditPage /> },
+      { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
+      { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
       { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
       {
         path: '/agents/:agentId',

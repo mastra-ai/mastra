@@ -78,6 +78,10 @@ export class AgentsPG extends AgentsStorage {
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
       ifNotExists: ['status', 'authorId'],
     });
+
+    // Migrate tools field from string[] to JSONB format
+    await this.#migrateToolsToJsonbFormat();
+
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
 
@@ -203,6 +207,57 @@ export class AgentsPG extends AgentsStorage {
   }
 
   /**
+   * Migrates the tools field from string[] format to JSONB format { "tool-key": { "description": "..." } }.
+   * This handles the transition from the old format where tools were stored as an array of string keys
+   * to the new format where tools can have per-agent description overrides.
+   */
+  async #migrateToolsToJsonbFormat(): Promise<void> {
+    const fullVersionsTableName = getTableName({
+      indexName: TABLE_AGENT_VERSIONS,
+      schemaName: getSchemaName(this.#schema),
+    });
+
+    try {
+      // Check if any records have tools stored as a JSON array
+      const recordsWithArrayTools = await this.#db.client.any(
+        `SELECT id, tools FROM ${fullVersionsTableName} 
+         WHERE tools IS NOT NULL 
+         AND jsonb_typeof(tools) = 'array'`,
+      );
+
+      if (recordsWithArrayTools.length === 0) {
+        return; // No migration needed
+      }
+
+      // Convert each record's tools from array to object format
+      for (const record of recordsWithArrayTools) {
+        const toolsArray = record.tools as string[];
+        const toolsObject: Record<string, { description?: string }> = {};
+
+        // Convert each tool string to an object key with empty config
+        for (const toolKey of toolsArray) {
+          toolsObject[toolKey] = {};
+        }
+
+        // Update the record with the new format
+        await this.#db.client.none(
+          `UPDATE ${fullVersionsTableName} 
+           SET tools = $1::jsonb 
+           WHERE id = $2`,
+          [JSON.stringify(toolsObject), record.id],
+        );
+      }
+
+      this.logger?.info?.(
+        `Migrated ${recordsWithArrayTools.length} agent version(s) tools from array to object format`,
+      );
+    } catch (error) {
+      // Log but don't fail - this is a non-breaking migration
+      this.logger?.warn?.('Failed to migrate tools to JSONB format:', error);
+    }
+  }
+
+  /**
    * Removes stale draft agent records that have no activeVersionId.
    * These are left behind when createAgent partially fails (inserts thin record
    * but fails to create the version due to schema mismatch).
@@ -210,7 +265,7 @@ export class AgentsPG extends AgentsStorage {
   async #cleanupStaleDrafts(): Promise<void> {
     try {
       const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND "activeVersionId" IS NULL`);
+      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND \"activeVersionId\" IS NULL`);
     } catch {
       // Non-critical cleanup, ignore errors
     }
@@ -415,6 +470,7 @@ export class AgentsPG extends AgentsStorage {
         'outputProcessors',
         'memory',
         'scorers',
+        'requestContextSchema',
       ];
 
       // Check if any config fields are present in the update
@@ -652,9 +708,10 @@ export class AgentsPG extends AgentsStorage {
           name, description, instructions, model, tools,
           "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers,
+          "requestContextSchema",
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
         [
           input.id,
           input.agentId,
@@ -672,6 +729,7 @@ export class AgentsPG extends AgentsStorage {
           input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
           input.memory ? JSON.stringify(input.memory) : null,
           input.scorers ? JSON.stringify(input.scorers) : null,
+          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -938,6 +996,7 @@ export class AgentsPG extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,

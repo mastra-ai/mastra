@@ -72,6 +72,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(resolved?.outputProcessors).toEqual(agent.outputProcessors);
         expect(resolved?.memory).toEqual(agent.memory);
         expect(resolved?.scorers).toEqual(agent.scorers);
+        expect(resolved?.requestContextSchema).toEqual(agent.requestContextSchema);
         expect(resolved?.metadata).toEqual(agent.metadata);
       });
 
@@ -576,7 +577,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       });
 
       it('should handle tools configuration', async () => {
-        const tools = ['calculator', 'webSearch', 'codeInterpreter'];
+        const tools = { calculator: {}, webSearch: {}, codeInterpreter: {} };
 
         const agent = createSampleAgent({ tools });
 

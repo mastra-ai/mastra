@@ -44,6 +44,7 @@ const SNAPSHOT_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'requestContextSchema',
 ] as const;
 
 export class MongoDBAgentsStorage extends AgentsStorage {
@@ -119,6 +120,54 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.#migrateToolsToJsonbFormat();
+  }
+
+  /**
+   * Migrates the tools field from string[] format to object format { "tool-key": { "description": "..." } }.
+   * This handles the transition from the old format where tools were stored as an array of string keys
+   * to the new format where tools can have per-agent description overrides.
+   */
+  async #migrateToolsToJsonbFormat(): Promise<void> {
+    try {
+      const versionsCollection = await this.getCollection(TABLE_AGENT_VERSIONS);
+
+      // Find all documents where tools is an array
+      const cursor = versionsCollection.find({ tools: { $type: 'array' } });
+
+      const updates: { id: string; tools: Record<string, { description?: string }> }[] = [];
+
+      for await (const doc of cursor) {
+        if (Array.isArray(doc.tools)) {
+          const toolsObject: Record<string, { description?: string }> = {};
+
+          // Convert each tool string to an object key with empty config
+          for (const toolKey of doc.tools) {
+            if (typeof toolKey === 'string') {
+              toolsObject[toolKey] = {};
+            }
+          }
+
+          updates.push({ id: doc.id, tools: toolsObject });
+        }
+      }
+
+      // Batch update all documents
+      if (updates.length > 0) {
+        const bulkOps = updates.map(update => ({
+          updateOne: {
+            filter: { id: update.id },
+            update: { $set: { tools: update.tools } },
+          },
+        }));
+
+        await versionsCollection.bulkWrite(bulkOps);
+        this.logger?.info?.(`Migrated ${updates.length} agent version tools from array to object format`);
+      }
+    } catch (error) {
+      // Log but don't fail - this is a non-breaking migration
+      this.logger?.warn?.('Failed to migrate tools to object format:', error);
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

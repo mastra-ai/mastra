@@ -11,6 +11,7 @@ interface DevArgs {
   inspectBrk?: string | boolean;
   customArgs?: string;
   https?: boolean;
+  requestContextPresets?: string;
   debug: boolean;
 }
 
@@ -29,6 +30,7 @@ export const startDevServer = async (args: DevArgs) => {
     inspectBrk: args?.inspectBrk,
     customArgs: args?.customArgs ? args.customArgs.split(',') : [],
     https: args?.https,
+    requestContextPresets: args?.requestContextPresets,
     debug: args.debug,
   }).catch(err => {
     logger.error(err.message);

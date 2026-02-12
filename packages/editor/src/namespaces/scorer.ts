@@ -24,6 +24,21 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
     this.mastra?.removeScorer(id);
   }
 
+  /**
+   * Hydrate a stored scorer definition into a runtime MastraScorer instance
+   * and register it on the Mastra instance so it can be discovered via
+   * `mastra.getScorer()` / `mastra.getScorerById()`.
+   */
+  protected override async hydrate(
+    storedScorer: StorageResolvedScorerDefinitionType,
+  ): Promise<StorageResolvedScorerDefinitionType> {
+    const scorer = this.resolve(storedScorer);
+    if (scorer && this.mastra) {
+      this.mastra.addScorer(scorer, storedScorer.id, { source: 'stored' });
+    }
+    return storedScorer;
+  }
+
   protected async getStorageAdapter(): Promise<
     StorageAdapter<
       StorageCreateScorerDefinitionInput,

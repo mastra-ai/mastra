@@ -1,32 +1,59 @@
 import { z } from 'zod';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { JsonSchema } from '@/lib/json-schema';
+import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
+
+export type InstructionBlock = {
+  id: string;
+  type: 'prompt_block';
+  content: string;
+  rules?: RuleGroup;
+};
+
+const ruleSchema = z.object({
+  field: z.string(),
+  operator: z.enum([
+    'equals',
+    'not_equals',
+    'contains',
+    'not_contains',
+    'greater_than',
+    'less_than',
+    'greater_than_or_equal',
+    'less_than_or_equal',
+    'in',
+    'not_in',
+    'exists',
+    'not_exists',
+  ]),
+  value: z.unknown().optional(),
+});
+
+const ruleGroupDepth2Schema: z.ZodType<RuleGroupDepth2> = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(ruleSchema),
+});
+
+const ruleGroupDepth1Schema: z.ZodType<RuleGroupDepth1> = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth2Schema])),
+});
+
+const ruleGroupSchema: z.ZodType<RuleGroup> = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth1Schema])),
+});
 
 const instructionBlockSchema = z.object({
   id: z.string(),
+  type: z.literal('prompt_block'),
   content: z.string(),
-  rules: z.array(
-    z.object({
-      field: z.string(),
-      operator: z.enum([
-        'equals',
-        'not_equals',
-        'contains',
-        'not_contains',
-        'greater_than',
-        'less_than',
-        'in',
-        'not_in',
-      ]),
-      value: z.unknown(),
-    }),
-  ),
+  rules: ruleGroupSchema.optional(),
 });
 
-export type InstructionBlock = z.infer<typeof instructionBlockSchema>;
-
-export const createInstructionBlock = (content = '', rules: InstructionBlock['rules'] = []): InstructionBlock => ({
+export const createInstructionBlock = (content = '', rules?: RuleGroup): InstructionBlock => ({
   id: uuid(),
+  type: 'prompt_block',
   content,
   rules,
 });
@@ -53,6 +80,47 @@ const memoryConfigSchema = z
     readOnly: z.boolean().optional(),
     vector: z.string().optional(),
     embedder: z.string().optional(),
+    observationalMemory: z
+      .object({
+        enabled: z.boolean().optional(),
+        model: z
+          .object({
+            provider: z.string().optional(),
+            name: z.string().optional(),
+          })
+          .optional(),
+        scope: z.enum(['resource', 'thread']).optional(),
+        shareTokenBudget: z.boolean().optional(),
+        observation: z
+          .object({
+            model: z
+              .object({
+                provider: z.string().optional(),
+                name: z.string().optional(),
+              })
+              .optional(),
+            messageTokens: z.number().min(1).optional(),
+            maxTokensPerBatch: z.number().min(1).optional(),
+            bufferTokens: z.union([z.number().min(0), z.literal(false)]).optional(),
+            bufferActivation: z.number().min(0).max(1).optional(),
+            blockAfter: z.number().min(0).optional(),
+          })
+          .optional(),
+        reflection: z
+          .object({
+            model: z
+              .object({
+                provider: z.string().optional(),
+                name: z.string().optional(),
+              })
+              .optional(),
+            observationTokens: z.number().min(1).optional(),
+            blockAfter: z.number().min(0).optional(),
+            bufferActivation: z.number().min(0).max(1).optional(),
+          })
+          .optional(),
+      })
+      .optional(),
   })
   .refine(
     data => {

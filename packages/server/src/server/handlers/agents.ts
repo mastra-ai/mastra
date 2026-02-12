@@ -474,6 +474,16 @@ async function formatAgentList({
     },
   }));
 
+  // Serialize requestContextSchema if present
+  let serializedRequestContextSchema: string | undefined;
+  if (agent.requestContextSchema) {
+    try {
+      serializedRequestContextSchema = stringify(zodToJsonSchema(agent.requestContextSchema));
+    } catch (error) {
+      logger.error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
+    }
+  }
+
   return {
     id: agent.id || id,
     name: agent.name,
@@ -494,6 +504,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
   };
 }
@@ -835,11 +846,16 @@ export const CLONE_AGENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ agentId, mastra, newId, newName, metadata, authorId, requestContext }) => {
     try {
+      const editor = mastra.getEditor();
+      if (!editor) {
+        return handleError(new Error('Editor is not configured on the Mastra instance'), 'Error cloning agent');
+      }
+
       const agent = await getAgentFromSystem({ mastra, agentId });
 
       const cloneId = toSlug(newId || `${agentId}-clone`);
 
-      const result = await agent.cloneAgent({
+      const result = await editor.agent.clone(agent, {
         newId: cloneId,
         newName,
         metadata,

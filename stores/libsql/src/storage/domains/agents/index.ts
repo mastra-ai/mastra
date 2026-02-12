@@ -43,6 +43,7 @@ const SNAPSHOT_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'requestContextSchema',
 ] as const;
 
 export class AgentsLibSQL extends AgentsStorage {
@@ -69,6 +70,9 @@ export class AgentsLibSQL extends AgentsStorage {
       schema: AGENTS_SCHEMA,
       ifNotExists: ['status', 'authorId'],
     });
+
+    // Migrate tools field from string[] to JSONB format
+    await this.#migrateToolsToJsonbFormat();
 
     // Clean up any stale draft records from previously failed createAgent calls
     await this.#cleanupStaleDrafts();
@@ -194,6 +198,66 @@ export class AgentsLibSQL extends AgentsStorage {
       });
     } catch {
       // Non-critical cleanup, ignore errors
+    }
+  }
+
+  /**
+   * Migrates the tools field from string[] format to JSONB format { "tool-key": { "description": "..." } }.
+   * This handles the transition from the old format where tools were stored as an array of string keys
+   * to the new format where tools can have per-agent description overrides.
+   */
+  async #migrateToolsToJsonbFormat(): Promise<void> {
+    try {
+      // Check if any records have tools stored as a JSON array
+      const result = await this.#client.execute({
+        sql: `SELECT id, tools FROM "${TABLE_AGENT_VERSIONS}" WHERE tools IS NOT NULL`,
+      });
+
+      if (!result.rows || result.rows.length === 0) {
+        return; // No records to migrate
+      }
+
+      for (const row of result.rows) {
+        const toolsValue = row.tools;
+
+        // Parse the JSON value
+        let parsedTools: any;
+        try {
+          if (typeof toolsValue === 'string') {
+            parsedTools = JSON.parse(toolsValue);
+          } else if (toolsValue instanceof ArrayBuffer) {
+            const decoder = new TextDecoder();
+            parsedTools = JSON.parse(decoder.decode(toolsValue));
+          } else {
+            parsedTools = toolsValue;
+          }
+        } catch {
+          continue; // Skip invalid JSON
+        }
+
+        // Check if tools is an array (needs migration)
+        if (Array.isArray(parsedTools)) {
+          const toolsObject: Record<string, { description?: string }> = {};
+
+          // Convert each tool string to an object key with empty config
+          for (const toolKey of parsedTools) {
+            if (typeof toolKey === 'string') {
+              toolsObject[toolKey] = {};
+            }
+          }
+
+          // Update the record with the new format
+          await this.#client.execute({
+            sql: `UPDATE "${TABLE_AGENT_VERSIONS}" SET tools = ? WHERE id = ?`,
+            args: [JSON.stringify(toolsObject), row.id as string],
+          });
+        }
+      }
+
+      this.logger?.info?.(`Migrated agent version tools from array to object format`);
+    } catch (error) {
+      // Log but don't fail - this is a non-breaking migration
+      this.logger?.warn?.('Failed to migrate tools to JSONB format:', error);
     }
   }
 
@@ -580,6 +644,7 @@ export class AgentsLibSQL extends AgentsStorage {
           outputProcessors: input.outputProcessors ?? null,
           memory: input.memory ?? null,
           scorers: input.scorers ?? null,
+          requestContextSchema: input.requestContextSchema ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -880,6 +945,7 @@ export class AgentsLibSQL extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAt as string),

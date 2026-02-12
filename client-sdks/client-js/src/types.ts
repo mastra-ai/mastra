@@ -24,10 +24,15 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
+  AgentInstructionBlock,
   PaginationInfo,
   WorkflowRuns,
   StorageListMessagesInput,
   ObservationalMemoryRecord,
+  Rule,
+  RuleGroup,
+  StorageConditionalVariant,
+  StorageConditionalField,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -639,6 +644,37 @@ export type TitleGenerationConfig =
  *
  * Note: When semanticRecall is enabled, both `vector` (string, not false) and `embedder` must be configured.
  */
+/** Serializable observation step config for observational memory */
+export interface SerializedObservationConfig {
+  model?: string;
+  messageTokens?: number;
+  modelSettings?: Record<string, unknown>;
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  maxTokensPerBatch?: number;
+  bufferTokens?: number | false;
+  bufferActivation?: number;
+  blockAfter?: number;
+}
+
+/** Serializable reflection step config for observational memory */
+export interface SerializedReflectionConfig {
+  model?: string;
+  observationTokens?: number;
+  modelSettings?: Record<string, unknown>;
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  blockAfter?: number;
+  bufferActivation?: number;
+}
+
+/** Serializable observational memory configuration */
+export interface SerializedObservationalMemoryConfig {
+  model?: string;
+  scope?: 'resource' | 'thread';
+  shareTokenBudget?: boolean;
+  observation?: SerializedObservationConfig;
+  reflection?: SerializedReflectionConfig;
+}
+
 export interface SerializedMemoryConfig {
   /**
    * Vector database identifier. Required when semanticRecall is enabled.
@@ -665,6 +701,11 @@ export interface SerializedMemoryConfig {
    * Options to pass to the embedder
    */
   embedderOptions?: Record<string, unknown>;
+  /**
+   * Serialized observational memory configuration.
+   * `true` to enable with defaults, or a config object for customization.
+   */
+  observationalMemory?: boolean | SerializedObservationalMemoryConfig;
 }
 
 /**
@@ -703,11 +744,28 @@ export interface DefaultOptions {
 }
 
 /**
+ * Per-tool config for stored agents (e.g., description overrides)
+ */
+export interface StoredAgentToolConfig {
+  description?: string;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
   sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
 }
+
+// ============================================================================
+// Conditional Field Types (for rule-based dynamic agent configuration)
+// Re-exported from @mastra/core/storage for convenience
+// ============================================================================
+
+export type StoredAgentRule = Rule;
+export type StoredAgentRuleGroup = RuleGroup;
+export type ConditionalVariant<T> = StorageConditionalVariant<T>;
+export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
  * Stored agent data returned from API
@@ -724,21 +782,22 @@ export interface StoredAgentResponse {
   // Version snapshot config fields (resolved from active version)
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -793,21 +852,22 @@ export interface CreateStoredAgentParams {
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -818,21 +878,22 @@ export interface UpdateStoredAgentParams {
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
-  instructions?: string;
-  model?: {
+  instructions?: string | AgentInstructionBlock[];
+  model?: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -987,21 +1048,22 @@ export interface AgentVersionResponse {
   versionNumber: number;
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<string[]>;
+  agents?: ConditionalField<string[]>;
   integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;
@@ -1454,6 +1516,23 @@ export interface GetObservationalMemoryParams {
 export interface GetObservationalMemoryResponse {
   record: ObservationalMemoryRecord | null;
   history?: ObservationalMemoryRecord[];
+}
+
+/**
+ * Parameters for awaiting buffer status
+ */
+export interface AwaitBufferStatusParams {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext;
+}
+
+/**
+ * Response for buffer status endpoint
+ */
+export interface AwaitBufferStatusResponse {
+  record: ObservationalMemoryRecord | null;
 }
 
 /**

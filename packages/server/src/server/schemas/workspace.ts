@@ -75,6 +75,21 @@ export const fileEntrySchema = z.object({
       icon: z.string().optional(),
       displayName: z.string().optional(),
       description: z.string().optional(),
+      status: z
+        .enum([
+          'pending',
+          'initializing',
+          'ready',
+          'starting',
+          'running',
+          'stopping',
+          'stopped',
+          'destroying',
+          'destroyed',
+          'error',
+        ])
+        .optional(),
+      error: z.string().optional(),
     })
     .optional(),
 });
@@ -184,6 +199,18 @@ export const workspaceInfoResponseSchema = z.object({
   safety: z
     .object({
       readOnly: z.boolean(),
+    })
+    .optional(),
+  filesystem: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      provider: z.string(),
+      status: z.string().optional(),
+      error: z.string().optional(),
+      readOnly: z.boolean().optional(),
+      icon: z.string().optional(),
+      metadata: z.record(z.unknown()).optional(),
     })
     .optional(),
 });

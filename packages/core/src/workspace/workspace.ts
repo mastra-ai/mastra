@@ -35,7 +35,7 @@ import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
-import type { WorkspaceFilesystem, FilesystemIcon } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { callLifecycle } from './lifecycle';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
@@ -294,20 +294,7 @@ export interface WorkspaceInfo {
   lastAccessedAt: Date;
 
   /** Filesystem info (if available) */
-  filesystem?: {
-    provider: string;
-    /** Human-readable name */
-    name?: string;
-    /** Icon identifier for UI display */
-    icon?: FilesystemIcon;
-    basePath?: string;
-    readOnly?: boolean;
-    status?: string;
-    storage?: {
-      totalBytes?: number;
-      usedBytes?: number;
-      availableBytes?: number;
-    };
+  filesystem?: FilesystemInfo & {
     totalFiles?: number;
     totalSize?: number;
   };
@@ -709,13 +696,14 @@ export class Workspace {
     if (this._fs) {
       const fsInfo = await this._fs.getInfo?.();
       info.filesystem = {
-        provider: this._fs.provider,
+        id: fsInfo?.id ?? this._fs.id,
         name: fsInfo?.name ?? this._fs.name,
-        icon: fsInfo?.icon,
-        basePath: fsInfo?.basePath ?? this._fs.basePath,
+        provider: fsInfo?.provider ?? this._fs.provider,
         readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
         status: fsInfo?.status,
-        storage: fsInfo?.storage,
+        error: fsInfo?.error,
+        icon: fsInfo?.icon,
+        metadata: fsInfo?.metadata,
       };
 
       if (options?.includeFileCount) {

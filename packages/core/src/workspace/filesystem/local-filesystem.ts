@@ -32,11 +32,12 @@ import type {
 } from './filesystem';
 import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
+import type { MastraFilesystemOptions } from './mastra-filesystem';
 
 /**
  * Local filesystem provider configuration.
  */
-export interface LocalFilesystemOptions {
+export interface LocalFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** Base directory path on disk */
@@ -44,6 +45,18 @@ export interface LocalFilesystemOptions {
   /**
    * When true, all file operations are restricted to stay within basePath.
    * Prevents path traversal attacks and symlink escapes.
+   *
+   * Path resolution depends on this setting:
+   * - `contained: true` (default) — Absolute paths that fall within basePath are
+   *   used as-is; all other absolute paths are treated as virtual (resolved
+   *   relative to basePath, e.g. `/file.txt` → `basePath/file.txt`). Any
+   *   resolved path that escapes basePath throws a PermissionError.
+   * - `contained: false` — Absolute paths are always treated as real filesystem
+   *   paths. No containment check is applied.
+   *
+   * Set to `false` when the filesystem needs to access paths outside basePath,
+   * such as global skills directories or user home directories.
+   *
    * @default true
    */
   contained?: boolean;
@@ -93,7 +106,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   constructor(options: LocalFilesystemOptions) {
-    super({ name: 'LocalFilesystem' });
+    super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
     this._basePath = nodePath.resolve(options.basePath);
     this._contained = options.contained ?? true;
@@ -111,9 +124,28 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private resolvePath(inputPath: string): string {
-    const cleanedPath = inputPath.replace(/^\/+/, '');
-    const normalizedInput = nodePath.normalize(cleanedPath);
-    const absolutePath = nodePath.resolve(this._basePath, normalizedInput);
+    let absolutePath: string;
+
+    if (!this._contained && nodePath.isAbsolute(inputPath)) {
+      // Containment disabled — absolute paths are real filesystem paths
+      absolutePath = nodePath.normalize(inputPath);
+    } else if (this._contained && nodePath.isAbsolute(inputPath)) {
+      // Containment enabled — check if this is a real path within basePath
+      // (e.g. "/Users/foo/project/.mastracode/skills") vs the virtual-root
+      // convention (e.g. "/file.txt" meaning "basePath/file.txt")
+      const normalized = nodePath.normalize(inputPath);
+      const relative = nodePath.relative(this._basePath, normalized);
+      if (!relative.startsWith('..') && !nodePath.isAbsolute(relative)) {
+        absolutePath = normalized;
+      } else {
+        const cleanedPath = inputPath.replace(/^\/+/, '');
+        absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+      }
+    } else {
+      // Relative path — resolve against basePath
+      const cleanedPath = inputPath.replace(/^\/+/, '');
+      absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+    }
 
     if (this._contained) {
       const relative = nodePath.relative(this._basePath, absolutePath);
@@ -186,17 +218,9 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  /**
-   * Ensure the filesystem is initialized before operations.
-   * Uses base class ensureReady() for status management.
-   */
-  private async ensureInitialized(): Promise<void> {
-    await this.ensureReady();
-  }
-
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     this.logger.debug('Reading file', { path: inputPath, encoding: options?.encoding });
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
 
@@ -222,7 +246,7 @@ export class LocalFilesystem extends MastraFilesystem {
   async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const contentSize = Buffer.isBuffer(content) ? content.length : content.length;
     this.logger.debug('Writing file', { path: inputPath, size: contentSize, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('writeFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -265,7 +289,7 @@ export class LocalFilesystem extends MastraFilesystem {
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
     const contentSize = Buffer.isBuffer(content) ? content.length : content.length;
     this.logger.debug('Appending to file', { path: inputPath, size: contentSize });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('appendFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -276,7 +300,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.logger.debug('Deleting file', { path: inputPath, force: options?.force });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('deleteFile');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -301,7 +325,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     this.logger.debug('Copying file', { src, dest, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('copyFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
@@ -338,7 +362,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private async copyDirectory(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    await this.ensureInitialized();
+    await this.ensureReady();
     await fs.mkdir(dest, { recursive: true });
     const entries = await fs.readdir(src, { withFileTypes: true });
 
@@ -370,7 +394,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     this.logger.debug('Moving file', { src, dest, overwrite: options?.overwrite });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('moveFile');
     const srcPath = this.resolvePath(src);
     const destPath = this.resolvePath(dest);
@@ -410,7 +434,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
     this.logger.debug('Creating directory', { path: inputPath, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('mkdir');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -435,7 +459,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
     this.logger.debug('Removing directory', { path: inputPath, recursive: options?.recursive, force: options?.force });
-    await this.ensureInitialized();
+    await this.ensureReady();
     this.assertWritable('rmdir');
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
@@ -471,7 +495,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   async readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
     this.logger.debug('Reading directory', { path: inputPath, recursive: options?.recursive });
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
 
@@ -562,14 +586,14 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   async exists(inputPath: string): Promise<boolean> {
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
     return fsExists(absolutePath);
   }
 
   async stat(inputPath: string): Promise<FileStat> {
-    await this.ensureInitialized();
+    await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
     const result = await fsStat(absolutePath, inputPath);
@@ -598,18 +622,25 @@ export class LocalFilesystem extends MastraFilesystem {
     // LocalFilesystem doesn't clean up files on destroy by default
   }
 
-  getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo<{ basePath: string; contained: boolean }> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
       readOnly: this.readOnly,
-      basePath: this.basePath,
       status: this.status,
+      error: this.error,
+      metadata: {
+        basePath: this.basePath,
+        contained: this._contained,
+      },
     };
   }
 
   getInstructions(): string {
-    return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+    if (this._contained) {
+      return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+    }
+    return `Local filesystem rooted at "${this.basePath}". Containment is disabled so absolute paths access the real filesystem. Use paths relative to "${this.basePath}" (e.g. "foo/bar.txt") for workspace files. Avoid unnecessary listing "/" as it would traverse the entire host filesystem.`;
   }
 }
