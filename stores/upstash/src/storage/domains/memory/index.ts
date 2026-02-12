@@ -424,7 +424,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         if (i === 0 && existingThread) {
           const now = new Date();
           // Compute lastMessageAt from the max createdAt of saved messages
-          const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime())));
+          const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt ?? now).getTime())));
           // Only advance lastMessageAt, never regress
           const lastMessageAt =
             existingThread.lastMessageAt && new Date(existingThread.lastMessageAt) > maxCreatedAt
@@ -1141,7 +1141,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
           if (thread) {
             const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
             const lastMessageAt =
-              remaining.length > 0 ? new Date(Math.max(...remaining.map(m => new Date(m.createdAt).getTime()))) : null;
+              remaining.length > 0
+                ? new Date(Math.max(...remaining.map(m => new Date(m.createdAt ?? new Date()).getTime())))
+                : null;
             const updatedThread = {
               ...thread,
               updatedAt: new Date(),
@@ -1277,7 +1279,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Create the new thread
       const maxMessageDate =
         sourceMessages.length > 0
-          ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt).getTime())))
+          ? new Date(Math.max(...sourceMessages.map(m => new Date(m.createdAt ?? new Date()).getTime())))
           : null;
       const newThread: StorageThreadType = {
         id: newThreadId,

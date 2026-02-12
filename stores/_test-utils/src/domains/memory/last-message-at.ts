@@ -271,5 +271,16 @@ export function createLastMessageAtTests({ storage }: { storage: MastraStorage }
 
 function isStorageSupportsSort(storage: MastraStorage): boolean {
   const storageType = storage.constructor.name;
-  return ['LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore'].includes(storageType);
+  return [
+    'LibSQLStore',
+    'PostgresStore',
+    'MSSQLStore',
+    'DynamoDBStore',
+    'MongoDBStore',
+    'ClickhouseStore',
+    'D1Store',
+    'CloudflareStore',
+    'UpstashStore',
+    'ConvexStore',
+  ].includes(storageType);
 }
