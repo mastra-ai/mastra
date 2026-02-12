@@ -153,7 +153,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<Workspace | undefined>;
+  #workspace?: DynamicArgument<Workspace<any, any, any> | undefined>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;

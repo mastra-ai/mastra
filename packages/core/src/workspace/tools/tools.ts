@@ -77,7 +77,7 @@ export function resolveToolConfig(
  * @param workspace - The workspace instance to bind tools to
  * @returns Record of workspace tools
  */
-export function createWorkspaceTools(workspace: Workspace) {
+export function createWorkspaceTools(workspace: Workspace<any, any, any>) {
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;

@@ -229,7 +229,7 @@ export interface Config<
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
    */
-  workspace?: Workspace;
+  workspace?: Workspace<any, any, any>;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -322,8 +322,8 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
-  #workspace?: Workspace;
-  #workspaces: Record<string, Workspace> = {};
+  #workspace?: Workspace<any, any, any>;
+  #workspaces: Record<string, Workspace<any, any, any>> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -1240,7 +1240,7 @@ export class Mastra<
    * mastra.addWorkspace(workspace);
    * ```
    */
-  public addWorkspace(workspace: Workspace, key?: string): void {
+  public addWorkspace(workspace: Workspace<any, any, any>, key?: string): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
     }

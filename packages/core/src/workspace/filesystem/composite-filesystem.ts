@@ -37,9 +37,11 @@ import type {
 /**
  * Configuration for CompositeFilesystem.
  */
-export interface CompositeFilesystemConfig {
+export interface CompositeFilesystemConfig<
+  TMounts extends Record<string, WorkspaceFilesystem> = Record<string, WorkspaceFilesystem>,
+> {
   /** Map of mount paths to filesystem instances */
-  mounts: Record<string, WorkspaceFilesystem>;
+  mounts: TMounts;
 }
 
 interface ResolvedMount {
@@ -53,17 +55,36 @@ interface ResolvedMount {
  *
  * Routes file operations to the appropriate underlying filesystem based on path.
  * Supports cross-mount operations (copy/move between different filesystems).
+ *
+ * The generic parameter preserves the concrete types of mounted filesystems,
+ * enabling typed access via `getMount()`.
+ *
+ * @example
+ * ```typescript
+ * const cfs = new CompositeFilesystem({
+ *   mounts: {
+ *     '/local': new LocalFilesystem({ basePath: './data' }),
+ *     '/s3': new S3Filesystem({ bucket: 'my-bucket' }),
+ *   },
+ * });
+ *
+ * cfs.getMount('/local') // LocalFilesystem
+ * cfs.getMount('/s3')    // S3Filesystem
+ * ```
  */
-export class CompositeFilesystem implements WorkspaceFilesystem {
+export class CompositeFilesystem<
+  TMounts extends Record<string, WorkspaceFilesystem> = Record<string, WorkspaceFilesystem>,
+> implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'CompositeFilesystem';
   readonly provider = 'composite';
 
+  readonly readOnly?: boolean;
   status: ProviderStatus = 'ready';
 
   private readonly _mounts: Map<string, WorkspaceFilesystem>;
 
-  constructor(config: CompositeFilesystemConfig) {
+  constructor(config: CompositeFilesystemConfig<TMounts>) {
     this.id = `cfs-${Date.now().toString(36)}`;
     this._mounts = new Map();
 
@@ -96,9 +117,32 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
   /**
    * Get the mounts map.
+   * Returns a typed map where `get()` preserves the concrete filesystem type per mount path.
    */
-  get mounts(): ReadonlyMap<string, WorkspaceFilesystem> {
-    return this._mounts;
+  get mounts(): ReadonlyMountMap<TMounts> {
+    return this._mounts as unknown as ReadonlyMountMap<TMounts>;
+  }
+
+  /**
+   * Get a mounted filesystem by its mount path.
+   * Returns the concrete type of the filesystem at that mount point.
+   *
+   * @example
+   * ```typescript
+   * const cfs = new CompositeFilesystem({
+   *   mounts: {
+   *     '/local': new LocalFilesystem({ basePath: './data' }),
+   *     '/s3': new S3Filesystem({ bucket: 'my-bucket' }),
+   *   },
+   * });
+   *
+   * cfs.getMount('/local') // LocalFilesystem
+   * ```
+   */
+  getMount<K extends string & keyof TMounts>(mountPath: K): TMounts[K];
+  getMount(mountPath: string): WorkspaceFilesystem | undefined;
+  getMount(mountPath: string): WorkspaceFilesystem | undefined {
+    return this._mounts.get(this.normalizePath(mountPath));
   }
 
   /**
@@ -411,4 +455,38 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
     return `Mounted filesystems:\n${mountDescriptions}\nFiles written via workspace tools are accessible at the same paths in sandbox commands.`;
   }
+}
+
+/**
+ * A read-only view of mounted filesystems with typed per-key access.
+ *
+ * Unlike `ReadonlyMap<string, WorkspaceFilesystem>`, this preserves the
+ * concrete filesystem type for each mount path via an overloaded `get()`.
+ *
+ * @example
+ * ```typescript
+ * const mounts = cfs.mounts;
+ * mounts.get('/local') // LocalFilesystem
+ * mounts.get('/s3')    // S3Filesystem
+ * ```
+ */
+export interface ReadonlyMountMap<TMounts extends Record<string, WorkspaceFilesystem>> {
+  /** Get a mounted filesystem by path. Returns the concrete type for known mount paths. */
+  get<K extends string & keyof TMounts>(key: K): TMounts[K];
+  get(key: string): WorkspaceFilesystem | undefined;
+
+  has(key: string): boolean;
+  readonly size: number;
+
+  keys(): IterableIterator<string & keyof TMounts>;
+  values(): IterableIterator<TMounts[keyof TMounts & string]>;
+  entries(): IterableIterator<[string & keyof TMounts, TMounts[keyof TMounts & string]]>;
+  forEach(
+    callbackfn: (
+      value: TMounts[keyof TMounts & string],
+      key: string & keyof TMounts,
+      map: ReadonlyMountMap<TMounts>,
+    ) => void,
+  ): void;
+  [Symbol.iterator](): IterableIterator<[string & keyof TMounts, TMounts[keyof TMounts & string]]>;
 }

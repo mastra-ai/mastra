@@ -237,7 +237,7 @@ export interface AgentConfig<
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.
    */
-  workspace?: DynamicArgument<Workspace | undefined>;
+  workspace?: DynamicArgument<Workspace<any, any, any> | undefined>;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or

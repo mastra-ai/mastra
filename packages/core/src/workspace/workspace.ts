@@ -54,8 +54,16 @@ import type { WorkspaceStatus } from './types';
 /**
  * Configuration for creating a Workspace.
  * Users pass provider instances directly.
+ *
+ * Generic type parameters allow the workspace to preserve the concrete types
+ * of filesystem and sandbox providers, so accessors return the exact type
+ * you passed in.
  */
-export interface WorkspaceConfig {
+export interface WorkspaceConfig<
+  TFs extends WorkspaceFilesystem | undefined = undefined,
+  TSandbox extends WorkspaceSandbox | undefined = undefined,
+  TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
+> {
   /** Unique identifier (auto-generated if not provided) */
   id?: string;
 
@@ -67,14 +75,14 @@ export interface WorkspaceConfig {
    * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
    * Extend MastraFilesystem for automatic logger integration.
    */
-  filesystem?: WorkspaceFilesystem;
+  filesystem?: TFs;
 
   /**
    * Sandbox provider instance.
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
    * Extend MastraSandbox for automatic logger integration.
    */
-  sandbox?: WorkspaceSandbox;
+  sandbox?: TSandbox;
 
   /**
    * Mount multiple filesystems at different paths.
@@ -84,6 +92,9 @@ export interface WorkspaceConfig {
    * into the sandbox at their respective paths during init().
    *
    * Use the `onMount` hook to skip or customize mounting for specific filesystems.
+   *
+   * The concrete mount types are preserved — use `workspace.filesystem.getMount()`
+   * for typed access to individual mounts.
    *
    * @example
    * ```typescript
@@ -96,10 +107,11 @@ export interface WorkspaceConfig {
    * });
    *
    * await workspace.init();
-   * // Both filesystems mounted in sandbox at /data and /skills
+   * workspace.filesystem                    // CompositeFilesystem<{ '/data': S3Filesystem, '/skills': S3Filesystem }>
+   * workspace.filesystem.getMount('/data')  // S3Filesystem
    * ```
    */
-  mounts?: Record<string, WorkspaceFilesystem>;
+  mounts?: TMounts;
 
   /**
    * Hook called before mounting each filesystem into the sandbox.
@@ -323,8 +335,37 @@ export interface WorkspaceInfo {
  *
  * At minimum, a workspace has either a filesystem or a sandbox (or both).
  * Users pass instantiated provider objects to the constructor.
+ *
+ * The generic type parameters preserve the concrete types of filesystem and
+ * sandbox providers so that accessors return the exact type you passed in.
+ * TypeScript infers `TFs`, `TSandbox`, and `TMounts` from the constructor
+ * argument — no explicit generic params needed.
+ *
+ * @example
+ * ```typescript
+ * // With filesystem — preserves LocalFilesystem type
+ * const ws1 = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './data' }),
+ *   sandbox: new LocalSandbox({ workingDirectory: './data' }),
+ * });
+ * ws1.filesystem  // LocalFilesystem | undefined
+ * ws1.sandbox     // LocalSandbox | undefined
+ *
+ * // With mounts — filesystem becomes CompositeFilesystem
+ * const ws2 = new Workspace({
+ *   mounts: {
+ *     '/local': new LocalFilesystem({ basePath: './data' }),
+ *   },
+ * });
+ * ws2.filesystem                        // CompositeFilesystem<{ '/local': LocalFilesystem }>
+ * ws2.filesystem.getMount('/local')     // LocalFilesystem
+ * ```
  */
-export class Workspace {
+export class Workspace<
+  TFs extends WorkspaceFilesystem | undefined = undefined,
+  TSandbox extends WorkspaceSandbox | undefined = undefined,
+  TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
+> {
   readonly id: string;
   readonly name: string;
   readonly createdAt: Date;
@@ -333,11 +374,11 @@ export class Workspace {
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
-  private readonly _config: WorkspaceConfig;
+  private readonly _config: WorkspaceConfig<any, any, any>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
-  constructor(config: WorkspaceConfig) {
+  constructor(config: WorkspaceConfig<TFs, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
     this.createdAt = new Date();
@@ -436,16 +477,22 @@ export class Workspace {
 
   /**
    * The filesystem provider (if configured).
+   *
+   * Returns the concrete type you passed to the constructor.
+   * When `mounts` is used instead of `filesystem`, returns `CompositeFilesystem`
+   * parameterized with the concrete mount types.
    */
-  get filesystem(): WorkspaceFilesystem | undefined {
-    return this._fs;
+  get filesystem(): [TMounts] extends [Record<string, WorkspaceFilesystem>] ? CompositeFilesystem<TMounts> : TFs {
+    return this._fs as any;
   }
 
   /**
    * The sandbox provider (if configured).
+   *
+   * Returns the concrete type you passed to the constructor.
    */
-  get sandbox(): WorkspaceSandbox | undefined {
-    return this._sandbox;
+  get sandbox(): TSandbox {
+    return this._sandbox as any;
   }
 
   /**
