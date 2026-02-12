@@ -50,6 +50,20 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
 }
 
 /**
+ * Get the public-facing origin from a request, respecting reverse proxy headers.
+ * Behind a proxy (e.g. edge router), request.url contains the internal hostname.
+ * X-Forwarded-Host and X-Forwarded-Proto tell us the real public origin.
+ */
+function getPublicOrigin(request: Request): string {
+  const forwardedHost = request.headers.get('x-forwarded-host');
+  if (forwardedHost) {
+    const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+  return new URL(request.url).origin;
+}
+
+/**
  * Helper to get RBAC provider from Mastra server config.
  */
 function getRBACProvider(mastra: any): IRBACProvider<EEUser> | undefined {
@@ -167,8 +181,8 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
       }
 
       // Build OAuth callback URI (always /api/auth/sso/callback)
-      const requestUrl = new URL(request.url);
-      const oauthCallbackUri = `${requestUrl.origin}/api/auth/sso/callback`;
+      const origin = getPublicOrigin(request);
+      const oauthCallbackUri = `${origin}/api/auth/sso/callback`;
 
       // Encode the post-login redirect in state (where user goes after auth completes)
       // State format: uuid|postLoginRedirect
@@ -215,8 +229,7 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
     const { mastra, code, state, request } = ctx as any;
 
     // Build base URL for redirects (Response.redirect requires absolute URL)
-    const requestUrl = new URL(request.url);
-    const baseUrl = requestUrl.origin;
+    const baseUrl = getPublicOrigin(request);
 
     // Extract post-login redirect from state (format: uuid|encodedRedirect)
     let redirectTo = '/';
@@ -324,9 +337,9 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
       // Get logout URL if available
       let redirectTo: string | undefined;
       if (implementsInterface<ISSOProvider>(auth, 'getLogoutUrl') && auth.getLogoutUrl) {
-        // WorkOS requires absolute URL for redirect_uri and session from request
-        const requestUrl = new URL(request.url);
-        const logoutUrl = await auth.getLogoutUrl(requestUrl.origin, request);
+        // Use public origin (respects X-Forwarded-Host behind reverse proxy)
+        const origin = getPublicOrigin(request);
+        const logoutUrl = await auth.getLogoutUrl(origin, request);
         redirectTo = logoutUrl ?? undefined;
       }
 
