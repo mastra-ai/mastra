@@ -161,10 +161,15 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
             // Add feedback if provided (only if we're continuing to next iteration)
             if (iterationResult.feedback && typedInputData.stepResult?.isContinued && !hasFinishedSteps) {
+              console.log(
+                'adding iteration feedback to messageList',
+                rest.agentId,
+                JSON.stringify(iterationResult, null, 2),
+              );
               messageList.add(
                 {
                   id: rest.mastra?.generateId(),
-                  createdAt: new Date(new Date().getTime() + 1),
+                  createdAt: new Date(),
                   type: 'text',
                   role: 'assistant',
                   content: {

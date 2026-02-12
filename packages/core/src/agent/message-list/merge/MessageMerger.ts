@@ -46,8 +46,10 @@ export class MessageMerger {
     if (MessageMerger.isSealed(latestMessage)) return false;
 
     // Don't merge completion result message
-    if (incomingMessage.content.metadata?.completionResult || latestMessage.content.metadata?.completionResult)
+    if (incomingMessage.content.metadata?.completionResult || latestMessage.content.metadata?.completionResult) {
+      console.dir({ incomingMessage, latestMessage, shouldMerge: false }, { depth: null });
       return false;
+    }
 
     // Basic merge conditions: both messages must be assistant messages from the same thread
     const shouldAppendToLastAssistantMessage =

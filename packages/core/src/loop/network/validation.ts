@@ -803,9 +803,9 @@ export function formatStreamCompletionFeedback(result: CompletionRunResult, maxI
   }
 
   if (result.complete) {
-    lines.push('✅ The task is complete. You can now provide a final response to the user.');
+    lines.push('✅ The task is complete.');
   } else if (maxIterationReached) {
-    lines.push('⚠️ Max iterations reached. Please provide the best response you can with current progress.');
+    lines.push('⚠️ Max iterations reached.');
   } else {
     lines.push('🔄 The task is not yet complete. Please continue working based on the feedback above.');
   }

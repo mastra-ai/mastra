@@ -356,6 +356,7 @@ export class MastraLLMVNext extends MastraBase {
             });
           },
         },
+        maxSteps,
       };
 
       return loop(loopOptions);
