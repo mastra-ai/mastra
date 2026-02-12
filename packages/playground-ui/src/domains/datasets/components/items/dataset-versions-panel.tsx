@@ -75,7 +75,7 @@ export function DatasetVersionsPanel({
   const columnsToRender = isSelectionActive ? versionsListColumnsWithCheckbox : versionsListColumns;
 
   return (
-    <Column withLeftSeparator={true} className="w-[22rem]">
+    <Column withLeftSeparator={true} className="w-[20rem]">
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>

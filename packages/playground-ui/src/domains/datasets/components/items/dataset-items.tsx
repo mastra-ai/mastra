@@ -2,20 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import type { DatasetItem } from '@mastra/client-js';
-import { Alert, AlertTitle } from '@/ds/components/Alert';
-import { Button } from '@/ds/components/Button';
 import { DatasetItemsList } from './dataset-items-list';
 import { DatasetItemsToolbar } from './dataset-items-toolbar';
 import { DatasetItemPanel } from './dataset-item-panel';
 import { DatasetVersionsPanel } from './dataset-versions-panel';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
-import { ArrowRightToLineIcon } from 'lucide-react';
+import { AlertTriangleIcon, ArrowRightToLineIcon } from 'lucide-react';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
 import { exportItemsToJSON } from '../../utils/json-export';
 import { toast } from '@/lib/toast';
-import { cn } from '@/index';
+import { Alert, AlertTitle, Button, cn } from '@/index';
 import { Columns, Column } from '@/ds/components/Columns';
+import { Notice } from '@/ds/components/Notice';
 
 type SelectionMode =
   | 'idle'
@@ -102,9 +101,7 @@ export function DatasetItems({
 
   // Check if viewing an old version
   const isViewingOldVersion =
-    activeDatasetVersion != null &&
-    currentDatasetVersion != null &&
-    activeDatasetVersion !== currentDatasetVersion;
+    activeDatasetVersion != null && currentDatasetVersion != null && activeDatasetVersion !== currentDatasetVersion;
 
   const handleItemClick = (itemId: string) => {
     if (itemId === featuredItemId) {
@@ -169,8 +166,6 @@ export function DatasetItems({
     { name: 'date', label: 'Created', size: '5rem' },
   ];
 
-  console.log('____', !!featuredItem, isVersionsPanelOpen);
-
   return (
     <Columns
       className={cn({
@@ -204,18 +199,13 @@ export function DatasetItems({
         />
 
         {isViewingOldVersion && activeDatasetVersion != null && (
-          <Alert variant="warning">
-            <AlertTitle>Viewing version v{activeDatasetVersion}</AlertTitle>
-
-            <Button
-              variant="default"
-              size="sm"
-              className="mt-2 mb-1"
-              onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}
-            >
+          <Notice variant="warning">
+            <AlertTriangleIcon />
+            <Notice.Message>Viewing version v{activeDatasetVersion}</Notice.Message>
+            <Notice.Button onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}>
               <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
-            </Button>
-          </Alert>
+            </Notice.Button>
+          </Notice>
         )}
 
         <DatasetItemsList

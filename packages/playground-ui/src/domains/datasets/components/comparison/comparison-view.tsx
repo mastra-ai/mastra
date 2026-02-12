@@ -7,6 +7,8 @@ import { ScoreDelta } from './score-delta';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import { useDatasetExperiment } from '../../hooks/use-dataset-experiments';
 import type { CompareExperimentsResponse } from '@mastra/client-js';
+import { Notice } from '@/ds/components/Notice';
+import { AlertTriangleIcon } from 'lucide-react';
 
 interface ComparisonViewProps {
   datasetId: string;
@@ -86,10 +88,13 @@ export function ComparisonView({ datasetId, experimentIdA, experimentIdB }: Comp
 
   if (error) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Error loading comparison</AlertTitle>
-        <AlertDescription as="p">{error instanceof Error ? error.message : 'Unknown error'}</AlertDescription>
-      </Alert>
+      <Notice variant="warning">
+        <AlertTriangleIcon />
+        <Notice.Column>
+          <Notice.Title>Error loading comparison</Notice.Title>
+          <Notice.Message>{error instanceof Error ? error.message : 'Unknown error'}</Notice.Message>
+        </Notice.Column>
+      </Notice>
     );
   }
 
@@ -103,12 +108,13 @@ export function ComparisonView({ datasetId, experimentIdA, experimentIdB }: Comp
   return (
     <div className="space-y-6">
       {versionMismatch && (
-        <Alert variant="warning">
-          <AlertTitle>Version mismatch</AlertTitle>
-          <AlertDescription as="p">
-            These experiments used different dataset versions (v{expA.datasetVersion} vs v{expB.datasetVersion}). Results may not be directly comparable.
-          </AlertDescription>
-        </Alert>
+        <Notice variant="warning">
+          <AlertTriangleIcon />
+          <Notice.Message>
+            <strong>Version mismatch!</strong> These experiments used different dataset versions (v
+            {expA.datasetVersion} vs v{expB.datasetVersion}). Results may not be directly comparable.
+          </Notice.Message>
+        </Notice>
       )}
 
       {/* Per-scorer summary */}
