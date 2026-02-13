@@ -395,7 +395,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
   }
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -421,6 +421,9 @@ export class PromptBlocksPG extends PromptBlocksStorage {
       const queryParams: any[] = [];
       let paramIdx = 1;
 
+      conditions.push(`status = $${paramIdx++}`);
+      queryParams.push(status);
+
       if (authorId !== undefined) {
         conditions.push(`"authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
@@ -431,7 +434,7 @@ export class PromptBlocksPG extends PromptBlocksStorage {
         queryParams.push(JSON.stringify(metadata));
       }
 
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
       const countResult = await this.#db.client.one(

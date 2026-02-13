@@ -345,7 +345,7 @@ export class MongoDBMCPClientsStorage extends MCPClientsStorage {
 
   async list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -367,6 +367,7 @@ export class MongoDBMCPClientsStorage extends MCPClientsStorage {
 
       // Build filter
       const filter: Record<string, any> = {};
+      filter.status = status;
       if (authorId) {
         filter.authorId = authorId;
       }

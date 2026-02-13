@@ -3,6 +3,7 @@ import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/c
 import { HTTPException } from '../http-exception';
 import {
   storedAgentIdPathParams,
+  statusQuerySchema,
   listStoredAgentsQuerySchema,
   createStoredAgentBodySchema,
   updateStoredAgentBodySchema,
@@ -37,7 +38,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -54,6 +55,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         page,
         perPage,
         orderBy,
+        status,
         authorId,
         metadata,
       });
@@ -73,12 +75,14 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
   path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
+  queryParamSchema: statusQuerySchema,
   responseSchema: getStoredAgentResponseSchema,
   summary: 'Get stored agent by ID',
-  description: 'Returns a specific agent from storage by its unique identifier (resolved with active version config)',
+  description:
+    'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId }) => {
+  handler: async ({ mastra, storedAgentId, status }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -91,9 +95,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      // Use getAgentByIdResolved to automatically resolve from active version
-      // Returns StorageResolvedAgentType (thin record + version config)
-      const agent = await agentsStore.getByIdResolved(storedAgentId);
+      const agent = await agentsStore.getByIdResolved(storedAgentId, { status });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
@@ -310,7 +312,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
 
       // Handle auto-versioning with retry logic for race conditions
-      // This creates a version if there are meaningful config changes and DOES update activeVersionId
+      // This creates a new version if there are meaningful config changes.
+      // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       const autoVersionResult = await handleAutoVersioning(
         agentsStore,
         storedAgentId,
@@ -329,8 +332,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         editor.agent.clearCache(storedAgentId);
       }
 
-      // Return the resolved agent with the updated activeVersionId
-      const resolved = await agentsStore.getByIdResolved(storedAgentId);
+      // Return the resolved agent with the latest (draft) version so the UI sees its edits
+      const resolved = await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
       }

@@ -27,10 +27,29 @@ const storageOrderBySchema = z.object({
 });
 
 /**
+ * Status filter for get-by-id endpoints.
+ * Controls which version is resolved:
+ * - 'published' (default) — resolve with the active (published) version.
+ * - 'draft' — resolve with the latest version (which may be ahead of the published one).
+ */
+export const statusQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Which version to resolve: published (active version) or draft (latest version)'),
+});
+
+/**
  * GET /stored/agents - List stored agents
  */
 export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Filter agents by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter agents by author identifier'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
 });

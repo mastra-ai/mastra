@@ -348,7 +348,7 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
 
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -370,6 +370,7 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
 
       // Build filter
       const filter: Record<string, any> = {};
+      filter.status = status;
       if (authorId) {
         filter.authorId = authorId;
       }

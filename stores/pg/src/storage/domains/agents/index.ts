@@ -651,7 +651,7 @@ export class AgentsPG extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -672,8 +672,31 @@ export class AgentsPG extends AgentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIdx = 1;
+
+      conditions.push(`status = $${paramIdx++}`);
+      queryParams.push(status);
+
+      if (authorId !== undefined) {
+        conditions.push(`"authorId" = $${paramIdx++}`);
+        queryParams.push(authorId);
+      }
+
+      if (metadata && Object.keys(metadata).length > 0) {
+        conditions.push(`metadata @> $${paramIdx++}::jsonb`);
+        queryParams.push(JSON.stringify(metadata));
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       // Get total count
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const countResult = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -689,8 +712,8 @@ export class AgentsPG extends AgentsStorage {
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ORDER BY "${field}" ${direction} LIMIT $1 OFFSET $2`,
-        [limitValue, offset],
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+        [...queryParams, limitValue, offset],
       );
 
       const agents = (dataResult || []).map(row => this.parseRow(row));

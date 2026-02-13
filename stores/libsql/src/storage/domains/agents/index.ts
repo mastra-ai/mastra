@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -555,7 +555,7 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -574,8 +574,42 @@ export class AgentsLibSQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+
+      conditions.push('status = ?');
+      queryParams.push(status);
+
+      if (authorId !== undefined) {
+        conditions.push('authorId = ?');
+        queryParams.push(authorId);
+      }
+
+      if (metadata && Object.keys(metadata).length > 0) {
+        for (const [key, value] of Object.entries(metadata)) {
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_AGENTS', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}. Keys must be alphanumeric with underscores.`,
+              details: { key },
+            });
+          }
+          conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
+        }
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       // Get total count
-      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
+      const countResult = await this.#client.execute({
+        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}" ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -589,12 +623,12 @@ export class AgentsLibSQL extends AgentsStorage {
 
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
-      const rows = await this.#db.selectMany<Record<string, any>>({
-        tableName: TABLE_AGENTS,
-        orderBy: `"${field}" ${direction}`,
-        limit: limitValue,
-        offset,
+      const result = await this.#client.execute({
+        sql: `SELECT * FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, offset],
       });
+
+      const rows = result.rows ?? [];
 
       const agents = rows.map(row => this.parseRow(row));
 
