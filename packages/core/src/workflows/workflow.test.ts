@@ -19162,7 +19162,6 @@ describe('Workflow', () => {
         step: resumedResult.suspended[0],
         resumeData: new Date('2024-12-31'),
       });
-
       expect(finalResult.status).toBe('success');
       expect(secondItemDateAction).toHaveBeenCalledTimes(2);
 
@@ -19285,16 +19284,12 @@ describe('Workflow', () => {
         resumeData: { answer: 'hello' },
       });
 
-      // The branch conditions are re-evaluated during resume.
-      // The key assertion: inputData must NOT be undefined when conditions are re-evaluated.
-      // This is the bug from issue #12982 - the map step output stored in the snapshot
-      // uses the OLD map step UUID as key, but the reconstructed workflow has a NEW UUID,
-      // so getStepOutput can't find the result.
-      expect(conditionSpy).toHaveBeenCalled();
-      for (const call of conditionSpy.mock.calls) {
-        expect(call[0]).toBeDefined();
-        expect(call[0]).toHaveProperty('mappedValue', 20);
-      }
+      // Branch conditions should NOT be re-evaluated during resume.
+      // The resume path from suspendedPaths already identifies the correct branch.
+      // Re-evaluating conditions was the cause of issue #12982: the map step output
+      // uses a non-deterministic UUID as key, so after workflow reconstruction the
+      // condition would receive undefined inputData.
+      expect(conditionSpy).not.toHaveBeenCalled();
 
       expect(resumedResult.status).toBe('success');
       expect(resumedResult.steps['nested-wf-with-suspend'].status).toBe('success');
