@@ -676,11 +676,8 @@ Usage:
                   if (entry.type === 'file') {
                     // Skip non-text files
                     if (!isTextFile(entry.name)) continue;
-                    // Apply glob filter (match against path relative to search root)
-                    if (globMatcher) {
-                      const relativePath = fullPath.startsWith('/') ? fullPath.slice(1) : fullPath;
-                      if (!globMatcher(relativePath)) continue;
-                    }
+                    // Apply glob filter (createGlobMatcher normalizes leading slashes)
+                    if (globMatcher && !globMatcher(fullPath)) continue;
                     files.push(fullPath);
                   } else if (entry.type === 'directory' && !entry.isSymlink) {
                     files.push(...(await collectFiles(fullPath)));
