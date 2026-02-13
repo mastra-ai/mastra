@@ -1,7 +1,7 @@
 import type { ListScoresResponse } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type { PaginationInfo, TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -16,7 +16,9 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  StoredMCPClient,
   StoredScorer,
+  ToolProvider,
   Workspace,
 } from './resources';
 import type {
@@ -60,6 +62,10 @@ import type {
   ListStoredScorersResponse,
   CreateStoredScorerParams,
   StoredScorerResponse,
+  ListStoredMCPClientsParams,
+  ListStoredMCPClientsResponse,
+  CreateStoredMCPClientParams,
+  StoredMCPClientResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
@@ -70,6 +76,22 @@ import type {
   ListWorkspacesResponse,
   ListVectorsResponse,
   ListEmbeddersResponse,
+  DatasetRecord,
+  DatasetItem,
+  DatasetExperiment,
+  DatasetExperimentResult,
+  CreateDatasetParams,
+  UpdateDatasetParams,
+  AddDatasetItemParams,
+  UpdateDatasetItemParams,
+  BatchInsertDatasetItemsParams,
+  BatchDeleteDatasetItemsParams,
+  TriggerDatasetExperimentParams,
+  CompareExperimentsParams,
+  CompareExperimentsResponse,
+  DatasetItemVersionResponse,
+  DatasetVersionResponse,
+  ListToolProvidersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -683,10 +705,13 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available scorers
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing list of available scorers
    */
-  public listScorers(): Promise<Record<string, GetScorerResponse>> {
-    return this.request('/scores/scorers');
+  public listScorers(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<Record<string, GetScorerResponse>> {
+    return this.request(`/scores/scorers${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -928,6 +953,85 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Stored MCP Clients
+  // ============================================================================
+
+  /**
+   * Lists all stored MCP clients with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored MCP clients
+   */
+  public listStoredMCPClients(params?: ListStoredMCPClientsParams): Promise<ListStoredMCPClientsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/mcp-clients${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored MCP client
+   * @param params - MCP client configuration
+   * @returns Promise containing the created stored MCP client
+   */
+  public createStoredMCPClient(params: CreateStoredMCPClientParams): Promise<StoredMCPClientResponse> {
+    return this.request('/stored/mcp-clients', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored MCP client instance by ID for further operations (details, update, delete)
+   * @param storedMCPClientId - ID of the stored MCP client
+   * @returns StoredMCPClient instance
+   */
+  public getStoredMCPClient(storedMCPClientId: string): StoredMCPClient {
+    return new StoredMCPClient(this.options, storedMCPClientId);
+  }
+
+  // ============================================================================
+  // Tool Providers
+  // ============================================================================
+
+  /**
+   * Lists all registered tool providers
+   * @returns Promise containing list of tool provider info
+   */
+  public listToolProviders(): Promise<ListToolProvidersResponse> {
+    return this.request('/tool-providers');
+  }
+
+  /**
+   * Gets a tool provider instance by ID for further operations (listToolkits, listTools, getToolSchema)
+   * @param providerId - ID of the tool provider
+   * @returns ToolProvider instance
+   */
+  public getToolProvider(providerId: string): ToolProvider {
+    return new ToolProvider(this.options, providerId);
+  }
+
+  // ============================================================================
   // System
   // ============================================================================
 
@@ -978,5 +1082,275 @@ export class MastraClient extends BaseResource {
    */
   public listEmbedders(): Promise<ListEmbeddersResponse> {
     return this.request('/embedders');
+  }
+
+  // ============================================================================
+  // Datasets
+  // ============================================================================
+
+  /**
+   * Lists all datasets with optional pagination
+   */
+  public listDatasets(pagination?: {
+    page?: number;
+    perPage?: number;
+  }): Promise<{ datasets: DatasetRecord[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset by ID
+   */
+  public getDataset(datasetId: string): Promise<DatasetRecord> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  }
+
+  /**
+   * Creates a new dataset
+   */
+  public createDataset(params: CreateDatasetParams): Promise<DatasetRecord> {
+    return this.request('/datasets', { method: 'POST', body: params });
+  }
+
+  /**
+   * Updates a dataset
+   */
+  public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Deletes a dataset
+   */
+  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================================================
+  // Dataset Items
+  // ============================================================================
+
+  /**
+   * Lists items in a dataset with optional pagination, search, and version filter
+   */
+  public listDatasetItems(
+    datasetId: string,
+    params?: { page?: number; perPage?: number; search?: string; version?: number | null },
+  ): Promise<{ items: DatasetItem[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.version != null) {
+      searchParams.set('version', String(params.version));
+    }
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset item by ID
+   */
+  public getDatasetItem(datasetId: string, itemId: string): Promise<DatasetItem> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`);
+  }
+
+  /**
+   * Adds an item to a dataset
+   */
+  public addDatasetItem(params: AddDatasetItemParams): Promise<DatasetItem> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Updates a dataset item
+   */
+  public updateDatasetItem(params: UpdateDatasetItemParams): Promise<DatasetItem> {
+    const { datasetId, itemId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'PATCH',
+      body,
+    });
+  }
+
+  /**
+   * Deletes a dataset item
+   */
+  public deleteDatasetItem(datasetId: string, itemId: string): Promise<{ success: boolean }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Batch inserts items to a dataset
+   */
+  public batchInsertDatasetItems(
+    params: BatchInsertDatasetItemsParams,
+  ): Promise<{ items: DatasetItem[]; count: number }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/batch`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Batch deletes items from a dataset
+   */
+  public batchDeleteDatasetItems(
+    params: BatchDeleteDatasetItemsParams,
+  ): Promise<{ success: boolean; deletedCount: number }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/batch`, {
+      method: 'DELETE',
+      body,
+    });
+  }
+
+  // ============================================================================
+  // Dataset Item Versions
+  // ============================================================================
+
+  /**
+   * Lists versions for a dataset item
+   */
+  public getItemHistory(datasetId: string, itemId: string): Promise<{ history: DatasetItemVersionResponse[] }> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/history`);
+  }
+
+  /**
+   * Gets a specific version of a dataset item
+   */
+  public getDatasetItemVersion(
+    datasetId: string,
+    itemId: string,
+    datasetVersion: number,
+  ): Promise<DatasetItemVersionResponse> {
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/items/${encodeURIComponent(itemId)}/versions/${datasetVersion}`,
+    );
+  }
+
+  // ============================================================================
+  // Dataset Versions
+  // ============================================================================
+
+  /**
+   * Lists versions for a dataset
+   */
+  public listDatasetVersions(
+    datasetId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ versions: DatasetVersionResponse[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/versions${qs ? `?${qs}` : ''}`);
+  }
+
+  // ============================================================================
+  // Dataset Experiments
+  // ============================================================================
+
+  /**
+   * Lists experiments for a dataset
+   */
+  public listDatasetExperiments(
+    datasetId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ experiments: DatasetExperiment[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single dataset experiment by ID
+   */
+  public getDatasetExperiment(datasetId: string, experimentId: string): Promise<DatasetExperiment> {
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`);
+  }
+
+  /**
+   * Lists results for a dataset experiment
+   */
+  public listDatasetExperimentResults(
+    datasetId: string,
+    experimentId: string,
+    pagination?: { page?: number; perPage?: number },
+  ): Promise<{ results: DatasetExperimentResult[]; pagination: PaginationInfo }> {
+    const searchParams = new URLSearchParams();
+    if (pagination?.page !== undefined) searchParams.set('page', String(pagination.page));
+    if (pagination?.perPage !== undefined) searchParams.set('perPage', String(pagination.perPage));
+    const qs = searchParams.toString();
+    return this.request(
+      `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  /**
+   * Triggers a new dataset experiment
+   */
+  public triggerDatasetExperiment(params: TriggerDatasetExperimentParams): Promise<{
+    experimentId: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    totalItems: number;
+    succeededCount: number;
+    failedCount: number;
+    startedAt: string | Date;
+    completedAt: string | Date | null;
+    results: Array<{
+      itemId: string;
+      itemDatasetVersion: number | null;
+      input: unknown;
+      output: unknown | null;
+      groundTruth: unknown | null;
+      error: string | null;
+      startedAt: string | Date;
+      completedAt: string | Date;
+      retryCount: number;
+      scores: Array<{
+        scorerId: string;
+        scorerName: string;
+        score: number | null;
+        reason: string | null;
+        error: string | null;
+      }>;
+    }>;
+  }> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Compares two dataset experiments for regression detection
+   */
+  public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
+    const { datasetId, ...body } = params;
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}/compare`, {
+      method: 'POST',
+      body,
+    });
   }
 }

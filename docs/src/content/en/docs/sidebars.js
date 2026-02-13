@@ -426,6 +426,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
           id: 'deployment/monorepo',
           label: 'Monorepo',
         },

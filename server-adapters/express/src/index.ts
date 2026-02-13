@@ -136,7 +136,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -451,6 +451,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       },
     );
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    this.app.use(async (req: Request, res: Response, next: NextFunction) => {
+      const response = await this.handleCustomRouteRequest(
+        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        req.method,
+        req.headers as Record<string, string | string[] | undefined>,
+        req.body,
+        res.locals.requestContext,
+      );
+      if (!response) return next();
+      await this.writeCustomRouteResponse(response, res);
+    });
   }
 
   registerContextMiddleware(): void {

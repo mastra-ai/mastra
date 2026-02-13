@@ -131,6 +131,21 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Retrieves the input/output schema for the workflow
+   * @returns Promise containing parsed inputSchema and outputSchema, or null if not defined
+   */
+  async getSchema(): Promise<{
+    inputSchema: Record<string, unknown> | null;
+    outputSchema: Record<string, unknown> | null;
+  }> {
+    const details = await this.details();
+    return {
+      inputSchema: details.inputSchema ? JSON.parse(details.inputSchema) : null,
+      outputSchema: details.outputSchema ? JSON.parse(details.outputSchema) : null,
+    };
+  }
+
+  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the Run instance

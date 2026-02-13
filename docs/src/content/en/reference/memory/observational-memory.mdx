@@ -56,7 +56,7 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
       name: "scope",
       type: "'resource' | 'thread'",
       description:
-        "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` shares observations across all threads for a resource, enabling cross-conversation memory.",
+        "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` (experimental) shares observations across all threads for a resource, enabling cross-conversation memory.",
       isOptional: true,
       defaultValue: "'thread'",
     },
@@ -218,7 +218,7 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
 
 ## Examples
 
-### Resource scope with custom thresholds
+### Resource scope with custom thresholds (experimental)
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from "@mastra/memory";

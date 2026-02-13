@@ -43,6 +43,8 @@ const SNAPSHOT_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'mcpClients',
+  'requestContextSchema',
 ] as const;
 
 export class AgentsLibSQL extends AgentsStorage {
@@ -643,6 +645,8 @@ export class AgentsLibSQL extends AgentsStorage {
           outputProcessors: input.outputProcessors ?? null,
           memory: input.memory ?? null,
           scorers: input.scorers ?? null,
+          mcpClients: input.mcpClients ?? null,
+          requestContextSchema: input.requestContextSchema ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -943,6 +947,8 @@ export class AgentsLibSQL extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAt as string),

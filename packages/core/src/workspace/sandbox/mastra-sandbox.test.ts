@@ -34,8 +34,8 @@ class MountableSandbox extends MastraSandbox {
   /** Track lifecycle calls for ordering verification */
   readonly calls: string[] = [];
 
-  constructor(options?: Omit<MastraSandboxOptions, 'name'>) {
-    super({ name: 'MountableSandbox', ...options });
+  constructor(options?: MastraSandboxOptions) {
+    super({ ...options, name: 'MountableSandbox' });
   }
 
   async start(): Promise<void> {
