@@ -1183,6 +1183,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If shouldRetry is true, we continue the loop instead of triggering tripwire
       const stepReason = shouldRetry ? 'retry' : tripwireTriggered ? 'tripwire' : hasErrored ? 'error' : finishReason;
 
+      // isContinued should be true if:
+      // - shouldRetry is true (processor requested retry)
+      // - OR finishReason indicates more work (e.g., tool-use)
       const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error'].includes(finishReason));
 
       // Increment processor retry count if we're retrying
