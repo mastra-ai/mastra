@@ -690,10 +690,13 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available scorers
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing list of available scorers
    */
-  public listScorers(): Promise<Record<string, GetScorerResponse>> {
-    return this.request('/scores/scorers');
+  public listScorers(
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<Record<string, GetScorerResponse>> {
+    return this.request(`/scores/scorers${requestContextQueryString(requestContext)}`);
   }
 
   /**

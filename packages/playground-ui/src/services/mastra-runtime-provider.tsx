@@ -16,7 +16,7 @@ import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
-import { useAgentPromptExperiment, useObservationalMemoryContext } from '@/domains/agents/context';
+import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useQueryClient } from '@tanstack/react-query';
 
 const handleFinishReason = (finishReason: string) => {
@@ -382,7 +382,6 @@ export function MastraRuntimeProvider({
   children: ReactNode;
 }> &
   ChatProps) {
-  const { prompt: instructions } = useAgentPromptExperiment();
   const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>([]);
@@ -648,7 +647,6 @@ export function MastraRuntimeProvider({
     topP,
     seed,
     maxOutputTokens: maxTokens, // AI SDK v5 uses maxOutputTokens
-    instructions,
     providerOptions,
     maxSteps,
     requireToolApproval,
@@ -839,7 +837,6 @@ export function MastraRuntimeProvider({
             topK,
             topP,
             seed,
-            instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
             providerOptions,
@@ -956,7 +953,6 @@ export function MastraRuntimeProvider({
             topK,
             topP,
             seed,
-            instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
             providerOptions,

@@ -57,7 +57,12 @@ export const RequestContextSchemaForm = ({ requestContextSchema }: RequestContex
         <CopyButton content={localFormValuesStr} />
       </div>
 
-      <DynamicForm schema={zodSchema} onSubmit={setSchemaValues} submitButtonLabel="Save" defaultValues={schemaValues} />
+      <DynamicForm
+        schema={zodSchema}
+        onSubmit={setSchemaValues}
+        submitButtonLabel="Save"
+        defaultValues={schemaValues}
+      />
     </div>
   );
 };
