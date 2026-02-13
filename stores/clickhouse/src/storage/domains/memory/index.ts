@@ -81,13 +81,27 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       ifNotExists: ['lastMessageAt'],
     });
     // Backfill lastMessageAt for existing threads that have messages but NULL lastMessageAt
-    await this.client.command({
-      query: `ALTER TABLE ${TABLE_THREADS} UPDATE lastMessageAt = (
-        SELECT MAX(createdAt) FROM ${TABLE_MESSAGES} WHERE thread_id = ${TABLE_THREADS}.id
-      ) WHERE lastMessageAt IS NULL AND id IN (
-        SELECT DISTINCT thread_id FROM ${TABLE_MESSAGES}
-      )`,
+    // ClickHouse ALTER TABLE UPDATE does not support correlated subqueries,
+    // so we query the max createdAt per thread first, then update each thread individually.
+    const backfillResult = await this.client.query({
+      query: `SELECT thread_id, max(createdAt) as maxCreatedAt FROM ${TABLE_MESSAGES} GROUP BY thread_id`,
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
     });
+    const backfillRows = await backfillResult.json();
+    for (const row of backfillRows.data as any[]) {
+      const maxCreatedAt = row.maxCreatedAt ? new Date(row.maxCreatedAt).toISOString().replace('Z', '') : null;
+      if (maxCreatedAt) {
+        await this.client.command({
+          query: `ALTER TABLE ${TABLE_THREADS} UPDATE lastMessageAt = {lma:DateTime64(3)} WHERE id = {threadId:String} AND lastMessageAt IS NULL`,
+          query_params: { lma: maxCreatedAt, threadId: row.thread_id },
+        });
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
