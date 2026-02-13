@@ -11,5 +11,5 @@ Added a unified observability type system with interfaces for structured logging
 - New `ObservabilityContext` interface combining tracing, logging, and metrics contexts
 - New type definitions for `LoggerContext`, `MetricsContext`, `ScoreInput`, `FeedbackInput`, and `ObservabilityEventBus`
 - `createObservabilityContext()` factory and `resolveObservabilityContext()` resolver with no-op defaults for graceful degradation
-- Migrated 60+ internal forwarding sites from `TracingContext` to `ObservabilityContext` so future signals propagate without additional changes
+- Future logging and metrics signals will propagate automatically through execution contexts — no migration needed
 - Added `loggerVNext` and `metrics` getters to the `Mastra` class
