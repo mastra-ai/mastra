@@ -585,6 +585,11 @@ Usage:
             .optional()
             .default(true)
             .describe('Whether the search is case-sensitive (default: true)'),
+          includeHidden: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
         }),
         outputSchema: z.object({
           matches: z.array(
@@ -614,6 +619,7 @@ Usage:
           contextLines = 0,
           maxResults = 100,
           caseSensitive = true,
+          includeHidden = false,
         }) => {
           // Guard against excessively long patterns as a cheap ReDoS heuristic
           const MAX_PATTERN_LENGTH = 1000;
@@ -644,7 +650,7 @@ Usage:
           // Compile glob matcher if provided
           let globMatcher: GlobMatcher | undefined;
           if (globPattern) {
-            globMatcher = createGlobMatcher(globPattern);
+            globMatcher = createGlobMatcher(globPattern, { dot: includeHidden });
           }
 
           // Collect files to search
@@ -669,8 +675,8 @@ Usage:
                 }
 
                 for (const entry of entries) {
-                  // Skip hidden files/dirs
-                  if (entry.name.startsWith('.')) continue;
+                  // Skip hidden files/dirs unless includeHidden is set
+                  if (!includeHidden && entry.name.startsWith('.')) continue;
 
                   const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
                   if (entry.type === 'file') {

@@ -937,6 +937,77 @@ describe('createWorkspaceTools', () => {
 
       expect(result.matches[0].column).toBe(5);
     });
+
+    it('should skip hidden files by default', async () => {
+      await fs.writeFile(path.join(tempDir, '.hidden.ts'), 'const SECRET = "hidden"');
+      await fs.writeFile(path.join(tempDir, 'visible.ts'), 'const SECRET = "visible"');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'SECRET' });
+
+      expect(result.matchCount).toBe(1);
+      expect(result.matches[0].file).toBe('/visible.ts');
+    });
+
+    it('should include hidden files when includeHidden is true', async () => {
+      await fs.writeFile(path.join(tempDir, '.hidden.ts'), 'const SECRET = "hidden"');
+      await fs.writeFile(path.join(tempDir, 'visible.ts'), 'const SECRET = "visible"');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'SECRET',
+        includeHidden: true,
+      });
+
+      expect(result.matchCount).toBe(2);
+      const files = result.matches.map(m => m.file).sort();
+      expect(files).toEqual(['/.hidden.ts', '/visible.ts']);
+    });
+
+    it('should include hidden directories when includeHidden is true', async () => {
+      await fs.mkdir(path.join(tempDir, '.config'));
+      await fs.writeFile(path.join(tempDir, '.config', 'settings.json'), '{"key": "value"}');
+      await fs.writeFile(path.join(tempDir, 'app.ts'), 'const key = "value"');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'key',
+        includeHidden: true,
+      });
+
+      expect(result.matchCount).toBe(2);
+      const files = result.matches.map(m => m.file).sort();
+      expect(files).toEqual(['/.config/settings.json', '/app.ts']);
+    });
+
+    it('should filter hidden files with glob when includeHidden is true', async () => {
+      await fs.writeFile(path.join(tempDir, '.eslintrc.json'), '{"hidden": true}');
+      await fs.writeFile(path.join(tempDir, '.prettierrc.json'), '{"hidden": true}');
+      await fs.writeFile(path.join(tempDir, 'tsconfig.json'), '{"visible": true}');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'hidden',
+        glob: '.*rc.json',
+        includeHidden: true,
+      });
+
+      expect(result.matchCount).toBe(2);
+      const files = result.matches.map(m => m.file).sort();
+      expect(files).toEqual(['/.eslintrc.json', '/.prettierrc.json']);
+    });
   });
 
   // ===========================================================================
