@@ -25,7 +25,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { findToolByName, inferProviderExecuted, isGatewayTool } from '../../../tools/provider-tool-utils';
+import { findProviderToolByName, inferProviderExecuted, isGatewayTool } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -977,7 +977,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       /**
        * Merge provider-executed tool results into their corresponding tool calls.
        *
-       * For provider-executed tools (like gateway tools or native provider tools),
+       * For provider-executed tools (like gateway tools),
        * the stream from doStream includes both tool-call and tool-result chunks.
        * We need to:
        * 1. Infer providerExecuted for provider tools when the stream doesn't set it
@@ -993,7 +993,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         if (streamToolResults && streamToolResults.length > 0) {
           for (const chunk of streamToolResults) {
             const payload = chunk.payload;
-            if (payload.providerExecuted || findToolByName(stepTools, payload.toolName)) {
+            if (payload.providerExecuted || findProviderToolByName(stepTools, payload.toolName)) {
               toolResultMap.set(payload.toolCallId, payload.result);
             }
           }
@@ -1001,7 +1001,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
         for (const toolCall of toolCalls) {
           // Infer providerExecuted for provider tools when the stream doesn't set it
-          const tool = findToolByName(stepTools, toolCall.toolName);
+          const tool = findProviderToolByName(stepTools, toolCall.toolName);
           const inferred = inferProviderExecuted(toolCall.providerExecuted, tool);
           if (inferred !== undefined) {
             toolCall.providerExecuted = inferred;
@@ -1022,7 +1022,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
-              const tool = findToolByName(stepTools, toolCall.toolName);
+              const tool = findProviderToolByName(stepTools, toolCall.toolName);
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
