@@ -6,8 +6,6 @@ export const useAgent = (agentId?: string) => {
   const client = useMastraClient();
   const requestContext = useMergedRequestContext();
 
-  console.log('lol', requestContext);
-
   return useQuery({
     queryKey: ['agent', agentId, requestContext],
     queryFn: () => (agentId ? client.getAgent(agentId).details(requestContext) : null),
