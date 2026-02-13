@@ -1,4 +1,4 @@
-import { MastraStorage } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { Redis } from '@upstash/redis';
 import { StoreMemoryUpstash } from './domains/memory';
@@ -92,7 +92,7 @@ const isClientConfig = (config: UpstashConfig): config is UpstashConfig & { clie
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class UpstashStore extends MastraStorage {
+export class UpstashStore extends MastraCompositeStore {
   private redis: Redis;
   stores: StorageDomains;
 

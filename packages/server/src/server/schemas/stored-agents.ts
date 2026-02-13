@@ -1,5 +1,7 @@
 import z from 'zod';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
+import { serializedMemoryConfigSchema } from './memory-config';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -25,10 +27,12 @@ const storageOrderBySchema = z.object({
 });
 
 /**
- * GET /api/storage/agents - List stored agents
+ * GET /stored/agents - List stored agents
  */
 export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  authorId: z.string().optional().describe('Filter agents by author identifier'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
 });
 
 // ============================================================================
@@ -40,84 +44,318 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
  */
 const scorerConfigSchema = z.object({
   sampling: z
-    .object({
-      type: z.enum(['ratio', 'count']),
-      rate: z.number().optional(),
-      count: z.number().optional(),
-    })
+    .union([
+      z.object({ type: z.literal('none') }),
+      z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
+    ])
     .optional(),
 });
 
 /**
- * Base stored agent schema (shared fields)
+ * Rule and RuleGroup schemas for conditional prompt block evaluation.
  */
-const storedAgentBaseSchema = z.object({
+const ruleSchema = z.object({
+  field: z.string(),
+  operator: z.enum([
+    'equals',
+    'not_equals',
+    'contains',
+    'not_contains',
+    'greater_than',
+    'less_than',
+    'greater_than_or_equal',
+    'less_than_or_equal',
+    'in',
+    'not_in',
+    'exists',
+    'not_exists',
+  ]),
+  value: z.unknown(),
+});
+
+/**
+ * Rule group schema with a fixed nesting depth (3 levels) to avoid
+ * infinite recursion when converting to JSON Schema / OpenAPI.
+ */
+const ruleGroupDepth2 = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(ruleSchema),
+});
+
+const ruleGroupDepth1 = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth2])),
+});
+
+const ruleGroupSchema = z.object({
+  operator: z.enum(['AND', 'OR']),
+  conditions: z.array(z.union([ruleSchema, ruleGroupDepth1])),
+});
+
+/**
+ * Agent instruction block schema for prompt-block-based instructions.
+ */
+const agentInstructionBlockSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('text'), content: z.string() }),
+  z.object({ type: z.literal('prompt_block_ref'), id: z.string() }),
+  z.object({ type: z.literal('prompt_block'), content: z.string(), rules: ruleGroupSchema.optional() }),
+]);
+
+/**
+ * Creates a schema for a field that can be either a static value or an array of conditional variants.
+ * Each variant has a `value` and an optional `rules` (RuleGroup) that determines when it applies.
+ */
+function conditionalFieldSchema<T extends z.ZodTypeAny>(valueSchema: T) {
+  const variantSchema = z.object({
+    value: valueSchema,
+    rules: ruleGroupSchema.optional(),
+  });
+  return z.union([valueSchema, z.array(variantSchema)]);
+}
+
+/**
+ * Instructions can be a plain string or an array of instruction blocks (text + prompt_block references).
+ */
+export const instructionsSchema = z
+  .union([z.string(), z.array(agentInstructionBlockSchema)])
+  .describe('System instructions for the agent (string or array of instruction blocks)');
+
+/** Base model config schema (reused across snapshot and response schemas) */
+const modelConfigSchema = z
+  .object({
+    provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
+    name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
+  })
+  .passthrough();
+
+/** Base tools config schema */
+const toolsConfigSchema = z.record(z.string(), z.object({ description: z.string().optional() }));
+
+/** MCP client tools config schema — specifies which tools to use from an MCP client/server */
+const mcpClientToolsConfigSchema = z.object({
+  tools: z.record(z.string(), z.object({ description: z.string().optional() })).optional(),
+});
+
+/**
+ * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
+ * These live in version snapshots, not on the thin agent record.
+ *
+ * Fields that support conditional variants (StorageConditionalField) can be either
+ * a static value OR an array of { value, rules? } variants evaluated at request time.
+ */
+const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
-  instructions: z.string().describe('System instructions for the agent'),
-  model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: z.record(z.string(), z.unknown()).optional().describe('Default options for generate/stream calls'),
-  workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
-  agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
-  inputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Input processor configurations'),
-  outputProcessors: z.array(z.record(z.string(), z.unknown())).optional().describe('Output processor configurations'),
-  memory: z.string().optional().describe('Memory key to resolve from Mastra registry'),
-  scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
+  instructions: instructionsSchema,
+  model: conditionalFieldSchema(modelConfigSchema).describe(
+    'Model configuration — static value or array of conditional variants',
+  ),
+  tools: conditionalFieldSchema(toolsConfigSchema)
+    .optional()
+    .describe('Tool keys mapped to per-tool config — static or conditional'),
+  defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
+    .optional()
+    .describe('Default options for generate/stream calls — static or conditional'),
+  workflows: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of workflow keys — static or conditional'),
+  agents: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of agent keys — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
+  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+    .optional()
+    .describe('Memory configuration — static or conditional'),
+  scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
+    .optional()
+    .describe('Scorer keys with optional sampling config — static or conditional'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining valid request context variables for conditional rule evaluation'),
+});
+
+/**
+ * Agent metadata fields (authorId, metadata) that live on the thin agent record.
+ */
+const agentMetadataSchema = z.object({
+  authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
 });
 
 /**
- * POST /api/storage/agents - Create stored agent body
+ * POST /stored/agents - Create stored agent body
+ * Flat union of agent-record fields + config fields
+ * The id is optional — if not provided, it will be derived from the agent name via slugify.
  */
-export const createStoredAgentBodySchema = storedAgentBaseSchema.extend({
-  id: z.string().describe('Unique identifier for the agent'),
+export const createStoredAgentBodySchema = z
+  .object({
+    id: z.string().optional().describe('Unique identifier for the agent. If not provided, derived from name.'),
+    authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
+  })
+  .merge(snapshotConfigSchema);
+
+/**
+ * Snapshot config schema for updates where nullable fields (like memory) can be set to null to clear them.
+ */
+const snapshotConfigUpdateSchema = snapshotConfigSchema.extend({
+  memory: z
+    .union([conditionalFieldSchema(serializedMemoryConfigSchema), z.null()])
+    .optional()
+    .describe('Memory configuration — static, conditional, or null to disable memory'),
 });
 
 /**
- * PATCH /api/storage/agents/:storedAgentId - Update stored agent body
+ * PATCH /stored/agents/:storedAgentId - Update stored agent body
+ * Optional metadata-level fields + optional config fields
  */
-export const updateStoredAgentBodySchema = storedAgentBaseSchema.partial();
+export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigUpdateSchema.partial());
 
 // ============================================================================
 // Response Schemas
 // ============================================================================
 
 /**
- * Stored agent object schema (full response)
+ * Stored agent object schema (resolved response: thin record + version config)
+ * Represents StorageResolvedAgentType
  */
-export const storedAgentSchema = storedAgentBaseSchema.extend({
+export const storedAgentSchema = z.object({
+  // Thin agent record fields
   id: z.string(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  status: z.string().describe('Agent status: draft or published'),
+  activeVersionId: z.string().optional(),
+  authorId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  // Version snapshot config fields (resolved from active version)
+  name: z.string().describe('Name of the agent'),
+  description: z.string().optional().describe('Description of the agent'),
+  instructions: instructionsSchema,
+  model: conditionalFieldSchema(modelConfigSchema).describe(
+    'Model configuration — static value or array of conditional variants',
+  ),
+  tools: conditionalFieldSchema(toolsConfigSchema)
+    .optional()
+    .describe('Tool keys mapped to per-tool config — static or conditional'),
+  defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
+    .optional()
+    .describe('Default options for generate/stream calls — static or conditional'),
+  workflows: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of workflow keys — static or conditional'),
+  agents: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of agent keys — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
+  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+    .optional()
+    .describe('Memory configuration — static or conditional'),
+  scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
+    .optional()
+    .describe('Scorer keys with optional sampling config — static or conditional'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining valid request context variables'),
 });
 
 /**
- * Response for GET /api/storage/agents
+ * Response for GET /stored/agents
  */
 export const listStoredAgentsResponseSchema = paginationInfoSchema.extend({
   agents: z.array(storedAgentSchema),
 });
 
 /**
- * Response for GET /api/storage/agents/:storedAgentId
+ * Response for GET /stored/agents/:storedAgentId
  */
 export const getStoredAgentResponseSchema = storedAgentSchema;
 
 /**
- * Response for POST /api/storage/agents
+ * Response for POST /stored/agents
  */
 export const createStoredAgentResponseSchema = storedAgentSchema;
 
 /**
- * Response for PATCH /api/storage/agents/:storedAgentId
+ * Response for PATCH /stored/agents/:storedAgentId
+ *
+ * The response can be either:
+ * 1. A thin agent record (no version) - only has id, status, dates, etc.
+ * 2. A resolved agent (with version) - has all config fields from the version
+ *
+ * We use a union to handle both cases properly.
  */
-export const updateStoredAgentResponseSchema = storedAgentSchema;
+export const updateStoredAgentResponseSchema = z.union([
+  // Thin agent record (no version config)
+  z.object({
+    id: z.string(),
+    status: z.string(),
+    activeVersionId: z.string().optional(),
+    authorId: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    createdAt: z.coerce.date(),
+    updatedAt: z.coerce.date(),
+  }),
+  // Resolved agent (thin record + version config)
+  storedAgentSchema,
+]);
 
 /**
- * Response for DELETE /api/storage/agents/:storedAgentId
+ * Response for DELETE /stored/agents/:storedAgentId
  */
 export const deleteStoredAgentResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
 });
+
+// ============================================================================
+// Preview Instructions Schemas
+// ============================================================================
+
+/**
+ * POST /stored/agents/preview-instructions - Preview resolved instructions
+ */
+export const previewInstructionsBodySchema = z.object({
+  blocks: z.array(agentInstructionBlockSchema).describe('Array of instruction blocks to resolve'),
+  context: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .default({})
+    .describe('Request context for variable interpolation and rule evaluation'),
+});
+
+/**
+ * Response for POST /stored/agents/preview-instructions
+ */
+export const previewInstructionsResponseSchema = z.object({
+  result: z.string().describe('The resolved instructions string'),
+});
+
+/**
+ * Exported for use in agent-versions.ts schemas
+ */
+export { snapshotConfigSchema, scorerConfigSchema, conditionalFieldSchema, modelConfigSchema, toolsConfigSchema };

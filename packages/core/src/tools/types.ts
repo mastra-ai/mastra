@@ -16,6 +16,7 @@ import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
+import type { Workspace } from '../workspace/workspace';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
@@ -89,6 +90,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
    * This is populated by the MCP server and passed through to the tool's execution context.
    */
   mcp?: MCPToolExecutionContext;
+  /**
+   * Workspace for tool execution. When provided at execution time, this overrides
+   * any workspace configured at tool build time. Allows dynamic workspace selection
+   * per-step via prepareStep.
+   */
+  workspace?: Workspace;
 };
 
 /**
@@ -233,12 +240,25 @@ export type InternalCoreTool = {
 );
 
 // Unified tool execution context that works for all scenarios
-export interface ToolExecutionContext<TSuspend = unknown, TResume = unknown> {
+export interface ToolExecutionContext<
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<TRequestContext>;
   tracingContext?: TracingContext;
   abortSignal?: AbortSignal;
+
+  /**
+   * Workspace available for tool execution. When provided, tools can access:
+   * - workspace.filesystem - for file operations (read, write, list, etc.)
+   * - workspace.sandbox - for command execution
+   *
+   * This allows tools to work with the agent's configured workspace.
+   */
+  workspace?: Workspace;
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream
@@ -261,8 +281,9 @@ export interface ToolAction<
   TSchemaOut,
   TSuspend = unknown,
   TResume = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume> = ToolExecutionContext<TSuspend, TResume>,
+  TContext extends ToolExecutionContext<TSuspend, TResume, any> = ToolExecutionContext<TSuspend, TResume>,
   TId extends string = string,
+  TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TId;
   description: string;
@@ -270,6 +291,12 @@ export interface ToolAction<
   outputSchema?: SchemaWithValidation<TSchemaOut>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   resumeSchema?: SchemaWithValidation<TResume>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before tool execution.
+   * If validation fails, a validation error is returned instead of executing the tool.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.

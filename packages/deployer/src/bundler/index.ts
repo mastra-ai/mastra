@@ -15,7 +15,7 @@ import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
 import type { BundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
-import { getPackageName, slash } from '../build/utils';
+import { slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
@@ -323,32 +323,50 @@ export abstract class Bundler extends MastraBundler {
     }
 
     const dependenciesToInstall = new Map<string, string>();
-    for (const dep of analyzedBundleInfo.externalDependencies) {
+    for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
+      if (analyzedBundleInfo.workspaceMap.has(dep)) {
+        continue;
+      }
+
+      let version = depInfo.version;
+      let actualPackageName: string | undefined;
+
+      // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
       try {
-        if (analyzedBundleInfo.workspaceMap.has(dep)) {
-          continue;
+        // First try to resolve from the project root (provides correct context for monorepos)
+        let rootPath = await getPackageRootPath(dep, projectRoot);
+
+        // If not found in user's project, try resolving from deployer's location
+        // This handles packages like hono that are provided by @mastra/deployer
+        if (!rootPath) {
+          rootPath = await getPackageRootPath(dep, import.meta.dirname);
         }
 
-        const rootPath = await getPackageRootPath(dep);
-        const pkg = await readJSON(`${rootPath}/package.json`);
-        const actualPackageName = pkg.name;
-        const version = pkg.version || 'latest';
-
-        // Check if this is an npm alias (import name differs from actual package name)
-        // e.g., importing "ai-v5" which resolves to package "ai"
-        // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
-        // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
-        // For scoped packages, compare the full package name (e.g., @scope/pkg)
-        const importName = getPackageName(dep);
-        const isAlias = actualPackageName && importName !== actualPackageName;
-
-        if (isAlias) {
-          dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
-        } else {
-          dependenciesToInstall.set(dep, version);
+        if (rootPath) {
+          const pkg = await readJSON(`${rootPath}/package.json`);
+          actualPackageName = pkg.name;
+          // Use pre-resolved version if available, otherwise use from package.json
+          if (!version) {
+            version = pkg.version;
+          }
         }
       } catch {
-        dependenciesToInstall.set(dep, 'latest');
+        // Resolution failed, will use 'latest' for version
+      }
+
+      // Default to 'latest' if still no version
+      version = version || 'latest';
+
+      // Check if this is an npm alias (import name differs from actual package name)
+      // e.g., importing "ai-v5" which resolves to package "ai"
+      // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
+      // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
+      const isAlias = actualPackageName && dep !== actualPackageName;
+
+      if (isAlias) {
+        dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
+      } else {
+        dependenciesToInstall.set(dep, version);
       }
     }
 

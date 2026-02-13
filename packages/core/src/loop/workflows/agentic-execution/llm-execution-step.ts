@@ -1,6 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
@@ -11,6 +12,7 @@ import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/mo
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
+import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
@@ -24,6 +26,7 @@ import type {
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -327,7 +330,7 @@ async function processOutputStream<OUTPUT = undefined>({
               parts: [
                 {
                   type: 'file' as const,
-                  // @ts-expect-error
+                  // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
                 },
@@ -445,6 +448,7 @@ function executeStreamWithFallbackModels<T>(
     let finalResult: T | undefined;
 
     let done = false;
+    let lastError: unknown;
     for (const modelConfig of models) {
       index++;
       const maxRetries = modelConfig.maxRetries || 0;
@@ -468,6 +472,7 @@ function executeStreamWithFallbackModels<T>(
             throw err;
           }
 
+          lastError = err;
           attempt++;
 
           logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
@@ -485,8 +490,10 @@ function executeStreamWithFallbackModels<T>(
       }
     }
     if (typeof finalResult === 'undefined') {
-      logger?.error('Exhausted all fallback models and reached the maximum number of retries.');
-      throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
+      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
+      const errorMessage = `Exhausted all fallback models and reached the maximum number of retries. Last error: ${lastErrMsg}`;
+      logger?.error(errorMessage);
+      throw new Error(errorMessage, { cause: lastError });
     }
     return finalResult;
   };
@@ -520,6 +527,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
+  workspace,
+  outputWriter,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
@@ -536,11 +545,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let request: any;
       let rawResponse: any;
 
-      const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
+      const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
+        stepWorkspace?: Workspace;
       }>(
         models,
         logger,
@@ -568,6 +578,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
+          workspace?: Workspace;
         } = {
           model,
           tools,
@@ -576,6 +587,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           providerOptions,
           modelSettings,
           structuredOutput,
+          workspace,
         };
 
         const inputStepProcessors = [
@@ -588,11 +600,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            processorStates,
           });
 
           try {
             // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
             const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+            // Create a ProcessorStreamWriter from outputWriter if available
+            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+              : undefined;
+
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
@@ -607,6 +626,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               modelSettings,
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
+              writer: inputStepWriter,
+              abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
@@ -664,10 +685,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           _internal: _internal!,
           model: currentStep.model,
         });
+
+        // Resolve supportedUrls - it may be a Promise (e.g., from ModelRouterLanguageModel)
+        // This allows providers like Mistral to expose their native URL support for PDFs
+        // See: https://github.com/mastra-ai/mastra/issues/12152
+        let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
+        const modelSupportedUrls = currentStep.model?.supportedUrls;
+        if (modelSupportedUrls) {
+          if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+            resolvedSupportedUrls = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+          } else {
+            resolvedSupportedUrls = modelSupportedUrls as Record<string, RegExp[]>;
+          }
+        }
+
         const messageListPromptArgs = {
           downloadRetries,
           downloadConcurrency,
-          supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
+          supportedUrls: resolvedSupportedUrls,
         };
         let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
@@ -721,6 +756,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
                       If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
+
+                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
                       `;
                 }
 
@@ -829,7 +866,28 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger,
           });
         } catch (error) {
-          logger?.error('Error in LLM Execution Step', error);
+          const provider = model?.provider;
+          const modelIdStr = model?.modelId;
+          const isUpstreamError = APICallError.isInstance(error);
+
+          if (isUpstreamError) {
+            const providerInfo = provider ? ` from ${provider}` : '';
+            const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
+            logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          } else {
+            logger?.error('Error in LLM execution', {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          }
+
           if (isAbortError(error) && options?.abortSignal?.aborted) {
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
@@ -864,13 +922,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
-        return { outputStream, callBail: false, runState, stepTools: currentStep.tools };
+        return {
+          outputStream,
+          callBail: false,
+          runState,
+          stepTools: currentStep.tools,
+          stepWorkspace: currentStep.workspace,
+        };
       });
 
-      // Store modified tools in _internal so toolCallStep can access them
+      // Store modified tools and workspace in _internal so toolCallStep can access them
       // without going through workflow serialization (which would lose execute functions)
       if (_internal) {
         _internal.stepTools = stepTools;
+        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
       }
 
       if (callBail) {
@@ -957,6 +1022,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          processorStates,
         });
 
         try {
@@ -976,6 +1042,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+          // Create a ProcessorStreamWriter from outputWriter if available
+          const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+            : undefined;
+
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
@@ -987,6 +1059,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tracingContext: outputStepTracingContext,
             requestContext,
             retryCount: currentRetryCount,
+            writer: processorWriter,
           });
         } catch (error) {
           if (error instanceof TripWire) {
@@ -1066,6 +1139,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           tripwire: stepTripwireData,
         }),
       );
+
+      // Remove rejected response messages from the messageList before the next iteration.
+      // Without this, the LLM sees the rejected assistant response in its prompt on retry,
+      // which confuses models and often causes empty text responses.
+      if (shouldRetry) {
+        messageList.removeByIds([messageId]);
+      }
 
       // Build retry feedback text if retrying
       // This will be passed through workflow state to survive the system message reset

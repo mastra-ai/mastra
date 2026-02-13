@@ -63,7 +63,7 @@ workflow.foreach(step1, { concurrency: 2 });
 
 The `.foreach()` method processes all items before the next step executes. The step following `.foreach()` only runs after every iteration has completed, regardless of concurrency settings. With `concurrency: 1` (default), items process sequentially. With higher concurrency, items process in parallel batches, but the next step still waits for all batches to finish.
 
-If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/v1/workflows/control-flow#nested-workflows-inside-foreach) for examples.
+If you need to run multiple operations per item, use a nested workflow as the step. This keeps all operations for each item together and is cleaner than chaining multiple `.foreach()` calls. See [Nested workflows inside foreach](/docs/workflows/control-flow#nested-workflows-inside-foreach) for examples.
 
 ### Output structure
 
@@ -122,6 +122,60 @@ workflow
   .commit();
 ```
 
+### Progress events during streaming
+
+When using `run.stream()`, foreach steps emit a `workflow-step-progress` event after each iteration completes. This lets you track real-time progress without waiting for the entire foreach to finish.
+
+```typescript
+const run = await workflow.createRun();
+const stream = run.stream({ inputData });
+
+for await (const chunk of stream) {
+  if (chunk.type === 'workflow-step-progress') {
+    console.log(`${chunk.payload.completedCount}/${chunk.payload.totalCount}`);
+    // e.g. "1/3", "2/3", "3/3"
+  }
+}
+```
+
+Each progress event payload contains:
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "The step ID of the foreach step",
+    },
+    {
+      name: "completedCount",
+      type: "number",
+      description: "Number of iterations completed so far",
+    },
+    {
+      name: "totalCount",
+      type: "number",
+      description: "Total number of iterations",
+    },
+    {
+      name: "currentIndex",
+      type: "number",
+      description: "Index of the iteration that just completed",
+    },
+    {
+      name: "iterationStatus",
+      type: "'success' | 'failed' | 'suspended'",
+      description: "Status of the iteration that just completed",
+    },
+    {
+      name: "iterationOutput",
+      type: "Record<string, any>",
+      description: "Output of the iteration (present when iterationStatus is 'success')",
+      isOptional: true,
+    },
+  ]}
+/>
+
 ## Related
 
-- [Looping with foreach](/docs/v1/workflows/control-flow#looping-with-foreach)
+- [Looping with foreach](/docs/workflows/control-flow#looping-with-foreach)

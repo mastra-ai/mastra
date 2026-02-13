@@ -1,37 +1,39 @@
 import { join } from 'node:path';
 import { MastraError } from '@mastra/core/error';
-import { FileService } from '@mastra/deployer';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MASTRA_DIRECTORY } from './constants.js';
 import { getMastraEntryFile } from './file.js';
 
-vi.mock('@mastra/deployer');
+const mockGetFirstExistingFile = vi.fn();
+
+vi.mock('@mastra/deployer', () => {
+  return {
+    FileService: class MockFileService {
+      getFirstExistingFile = mockGetFirstExistingFile;
+    },
+  };
+});
+
 vi.mock('./constants.js', () => ({
   MASTRA_DIRECTORY: 'src/mastra',
 }));
 
 describe('getMastraEntryFile', () => {
-  let mockFileService: any;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFileService = {
-      getFirstExistingFile: vi.fn(),
-    };
-    vi.mocked(FileService).mockImplementation(() => mockFileService);
   });
 
   it('should return the first existing mastra entry file', () => {
     const mastraDir = '/test/project';
     const expectedFile = join(mastraDir, MASTRA_DIRECTORY, 'index.ts');
 
-    mockFileService.getFirstExistingFile.mockReturnValue(expectedFile);
+    mockGetFirstExistingFile.mockReturnValue(expectedFile);
 
     const result = getMastraEntryFile(mastraDir);
 
     expect(result).toBe(expectedFile);
-    expect(mockFileService.getFirstExistingFile).toHaveBeenCalledWith([
+    expect(mockGetFirstExistingFile).toHaveBeenCalledWith([
       join(mastraDir, MASTRA_DIRECTORY, 'index.ts'),
       join(mastraDir, MASTRA_DIRECTORY, 'index.js'),
     ]);
@@ -41,7 +43,7 @@ describe('getMastraEntryFile', () => {
     const mastraDir = '/test/project';
     const originalError = new Error('No files found');
 
-    mockFileService.getFirstExistingFile.mockImplementation(() => {
+    mockGetFirstExistingFile.mockImplementation(() => {
       throw originalError;
     });
 
@@ -60,11 +62,11 @@ describe('getMastraEntryFile', () => {
 
   it('should check for both .ts and .js files', () => {
     const mastraDir = '/custom/path';
-    mockFileService.getFirstExistingFile.mockReturnValue(join(mastraDir, MASTRA_DIRECTORY, 'index.js'));
+    mockGetFirstExistingFile.mockReturnValue(join(mastraDir, MASTRA_DIRECTORY, 'index.js'));
 
     getMastraEntryFile(mastraDir);
 
-    const calledPaths = mockFileService.getFirstExistingFile.mock.calls[0][0];
+    const calledPaths = mockGetFirstExistingFile.mock.calls[0][0];
     expect(calledPaths).toHaveLength(2);
     expect(calledPaths[0]).toContain('index.ts');
     expect(calledPaths[1]).toContain('index.js');
@@ -72,11 +74,11 @@ describe('getMastraEntryFile', () => {
 
   it('should use the MASTRA_DIRECTORY constant correctly', () => {
     const mastraDir = '/test/project';
-    mockFileService.getFirstExistingFile.mockReturnValue('some/path');
+    mockGetFirstExistingFile.mockReturnValue('some/path');
 
     getMastraEntryFile(mastraDir);
 
-    const calledPaths = mockFileService.getFirstExistingFile.mock.calls[0][0];
+    const calledPaths = mockGetFirstExistingFile.mock.calls[0][0];
     expect(calledPaths[0]).toContain(MASTRA_DIRECTORY);
     expect(calledPaths[1]).toContain(MASTRA_DIRECTORY);
   });

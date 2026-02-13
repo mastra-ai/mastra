@@ -3,6 +3,8 @@ import { createContext, useContext, ReactNode } from 'react';
 interface ToolCallContextValue {
   approveToolcall: (toolCallId: string) => void;
   declineToolcall: (toolCallId: string) => void;
+  approveToolcallGenerate: (toolCallId: string) => void;
+  declineToolcallGenerate: (toolCallId: string) => void;
   approveNetworkToolcall: (toolName: string, runId?: string) => void;
   declineNetworkToolcall: (toolName: string, runId?: string) => void;
   isRunning: boolean;
@@ -16,6 +18,8 @@ interface ToolCallProviderProps {
   children: ReactNode;
   approveToolcall: (toolCallId: string) => void;
   declineToolcall: (toolCallId: string) => void;
+  approveToolcallGenerate: (toolCallId: string) => void;
+  declineToolcallGenerate: (toolCallId: string) => void;
   approveNetworkToolcall: (toolName: string, runId?: string) => void;
   declineNetworkToolcall: (toolName: string, runId?: string) => void;
   isRunning: boolean;
@@ -27,6 +31,8 @@ export function ToolCallProvider({
   children,
   approveToolcall,
   declineToolcall,
+  approveToolcallGenerate,
+  declineToolcallGenerate,
   approveNetworkToolcall,
   declineNetworkToolcall,
   isRunning,
@@ -38,6 +44,8 @@ export function ToolCallProvider({
       value={{
         approveToolcall,
         declineToolcall,
+        approveToolcallGenerate,
+        declineToolcallGenerate,
         approveNetworkToolcall,
         declineNetworkToolcall,
         isRunning,

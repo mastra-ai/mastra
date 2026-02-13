@@ -8,8 +8,8 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageListMessagesInput,
   StorageListMessagesOutput,
 } from '@mastra/core/storage';
@@ -25,12 +25,24 @@ export class BenchmarkStore extends MastraStorage {
     mastra_threads: new Map(),
     mastra_traces: new Map(),
     mastra_resources: new Map(),
+    mastra_scorers: new Map(),
+    mastra_ai_spans: new Map(),
+    mastra_agents: new Map(),
+    mastra_agent_versions: new Map(),
+    mastra_datasets: new Map(),
+    mastra_dataset_items: new Map(),
+    mastra_dataset_item_versions: new Map(),
+    mastra_dataset_versions: new Map(),
+    mastra_experiments: new Map(),
+    mastra_experiment_results: new Map(),
+    mastra_prompt_blocks: new Map(),
+    mastra_prompt_block_versions: new Map(),
   };
 
   private mode: DBMode;
 
   constructor(mode: DBMode = 'read-write') {
-    super({ name: 'BenchmarkStore' });
+    super({ id: 'benchmark-store', name: 'BenchmarkStore' });
     this.hasInitialized = Promise.resolve(true);
     this.mode = mode;
   }
@@ -39,6 +51,9 @@ export class BenchmarkStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
+      hasColumn: true,
+      createTable: true,
+      deleteMessages: true,
     };
   }
 
@@ -320,24 +335,50 @@ export class BenchmarkStore extends MastraStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const allThreads: StorageThreadType[] = [];
-    for (const thread of this.data.mastra_threads.values()) {
-      if (thread.resourceId === args.resourceId) {
-        allThreads.push(thread);
-      }
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, filter, orderBy } = args;
+    let allThreads: StorageThreadType[] = Array.from(this.data.mastra_threads.values());
+
+    // Apply resourceId filter if provided
+    if (filter?.resourceId) {
+      allThreads = allThreads.filter(thread => thread.resourceId === filter.resourceId);
     }
-    const start = args.offset * args.limit;
-    const threads = allThreads.slice(start, start + args.limit);
+
+    // Apply metadata filter if provided (AND logic)
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      allThreads = allThreads.filter(thread => {
+        if (!thread.metadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => thread.metadata![key] === value);
+      });
+    }
+
+    // Apply ordering - default to DESC by createdAt
+    const sortField = orderBy?.field || 'createdAt';
+    const sortDirection = orderBy?.direction || 'DESC';
+    const direction = sortDirection === 'ASC' ? 1 : -1;
+
+    allThreads.sort((a: any, b: any) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      if (aVal instanceof Date && bVal instanceof Date) {
+        return direction * (aVal.getTime() - bVal.getTime());
+      }
+      return direction * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0);
+    });
+
+    // Handle perPage: false (fetch all results)
+    const fetchAll = perPageInput === false;
+    const normalizedPerPage = fetchAll ? allThreads.length : typeof perPageInput === 'number' ? perPageInput : 100;
+    const normalizedPage = fetchAll ? 0 : Math.max(0, page);
+    const offset = normalizedPage * normalizedPerPage;
+    const threads = allThreads.slice(offset, fetchAll ? undefined : offset + normalizedPerPage);
 
     return {
       threads,
       total: allThreads.length,
-      page: args.offset,
-      perPage: args.limit,
-      hasMore: allThreads.length > (args.offset + 1) * args.limit,
+      page: normalizedPage,
+      perPage: fetchAll ? false : normalizedPerPage,
+      hasMore: fetchAll ? false : offset + normalizedPerPage < allThreads.length,
     };
   }
 

@@ -1,11 +1,15 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execa } from 'execa';
 import { ensureDir, writeFile, readFile } from 'fs-extra';
 import { copy } from 'fs-extra/esm';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest';
 
 import { CloudDeployer } from './index.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Mock the logger to avoid redis connection issues
 vi.mock('./utils/logger.js', () => ({
@@ -30,6 +34,10 @@ describe('CloudDeployer Integration Tests', () => {
   let deployer: CloudDeployer;
   let tempDir: string;
   let outputDir: string;
+
+  beforeAll(async () => {
+    await execa('pnpm', ['prepack'], { cwd: join(__dirname, '..') });
+  });
 
   beforeEach(async () => {
     deployer = new CloudDeployer();
@@ -56,7 +64,6 @@ describe('CloudDeployer Integration Tests', () => {
       // Create some existing files to ensure clean preparation
       await writeFile(join(outputDir, 'old-file.txt'), 'old content');
 
-      // @ts-ignore - accessing protected method for testing
       await deployer.prepare(outputDir);
 
       // Verify output directories are created
@@ -125,7 +132,7 @@ describe('CloudDeployer Integration Tests', () => {
     });
 
     it('should generate valid entry code for server', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Basic validation that it's valid JavaScript
@@ -169,7 +176,7 @@ describe('CloudDeployer Integration Tests', () => {
 
     it('should maintain correct entry code structure even with special characters in constants', () => {
       // This tests that the template literals are properly escaped
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // The regex needs to account for multiline JSON objects
@@ -199,7 +206,7 @@ describe('CloudDeployer Integration Tests', () => {
       let capturedEntry: string = '';
       let capturedToolsPaths: any[] = [];
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       deployer._bundle = async (entry: string, mastraFile: string, output: string, toolsPaths: any[]) => {
         capturedEntry = entry;
         capturedToolsPaths = toolsPaths;

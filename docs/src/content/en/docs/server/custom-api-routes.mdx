@@ -40,6 +40,8 @@ curl http://localhost:4111/my-custom-route
 
 Each route's handler receives the Hono `Context`. Within the handler you can access the `Mastra` instance to fetch or call agents and workflows.
 
+## Middleware
+
 To add route-specific middleware pass a `middleware` array when calling `registerApiRoute()`.
 
 ```typescript title="src/mastra/index.ts"
@@ -65,3 +67,206 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+## OpenAPI Documentation
+
+Custom routes can include OpenAPI metadata to appear in the Swagger UI alongside Mastra server routes. Pass an `openapi` option with standard OpenAPI operation fields.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { z } from "zod";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/items/:itemId", {
+        method: "GET",
+        openapi: {
+          summary: "Get item by ID",
+          description: "Retrieves a single item by its unique identifier",
+          tags: ["Items"],
+          parameters: [
+            {
+              name: "itemId",
+              in: "path",
+              required: true,
+              description: "The item ID",
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Item found",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      name: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            404: {
+              description: "Item not found",
+            },
+          },
+        },
+        handler: async (c) => {
+          const itemId = c.req.param("itemId");
+          return c.json({ id: itemId, name: "Example Item" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### Using Zod Schemas
+
+Zod schemas in the `openapi` configuration are converted to JSON Schema when the OpenAPI document is generated:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { z } from "zod";
+
+const ItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  price: z.number(),
+});
+
+const CreateItemSchema = z.object({
+  name: z.string().min(1),
+  price: z.number().positive(),
+});
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/items", {
+        method: "POST",
+        openapi: {
+          summary: "Create a new item",
+          tags: ["Items"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: CreateItemSchema,
+              },
+            },
+          },
+          responses: {
+            201: {
+              description: "Item created",
+              content: {
+                "application/json": {
+                  schema: ItemSchema,
+                },
+              },
+            },
+          },
+        },
+        handler: async (c) => {
+          const body = await c.req.json();
+          return c.json({ id: "new-id", ...body }, 201);
+        },
+      }),
+    ],
+  },
+});
+```
+
+### Viewing in Swagger UI
+
+When running in development mode (`mastra dev`) or with `swaggerUI: true` in build options, your custom routes appear in the Swagger UI at `/swagger-ui`.
+
+```typescript
+export const mastra = new Mastra({
+  server: {
+    build: {
+      swaggerUI: true, // Enable in production builds
+    },
+    apiRoutes: [
+      // Your routes...
+    ],
+  },
+});
+```
+
+## Authentication
+
+When authentication is configured on your Mastra server, custom API routes require authentication by default. To make a route publicly accessible, set `requiresAuth: false`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+import { MastraJwtAuth } from "@mastra/auth";
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({
+      secret: process.env.MASTRA_JWT_SECRET,
+    }),
+    apiRoutes: [
+      // Protected route (default behavior)
+      registerApiRoute("/protected-data", {
+        method: "GET",
+        handler: async (c) => {
+          // Access authenticated user from request context
+          const user = c.get("requestContext").get("user");
+          return c.json({ message: "Authenticated user", user });
+        },
+      }),
+
+      // Public route (no authentication required)
+      registerApiRoute("/webhooks/github", {
+        method: "POST",
+        requiresAuth: false, // Explicitly opt out of authentication
+        handler: async (c) => {
+          const payload = await c.req.json();
+          // Process webhook without authentication
+          return c.json({ received: true });
+        },
+      }),
+    ],
+  },
+});
+```
+
+### Authentication behavior
+
+- **No auth configured**: All routes (built-in and custom) are public
+- **Auth configured**:
+  - Mastra-provided routes (`/api/agents/*`, `/api/workflows/*`, etc.) require authentication
+  - Custom routes require authentication by default
+  - Custom routes can opt out with `requiresAuth: false`
+
+### Accessing user information
+
+When a request is authenticated, the user object is available in the request context:
+
+```typescript
+registerApiRoute("/user-profile", {
+  method: "GET",
+  handler: async (c) => {
+    const requestContext = c.get("requestContext");
+    const user = requestContext.get("user");
+
+    return c.json({ user });
+  },
+})
+```
+
+For more information about authentication providers, see the [Auth documentation](/docs/server/auth).
+
+## Related
+
+- [registerApiRoute() Reference](/reference/server/register-api-route) - Full API reference
+- [Server Middleware](/docs/server/middleware) - Global middleware configuration
+- [Mastra Server](/docs/server/mastra-server) - Server configuration options

@@ -7,8 +7,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type {
   MemoryStorage,
   StorageListMessagesInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
 } from '../storage';
@@ -84,26 +84,18 @@ export class MockMemory extends MastraMemory {
     return memoryStorage.saveMessages({ messages });
   }
 
-  async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
     const memoryStorage = await this.getMemoryStore();
-    return memoryStorage.listThreadsByResourceId(args);
+    return memoryStorage.listThreads(args);
   }
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
     const memoryStorage = await this.getMemoryStore();
-    const result = await memoryStorage.listMessages({
-      threadId: args.threadId,
-      resourceId: args.resourceId,
-      perPage: args.perPage,
-      page: args.page,
-      orderBy: args.orderBy,
-      filter: args.filter,
-      include: args.include,
-    });
+    // Extract only the StorageListMessagesInput properties, excluding threadConfig and vectorSearchString
+    const { threadConfig: _threadConfig, vectorSearchString: _vectorSearchString, ...listMessagesArgs } = args;
+    const result = await memoryStorage.listMessages(listMessagesArgs);
 
     return result;
   }
@@ -168,30 +160,39 @@ export class MockMemory extends MastraMemory {
           // or context.memory (when agent is standalone with memory passed directly)
           const memory = (context as any)?.memory;
 
-          if (!threadId || !memory || !resourceId) {
-            throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
+          if (!memory) {
+            throw new Error('Memory instance is required for working memory updates');
           }
 
-          let thread = await memory.getThreadById({ threadId });
-
-          if (!thread) {
-            thread = await memory.createThread({
-              threadId,
-              resourceId,
-              memoryConfig: _config,
-            });
+          const scope = mergedConfig.workingMemory?.scope || 'resource';
+          if (scope === 'thread' && !threadId) {
+            throw new Error('Thread ID is required for thread-scoped working memory updates');
+          }
+          if (scope === 'resource' && !resourceId) {
+            throw new Error('Resource ID is required for resource-scoped working memory updates');
           }
 
-          if (thread.resourceId && thread.resourceId !== resourceId) {
-            throw new Error(
-              `Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`,
-            );
+          if (threadId) {
+            let thread = await memory.getThreadById({ threadId });
+
+            if (!thread) {
+              thread = await memory.createThread({
+                threadId,
+                resourceId,
+                memoryConfig: _config,
+              });
+            }
+
+            if (thread.resourceId && resourceId && thread.resourceId !== resourceId) {
+              throw new Error(
+                `Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`,
+              );
+            }
           }
 
           const workingMemory =
             typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
 
-          // Use the new updateWorkingMemory method which handles both thread and resource scope
           await memory.updateWorkingMemory({
             threadId,
             resourceId,

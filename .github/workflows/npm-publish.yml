@@ -29,7 +29,6 @@ on:
   push:
     branches:
       - main
-      - 0.x
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -75,19 +74,13 @@ jobs:
       - name: Determine publish tag
         id: determine-tag
         run: |
-          BRANCH_NAME="${{ github.ref_name }}"
-          if [[ "$BRANCH_NAME" == "main" ]]; then
-            echo "tag=beta" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH_NAME" == "0.x" ]]; then
-            echo "tag=alpha" >> $GITHUB_OUTPUT
-          else
-            echo "tag=alpha" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=alpha" >> $GITHUB_OUTPUT
 
       - name: Publish packages
         run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'
 
   # ===========================================
   # STABLE RELEASE: Manual trigger only
@@ -177,6 +170,7 @@ jobs:
         run: pnpm publish -r --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'
 
       - name: Updated alpha versions
         if: ${{ !inputs.dry_run }}
@@ -349,3 +343,4 @@ jobs:
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'

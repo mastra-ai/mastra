@@ -1,6 +1,6 @@
-import { AgentChunkType, ChunkType } from '@mastra/core/stream';
-import { MastraUIMessage, MastraUIMessageMetadata, MastraExtendedTextPart } from '../types';
-import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { type AgentChunkType, type ChunkType } from '@mastra/core/stream';
+import { type MastraUIMessage, type MastraUIMessageMetadata, type MastraExtendedTextPart } from '../types';
+import { type WorkflowStreamResult, type StepResult } from '@mastra/core/workflows';
 
 type StreamChunk = {
   type: string;
@@ -90,6 +90,26 @@ export const mapWorkflowStreamChunkToWatchResult = (
       ...prev,
       status: 'waiting',
       steps: newSteps,
+    };
+  }
+
+  if (chunk.type === 'workflow-step-progress') {
+    const progressSteps = {
+      ...prev?.steps,
+      [chunk.payload.id]: {
+        ...prev?.steps?.[chunk.payload.id],
+        foreachProgress: {
+          completedCount: chunk.payload.completedCount,
+          totalCount: chunk.payload.totalCount,
+          currentIndex: chunk.payload.currentIndex,
+          iterationStatus: chunk.payload.iterationStatus,
+          iterationOutput: chunk.payload.iterationOutput,
+        },
+      },
+    };
+    return {
+      ...prev,
+      steps: progressSteps,
     };
   }
 

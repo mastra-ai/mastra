@@ -9,10 +9,18 @@ packages:
 
 The Convex storage implementation provides a serverless storage solution using [Convex](https://convex.dev), a full-stack TypeScript development platform with real-time sync and automatic caching.
 
+:::warning[Observability Not Supported]
+Convex storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to Convex, and Mastra Studio's observability features won't work with Convex as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
+:::warning[Record Size Limit]
+Convex enforces a **1 MiB maximum record size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/storage#handling-large-attachments) for workarounds including uploading attachments to external storage like S3, Cloudflare R2, or [Convex file storage](https://docs.convex.dev/file-storage).
+:::
+
 ## Installation
 
-```bash
-npm install @mastra/convex@beta
+```bash npm2yarn
+npm install @mastra/convex@latest
 ```
 
 ## Convex Setup

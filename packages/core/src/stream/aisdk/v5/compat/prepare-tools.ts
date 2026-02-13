@@ -63,9 +63,10 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   toolChoice: PreparedToolChoice | undefined;
 } {
   if (Object.keys(tools || {}).length === 0) {
+    // Preserve explicit 'none' toolChoice to tell the LLM not to attempt tool calls
     return {
       tools: undefined,
-      toolChoice: undefined,
+      toolChoice: toolChoice === 'none' ? { type: 'none' as const } : undefined,
     };
   }
 
@@ -100,7 +101,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           if ('inputSchema' in tool) {
             inputSchema = tool.inputSchema;
           } else if ('parameters' in tool) {
-            // @ts-ignore tool is not part
+            // @ts-expect-error tool is not part
             inputSchema = tool.parameters;
           }
 

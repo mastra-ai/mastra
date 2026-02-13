@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 import { Button } from '@/ds/components/Button';
-import { XIcon } from 'lucide-react';
+import { XIcon, InfoIcon, AlertTriangleIcon } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { transitions } from '@/ds/primitives/transitions';
 
 export type NotificationProps = {
   children: React.ReactNode;
@@ -11,7 +12,7 @@ export type NotificationProps = {
   autoDismiss?: boolean;
   dismissTime?: number;
   dismissible?: boolean;
-  type?: 'info' | 'error';
+  type?: 'info' | 'error' | 'success' | 'warning';
 };
 
 export function Notification({
@@ -24,46 +25,76 @@ export function Notification({
   type = 'info',
 }: NotificationProps) {
   const [localIsVisible, setLocalIsVisible] = useState(isVisible);
+  const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
   useEffect(() => {
     if (dismissible && autoDismiss && isVisible) {
       const timer = setTimeout(() => {
-        setLocalIsVisible(false);
+        handleDismiss();
       }, dismissTime);
       return () => clearTimeout(timer);
     }
-  }, [autoDismiss, isVisible, dismissTime]);
+  }, [autoDismiss, isVisible, dismissTime, dismissible]);
 
   useEffect(() => {
-    setLocalIsVisible(isVisible);
+    if (isVisible) {
+      setIsAnimatingOut(false);
+      setLocalIsVisible(true);
+    }
   }, [isVisible]);
 
+  const handleDismiss = () => {
+    setIsAnimatingOut(true);
+    setTimeout(() => {
+      setLocalIsVisible(false);
+      setIsAnimatingOut(false);
+    }, 200);
+  };
+
   if (!localIsVisible) return null;
+
+  const typeStyles = {
+    info: 'bg-surface4 border-border1',
+    error: 'bg-accent2Darker border-accent2/30',
+    success: 'bg-accent1Darker border-accent1/30',
+    warning: 'bg-accent6Darker border-accent6/30',
+  };
+
+  const iconStyles = {
+    info: 'text-accent5',
+    error: 'text-accent2',
+    success: 'text-accent1',
+    warning: 'text-accent6',
+  };
 
   return (
     <div
       className={cn(
-        'grid grid-cols-[1fr_auto] gap-2 rounded-lg bg-white/5 p-6 py-4 text-ui-md text-neutral3 items-center',
-        {
-          'bg-red-900/10 border border-red-900': type === 'error',
-        },
+        'grid grid-cols-[auto_1fr_auto] gap-3 rounded-lg border p-4 text-ui-md text-neutral4 items-start',
+        'shadow-card',
+        transitions.all,
+        isAnimatingOut
+          ? 'animate-out fade-out-0 slide-out-to-right-2 duration-200'
+          : 'animate-in fade-in-0 slide-in-from-right-2 duration-300',
+        typeStyles[type],
         className,
       )}
     >
-      <div
-        className={cn(
-          'flex gap-2 items-start',
-          '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-70 [&>svg]:translate-y-0.5',
-          {
-            '[&>svg]:text-red-400': type === 'error',
-          },
+      <div className={cn('flex-shrink-0 mt-0.5', iconStyles[type])}>
+        {type === 'error' || type === 'warning' ? (
+          <AlertTriangleIcon className="h-4 w-4" />
+        ) : (
+          <InfoIcon className="h-4 w-4" />
         )}
-      >
-        {children}
       </div>
+      <div className="flex gap-2 items-start min-w-0">{children}</div>
       {dismissible && (
-        <Button onClick={() => setLocalIsVisible(false)}>
-          <XIcon />
+        <Button
+          variant="ghost"
+          className={cn('h-6 w-6 p-0 flex-shrink-0', transitions.colors, 'hover:bg-surface5')}
+          onClick={handleDismiss}
+        >
+          <XIcon className="h-4 w-4" />
           <VisuallyHidden>Dismiss</VisuallyHidden>
         </Button>
       )}

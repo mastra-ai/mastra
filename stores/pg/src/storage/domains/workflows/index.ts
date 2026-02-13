@@ -14,7 +14,7 @@ import type {
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { PgDB, resolvePgConfig } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 function getSchemaName(schema?: string) {
@@ -72,6 +72,26 @@ export class WorkflowsPG extends WorkflowsStorage {
       createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
       updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
     };
+  }
+
+  /**
+   * Returns all DDL statements for this domain: table with unique constraint.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+
+    // Table (includes the UNIQUE constraint on workflow_name, run_id via generateTableSQL)
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
+    return statements;
   }
 
   /**

@@ -55,7 +55,7 @@ describe('Agent.stream', () => {
       age: z.number(),
     });
     const jsonSchema = zodToJsonSchema(outputSchema);
-    const params: StreamParams<typeof outputSchema> = {
+    const params: Omit<StreamParams<z.infer<typeof outputSchema>>, 'messages'> = {
       structuredOutput: { schema: outputSchema },
     };
     await agent.stream([], params);
@@ -75,7 +75,7 @@ describe('Agent.stream', () => {
     // Ensure instanceof RequestContext succeeds so parseClientRequestContext converts it
     Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
 
-    const params: StreamParams<undefined> = {
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
       requestContext,
     };
 
@@ -107,7 +107,7 @@ describe('Agent.stream', () => {
       },
     };
 
-    const params: StreamParams<undefined> = {
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
       clientTools,
     };
 
@@ -139,12 +139,10 @@ describe('Agent.stream', () => {
   it('should invoke onChunk callback when processing stream data', async () => {
     // Arrange: Create callback and params
     const onChunk = vi.fn();
-    const params: StreamParams<undefined> = {
-      messages: [],
-    };
+    const params: Omit<StreamParams<undefined>, 'messages'> = {};
 
     // Act: Process the stream
-    const response = await agent.stream(params);
+    const response = await agent.stream([], params);
     await response.processDataStream({ onChunk });
 
     // Assert: Verify callback execution
@@ -153,6 +151,152 @@ describe('Agent.stream', () => {
     expect(firstCall[0]).toBeDefined();
     expect(typeof firstCall[0]).toBe('string');
     expect(firstCall[0]).toBe('test');
+  });
+});
+
+describe('Agent.network', () => {
+  let agent: Agent;
+  const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+
+  const mockClientOptions: ClientOptions = {
+    baseUrl: 'https://test.com',
+    headers: {
+      Authorization: 'Bearer test-key',
+    },
+    retries: 0,
+  };
+
+  const mockStreamResponse = (sseData: string = '"test"') => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValueOnce(
+      new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    );
+  };
+
+  const getRequestBody = () => {
+    const call = mockFetch.mock.calls[0];
+    return JSON.parse(call[1].body);
+  };
+
+  beforeEach(() => {
+    agent = new Agent(mockClientOptions, 'test-agent');
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should convert structuredOutput.schema from Zod to JSON Schema and preserve sibling fields', async () => {
+    mockStreamResponse();
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+    const jsonSchema = zodToJsonSchema(outputSchema);
+
+    await agent.network([], {
+      structuredOutput: {
+        schema: outputSchema,
+        instructions: 'Return structured data',
+      },
+    });
+
+    const body = getRequestBody();
+    expect(body.structuredOutput.schema).toEqual(jsonSchema);
+    expect(body.structuredOutput.instructions).toBe('Return structured data');
+  });
+
+  it('should pass through pre-converted JSON Schema unchanged', async () => {
+    mockStreamResponse();
+    const preConverted = {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+      additionalProperties: false,
+    };
+
+    await agent.network([], {
+      structuredOutput: { schema: preConverted as any },
+    });
+
+    const body = getRequestBody();
+    expect(body.structuredOutput.schema).toEqual(preConverted);
+  });
+
+  it('should process requestContext through parseClientRequestContext', async () => {
+    mockStreamResponse();
+    const contextData = new Map([
+      ['env', 'test'],
+      ['userId', '123'],
+    ]);
+
+    const requestContext: any = {
+      entries: () => contextData,
+    };
+    Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
+
+    await agent.network([], { requestContext });
+
+    const body = getRequestBody();
+    expect(body.requestContext).toEqual({
+      env: 'test',
+      userId: '123',
+    });
+  });
+
+  it('should process both structuredOutput and requestContext together', async () => {
+    mockStreamResponse();
+    const outputSchema = z.object({ result: z.string() });
+    const contextData = new Map([['key', 'value']]);
+    const requestContext: any = { entries: () => contextData };
+    Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
+
+    await agent.network([{ role: 'user', content: 'test' }], {
+      structuredOutput: { schema: outputSchema },
+      requestContext,
+      maxSteps: 3,
+    });
+
+    const body = getRequestBody();
+    expect(body.structuredOutput.schema).toEqual(zodToJsonSchema(outputSchema));
+    expect(body.requestContext).toEqual({ key: 'value' });
+    expect(body.maxSteps).toBe(3);
+    expect(body.messages).toEqual([{ role: 'user', content: 'test' }]);
+  });
+
+  it('should send POST to /agents/:agentId/network', async () => {
+    mockStreamResponse();
+    await agent.network([], {});
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://test.com/api/agents/test-agent/network',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+        }),
+      }),
+    );
+  });
+
+  it('should invoke onChunk callback when processing stream data', async () => {
+    mockStreamResponse(JSON.stringify({ type: 'text', text: 'hello' }));
+    const onChunk = vi.fn();
+
+    const response = await agent.network([], {});
+    await response.processDataStream({ onChunk });
+
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledWith({ type: 'text', text: 'hello' });
   });
 });
 

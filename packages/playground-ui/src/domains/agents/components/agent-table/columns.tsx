@@ -9,18 +9,20 @@ import { useLinkComponent } from '@/lib/framework';
 import { providerMapToIcon } from '../provider-map-icon';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { ToolsIcon, WorkflowIcon, ProcessorIcon } from '@/ds/icons';
 import { extractPrompt } from '../../utils/extractPrompt';
+import { AgentSourceIcon } from '../agent-source-icon';
 
 export type AgentTableColumn = {
   id: string;
 } & AgentTableData;
 
-const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
+const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSourceIcon?: boolean }) => {
   const { Link, paths } = useLinkComponent();
 
   return (
     <EntryCell
+      icon={showSourceIcon ? <AgentSourceIcon source={row.original.source} /> : undefined}
       name={
         <Link className="w-full" href={paths.agentLink(row.original.id)}>
           {row.original.name}
@@ -31,75 +33,105 @@ const NameCell = ({ row }: { row: Row<AgentTableColumn> }) => {
   );
 };
 
-export const columns: ColumnDef<AgentTableColumn>[] = [
-  {
-    header: 'Name',
-    accessorKey: 'name',
-    cell: NameCell,
+const modelColumn: ColumnDef<AgentTableColumn> = {
+  header: 'Model',
+  accessorKey: 'model',
+  cell: ({ row }) => {
+    return (
+      <Cell>
+        <Badge
+          variant="default"
+          icon={providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] || <OpenAIIcon />}
+          className="truncate"
+        >
+          {row.original.modelId || 'N/A'}
+        </Badge>
+        {row.original.modelList && row.original.modelList.length > 1 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="info" className="ml-2">
+                + {row.original.modelList.length - 1} more
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent className="bg-surface5 flex flex-col gap-2">
+              {row.original.modelList.slice(1).map(mdl => (
+                <div key={mdl.id}>
+                  <Badge
+                    variant="default"
+                    icon={providerMapToIcon[mdl.model.provider as keyof typeof providerMapToIcon]}
+                  >
+                    {mdl.model.modelId}
+                  </Badge>
+                </div>
+              ))}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+      </Cell>
+    );
   },
-  {
-    header: 'Model',
-    accessorKey: 'model',
-    cell: ({ row }) => {
-      return (
-        <Cell>
-          <Badge
-            variant="default"
-            icon={providerMapToIcon[row.original.provider as keyof typeof providerMapToIcon] || <OpenAIIcon />}
-            className="truncate"
-          >
-            {row.original.modelId || 'N/A'}
+};
+
+const attachedEntitiesColumn: ColumnDef<AgentTableColumn> = {
+  header: 'Attached entities',
+  accessorKey: 'attachedEntities',
+  cell: ({ row }) => {
+    const agent = row.original;
+
+    const agentsCount = Object.keys(agent.agents || {}).length;
+    const toolsCount = Object.keys(agent.tools || {}).length;
+    const workflowsCount = Object.keys(agent.workflows || {}).length;
+    const inputProcessorsCount = (agent.inputProcessors || []).length;
+    const outputProcessorsCount = (agent.outputProcessors || []).length;
+
+    return (
+      <Cell>
+        <span className="flex flex-row gap-2 w-full items-center flex-wrap">
+          <Badge variant="default" icon={<AgentIcon className="text-accent1" />}>
+            {agentsCount} agent{agentsCount !== 1 ? 's' : ''}
           </Badge>
-          {row.original.modelList && row.original.modelList.length > 1 ? (
+          <Badge variant="default" icon={<ToolsIcon className="text-accent6" />}>
+            {toolsCount} tool{toolsCount !== 1 ? 's' : ''}
+          </Badge>
+          <Badge variant="default" icon={<WorkflowIcon className="text-accent3" />}>
+            {workflowsCount} workflow{workflowsCount !== 1 ? 's' : ''}
+          </Badge>
+          {(inputProcessorsCount > 0 || outputProcessorsCount > 0) && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="info" className="ml-2">
-                  + {row.original.modelList.length - 1} more
-                </Badge>
+                <Badge variant="default" icon={<ProcessorIcon className="text-accent4" />} />
               </TooltipTrigger>
-              <TooltipContent className="bg-surface5 flex flex-col gap-2">
-                {row.original.modelList.slice(1).map(mdl => (
-                  <div key={mdl.id}>
-                    <Badge
-                      variant="default"
-                      icon={providerMapToIcon[mdl.model.provider as keyof typeof providerMapToIcon]}
-                    >
-                      {mdl.model.modelId}
-                    </Badge>
-                  </div>
-                ))}
+              <TooltipContent className="flex flex-col gap-1">
+                <a
+                  href="https://mastra.ai/docs/agents/processors"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent1 hover:underline"
+                >
+                  Processors
+                </a>
+                <span className="text-icon3">
+                  {[inputProcessorsCount > 0 && 'input', outputProcessorsCount > 0 && 'output']
+                    .filter(Boolean)
+                    .join(', ')}
+                </span>
               </TooltipContent>
             </Tooltip>
-          ) : null}
-        </Cell>
-      );
-    },
+          )}
+        </span>
+      </Cell>
+    );
   },
-  {
-    header: 'Attached entities',
-    accessorKey: 'attachedEntities',
-    cell: ({ row }) => {
-      const agent = row.original;
+};
 
-      const agentsCount = Object.keys(agent.agents || {}).length;
-      const toolsCount = Object.keys(agent.tools || {}).length;
-      const workflowsCount = Object.keys(agent.workflows || {}).length;
-
-      return (
-        <Cell>
-          <span className="flex flex-row gap-2 w-full items-center">
-            <Badge variant="default" icon={<AgentIcon className="text-accent1" />}>
-              {agentsCount} agent{agentsCount > 1 ? 's' : ''}
-            </Badge>
-            <Badge variant="default" icon={<ToolsIcon className="text-accent6" />}>
-              {toolsCount} tool{toolsCount > 1 ? 's' : ''}
-            </Badge>
-            <Badge variant="default" icon={<WorkflowIcon className="text-accent3" />}>
-              {workflowsCount} workflow{workflowsCount > 1 ? 's' : ''}
-            </Badge>
-          </span>
-        </Cell>
-      );
+export const getColumns = (experimentalFeaturesEnabled: boolean): ColumnDef<AgentTableColumn>[] => {
+  return [
+    {
+      header: 'Name',
+      accessorKey: 'name',
+      cell: ({ row }) => <NameCell row={row} showSourceIcon={experimentalFeaturesEnabled} />,
     },
-  },
-];
+    modelColumn,
+    attachedEntitiesColumn,
+  ];
+};

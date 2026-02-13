@@ -978,7 +978,7 @@ await serverWithPrompts.prompts.notifyListChanged();
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/docs/v1/mcp/publishing-mcp-server).
+For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/docs/mcp/publishing-mcp-server).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -1386,6 +1386,35 @@ execute: async (inputData, context) => {
   });
 
   return response.json();
+};
+```
+
+### Passing `RequestContext` through to agent
+
+```typescript
+execute: async (inputData, context) => {
+  // Access the auth data you set in middleware
+  const authInfo = context?.mcp?.extra?.authInfo;
+
+  const requestContext = context.requestContext || new RequestContext().set('someKey', authInfo)
+
+  if (!authInfo?.extra?.userId) {
+    return { error: "Authentication required" };
+  }
+
+  // Use the auth data
+  console.log("User ID:", authInfo.extra.userId);
+  console.log("Email:", authInfo.extra.email);
+
+  const agent = context?.mastra?.getAgentById('some-agent-id');
+
+  if (!agent) {
+    return { error: "Agent 'some-agent-id' not found" }
+  }
+
+  const response = await agent.generate(prompt, { requestContext })
+
+  return response.text
 };
 ```
 

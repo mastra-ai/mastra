@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
@@ -14,9 +14,15 @@ import type { PostgresStoreConfig } from '../shared/config';
 import { PoolAdapter } from './client';
 import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
+import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
+import { DatasetsPG } from './domains/datasets';
+import { ExperimentsPG } from './domains/experiments';
+import { MCPClientsPG } from './domains/mcp-clients';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
+import { PromptBlocksPG } from './domains/prompt-blocks';
+import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
@@ -25,9 +31,55 @@ const DEFAULT_MAX_CONNECTIONS = 20;
 /** Default idle timeout in milliseconds */
 const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
-export { exportSchemas } from './db';
+/**
+ * All storage domain classes, in order. Each provides a static getExportDDL method
+ * that returns the complete DDL (tables, constraints, indexes, triggers) for that domain.
+ */
+const ALL_DOMAINS = [
+  MemoryPG,
+  ObservabilityPG,
+  ScoresPG,
+  ScorerDefinitionsPG,
+  PromptBlocksPG,
+  AgentsPG,
+  WorkflowsPG,
+  DatasetsPG,
+  ExperimentsPG,
+] as const;
+
+/**
+ * Exports the Mastra database schema as SQL DDL statements, including tables, indexes, and triggers.
+ * Does not require a database connection. Each domain class provides its own DDL contribution
+ * via a static getExportDDL method, ensuring a single source of truth.
+ */
+export function exportSchemas(schemaName?: string): string {
+  const statements: string[] = [];
+
+  if (schemaName) {
+    const quotedSchemaName = getSchemaName(schemaName);
+    statements.push(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName};`);
+    statements.push('');
+  }
+
+  for (const Domain of ALL_DOMAINS) {
+    statements.push(...Domain.getExportDDL(schemaName));
+  }
+
+  return statements.join('\n');
+}
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
+export {
+  AgentsPG,
+  DatasetsPG,
+  ExperimentsPG,
+  MCPClientsPG,
+  MemoryPG,
+  ObservabilityPG,
+  PromptBlocksPG,
+  ScorerDefinitionsPG,
+  ScoresPG,
+  WorkflowsPG,
+};
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
@@ -55,7 +107,7 @@ export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomain
  * const rows = await store.db.any('SELECT * FROM my_table');
  * ```
  */
-export class PostgresStore extends MastraStorage {
+export class PostgresStore extends MastraCompositeStore {
   #pool: Pool;
   #db: DbClient;
   #ownsPool: boolean;
@@ -94,6 +146,11 @@ export class PostgresStore extends MastraStorage {
         memory: new MemoryPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),
         agents: new AgentsPG(domainConfig),
+        promptBlocks: new PromptBlocksPG(domainConfig),
+        scorerDefinitions: new ScorerDefinitionsPG(domainConfig),
+        mcpClients: new MCPClientsPG(domainConfig),
+        datasets: new DatasetsPG(domainConfig),
+        experiments: new ExperimentsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
@@ -147,6 +204,10 @@ export class PostgresStore extends MastraStorage {
       await super.init();
     } catch (error) {
       this.isInitialized = false;
+      // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'INIT', 'FAILED'),

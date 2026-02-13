@@ -1,7 +1,9 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+import type { EmbeddingModel } from '@internal/ai-sdk-v5';
+
+type EmbeddingModelV2<VALUE> = Exclude<EmbeddingModel<VALUE>, string>;
 
 import { GatewayRegistry } from './provider-registry.js';
 import type { OpenAICompatibleConfig } from './shared.types.js';
@@ -52,13 +54,6 @@ export const EMBEDDING_MODELS: EmbeddingModelInfo[] = [
     maxInputTokens: 2048,
     description: 'Google gemini-embedding-001 model',
   },
-  {
-    id: 'text-embedding-004',
-    provider: 'google',
-    dimensions: 768,
-    maxInputTokens: 3072,
-    description: 'Google text-embedding-004 model',
-  },
 ];
 
 /**
@@ -68,8 +63,7 @@ export type EmbeddingModelId =
   | 'openai/text-embedding-3-small'
   | 'openai/text-embedding-3-large'
   | 'openai/text-embedding-ada-002'
-  | 'google/gemini-embedding-001'
-  | 'google/text-embedding-004';
+  | 'google/gemini-embedding-001';
 
 /**
  * Check if a model ID is a known embedding model

@@ -7,6 +7,9 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  FolderIcon,
+  Cpu,
+  DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -24,6 +27,7 @@ import {
   MastraVersionFooter,
   useMastraPlatform,
   NavLink,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -44,6 +48,12 @@ const mainNavigation: NavSection[] = [
         isOnMastraPlatform: true,
       },
       {
+        name: 'Processors',
+        url: '/processors',
+        icon: <Cpu />,
+        isOnMastraPlatform: false,
+      },
+      {
         name: 'MCP Servers',
         url: '/mcps',
         icon: <McpServerIcon />,
@@ -61,7 +71,11 @@ const mainNavigation: NavSection[] = [
         icon: <GaugeIcon />,
         isOnMastraPlatform: true,
       },
-
+      {
+        name: 'Workspaces',
+        url: '/workspaces',
+        icon: <FolderIcon />,
+      },
       {
         name: 'Request Context',
         url: '/request-context',
@@ -79,6 +93,13 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DatabaseIcon />,
+        isOnMastraPlatform: false,
+        isExperimental: true,
       },
     ],
   },
@@ -115,7 +136,7 @@ const secondNavigation: NavSection = {
   links: [
     {
       name: 'Mastra APIs',
-      url: 'http://localhost:4111/swagger-ui',
+      url: '/swagger-ui',
       icon: <EarthIcon />,
       isOnMastraPlatform: false,
     },
@@ -154,8 +175,12 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   const filterPlatformLink = (link: NavLink) => {
+    if (link.name === 'Datasets' && !experimentalFeaturesEnabled) {
+      return false;
+    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }
@@ -189,10 +214,7 @@ export function AppSidebar() {
               )}
               <MainSidebar.NavList>
                 {filteredLinks.map(link => {
-                  const [_, pagePath] = pathname.split('/');
-                  const lowercasedPagePath = link.name.toLowerCase();
-                  const isActive = link.url === pathname || link.name === pathname || pagePath === lowercasedPagePath;
-
+                  const isActive = pathname.startsWith(link.url);
                   return <MainSidebar.NavLink key={link.name} state={state} link={link} isActive={isActive} />;
                 })}
               </MainSidebar.NavList>

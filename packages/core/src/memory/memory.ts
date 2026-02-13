@@ -3,7 +3,7 @@ import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
-import type { EmbeddingModelId } from '../llm/model';
+import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type {
   InputProcessor,
@@ -15,10 +15,10 @@ import { isProcessorWorkflow } from '../processors';
 import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
-  MastraStorage,
+  MastraCompositeStore,
   StorageListMessagesInput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
 } from '../storage';
@@ -36,7 +36,24 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
   MemoryRequestContext,
+  SerializedMemoryConfig,
+  SerializedObservationalMemoryConfig,
+  ObservationalMemoryOptions,
 } from './types';
+import { isObservationalMemoryEnabled } from './types';
+
+/**
+ * Extract a string model ID from an AgentConfig['model'] value.
+ * Returns undefined for non-serializable values (functions, LanguageModel instances).
+ */
+function extractModelIdString(model: unknown): string | undefined {
+  if (typeof model === 'string') return model;
+  if (typeof model === 'function') return undefined;
+  if (model && typeof model === 'object' && 'id' in model && typeof (model as { id: unknown }).id === 'string') {
+    return (model as { id: string }).id;
+  }
+  return undefined;
+}
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -97,7 +114,7 @@ export abstract class MastraMemory extends MastraBase {
 
   MAX_CONTEXT_TOKENS?: number;
 
-  protected _storage?: MastraStorage;
+  protected _storage?: MastraCompositeStore;
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;
   embedderOptions?: MastraEmbeddingOptions;
@@ -201,7 +218,7 @@ https://mastra.ai/en/docs/memory/overview`,
     return this._storage;
   }
 
-  public setStorage(storage: MastraStorage) {
+  public setStorage(storage: MastraCompositeStore) {
     this._storage = augmentWithInit(storage);
   }
 
@@ -241,7 +258,7 @@ https://mastra.ai/en/docs/memory/overview`,
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any>> {
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any, any, any>> {
     return {};
   }
 
@@ -326,19 +343,38 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**
-   * Lists all threads that belong to the specified resource.
-   * @param args.resourceId - The unique identifier of the resource
-   * @param args.offset - The number of threads to skip (for pagination)
-   * @param args.limit - The maximum number of threads to return
-   * @param args.orderBy - Optional sorting configuration with `field` (`'createdAt'` or `'updatedAt'`)
-   *                       and `direction` (`'ASC'` or `'DESC'`);
-   *                       defaults to `{ field: 'createdAt', direction: 'DESC' }`
-   * @returns Promise resolving to paginated thread results with metadata;
-   *          resolves to an empty array if the resource has no threads
+   * Lists threads with optional filtering by resourceId and metadata.
+   * This method supports:
+   * - Optional resourceId filtering (not required)
+   * - Metadata filtering with AND logic (all key-value pairs must match)
+   * - Pagination via `page` / `perPage`, optional ordering via `orderBy`
+   *
+   * @param args.filter - Optional filters for resourceId and/or metadata
+   * @param args.filter.resourceId - Optional resource ID to filter by
+   * @param args.filter.metadata - Optional metadata key-value pairs to filter by (AND logic)
+   * @param args.page - Zero-indexed page number for pagination (defaults to 0)
+   * @param args.perPage - Number of items per page, or false to fetch all (defaults to 100)
+   * @param args.orderBy - Optional sorting configuration with `field` and `direction`
+   * @returns Promise resolving to paginated thread results with metadata
+   *
+   * @example
+   * ```typescript
+   * // Filter by resourceId only
+   * await memory.listThreads({ filter: { resourceId: 'user-123' } });
+   *
+   * // Filter by metadata only
+   * await memory.listThreads({ filter: { metadata: { category: 'support' } } });
+   *
+   * // Filter by both
+   * await memory.listThreads({
+   *   filter: {
+   *     resourceId: 'user-123',
+   *     metadata: { priority: 'high', status: 'open' }
+   *   }
+   * });
+   * ```
    */
-  abstract listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput>;
+  abstract listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput>;
 
   /**
    * Saves or updates a thread
@@ -361,7 +397,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-  }): Promise<{ messages: MastraDBMessage[] }>;
+  }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
    * Retrieves messages for a specific thread with optional semantic recall
@@ -376,7 +412,7 @@ https://mastra.ai/en/docs/memory/overview`,
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
     },
-  ): Promise<{ messages: MastraDBMessage[] }>;
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
    * Helper method to create a new thread
@@ -588,7 +624,13 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
-      if (!hasMessageHistory) {
+      // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
+      const hasObservationalMemory =
+        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+
+      // Skip MessageHistory input processor if ObservationalMemory handles message loading
+      if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
           new MessageHistory({
             storage: memoryStore,
@@ -737,7 +779,13 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
-      if (!hasMessageHistory) {
+      // Check if ObservationalMemory is present (via processor or config) - it handles its own message saving
+      const hasObservationalMemory =
+        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+
+      // Skip MessageHistory output processor if ObservationalMemory handles message saving
+      if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
           new MessageHistory({
             storage: memoryStore,
@@ -760,4 +808,128 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Get serializable configuration for this memory instance
+   * @returns Serializable memory configuration
+   */
+  getConfig(): SerializedMemoryConfig {
+    const { generateTitle, workingMemory, threads, observationalMemory, ...restConfig } = this.threadConfig;
+
+    const config: SerializedMemoryConfig = {
+      vector: this.vector?.id,
+      options: {
+        ...restConfig,
+      },
+    };
+
+    // Serialize generateTitle configuration
+    if (generateTitle !== undefined && config.options) {
+      if (typeof generateTitle === 'boolean') {
+        config.options.generateTitle = generateTitle;
+      } else if (typeof generateTitle === 'object' && generateTitle.model) {
+        const model = generateTitle.model;
+        // Extract ModelRouterModelId from various model configurations
+        let modelId: string | undefined;
+
+        if (typeof model === 'string') {
+          modelId = model;
+        } else if (typeof model === 'function') {
+          // Cannot serialize dynamic functions - skip
+          modelId = undefined;
+        } else if (model && typeof model === 'object') {
+          // Handle config objects with id field
+          if ('id' in model && typeof model.id === 'string') {
+            modelId = model.id;
+          }
+        }
+
+        if (modelId && config.options) {
+          config.options.generateTitle = {
+            model: modelId as ModelRouterModelId,
+            instructions: typeof generateTitle.instructions === 'string' ? generateTitle.instructions : undefined,
+          };
+        }
+      }
+    }
+
+    if (this.embedder) {
+      config.embedder = this.embedder as unknown as EmbeddingModelId;
+    }
+
+    if (this.embedderOptions) {
+      const { telemetry, ...rest } = this.embedderOptions;
+      config.embedderOptions = rest;
+    }
+
+    // Serialize observationalMemory configuration
+    if (observationalMemory !== undefined) {
+      config.observationalMemory = this.serializeObservationalMemory(observationalMemory);
+    }
+
+    return config;
+  }
+
+  /**
+   * Serialize observational memory config to a JSON-safe representation.
+   * Model references that aren't string IDs are dropped (non-serializable).
+   */
+  private serializeObservationalMemory(
+    om: boolean | ObservationalMemoryOptions,
+  ): SerializedMemoryConfig['observationalMemory'] {
+    if (typeof om === 'boolean') {
+      return om;
+    }
+
+    if (om.enabled === false) {
+      return false;
+    }
+
+    const result: SerializedObservationalMemoryConfig = {
+      scope: om.scope,
+      shareTokenBudget: om.shareTokenBudget,
+    };
+
+    // Extract model ID string from the top-level model
+    const topModelId = extractModelIdString(om.model);
+    if (topModelId) {
+      result.model = topModelId;
+    }
+
+    // Serialize observation config
+    if (om.observation) {
+      const obs = om.observation;
+      result.observation = {
+        messageTokens: obs.messageTokens,
+        modelSettings: obs.modelSettings as Record<string, unknown>,
+        providerOptions: obs.providerOptions,
+        maxTokensPerBatch: obs.maxTokensPerBatch,
+        bufferTokens: obs.bufferTokens,
+        bufferActivation: obs.bufferActivation,
+        blockAfter: obs.blockAfter,
+      };
+      const obsModelId = extractModelIdString(obs.model);
+      if (obsModelId) {
+        result.observation.model = obsModelId;
+      }
+    }
+
+    // Serialize reflection config
+    if (om.reflection) {
+      const ref = om.reflection;
+      result.reflection = {
+        observationTokens: ref.observationTokens,
+        modelSettings: ref.modelSettings as Record<string, unknown>,
+        providerOptions: ref.providerOptions,
+        blockAfter: ref.blockAfter,
+        bufferActivation: ref.bufferActivation,
+      };
+      const refModelId = extractModelIdString(ref.model);
+      if (refModelId) {
+        result.reflection.model = refModelId;
+      }
+    }
+
+    return result;
+  }
 }

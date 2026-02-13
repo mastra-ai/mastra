@@ -1,16 +1,32 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { StorageDomains } from '@mastra/core/storage';
-import { MastraStorage } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
+import { DatasetsLibSQL } from './domains/datasets';
+import { ExperimentsLibSQL } from './domains/experiments';
+import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
+import { PromptBlocksLibSQL } from './domains/prompt-blocks';
+import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsLibSQL, MemoryLibSQL, ObservabilityLibSQL, ScoresLibSQL, WorkflowsLibSQL };
+export {
+  AgentsLibSQL,
+  DatasetsLibSQL,
+  ExperimentsLibSQL,
+  MCPClientsLibSQL,
+  MemoryLibSQL,
+  ObservabilityLibSQL,
+  PromptBlocksLibSQL,
+  ScorerDefinitionsLibSQL,
+  ScoresLibSQL,
+  WorkflowsLibSQL,
+};
 export type { LibSQLDomainConfig } from './db';
 
 /**
@@ -78,7 +94,7 @@ export type LibSQLConfig =
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class LibSQLStore extends MastraStorage {
+export class LibSQLStore extends MastraCompositeStore {
   private client: Client;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
@@ -131,6 +147,11 @@ export class LibSQLStore extends MastraStorage {
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
+    const datasets = new DatasetsLibSQL(domainConfig);
+    const experiments = new ExperimentsLibSQL(domainConfig);
+    const promptBlocks = new PromptBlocksLibSQL(domainConfig);
+    const scorerDefinitions = new ScorerDefinitionsLibSQL(domainConfig);
+    const mcpClients = new MCPClientsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -138,6 +159,11 @@ export class LibSQLStore extends MastraStorage {
       memory,
       observability,
       agents,
+      datasets,
+      experiments,
+      promptBlocks,
+      scorerDefinitions,
+      mcpClients,
     };
   }
 }

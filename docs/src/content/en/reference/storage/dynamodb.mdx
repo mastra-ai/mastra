@@ -12,24 +12,28 @@ packages:
 
 The DynamoDB storage implementation provides a scalable and performant NoSQL database solution for Mastra, leveraging a single-table design pattern with [ElectroDB](https://electrodb.dev/).
 
+:::warning[Observability Not Supported]
+DynamoDB storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to DynamoDB, and Mastra Studio's observability features won't work with DynamoDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
+:::warning[Item Size Limit]
+DynamoDB enforces a **400 KB maximum item size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/storage#handling-large-attachments) for workarounds including uploading attachments to external storage.
+:::
+
 ## Features
 
 - Efficient single-table design for all Mastra storage needs
 - Based on ElectroDB for type-safe DynamoDB access
 - Support for AWS credentials, regions, and endpoints
 - Compatible with AWS DynamoDB Local for development
-- Stores Thread, Message, Trace, Eval, and Workflow data
+- Stores Thread, Message, Eval, and Workflow data
 - Optimized for serverless environments
 - Configurable TTL (Time To Live) for automatic data expiration per entity type
 
 ## Installation
 
-```bash
-npm install @mastra/dynamodb@beta
-# or
-pnpm add @mastra/dynamodb@beta
-# or
-yarn add @mastra/dynamodb@beta
+```bash npm2yarn
+npm install @mastra/dynamodb@latest
 ```
 
 ## Prerequisites
@@ -78,7 +82,7 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 2.  **Configure `DynamoDBStore` to use the local endpoint:**
 
-    ```typescript copy
+    ```typescript
     import { DynamoDBStore } from "@mastra/dynamodb";
 
     const storage = new DynamoDBStore({

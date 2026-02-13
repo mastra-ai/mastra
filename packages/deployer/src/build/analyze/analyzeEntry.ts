@@ -1,19 +1,22 @@
-import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { noopLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { fileURLToPath } from 'node:url';
-import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
-import resolveFrom from 'resolve-from';
-import { esbuild } from '../plugins/esbuild';
+import { readJSON } from 'fs-extra/esm';
+import { resolveModule } from 'local-pkg';
+import { rollup } from 'rollup';
+import type { OutputChunk, Plugin, SourceMap } from 'rollup';
+import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { isNodeBuiltin } from '../isNodeBuiltin';
-import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName, slash } from '../utils';
 import { getPackageRootPath } from '../package-info';
-import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import type { DependencyMetadata } from '../types';
-import { DEPS_TO_IGNORE } from './constants';
+import { esbuild } from '../plugins/esbuild';
 import { removeDeployer } from '../plugins/remove-deployer';
+import { tsConfigPaths } from '../plugins/tsconfig-paths';
+import type { DependencyMetadata } from '../types';
+import { getPackageName, slash } from '../utils';
+import { DEPS_TO_IGNORE } from './constants';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -113,10 +116,21 @@ async function captureDependenciesToOptimize(
     const pkgName = getPackageName(dependency);
     let rootPath: string | null = null;
     let isWorkspace = false;
+    let version: string | undefined;
 
     if (pkgName) {
       rootPath = await getPackageRootPath(dependency, entryRootPath);
       isWorkspace = workspaceMap.has(pkgName);
+
+      // Read version from package.json when we have a valid rootPath
+      if (rootPath) {
+        try {
+          const pkgJson = await readJSON(`${rootPath}/package.json`);
+          version = pkgJson.version;
+        } catch {
+          // Failed to read package.json, version will remain undefined
+        }
+      }
     }
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
@@ -125,6 +139,7 @@ async function captureDependenciesToOptimize(
       exports: bindings,
       rootPath: normalizedRootPath,
       isWorkspace,
+      version,
     });
   }
 
@@ -153,8 +168,13 @@ async function captureDependenciesToOptimize(
       }
 
       try {
-        // Absolute path to the dependency
-        const resolvedPath = resolveFrom(projectRoot, dep);
+        const importerPath = output.facadeModuleId
+          ? pathToFileURL(output.facadeModuleId).href
+          : pathToFileURL(projectRoot).href;
+        // Absolute path to the dependency using ESM-compatible resolution
+        const resolvedPath = resolveModule(dep, {
+          paths: [importerPath],
+        });
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
           continue;
@@ -205,10 +225,28 @@ async function captureDependenciesToOptimize(
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
+        // Try to resolve version for dynamic imports as well
+        const pkgName = getPackageName(dynamicImport);
+        let version: string | undefined;
+        let rootPath: string | null = null;
+
+        if (pkgName) {
+          rootPath = await getPackageRootPath(dynamicImport, entryRootPath);
+          if (rootPath) {
+            try {
+              const pkgJson = await readJSON(`${rootPath}/package.json`);
+              version = pkgJson.version;
+            } catch {
+              // Failed to read package.json
+            }
+          }
+        }
+
         depsToOptimize.set(dynamicImport, {
           exports: ['*'],
-          rootPath: null,
+          rootPath: rootPath ? slash(rootPath) : null,
           isWorkspace: false,
+          version,
         });
       }
     }

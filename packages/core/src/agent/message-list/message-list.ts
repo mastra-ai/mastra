@@ -94,7 +94,7 @@ export class MessageList {
     threadId,
     resourceId,
     generateMessageId,
-    // @ts-ignore Flag for agent network messages
+    // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
   }: { threadId?: string; resourceId?: string; generateMessageId?: (context?: IdGeneratorContext) => string } = {}) {
     if (threadId) {
@@ -112,6 +112,23 @@ export class MessageList {
     this.recordedEvents = [];
   }
 
+  public hasRecordedEvents(): boolean {
+    return this.recordedEvents.length > 0;
+  }
+
+  public getRecordedEvents(): Array<{
+    type: 'add' | 'addSystem' | 'removeByIds' | 'clear';
+    source?: MessageSource;
+    count?: number;
+    ids?: string[];
+    text?: string;
+    tag?: string;
+    message?: CoreMessageV4;
+  }> {
+    const events = [...this.recordedEvents];
+    return events;
+  }
+
   /**
    * Stop recording and return the list of recorded events
    */
@@ -125,7 +142,7 @@ export class MessageList {
     message?: CoreMessageV4;
   }> {
     this.isRecording = false;
-    const events = [...this.recordedEvents];
+    const events = this.getRecordedEvents();
     this.recordedEvents = [];
     return events;
   }
@@ -167,6 +184,36 @@ export class MessageList {
       memoryInfo: this.memoryInfo,
       agentNetworkAppend: this._agentNetworkAppend,
     });
+  }
+
+  /**
+   * Custom serialization for tracing/observability spans.
+   * Returns a clean representation with just the essential data,
+   * excluding internal state tracking, methods, and implementation details.
+   *
+   * This is automatically called by the span serialization system when
+   * a MessageList instance appears in span input/output/attributes.
+   */
+  public serializeForSpan(): {
+    messages: Array<{ role: string; content: unknown }>;
+    systemMessages: Array<{ role: string; content: unknown; tag?: string }>;
+  } {
+    const coreMessages = this.all.aiV4.core();
+
+    return {
+      messages: coreMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+      systemMessages: [
+        // Untagged first (base instructions)
+        ...this.systemMessages.map(m => ({ role: m.role, content: m.content })),
+        // Tagged after (contextual additions)
+        ...Object.entries(this.taggedSystemMessages).flatMap(([tag, msgs]) =>
+          msgs.map(m => ({ role: m.role, content: m.content, tag })),
+        ),
+      ],
+    };
   }
 
   public deserialize(state: SerializedMessageListState) {
@@ -581,6 +628,19 @@ export class MessageList {
   }
 
   /**
+   * Clear system messages, optionally for a specific tag
+   * @param tag - If provided, only clears messages with this tag. Otherwise clears untagged messages.
+   */
+  public clearSystemMessages(tag?: string): this {
+    if (tag) {
+      delete this.taggedSystemMessages[tag];
+    } else {
+      this.systemMessages = [];
+    }
+    return this;
+  }
+
+  /**
    * Replace all system messages with new ones
    * This clears both tagged and untagged system messages and replaces them with the provided array
    * @param messages - Array of system messages to set
@@ -777,7 +837,64 @@ export class MessageList {
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
       if (shouldReplace && existingMessage) {
-        this.messages[existingIndex] = messageV2;
+        // If the existing message is sealed (e.g., after observation), don't replace it.
+        // Instead, generate a new ID for the incoming message and add it as a new message.
+        if (MessageMerger.isSealed(existingMessage)) {
+          // Find the last part with sealedAt metadata in the EXISTING message.
+          // The existing message has the seal boundary marker from insertObservationMarker.
+          const existingParts = existingMessage.content?.parts || [];
+          let sealedPartCount = 0;
+
+          for (let i = existingParts.length - 1; i >= 0; i--) {
+            const part = existingParts[i] as { metadata?: { mastra?: { sealedAt?: number } } };
+            if (part?.metadata?.mastra?.sealedAt) {
+              // The seal is at index i, so sealed content is parts 0 through i (inclusive)
+              sealedPartCount = i + 1;
+              break;
+            }
+          }
+
+          // If no sealedAt found, use the entire existing message length as the boundary
+          if (sealedPartCount === 0) {
+            sealedPartCount = existingParts.length;
+          }
+
+          // Get parts from incoming message that are beyond the sealed boundary
+          const incomingParts = messageV2.content.parts;
+
+          let newParts: typeof incomingParts;
+
+          if (incomingParts.length <= sealedPartCount) {
+            // Incoming message has fewer or equal parts than the sealed boundary.
+            // Check if these are truly stale (same content as the sealed message) or
+            // new content flushed independently (e.g., text deltas flushed with the
+            // same messageId but only containing a text part).
+            if (messagesAreEqual(existingMessage, messageV2)) {
+              // Stale message, ignore - don't replace, don't create new
+              return this;
+            }
+            // Not stale — these are fresh parts (e.g., a text flush). Treat all as new.
+            newParts = incomingParts;
+          } else {
+            newParts = incomingParts.slice(sealedPartCount);
+          }
+
+          // Only create a new message if there are actually new parts
+          if (newParts.length > 0) {
+            // Generate a new ID for the incoming message
+            messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
+            // Replace the parts with only the new ones
+            messageV2.content.parts = newParts;
+            // Ensure the new message has a timestamp after the sealed message
+            if (messageV2.createdAt <= existingMessage.createdAt) {
+              messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);
+            }
+            this.messages.push(messageV2);
+          }
+          // If no new parts, don't add anything (the sealed message already has all the content)
+        } else {
+          this.messages[existingIndex] = messageV2;
+        }
       } else if (!exists) {
         this.messages.push(messageV2);
       }

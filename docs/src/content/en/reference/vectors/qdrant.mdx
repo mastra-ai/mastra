@@ -48,7 +48,7 @@ It provides a production-ready service with a convenient API to store, search, a
     {
       name: "dimension",
       type: "number",
-      description: "Vector dimension (must match your embedding model)",
+      description: "Vector dimension (must match your embedding model). Required for single-vector collections.",
     },
     {
       name: "metric",
@@ -57,13 +57,38 @@ It provides a production-ready service with a convenient API to store, search, a
       defaultValue: "cosine",
       description: "Distance metric for similarity search",
     },
+    {
+      name: "namedVectors",
+      type: "Record<string, { size: number; distance: 'cosine' | 'euclidean' | 'dotproduct' }>",
+      isOptional: true,
+      description: "Configuration for named vector spaces. When provided, creates a collection with multiple named vector fields.",
+    },
   ]}
 />
+
+#### Creating a Named Vectors Collection
+
+```typescript
+// Create a collection with multiple named vector spaces
+await store.createIndex({
+  indexName: "multi_modal",
+  dimension: 768, // fallback
+  namedVectors: {
+    text: { size: 768, distance: "cosine" },
+    image: { size: 512, distance: "euclidean" },
+  },
+});
+```
 
 ### upsert()
 
 <PropertiesTable
   content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert into",
+    },
     {
       name: "vectors",
       type: "number[][]",
@@ -81,8 +106,34 @@ It provides a production-ready service with a convenient API to store, search, a
       isOptional: true,
       description: "Optional vector IDs (auto-generated if not provided)",
     },
+    {
+      name: "vectorName",
+      type: "string",
+      isOptional: true,
+      description: "Name of the vector space to upsert into when using named vectors.",
+    },
   ]}
 />
+
+#### Upserting into Named Vector Spaces
+
+```typescript
+// Upsert into the "text" vector space
+await store.upsert({
+  indexName: "multi_modal",
+  vectors: textEmbeddings,
+  metadata: textMetadata,
+  vectorName: "text",
+});
+
+// Upsert into the "image" vector space
+await store.upsert({
+  indexName: "multi_modal",
+  vectors: imageEmbeddings,
+  metadata: imageMetadata,
+  vectorName: "image",
+});
+```
 
 ### query()
 
@@ -118,8 +169,27 @@ It provides a production-ready service with a convenient API to store, search, a
       defaultValue: "false",
       description: "Whether to include vectors in the results",
     },
+    {
+      name: "using",
+      type: "string",
+      isOptional: true,
+      description: "Name of the vector field to query when using named vectors. Use this when your collection has multiple named vector fields.",
+    },
   ]}
 />
+
+#### Named Vectors
+
+Qdrant supports [named vectors](https://qdrant.tech/documentation/concepts/vectors/#named-vectors), allowing multiple vector fields per collection. Use the `using` parameter to specify which named vector to query against:
+
+```typescript
+const results = await store.query({
+  indexName: "my_index",
+  queryVector: embedding,
+  topK: 10,
+  using: "title_embedding", // Query against a specific named vector
+});
+```
 
 ### listIndexes()
 

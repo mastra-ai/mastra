@@ -25,7 +25,7 @@ This template demonstrates the powerful integration between **Mastra** and **Com
 
 Before using this template, ensure you have:
 
-1. **Node.js 20.9.0 or higher** installed
+1. **Node.js 22.13.0 or later** installed
 2. **Composio account** with Google Sheets integration configured
 3. **Anthropic API key** for Claude access
 4. **Google account** for Sheets integration (configured through Composio)
