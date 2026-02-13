@@ -3,6 +3,7 @@ import { toast } from '@/lib/toast';
 import { GetScorerResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { useMergedRequestContext } from '@/domains/request-context';
 
 type UseScoresByScorerIdProps = {
   scorerId: string;
@@ -53,10 +54,11 @@ export const useScorer = (scorerId: string) => {
 
 export const useScorers = () => {
   const client = useMastraClient();
+  const requestContext = useMergedRequestContext();
 
   return useQuery({
-    queryKey: ['scorers'],
-    queryFn: () => client.listScorers(),
+    queryKey: ['scorers', requestContext],
+    queryFn: () => client.listScorers(requestContext),
     staleTime: 0,
     gcTime: 0,
   });
