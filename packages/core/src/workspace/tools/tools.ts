@@ -13,6 +13,8 @@ import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { InMemoryFileReadTracker } from '../filesystem';
 import type { FileReadTracker } from '../filesystem';
 import { isTextFile } from '../filesystem/fs-utils';
+import { createGlobMatcher } from '../glob';
+import type { GlobMatcher } from '../glob';
 import {
   extractLinesWithLimit,
   formatWithLineNumbers,
@@ -549,13 +551,21 @@ Examples:
     if (grepConfig.enabled) {
       tools[WORKSPACE_TOOLS.SEARCH.GREP] = createTool({
         id: WORKSPACE_TOOLS.SEARCH.GREP,
-        description:
-          'Search file contents using a regex pattern. Walks the filesystem and returns matching lines with file paths and line numbers.',
+        description: `Search file contents using a regex pattern. Returns matching lines with file paths and line numbers.
+
+Usage:
+- Use this for content search (finding functions, variables, error messages, imports, etc.)
+- Supports full regex syntax (e.g., "function\\s+\\w+", "import.*from")
+- Use the glob parameter to filter by file type (e.g., "**/*.ts", "*.{js,jsx}")
+- Use contextLines to see surrounding code for each match`,
         requireApproval: grepConfig.requireApproval,
         inputSchema: z.object({
           pattern: z.string().describe('Regex pattern to search for'),
           path: z.string().optional().default('/').describe('Directory to search within (default: "/")'),
-          glob: z.string().optional().describe('File filter pattern (e.g., "*.ts"). Filters files by extension.'),
+          glob: z
+            .string()
+            .optional()
+            .describe('Glob pattern to filter files (e.g., "**/*.ts", "*.{js,jsx}", "src/**/*.test.ts")'),
           contextLines: z
             .number()
             .optional()
@@ -627,22 +637,10 @@ Examples:
             };
           }
 
-          // Extract extension filter from glob pattern (e.g., "*.ts" → ".ts")
-          // Only simple "*.ext" patterns are supported.
-          let extensionFilter: string | undefined;
+          // Compile glob matcher if provided
+          let globMatcher: GlobMatcher | undefined;
           if (globPattern) {
-            const match = globPattern.match(/^\*(\.\w+)$/);
-            if (match) {
-              extensionFilter = match[1];
-            } else {
-              return {
-                matches: [],
-                fileCount: 0,
-                matchCount: 0,
-                truncated: false,
-                error: `Unsupported glob pattern: "${globPattern}". Use simple extension filters like "*.ts".`,
-              };
-            }
+            globMatcher = createGlobMatcher(globPattern);
           }
 
           // Recursively collect files
@@ -664,8 +662,11 @@ Examples:
               if (entry.type === 'file') {
                 // Skip non-text files
                 if (!isTextFile(entry.name)) continue;
-                // Apply extension filter
-                if (extensionFilter && !entry.name.endsWith(extensionFilter)) continue;
+                // Apply glob filter (match against path relative to search root)
+                if (globMatcher) {
+                  const relativePath = fullPath.startsWith('/') ? fullPath.slice(1) : fullPath;
+                  if (!globMatcher(relativePath)) continue;
+                }
                 files.push(fullPath);
               } else if (entry.type === 'directory' && !entry.isSymlink) {
                 files.push(...(await collectFiles(fullPath)));

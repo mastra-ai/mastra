@@ -839,19 +839,42 @@ describe('createWorkspaceTools', () => {
       expect((result as any).error).toContain('Pattern too long');
     });
 
-    it('should return error for unsupported glob patterns', async () => {
+    it('should support ** globstar patterns', async () => {
+      await fs.mkdir(path.join(tempDir, 'src', 'utils'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), 'match');
+      await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), 'match');
+      await fs.writeFile(path.join(tempDir, 'src', 'style.css'), 'match');
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
       const tools = createWorkspaceTools(workspace);
 
       const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
-        pattern: 'test',
+        pattern: 'match',
         glob: '**/*.ts',
       });
 
-      expect(result.matchCount).toBe(0);
-      expect((result as any).error).toContain('Unsupported glob pattern');
+      expect(result.matchCount).toBe(2);
+      expect(result.matches.every((m: any) => m.file.endsWith('.ts'))).toBe(true);
+    });
+
+    it('should support brace expansion glob patterns', async () => {
+      await fs.writeFile(path.join(tempDir, 'app.ts'), 'match');
+      await fs.writeFile(path.join(tempDir, 'app.js'), 'match');
+      await fs.writeFile(path.join(tempDir, 'style.css'), 'match');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: 'match',
+        glob: '*.{ts,js}',
+      });
+
+      expect(result.matchCount).toBe(2);
+      expect(result.matches.some((m: any) => m.file.endsWith('.ts'))).toBe(true);
+      expect(result.matches.some((m: any) => m.file.endsWith('.js'))).toBe(true);
     });
 
     it('should skip binary/non-text files', async () => {
