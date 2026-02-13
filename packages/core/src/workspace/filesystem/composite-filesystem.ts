@@ -98,6 +98,9 @@ export class CompositeFilesystem<
       throw new Error('CompositeFilesystem requires at least one mount');
     }
 
+    // Composite is read-only when every mount is read-only
+    this.readOnly = [...this._mounts.values()].every(fs => fs.readOnly) || undefined;
+
     // Validate no nested mount paths (e.g., /data and /data/sub)
     const mountPaths = [...this._mounts.keys()];
     for (const a of mountPaths) {
