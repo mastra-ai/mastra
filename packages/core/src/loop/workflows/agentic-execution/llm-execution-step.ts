@@ -977,8 +977,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       /**
        * Merge provider-executed tool results into their corresponding tool calls.
        *
-       * For provider-executed tools (like gateway tools),
-       * the stream from doStream includes both tool-call and tool-result chunks.
+       * For some provider-executed tools (like the ones from @ai-sdk/gateway),
+       * the response includes both tool-call and tool-result chunks.
        * We need to:
        * 1. Infer providerExecuted for provider tools when the stream doesn't set it
        *    (gateway tools may not have providerExecuted set in the raw stream)
@@ -1000,7 +1000,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
 
         for (const toolCall of toolCalls) {
-          // Infer providerExecuted for provider tools when the stream doesn't set it
+          // Infer providerExecuted for provider tools when the response doesn't set it
           const tool = findProviderToolByName(stepTools, toolCall.toolName);
           const inferred = inferProviderExecuted(toolCall.providerExecuted, tool);
           if (inferred !== undefined) {
