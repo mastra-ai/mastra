@@ -66,6 +66,15 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     // Test non-deprecated routes with full test suite
     // Skip MCP transport routes (mcp-http, mcp-sse) - they require MCP protocol handling
     // and are tested separately via mcp-transport-test-suite
+    // Skip auth routes that require specific providers (SSO, credentials) - they return 404
+    // when providers aren't configured, which is expected behavior
+    // Note: Route paths in SERVER_ROUTES don't include /api prefix
+    const authRoutesRequiringProviders = [
+      '/auth/sso/login',
+      '/auth/sso/callback',
+      '/auth/credentials/sign-in',
+      '/auth/credentials/sign-up',
+    ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [
       // skills-sh routes that require external API calls (GitHub, skills.sh)
@@ -84,6 +93,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         !r.deprecated &&
         r.responseType !== 'mcp-http' &&
         r.responseType !== 'mcp-sse' &&
+        !authRoutesRequiringProviders.includes(r.path) &&
         !routesRequiringExternalDeps.includes(r.path),
     );
     activeRoutes.forEach(route => {
@@ -378,7 +388,10 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     // Additional cross-route tests
     describe('Cross-Route Tests', () => {
       // Test array query parameters for ALL GET routes
-      const getRoutes = SERVER_ROUTES.filter(r => r.method === 'GET' && !r.deprecated);
+      // Skip auth routes that require specific providers
+      const getRoutes = SERVER_ROUTES.filter(
+        r => r.method === 'GET' && !r.deprecated && !authRoutesRequiringProviders.includes(r.path),
+      );
       getRoutes.forEach(route => {
         it(`should handle array query parameters for ${route.method} ${route.path}`, async () => {
           const request = buildRouteRequest(route);

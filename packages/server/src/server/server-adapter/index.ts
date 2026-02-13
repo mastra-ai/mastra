@@ -10,7 +10,7 @@ import { defaultAuthConfig } from '../auth/defaults';
 import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
-import { SERVER_ROUTES } from './routes';
+import { SERVER_ROUTES, getEffectivePermission } from './routes';
 import type { ServerRoute } from './routes';
 
 export * from './routes';
@@ -248,6 +248,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       getHeader: (name: string) => string | undefined;
       getQuery: (name: string) => string | undefined;
       requestContext: RequestContext;
+      /** Raw Request object for cookie-based auth providers */
+      request?: Request;
     },
   ): Promise<{ status: number; error: string } | null> {
     const authConfig = this.mastra.getServer()?.auth;
@@ -281,22 +283,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       token = context.getQuery('apiKey') || null;
     }
 
-    if (!token) {
-      return { status: 401, error: 'Authentication required' };
-    }
-
     let user: unknown;
     try {
       if (typeof authConfig.authenticateToken === 'function') {
-        // Note: We pass null as request since adapters have different request types
-        // If specific request is needed, authenticateToken can use data from token
-        user = await authConfig.authenticateToken(token, null as any);
+        // Pass the raw request for cookie-based auth providers (e.g., WorkOS)
+        // Token may be null for cookie-based auth - provider will read from request
+        user = await authConfig.authenticateToken(token ?? '', context.request as any);
       } else {
         return { status: 401, error: 'No token verification method configured' };
       }
 
       if (!user) {
-        return { status: 401, error: 'Invalid or expired token' };
+        return { status: 401, error: 'Authentication required' };
       }
 
       context.requestContext.set('user', user);
@@ -352,7 +350,15 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return { status: 403, error: 'Access denied' };
     }
 
-    // Check default rules
+    // No explicit authorization configured (authorizeUser, authorize, or rules)
+    // Check if RBAC is configured - if not, allow authenticated users through
+    // (auth-only mode = authenticated users get full access)
+    const rbacProvider = this.mastra.getServer()?.rbac;
+    if (!rbacProvider) {
+      return null;
+    }
+
+    // RBAC is configured, fall back to default rules
     if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
       const isAuthorized = await checkRules(defaultAuthConfig.rules, context.path, context.method, user);
       if (isAuthorized) {
@@ -361,6 +367,50 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     return { status: 403, error: 'Access denied' };
+  }
+
+  /**
+   * Check if the user has the required permission for a route.
+   *
+   * Uses convention-based permission derivation:
+   * 1. If route has explicit `requiresPermission`, use that
+   * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
+   * 3. Routes with `requiresAuth: false` skip permission checks
+   *
+   * @param route - The route being accessed
+   * @param userPermissions - The user's permissions from the request context
+   * @returns Error response if permission denied, null if allowed
+   */
+  protected checkRoutePermission(
+    route: ServerRoute,
+    userPermissions: string[] | undefined,
+    hasPermissionFn: (userPerms: string[], required: string) => boolean,
+  ): { status: number; error: string; message: string } | null {
+    // If RBAC is not configured, skip permission checks entirely
+    // Auth-only mode = authenticated users get full access
+    const rbacProvider = this.mastra.getServer()?.rbac;
+    if (!rbacProvider) {
+      return null;
+    }
+
+    // Get the effective permission (explicit or derived)
+    const requiredPermission = getEffectivePermission(route);
+
+    // No permission required (public route or couldn't derive)
+    if (!requiredPermission) {
+      return null;
+    }
+
+    // Check if user has the required permission
+    if (!userPermissions || !hasPermissionFn(userPermissions, requiredPermission)) {
+      return {
+        status: 403,
+        error: 'Forbidden',
+        message: `Missing required permission: ${requiredPermission}`,
+      };
+    }
+
+    return null;
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;

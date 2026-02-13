@@ -22,6 +22,8 @@ import {
   ScorerCombobox,
   toast,
   Spinner,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { GaugeIcon, PencilIcon } from 'lucide-react';
@@ -105,6 +107,31 @@ export default function Scorer() {
       toast.error(`Error loading workflows: ${errorMessage}`);
     }
   }, [workflowsError]);
+
+  // 403 check - permission denied for scorers
+  if (scorerError && is403ForbiddenError(scorerError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {scorerId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="scorers" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 

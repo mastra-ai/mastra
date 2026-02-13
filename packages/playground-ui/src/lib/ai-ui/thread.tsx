@@ -19,6 +19,7 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 import { BracketOverlay } from './components/bracket-overlay';
 
@@ -95,6 +96,10 @@ interface ComposerProps {
 
 const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { canExecute } = usePermissions();
+  const canExecuteAgent = canExecute('agents');
+
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -105,19 +110,21 @@ const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
         <div className="bg-surface3 rounded-lg border border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
-              autoFocus
-              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none"
-              placeholder="Enter your message..."
+              ref={textareaRef}
+              autoFocus={document.activeElement === document.body}
+              className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-none resize-none outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
+              disabled={!canExecuteAgent}
             />
           </ComposerPrimitive.Input>
           <div className="flex items-center justify-between gap-2">
             {agentId && !hasModelList && <ComposerModelSwitcher agentId={agentId} />}
             <div className="flex items-center gap-2 ml-auto">
-              <SpeechInput agentId={agentId} />
-              <ComposerAction />
+              {canExecuteAgent && <SpeechInput agentId={agentId} />}
+              <ComposerAction canExecute={canExecuteAgent} />
             </div>
           </div>
         </div>
@@ -150,31 +157,38 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
   );
 };
 
-const ComposerAction = () => {
+interface ComposerActionProps {
+  canExecute?: boolean;
+}
+
+const ComposerAction = ({ canExecute = true }: ComposerActionProps) => {
   const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
 
   return (
     <>
-      <IconButton
-        variant="light"
-        size="md"
-        type="button"
-        tooltip="Add attachment"
-        className="rounded-full"
-        onClick={() => setIsAddAttachmentDialogOpen(true)}
-      >
-        <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
-      </IconButton>
+      {canExecute && (
+        <IconButton
+          variant="light"
+          size="md"
+          type="button"
+          tooltip="Add attachment"
+          className="rounded-full"
+          onClick={() => setIsAddAttachmentDialogOpen(true)}
+        >
+          <PlusIcon className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        </IconButton>
+      )}
 
       <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
 
       <ThreadPrimitive.If running={false}>
-        <ComposerPrimitive.Send asChild>
+        <ComposerPrimitive.Send asChild disabled={!canExecute}>
           <IconButton
             variant="light"
             size="md"
-            tooltip="Send"
+            tooltip={canExecute ? 'Send' : 'No permission to execute'}
             className="rounded-full border border-border1 bg-surface5"
+            disabled={!canExecute}
           >
             <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
           </IconButton>

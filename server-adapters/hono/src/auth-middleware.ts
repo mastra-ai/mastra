@@ -1,3 +1,4 @@
+import type { IRBACProvider, EEUser } from '@mastra/core/auth';
 import type { ContextWithMastra } from '@mastra/core/server';
 import {
   canAccessPublicly,
@@ -44,8 +45,12 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     token = c.req.query('apiKey') || null;
   }
 
-  // Handle missing token
-  if (!token) {
+  // Check if there are cookies that might contain session tokens
+  const hasCookies = !!c.req.header('Cookie');
+
+  // Handle missing token - but allow through if cookies are present
+  // (auth provider may use cookie-based sessions like Better Auth)
+  if (!token && !hasCookies) {
     return c.json({ error: 'Authentication required' }, 401);
   }
 
@@ -55,7 +60,8 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
     // Client provided verify function
     if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token, c.req);
+      // Pass empty string if no token but cookies present - provider will check cookies
+      user = await authConfig.authenticateToken(token || '', c.req);
     } else {
       throw new Error('No token verification method configured');
     }
@@ -66,6 +72,24 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
     // Store user in context
     c.get('requestContext').set('user', user);
+
+    // Resolve and store user permissions using RBAC provider (EE feature)
+    try {
+      const serverConfig = mastra.getServer();
+      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+
+      if (rbacProvider) {
+        // Use the RBAC provider to resolve permissions
+        const permissions = await rbacProvider.getPermissions(user as EEUser);
+        c.get('requestContext').set('userPermissions', permissions);
+
+        // Also store roles for UI display
+        const roles = await rbacProvider.getRoles(user as EEUser);
+        c.get('requestContext').set('userRoles', roles);
+      }
+    } catch {
+      // RBAC not available or failed, continue without permissions
+    }
 
     return next();
   } catch (err) {
@@ -154,7 +178,15 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return c.json({ error: 'Access denied' }, 403);
   }
 
-  // Default rule-based authorization
+  // No explicit authorization configured (authorizeUser, authorize, or rules)
+  // Check if RBAC is configured - if not, allow authenticated users through
+  // (auth-only mode = authenticated users get full access)
+  const rbacProvider = mastra.getServer()?.rbac;
+  if (!rbacProvider) {
+    return next();
+  }
+
+  // RBAC is configured, fall back to default rules
   if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
     const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
 

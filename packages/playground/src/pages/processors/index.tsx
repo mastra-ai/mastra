@@ -15,7 +15,7 @@ import {
 import { Link } from 'react-router';
 
 export function Processors() {
-  const { data: processors = {}, isLoading } = useProcessors();
+  const { data: processors = {}, isLoading, error } = useProcessors();
 
   const isEmpty = !isLoading && Object.keys(processors).length === 0;
 
@@ -40,7 +40,7 @@ export function Processors() {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <ProcessorTable processors={processors} isLoading={isLoading} />
+        <ProcessorTable processors={processors} isLoading={isLoading} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

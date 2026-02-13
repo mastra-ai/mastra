@@ -51,6 +51,11 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
     return null;
   }
 
+  // Only show version footer in dev mode
+  if (!data?.isDev) {
+    return null;
+  }
+
   if (isLoadingPackages) {
     return (
       <div className="px-3 py-2">

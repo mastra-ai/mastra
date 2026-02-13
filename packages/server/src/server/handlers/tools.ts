@@ -141,25 +141,26 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
 
       validateBody({ data });
 
+      let result;
       if (isVercelTool(tool)) {
-        const result = await (tool as any).execute(data);
-        return result;
+        result = await (tool as any).execute(data);
+      } else {
+        result = await tool.execute(data!, {
+          mastra,
+          requestContext,
+          // TODO: Pass proper tracing context when server API supports tracing
+          tracingContext: { currentSpan: undefined },
+          ...(runId
+            ? {
+                workflow: {
+                  runId,
+                  suspend: async () => {},
+                },
+              }
+            : {}),
+        });
       }
 
-      const result = await tool.execute(data!, {
-        mastra,
-        requestContext,
-        // TODO: Pass proper tracing context when server API supports tracing
-        tracingContext: { currentSpan: undefined },
-        ...(runId
-          ? {
-              workflow: {
-                runId,
-                suspend: async () => {},
-              },
-            }
-          : {}),
-      });
       return result;
     } catch (error) {
       return handleError(error, 'Error executing tool');
