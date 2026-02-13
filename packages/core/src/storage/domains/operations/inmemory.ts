@@ -28,6 +28,11 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_scorer_definition_versions: new Map(),
       mastra_mcp_clients: new Map(),
       mastra_mcp_client_versions: new Map(),
+      mastra_datasets: new Map(),
+      mastra_dataset_items: new Map(),
+      mastra_dataset_versions: new Map(),
+      mastra_experiments: new Map(),
+      mastra_experiment_results: new Map(),
     };
   }
 

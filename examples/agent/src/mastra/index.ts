@@ -3,7 +3,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 
-import { mastraAuth, rbacProvider } from './auth';
+// import { mastraAuth, rbacProvider } from './auth';
 
 import {
   agentThatHarassesYou,
@@ -45,7 +45,7 @@ import {
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
-  url: 'file:./mastra.db',
+  url: 'file:../../../mastra.db',
 });
 
 const config = {
@@ -64,14 +64,13 @@ const config = {
     sourcemap: true,
   },
   editor: new MastraEditor(),
-  server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-  },
+  // server: {
+  //   auth: mastraAuth,
+  //   rbac: rbacProvider,
+  // },
   storage,
 };
 
 export const mastra = new Mastra({
   ...config,
-  editor: new MastraEditor(),
 });

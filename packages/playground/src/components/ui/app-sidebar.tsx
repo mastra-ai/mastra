@@ -9,6 +9,7 @@ import {
   MessagesSquareIcon,
   FolderIcon,
   Cpu,
+  DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -29,6 +30,7 @@ import {
   NavLink,
   useAuthCapabilities,
   isAuthenticated,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -94,6 +96,13 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DatabaseIcon />,
+        isOnMastraPlatform: false,
+        isExperimental: true,
       },
     ],
   },
@@ -170,11 +179,15 @@ export function AppSidebar() {
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   // Check if user is authenticated (small avatar) vs not (wide login button)
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
 
   const filterPlatformLink = (link: NavLink) => {
+    if (link.name === 'Datasets' && !experimentalFeaturesEnabled) {
+      return false;
+    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }

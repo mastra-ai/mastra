@@ -1,3 +1,4 @@
+import { coreFeatures } from '@mastra/core/features';
 import { v4 as uuid } from '@lukeed/uuid';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 
@@ -70,6 +71,14 @@ import CmsAgentVariablesPage from './pages/cms/agents/variables';
 import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import Datasets from './pages/datasets';
+import DatasetPage from './pages/datasets/dataset';
+import DatasetItemPage from './pages/datasets/dataset/item';
+import DatasetExperiment from './pages/datasets/dataset/experiment';
+import DatasetCompare from './pages/datasets/dataset/compare';
+import DatasetCompareItems from './pages/datasets/dataset/item/compare';
+import DatasetCompareVersions from './pages/datasets/dataset/item/versions';
+import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -104,6 +113,10 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
+  datasetExperimentLink: (datasetId: string, experimentId: string) =>
+    `/datasets/${datasetId}/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -121,6 +134,7 @@ const RootLayout = () => {
 
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
+const isExperimentalFeatures = coreFeatures.has('datasets');
 
 const routes = [
   // Auth pages - no layout
@@ -222,6 +236,19 @@ const routes = [
           { path: 'graph/:runId', element: <Workflow /> },
         ],
       },
+
+      ...(isExperimentalFeatures
+        ? [
+            { path: '/datasets', element: <Datasets /> },
+            { path: '/datasets/:datasetId', element: <DatasetPage /> },
+            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetCompareVersions /> },
+            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
+            { path: '/datasets/:datasetId/items', element: <DatasetCompareItems /> },
+            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+          ]
+        : []),
 
       { index: true, loader: () => redirect('/agents') },
       { path: '/request-context', element: <RequestContext /> },

@@ -12,7 +12,6 @@
     "@ai-sdk/provider": "^2.0.0",
     "@mastra/auth-better-auth": "latest",
     "@mastra/auth-workos": "latest",
-    "@mastra/auth-cloud": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/editor": "latest",
@@ -35,7 +34,6 @@
     "overrides": {
       "@mastra/auth-better-auth": "link:../../auth/better-auth",
       "@mastra/auth-workos": "link:../../auth/workos",
-      "@mastra/auth-cloud": "link:../../auth/cloud",
       "@mastra/core": "link:../../packages/core",
       "@mastra/editor": "link:../../packages/editor",
       "@mastra/loggers": "link:../../packages/loggers",
@@ -54,7 +52,7 @@
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
     "mastra:dev": "mastra dev",
-    "mastra:build": "mastra build",
+    "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
     "mastra:studio": "mastra studio"
   },
