@@ -298,44 +298,77 @@ export async function executeEntry(
     const idx = resume.resumePath.shift();
     const branchStep = entry.steps[idx!]!;
 
-    // Use the step's stored payload from the snapshot as prevOutput, since the previous
-    // step (e.g., a .map() step) may have a non-deterministic ID that doesn't match
-    // between workflow constructions.
-    const resumePrevOutput = stepResults[branchStep.step.id]?.payload ?? prevOutput;
+    let branchResult: EntryExecutionResult;
 
-    const stepExecResult = await engine.executeStep({
-      workflowId,
-      runId,
-      resourceId,
-      step: branchStep.step,
-      prevOutput: resumePrevOutput,
-      stepResults,
-      serializedStepGraph,
-      resume,
-      restart,
-      timeTravel,
-      executionContext: {
+    if (branchStep.type !== 'step') {
+      // Recurse through executeEntry for nested block types (parallel, conditional, etc.)
+      branchResult = await executeEntry(engine, {
         workflowId,
         runId,
-        executionPath: [...executionContext.executionPath, idx!],
-        suspendedPaths: executionContext.suspendedPaths,
-        resumeLabels: executionContext.resumeLabels,
-        retryConfig: executionContext.retryConfig,
-        activeStepsPath: executionContext.activeStepsPath,
-        state: executionContext.state,
-      },
-      tracingContext,
-      pubsub,
-      abortController,
-      requestContext,
-      outputWriter,
-      disableScorers,
-      perStep,
-    });
+        resourceId,
+        entry: branchStep,
+        prevStep,
+        serializedStepGraph,
+        stepResults,
+        resume,
+        executionContext: {
+          workflowId,
+          runId,
+          executionPath: [...executionContext.executionPath, idx!],
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
+          retryConfig: executionContext.retryConfig,
+          activeStepsPath: executionContext.activeStepsPath,
+          state: executionContext.state,
+        },
+        tracingContext,
+        pubsub,
+        abortController,
+        requestContext,
+        outputWriter,
+        disableScorers,
+        perStep,
+      });
+    } else {
+      // Use the step's stored payload from the snapshot as prevOutput, since the previous
+      // step (e.g., a .map() step) may have a non-deterministic ID that doesn't match
+      // between workflow constructions.
+      const resumePrevOutput = stepResults[branchStep.step.id]?.payload ?? prevOutput;
+
+      branchResult = await engine.executeStep({
+        workflowId,
+        runId,
+        resourceId,
+        step: branchStep.step,
+        prevOutput: resumePrevOutput,
+        stepResults,
+        serializedStepGraph,
+        resume,
+        restart,
+        timeTravel,
+        executionContext: {
+          workflowId,
+          runId,
+          executionPath: [...executionContext.executionPath, idx!],
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
+          retryConfig: executionContext.retryConfig,
+          activeStepsPath: executionContext.activeStepsPath,
+          state: executionContext.state,
+        },
+        tracingContext,
+        pubsub,
+        abortController,
+        requestContext,
+        outputWriter,
+        disableScorers,
+        perStep,
+      });
+    }
 
     // Apply context changes from resumed step
-    engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-    Object.assign(stepResults, stepExecResult.stepResults);
+    engine.applyMutableContext(executionContext, branchResult.mutableContext);
+    Object.assign(stepResults, branchResult.stepResults);
 
     // For conditionals, only check steps that were actually executed (have results).
     // Branches whose conditions were false during initial execution should be ignored.
@@ -345,7 +378,7 @@ export async function executeEntry(
       result: execResults,
       stepResults,
       mutableContext: engine.buildMutableContext(executionContext),
-      requestContext: stepExecResult.requestContext,
+      requestContext: branchResult.requestContext,
     };
   } else if (entry.type === 'conditional') {
     execResults = await engine.executeConditional({
