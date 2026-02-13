@@ -8,7 +8,8 @@
  */
 
 import { coreFeatures } from '@mastra/core/features';
-import type { Workspace, WorkspaceSkills } from '@mastra/core/workspace';
+import { CompositeFilesystem } from '@mastra/core/workspace';
+import type { Workspace, WorkspaceSkills, WorkspaceFilesystem } from '@mastra/core/workspace';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -56,6 +57,8 @@ import {
   skillsShRemoveResponseSchema,
   skillsShUpdateBodySchema,
   skillsShUpdateResponseSchema,
+  // Mount schemas
+  listMountsResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -159,6 +162,45 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
 async function getSkillsById(mastra: any, workspaceId: string): Promise<WorkspaceSkills | undefined> {
   const workspace = await getWorkspaceById(mastra, workspaceId);
   return workspace?.skills;
+}
+
+/**
+ * Build the install path for a skill from skills.sh.
+ *
+ * For CompositeFilesystem: resolves the requested mount (or first writable),
+ * validates it is writable, and returns `<mount>/.agents/skills/<skillId>`.
+ * For non-composite: returns `.agents/skills/<skillId>` (unchanged behavior).
+ */
+function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: string, requestedMount?: string): string {
+  if (filesystem instanceof CompositeFilesystem) {
+    const composite = filesystem;
+
+    if (requestedMount) {
+      // Validate the requested mount exists
+      const mountFs = composite.mounts.get(requestedMount);
+      if (!mountFs) {
+        throw new HTTPException(400, {
+          message: `Mount "${requestedMount}" not found. Available mounts: ${composite.mountPaths.join(', ')}`,
+        });
+      }
+      if (mountFs.readOnly) {
+        throw new HTTPException(403, { message: `Mount "${requestedMount}" is read-only` });
+      }
+      return `${requestedMount}/${SKILLS_SH_DIR}/${safeSkillId}`;
+    }
+
+    // Default: use first writable mount
+    for (const [mountPath, mountFs] of composite.mounts) {
+      if (!mountFs.readOnly) {
+        return `${mountPath}/${SKILLS_SH_DIR}/${safeSkillId}`;
+      }
+    }
+
+    throw new HTTPException(403, { message: 'No writable mount available for skill installation' });
+  }
+
+  // Non-composite: standard path
+  return `${SKILLS_SH_DIR}/${safeSkillId}`;
 }
 
 // =============================================================================
@@ -347,6 +389,68 @@ export const GET_WORKSPACE_ROUTE = createRoute({
     }
   },
 });
+
+// =============================================================================
+// Mounts Route
+// =============================================================================
+
+export const WORKSPACE_LIST_MOUNTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workspaces/:workspaceId/mounts',
+  responseType: 'json',
+  pathParamSchema: workspaceIdPathParams,
+  responseSchema: listMountsResponseSchema,
+  summary: 'List workspace mounts',
+  description:
+    'Returns mount points for a workspace filesystem. For CompositeFilesystem, returns all mounts with metadata.',
+  tags: ['Workspace'],
+  handler: async ({ mastra, workspaceId }) => {
+    try {
+      const workspace = await getWorkspaceById(mastra, workspaceId);
+      if (!workspace?.filesystem) {
+        return { mounts: [], isComposite: false };
+      }
+
+      const fs = workspace.filesystem;
+
+      if (fs instanceof CompositeFilesystem) {
+        const mounts = [];
+        for (const [mountPath, mountFs] of fs.mounts) {
+          const info = await mountFs.getInfo?.();
+          mounts.push({
+            path: mountPath,
+            provider: info?.provider ?? mountFs.provider ?? 'unknown',
+            readOnly: mountFs.readOnly ?? false,
+            displayName: info?.name ?? mountFs.name,
+            icon: info?.icon,
+            name: mountFs.name,
+          });
+        }
+        return { mounts, isComposite: true };
+      }
+
+      // Non-composite: single root mount
+      const info = await fs.getInfo?.();
+      return {
+        mounts: [
+          {
+            path: '/',
+            provider: info?.provider ?? fs.provider ?? 'unknown',
+            readOnly: fs.readOnly ?? false,
+            displayName: info?.name ?? fs.name,
+            icon: info?.icon,
+            name: fs.name,
+          },
+        ],
+        isComposite: false,
+      };
+    } catch (error) {
+      return handleWorkspaceError(error, 'Error listing mounts');
+    }
+  },
+});
+
+export const WORKSPACE_MOUNT_ROUTES = [WORKSPACE_LIST_MOUNTS_ROUTE];
 
 // =============================================================================
 // Filesystem Routes
@@ -1279,7 +1383,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   summary: 'Install skill from Skills API',
   description: 'Installs a skill by fetching files from the Skills API and writing to workspace filesystem.',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId, owner, repo, skillName }) => {
+  handler: async ({ mastra, workspaceId, owner, repo, skillName, mount }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -1306,7 +1410,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       // Validate skill name to prevent path traversal
       const safeSkillId = assertSafeSkillName(result.skillId);
-      const installPath = `${SKILLS_SH_DIR}/${safeSkillId}`;
+      const installPath = buildSkillInstallPath(workspace.filesystem, safeSkillId, mount);
 
       // Ensure the skills directory exists
       try {
@@ -1418,7 +1522,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       const skillPath =
         discoveredPath && discoveredPath.includes(SKILLS_SH_PATH_PREFIX)
           ? discoveredPath
-          : `${SKILLS_SH_DIR}/${safeSkillName}`;
+          : buildSkillInstallPath(workspace.filesystem, safeSkillName);
 
       // Check if skill exists on filesystem
       try {
@@ -1482,23 +1586,57 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         error?: string;
       }> = [];
 
-      // Get list of skills to update
-      let skillsToUpdate: string[];
+      // Build list of { skillName, basePath } entries to update.
+      // basePath is the parent of the skill directory (e.g., `.agents/skills`).
+      let skillsToUpdate: Array<{ name: string; basePath: string }>;
+
       if (skillName) {
-        // Validate skill name to prevent path traversal
-        skillsToUpdate = [assertSafeSkillName(skillName)];
+        const safeName = assertSafeSkillName(skillName);
+
+        // Try to find the installed path via discovery first
+        const discoveredSkill = await workspace.skills?.get(safeName);
+        let basePath: string;
+        if (discoveredSkill?.path && discoveredSkill.path.includes(SKILLS_SH_PATH_PREFIX)) {
+          // Derive basePath by removing the skill name suffix from the discovered path
+          basePath = discoveredSkill.path.substring(0, discoveredSkill.path.lastIndexOf('/'));
+        } else {
+          basePath = SKILLS_SH_DIR;
+        }
+        skillsToUpdate = [{ name: safeName, basePath }];
       } else {
-        try {
-          const entries = await workspace?.filesystem?.readdir(SKILLS_SH_DIR);
-          skillsToUpdate = entries?.filter(e => e.type === 'directory').map(e => e.name) ?? [];
-        } catch {
-          // Skills directory doesn't exist or isn't readable - no skills to update
-          // This is expected when no skills have been installed yet
+        // Update all: scan `.agents/skills` under each writable mount (or just SKILLS_SH_DIR)
+        skillsToUpdate = [];
+        const dirsToScan: string[] = [];
+
+        if (workspace.filesystem instanceof CompositeFilesystem) {
+          for (const [mountPath, mountFs] of workspace.filesystem.mounts) {
+            if (!mountFs.readOnly) {
+              dirsToScan.push(`${mountPath}/${SKILLS_SH_DIR}`);
+            }
+          }
+        } else {
+          dirsToScan.push(SKILLS_SH_DIR);
+        }
+
+        for (const dir of dirsToScan) {
+          try {
+            const entries = await workspace.filesystem.readdir(dir);
+            for (const e of entries) {
+              if (e.type === 'directory') {
+                skillsToUpdate.push({ name: e.name, basePath: dir });
+              }
+            }
+          } catch {
+            // Directory doesn't exist or isn't readable - skip
+          }
+        }
+
+        if (skillsToUpdate.length === 0) {
           return { updated: [] };
         }
       }
 
-      for (const skill of skillsToUpdate) {
+      for (const { name: skill, basePath } of skillsToUpdate) {
         // Validate each skill name for safety
         try {
           assertSafeSkillName(skill);
@@ -1510,7 +1648,8 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           });
           continue;
         }
-        const metaPath = `${SKILLS_SH_DIR}/${skill}/.meta.json`;
+        const installPath = `${basePath}/${skill}`;
+        const metaPath = `${installPath}/.meta.json`;
         try {
           const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
           const meta: SkillMetaFile = JSON.parse(metaContent as string);
@@ -1527,7 +1666,6 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
             continue;
           }
 
-          const installPath = `${SKILLS_SH_DIR}/${skill}`;
           let filesWritten = 0;
 
           for (const file of fetchResult.files) {
