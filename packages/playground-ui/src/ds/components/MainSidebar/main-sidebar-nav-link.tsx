@@ -23,6 +23,7 @@ export type MainSidebarNavLinkProps = {
   state?: SidebarState;
   children?: React.ReactNode;
   className?: string;
+  target?: '_blank' | '_self' | '_parent' | '_top';
 };
 export function MainSidebarNavLink({
   link,
@@ -30,6 +31,7 @@ export function MainSidebarNavLink({
   children,
   isActive,
   className,
+  target,
 }: MainSidebarNavLinkProps) {
   const { Link } = useLinkComponent();
   const isCollapsed = state === 'collapsed';
@@ -70,7 +72,7 @@ export function MainSidebarNavLink({
           {isCollapsed || link.tooltipMsg ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link href={link.url} {...linkParams}>
+                <Link href={link.url} {...linkParams} target={target}>
                   {link.icon && link.icon}
                   {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
                 </Link>
@@ -86,7 +88,7 @@ export function MainSidebarNavLink({
               </TooltipContent>
             </Tooltip>
           ) : (
-            <Link href={link.url} {...linkParams}>
+            <Link href={link.url} {...linkParams} target={target}>
               {link.icon && link.icon}
               {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
               {link.isExperimental && (
