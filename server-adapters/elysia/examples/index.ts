@@ -1,15 +1,15 @@
 import { openai } from '@ai-sdk/openai';
+import { cors } from '@elysiajs/cors';
+import { openapi } from '@elysiajs/openapi';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { z } from 'zod';
-import { MastraServer } from '../src/index';
 import Elysia from 'elysia';
-import { cors } from '@elysiajs/cors'
-import { openapi } from '@elysiajs/openapi'
+import { z } from 'zod';
+import { MastraServer, getMastraOpenAPIDoc } from '../src/index';
 
 const storage = new LibSQLStore({
   id: 'elysia-storage',
@@ -419,19 +419,38 @@ const mastra = new Mastra({
 });
 
 const app = new Elysia();
-app.use(cors({ origin: "*" }));
-app.use(openapi({
-  provider: 'swagger-ui',
-  path: "/swagger-ui",
-  specPath: "/openapi.json",
-  swagger: {
-    //@ts-expect-error: must use url to correctly load json 
-    url: '/openapi.json',
-  }
-}))
+app.use(cors({ origin: '*' }));
 
+// Create and initialize Mastra server FIRST
 const srv = new MastraServer({ mastra, openapiPath: '/openapi.json', app });
 await srv.init();
+
+// Get OpenAPI documentation from Mastra after initialization
+// This extracts all Mastra routes with proper type schemas
+const mastraOpenAPI = getMastraOpenAPIDoc(srv, {
+  title: 'Mastra API with Weather Agent',
+  version: '1.0.0',
+  description: 'Example Mastra server with weather agent and workflows',
+});
+
+// Configure Elysia OpenAPI plugin with Mastra's schemas
+app.use(
+  openapi({
+    provider: 'swagger-ui',
+    path: '/swagger-ui',
+    specPath: '/openapi.json',
+    documentation: {
+      info: mastraOpenAPI.info,
+      // Include Mastra's paths and components for complete type references
+      paths: mastraOpenAPI.paths,
+      components: mastraOpenAPI.components,
+    },
+    swagger: {
+      //@ts-expect-error: must use url to correctly load json
+      url: '/openapi.json',
+    },
+  }),
+);
 
 app.listen(3001, () => {
   // eslint-disable-next-line no-console
@@ -440,4 +459,4 @@ app.listen(3001, () => {
   console.log('OpenAPI spec: http://localhost:3001/openapi.json');
   // eslint-disable-next-line no-console
   console.log('Swagger UI: http://localhost:3001/swagger-ui');
-})
+});

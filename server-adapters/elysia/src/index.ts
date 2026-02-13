@@ -3,7 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
-import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
+import type { MCPHttpTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
@@ -11,10 +11,14 @@ import {
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { AnyElysia, MaybePromise } from 'elysia';
-import Elysia, { sse } from 'elysia';
+import type Elysia from 'elysia';
+import { sse } from 'elysia';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import { ZodError } from 'zod';
 import { authPlugin } from './auth-middleware';
+
+// Export helper functions for OpenAPI integration
+export { getMastraOpenAPIDoc, clearMastraOpenAPICache } from './helper';
 
 // Export type definitions for Elysia app configuration
 export interface ElysiaContext {
@@ -107,7 +111,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
     if (streamFormat === 'sse') {
       // Return generator function for SSE format
-      return (async function* (this: MastraServer) {
+      return async function* (this: MastraServer) {
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 
@@ -132,7 +136,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         } finally {
           await reader.cancel();
         }
-      }.bind(this))();
+      }.bind(this)();
     } else {
       // Return Response with ReadableStream for regular stream format
       const stream = new ReadableStream({
@@ -483,23 +487,17 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         if (error && typeof error === 'object') {
           if ('status' in error) {
             const status = (error as any).status;
-            return new Response(
-              JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-              {
-                status,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            );
+            return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
+              status,
+              headers: { 'Content-Type': 'application/json' },
+            });
           }
           if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
             const status = (error.details as any).status;
-            return new Response(
-              JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-              {
-                status,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            );
+            return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
+              status,
+              headers: { 'Content-Type': 'application/json' },
+            });
           }
         }
 
