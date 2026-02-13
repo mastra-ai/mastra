@@ -911,13 +911,155 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect((resultError as any).requestId).toBe(testErrorRequestId);
       });
 
-      // Helper to create a model that calls a non-existent tool
-      function createModelWithNonExistentToolCall() {
+      it('should throw correct error in generate when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model generation failed');
+          },
+          doStream: async () => {
+            throw new Error('Model generation failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-throw-generate',
+          name: 'Test Throw Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let caughtError: Error | null = null;
+        try {
+          await agent.generate('Please use a tool', { modelSettings: { maxRetries: 0 } });
+        } catch (err: any) {
+          caughtError = err;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError).toBeInstanceOf(Error);
+        expect(caughtError!.message).toMatch(/Model generation failed/i);
+      });
+
+      it('should have correct error in output.error and fullStream error chunk when model throws in stream', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model stream failed');
+          },
+          doStream: async () => {
+            throw new Error('Model stream failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-stream',
+          name: 'Test Error Stream',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const output = await agent.stream('Please use a tool', { modelSettings: { maxRetries: 0 } });
+
+        let errorChunk: any;
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'error') {
+            errorChunk = chunk;
+          }
+        }
+
+        // Verify error chunk has correct error
+        expect(errorChunk).toBeDefined();
+        expect(errorChunk.payload.error).toBeDefined();
+        expect(errorChunk.payload.error).toBeInstanceOf(Error);
+        expect((errorChunk.payload.error as Error).message).toMatch(/Model stream failed/i);
+
+        // Verify output.error has correct error
+        expect(output.error).toBeInstanceOf(Error);
+        expect((output.error as Error).message).toMatch(/Model stream failed/i);
+
+        // Verify they are the same instance
+        expect(output.error).toBe(errorChunk.payload.error);
+      });
+
+      it('should call onError with correct error in generate when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model generation failed');
+          },
+          doStream: async () => {
+            throw new Error('Model generation failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-onerror-generate',
+          name: 'Test OnError Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCalled = false;
+        let onErrorArg: string | Error | null = null;
+
+        try {
+          await agent.generate('Please use a tool', {
+            onError: ({ error }) => {
+              onErrorCalled = true;
+              onErrorArg = error;
+            },
+            modelSettings: { maxRetries: 0 },
+          });
+        } catch {
+          // Expected to throw
+        }
+
+        expect(onErrorCalled).toBe(true);
+        expect(onErrorArg).toBeInstanceOf(Error);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Model generation failed/i);
+      });
+
+      it('should call onError with correct error in stream when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model stream failed');
+          },
+          doStream: async () => {
+            throw new Error('Model stream failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-onerror-stream',
+          name: 'Test OnError Stream',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCalled = false;
+        let onErrorArg: string | Error | null = null;
+
+        const output = await agent.stream('Please use a tool', {
+          onError: ({ error }) => {
+            onErrorCalled = true;
+            onErrorArg = error;
+          },
+          modelSettings: { maxRetries: 0 },
+        });
+
+        // Consume the stream to trigger the error
+        for await (const _ of output.fullStream) {
+          // Just consume
+        }
+
+        expect(onErrorCalled).toBe(true);
+        expect(onErrorArg).toBeInstanceOf(Error);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Model stream failed/i);
+      });
+
+      // Helper to create a model that calls a tool which will throw during execution
+      function createModelWithFailingToolCall() {
         return new MockLanguageModelV2({
           doGenerate: async () => ({
-            content: [
-              { type: 'tool-call', toolCallId: '123', toolName: 'nonExistentTool', input: '{"input": "test"}' },
-            ],
+            content: [{ type: 'tool-call', toolCallId: '123', toolName: 'failingTool', input: '{"input": "test"}' }],
             finishReason: 'tool-calls',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
             warnings: [],
@@ -928,7 +1070,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
                 type: 'tool-call',
                 toolCallId: 'call-1',
                 toolCallType: 'function',
-                toolName: 'nonExistentTool', // This tool doesn't exist in the agent's tools
+                toolName: 'failingTool',
                 input: '{"input": "test"}',
               },
               {
@@ -942,118 +1084,86 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         });
       }
 
-      // Helper to create an agent with a tool that exists but the model will call a non-existent one
-      function createAgentWithMismatchedTool(model: MockLanguageModelV2) {
-        const existingTool = createTool({
-          id: 'existingTool',
-          description: 'A tool that exists',
+      // Helper to create an agent with a tool that throws during execution
+      function createAgentWithFailingTool(model: MockLanguageModelV2) {
+        const failingTool = createTool({
+          id: 'failingTool',
+          description: 'A tool that throws during execution',
           inputSchema: z.object({ input: z.string() }),
-          execute: async () => ({ result: 'success' }),
-        });
-
-        return new Agent({
-          id: 'test-tool-not-found-error',
-          name: 'Test Tool Not Found Error',
-          model,
-          instructions: 'You are a helpful assistant.',
-          tools: { existingTool },
-        });
-      }
-
-      it('should throw correct error message in generate when workflow step fails (e.g. tool not found)', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        let caughtError: Error | null = null;
-        try {
-          await agent.generate('Please use a tool');
-        } catch (err: any) {
-          caughtError = err;
-        }
-
-        expect(caughtError).toBeDefined();
-        expect(caughtError).toBeInstanceOf(Error);
-        // The error should contain the actual error message, not "promise 'text' was not resolved"
-        expect(caughtError!.message).toMatch(/Tool nonExistentTool not found/i);
-        expect(caughtError!.message).not.toMatch(/promise.*was not resolved/i);
-      });
-
-      it('should have correct error in output.error and fullStream error chunk when workflow step fails in stream', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        const output = await agent.stream('Please use a tool');
-
-        let errorChunk: any;
-        for await (const chunk of output.fullStream) {
-          if (chunk.type === 'error') {
-            errorChunk = chunk;
-          }
-        }
-
-        // Verify error chunk has correct error
-        expect(errorChunk).toBeDefined();
-        expect(errorChunk.payload.error).toBeDefined();
-        expect(errorChunk.payload.error).toBeInstanceOf(Error);
-        expect((errorChunk.payload.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((errorChunk.payload.error as Error).message).not.toMatch(/promise.*was not resolved/i);
-
-        // Verify output.error has correct error
-        expect(output.error).toBeInstanceOf(Error);
-        expect((output.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((output.error as Error).message).not.toMatch(/promise.*was not resolved/i);
-
-        // Verify they are the same instance
-        expect(output.error).toBe(errorChunk.payload.error);
-      });
-
-      it('should call onError with correct error in generate when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        let onErrorCalled = false;
-        let onErrorArg: string | Error | null = null;
-
-        try {
-          await agent.generate('Please use a tool', {
-            onError: ({ error }) => {
-              onErrorCalled = true;
-              onErrorArg = error;
-            },
-          });
-        } catch {
-          // Expected to throw
-        }
-
-        expect(onErrorCalled).toBe(true);
-        expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
-      });
-
-      it('should call onError with correct error in stream when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        let onErrorCalled = false;
-        let onErrorArg: string | Error | null = null;
-
-        const output = await agent.stream('Please use a tool', {
-          onError: ({ error }) => {
-            onErrorCalled = true;
-            onErrorArg = error;
+          execute: async () => {
+            throw new Error('Tool execution failed');
           },
         });
 
-        // Consume the stream to trigger the error
+        return new Agent({
+          id: 'test-tool-execution-error',
+          name: 'Test Tool Execution Error',
+          model,
+          instructions: 'You are a helpful assistant.',
+          tools: { failingTool },
+        });
+      }
+
+      it('should not throw in generate when tool execution fails (error returned to model)', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        // Tool execution failures bail the workflow but don't throw
+        const result = await agent.generate('Please use a tool');
+        expect(result).toBeDefined();
+      });
+
+      it('should not emit error chunks in stream when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        const output = await agent.stream('Please use a tool');
+
+        const errorChunks: any[] = [];
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'error') {
+            errorChunks.push(chunk);
+          }
+        }
+
+        // Tool execution failures go through bail(), not the error path
+        expect(errorChunks.length).toBe(0);
+      });
+
+      it('should not call onError in generate when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        let onErrorCalled = false;
+
+        await agent.generate('Please use a tool', {
+          onError: () => {
+            onErrorCalled = true;
+          },
+        });
+
+        // Tool execution failures go through bail(), onError is not called
+        expect(onErrorCalled).toBe(false);
+      });
+
+      it('should not call onError in stream when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        let onErrorCalled = false;
+
+        const output = await agent.stream('Please use a tool', {
+          onError: () => {
+            onErrorCalled = true;
+          },
+        });
+
         for await (const _ of output.fullStream) {
           // Just consume
         }
 
-        expect(onErrorCalled).toBe(true);
-        expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
+        // Tool execution failures go through bail(), onError is not called
+        expect(onErrorCalled).toBe(false);
       });
     });
 
