@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { basename, join } from 'node:path';
 import * as babel from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -408,9 +408,8 @@ If you think your configuration is valid, please open an issue.`);
     workspaceMap,
   });
 
-  const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
-    relative(workspaceRoot || projectRoot, pkgInfo.location),
-  );
+  // Workspace package names for filtering workspace imports from rollup output
+  const workspacePackageNames = new Set(workspaceMap.keys());
 
   // Build a map of dependency versions from depsToOptimize for lookup
   const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
@@ -444,12 +443,12 @@ If you think your configuration is valid, please open an issue.`);
         continue;
       }
 
+      const pkgName = getPackageName(i);
+
       // Do not include workspace packages
-      if (relativeWorkspaceFolderPaths.some(workspacePath => i.startsWith(workspacePath))) {
+      if (pkgName && workspacePackageNames.has(pkgName)) {
         continue;
       }
-
-      const pkgName = getPackageName(i);
 
       if (pkgName && !allUsedExternals.has(pkgName)) {
         // Try to get version info from our tracked dependencies
