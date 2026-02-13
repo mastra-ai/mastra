@@ -84,7 +84,8 @@
         "z-ai/glm-4.6v-flash-free",
         "z-ai/glm-4.7",
         "z-ai/glm-4.7-flash-free",
-        "z-ai/glm-4.7-flashx"
+        "z-ai/glm-4.7-flashx",
+        "z-ai/glm-5"
       ],
       "docUrl": "https://docs.zenmux.ai",
       "gateway": "models.dev",
@@ -751,9 +752,9 @@
         "anthropic/claude-haiku-3.5",
         "anthropic/claude-haiku-4.5",
         "anthropic/claude-opus-4",
-        "anthropic/claude-opus-4-6",
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
+        "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-3.5",
         "anthropic/claude-sonnet-3.5-june",
         "anthropic/claude-sonnet-3.7",
@@ -2997,7 +2998,8 @@
       "z-ai/glm-4.6v-flash-free",
       "z-ai/glm-4.7",
       "z-ai/glm-4.7-flash-free",
-      "z-ai/glm-4.7-flashx"
+      "z-ai/glm-4.7-flashx",
+      "z-ai/glm-5"
     ],
     "io-net": [
       "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
@@ -3495,9 +3497,9 @@
       "anthropic/claude-haiku-3.5",
       "anthropic/claude-haiku-4.5",
       "anthropic/claude-opus-4",
-      "anthropic/claude-opus-4-6",
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
+      "anthropic/claude-opus-4.6",
       "anthropic/claude-sonnet-3.5",
       "anthropic/claude-sonnet-3.5-june",
       "anthropic/claude-sonnet-3.7",

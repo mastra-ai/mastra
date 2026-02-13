@@ -80,6 +80,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash-free',
     'z-ai/glm-4.7-flashx',
+    'z-ai/glm-5',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -577,9 +578,9 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-3.5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
-    'anthropic/claude-opus-4-6',
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5',
+    'anthropic/claude-opus-4.6',
     'anthropic/claude-sonnet-3.5',
     'anthropic/claude-sonnet-3.5-june',
     'anthropic/claude-sonnet-3.7',
