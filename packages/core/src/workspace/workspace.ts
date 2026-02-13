@@ -335,31 +335,6 @@ export interface WorkspaceInfo {
  *
  * At minimum, a workspace has either a filesystem or a sandbox (or both).
  * Users pass instantiated provider objects to the constructor.
- *
- * The generic type parameters preserve the concrete types of filesystem and
- * sandbox providers so that accessors return the exact type you passed in.
- * TypeScript infers `TFilesystem`, `TSandbox`, and `TMounts` from the constructor
- * argument — no explicit generic params needed.
- *
- * @example
- * ```typescript
- * // With filesystem — preserves LocalFilesystem type
- * const ws1 = new Workspace({
- *   filesystem: new LocalFilesystem({ basePath: './data' }),
- *   sandbox: new LocalSandbox({ workingDirectory: './data' }),
- * });
- * ws1.filesystem  // LocalFilesystem | undefined
- * ws1.sandbox     // LocalSandbox | undefined
- *
- * // With mounts — filesystem becomes CompositeFilesystem
- * const ws2 = new Workspace({
- *   mounts: {
- *     '/local': new LocalFilesystem({ basePath: './data' }),
- *   },
- * });
- * ws2.filesystem                        // CompositeFilesystem<{ '/local': LocalFilesystem }>
- * ws2.filesystem.mounts.get('/local')    // LocalFilesystem
- * ```
  */
 export class Workspace<
   TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
