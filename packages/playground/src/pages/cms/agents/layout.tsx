@@ -405,8 +405,7 @@ function EditFormContent({
         model: values.model,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
-        workflows:
-          values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
+        workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         scorers: values.scorers,
         memory: values.memory?.enabled
