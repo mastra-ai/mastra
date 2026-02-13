@@ -53,8 +53,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       let bodyRequestContext: Record<string, any> | undefined;
       let paramsRequestContext: Record<string, any> | undefined;
 
-      // Parse request context from request body (POST/PUT)
-      if (ctx.request.method === 'POST' || ctx.request.method === 'PUT') {
+      // Parse request context from request body (POST/PUT/PATCH)
+      if (ctx.request.method === 'POST' || ctx.request.method === 'PUT' || ctx.request.method === 'PATCH') {
         const contentType = ctx.request.headers.get('content-type');
         if (contentType?.includes('application/json')) {
           try {
@@ -187,8 +187,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     // We'll need to adjust the approach. Let's extract what we can from the Request directly
     const url = new URL(request.url);
 
-    // URL params - we'll need to parse from the pathname if needed
-    const urlParams: Record<string, string> = {};
+    // URL params - extract from request context if available (Elysia stores params in ctx)
+    const urlParams: Record<string, string> = (request as any).params || (request as any).ctx?.params || {};
 
     // Query params - parse from URL
     const queryParams = normalizeQueryParams(Object.fromEntries(url.searchParams));
@@ -239,26 +239,40 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
   /**
    * Parse FormData into a plain object, converting File objects to Buffers.
+   * Handles both native FormData and Elysia's pre-parsed object format.
    */
-  private async parseFormData(formData: FormData): Promise<Record<string, unknown>> {
+  private async parseFormData(data: FormData | Record<string, unknown>): Promise<Record<string, unknown>> {
     const result: Record<string, unknown> = {};
 
-    for (const [key, value] of formData.entries()) {
-      if (value instanceof File) {
-        const arrayBuffer = await value.arrayBuffer();
-        result[key] = Buffer.from(arrayBuffer);
-      } else if (typeof value === 'string') {
-        // Try to parse JSON strings (like 'options')
-        try {
-          result[key] = JSON.parse(value);
-        } catch {
+    // Handle native FormData
+    if (data instanceof FormData) {
+      for (const [key, value] of data.entries()) {
+        if (value instanceof File) {
+          const arrayBuffer = await value.arrayBuffer();
+          result[key] = Buffer.from(arrayBuffer);
+        } else if (typeof value === 'string') {
+          // Try to parse JSON strings (like 'options')
+          try {
+            result[key] = JSON.parse(value);
+          } catch {
+            result[key] = value;
+          }
+        } else {
           result[key] = value;
         }
+      }
+      return result;
+    }
+
+    // Handle Elysia's pre-parsed object format
+    for (const [key, value] of Object.entries(data)) {
+      if (value && typeof value === 'object' && 'name' in value && 'type' in value) {
+        // This is a File-like object from Elysia
+        result[key] = value;
       } else {
         result[key] = value;
       }
     }
-
     return result;
   }
 
@@ -358,7 +372,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         if (contentType.includes('multipart/form-data')) {
           try {
             // Elysia pre-parses multipart form data
-            body = ctx.body ? await this.parseFormData(ctx.body as FormData) : undefined;
+            body = ctx.body ? await this.parseFormData(ctx.body) : undefined;
           } catch (error) {
             this.mastra.getLogger()?.error('Failed to parse multipart form data', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
@@ -529,7 +543,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         ctx.request.url,
         ctx.request.method,
         headers,
-        ctx.request.body,
+        ctx.body,
         ctx.requestContext,
       );
 

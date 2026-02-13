@@ -7,25 +7,16 @@ import type { MastraServer } from './index';
 
 /**
  * OpenAPI documentation cache to avoid regenerating on each call.
- * Keyed by a combination of prefix and whether custom routes exist.
+ * Uses WeakMap to prevent cache collisions between server instances.
  */
-const openapiDocCache = new Map<
-  string,
+const openapiDocCache = new WeakMap<
+  MastraServer,
   {
     paths: Record<string, any>;
     components?: Record<string, any>;
     info: { title: string; version: string; description?: string };
   }
 >();
-
-/**
- * Generate a cache key based on server configuration
- */
-function getCacheKey(server: MastraServer): string {
-  const prefix = (server as any).prefix || '';
-  const hasCustomRoutes = (server as any).customApiRoutes?.length > 0;
-  return `${prefix}:${hasCustomRoutes}`;
-}
 
 /**
  * Get OpenAPI documentation from a MastraServer instance, formatted for Elysia's openapi plugin.
@@ -76,15 +67,13 @@ export function getMastraOpenAPIDoc(
   components?: Record<string, any>;
   info: { title: string; version: string; description?: string };
 } {
-  const cacheKey = getCacheKey(server);
-
   // Clear cache if requested
   if (options?.clearCache) {
-    openapiDocCache.delete(cacheKey);
+    openapiDocCache.delete(server);
   }
 
   // Return cached result if available
-  const cached = openapiDocCache.get(cacheKey);
+  const cached = openapiDocCache.get(server);
   if (cached) {
     // Merge custom info if provided
     if (options) {
@@ -136,7 +125,7 @@ export function getMastraOpenAPIDoc(
   };
 
   // Cache the result
-  openapiDocCache.set(cacheKey, result);
+  openapiDocCache.set(server, result);
 
   return result;
 }
@@ -144,7 +133,13 @@ export function getMastraOpenAPIDoc(
 /**
  * Clear the OpenAPI documentation cache.
  * Call this if routes are added dynamically after initialization.
+ *
+ * @param server - Optional MastraServer instance to clear cache for. If not provided, clears all caches.
+ * Note: When using WeakMap, clearing all entries is not possible, but they will be garbage collected automatically.
  */
-export function clearMastraOpenAPICache(): void {
-  openapiDocCache.clear();
+export function clearMastraOpenAPICache(server?: MastraServer): void {
+  if (server) {
+    openapiDocCache.delete(server);
+  }
+  // Cannot clear all entries in WeakMap - they will be garbage collected when servers are released
 }

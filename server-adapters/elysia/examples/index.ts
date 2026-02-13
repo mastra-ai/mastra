@@ -390,6 +390,7 @@ const travelPlannerStep = createStep({
 
 const travelAgentWorkflow = createWorkflow({
   id: 'travel-agent-workflow-step4-suspend-resume',
+  steps: [generateSuggestionsStep, humanInputStep, travelPlannerStep],
   inputSchema: z.object({
     vacationDescription: z.string().describe('The description of the vacation'),
   }),

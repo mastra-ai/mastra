@@ -1,5 +1,3 @@
-import type { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
 import {
   canAccessPublicly,
   checkRules,
@@ -46,7 +44,7 @@ export const authPlugin = new Elysia({ name: 'mastra-auth' }).derive(async (ctx:
 
   // --- Authentication ---
   const authHeader = ctx.request.headers.get('authorization');
-  let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
+  let token: string | null = authHeader ? authHeader.replace(/^Bearer\s+/i, '') : null;
 
   // Try to get token from query params
   if (!token && ctx.query?.apiKey) {
@@ -63,8 +61,8 @@ export const authPlugin = new Elysia({ name: 'mastra-auth' }).derive(async (ctx:
   let user: unknown;
   try {
     if (typeof authConfig.authenticateToken === 'function') {
-      // Pass null as request since Elysia request type differs
-      user = await authConfig.authenticateToken(token, null as any);
+      // Pass Elysia request object (Fetch API Request compatible)
+      user = await authConfig.authenticateToken(token, ctx.request as any);
     } else {
       return new Response(JSON.stringify({ error: 'No token verification method configured' }), {
         status: 401,
@@ -96,7 +94,7 @@ export const authPlugin = new Elysia({ name: 'mastra-auth' }).derive(async (ctx:
   // Check authorizeUser (simplified authorization)
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, null as any);
+      const isAuthorized = await authConfig.authorizeUser(user, ctx.request as any);
 
       if (!isAuthorized) {
         return new Response(JSON.stringify({ error: 'Access denied' }), {
@@ -119,7 +117,7 @@ export const authPlugin = new Elysia({ name: 'mastra-auth' }).derive(async (ctx:
   // Check authorize (path/method-based authorization)
   if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
     try {
-      const isAuthorized = await authConfig.authorize(path, method, user, null as any);
+      const isAuthorized = await authConfig.authorize(path, method, user, ctx as any);
 
       if (!isAuthorized) {
         return new Response(JSON.stringify({ error: 'Access denied' }), {

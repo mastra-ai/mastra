@@ -149,7 +149,7 @@ describe('getMastraOpenAPIDoc', () => {
 
     it('should return fresh object when cache is cleared', () => {
       const result1 = getMastraOpenAPIDoc(server);
-      clearMastraOpenAPICache();
+      clearMastraOpenAPICache(server);
       const result2 = getMastraOpenAPIDoc(server);
 
       expect(result1).not.toBe(result2); // Different references
