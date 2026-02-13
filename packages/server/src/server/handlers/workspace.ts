@@ -202,7 +202,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
       // Dynamic workspaces get lazily registered during agent execution (stream/generate).
       if (typeof mastra.listWorkspaces === 'function') {
         const registeredWorkspaces = mastra.listWorkspaces();
-        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace][]) {
+        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace<any, any, any>][]) {
           workspaces.push({
             id: ws.id,
             name: ws.name,

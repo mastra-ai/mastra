@@ -27,6 +27,7 @@ import type {
   FileContent,
   FileEntry,
   FileStat,
+  FilesystemInfo,
   ReadOptions,
   WriteOptions,
   ListOptions,
@@ -121,6 +122,26 @@ export class CompositeFilesystem<
    */
   get mounts(): ReadonlyMountMap<TMounts> {
     return this._mounts as unknown as ReadonlyMountMap<TMounts>;
+  }
+
+  /**
+   * Get status and metadata for this composite filesystem.
+   * Includes info from each mounted filesystem in `metadata.mounts`.
+   */
+  async getInfo(): Promise<FilesystemInfo> {
+    const mounts: Record<string, FilesystemInfo | null> = {};
+    for (const [mountPath, fs] of this._mounts) {
+      mounts[mountPath] = (await fs.getInfo?.()) ?? null;
+    }
+
+    return {
+      id: this.id,
+      name: this.name,
+      provider: this.provider,
+      status: this.status,
+      readOnly: this.readOnly,
+      metadata: { mounts },
+    };
   }
 
   /**
