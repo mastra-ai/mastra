@@ -817,6 +817,82 @@ Line 3 conclusion`;
       await workspace.destroy();
     });
 
+    it('should auto-index only matching files when autoIndexPaths uses glob pattern', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'readme.md'), 'Welcome to the project');
+      await fs.writeFile(path.join(tempDir, 'docs', 'guide.md'), 'Installation guide for users');
+      await fs.writeFile(path.join(tempDir, 'docs', 'notes.txt'), 'Internal notes');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/docs/**/*.md'],
+      });
+
+      await workspace.init();
+
+      // .md files should be searchable
+      const mdResults = await workspace.search('project');
+      expect(mdResults.some(r => r.id === '/docs/readme.md')).toBe(true);
+
+      // .txt files should NOT be indexed
+      const txtResults = await workspace.search('Internal notes');
+      expect(txtResults.some(r => r.id === '/docs/notes.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should support plain paths alongside glob patterns in autoIndexPaths', async () => {
+      await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
+      await fs.mkdir(path.join(tempDir, 'support'), { recursive: true });
+      await fs.writeFile(path.join(tempDir, 'docs', 'api.md'), 'API reference documentation');
+      await fs.writeFile(path.join(tempDir, 'docs', 'changelog.txt'), 'Changelog text');
+      await fs.writeFile(path.join(tempDir, 'support', 'faq.txt'), 'Frequently asked questions');
+      await fs.writeFile(path.join(tempDir, 'support', 'guide.md'), 'Support guide markdown');
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        // Mix of plain path and glob pattern
+        autoIndexPaths: ['/support', '/docs/**/*.md'],
+      });
+
+      await workspace.init();
+
+      // /support is a plain path — all files indexed
+      const faqResults = await workspace.search('frequently asked');
+      expect(faqResults.some(r => r.id === '/support/faq.txt')).toBe(true);
+
+      const guideResults = await workspace.search('Support guide');
+      expect(guideResults.some(r => r.id === '/support/guide.md')).toBe(true);
+
+      // /docs/**/*.md is a glob — only .md files indexed
+      const apiResults = await workspace.search('API reference');
+      expect(apiResults.some(r => r.id === '/docs/api.md')).toBe(true);
+
+      const changelogResults = await workspace.search('Changelog text');
+      expect(changelogResults.some(r => r.id === '/docs/changelog.txt')).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('should handle glob pattern with non-existent base gracefully', async () => {
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: true,
+        autoIndexPaths: ['/nonexistent/**/*.md'],
+      });
+
+      // Should not throw
+      await workspace.init();
+      expect(workspace.status).toBe('ready');
+
+      await workspace.destroy();
+    });
+
     it('should not auto-index when no search engine configured', async () => {
       await fs.mkdir(path.join(tempDir, 'docs'), { recursive: true });
       await fs.writeFile(path.join(tempDir, 'docs', 'file.txt'), 'content');

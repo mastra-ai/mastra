@@ -22,7 +22,8 @@ import type {
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
 } from '@mastra/core/storage/domains/prompt-blocks';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -45,15 +46,53 @@ export class PromptBlocksPG extends PromptBlocksStorage {
     this.#indexes = indexes?.filter(idx => (PromptBlocksPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+  /**
+   * Returns default index definitions for the prompt blocks domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
+   */
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: 'idx_prompt_block_versions_block_version',
+        name: `${schemaPrefix}idx_prompt_block_versions_block_version`,
         table: TABLE_PROMPT_BLOCK_VERSIONS,
         columns: ['blockId', 'versionNumber'],
         unique: true,
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    // Tables
+    for (const tableName of PromptBlocksPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    // Indexes
+    for (const idx of PromptBlocksPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return PromptBlocksPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {

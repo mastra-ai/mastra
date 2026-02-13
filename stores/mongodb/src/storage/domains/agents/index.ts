@@ -44,6 +44,7 @@ const SNAPSHOT_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'mcpClients',
   'requestContextSchema',
 ] as const;
 
