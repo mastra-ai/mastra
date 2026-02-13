@@ -37,7 +37,7 @@ const columns = [
   { name: 'description', label: 'Description', size: '2fr' },
 ];
 
-const actionsColumn = { name: 'actions', label: '', size: '48px' };
+const columnsWithActions = [...columns, { name: 'actions', label: '', size: '48px' }];
 
 /**
  * Derive a mount label for a skill by matching its path against known mount paths.
@@ -78,7 +78,7 @@ export function SkillsTable({
   const hasActionCallbacks = !!onRemoveSkill || !!onUpdateSkill;
   const hasRowActions = hasActionCallbacks && hasDownloadedSkills;
 
-  const effectiveColumns = hasRowActions ? [...columns, actionsColumn] : columns;
+  const effectiveColumns = hasRowActions ? columnsWithActions : columns;
 
   if (!isSkillsConfigured && !isLoading) {
     return <SkillsNotConfigured onAddSkill={onAddSkill} />;
@@ -203,7 +203,7 @@ export function SkillsTable({
 }
 
 function SkillsTableSkeleton({ hasRowActions }: { hasRowActions?: boolean }) {
-  const effectiveColumns = hasRowActions ? [...columns, actionsColumn] : columns;
+  const effectiveColumns = hasRowActions ? columnsWithActions : columns;
   return (
     <EntryList>
       <EntryList.Trim>
