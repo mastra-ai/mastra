@@ -393,8 +393,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           await this.#discoverSkillsInPath(dir, source);
         }
       } else {
-        // Plain path: existing behavior
-        await this.#discoverSkillsInPath(skillsPath, source);
+        // Check if the path is a direct skill reference (directory with SKILL.md or SKILL.md file)
+        const isDirect = await this.#discoverDirectSkill(skillsPath, source);
+        if (!isDirect) {
+          // Plain path: scan subdirectories for skills
+          await this.#discoverSkillsInPath(skillsPath, source);
+        }
       }
     }
     // Track when discovery completed for staleness check
@@ -495,6 +499,64 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
+   * Attempt to discover a skill from a direct path reference.
+   *
+   * Handles two cases:
+   * - Path ends with `/SKILL.md` → parse directly, extract dirName from parent
+   * - Path is a directory containing `SKILL.md` → parse it as a single skill
+   *
+   * Returns `true` if the path was a direct skill reference (skip subdirectory scan),
+   * `false` to fall through to the normal subdirectory scan.
+   */
+  async #discoverDirectSkill(skillsPath: string, source: ContentSource): Promise<boolean> {
+    try {
+      // Case 1: Path points directly to a SKILL.md file
+      if (skillsPath.endsWith('/SKILL.md') || skillsPath === 'SKILL.md') {
+        if (!(await this.#source.exists(skillsPath))) {
+          return true; // It was a direct reference, just doesn't exist — skip subdirectory scan
+        }
+
+        const skillDir = this.#getParentPath(skillsPath);
+        const dirName = skillDir.split('/').pop() || skillDir;
+
+        try {
+          const skill = await this.#parseSkillFile(skillsPath, dirName, source);
+          this.#skills.set(skill.name, skill);
+          await this.#indexSkill(skill);
+        } catch (error) {
+          if (error instanceof Error) {
+            console.error(`[WorkspaceSkills] Failed to load skill from ${skillsPath}:`, error.message);
+          }
+        }
+        return true;
+      }
+
+      // Case 2: Path is a directory that directly contains SKILL.md
+      if (await this.#source.exists(skillsPath)) {
+        const skillFilePath = this.#joinPath(skillsPath, 'SKILL.md');
+        if (await this.#source.exists(skillFilePath)) {
+          const dirName = skillsPath.split('/').pop() || skillsPath;
+
+          try {
+            const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
+            this.#skills.set(skill.name, skill);
+            await this.#indexSkill(skill);
+          } catch (error) {
+            if (error instanceof Error) {
+              console.error(`[WorkspaceSkills] Failed to load skill from ${skillFilePath}:`, error.message);
+            }
+          }
+          return true;
+        }
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Check if any skills path directory has been modified since last discovery.
    * Compares directory mtime to lastDiscoveryTime.
    * For glob patterns, checks the walk root and expanded directories.
@@ -529,6 +591,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
           if (mtime > this.#lastDiscoveryTime) {
             return true;
+          }
+
+          // Skip subdirectory scan for non-directory paths (direct skill references)
+          if (stat.type !== 'directory') {
+            continue;
           }
 
           // Also check subdirectories (skill directories) for changes

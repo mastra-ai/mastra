@@ -1100,6 +1100,154 @@ Instructions for the new skill.`;
     });
   });
 
+  describe('direct skill path discovery', () => {
+    it('should discover a skill when path points to a directory containing SKILL.md', async () => {
+      const filesystem = createMockFilesystem({
+        '/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/test-skill'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('test-skill');
+
+      const skill = await skills.get('test-skill');
+      expect(skill?.path).toBe('/test-skill');
+    });
+
+    it('should discover a skill when path points directly to SKILL.md', async () => {
+      const filesystem = createMockFilesystem({
+        '/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/test-skill/SKILL.md'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('test-skill');
+
+      const skill = await skills.get('test-skill');
+      expect(skill?.path).toBe('/test-skill');
+    });
+
+    it('should handle mixed direct and directory scanning paths', async () => {
+      const filesystem = createMockFilesystem({
+        '/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/test-skill', '/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should gracefully handle non-existent direct skill path', async () => {
+      const filesystem = createMockFilesystem({});
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/non-existent/SKILL.md'],
+      });
+
+      const result = await skills.list();
+      expect(result).toEqual([]);
+    });
+
+    it('should gracefully handle non-existent direct directory path', async () => {
+      const filesystem = createMockFilesystem({});
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/non-existent-dir'],
+      });
+
+      const result = await skills.list();
+      expect(result).toEqual([]);
+    });
+
+    it('should still scan subdirectories for a directory without SKILL.md', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should include references, scripts, and assets from direct skill path', async () => {
+      const filesystem = createMockFilesystem({
+        '/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/test-skill/references/doc.md': REFERENCE_CONTENT,
+        '/test-skill/scripts/run.sh': SCRIPT_CONTENT,
+        '/test-skill/assets/logo.png': Buffer.from('PNG'),
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/test-skill'],
+      });
+
+      const skill = await skills.get('test-skill');
+      expect(skill?.references).toContain('doc.md');
+      expect(skill?.scripts).toContain('run.sh');
+      expect(skill?.assets).toContain('logo.png');
+    });
+
+    it('should handle staleness check for direct SKILL.md path', async () => {
+      let modifiedAt = new Date(Date.now() - 10000);
+
+      const filesystem = createMockFilesystem({
+        '/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+        async (path: string): Promise<SkillSourceStat> => ({
+          name: path.split('/').pop() || path,
+          type: path.endsWith('.md') ? ('file' as const) : ('directory' as const),
+          size: 0,
+          createdAt: modifiedAt,
+          modifiedAt,
+        }),
+      );
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/test-skill/SKILL.md'],
+      });
+
+      await skills.list();
+      const initialReadFileCalls = (filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      // No change — should not refresh
+      await skills.maybeRefresh();
+      expect((filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length).toBe(initialReadFileCalls);
+
+      // Simulate modification
+      modifiedAt = new Date(Date.now() + 1000);
+      await skills.maybeRefresh();
+      expect((filesystem.readFile as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(initialReadFileCalls);
+    });
+  });
+
   describe('dynamic skills paths', () => {
     const BASIC_SKILL_MD = `---
 name: basic-skill
