@@ -1906,11 +1906,27 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     } catch (e) {
       this.mastra.getLogger()?.error(`Error processing workflow event ${type} for run ${workflowData.runId}`, e);
-      // Publish workflow.fail so the execution engine's result promise resolves
-      // instead of hanging forever. Guard against workflow.fail itself throwing
-      // to avoid infinite loops.
       if (type !== 'workflow.fail') {
+        // Publish workflow.fail so the execution engine's result promise resolves
+        // instead of hanging forever.
         await this.errorWorkflow(workflowData, e instanceof Error ? e : new Error(String(e)));
+      } else {
+        // workflow.fail handler itself threw (e.g. storage error during state persist).
+        // Publish workflows-finish directly so the execution engine's result promise
+        // resolves instead of hanging forever.
+        try {
+          await this.mastra.pubsub.publish('workflows-finish', {
+            type: 'workflow.fail',
+            runId: workflowData.runId,
+            data: {
+              ...workflowData,
+              workflow: undefined,
+              prevResult: { status: 'failed', error: e instanceof Error ? e.message : String(e) },
+            },
+          });
+        } catch {
+          // Last resort — nothing more we can do
+        }
       }
     }
 

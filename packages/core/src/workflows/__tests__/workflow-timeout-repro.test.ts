@@ -4,20 +4,27 @@
  * Issue: Workflows using parallel steps hang silently — no error, the workflow
  * just stops progressing. Eventually a timeout error with status 0 appears.
  *
- * Two root causes were identified and fixed:
+ * Three root causes were identified and fixed:
  *
- * 1. Race condition in parallel completion check (PRIMARY):
+ * 1. Race condition in parallel completion check:
  *    processWorkflowStepEnd used the return value of updateWorkflowResults to
  *    check if all parallel branches completed. With a real database, concurrent
  *    branches can get stale return values (each only sees its own result), so
  *    both return early → nobody advances → permanent hang.
  *    Fix: re-read from storage via loadWorkflowSnapshot after writing.
  *
- * 2. Unhandled errors in process() (SECONDARY):
+ * 2. Unhandled errors in process():
  *    If updateWorkflowResults throws, the error escapes process(), is silently
  *    dropped by EventEmitterPubSub (emit() doesn't await async listeners), and
  *    the workflow hangs because workflow.fail is never published.
  *    Fix: try/catch around the switch statement in process().
+ *
+ * 3. processWorkflowFail itself throwing:
+ *    If the workflow.fail handler throws (e.g. updateWorkflowState not
+ *    implemented or storage error), the workflows-finish event is never
+ *    published and the execution engine's result promise hangs forever.
+ *    Fix: catch block publishes workflows-finish directly when workflow.fail
+ *    handler throws.
  *
  * These tests use the EVENTED workflow system (same as server/playground),
  * not the default execution engine.
@@ -222,6 +229,64 @@ describe('Workflow parallel step hang fixes (Evented)', () => {
 
           // Without the fix: hangs forever (times out at 10s)
           // With the fix: process() catches the error → publishes workflow.fail
+          expect(result.status).toBe('failed');
+        } finally {
+          await mastra.stopEventEngine();
+        }
+      },
+      HANG_TIMEOUT_MS,
+    );
+  });
+
+  describe('Fix 3: workflows-finish published when processWorkflowFail throws', () => {
+    it(
+      'should not hang when both updateWorkflowResults and updateWorkflowState throw',
+      async () => {
+        // This reproduces the hang when the fail handler itself fails.
+        // Chain of events:
+        //   1. updateWorkflowResults throws → try/catch publishes workflow.fail
+        //   2. processWorkflowFail calls updateWorkflowState → also throws
+        //   3. workflows-finish (which resolves the execution engine's promise)
+        //      was never reached → hang
+        //
+        // This matches storage backends where these methods aren't implemented
+        // (e.g. PostgreSQL's WorkflowsPg throws "Method not implemented").
+
+        const step1 = createStep({
+          id: 'step-a',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async () => ({ value: 'a' }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'fail-handler-crash-workflow',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ value: z.string() }),
+          steps: [step1],
+        });
+
+        workflow.then(step1).commit();
+
+        const mastra = new Mastra({
+          workflows: { 'fail-handler-crash-workflow': workflow },
+          storage: testStorage,
+        });
+        await mastra.startEventEngine();
+
+        const workflowsStore = await testStorage.getStore('workflows');
+
+        // Make updateWorkflowResults throw (simulates unimplemented or broken storage)
+        vi.spyOn(workflowsStore!, 'updateWorkflowResults').mockRejectedValue(new Error('Method not implemented.'));
+        // Make updateWorkflowState also throw (the fail handler uses this)
+        vi.spyOn(workflowsStore!, 'updateWorkflowState').mockRejectedValue(new Error('Method not implemented.'));
+
+        try {
+          const run = await workflow.createRun();
+          const result = await run.start({ inputData: {} });
+
+          // Without the fix: hangs forever (times out at 10s)
+          // With the fix: catch block publishes workflows-finish directly
           expect(result.status).toBe('failed');
         } finally {
           await mastra.stopEventEngine();
