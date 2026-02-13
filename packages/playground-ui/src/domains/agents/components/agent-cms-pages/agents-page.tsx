@@ -9,19 +9,18 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { useAgents } from '../../hooks/use-agents';
+import type { RuleGroup } from '@/lib/rule-engine';
+import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentCreateContent } from '../agent-create-content';
-
-interface EntityConfig {
-  description?: string;
-}
 
 export function AgentsPage() {
   const { form, readOnly, agentId: currentAgentId } = useAgentEditFormContext();
   const { control } = form;
   const { data: agents, isLoading } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
+  const variables = useWatch({ control, name: 'variables' });
   const count = Object.keys(selectedAgents || {}).length;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
@@ -104,6 +103,13 @@ export function AgentsPage() {
               field.onChange(newValue);
             };
 
+            const handleRulesChange = (agentIdVal: string, rules: RuleGroup | undefined) => {
+              field.onChange({
+                ...field.value,
+                [agentIdVal]: { ...field.value?.[agentIdVal], rules },
+              });
+            };
+
             return (
               <div className="flex flex-col gap-2">
                 <MultiCombobox
@@ -127,6 +133,9 @@ export function AgentsPage() {
                         description={field.value?.[agent.value]?.description || ''}
                         onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)}
                         onRemove={readOnly ? undefined : () => handleRemove(agent.value)}
+                        schema={variables}
+                        rules={field.value?.[agent.value]?.rules || undefined}
+                        onRulesChange={readOnly ? undefined : rules => handleRulesChange(agent.value, rules)}
                       />
                     ))}
                   </div>

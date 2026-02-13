@@ -248,6 +248,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kuae-cloud-coding-plan',
+          label: 'KUAE Cloud Coding Plan',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },

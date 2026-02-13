@@ -45,6 +45,8 @@ export type ProviderModelsMap = {
     'kuaishou/kat-coder-pro-v1-free',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
+    'minimax/minimax-m2.5',
+    'minimax/minimax-m2.5-lightning',
     'moonshotai/kimi-k2-0905',
     'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2-thinking-turbo',
@@ -80,6 +82,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash-free',
     'z-ai/glm-4.7-flashx',
+    'z-ai/glm-5',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -298,11 +301,12 @@ export type ProviderModelsMap = {
     'google/gemma-3-27b-it',
     'google/gemma-3-27b-it-fast',
     'intfloat/e5-mistral-7b-instruct',
-    'meta-llama/llama-3.3-70b-instruct-base',
+    'meta-llama/Llama-3.3-70B-Instruct',
     'meta-llama/llama-3.3-70b-instruct-fast',
     'meta-llama/llama-guard-3-8b',
     'meta-llama/meta-llama-3.1-8b-instruct',
     'meta-llama/meta-llama-3.1-8b-instruct-fast',
+    'moonshotai/Kimi-K2.5',
     'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-thinking',
     'nvidia/llama-3_1-nemotron-ultra-253b-v1',
@@ -324,7 +328,6 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'zai-org/glm-4.5',
     'zai-org/glm-4.5-air',
-    'zai-org/glm-4.7',
     'zai-org/glm-4.7-fp8',
   ];
   readonly 'ollama-cloud': readonly [
@@ -444,6 +447,7 @@ export type ProviderModelsMap = {
     'workers-ai/@cf/qwen/qwen3-embedding-0.6b',
     'workers-ai/@cf/qwen/qwq-32b',
   ];
+  readonly 'kuae-cloud-coding-plan': readonly ['GLM-4.7'];
   readonly upstage: readonly ['solar-mini', 'solar-pro2', 'solar-pro3'];
   readonly inception: readonly ['mercury', 'mercury-coder'];
   readonly submodel: readonly [
@@ -577,9 +581,9 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-3.5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
-    'anthropic/claude-opus-4-6',
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5',
+    'anthropic/claude-opus-4.6',
     'anthropic/claude-sonnet-3.5',
     'anthropic/claude-sonnet-3.5-june',
     'anthropic/claude-sonnet-3.7',
@@ -942,8 +946,6 @@ export type ProviderModelsMap = {
   ];
   readonly siliconflow: readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
-    'MiniMaxAI/MiniMax-M1-80k',
-    'MiniMaxAI/MiniMax-M2',
     'MiniMaxAI/MiniMax-M2.1',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
@@ -959,7 +961,6 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-235B-A22B',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
-    'Qwen/Qwen3-30B-A3B',
     'Qwen/Qwen3-30B-A3B-Instruct-2507',
     'Qwen/Qwen3-30B-A3B-Thinking-2507',
     'Qwen/Qwen3-32B',
@@ -981,14 +982,12 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-VL-8B-Thinking',
     'THUDM/GLM-4-32B-0414',
     'THUDM/GLM-4-9B-0414',
-    'THUDM/GLM-4.1V-9B-Thinking',
     'THUDM/GLM-Z1-32B-0414',
     'THUDM/GLM-Z1-9B-0414',
     'baidu/ERNIE-4.5-300B-A47B',
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B',
     'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
-    'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
     'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3.1',
     'deepseek-ai/DeepSeek-V3.1-Terminus',
@@ -999,7 +998,6 @@ export type ProviderModelsMap = {
     'inclusionAI/Ling-mini-2.0',
     'inclusionAI/Ring-flash-2.0',
     'meta-llama/Meta-Llama-3.1-8B-Instruct',
-    'moonshotai/Kimi-Dev-72B',
     'moonshotai/Kimi-K2-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
@@ -1007,7 +1005,7 @@ export type ProviderModelsMap = {
     'nex-agi/DeepSeek-V3.1-Nex-N1',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
-    'stepfun-ai/step3',
+    'stepfun-ai/Step-3.5-Flash',
     'tencent/Hunyuan-A13B-Instruct',
     'tencent/Hunyuan-MT-7B',
     'zai-org/GLM-4.5',
@@ -1016,6 +1014,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.6V',
     'zai-org/GLM-4.7',
+    'zai-org/GLM-5',
   ];
   readonly togetherai: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507-tput',
@@ -1034,6 +1033,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.7',
+    'zai-org/GLM-5',
   ];
   readonly berget: readonly [
     'BAAI/bge-reranker-v2-m3',
@@ -1516,8 +1516,6 @@ export type ProviderModelsMap = {
   readonly 'siliconflow-cn': readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'Kwaipilot/KAT-Dev',
-    'MiniMaxAI/MiniMax-M1-80k',
-    'MiniMaxAI/MiniMax-M2',
     'Pro/MiniMaxAI/MiniMax-M2.1',
     'Pro/deepseek-ai/DeepSeek-R1',
     'Pro/deepseek-ai/DeepSeek-V3',
@@ -1527,6 +1525,7 @@ export type ProviderModelsMap = {
     'Pro/moonshotai/Kimi-K2-Thinking',
     'Pro/moonshotai/Kimi-K2.5',
     'Pro/zai-org/GLM-4.7',
+    'Pro/zai-org/GLM-5',
     'Qwen/QwQ-32B',
     'Qwen/Qwen2.5-14B-Instruct',
     'Qwen/Qwen2.5-32B-Instruct',
@@ -1539,7 +1538,6 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-14B',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
-    'Qwen/Qwen3-30B-A3B',
     'Qwen/Qwen3-30B-A3B-Instruct-2507',
     'Qwen/Qwen3-30B-A3B-Thinking-2507',
     'Qwen/Qwen3-32B',
@@ -1561,7 +1559,6 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-VL-8B-Thinking',
     'THUDM/GLM-4-32B-0414',
     'THUDM/GLM-4-9B-0414',
-    'THUDM/GLM-4.1V-9B-Thinking',
     'THUDM/GLM-Z1-32B-0414',
     'THUDM/GLM-Z1-9B-0414',
     'ascend-tribe/pangu-pro-moe',
@@ -1569,7 +1566,6 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-R1-Distill-Qwen-14B',
     'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B',
-    'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
     'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3.1-Terminus',
     'deepseek-ai/DeepSeek-V3.2',
@@ -1577,10 +1573,9 @@ export type ProviderModelsMap = {
     'inclusionAI/Ling-flash-2.0',
     'inclusionAI/Ling-mini-2.0',
     'inclusionAI/Ring-flash-2.0',
-    'moonshotai/Kimi-Dev-72B',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
-    'stepfun-ai/step3',
+    'stepfun-ai/Step-3.5-Flash',
     'tencent/Hunyuan-A13B-Instruct',
     'tencent/Hunyuan-MT-7B',
     'zai-org/GLM-4.5-Air',

@@ -8,7 +8,6 @@ import {
   useMemory,
   useThreads,
   AgentInformation,
-  AgentPromptExperimentProvider,
   TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
@@ -104,46 +103,45 @@ function Agent() {
 
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
-        <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-          <SchemaRequestContextProvider>
-            <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-              <ThreadInputProvider>
-                <ObservationalMemoryProvider>
-                  <ActivatedSkillsProvider>
-                    <AgentLayout
+      <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+        <SchemaRequestContextProvider>
+          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
+            <ThreadInputProvider>
+              <ObservationalMemoryProvider>
+                <ActivatedSkillsProvider>
+                  <AgentLayout
+                    agentId={agentId!}
+                    leftSlot={
+                      hasMemory && (
+                        <AgentSidebar
+                          agentId={agentId!}
+                          threadId={actualThreadId!}
+                          threads={threads || []}
+                          isLoading={isThreadsLoading}
+                        />
+                      )
+                    }
+                    rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                  >
+                    <AgentChat
+                      key={actualThreadId!}
                       agentId={agentId!}
-                      leftSlot={
-                        hasMemory && (
-                          <AgentSidebar
-                            agentId={agentId!}
-                            threadId={actualThreadId!}
-                            threads={threads || []}
-                            isLoading={isThreadsLoading}
-                          />
-                        )
-                      }
-                      rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                    >
-                      <AgentChat
-                        agentId={agentId!}
-                        agentName={agent?.name}
-                        modelVersion={agent?.modelVersion}
-                        threadId={actualThreadId!}
-                        memory={hasMemory}
-                        refreshThreadList={handleRefreshThreadList}
-                        modelList={agent?.modelList}
-                        messageId={messageId}
-                        isNewThread={isNewThread}
-                      />
-                    </AgentLayout>
-                  </ActivatedSkillsProvider>
-                </ObservationalMemoryProvider>
-              </ThreadInputProvider>
-            </WorkingMemoryProvider>
-          </SchemaRequestContextProvider>
-        </AgentSettingsProvider>
-      </AgentPromptExperimentProvider>
+                      agentName={agent?.name}
+                      modelVersion={agent?.modelVersion}
+                      threadId={actualThreadId!}
+                      memory={hasMemory}
+                      refreshThreadList={handleRefreshThreadList}
+                      modelList={agent?.modelList}
+                      messageId={messageId}
+                      isNewThread={isNewThread}
+                    />
+                  </AgentLayout>
+                </ActivatedSkillsProvider>
+              </ObservationalMemoryProvider>
+            </ThreadInputProvider>
+          </WorkingMemoryProvider>
+        </SchemaRequestContextProvider>
+      </AgentSettingsProvider>
     </TracingSettingsProvider>
   );
 }
