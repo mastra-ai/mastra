@@ -77,6 +77,13 @@ describe('extractGlobBase', () => {
   it('should return root when glob is at top level', () => {
     expect(extractGlobBase('/*.ts')).toBe('/');
   });
+
+  it('should extract base from ./ prefixed patterns', () => {
+    // ./**/skills → first meta at 2, prefix './', lastSlash 1, returns '.'
+    expect(extractGlobBase('./**/skills')).toBe('.');
+    // ./src/**/*.ts → first meta at 6, prefix './src/', lastSlash 5, returns './src'
+    expect(extractGlobBase('./src/**/*.ts')).toBe('./src');
+  });
 });
 
 // =============================================================================

@@ -412,14 +412,17 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #resolveGlobToDirectories(pattern: string): Promise<string[]> {
     const walkRoot = extractGlobBase(pattern);
-    // Strip leading slash from pattern for relative matching
-    const normalizedPattern = pattern.startsWith('/') ? pattern.slice(1) : pattern;
+
+    // Normalize pattern for picomatch: strip leading '/' or './' since picomatch
+    // doesn't match paths with these prefixes. This only affects pattern matching,
+    // not the filesystem paths (walkRoot and dirPath keep their original form).
+    const normalizedPattern = pattern.replace(/^\.?\//, '');
     const matcher = createGlobMatcher(normalizedPattern, { dot: true });
     const matchingDirs: string[] = [];
 
     await this.#walkForDirectories(walkRoot, dirPath => {
-      const relativePath = dirPath.startsWith('/') ? dirPath.slice(1) : dirPath;
-      if (matcher(relativePath)) {
+      const normalizedPath = dirPath.replace(/^\.?\//, '');
+      if (matcher(normalizedPath)) {
         matchingDirs.push(dirPath);
       }
     });
@@ -434,7 +437,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     basePath: string,
     callback: (dirPath: string) => void,
     depth: number = 0,
-    maxDepth: number = 20,
+    maxDepth: number = 4,
   ): Promise<void> {
     if (depth >= maxDepth) return;
 
