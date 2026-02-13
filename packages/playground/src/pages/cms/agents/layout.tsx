@@ -47,6 +47,44 @@ const normalizeToolsToRecord = (
   return { ...tools };
 };
 
+// Transform flat integration tools form data ("providerId:toolSlug") to nested API format
+const transformIntegrationToolsForApi = (
+  integrationTools: Record<string, { description?: string }> | undefined,
+): Record<string, { tools?: Record<string, { description?: string }> }> | undefined => {
+  if (!integrationTools || Object.keys(integrationTools).length === 0) return undefined;
+
+  const result: Record<string, { tools?: Record<string, { description?: string }> }> = {};
+  for (const [compositeKey, config] of Object.entries(integrationTools)) {
+    const separatorIndex = compositeKey.indexOf(':');
+    if (separatorIndex === -1) continue;
+    const providerId = compositeKey.slice(0, separatorIndex);
+    const toolSlug = compositeKey.slice(separatorIndex + 1);
+
+    if (!result[providerId]) {
+      result[providerId] = { tools: {} };
+    }
+    result[providerId].tools![toolSlug] = { description: config.description };
+  }
+  return result;
+};
+
+// Transform nested API integration tools to flat form format
+const normalizeIntegrationToolsToRecord = (
+  integrationTools: Record<string, { tools?: Record<string, { description?: string }> }> | undefined,
+): Record<string, { description?: string }> => {
+  if (!integrationTools) return {};
+
+  const result: Record<string, { description?: string }> = {};
+  for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
+    if (providerConfig.tools) {
+      for (const [toolSlug, toolConfig] of Object.entries(providerConfig.tools)) {
+        result[`${providerId}:${toolSlug}`] = { description: toolConfig.description };
+      }
+    }
+  }
+  return result;
+};
+
 // Type for the agent data (inferred from useStoredAgent)
 type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
 
@@ -96,6 +134,7 @@ function CreateLayoutWrapper() {
         })),
         model: values.model,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
+        integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows:
           values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
@@ -223,13 +262,6 @@ function EditFormContent({
     const dataSource = isViewingVersion ? versionData : agent;
 
     const toolsRecord = normalizeToolsToRecord(dataSource.tools);
-    if (dataSource.integrationTools && Array.isArray(dataSource.integrationTools)) {
-      for (const id of dataSource.integrationTools) {
-        if (!toolsRecord[id]) {
-          toolsRecord[id] = { description: undefined };
-        }
-      }
-    }
 
     const memoryData = dataSource.memory as
       | {
@@ -286,6 +318,9 @@ function EditFormContent({
         name: (dataSource.model as { provider?: string; name?: string })?.name || '',
       },
       tools: toolsRecord,
+      integrationTools: normalizeIntegrationToolsToRecord(
+        dataSource.integrationTools as Record<string, { tools?: Record<string, { description?: string }> }> | undefined,
+      ),
       workflows: arrayToRecord((dataSource.workflows as string[]) || []),
       agents: arrayToRecord((dataSource.agents as string[]) || []),
       scorers: dataSource.scorers || {},
@@ -358,20 +393,6 @@ function EditFormContent({
     setIsSubmitting(true);
 
     try {
-      const codeDefinedTools: Record<string, { description?: string }> = {};
-      const integrationToolIds: string[] = [];
-      const existingIntegrationTools = new Set(agent.integrationTools || []);
-
-      if (values.tools) {
-        for (const toolId of Object.keys(values.tools)) {
-          if (existingIntegrationTools.has(toolId)) {
-            integrationToolIds.push(toolId);
-          } else {
-            codeDefinedTools[toolId] = values.tools[toolId]!;
-          }
-        }
-      }
-
       await updateStoredAgent.mutateAsync({
         name: values.name,
         description: values.description,
@@ -381,8 +402,8 @@ function EditFormContent({
           rules: block.rules,
         })),
         model: values.model,
-        tools: Object.keys(codeDefinedTools).length > 0 ? codeDefinedTools : undefined,
-        integrationTools: integrationToolIds,
+        tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
+        integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: Object.keys(values.workflows || {}),
         agents: Object.keys(values.agents || {}),
         scorers: values.scorers,
@@ -457,7 +478,7 @@ function EditFormContent({
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, agent, updateStoredAgent, navigate, paths, agentId]);
+  }, [form, updateStoredAgent, navigate, paths, agentId]);
 
   const basePath = `/cms/agents/${agentId}/edit`;
 
