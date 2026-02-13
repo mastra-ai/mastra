@@ -66,9 +66,7 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
         <SideDialog.Heading>{provider?.name}</SideDialog.Heading>
         {onSubmit && (
           <Button variant="primary" size="sm" onClick={handleSubmit}>
-            {selectionCount > 0
-              ? `Add ${selectionCount} tool${selectionCount !== 1 ? 's' : ''}`
-              : 'Add tools'}
+            {selectionCount > 0 ? `Add ${selectionCount} tool${selectionCount !== 1 ? 's' : ''}` : 'Add tools'}
           </Button>
         )}
       </SideDialog.Header>

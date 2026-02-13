@@ -224,7 +224,7 @@ export const mastra = new Mastra({
   ...config,
   editor: new MastraEditor({
     toolProviders: {
-      composio: new ComposioToolProvider({ apiKey: '' }),
+      composio: new ComposioToolProvider({ apiKey: 'ak_NxJAMDlKgawR9HENf0bu' }),
     },
   }),
 });
