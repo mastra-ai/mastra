@@ -263,6 +263,33 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   /**
+   * Cached embedding dimension from probing the embedder.
+   * Used to ensure consistent index naming between processors and recall().
+   */
+  private _cachedEmbeddingDimension?: number;
+
+  /**
+   * Probe the embedder to determine its actual output dimension.
+   * The result is cached so subsequent calls are free.
+   */
+  protected async getEmbeddingDimension(): Promise<number | undefined> {
+    if (this._cachedEmbeddingDimension) return this._cachedEmbeddingDimension;
+    if (!this.embedder) return undefined;
+
+    try {
+      const result = await this.embedder.doEmbed({
+        values: ['a'],
+        ...(this.embedderOptions || {}),
+      } as any);
+      const dimension = result.embeddings[0]?.length;
+      if (dimension) this._cachedEmbeddingDimension = dimension;
+      return dimension;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Get the index name for semantic recall embeddings.
    * This is used to ensure consistency between the Memory class and SemanticRecall processor.
    */
@@ -672,8 +699,10 @@ https://mastra.ai/en/docs/memory/overview`,
       if (!hasSemanticRecall) {
         const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
 
-        // Use the Memory class's index name for consistency with memory.recall()
-        const indexName = this.getEmbeddingIndexName();
+        // Probe the embedder for its actual dimension to generate the correct index name.
+        // This ensures the processor uses the same dimension-aware index name as recall().
+        const embeddingDimension = await this.getEmbeddingDimension();
+        const indexName = this.getEmbeddingIndexName(embeddingDimension);
 
         processors.push(
           new SemanticRecall({
@@ -750,8 +779,10 @@ https://mastra.ai/en/docs/memory/overview`,
         const semanticRecallConfig =
           typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
 
-        // Use the Memory class's index name for consistency with memory.recall()
-        const indexName = this.getEmbeddingIndexName();
+        // Probe the embedder for its actual dimension to generate the correct index name.
+        // This ensures the processor uses the same dimension-aware index name as recall().
+        const embeddingDimension = await this.getEmbeddingDimension();
+        const indexName = this.getEmbeddingIndexName(embeddingDimension);
 
         processors.push(
           new SemanticRecall({
