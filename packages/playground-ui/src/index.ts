@@ -105,6 +105,7 @@ export { cn } from './lib/utils';
 export * from './lib/ai-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
+export * from './domains/tool-providers/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
 export * from './domains/workspace/index';

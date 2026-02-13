@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-better-auth",
-  "version": "1.0.1-alpha.0",
+  "version": "1.0.1",
   "description": "Mastra Better Auth integration - self-hosted authentication",
   "type": "module",
   "main": "dist/index.js",

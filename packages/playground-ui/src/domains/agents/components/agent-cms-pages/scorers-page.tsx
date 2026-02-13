@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
-import { Trash2, PlusIcon } from 'lucide-react';
+import { ChevronRight, Ruler, Trash2, PlusIcon } from 'lucide-react';
 
 import { SectionHeader } from '@/domains/cms';
 import { JudgeIcon, Icon } from '@/ds/icons';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { IconButton } from '@/ds/components/IconButton';
@@ -15,24 +16,19 @@ import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
+import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
+import { RuleBuilder, countLeafRules } from '@/lib/rule-engine';
+import { cn } from '@/lib/utils';
+import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-
-interface ScoringSamplingConfig {
-  type: 'ratio';
-  rate?: number;
-}
-
-interface ScorerConfig {
-  description?: string;
-  sampling?: ScoringSamplingConfig;
-}
 
 export function ScorersPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
   const { data: scorers, isLoading } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
+  const variables = useWatch({ control, name: 'variables' });
   const count = Object.keys(selectedScorers || {}).length;
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
@@ -101,7 +97,7 @@ export function ScorersPage() {
               });
             };
 
-            const handleSamplingChange = (scorerId: string, samplingConfig: ScoringSamplingConfig | undefined) => {
+            const handleSamplingChange = (scorerId: string, samplingConfig: ScorerConfig['sampling'] | undefined) => {
               field.onChange({
                 ...currentScorers,
                 [scorerId]: { ...currentScorers[scorerId], sampling: samplingConfig },
@@ -112,6 +108,13 @@ export function ScorersPage() {
               const newScorers = { ...currentScorers };
               delete newScorers[scorerId];
               field.onChange(newScorers);
+            };
+
+            const handleRulesChange = (scorerId: string, rules: RuleGroup | undefined) => {
+              field.onChange({
+                ...currentScorers,
+                [scorerId]: { ...currentScorers[scorerId], rules },
+              });
             };
 
             return (
@@ -139,6 +142,9 @@ export function ScorersPage() {
                         onSamplingChange={config => handleSamplingChange(scorer.value, config)}
                         onRemove={() => handleRemove(scorer.value)}
                         readOnly={readOnly}
+                        schema={variables}
+                        rules={currentScorers[scorer.value]?.rules || undefined}
+                        onRulesChange={readOnly ? undefined : rules => handleRulesChange(scorer.value, rules)}
                       />
                     ))}
                   </div>
@@ -167,11 +173,14 @@ interface ScorerConfigPanelProps {
   scorerId: string;
   scorerName: string;
   description: string;
-  samplingConfig?: ScoringSamplingConfig;
+  samplingConfig?: ScorerConfig['sampling'];
   onDescriptionChange: (description: string) => void;
-  onSamplingChange: (config: ScoringSamplingConfig | undefined) => void;
+  onSamplingChange: (config: ScorerConfig['sampling'] | undefined) => void;
   onRemove: () => void;
   readOnly?: boolean;
+  schema?: JsonSchema;
+  rules?: RuleGroup;
+  onRulesChange?: (rules: RuleGroup | undefined) => void;
 }
 
 function ScorerConfigPanel({
@@ -183,8 +192,16 @@ function ScorerConfigPanel({
   onSamplingChange,
   onRemove,
   readOnly = false,
+  schema,
+  rules,
+  onRulesChange,
 }: ScorerConfigPanelProps) {
   const samplingType = samplingConfig?.type || 'none';
+  const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
+  const showRulesSection = schema && hasVariablesSet && !readOnly;
+  const ruleCount = countLeafRules(rules);
+
+  const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
   const handleTypeChange = (type: string) => {
     if (type === 'none') {
@@ -201,75 +218,103 @@ function ScorerConfigPanel({
   };
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon size="sm">
-            <JudgeIcon className="text-neutral3" />
-          </Icon>
-          <span className="text-xs font-medium text-icon6">{scorerName}</span>
+    <div className="rounded-md border border-border1 overflow-hidden">
+      <div className="bg-surface2 p-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon size="sm">
+              <JudgeIcon className="text-neutral3" />
+            </Icon>
+            <span className="text-xs font-medium text-icon6">{scorerName}</span>
+          </div>
+          {!readOnly && (
+            <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
+              <Trash2 />
+            </IconButton>
+          )}
         </div>
-        {!readOnly && (
-          <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
-            <Trash2 />
-          </IconButton>
-        )}
-      </div>
 
-      <Textarea
-        id={`description-${scorerId}`}
-        value={description}
-        onChange={e => onDescriptionChange(e.target.value)}
-        placeholder="Custom description for this scorer..."
-        className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
-        size="sm"
-        disabled={readOnly}
-      />
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">
-          Sampling
-        </Label>
-        <RadioGroup
-          id={`sampling-type-${scorerId}`}
-          value={samplingType}
-          onValueChange={handleTypeChange}
-          className="flex flex-col gap-2"
+        <Textarea
+          id={`description-${scorerId}`}
+          value={description}
+          onChange={e => onDescriptionChange(e.target.value)}
+          placeholder="Custom description for this scorer..."
+          className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
+          size="sm"
           disabled={readOnly}
-        >
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-sm text-icon5 cursor-pointer">
-              None (evaluate all)
-            </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-icon5 cursor-pointer">
-              Ratio (percentage)
-            </Label>
-          </div>
-        </RadioGroup>
+        />
 
-        {samplingType === 'ratio' && (
-          <div className="flex flex-col gap-1.5 mt-1">
-            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-icon4">
-              Sample Rate (0-1)
-            </Label>
-            <Input
-              id={`rate-${scorerId}`}
-              type="number"
-              min="0"
-              max="1"
-              step="0.1"
-              value={samplingConfig?.rate ?? 0.1}
-              onChange={e => handleRateChange(parseFloat(e.target.value))}
-              className="h-8"
-              disabled={readOnly}
-            />
-          </div>
-        )}
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">
+            Sampling
+          </Label>
+          <RadioGroup
+            id={`sampling-type-${scorerId}`}
+            value={samplingType}
+            onValueChange={handleTypeChange}
+            className="flex flex-col gap-2"
+            disabled={readOnly}
+          >
+            <div className="flex items-center gap-2">
+              <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
+              <Label htmlFor={`${scorerId}-none`} className="text-sm text-icon5 cursor-pointer">
+                None (evaluate all)
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
+              <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-icon5 cursor-pointer">
+                Ratio (percentage)
+              </Label>
+            </div>
+          </RadioGroup>
+
+          {samplingType === 'ratio' && (
+            <div className="flex flex-col gap-1.5 mt-1">
+              <Label htmlFor={`rate-${scorerId}`} className="text-xs text-icon4">
+                Sample Rate (0-1)
+              </Label>
+              <Input
+                id={`rate-${scorerId}`}
+                type="number"
+                min="0"
+                max="1"
+                step="0.1"
+                value={samplingConfig?.rate ?? 0.1}
+                onChange={e => handleRateChange(parseFloat(e.target.value))}
+                className="h-8"
+                disabled={readOnly}
+              />
+            </div>
+          )}
+        </div>
       </div>
+
+      {showRulesSection && (
+        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border1 bg-surface2">
+          <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2">
+            <Icon>
+              <ChevronRight
+                className={cn('text-icon3 transition-transform', {
+                  'rotate-90': isRulesOpen,
+                })}
+              />
+            </Icon>
+            <Icon>
+              <Ruler className="text-accent6" />
+            </Icon>
+            <span className="text-neutral5 text-ui-sm">Display Conditions</span>
+            {ruleCount > 0 && (
+              <span className="text-neutral3 text-ui-sm">
+                ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
+              </span>
+            )}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            {onRulesChange && <RuleBuilder schema={schema} ruleGroup={rules} onChange={onRulesChange} />}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   );
 }
