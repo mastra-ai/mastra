@@ -43,7 +43,7 @@ export interface OnMountArgs {
   /** The sandbox instance for custom mount implementations */
   sandbox: WorkspaceSandbox;
   /** The workspace instance */
-  workspace: Workspace<any, any, any>;
+  workspace: Workspace;
 }
 
 /**
@@ -92,7 +92,7 @@ export class MountManager {
   private _mountFn: MountFn;
   private _onMount?: OnMountHook;
   private _sandbox?: WorkspaceSandbox;
-  private _workspace?: Workspace<any, any, any>;
+  private _workspace?: Workspace;
   private logger: IMastraLogger;
 
   constructor(config: MountManagerConfig) {
@@ -104,7 +104,7 @@ export class MountManager {
    * Set the sandbox and workspace references for onMount hook args.
    * Called by Workspace during construction.
    */
-  setContext(context: { sandbox: WorkspaceSandbox; workspace: Workspace<any, any, any> }): void {
+  setContext(context: { sandbox: WorkspaceSandbox; workspace: Workspace }): void {
     this._sandbox = context.sandbox;
     this._workspace = context.workspace;
   }

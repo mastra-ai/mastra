@@ -230,7 +230,7 @@ export interface Config<
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
    */
-  workspace?: Workspace<any, any, any>;
+  workspace?: Workspace;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -323,8 +323,8 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
-  #workspace?: Workspace<any, any, any>;
-  #workspaces: Record<string, Workspace<any, any, any>> = {};
+  #workspace?: Workspace;
+  #workspaces: Record<string, Workspace> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -1183,7 +1183,7 @@ export class Mastra<
    * }
    * ```
    */
-  public getWorkspace(): Workspace<any, any, any> | undefined {
+  public getWorkspace(): Workspace | undefined {
     return this.#workspace;
   }
 
@@ -1198,7 +1198,7 @@ export class Mastra<
    * const files = await workspace.filesystem.readdir('/');
    * ```
    */
-  public getWorkspaceById(id: string): Workspace<any, any, any> {
+  public getWorkspaceById(id: string): Workspace {
     const workspace = this.#workspaces[id];
     if (!workspace) {
       const error = new MastraError({
@@ -1249,7 +1249,7 @@ export class Mastra<
    * mastra.addWorkspace(workspace);
    * ```
    */
-  public addWorkspace(workspace: Workspace<any, any, any>, key?: string): void {
+  public addWorkspace(workspace: Workspace, key?: string): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
     }

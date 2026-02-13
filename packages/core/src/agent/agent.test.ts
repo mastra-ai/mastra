@@ -7423,7 +7423,7 @@ describe('Agent Tests', () => {
 
     it('should pass workspace returned from prepareStep to tool execution', async () => {
       const workspace = createWorkspace('preparestep-workspace');
-      let capturedWorkspace: Workspace<any, any, any> | undefined;
+      let capturedWorkspace: Workspace | undefined;
 
       const workspaceCaptureTool = createTool({
         id: 'capture_workspace',

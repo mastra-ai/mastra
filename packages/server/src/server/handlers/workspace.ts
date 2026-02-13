@@ -119,7 +119,7 @@ function requireWorkspaceV1Support(): void {
  * Backwards compatible: Falls back to searching through agents if
  * mastra.getWorkspaceById() is not available (older @mastra/core versions).
  */
-async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace<any, any, any> | undefined> {
+async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace | undefined> {
   requireWorkspaceV1Support();
 
   // Check if the global workspace matches
@@ -202,7 +202,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
       // Dynamic workspaces get lazily registered during agent execution (stream/generate).
       if (typeof mastra.listWorkspaces === 'function') {
         const registeredWorkspaces = mastra.listWorkspaces();
-        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace<any, any, any>][]) {
+        for (const [, ws] of Object.entries(registeredWorkspaces) as [string, Workspace][]) {
           workspaces.push({
             id: ws.id,
             name: ws.name,

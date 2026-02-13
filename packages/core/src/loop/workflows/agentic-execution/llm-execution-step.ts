@@ -550,7 +550,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
-        stepWorkspace?: Workspace<any, any, any>;
+        stepWorkspace?: Workspace;
       }>(
         models,
         logger,
@@ -578,7 +578,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
-          workspace?: Workspace<any, any, any>;
+          workspace?: Workspace;
         } = {
           model,
           tools,

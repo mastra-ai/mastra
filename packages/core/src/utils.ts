@@ -296,7 +296,7 @@ export interface ToolOptions {
    * Workspace available for tool execution. When provided, tools can access
    * workspace.filesystem and workspace.sandbox for file operations and command execution.
    */
-  workspace?: Workspace<any, any, any>;
+  workspace?: Workspace;
 }
 
 /**

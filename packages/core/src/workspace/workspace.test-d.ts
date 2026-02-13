@@ -3,6 +3,7 @@ import type { CompositeFilesystem, MountMapEntry } from './filesystem/composite-
 import type { WorkspaceFilesystem } from './filesystem/filesystem';
 import { LocalFilesystem } from './filesystem/local-filesystem';
 import { LocalSandbox } from './sandbox/local-sandbox';
+import type { WorkspaceSandbox } from './sandbox/sandbox';
 import { Workspace } from './workspace';
 
 /**
@@ -38,11 +39,11 @@ describe('Workspace generic type inference', () => {
     expectTypeOf(workspace.sandbox).toEqualTypeOf<LocalSandbox>();
   });
 
-  it('should default to undefined when not configured', () => {
+  it('should default to base types | undefined when not configured', () => {
     const workspace = new Workspace({});
 
-    expectTypeOf(workspace.filesystem).toEqualTypeOf<undefined>();
-    expectTypeOf(workspace.sandbox).toEqualTypeOf<undefined>();
+    expectTypeOf(workspace.filesystem).toEqualTypeOf<WorkspaceFilesystem | undefined>();
+    expectTypeOf(workspace.sandbox).toEqualTypeOf<WorkspaceSandbox | undefined>();
   });
 
   it('should return CompositeFilesystem when mounts are used', () => {

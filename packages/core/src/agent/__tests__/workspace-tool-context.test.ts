@@ -136,7 +136,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
     describe('Agent-level workspace', () => {
       it('should make workspace available to tools in generate', async () => {
         const workspace = createWorkspace('agent-workspace');
-        let capturedWorkspace: Workspace<any, any, any> | undefined;
+        let capturedWorkspace: Workspace | undefined;
 
         const workspaceTool = createTool({
           id: 'workspace-tool',
@@ -174,7 +174,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
 
       it('should make workspace available to tools in stream', async () => {
         const workspace = createWorkspace('stream-workspace');
-        let capturedWorkspace: Workspace<any, any, any> | undefined;
+        let capturedWorkspace: Workspace | undefined;
 
         const workspaceTool = createTool({
           id: 'workspace-tool',
@@ -213,7 +213,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
     describe('Mastra-level workspace', () => {
       it('should make global workspace available to tools', async () => {
         const workspace = createWorkspace('global-workspace');
-        let capturedWorkspace: Workspace<any, any, any> | undefined;
+        let capturedWorkspace: Workspace | undefined;
 
         const workspaceTool = createTool({
           id: 'workspace-tool',
@@ -257,7 +257,7 @@ function workspaceToolContextTest(version: 'v2' | 'v3') {
 
     describe('No workspace configured', () => {
       it('should have undefined workspace when not configured', async () => {
-        let capturedWorkspace: Workspace<any, any, any> | undefined = undefined;
+        let capturedWorkspace: Workspace | undefined = undefined;
         let executeCalled = false;
 
         const workspaceTool = createTool({

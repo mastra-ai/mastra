@@ -60,8 +60,8 @@ import type { WorkspaceStatus } from './types';
  * you passed in.
  */
 export interface WorkspaceConfig<
-  TFilesystem extends WorkspaceFilesystem | undefined = undefined,
-  TSandbox extends WorkspaceSandbox | undefined = undefined,
+  TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
+  TSandbox extends WorkspaceSandbox | undefined = WorkspaceSandbox | undefined,
   TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
 > {
   /** Unique identifier (auto-generated if not provided) */
@@ -362,8 +362,8 @@ export interface WorkspaceInfo {
  * ```
  */
 export class Workspace<
-  TFilesystem extends WorkspaceFilesystem | undefined = undefined,
-  TSandbox extends WorkspaceSandbox | undefined = undefined,
+  TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
+  TSandbox extends WorkspaceSandbox | undefined = WorkspaceSandbox | undefined,
   TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
 > {
   readonly id: string;
@@ -374,7 +374,7 @@ export class Workspace<
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
-  private readonly _config: WorkspaceConfig<any, any, any>;
+  private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
 
@@ -397,7 +397,7 @@ export class Workspace<
       this._fs = new CompositeFilesystem({ mounts: config.mounts });
       if (this._sandbox?.mounts) {
         // Inform sandbox about mounts so it can process them on start()
-        this._sandbox.mounts.setContext({ sandbox: this._sandbox, workspace: this });
+        this._sandbox.mounts.setContext({ sandbox: this._sandbox, workspace: this as unknown as Workspace });
         this._sandbox.mounts.add(config.mounts);
         if (config.onMount) {
           this._sandbox.mounts.setOnMount(config.onMount);
