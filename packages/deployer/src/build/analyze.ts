@@ -14,7 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
-import { getPackageName, isBuiltinModule, isDependencyPartOfPackage } from './utils';
+import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
 type ErrorId =
@@ -408,9 +408,11 @@ If you think your configuration is valid, please open an issue.`);
     workspaceMap,
   });
 
-  // Filesystem-relative workspace paths for filtering workspace imports from rollup output
+  // Filesystem-relative workspace paths for filtering workspace imports from rollup output.
+  // Normalize to forward slashes so the startsWith check works on Windows where
+  // path.relative() produces backslashes but rollup uses forward slashes.
   const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
-    relative(workspaceRoot || projectRoot, pkgInfo.location),
+    slash(relative(workspaceRoot || projectRoot, pkgInfo.location)),
   );
 
   // Build a map of dependency versions from depsToOptimize for lookup
@@ -442,12 +444,6 @@ If you think your configuration is valid, please open an issue.`);
 
       // Skip relative imports - they're local chunks, not external packages
       if (i.startsWith('.') || i.startsWith('/')) {
-        continue;
-      }
-
-      // Skip rollup inter-chunk file references (e.g., "apps/@agents/devstudio/.mastra/.build/chunk-X.mjs")
-      // These are output file paths, not npm package specifiers
-      if (/\.(m?[jt]sx?|cjs)$/.test(i)) {
         continue;
       }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getPackageName, isBuiltinModule } from './utils';
+import { getPackageName, isBuiltinModule, slash } from './utils';
 
 describe('external import filtering (issue #13022)', () => {
   /**
@@ -7,6 +7,7 @@ describe('external import filtering (issue #13022)', () => {
    */
   function filterImports(imports: string[], workspacePaths: string[]): Map<string, {}> {
     const result = new Map<string, {}>();
+    const normalizedPaths = workspacePaths.map(p => slash(p));
 
     for (const i of imports) {
       if (isBuiltinModule(i)) {
@@ -17,11 +18,7 @@ describe('external import filtering (issue #13022)', () => {
         continue;
       }
 
-      if (/\.(m?[jt]sx?|cjs)$/.test(i)) {
-        continue;
-      }
-
-      if (workspacePaths.some(wp => i.startsWith(wp))) {
+      if (normalizedPaths.some(wp => i.startsWith(wp))) {
         continue;
       }
 
@@ -34,12 +31,34 @@ describe('external import filtering (issue #13022)', () => {
     return result;
   }
 
-  it('should skip rollup inter-chunk file references', () => {
-    const result = filterImports(['apps/@agents/devstudio/.mastra/.build/chunk-ILQXPZCD.mjs', 'zod'], []);
+  it('should filter workspace paths with backslashes (Windows)', () => {
+    const result = filterImports(
+      ['apps/@agents/devstudio/.mastra/.build/chunk-ILQXPZCD.mjs', 'zod'],
+      ['apps\\@agents\\devstudio'],
+    );
 
     expect(result.has('apps')).toBe(false);
     expect(result.has('zod')).toBe(true);
     expect(result.size).toBe(1);
+  });
+
+  it('should filter workspace paths with forward slashes (Linux/macOS)', () => {
+    const result = filterImports(
+      ['apps/@agents/devstudio/.mastra/.build/chunk-ILQXPZCD.mjs', 'zod'],
+      ['apps/@agents/devstudio'],
+    );
+
+    expect(result.has('apps')).toBe(false);
+    expect(result.has('zod')).toBe(true);
+    expect(result.size).toBe(1);
+  });
+
+  it('should keep external subpath imports with file extensions', () => {
+    const result = filterImports(['@modelcontextprotocol/sdk/shared/auth.js', 'zod'], ['apps/@agents/devstudio']);
+
+    expect(result.has('@modelcontextprotocol/sdk')).toBe(true);
+    expect(result.has('zod')).toBe(true);
+    expect(result.size).toBe(2);
   });
 
   it('should skip builtin and relative imports', () => {
@@ -47,14 +66,5 @@ describe('external import filtering (issue #13022)', () => {
 
     expect(result.has('zod')).toBe(true);
     expect(result.size).toBe(1);
-  });
-
-  it('should keep real npm package imports', () => {
-    const result = filterImports(['zod', 'pino', '@mastra/core'], []);
-
-    expect(result.has('zod')).toBe(true);
-    expect(result.has('pino')).toBe(true);
-    expect(result.has('@mastra/core')).toBe(true);
-    expect(result.size).toBe(3);
   });
 });
