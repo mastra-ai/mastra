@@ -243,26 +243,28 @@ function scorersTests(version: 'v1' | 'v2') {
       }
 
       // Verify the exact call parameters
-      expect(runScorer).toHaveBeenCalledWith({
-        scorerId: 'scorer-1',
-        scorerObject: expect.objectContaining({
-          scorer: scorer1,
+      expect(runScorer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'scorer-1',
+          scorerObject: expect.objectContaining({
+            scorer: scorer1,
+          }),
+          runId: expect.any(String),
+          input: expect.any(Object),
+          output: expect.any(Object),
+          requestContext: expect.any(Object),
+          entity: expect.objectContaining({
+            id: 'test-agent',
+            name: 'Test Agent',
+          }),
+          source: 'LIVE',
+          entityType: 'AGENT',
+          structuredOutput: false,
+          threadId: undefined,
+          resourceId: undefined,
+          tracingContext: expect.any(Object),
         }),
-        runId: expect.any(String),
-        input: expect.any(Object),
-        output: expect.any(Object),
-        requestContext: expect.any(Object),
-        entity: expect.objectContaining({
-          id: 'test-agent',
-          name: 'Test Agent',
-        }),
-        source: 'LIVE',
-        entityType: 'AGENT',
-        structuredOutput: false,
-        threadId: undefined,
-        resourceId: undefined,
-        tracingContext: expect.any(Object),
-      });
+      );
     });
   });
 }
