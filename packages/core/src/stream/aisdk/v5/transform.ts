@@ -143,12 +143,12 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
             console.warn('[JSON Repair] Fixed malformed JSON for tool:', value.toolName);
             toolCallInput = repaired;
           } else {
-            console.error('Error converting tool call input to JSON', {
-              error,
-              input: value.input,
-            });
             toolCallInput = {};
             const truncated = value.input.length > 200 ? value.input.slice(0, 200) + '...' : value.input;
+            console.error('Error converting tool call input to JSON', {
+              error,
+              input: truncated,
+            });
             parseError =
               `Tool call arguments for "${value.toolName}" contained malformed JSON that could not be parsed. ` +
               `Please provide valid JSON arguments. Raw input: ${truncated}`;
