@@ -3,7 +3,7 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
 import { ChunkFrom } from '../../../stream/types';
-import { inferProviderExecuted } from '../../../tools/provider-tool-utils';
+import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
@@ -51,6 +51,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       const tool =
         stepTools?.[inputData.toolName] ||
+        findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
 
       const addToolMetadata = ({

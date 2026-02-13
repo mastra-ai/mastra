@@ -25,7 +25,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { findProviderToolByName, inferProviderExecuted, isGatewayTool } from '../../../tools/provider-tool-utils';
+import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -1022,7 +1022,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
-              const tool = findProviderToolByName(stepTools, toolCall.toolName);
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
@@ -1031,12 +1030,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   toolName: toolCall.toolName,
                   args: toolCall.args,
                 },
-                // Don't include providerMetadata for gateway tools to avoid the model
-                // provider treating them as native provider tools (e.g., OpenAI converting
-                // to item_reference instead of function_call)
-                ...(toolCall.providerMetadata && !isGatewayTool(tool)
-                  ? { providerMetadata: toolCall.providerMetadata }
-                  : {}),
+                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
               };
             }),
           },
@@ -1189,9 +1183,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If shouldRetry is true, we continue the loop instead of triggering tripwire
       const stepReason = shouldRetry ? 'retry' : tripwireTriggered ? 'tripwire' : hasErrored ? 'error' : finishReason;
 
-      // isContinued should be true if:
-      // - shouldRetry is true (processor requested retry)
-      // - OR finishReason indicates more work (e.g., tool-use)
       const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error'].includes(finishReason));
 
       // Increment processor retry count if we're retrying

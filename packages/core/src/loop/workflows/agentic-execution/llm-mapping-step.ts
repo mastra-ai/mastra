@@ -7,6 +7,7 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { findProviderToolByName, isGatewayTool } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -119,6 +120,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             content: {
               format: 2,
               parts: errorResults.map(toolCallErrorResult => {
+                // Don't include providerMetadata for gateway tools — gateway tool results
+                // aren't stored server-side, so including providerMetadata would cause OpenAI
+                // to convert to item_reference which the model can't resolve
+                const errorTool = findProviderToolByName(rest.tools, toolCallErrorResult.toolName);
                 return {
                   type: 'tool-invocation' as const,
                   toolInvocation: {
@@ -128,7 +133,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     args: toolCallErrorResult.args,
                     result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
                   },
-                  ...(toolCallErrorResult.providerMetadata
+                  ...(toolCallErrorResult.providerMetadata && !isGatewayTool(errorTool)
                     ? { providerMetadata: toolCallErrorResult.providerMetadata }
                     : {}),
                 };

@@ -29,14 +29,34 @@ describe('inferProviderExecuted', () => {
 
 describe('findProviderToolByName', () => {
   const tools = {
-    web_search: { type: 'provider' as const, id: 'gateway.perplexity_search', args: {} },
+    perplexitySearch: { type: 'provider' as const, id: 'gateway.perplexity_search', args: {} },
+    webSearch: { type: 'provider-defined' as const, id: 'openai.web_search', args: {} },
     calculator: { type: 'function' as const, description: 'A calculator' },
   } as any;
 
-  it('should find provider tool by key', () => {
+  it('should find provider tool by direct key', () => {
+    const result = findProviderToolByName(tools, 'perplexitySearch');
+
+    expect(result).toBe(tools.perplexitySearch);
+  });
+
+  it('should find provider tool by full ID', () => {
+    const result = findProviderToolByName(tools, 'gateway.perplexity_search');
+
+    expect(result).toBe(tools.perplexitySearch);
+  });
+
+  it('should find provider tool by model-facing name (suffix after provider prefix)', () => {
+    // The LLM stream reports toolName as 'perplexity_search' (without gateway. prefix)
+    const result = findProviderToolByName(tools, 'perplexity_search');
+
+    expect(result).toBe(tools.perplexitySearch);
+  });
+
+  it('should find openai provider tool by suffix', () => {
     const result = findProviderToolByName(tools, 'web_search');
 
-    expect(result).toBe(tools.web_search);
+    expect(result).toBe(tools.webSearch);
   });
 
   it('should return undefined for non-provider tool', () => {
@@ -47,6 +67,12 @@ describe('findProviderToolByName', () => {
 
   it('should return undefined when tool is not found', () => {
     const result = findProviderToolByName(tools, 'unknown_tool');
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined when tools is undefined', () => {
+    const result = findProviderToolByName(undefined, 'perplexity_search');
 
     expect(result).toBeUndefined();
   });
