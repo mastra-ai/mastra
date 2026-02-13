@@ -754,7 +754,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           metadata,
           toDateTime64(createdAt, 3) as createdAt,
           toDateTime64(updatedAt, 3) as updatedAt,
-          toDateTime64OrNull(lastMessageAt, 3) as lastMessageAt
+          lastMessageAt
         FROM "${TABLE_THREADS}"
         WHERE id = {var_id:String}
         ORDER BY updatedAt DESC
@@ -1043,7 +1043,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   metadata,
                   toDateTime64(createdAt, 3) as createdAt,
                   toDateTime64(updatedAt, 3) as updatedAt,
-                  toDateTime64OrNull(lastMessageAt, 3) as lastMessageAt,
+                  lastMessageAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
               )
@@ -1365,7 +1365,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const threadUpdatePromises = Array.from(threadIdsToUpdate).map(async threadId => {
           // Get existing thread data - get newest version by updatedAt
           const threadResult = await this.client.query({
-            query: `SELECT id, resourceId, title, metadata, createdAt, toDateTime64OrNull(lastMessageAt, 3) as lastMessageAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
+            query: `SELECT id, resourceId, title, metadata, createdAt, lastMessageAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
             query_params: { threadId },
             clickhouse_settings: {
               date_time_input_format: 'best_effort',

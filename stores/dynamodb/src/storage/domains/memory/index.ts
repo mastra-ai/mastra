@@ -83,14 +83,21 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       const now = new Date().toISOString();
       for (const threadId of threadIds) {
         const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
-        const lastMessageAt =
-          remaining.length > 0
-            ? new Date(Math.max(...remaining.map(m => new Date(m.createdAt).getTime()))).toISOString()
-            : null;
-        await this.service.entities.thread
-          .update({ entity: 'thread', id: threadId })
-          .set({ updatedAt: now, lastMessageAt })
-          .go();
+        if (remaining.length > 0) {
+          const lastMessageAt = new Date(
+            Math.max(...remaining.map(m => new Date(m.createdAt).getTime())),
+          ).toISOString();
+          await this.service.entities.thread
+            .update({ entity: 'thread', id: threadId })
+            .set({ updatedAt: now, lastMessageAt })
+            .go();
+        } else {
+          await this.service.entities.thread
+            .update({ entity: 'thread', id: threadId })
+            .set({ updatedAt: now })
+            .remove(['lastMessageAt'])
+            .go();
+        }
       }
     } catch (error) {
       throw new MastraError(
