@@ -1059,6 +1059,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
       function createModelWithFailingToolCall() {
         return new MockLanguageModelV2({
           doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
             content: [{ type: 'tool-call', toolCallId: '123', toolName: 'failingTool', input: '{"input": "test"}' }],
             finishReason: 'tool-calls',
             usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
@@ -1066,6 +1067,16 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           }),
           doStream: async () => ({
             stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'response-1',
+                modelId: 'mock-model',
+                timestamp: new Date(0),
+              },
               {
                 type: 'tool-call',
                 toolCallId: 'call-1',
@@ -1080,6 +1091,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
               },
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
           }),
         });
       }
