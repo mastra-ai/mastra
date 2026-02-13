@@ -29,7 +29,6 @@ import {
   useInstallSkill,
   useUpdateSkills,
   useRemoveSkill,
-  useWorkspaceMounts,
   toast,
   type WorkspaceItem,
 } from '@mastra/playground-ui';
@@ -152,9 +151,6 @@ export default function Workspace() {
   const updateSkills = useUpdateSkills();
   const removeSkill = useRemoveSkill();
 
-  // Workspace mounts (for CompositeFilesystem mount picker)
-  const { data: mountsData } = useWorkspaceMounts(effectiveWorkspaceId);
-
   const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
   const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
@@ -168,10 +164,11 @@ export default function Workspace() {
   const canManageSkills = hasFilesystem && !isReadOnly;
 
   // Derive writable mounts and mount paths for CompositeFilesystem
-  const writableMounts = mountsData?.mounts
-    .filter(m => !m.readOnly)
+  const mounts = workspaceInfo?.mounts;
+  const writableMounts = mounts
+    ?.filter(m => !m.readOnly)
     .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
-  const mountPaths = mountsData?.isComposite ? mountsData.mounts.map(m => m.path) : undefined;
+  const mountPaths = mounts && mounts.length > 1 ? mounts.map(m => m.path) : undefined;
 
   // Skills.sh handlers
   const handleInstallSkill = useCallback(

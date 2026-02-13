@@ -375,11 +375,16 @@ export function AddSkillDialog({
                 </div>
               )}
               <div className="flex items-center justify-end gap-2">
-                {isSelectedSkillInstalled && writableMounts && writableMounts.length > 1 && selectedSkill && installedSkillPaths?.[selectedSkill.name] && (() => {
-                  const skillPath = installedSkillPaths[selectedSkill.name]!;
-                  const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
-                  return mount ? <span className="text-xs text-icon4">Installed at {mount.path}</span> : null;
-                })()}
+                {isSelectedSkillInstalled &&
+                  writableMounts &&
+                  writableMounts.length > 1 &&
+                  selectedSkill &&
+                  installedSkillPaths?.[selectedSkill.name] &&
+                  (() => {
+                    const skillPath = installedSkillPaths[selectedSkill.name]!;
+                    const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
+                    return mount ? <span className="text-xs text-icon4">Installed at {mount.path}</span> : null;
+                  })()}
                 <Button variant="light" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>

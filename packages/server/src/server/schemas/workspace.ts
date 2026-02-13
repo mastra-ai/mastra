@@ -178,6 +178,19 @@ export const indexResponseSchema = z.object({
 });
 
 // =============================================================================
+// Mount Schemas
+// =============================================================================
+
+export const mountInfoSchema = z.object({
+  path: z.string().describe('Mount path'),
+  provider: z.string().describe('Filesystem provider type'),
+  readOnly: z.boolean().describe('Whether the mount is read-only'),
+  displayName: z.string().optional().describe('Human-readable name'),
+  icon: z.string().optional().describe('UI icon identifier'),
+  name: z.string().optional().describe('Filesystem instance name'),
+});
+
+// =============================================================================
 // Workspace Info Schema
 // =============================================================================
 
@@ -213,6 +226,7 @@ export const workspaceInfoResponseSchema = z.object({
       metadata: z.record(z.unknown()).optional(),
     })
     .optional(),
+  mounts: z.array(mountInfoSchema).optional().describe('Mount points (only present for CompositeFilesystem)'),
 });
 
 const workspaceItemSchema = z.object({
@@ -443,22 +457,4 @@ export const skillsShUpdateResponseSchema = z.object({
       error: z.string().optional(),
     }),
   ),
-});
-
-// =============================================================================
-// Mount Schemas
-// =============================================================================
-
-export const mountInfoSchema = z.object({
-  path: z.string().describe('Mount path'),
-  provider: z.string().describe('Filesystem provider type'),
-  readOnly: z.boolean().describe('Whether the mount is read-only'),
-  displayName: z.string().optional().describe('Human-readable name'),
-  icon: z.string().optional().describe('UI icon identifier'),
-  name: z.string().optional().describe('Filesystem instance name'),
-});
-
-export const listMountsResponseSchema = z.object({
-  mounts: z.array(mountInfoSchema),
-  isComposite: z.boolean().describe('Whether the workspace uses a CompositeFilesystem'),
 });

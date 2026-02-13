@@ -6,7 +6,6 @@ import type {
   SkillsShInstallResponse,
   SkillsShRemoveResponse,
   SkillsShUpdateResponse,
-  ListMountsResponse,
 } from '../types';
 
 // =============================================================================
@@ -96,36 +95,6 @@ export const useSkillPreview = (
     },
     enabled: options?.enabled !== false && !!workspaceId && !!owner && !!repo && !!skillPath,
     retry: false,
-  });
-};
-
-// =============================================================================
-// Workspace Mounts Hook
-// =============================================================================
-
-/**
- * Fetch workspace mounts (for CompositeFilesystem mount picker).
- */
-export const useWorkspaceMounts = (workspaceId: string | undefined) => {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: ['workspace', 'mounts', workspaceId],
-    queryFn: async (): Promise<ListMountsResponse> => {
-      if (!workspaceId) {
-        throw new Error('Workspace ID is required');
-      }
-      const baseUrl = client.options.baseUrl || '';
-      const url = `${baseUrl}/api/workspaces/${workspaceId}/mounts`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch mounts: ${response.statusText}`);
-      }
-      return response.json().catch(() => {
-        throw new Error('Invalid response from server');
-      });
-    },
-    enabled: !!workspaceId,
   });
 };
 

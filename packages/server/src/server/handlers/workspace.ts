@@ -8,7 +8,6 @@
  */
 
 import { coreFeatures } from '@mastra/core/features';
-import { CompositeFilesystem } from '@mastra/core/workspace';
 import type { Workspace, WorkspaceSkills, WorkspaceFilesystem } from '@mastra/core/workspace';
 
 import { HTTPException } from '../http-exception';
@@ -57,8 +56,6 @@ import {
   skillsShRemoveResponseSchema,
   skillsShUpdateBodySchema,
   skillsShUpdateResponseSchema,
-  // Mount schemas
-  listMountsResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -172,15 +169,16 @@ async function getSkillsById(mastra: any, workspaceId: string): Promise<Workspac
  * For non-composite: returns `.agents/skills/<skillId>` (unchanged behavior).
  */
 function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: string, requestedMount?: string): string {
-  if (filesystem instanceof CompositeFilesystem) {
-    const composite = filesystem;
+  if ('mounts' in filesystem && filesystem.mounts instanceof Map) {
+    const mounts = filesystem.mounts as ReadonlyMap<string, WorkspaceFilesystem>;
 
     if (requestedMount) {
       // Validate the requested mount exists
-      const mountFs = composite.mounts.get(requestedMount);
+      const mountFs = mounts.get(requestedMount);
       if (!mountFs) {
+        const mountPaths = Array.from(mounts.keys());
         throw new HTTPException(400, {
-          message: `Mount "${requestedMount}" not found. Available mounts: ${composite.mountPaths.join(', ')}`,
+          message: `Mount "${requestedMount}" not found. Available mounts: ${mountPaths.join(', ')}`,
         });
       }
       if (mountFs.readOnly) {
@@ -190,7 +188,7 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
     }
 
     // Default: use first writable mount
-    for (const [mountPath, mountFs] of composite.mounts) {
+    for (const [mountPath, mountFs] of mounts) {
       if (!mountFs.readOnly) {
         return `${mountPath}/${SKILLS_SH_DIR}/${safeSkillId}`;
       }
@@ -355,6 +353,34 @@ export const GET_WORKSPACE_ROUTE = createRoute({
 
       const fsInfo = await workspace.filesystem?.getInfo?.();
 
+      // Build mounts array for CompositeFilesystem
+      let mounts:
+        | Array<{
+            path: string;
+            provider: string;
+            readOnly: boolean;
+            displayName?: string;
+            icon?: string;
+            name?: string;
+          }>
+        | undefined;
+
+      const fs = workspace.filesystem;
+      if (fs && 'mounts' in fs && fs.mounts instanceof Map) {
+        mounts = [];
+        for (const [mountPath, mountFs] of fs.mounts) {
+          const info = await mountFs.getInfo?.();
+          mounts.push({
+            path: mountPath,
+            provider: info?.provider ?? mountFs.provider ?? 'unknown',
+            readOnly: mountFs.readOnly ?? false,
+            displayName: info?.name ?? mountFs.name,
+            icon: info?.icon,
+            name: mountFs.name,
+          });
+        }
+      }
+
       return {
         isWorkspaceConfigured: true,
         id: workspace.id,
@@ -383,74 +409,13 @@ export const GET_WORKSPACE_ROUTE = createRoute({
               metadata: fsInfo.metadata,
             }
           : undefined,
+        mounts,
       };
     } catch (error) {
       return handleWorkspaceError(error, 'Error getting workspace info');
     }
   },
 });
-
-// =============================================================================
-// Mounts Route
-// =============================================================================
-
-export const WORKSPACE_LIST_MOUNTS_ROUTE = createRoute({
-  method: 'GET',
-  path: '/workspaces/:workspaceId/mounts',
-  responseType: 'json',
-  pathParamSchema: workspaceIdPathParams,
-  responseSchema: listMountsResponseSchema,
-  summary: 'List workspace mounts',
-  description:
-    'Returns mount points for a workspace filesystem. For CompositeFilesystem, returns all mounts with metadata.',
-  tags: ['Workspace'],
-  handler: async ({ mastra, workspaceId }) => {
-    try {
-      const workspace = await getWorkspaceById(mastra, workspaceId);
-      if (!workspace?.filesystem) {
-        return { mounts: [], isComposite: false };
-      }
-
-      const fs = workspace.filesystem;
-
-      if (fs instanceof CompositeFilesystem) {
-        const mounts = [];
-        for (const [mountPath, mountFs] of fs.mounts) {
-          const info = await mountFs.getInfo?.();
-          mounts.push({
-            path: mountPath,
-            provider: info?.provider ?? mountFs.provider ?? 'unknown',
-            readOnly: mountFs.readOnly ?? false,
-            displayName: info?.name ?? mountFs.name,
-            icon: info?.icon,
-            name: mountFs.name,
-          });
-        }
-        return { mounts, isComposite: true };
-      }
-
-      // Non-composite: single root mount
-      const info = await fs.getInfo?.();
-      return {
-        mounts: [
-          {
-            path: '/',
-            provider: info?.provider ?? fs.provider ?? 'unknown',
-            readOnly: fs.readOnly ?? false,
-            displayName: info?.name ?? fs.name,
-            icon: info?.icon,
-            name: fs.name,
-          },
-        ],
-        isComposite: false,
-      };
-    } catch (error) {
-      return handleWorkspaceError(error, 'Error listing mounts');
-    }
-  },
-});
-
-export const WORKSPACE_MOUNT_ROUTES = [WORKSPACE_LIST_MOUNTS_ROUTE];
 
 // =============================================================================
 // Filesystem Routes
@@ -1608,8 +1573,8 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         skillsToUpdate = [];
         const dirsToScan: string[] = [];
 
-        if (workspace.filesystem instanceof CompositeFilesystem) {
-          for (const [mountPath, mountFs] of workspace.filesystem.mounts) {
+        if ('mounts' in workspace.filesystem && workspace.filesystem.mounts instanceof Map) {
+          for (const [mountPath, mountFs] of workspace.filesystem.mounts as ReadonlyMap<string, WorkspaceFilesystem>) {
             if (!mountFs.readOnly) {
               dirsToScan.push(`${mountPath}/${SKILLS_SH_DIR}`);
             }

@@ -34,6 +34,7 @@ export interface WorkspaceInfo {
   capabilities?: WorkspaceCapabilities;
   safety?: WorkspaceSafety;
   filesystem?: WorkspaceFilesystemInfo;
+  mounts?: MountInfo[];
 }
 
 export interface WorkspaceItem {
@@ -244,11 +245,6 @@ export interface MountInfo {
   displayName?: string;
   icon?: string;
   name?: string;
-}
-
-export interface ListMountsResponse {
-  mounts: MountInfo[];
-  isComposite: boolean;
 }
 
 // =============================================================================

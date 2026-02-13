@@ -11,7 +11,6 @@ import {
   WORKSPACE_SEARCH_ROUTES,
   WORKSPACE_SKILLS_ROUTES,
   WORKSPACE_SKILLS_SH_ROUTES,
-  WORKSPACE_MOUNT_ROUTES,
 } from '../../handlers/workspace';
 import type { ServerRoute } from '.';
 
@@ -21,9 +20,6 @@ export const WORKSPACE_ROUTES: ServerRoute<any, any, any>[] = [
 
   // Get workspace route (at /api/workspaces/:workspaceId)
   GET_WORKSPACE_ROUTE,
-
-  // Mount routes (at /api/workspaces/:workspaceId/mounts)
-  ...WORKSPACE_MOUNT_ROUTES,
 
   // Filesystem routes (at /api/workspaces/:workspaceId/fs/*)
   ...WORKSPACE_FS_ROUTES,
