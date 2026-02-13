@@ -9,7 +9,6 @@ import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
-import { ToolNotFoundError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -140,18 +139,15 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           rest.messageList.add(msg, 'response');
         }
 
-        // When all errors are tool-not-found errors, continue the agentic loop
-        // so the model can self-correct with the correct tool name.
-        // For other errors (e.g., tool execution failures), bail as before.
-        const allErrorsAreToolNotFound =
-          errorResults?.length > 0 && errorResults.every(tc => tc.error instanceof ToolNotFoundError);
-
         // Check for pending HITL tool calls (tools with no result and no error).
-        // In mixed turns with both ToolNotFoundError and pending HITL tools,
+        // In mixed turns with both errors and pending HITL tools,
         // the HITL suspension path should take priority over continuing the loop.
         const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error);
 
-        if (allErrorsAreToolNotFound && !hasPendingHITL) {
+        // When tool calls have errors, continue the agentic loop so the model can
+        // self-correct. The error messages are already in the messageList, so the
+        // model will see them and can retry with correct tool names, valid arguments, etc.
+        if (errorResults?.length > 0 && !hasPendingHITL) {
           // Process any successful tool results from this turn before continuing.
           // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
           // results need their chunks emitted and messages added to the messageList.
