@@ -84,7 +84,8 @@
         "z-ai/glm-4.6v-flash-free",
         "z-ai/glm-4.7",
         "z-ai/glm-4.7-flash-free",
-        "z-ai/glm-4.7-flashx"
+        "z-ai/glm-4.7-flashx",
+        "z-ai/glm-5"
       ],
       "docUrl": "https://docs.zenmux.ai",
       "gateway": "models.dev",
@@ -449,6 +450,7 @@
         "kimi-k2:1t",
         "minimax-m2",
         "minimax-m2.1",
+        "minimax-m2.5",
         "ministral-3:14b",
         "ministral-3:3b",
         "ministral-3:8b",
@@ -605,7 +607,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -750,9 +752,9 @@
         "anthropic/claude-haiku-3.5",
         "anthropic/claude-haiku-4.5",
         "anthropic/claude-opus-4",
-        "anthropic/claude-opus-4-6",
         "anthropic/claude-opus-4.1",
         "anthropic/claude-opus-4.5",
+        "anthropic/claude-opus-4.6",
         "anthropic/claude-sonnet-3.5",
         "anthropic/claude-sonnet-3.5-june",
         "anthropic/claude-sonnet-3.7",
@@ -868,7 +870,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1071,7 +1073,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1201,6 +1203,7 @@
         "accounts/fireworks/models/glm-4p5-air",
         "accounts/fireworks/models/glm-4p6",
         "accounts/fireworks/models/glm-4p7",
+        "accounts/fireworks/models/glm-5",
         "accounts/fireworks/models/gpt-oss-120b",
         "accounts/fireworks/models/gpt-oss-20b",
         "accounts/fireworks/models/kimi-k2-instruct",
@@ -1459,6 +1462,7 @@
         "minimax/minimax-m1",
         "minimax/minimax-m2",
         "minimax/minimax-m2.1",
+        "minimax/minimax-m2.5",
         "mistralai/codestral-2508",
         "mistralai/devstral-2512",
         "mistralai/devstral-2512:free",
@@ -2413,7 +2417,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -2443,6 +2447,7 @@
         "deepseek-ai/DeepSeek-V3.2",
         "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking",
+        "moonshotai/Kimi-K2.5",
         "zai-org/GLM-4.6",
         "zai-org/GLM-4.7"
       ],
@@ -2615,6 +2620,7 @@
         "meta-llama/llama-3.3-70b-instruct",
         "meta-llama/llama-4-maverick",
         "minimax/minimax-m2.1",
+        "minimax/minimax-m2.5",
         "minimax/minimax-m2.5-official",
         "mistralai/devstral-2-123b-instruct-2512",
         "mistralai/ministral-14b-instruct-2512",
@@ -2992,7 +2998,8 @@
       "z-ai/glm-4.6v-flash-free",
       "z-ai/glm-4.7",
       "z-ai/glm-4.7-flash-free",
-      "z-ai/glm-4.7-flashx"
+      "z-ai/glm-4.7-flashx",
+      "z-ai/glm-5"
     ],
     "io-net": [
       "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
@@ -3261,6 +3268,7 @@
       "kimi-k2:1t",
       "minimax-m2",
       "minimax-m2.1",
+      "minimax-m2.5",
       "ministral-3:14b",
       "ministral-3:3b",
       "ministral-3:8b",
@@ -3369,7 +3377,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1"],
+    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
     "novita-ai": [
       "baichuan/baichuan-m2-32b",
       "baidu/ernie-4.5-21B-a3b",
@@ -3489,9 +3497,9 @@
       "anthropic/claude-haiku-3.5",
       "anthropic/claude-haiku-4.5",
       "anthropic/claude-opus-4",
-      "anthropic/claude-opus-4-6",
       "anthropic/claude-opus-4.1",
       "anthropic/claude-opus-4.5",
+      "anthropic/claude-opus-4.6",
       "anthropic/claude-sonnet-3.5",
       "anthropic/claude-sonnet-3.5-june",
       "anthropic/claude-sonnet-3.7",
@@ -3599,7 +3607,7 @@
       "xai/grok-4.1-fast-reasoning",
       "xai/grok-code-fast-1"
     ],
-    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1"],
+    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
     "bailing": ["Ling-1T", "Ring-1T"],
     "alibaba": [
       "qvq-max",
@@ -3745,7 +3753,7 @@
       "qwen3-coder-480b-a35b-instruct",
       "qwen3-max-2026-01-23"
     ],
-    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1"],
+    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "mistral": [
       "codestral-latest",
@@ -3841,6 +3849,7 @@
       "accounts/fireworks/models/glm-4p5-air",
       "accounts/fireworks/models/glm-4p6",
       "accounts/fireworks/models/glm-4p7",
+      "accounts/fireworks/models/glm-5",
       "accounts/fireworks/models/gpt-oss-120b",
       "accounts/fireworks/models/gpt-oss-20b",
       "accounts/fireworks/models/kimi-k2-instruct",
@@ -4038,6 +4047,7 @@
       "minimax/minimax-m1",
       "minimax/minimax-m2",
       "minimax/minimax-m2.1",
+      "minimax/minimax-m2.5",
       "mistralai/codestral-2508",
       "mistralai/devstral-2512",
       "mistralai/devstral-2512:free",
@@ -4822,7 +4832,7 @@
     ],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
-    "minimax": ["MiniMax-M2", "MiniMax-M2.1"],
+    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
     "vultr": [
       "deepseek-r1-distill-llama-70b",
       "deepseek-r1-distill-qwen-32b",
@@ -4835,6 +4845,7 @@
       "deepseek-ai/DeepSeek-V3.2",
       "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking",
+      "moonshotai/Kimi-K2.5",
       "zai-org/GLM-4.6",
       "zai-org/GLM-4.7"
     ],
@@ -4961,6 +4972,7 @@
       "meta-llama/llama-3.3-70b-instruct",
       "meta-llama/llama-4-maverick",
       "minimax/minimax-m2.1",
+      "minimax/minimax-m2.5",
       "minimax/minimax-m2.5-official",
       "mistralai/devstral-2-123b-instruct-2512",
       "mistralai/ministral-14b-instruct-2512",

@@ -80,6 +80,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.7',
     'z-ai/glm-4.7-flash-free',
     'z-ai/glm-4.7-flashx',
+    'z-ai/glm-5',
   ];
   readonly 'io-net': readonly [
     'Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar',
@@ -348,6 +349,7 @@ export type ProviderModelsMap = {
     'kimi-k2:1t',
     'minimax-m2',
     'minimax-m2.1',
+    'minimax-m2.5',
     'ministral-3:14b',
     'ministral-3:3b',
     'ministral-3:8b',
@@ -456,7 +458,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly 'minimax-cn-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
+  readonly 'minimax-cn-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5'];
   readonly 'novita-ai': readonly [
     'baichuan/baichuan-m2-32b',
     'baidu/ernie-4.5-21B-a3b',
@@ -576,9 +578,9 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-3.5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
-    'anthropic/claude-opus-4-6',
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5',
+    'anthropic/claude-opus-4.6',
     'anthropic/claude-sonnet-3.5',
     'anthropic/claude-sonnet-3.5-june',
     'anthropic/claude-sonnet-3.7',
@@ -686,7 +688,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.1-fast-reasoning',
     'xai/grok-code-fast-1',
   ];
-  readonly 'minimax-cn': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
+  readonly 'minimax-cn': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5'];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly alibaba: readonly [
     'qvq-max',
@@ -832,7 +834,7 @@ export type ProviderModelsMap = {
     'qwen3-coder-480b-a35b-instruct',
     'qwen3-max-2026-01-23',
   ];
-  readonly 'minimax-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
+  readonly 'minimax-coding-plan': readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5'];
   readonly 'kimi-for-coding': readonly ['k2p5', 'kimi-k2-thinking'];
   readonly mistral: readonly [
     'codestral-latest',
@@ -928,6 +930,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/glm-4p5-air',
     'accounts/fireworks/models/glm-4p6',
     'accounts/fireworks/models/glm-4p7',
+    'accounts/fireworks/models/glm-5',
     'accounts/fireworks/models/gpt-oss-120b',
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2-instruct',
@@ -1125,6 +1128,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m1',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
+    'minimax/minimax-m2.5',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-2512:free',
@@ -1915,7 +1919,7 @@ export type ProviderModelsMap = {
   ];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
-  readonly minimax: readonly ['MiniMax-M2', 'MiniMax-M2.1'];
+  readonly minimax: readonly ['MiniMax-M2', 'MiniMax-M2.1', 'MiniMax-M2.5'];
   readonly vultr: readonly [
     'deepseek-r1-distill-llama-70b',
     'deepseek-r1-distill-qwen-32b',
@@ -1928,6 +1932,7 @@ export type ProviderModelsMap = {
     'deepseek-ai/DeepSeek-V3.2',
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
+    'moonshotai/Kimi-K2.5',
     'zai-org/GLM-4.6',
     'zai-org/GLM-4.7',
   ];
@@ -2054,6 +2059,7 @@ export type ProviderModelsMap = {
     'meta-llama/llama-3.3-70b-instruct',
     'meta-llama/llama-4-maverick',
     'minimax/minimax-m2.1',
+    'minimax/minimax-m2.5',
     'minimax/minimax-m2.5-official',
     'mistralai/devstral-2-123b-instruct-2512',
     'mistralai/ministral-14b-instruct-2512',

@@ -168,14 +168,27 @@ export function generateTableSQL({
   tableName,
   schema,
   schemaName,
+  compositePrimaryKey,
   includeAllConstraints = false,
 }: {
   tableName: TABLE_NAMES;
   schema: Record<string, StorageColumn>;
   schemaName?: string;
+  compositePrimaryKey?: string[];
   /** When true, includes all constraints in the SQL (for exports). When false, some constraints are added at runtime after data migration. */
   includeAllConstraints?: boolean;
 }): string {
+  // Validate composite PK columns exist in schema
+  if (compositePrimaryKey) {
+    for (const col of compositePrimaryKey) {
+      if (!(col in schema)) {
+        throw new Error(`compositePrimaryKey column "${col}" does not exist in schema for table "${tableName}"`);
+      }
+    }
+  }
+
+  const compositePKSet = compositePrimaryKey ? new Set(compositePrimaryKey) : null;
+
   const timeZColumns = Object.entries(schema)
     .filter(([_, def]) => def.type === 'timestamp')
     .map(([name]) => {
@@ -186,12 +199,19 @@ export function generateTableSQL({
   const columns = Object.entries(schema).map(([name, def]) => {
     const parsedName = parseSqlIdentifier(name, 'column name');
     const constraints = [];
-    if (def.primaryKey) constraints.push('PRIMARY KEY');
+    // Skip per-column PRIMARY KEY if column is part of composite PK
+    if (def.primaryKey && !compositePKSet?.has(name)) constraints.push('PRIMARY KEY');
     if (!def.nullable) constraints.push('NOT NULL');
     return `"${parsedName}" ${mapToSqlType(def.type)} ${constraints.join(' ')}`;
   });
 
-  const finalColumns = [...columns, ...timeZColumns].join(',\n');
+  const tableConstraints: string[] = [];
+  if (compositePrimaryKey) {
+    const pkCols = compositePrimaryKey.map(c => `"${parseSqlIdentifier(c, 'column name')}"`).join(', ');
+    tableConstraints.push(`PRIMARY KEY (${pkCols})`);
+  }
+
+  const finalColumns = [...columns, ...timeZColumns, ...tableConstraints].join(',\n');
   // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
   const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
   // Use the original (long) base name so existing databases that already have
@@ -574,9 +594,11 @@ export class PgDB extends MastraBase {
   async createTable({
     tableName,
     schema,
+    compositePrimaryKey,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
+    compositePrimaryKey?: string[];
   }): Promise<void> {
     try {
       const timeZColumnNames = Object.entries(schema)
@@ -587,7 +609,7 @@ export class PgDB extends MastraBase {
         await this.setupSchema();
       }
 
-      const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName });
+      const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
       await this.client.none(sql);
 
