@@ -37,6 +37,7 @@ import { WorkspaceError, SearchNotAvailableError } from './errors';
 import { CompositeFilesystem } from './filesystem';
 import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
+import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
 import { callLifecycle } from './lifecycle';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
@@ -601,6 +602,10 @@ export class Workspace<
   /**
    * Rebuild the search index from filesystem paths.
    * Used internally for auto-indexing on init.
+   *
+   * Paths can be plain directories (e.g., '/docs') or glob patterns
+   * (e.g., '/docs/**\/*.md'). Glob patterns are resolved to a walk root
+   * via extractGlobBase, then files are filtered by the pattern.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
     if (!this._searchEngine || !this._fs || paths.length === 0) {
@@ -611,18 +616,22 @@ export class Workspace<
     this._searchEngine.clear();
 
     // Index all files from specified paths
-    for (const basePath of paths) {
+    for (const pathOrGlob of paths) {
       try {
-        const files = await this.getAllFiles(basePath);
-        for (const filePath of files) {
-          try {
-            const content = await this._fs.readFile(filePath, { encoding: 'utf-8' });
-            await this._searchEngine.index({
-              id: filePath,
-              content: content as string,
-            });
-          } catch {
-            // Skip files that can't be read as text
+        if (isGlobPattern(pathOrGlob)) {
+          // Glob pattern: walk from the base directory, filter with matcher
+          const walkRoot = extractGlobBase(pathOrGlob);
+          const matcher = createGlobMatcher(pathOrGlob);
+          const files = await this.getAllFiles(walkRoot);
+          for (const filePath of files) {
+            if (!matcher(filePath)) continue;
+            await this.indexFileForSearch(filePath);
+          }
+        } else {
+          // Plain path: recurse everything (existing behavior)
+          const files = await this.getAllFiles(pathOrGlob);
+          for (const filePath of files) {
+            await this.indexFileForSearch(filePath);
           }
         }
       } catch {
@@ -631,8 +640,23 @@ export class Workspace<
     }
   }
 
-  private async getAllFiles(dir: string): Promise<string[]> {
-    if (!this._fs) return [];
+  /**
+   * Index a single file for search. Skips files that can't be read as text.
+   */
+  private async indexFileForSearch(filePath: string): Promise<void> {
+    try {
+      const content = await this._fs!.readFile(filePath, { encoding: 'utf-8' });
+      await this._searchEngine!.index({
+        id: filePath,
+        content: content as string,
+      });
+    } catch {
+      // Skip files that can't be read as text
+    }
+  }
+
+  private async getAllFiles(dir: string, depth: number = 0, maxDepth: number = 10): Promise<string[]> {
+    if (!this._fs || depth >= maxDepth) return [];
 
     const files: string[] = [];
     const entries = await this._fs.readdir(dir);
@@ -643,7 +667,7 @@ export class Workspace<
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
         // Skip symlink directories to prevent infinite recursion from cycles
-        files.push(...(await this.getAllFiles(fullPath)));
+        files.push(...(await this.getAllFiles(fullPath, depth + 1, maxDepth)));
       }
     }
 
