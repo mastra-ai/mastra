@@ -71,7 +71,7 @@ describe('CompositeFilesystem', () => {
   // 2. Mount Resolution & Path Normalization
   // ===========================================================================
   describe('mount resolution', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(() => {
       cfs = new CompositeFilesystem({
@@ -111,7 +111,7 @@ describe('CompositeFilesystem', () => {
   // 2b. Prefix Mount Path Routing
   // ===========================================================================
   describe('prefix mount path routing', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       // /data and /data2 are NOT nested — tests the startsWith(mountPath + '/') check
@@ -138,7 +138,7 @@ describe('CompositeFilesystem', () => {
   // 3. Single-Mount File Operation Routing
   // ===========================================================================
   describe('single-mount routing', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({ mounts: { '/data': localA } });
@@ -198,7 +198,7 @@ describe('CompositeFilesystem', () => {
   // 4. Multi-Mount Isolation
   // ===========================================================================
   describe('multi-mount isolation', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -239,7 +239,7 @@ describe('CompositeFilesystem', () => {
   // 5. Cross-Mount copyFile
   // ===========================================================================
   describe('cross-mount copyFile', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -280,7 +280,7 @@ describe('CompositeFilesystem', () => {
   // 6. Cross-Mount moveFile
   // ===========================================================================
   describe('cross-mount moveFile', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -321,7 +321,7 @@ describe('CompositeFilesystem', () => {
   // 7. Virtual Paths & Root Directory Listing
   // ===========================================================================
   describe('virtual paths', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(() => {
       cfs = new CompositeFilesystem({
@@ -379,7 +379,7 @@ describe('CompositeFilesystem', () => {
   describe('read-only enforcement', () => {
     let readOnlyFs: LocalFilesystem;
     let tempDirRo: string;
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       tempDirRo = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-cfs-ro-'));
@@ -556,7 +556,7 @@ describe('CompositeFilesystem', () => {
   // 11. isFile / isDirectory for Real Files
   // ===========================================================================
   describe('isFile and isDirectory', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -606,7 +606,7 @@ describe('CompositeFilesystem', () => {
   // 12. Buffer Content in Cross-Mount Operations
   // ===========================================================================
   describe('buffer content cross-mount', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -640,7 +640,7 @@ describe('CompositeFilesystem', () => {
   // 13. readdir Delegation vs Virtual Entries
   // ===========================================================================
   describe('readdir delegation vs virtual', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -680,7 +680,7 @@ describe('CompositeFilesystem', () => {
   // 14. stat Delegation for Files Inside Mounts
   // ===========================================================================
   describe('stat delegation', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -720,7 +720,7 @@ describe('CompositeFilesystem', () => {
   // 15. exists Edge Cases
   // ===========================================================================
   describe('exists edge cases', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -747,7 +747,7 @@ describe('CompositeFilesystem', () => {
   // 16. Cross-Mount overwrite:false
   // ===========================================================================
   describe('cross-mount overwrite:false', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -776,7 +776,7 @@ describe('CompositeFilesystem', () => {
   // 17. readdir with Options Through Composite
   // ===========================================================================
   describe('readdir with options', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -809,7 +809,7 @@ describe('CompositeFilesystem', () => {
   // 18. deleteFile and rmdir with Options
   // ===========================================================================
   describe('deleteFile and rmdir with options', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -856,7 +856,7 @@ describe('CompositeFilesystem', () => {
   // 20. writeFile with overwrite:false
   // ===========================================================================
   describe('writeFile overwrite:false', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({
@@ -880,7 +880,7 @@ describe('CompositeFilesystem', () => {
   // 21. No-Mount Error Paths
   // ===========================================================================
   describe('no-mount error paths', () => {
-    let cfs: CompositeFilesystem;
+    let cfs: CompositeFilesystem<any>;
 
     beforeEach(async () => {
       cfs = new CompositeFilesystem({ mounts: { '/data': localA } });
