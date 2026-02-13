@@ -7,7 +7,6 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { findToolByName, isGatewayTool } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -159,13 +158,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       }
 
       if (inputData?.length) {
-        // Use tools from _internal.stepTools if available (same pattern as tool-call-step)
-        const stepTools = (_internal?.stepTools as Tools) || rest.tools;
-
         for (const toolCall of inputData) {
-          const tool = findToolByName(stepTools, toolCall.toolName);
-          const isGateway = isGatewayTool(tool);
-
           const chunk: ChunkType<OUTPUT> = {
             type: 'tool-result',
             runId: rest.runId,
@@ -175,12 +168,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               result: toolCall.result,
-              // For gateway tools, don't mark as providerExecuted so the result is
-              // treated as a regular tool result in downstream message conversion.
-              // The LLM provider doesn't store gateway tool results, so they must
-              // be sent as regular tool messages.
-              providerMetadata: isGateway ? undefined : toolCall.providerMetadata,
-              providerExecuted: isGateway ? undefined : toolCall.providerExecuted,
+              providerMetadata: toolCall.providerMetadata,
+              providerExecuted: toolCall.providerExecuted,
             },
           };
 
@@ -203,9 +192,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           content: {
             format: 2,
             parts: inputData.map(toolCall => {
-              const tool = findToolByName(stepTools, toolCall.toolName);
-              const isGateway = isGatewayTool(tool);
-
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
@@ -215,9 +201,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   args: toolCall.args,
                   result: toolCall.result,
                 },
-                // Don't include providerMetadata for gateway tools to prevent the model
-                // provider from treating them as native provider tool results
-                ...(toolCall.providerMetadata && !isGateway ? { providerMetadata: toolCall.providerMetadata } : {}),
+                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
               };
             }),
           },
