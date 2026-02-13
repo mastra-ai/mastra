@@ -126,6 +126,7 @@ function Agent() {
                       rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
                     >
                       <AgentChat
+                        key={actualThreadId!}
                         agentId={agentId!}
                         agentName={agent?.name}
                         modelVersion={agent?.modelVersion}
