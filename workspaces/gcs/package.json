@@ -1,6 +1,6 @@
 {
   "name": "@mastra/gcs",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Google Cloud Storage filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
