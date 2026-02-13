@@ -19188,6 +19188,118 @@ describe('Workflow', () => {
       });
     });
 
+    it('should pass correct inputData to branch condition when resuming after map', async () => {
+      const localTestStorage = new MockStore();
+
+      const conditionSpy = vi.fn();
+
+      // Helper to build the workflow (simulates reconstruction after server restart)
+      const buildWorkflow = () => {
+        const suspendingStep = createStep({
+          id: 'suspending-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async ({ inputData, suspend, resumeData }) => {
+            if (!resumeData) {
+              await suspend({ prompt: 'Please provide an answer' });
+              return { result: '' };
+            }
+            return { result: `processed: ${inputData.mappedValue}, answer: ${resumeData.answer}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-wf-with-suspend',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .then(suspendingStep)
+          .commit();
+
+        const fallbackStep = createStep({
+          id: 'fallback-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData }) => {
+            return { result: `fallback: ${inputData.mappedValue}` };
+          },
+        });
+
+        const mainWorkflow = createWorkflow({
+          id: 'map-branch-suspend-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .map(async ({ inputData }) => {
+            return { mappedValue: inputData.value * 2 };
+          })
+          .branch([
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue > 10;
+              },
+              nestedWorkflow,
+            ],
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue <= 10;
+              },
+              fallbackStep,
+            ],
+          ])
+          .commit();
+
+        return { mainWorkflow, nestedWorkflow };
+      };
+
+      // First construction: start the workflow
+      const { mainWorkflow: wf1, nestedWorkflow: nwf1 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf1, 'nested-wf-with-suspend': nwf1 },
+      });
+
+      const run1 = await wf1.createRun();
+      const initialResult = await run1.start({ inputData: { value: 10 } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(conditionSpy).toHaveBeenCalledWith({ mappedValue: 20 });
+      conditionSpy.mockClear();
+
+      // Second construction: simulate server restart (new workflow objects, new map step UUIDs)
+      const { mainWorkflow: wf2, nestedWorkflow: nwf2 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf2, 'nested-wf-with-suspend': nwf2 },
+      });
+
+      // Resume using the NEW workflow instance (simulating server restart)
+      const run2 = await wf2.createRun({ runId: run1.runId });
+      const resumedResult = await run2.resume({
+        step: initialResult.suspended[0],
+        resumeData: { answer: 'hello' },
+      });
+
+      // The branch conditions are re-evaluated during resume.
+      // The key assertion: inputData must NOT be undefined when conditions are re-evaluated.
+      // This is the bug from issue #12982 - the map step output stored in the snapshot
+      // uses the OLD map step UUID as key, but the reconstructed workflow has a NEW UUID,
+      // so getStepOutput can't find the result.
+      expect(conditionSpy).toHaveBeenCalled();
+      for (const call of conditionSpy.mock.calls) {
+        expect(call[0]).toBeDefined();
+        expect(call[0]).toHaveProperty('mappedValue', 20);
+      }
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.steps['nested-wf-with-suspend'].status).toBe('success');
+    });
+
     it('should maintain correct step status after resuming in branching workflows - #6419', async () => {
       const branchStep1 = createStep({
         id: 'branch-step-1',
