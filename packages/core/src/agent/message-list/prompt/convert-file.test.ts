@@ -76,6 +76,13 @@ describe('convertImageFilePart', () => {
       expect(result).toMatchObject({ type: 'file', mediaType: 'video/webm' });
     });
 
+    it('auto-detects image/png from binary data in file part (fallback chain)', () => {
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const part: FilePart = { type: 'file', data: png, mediaType: undefined as unknown as string };
+      const result = convertImageFilePart(part);
+      expect(result).toMatchObject({ type: 'file', mediaType: 'image/png' });
+    });
+
     it('throws when file part has no mimeType and detection fails', () => {
       const unknown = new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c]);
       const part: FilePart = { type: 'file', data: unknown, mediaType: undefined as unknown as string };

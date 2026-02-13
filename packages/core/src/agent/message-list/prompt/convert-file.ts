@@ -61,7 +61,9 @@ export function convertImageFilePart(
 
     case 'file': {
       if (mediaType == null && (data instanceof Uint8Array || typeof data === 'string')) {
-        mediaType = detectMediaType({ data, signatures: videoMediaTypeSignatures });
+        mediaType =
+          detectMediaType({ data, signatures: imageMediaTypeSignatures }) ??
+          detectMediaType({ data, signatures: videoMediaTypeSignatures });
       }
 
       if (mediaType == null) {
