@@ -26,15 +26,9 @@ import {
   AgentVersionCombobox,
   createInstructionBlock,
   type AgentFormValues,
+  type EntityConfig,
 } from '@mastra/playground-ui';
 import { CreateStoredAgentParams } from '@mastra/client-js';
-
-import type { RuleGroup } from '@mastra/core/storage';
-
-interface EntityConfig {
-  description?: string;
-  rules?: RuleGroup;
-}
 
 // Helper function to convert array to record format expected by form sections
 const arrayToRecord = (arr: string[]): Record<string, EntityConfig> => {

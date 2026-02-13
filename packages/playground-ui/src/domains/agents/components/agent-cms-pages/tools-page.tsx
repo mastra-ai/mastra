@@ -10,13 +10,9 @@ import { Badge } from '@/ds/components/Badge';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useAllIntegrationTools } from '@/domains/tool-providers/hooks';
 import type { RuleGroup } from '@/lib/rule-engine';
+import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-
-interface EntityConfig {
-  description?: string;
-  rules?: RuleGroup;
-}
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();

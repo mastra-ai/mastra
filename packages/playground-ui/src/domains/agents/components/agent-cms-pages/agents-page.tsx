@@ -10,14 +10,10 @@ import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { useAgents } from '../../hooks/use-agents';
 import type { RuleGroup } from '@/lib/rule-engine';
+import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentCreateContent } from '../agent-create-content';
-
-interface EntityConfig {
-  description?: string;
-  rules?: RuleGroup;
-}
 
 export function AgentsPage() {
   const { form, readOnly, agentId: currentAgentId } = useAgentEditFormContext();

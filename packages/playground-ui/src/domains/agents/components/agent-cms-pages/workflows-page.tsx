@@ -7,13 +7,9 @@ import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import type { RuleGroup } from '@/lib/rule-engine';
+import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-
-interface EntityConfig {
-  description?: string;
-  rules?: RuleGroup;
-}
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();

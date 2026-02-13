@@ -19,19 +19,9 @@ import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-c
 import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
 import { RuleBuilder, countLeafRules } from '@/lib/rule-engine';
 import { cn } from '@/lib/utils';
+import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-
-interface ScoringSamplingConfig {
-  type: 'ratio';
-  rate?: number;
-}
-
-interface ScorerConfig {
-  description?: string;
-  sampling?: ScoringSamplingConfig;
-  rules?: RuleGroup;
-}
 
 export function ScorersPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -107,7 +97,7 @@ export function ScorersPage() {
               });
             };
 
-            const handleSamplingChange = (scorerId: string, samplingConfig: ScoringSamplingConfig | undefined) => {
+            const handleSamplingChange = (scorerId: string, samplingConfig: ScorerConfig['sampling'] | undefined) => {
               field.onChange({
                 ...currentScorers,
                 [scorerId]: { ...currentScorers[scorerId], sampling: samplingConfig },
@@ -183,9 +173,9 @@ interface ScorerConfigPanelProps {
   scorerId: string;
   scorerName: string;
   description: string;
-  samplingConfig?: ScoringSamplingConfig;
+  samplingConfig?: ScorerConfig['sampling'];
   onDescriptionChange: (description: string) => void;
-  onSamplingChange: (config: ScoringSamplingConfig | undefined) => void;
+  onSamplingChange: (config: ScorerConfig['sampling'] | undefined) => void;
   onRemove: () => void;
   readOnly?: boolean;
   schema?: JsonSchema;

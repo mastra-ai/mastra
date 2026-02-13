@@ -157,3 +157,5 @@ export const agentFormSchema = z.object({
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
+export type EntityConfig = z.infer<typeof entityConfigSchema>;
+export type ScorerConfig = z.infer<typeof scorerConfigSchema>;
