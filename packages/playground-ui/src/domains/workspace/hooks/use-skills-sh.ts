@@ -6,6 +6,7 @@ import type {
   SkillsShInstallResponse,
   SkillsShRemoveResponse,
   SkillsShUpdateResponse,
+  ListMountsResponse,
 } from '../types';
 
 // =============================================================================
@@ -99,6 +100,36 @@ export const useSkillPreview = (
 };
 
 // =============================================================================
+// Workspace Mounts Hook
+// =============================================================================
+
+/**
+ * Fetch workspace mounts (for CompositeFilesystem mount picker).
+ */
+export const useWorkspaceMounts = (workspaceId: string | undefined) => {
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['workspace', 'mounts', workspaceId],
+    queryFn: async (): Promise<ListMountsResponse> => {
+      if (!workspaceId) {
+        throw new Error('Workspace ID is required');
+      }
+      const baseUrl = client.options.baseUrl || '';
+      const url = `${baseUrl}/api/workspaces/${workspaceId}/mounts`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch mounts: ${response.statusText}`);
+      }
+      return response.json().catch(() => {
+        throw new Error('Invalid response from server');
+      });
+    },
+    enabled: !!workspaceId,
+  });
+};
+
+// =============================================================================
 // Skill Management Hooks (via server proxy)
 // =============================================================================
 
@@ -108,6 +139,8 @@ export interface InstallSkillParams {
   repository: string;
   /** Skill name within the repo */
   skillName: string;
+  /** Mount path to install into (for CompositeFilesystem) */
+  mount?: string;
 }
 
 /**
@@ -126,10 +159,14 @@ export const useInstallSkill = () => {
 
       const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/install`;
+      const body: Record<string, string> = { owner, repo, skillName: params.skillName };
+      if (params.mount) {
+        body.mount = params.mount;
+      }
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, repo, skillName: params.skillName }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

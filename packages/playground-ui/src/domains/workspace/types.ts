@@ -234,6 +234,24 @@ export interface SearchSkillsParams {
 }
 
 // =============================================================================
+// Mount Types
+// =============================================================================
+
+export interface MountInfo {
+  path: string;
+  provider: string;
+  readOnly: boolean;
+  displayName?: string;
+  icon?: string;
+  name?: string;
+}
+
+export interface ListMountsResponse {
+  mounts: MountInfo[];
+  isComposite: boolean;
+}
+
+// =============================================================================
 // skills.sh Types
 // =============================================================================
 
@@ -267,6 +285,7 @@ export interface SkillsShInstallParams {
   owner: string;
   repo: string;
   skillName: string;
+  mount?: string;
 }
 
 export interface SkillsShInstallResponse {

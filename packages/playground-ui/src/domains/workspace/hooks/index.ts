@@ -34,6 +34,7 @@ export {
   useInstallSkill,
   useUpdateSkills,
   useRemoveSkill,
+  useWorkspaceMounts,
   parseSkillSource,
   type InstallSkillParams,
   type UpdateSkillsParams,

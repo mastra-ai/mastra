@@ -25,6 +25,8 @@ export interface SkillsTableProps {
   updatingSkillName?: string;
   /** Name of the skill currently being removed (if any) */
   removingSkillName?: string;
+  /** Mount paths for labeling skills by mount (only used when multiple mounts exist) */
+  mountPaths?: string[];
 }
 
 /** Path segment that identifies skills installed via the skills CLI */
@@ -37,6 +39,20 @@ const columns = [
 
 const columnsWithActions = [...columns, { name: 'actions', label: '', size: '48px' }];
 
+/**
+ * Derive a mount label for a skill by matching its path against known mount paths.
+ * Returns the mount path or display name if multiple mounts exist.
+ */
+function getMountLabel(skillPath: string | undefined, mountPaths: string[] | undefined): string | null {
+  if (!skillPath || !mountPaths || mountPaths.length <= 1) return null;
+  for (const mp of mountPaths) {
+    if (skillPath.startsWith(mp + '/') || skillPath === mp) {
+      return mp;
+    }
+  }
+  return null;
+}
+
 export function SkillsTable({
   skills,
   isLoading,
@@ -48,8 +64,10 @@ export function SkillsTable({
   onRemoveSkill,
   updatingSkillName,
   removingSkillName,
+  mountPaths,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
+  const showMountBadges = mountPaths && mountPaths.length > 1;
 
   // Helper to check if a skill is downloaded (installed via skills CLI)
   const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
@@ -124,6 +142,13 @@ export function SkillsTable({
                         <SkillIcon className="h-3.5 w-3.5 text-icon4" />
                       </div>
                       <span className="font-medium text-icon6">{skill.name}</span>
+                      {showMountBadges &&
+                        (() => {
+                          const label = getMountLabel(skill.path, mountPaths);
+                          return label ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon3">{label}</span>
+                          ) : null;
+                        })()}
                     </div>
                     <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
                     {hasRowActions && (
