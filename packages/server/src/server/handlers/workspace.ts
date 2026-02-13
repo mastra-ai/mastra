@@ -8,7 +8,7 @@
  */
 
 import { coreFeatures } from '@mastra/core/features';
-import type { Workspace, WorkspaceSkills, WorkspaceFilesystem } from '@mastra/core/workspace';
+import type { Workspace, WorkspaceSkills, WorkspaceFilesystem, CompositeFilesystem } from '@mastra/core/workspace';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -70,6 +70,14 @@ const SKILLS_SH_DIR = '.agents/skills';
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+/**
+ * Runtime check for CompositeFilesystem using duck typing.
+ * Uses a type-only import so older @mastra/core versions (< 1.3.0) work fine.
+ */
+function isCompositeFilesystem(fs: unknown): fs is CompositeFilesystem {
+  return !!fs && typeof fs === 'object' && 'mounts' in fs && fs.mounts instanceof Map;
+}
 
 /**
  * Check if an error is a workspace filesystem not-found error.
@@ -169,16 +177,13 @@ async function getSkillsById(mastra: any, workspaceId: string): Promise<Workspac
  * For non-composite: returns `.agents/skills/<skillId>` (unchanged behavior).
  */
 function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: string, requestedMount?: string): string {
-  if ('mounts' in filesystem && filesystem.mounts instanceof Map) {
-    const mounts = filesystem.mounts as ReadonlyMap<string, WorkspaceFilesystem>;
-
+  if (isCompositeFilesystem(filesystem)) {
     if (requestedMount) {
       // Validate the requested mount exists
-      const mountFs = mounts.get(requestedMount);
+      const mountFs = filesystem.mounts.get(requestedMount);
       if (!mountFs) {
-        const mountPaths = Array.from(mounts.keys());
         throw new HTTPException(400, {
-          message: `Mount "${requestedMount}" not found. Available mounts: ${mountPaths.join(', ')}`,
+          message: `Mount "${requestedMount}" not found. Available mounts: ${filesystem.mountPaths.join(', ')}`,
         });
       }
       if (mountFs.readOnly) {
@@ -188,7 +193,7 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
     }
 
     // Default: use first writable mount
-    for (const [mountPath, mountFs] of mounts) {
+    for (const [mountPath, mountFs] of filesystem.mounts) {
       if (!mountFs.readOnly) {
         return `${mountPath}/${SKILLS_SH_DIR}/${safeSkillId}`;
       }
@@ -365,10 +370,9 @@ export const GET_WORKSPACE_ROUTE = createRoute({
           }>
         | undefined;
 
-      const fs = workspace.filesystem;
-      if (fs && 'mounts' in fs && fs.mounts instanceof Map) {
+      if (isCompositeFilesystem(workspace.filesystem)) {
         mounts = [];
-        for (const [mountPath, mountFs] of fs.mounts) {
+        for (const [mountPath, mountFs] of workspace.filesystem.mounts) {
           const info = await mountFs.getInfo?.();
           mounts.push({
             path: mountPath,
@@ -1573,8 +1577,8 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         skillsToUpdate = [];
         const dirsToScan: string[] = [];
 
-        if ('mounts' in workspace.filesystem && workspace.filesystem.mounts instanceof Map) {
-          for (const [mountPath, mountFs] of workspace.filesystem.mounts as ReadonlyMap<string, WorkspaceFilesystem>) {
+        if (isCompositeFilesystem(workspace.filesystem)) {
+          for (const [mountPath, mountFs] of workspace.filesystem.mounts) {
             if (!mountFs.readOnly) {
               dirsToScan.push(`${mountPath}/${SKILLS_SH_DIR}`);
             }
