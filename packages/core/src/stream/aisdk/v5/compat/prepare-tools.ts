@@ -40,10 +40,10 @@ function isProviderTool(tool: unknown): tool is { id: string; args?: Record<stri
 }
 
 /**
- * Extracts the tool name from a provider tool id.
+ * Extracts the model-facing tool name from a provider tool id.
  * e.g., 'openai.web_search' -> 'web_search'
  */
-function getProviderToolName(providerId: string): string {
+export function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');
 }
 
