@@ -25,6 +25,7 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { findToolByName, inferProviderExecuted, isGatewayTool } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -973,6 +974,47 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return chunk.payload;
       });
 
+      /**
+       * Merge provider-executed tool results into their corresponding tool calls.
+       *
+       * For provider-executed tools (like gateway tools or native provider tools),
+       * the stream from doStream includes both tool-call and tool-result chunks.
+       * We need to:
+       * 1. Infer providerExecuted for provider tools when the stream doesn't set it
+       *    (gateway tools may not have providerExecuted set in the raw stream)
+       * 2. Pair tool results with their tool calls so the tool-call-step can skip
+       *    execution and return the actual provider result
+       */
+      const streamToolResults = outputStream._getImmediateToolResults();
+
+      if (toolCalls.length > 0) {
+        // Build a map of tool results by toolCallId for efficient lookup
+        const toolResultMap = new Map<string, unknown>();
+        if (streamToolResults && streamToolResults.length > 0) {
+          for (const chunk of streamToolResults) {
+            const payload = chunk.payload;
+            if (payload.providerExecuted || findToolByName(stepTools, payload.toolName)) {
+              toolResultMap.set(payload.toolCallId, payload.result);
+            }
+          }
+        }
+
+        for (const toolCall of toolCalls) {
+          // Infer providerExecuted for provider tools when the stream doesn't set it
+          const tool = findToolByName(stepTools, toolCall.toolName);
+          const inferred = inferProviderExecuted(toolCall.providerExecuted, tool);
+          if (inferred !== undefined) {
+            toolCall.providerExecuted = inferred;
+          }
+
+          // Merge the provider-executed tool result as output on the tool call
+          // so the tool-call-step can skip execution and return the actual result
+          if (toolCall.providerExecuted && toolResultMap.has(toolCall.toolCallId)) {
+            toolCall.output = toolResultMap.get(toolCall.toolCallId);
+          }
+        }
+      }
+
       if (toolCalls.length > 0) {
         const message: MastraDBMessage = {
           id: messageId,
@@ -980,6 +1022,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           content: {
             format: 2,
             parts: toolCalls.map(toolCall => {
+              const tool = findToolByName(stepTools, toolCall.toolName);
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
@@ -988,7 +1031,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   toolName: toolCall.toolName,
                   args: toolCall.args,
                 },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                // Don't include providerMetadata for gateway tools to avoid the model
+                // provider treating them as native provider tools (e.g., OpenAI converting
+                // to item_reference instead of function_call)
+                ...(toolCall.providerMetadata && !isGatewayTool(tool)
+                  ? { providerMetadata: toolCall.providerMetadata }
+                  : {}),
               };
             }),
           },
