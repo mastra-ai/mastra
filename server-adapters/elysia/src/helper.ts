@@ -134,8 +134,8 @@ export function getMastraOpenAPIDoc(
  * Clear the OpenAPI documentation cache.
  * Call this if routes are added dynamically after initialization.
  *
- * @param server - Optional MastraServer instance to clear cache for. If not provided, clears all caches.
- * Note: When using WeakMap, clearing all entries is not possible, but they will be garbage collected automatically.
+ * `@param` server - The MastraServer instance to clear cache for.
+ * Note: WeakMap does not support clearing all entries. Pass the specific server instance whose cache should be invalidated.
  */
 export function clearMastraOpenAPICache(server?: MastraServer): void {
   if (server) {
