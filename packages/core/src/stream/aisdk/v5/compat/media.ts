@@ -111,6 +111,65 @@ export const audioMediaTypeSignatures = [
   },
 ] as const;
 
+export const videoMediaTypeSignatures = [
+  {
+    mediaType: 'video/webm' as const,
+    bytesPrefix: [0x1a, 0x45, 0xdf, 0xa3],
+    base64Prefix: 'GkXf',
+  },
+  {
+    mediaType: 'video/x-flv' as const,
+    bytesPrefix: [0x46, 0x4c, 0x56, 0x01],
+    base64Prefix: 'RkxW',
+  },
+  {
+    mediaType: 'video/mpeg' as const,
+    bytesPrefix: [0x00, 0x00, 0x01, 0xba],
+    base64Prefix: 'AAABug',
+  },
+  // MP4 (ISO BMFF) — ftyp box size varies; entries for common sizes and brands
+  {
+    mediaType: 'video/mp4' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d],
+    base64Prefix: 'AAAAGGZ0eXBpc29t',
+  },
+  {
+    mediaType: 'video/mp4' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x1c, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d],
+    base64Prefix: 'AAAAHGZ0eXBpc29t',
+  },
+  {
+    mediaType: 'video/mp4' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d],
+    base64Prefix: 'AAAAIGZ0eXBpc29t',
+  },
+  {
+    mediaType: 'video/mp4' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x70, 0x34, 0x31],
+    base64Prefix: 'AAAAIGZ0eXBtcDQx',
+  },
+  {
+    mediaType: 'video/mp4' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x70, 0x34, 0x32],
+    base64Prefix: 'AAAAIGZ0eXBtcDQy',
+  },
+  {
+    mediaType: 'video/quicktime' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20],
+    base64Prefix: 'AAAAIGZ0eXBxdCAg',
+  },
+  {
+    mediaType: 'video/3gpp' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x33, 0x67, 0x70, 0x34],
+    base64Prefix: 'AAAAIGZ0eXAzZ3A0',
+  },
+  {
+    mediaType: 'video/3gpp' as const,
+    bytesPrefix: [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x33, 0x67, 0x70, 0x35],
+    base64Prefix: 'AAAAIGZ0eXAzZ3A1',
+  },
+] as const;
+
 const stripID3 = (data: Uint8Array | string) => {
   const bytes = typeof data === 'string' ? convertBase64ToUint8Array(data) : data;
   const id3Size =
@@ -144,7 +203,7 @@ export function detectMediaType({
   signatures,
 }: {
   data: Uint8Array | string;
-  signatures: typeof audioMediaTypeSignatures | typeof imageMediaTypeSignatures;
+  signatures: typeof audioMediaTypeSignatures | typeof imageMediaTypeSignatures | typeof videoMediaTypeSignatures;
 }): (typeof signatures)[number]['mediaType'] | undefined {
   const processedData = stripID3TagsIfPresent(data);
 
