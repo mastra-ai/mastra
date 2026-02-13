@@ -111,6 +111,13 @@ export const audioMediaTypeSignatures = [
   },
 ] as const;
 
+// Magic-byte detection for container formats (EBML, ISO BMFF) is inherently limited:
+// - EBML prefix 0x1A45DFA3 is shared by video/webm, audio/webm, and video/x-matroska.
+//   Callers should prefer an explicit mediaType when the container type is known.
+// - ISO BMFF (MP4) entries only cover common ftyp box sizes (0x18, 0x1c, 0x20) and
+//   brands (isom, mp41, mp42, qt, 3gp4, 3gp5). Files with other sizes or brands
+//   (e.g., 0x14, 0x24, 'dash', 'M4V ', 'avc1') won't be auto-detected.
+//   Provide an explicit mediaType for broader coverage.
 export const videoMediaTypeSignatures = [
   {
     mediaType: 'video/webm' as const,
@@ -127,7 +134,6 @@ export const videoMediaTypeSignatures = [
     bytesPrefix: [0x00, 0x00, 0x01, 0xba],
     base64Prefix: 'AAABug',
   },
-  // MP4 (ISO BMFF) — ftyp box size varies; entries for common sizes and brands
   {
     mediaType: 'video/mp4' as const,
     bytesPrefix: [0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d],
