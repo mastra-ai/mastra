@@ -65,11 +65,13 @@ const scoringSamplingConfigSchema = z.object({
 
 const entityConfigSchema = z.object({
   description: z.string().max(500).optional(),
+  rules: ruleGroupSchema.optional(),
 });
 
 const scorerConfigSchema = z.object({
   description: z.string().max(500).optional(),
   sampling: scoringSamplingConfigSchema.optional(),
+  rules: ruleGroupSchema.optional(),
 });
 
 const memoryConfigSchema = z

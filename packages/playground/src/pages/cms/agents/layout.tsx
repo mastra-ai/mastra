@@ -29,9 +29,16 @@ import {
 } from '@mastra/playground-ui';
 import { CreateStoredAgentParams } from '@mastra/client-js';
 
+import type { RuleGroup } from '@mastra/core/storage';
+
+interface EntityConfig {
+  description?: string;
+  rules?: RuleGroup;
+}
+
 // Helper function to convert array to record format expected by form sections
-const arrayToRecord = (arr: string[]): Record<string, { description?: string }> => {
-  const record: Record<string, { description?: string }> = {};
+const arrayToRecord = (arr: string[]): Record<string, EntityConfig> => {
+  const record: Record<string, EntityConfig> = {};
   for (const id of arr) {
     record[id] = { description: undefined };
   }
@@ -40,8 +47,8 @@ const arrayToRecord = (arr: string[]): Record<string, { description?: string }> 
 
 // Helper to normalize tools from either string[] (legacy) or Record format
 const normalizeToolsToRecord = (
-  tools: string[] | Record<string, { description?: string }> | undefined,
-): Record<string, { description?: string }> => {
+  tools: string[] | Record<string, EntityConfig> | undefined,
+): Record<string, EntityConfig> => {
   if (!tools) return {};
   if (Array.isArray(tools)) return arrayToRecord(tools);
   return { ...tools };
@@ -49,11 +56,11 @@ const normalizeToolsToRecord = (
 
 // Transform flat integration tools form data ("providerId:toolSlug") to nested API format
 const transformIntegrationToolsForApi = (
-  integrationTools: Record<string, { description?: string }> | undefined,
-): Record<string, { tools?: Record<string, { description?: string }> }> | undefined => {
+  integrationTools: Record<string, EntityConfig> | undefined,
+): Record<string, { tools?: Record<string, EntityConfig> }> | undefined => {
   if (!integrationTools || Object.keys(integrationTools).length === 0) return undefined;
 
-  const result: Record<string, { tools?: Record<string, { description?: string }> }> = {};
+  const result: Record<string, { tools?: Record<string, EntityConfig> }> = {};
   for (const [compositeKey, config] of Object.entries(integrationTools)) {
     const separatorIndex = compositeKey.indexOf(':');
     if (separatorIndex === -1) continue;
@@ -63,22 +70,22 @@ const transformIntegrationToolsForApi = (
     if (!result[providerId]) {
       result[providerId] = { tools: {} };
     }
-    result[providerId].tools![toolSlug] = { description: config.description };
+    result[providerId].tools![toolSlug] = { description: config.description, rules: config.rules };
   }
   return result;
 };
 
 // Transform nested API integration tools to flat form format
 const normalizeIntegrationToolsToRecord = (
-  integrationTools: Record<string, { tools?: Record<string, { description?: string }> }> | undefined,
-): Record<string, { description?: string }> => {
+  integrationTools: Record<string, { tools?: Record<string, EntityConfig> }> | undefined,
+): Record<string, EntityConfig> => {
   if (!integrationTools) return {};
 
-  const result: Record<string, { description?: string }> = {};
+  const result: Record<string, EntityConfig> = {};
   for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
     if (providerConfig.tools) {
       for (const [toolSlug, toolConfig] of Object.entries(providerConfig.tools)) {
-        result[`${providerId}:${toolSlug}`] = { description: toolConfig.description };
+        result[`${providerId}:${toolSlug}`] = { description: toolConfig.description, rules: toolConfig.rules };
       }
     }
   }
@@ -119,6 +126,7 @@ function CreateLayoutWrapper() {
                       rate: value.sampling.rate || 0,
                     }
                   : undefined,
+                rules: value.rules,
               },
             ]),
           )
@@ -135,9 +143,8 @@ function CreateLayoutWrapper() {
         model: values.model,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
-        workflows:
-          values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
-        agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
+        workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
+        agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         scorers,
         memory: values.memory?.enabled
           ? {
@@ -319,10 +326,10 @@ function EditFormContent({
       },
       tools: toolsRecord,
       integrationTools: normalizeIntegrationToolsToRecord(
-        dataSource.integrationTools as Record<string, { tools?: Record<string, { description?: string }> }> | undefined,
+        dataSource.integrationTools as Record<string, { tools?: Record<string, EntityConfig> }> | undefined,
       ),
-      workflows: arrayToRecord((dataSource.workflows as string[]) || []),
-      agents: arrayToRecord((dataSource.agents as string[]) || []),
+      workflows: normalizeToolsToRecord(dataSource.workflows as Record<string, EntityConfig> | undefined),
+      agents: normalizeToolsToRecord(dataSource.agents as Record<string, EntityConfig> | undefined),
       scorers: dataSource.scorers || {},
       memory: memoryData?.options
         ? {
@@ -404,8 +411,9 @@ function EditFormContent({
         model: values.model,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
-        workflows: Object.keys(values.workflows || {}),
-        agents: Object.keys(values.agents || {}),
+        workflows:
+          values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
+        agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         scorers: values.scorers,
         memory: values.memory?.enabled
           ? {

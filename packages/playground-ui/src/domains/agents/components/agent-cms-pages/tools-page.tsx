@@ -9,11 +9,13 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Badge } from '@/ds/components/Badge';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useAllIntegrationTools } from '@/domains/tool-providers/hooks';
+import type { RuleGroup } from '@/lib/rule-engine';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
 interface EntityConfig {
   description?: string;
+  rules?: RuleGroup;
 }
 
 export function ToolsPage() {
@@ -24,6 +26,7 @@ export function ToolsPage() {
 
   const selectedTools = useWatch({ control, name: 'tools' });
   const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
+  const variables = useWatch({ control, name: 'variables' });
 
   const { options, integrationToolIds } = useMemo(() => {
     const integrationToolIds = new Set<string>();
@@ -106,6 +109,20 @@ export function ToolsPage() {
     }
   };
 
+  const handleRulesChange = (toolId: string, rules: RuleGroup | undefined) => {
+    if (integrationToolIds.has(toolId)) {
+      form.setValue('integrationTools', {
+        ...selectedIntegrationTools,
+        [toolId]: { ...selectedIntegrationTools?.[toolId], rules },
+      });
+    } else {
+      form.setValue('tools', {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], rules },
+      });
+    }
+  };
+
   const selectedOptions = options.filter(opt => allSelectedIds.includes(opt.value));
 
   return (
@@ -149,6 +166,13 @@ export function ToolsPage() {
                   }
                   onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)}
                   onRemove={readOnly ? undefined : () => handleRemove(tool.value)}
+                  schema={variables}
+                  rules={
+                    (integrationToolIds.has(tool.value)
+                      ? selectedIntegrationTools?.[tool.value]?.rules
+                      : selectedTools?.[tool.value]?.rules) || undefined
+                  }
+                  onRulesChange={readOnly ? undefined : rules => handleRulesChange(tool.value, rules)}
                 />
               ))}
             </div>
