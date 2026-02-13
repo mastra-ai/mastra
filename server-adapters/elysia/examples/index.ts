@@ -422,8 +422,12 @@ const app = new Elysia();
 app.use(cors({ origin: "*" }));
 app.use(openapi({
   provider: 'swagger-ui',
-  path: "swagger-ui",
+  path: "/swagger-ui",
   specPath: "/openapi.json",
+  swagger: {
+    //@ts-expect-error: must use url to correctly load json 
+    url: '/openapi.json',
+  }
 }))
 
 const srv = new MastraServer({ mastra, openapiPath: '/openapi.json', app });
