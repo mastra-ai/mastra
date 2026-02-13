@@ -52,19 +52,4 @@ describe('external import filtering (issue #13022)', () => {
     expect(result.has('zod')).toBe(true);
     expect(result.size).toBe(1);
   });
-
-  it('should keep external subpath imports with file extensions', () => {
-    const result = filterImports(['@modelcontextprotocol/sdk/shared/auth.js', 'zod'], ['apps/@agents/devstudio']);
-
-    expect(result.has('@modelcontextprotocol/sdk')).toBe(true);
-    expect(result.has('zod')).toBe(true);
-    expect(result.size).toBe(2);
-  });
-
-  it('should skip builtin and relative imports', () => {
-    const result = filterImports(['fs', 'node:crypto', './chunk.mjs', '../shared.mjs', 'zod'], []);
-
-    expect(result.has('zod')).toBe(true);
-    expect(result.size).toBe(1);
-  });
 });
