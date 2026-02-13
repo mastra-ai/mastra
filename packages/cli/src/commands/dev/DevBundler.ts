@@ -1,4 +1,5 @@
-import { writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
@@ -12,10 +13,12 @@ import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
+  private mastraDir?: string;
 
-  constructor(customEnvFile?: string) {
+  constructor(customEnvFile?: string, mastraDir?: string) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    this.mastraDir = mastraDir;
     // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
     this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
@@ -55,6 +58,18 @@ export class DevBundler extends Bundler {
     });
   }
 
+  protected async copyPublic(mastraDir: string, outputDirectory: string) {
+    const publicDir = join(mastraDir, 'public');
+    try {
+      await stat(publicDir);
+    } catch {
+      return;
+    }
+    devLogger.debug(`Copying public files from ${publicDir}`);
+    await super.copyPublic(mastraDir, outputDirectory);
+    devLogger.info('Public files copied to output (e.g., worker scripts)');
+  }
+
   async watch(
     entryFile: string,
     outputDirectory: string,
@@ -81,6 +96,10 @@ export class DevBundler extends Bundler {
 
     await this.writePackageJson(outputDir, new Map(), {});
 
+    // Capture instance for use inside Rollup plugin callbacks where `this` is the plugin context
+    const bundlerSelf = this;
+    const mastraDir = this.mastraDir ?? dirname(entryFile);
+
     const watcher = await createWatcher(
       {
         ...inputOptions,
@@ -103,6 +122,20 @@ export class DevBundler extends Bundler {
               for (const envFile of envFiles) {
                 this.addWatchFile(envFile);
               }
+            },
+          },
+          {
+            name: 'public-files-copier',
+            buildStart() {
+              // Watch the public directory so changes to worker files trigger rebuilds.
+              // Only add the watch if the directory exists to avoid ENOENT warnings from chokidar.
+              const publicDir = join(mastraDir, 'public');
+              if (existsSync(publicDir)) {
+                this.addWatchFile(publicDir);
+              }
+            },
+            async buildEnd() {
+              await bundlerSelf.copyPublic(mastraDir, outputDirectory);
             },
           },
           {
