@@ -145,6 +145,7 @@ export const agentFormSchema = z.object({
     name: z.string().min(1, 'Model is required'),
   }),
   tools: z.record(z.string(), entityConfigSchema).optional(),
+  integrationTools: z.record(z.string(), entityConfigSchema).optional(),
   workflows: z.record(z.string(), entityConfigSchema).optional(),
   agents: z.record(z.string(), entityConfigSchema).optional(),
   scorers: z.record(z.string(), scorerConfigSchema).optional(),
