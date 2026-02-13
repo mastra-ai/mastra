@@ -69,6 +69,7 @@ export function getAuthEntrypoint() {
           owner: ['*'],
           admin: ['*:read', '*:write', '*:execute'],
           api: ['*:read', '*:write', '*:execute'],
+          'business-api': ['*:read', '*:write', '*:execute'],
           member: ['*:read', '*:execute'],
           viewer: ['*:read'],
           _default: [],
