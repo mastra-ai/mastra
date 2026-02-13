@@ -263,30 +263,35 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   /**
-   * Cached embedding dimension from probing the embedder.
-   * Used to ensure consistent index naming between processors and recall().
+   * Cached promise for the embedding dimension probe.
+   * Stored as a promise to deduplicate concurrent calls.
    */
-  private _cachedEmbeddingDimension?: number;
+  private _embeddingDimensionPromise?: Promise<number | undefined>;
 
   /**
    * Probe the embedder to determine its actual output dimension.
    * The result is cached so subsequent calls are free.
    */
   protected async getEmbeddingDimension(): Promise<number | undefined> {
-    if (this._cachedEmbeddingDimension) return this._cachedEmbeddingDimension;
     if (!this.embedder) return undefined;
-
-    try {
-      const result = await this.embedder.doEmbed({
-        values: ['a'],
-        ...(this.embedderOptions || {}),
-      } as any);
-      const dimension = result.embeddings[0]?.length;
-      if (dimension) this._cachedEmbeddingDimension = dimension;
-      return dimension;
-    } catch {
-      return undefined;
+    if (!this._embeddingDimensionPromise) {
+      this._embeddingDimensionPromise = (async () => {
+        try {
+          const result = await this.embedder!.doEmbed({
+            values: ['a'],
+            ...(this.embedderOptions || {}),
+          } as any);
+          return result.embeddings[0]?.length;
+        } catch (e) {
+          console.warn(
+            `[Mastra Memory] Failed to probe embedder for dimension, falling back to default. ` +
+              `This may cause index name mismatches if the embedder uses non-default dimensions. Error: ${e}`,
+          );
+          return undefined;
+        }
+      })();
     }
+    return this._embeddingDimensionPromise;
   }
 
   /**
