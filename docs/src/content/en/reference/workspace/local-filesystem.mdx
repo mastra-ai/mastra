@@ -58,11 +58,25 @@ const response = await agent.generate('List all files in the workspace');
       defaultValue: "Auto-generated",
     },
     {
+      name: "contained",
+      type: "boolean",
+      description: "When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/workspace/filesystem#containment).",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
       name: "readOnly",
       type: "boolean",
       description: "When true, all write operations are blocked. Read operations are still allowed.",
       isOptional: true,
       defaultValue: "false",
+    },
+    {
+      name: "allowedPaths",
+      type: "string[]",
+      description: "Additional absolute paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Paths are resolved to absolute paths.",
+      isOptional: true,
+      defaultValue: "[]",
     },
   ]}
 />
@@ -96,6 +110,11 @@ const response = await agent.generate('List all files in the workspace');
       type: "boolean | undefined",
       description: "Whether the filesystem is in read-only mode",
     },
+    {
+      name: "allowedPaths",
+      type: "readonly string[]",
+      description: "Current set of additional allowed paths (absolute, resolved). These paths are permitted beyond basePath when containment is enabled.",
+    },
   ]}
 />
 
@@ -124,6 +143,83 @@ await filesystem.destroy();
 ```
 
 Called by `workspace.destroy()`.
+
+### `setAllowedPaths(pathsOrUpdater)`
+
+Update the allowed paths at runtime. Accepts a direct array or an updater callback receiving the current paths (React setState pattern).
+
+```typescript
+// Set directly
+filesystem.setAllowedPaths(['/home/user/.config']);
+
+// Update with callback
+filesystem.setAllowedPaths(prev => [...prev, '/home/user/.ssh']);
+
+// Clear all allowed paths
+filesystem.setAllowedPaths([]);
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "pathsOrUpdater",
+      type: "string[] | ((current: readonly string[]) => string[])",
+      description: "New allowed paths array or updater function receiving current paths",
+    },
+  ]}
+/>
+
+### `isPathAllowed(targetPath)`
+
+Check whether an absolute path is within `basePath` or any allowed path.
+
+```typescript
+const fs = new LocalFilesystem({
+  basePath: '/project',
+  allowedPaths: ['/home/user/.config'],
+});
+
+fs.isPathAllowed('/project/src/index.ts');         // true (within basePath)
+fs.isPathAllowed('/home/user/.config/app.json');   // true (within allowedPaths)
+fs.isPathAllowed('/etc/passwd');                    // false
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "targetPath",
+      type: "string",
+      description: "Absolute path to check",
+    },
+  ]}
+/>
+
+**Returns:** `boolean`
+
+### `assertPathAllowed(targetPath)`
+
+Assert that an absolute path is within `basePath` or any allowed path. Throws `PermissionError` if not.
+
+```typescript
+filesystem.assertPathAllowed('/project/src/index.ts'); // OK
+filesystem.assertPathAllowed('/etc/passwd');            // throws PermissionError
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+    {
+      name: "targetPath",
+      type: "string",
+      description: "Absolute path to check",
+    },
+  ]}
+/>
 
 ### `readFile(path, options?)`
 
