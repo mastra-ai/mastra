@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
 import { FileService } from '../../services/service.file';
@@ -47,6 +48,10 @@ export async function build({
         toolsPaths: discoveredTools,
         projectRoot: rootDir,
       });
+
+      // Write mastra packages info to the output directory for CMS availability detection
+      await writeFile(join(outputDirectory, 'output', 'mastra-packages.json'), JSON.stringify(mastraPackages), 'utf-8');
+
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
       if (studio) {
         logger.info(
@@ -69,6 +74,10 @@ export async function build({
       toolsPaths: discoveredTools,
       projectRoot: rootDir,
     });
+
+    // Write mastra packages info to the output directory for CMS availability detection
+    await writeFile(join(outputDirectory, 'output', 'mastra-packages.json'), JSON.stringify(mastraPackages), 'utf-8');
+
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     try {
