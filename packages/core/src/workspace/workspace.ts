@@ -597,14 +597,10 @@ export class Workspace {
         if (isGlobPattern(pathOrGlob)) {
           // Glob pattern: walk from the base directory, filter with matcher
           const walkRoot = extractGlobBase(pathOrGlob);
-          // Strip leading slash from pattern so it matches relative paths
-          const normalizedPattern = pathOrGlob.startsWith('/') ? pathOrGlob.slice(1) : pathOrGlob;
-          const matcher = createGlobMatcher(normalizedPattern);
+          const matcher = createGlobMatcher(pathOrGlob);
           const files = await this.getAllFiles(walkRoot);
           for (const filePath of files) {
-            // Strip leading slash to match against relative pattern
-            const relativePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-            if (!matcher(relativePath)) continue;
+            if (!matcher(filePath)) continue;
             await this.indexFileForSearch(filePath);
           }
         } else {
@@ -635,8 +631,8 @@ export class Workspace {
     }
   }
 
-  private async getAllFiles(dir: string): Promise<string[]> {
-    if (!this._fs) return [];
+  private async getAllFiles(dir: string, depth: number = 0, maxDepth: number = 10): Promise<string[]> {
+    if (!this._fs || depth >= maxDepth) return [];
 
     const files: string[] = [];
     const entries = await this._fs.readdir(dir);
@@ -647,7 +643,7 @@ export class Workspace {
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
         // Skip symlink directories to prevent infinite recursion from cycles
-        files.push(...(await this.getAllFiles(fullPath)));
+        files.push(...(await this.getAllFiles(fullPath, depth + 1, maxDepth)));
       }
     }
 

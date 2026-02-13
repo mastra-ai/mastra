@@ -150,6 +150,42 @@ describe('createGlobMatcher', () => {
     expect(match('src/utils/helpers.ts')).toBe(true);
     expect(match('lib/index.ts')).toBe(false);
   });
+
+  it('should normalize ./ prefix on patterns', () => {
+    const match = createGlobMatcher('./**/skills');
+    expect(match('skills')).toBe(true);
+    expect(match('a/skills')).toBe(true);
+    expect(match('./a/skills')).toBe(true);
+    expect(match('/a/skills')).toBe(true);
+  });
+
+  it('should normalize / prefix on patterns', () => {
+    const match = createGlobMatcher('/docs/**/*.md');
+    expect(match('/docs/readme.md')).toBe(true);
+    expect(match('docs/readme.md')).toBe(true);
+    expect(match('./docs/readme.md')).toBe(true);
+  });
+
+  it('should normalize / prefix on test paths', () => {
+    const match = createGlobMatcher('docs/**/*.md');
+    expect(match('/docs/readme.md')).toBe(true);
+    expect(match('./docs/readme.md')).toBe(true);
+    expect(match('docs/readme.md')).toBe(true);
+  });
+
+  it('should handle mixed prefixes between pattern and path', () => {
+    // ./ pattern, / path
+    const match1 = createGlobMatcher('./src/**/*.ts');
+    expect(match1('/src/index.ts')).toBe(true);
+
+    // / pattern, ./ path
+    const match2 = createGlobMatcher('/src/**/*.ts');
+    expect(match2('./src/index.ts')).toBe(true);
+
+    // ./ pattern, bare path
+    const match3 = createGlobMatcher('./src/**/*.ts');
+    expect(match3('src/index.ts')).toBe(true);
+  });
 });
 
 // =============================================================================

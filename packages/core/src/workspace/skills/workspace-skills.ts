@@ -412,17 +412,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #resolveGlobToDirectories(pattern: string): Promise<string[]> {
     const walkRoot = extractGlobBase(pattern);
-
-    // Normalize pattern for picomatch: strip leading '/' or './' since picomatch
-    // doesn't match paths with these prefixes. This only affects pattern matching,
-    // not the filesystem paths (walkRoot and dirPath keep their original form).
-    const normalizedPattern = pattern.replace(/^\.?\//, '');
-    const matcher = createGlobMatcher(normalizedPattern, { dot: true });
+    const matcher = createGlobMatcher(pattern, { dot: true });
     const matchingDirs: string[] = [];
 
     await this.#walkForDirectories(walkRoot, dirPath => {
-      const normalizedPath = dirPath.replace(/^\.?\//, '');
-      if (matcher(normalizedPath)) {
+      if (matcher(dirPath)) {
         matchingDirs.push(dirPath);
       }
     });
