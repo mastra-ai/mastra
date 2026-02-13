@@ -2,8 +2,8 @@
 '@mastra/deployer': patch
 ---
 
-Fixed workspace package filtering in the bundler that caused monorepo directory names (like `apps`) to be incorrectly added as npm dependencies in the build output.
+Fixed `mastra build` on Windows adding spurious npm dependencies (like `apps`) from monorepo directory names.
 
-The previous logic compared filesystem-relative paths against import specifiers, which never matched — especially on Windows where path separators differ (`apps\@agents\devstudio` vs `apps/@agents/devstudio`). Now uses workspace package names directly for reliable cross-platform filtering.
+Rollup inter-chunk file references (e.g., `apps/@agents/devstudio/.mastra/.build/chunk-X.mjs`) were being mistaken for npm package imports because they don't start with `./` or `/`. Now skips imports ending with file extensions (`.mjs`, `.js`, `.cjs`, etc.) since these are always file paths, not npm package specifiers.
 
 Fixes https://github.com/mastra-ai/mastra/issues/13022

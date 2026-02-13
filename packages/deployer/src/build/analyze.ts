@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import * as babel from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -281,6 +281,44 @@ async function validateOutput(
 }
 
 /**
+ * Collects external package imports, skipping builtins, relative paths, and workspace packages.
+ */
+export function collectExternalImports(
+  imports: string[],
+  workspacePaths: string[],
+  allUsedExternals: Map<string, ExternalDependencyInfo>,
+  depsVersionInfo?: Map<string, ExternalDependencyInfo>,
+): void {
+  for (const i of imports) {
+    if (isBuiltinModule(i)) {
+      continue;
+    }
+
+    if (i.startsWith('.') || i.startsWith('/')) {
+      continue;
+    }
+
+    // Skip rollup inter-chunk file references (e.g., "apps/@agents/devstudio/.mastra/.build/chunk-X.mjs")
+    // These are output file paths, not npm package specifiers
+    if (/\.(m?[jt]sx?|cjs)$/.test(i)) {
+      continue;
+    }
+
+    // Do not include workspace packages (old path-based check)
+    if (workspacePaths.some(workspacePath => i.startsWith(workspacePath))) {
+      continue;
+    }
+
+    const pkgName = getPackageName(i);
+
+    if (pkgName && !allUsedExternals.has(pkgName)) {
+      const versionInfo = depsVersionInfo?.get(i) || depsVersionInfo?.get(pkgName) || {};
+      allUsedExternals.set(pkgName, versionInfo);
+    }
+  }
+}
+
+/**
  * Main bundle analysis function that orchestrates the three-step process:
  * 1. Analyze dependencies
  * 2. Bundle dependencies modules
@@ -408,8 +446,10 @@ If you think your configuration is valid, please open an issue.`);
     workspaceMap,
   });
 
-  // Workspace package names for filtering workspace imports from rollup output
-  const workspacePackageNames = new Set(workspaceMap.keys());
+  // Filesystem-relative workspace paths for filtering workspace imports from rollup output
+  const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
+    relative(workspaceRoot || projectRoot, pkgInfo.location),
+  );
 
   // Build a map of dependency versions from depsToOptimize for lookup
   const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
@@ -433,29 +473,7 @@ If you think your configuration is valid, please open an issue.`);
       continue;
     }
 
-    for (const i of o.imports) {
-      if (isBuiltinModule(i)) {
-        continue;
-      }
-
-      // Skip relative imports - they're local chunks, not external packages
-      if (i.startsWith('.') || i.startsWith('/')) {
-        continue;
-      }
-
-      const pkgName = getPackageName(i);
-
-      // Do not include workspace packages
-      if (pkgName && workspacePackageNames.has(pkgName)) {
-        continue;
-      }
-
-      if (pkgName && !allUsedExternals.has(pkgName)) {
-        // Try to get version info from our tracked dependencies
-        const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName) || {};
-        allUsedExternals.set(pkgName, versionInfo);
-      }
-    }
+    collectExternalImports(o.imports, relativeWorkspaceFolderPaths, allUsedExternals, depsVersionInfo);
   }
 
   const result = await validateOutput(
