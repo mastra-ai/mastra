@@ -18,3 +18,30 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
     ('parameters' in tool || ('execute' in tool && typeof tool.execute === 'function' && 'inputSchema' in tool))
   );
 }
+
+/**
+ * Checks if a tool is a provider-defined tool from the AI SDK.
+ * Provider tools (like openai.tools.webSearch()) are created by the AI SDK with:
+ * - type: "provider-defined" (AI SDK v5) or "provider" (AI SDK v6)
+ * - id: in format 'provider.tool_name' (e.g., 'openai.web_search')
+ */
+export function isProviderDefinedTool(
+  tool: unknown,
+): tool is { type: string; id: string; args?: Record<string, unknown> } {
+  if (typeof tool !== 'object' || tool === null) return false;
+  const t = tool as Record<string, unknown>;
+  const isProviderType = t.type === 'provider-defined' || t.type === 'provider';
+  return isProviderType && typeof t.id === 'string';
+}
+
+/**
+ * Checks if a tool is a gateway tool based on its definition.
+ * Gateway tools are provider-executed but their results need to be sent
+ * to the LLM as regular tool results since the LLM provider
+ * doesn't have them stored.
+ *
+ * Gateway tools have an ID starting with 'gateway.' (e.g., 'gateway.perplexity_search').
+ */
+export function isGatewayTool(tool: unknown): boolean {
+  return isProviderDefinedTool(tool) && tool.id.startsWith('gateway.');
+}
