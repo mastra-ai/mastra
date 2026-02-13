@@ -1183,7 +1183,7 @@ export class Mastra<
    * }
    * ```
    */
-  public getWorkspace(): Workspace | undefined {
+  public getWorkspace(): Workspace<any, any, any> | undefined {
     return this.#workspace;
   }
 
@@ -1198,7 +1198,7 @@ export class Mastra<
    * const files = await workspace.filesystem.readdir('/');
    * ```
    */
-  public getWorkspaceById(id: string): Workspace {
+  public getWorkspaceById(id: string): Workspace<any, any, any> {
     const workspace = this.#workspaces[id];
     if (!workspace) {
       const error = new MastraError({

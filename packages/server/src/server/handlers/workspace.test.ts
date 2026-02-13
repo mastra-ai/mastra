@@ -219,7 +219,7 @@ function createWorkspace(
     bm25?: boolean;
     readOnly?: boolean;
   } = {},
-): Workspace {
+): Workspace<any, any, any> {
   const filesystem = createMockFilesystem(options.files ?? new Map(), { readOnly: options.readOnly });
 
   // Create workspace with mock filesystem
@@ -242,7 +242,7 @@ function createWorkspace(
 /**
  * Creates a real Mastra instance with the given workspace registered.
  */
-function createMastra(workspace?: Workspace): Mastra {
+function createMastra(workspace?: Workspace<any, any, any>): Mastra {
   const mastra = new Mastra({ logger: false });
   if (workspace) {
     mastra.addWorkspace(workspace);

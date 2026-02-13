@@ -119,7 +119,7 @@ function requireWorkspaceV1Support(): void {
  * Backwards compatible: Falls back to searching through agents if
  * mastra.getWorkspaceById() is not available (older @mastra/core versions).
  */
-async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace | undefined> {
+async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace<any, any, any> | undefined> {
   requireWorkspaceV1Support();
 
   // Check if the global workspace matches

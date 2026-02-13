@@ -30,7 +30,7 @@ interface StreamStepOptions {
   memory?: MastraMemory;
   resourceId?: string;
   autoResumeSuspendedTools?: boolean;
-  workspace?: Workspace;
+  workspace?: Workspace<any, any, any>;
 }
 
 export function createStreamStep<OUTPUT = undefined>({

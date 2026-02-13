@@ -71,13 +71,13 @@ function createMockWorkspaceSkills(): WorkspaceSkills {
 }
 
 // Create mock Workspace with skills
-function createMockWorkspace(): Workspace {
+function createMockWorkspace(): Workspace<any, any, any> {
   return {
     skills: createMockWorkspaceSkills(),
     getToolsConfig: () => undefined,
     filesystem: undefined,
     sandbox: undefined,
-  } as unknown as Workspace;
+  } as unknown as Workspace<any, any, any>;
 }
 
 // =============================================================================
@@ -98,7 +98,7 @@ function getToolNames(tools: unknown): string[] {
 
 describe('Skills with Custom Processors (Issue #12612)', () => {
   let mockModel: MockLanguageModelV2;
-  let mockWorkspace: Workspace;
+  let mockWorkspace: Workspace<any, any, any>;
   let capturedTools: unknown;
 
   beforeEach(() => {

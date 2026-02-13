@@ -859,7 +859,7 @@ export class Agent<
    */
   public async getWorkspace({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
+  }: { requestContext?: RequestContext } = {}): Promise<Workspace<any, any, any> | undefined> {
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {

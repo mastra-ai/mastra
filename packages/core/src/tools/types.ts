@@ -95,7 +95,7 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
    * any workspace configured at tool build time. Allows dynamic workspace selection
    * per-step via prepareStep.
    */
-  workspace?: Workspace;
+  workspace?: Workspace<any, any, any>;
 };
 
 /**
@@ -258,7 +258,7 @@ export interface ToolExecutionContext<
    *
    * This allows tools to work with the agent's configured workspace.
    */
-  workspace?: Workspace;
+  workspace?: Workspace<any, any, any>;
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream

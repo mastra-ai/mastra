@@ -40,7 +40,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentId: string;
   agentName?: string;
   toolCallId?: string;
-  workspace?: Workspace;
+  workspace?: Workspace<any, any, any>;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({

@@ -111,10 +111,10 @@ function createMockWorkspaceSkills(): WorkspaceSkills {
 }
 
 // Create mock Workspace
-function createMockWorkspace(skills?: WorkspaceSkills): Workspace {
+function createMockWorkspace(skills?: WorkspaceSkills): Workspace<any, any, any> {
   return {
     skills,
-  } as unknown as Workspace;
+  } as unknown as Workspace<any, any, any>;
 }
 
 // =============================================================================
@@ -124,7 +124,7 @@ function createMockWorkspace(skills?: WorkspaceSkills): Workspace {
 describe('SkillsProcessor', () => {
   let processor: SkillsProcessor;
   let mockSkills: WorkspaceSkills;
-  let mockWorkspace: Workspace;
+  let mockWorkspace: Workspace<any, any, any>;
   let mockMessageList: MockMessageList;
 
   beforeEach(() => {

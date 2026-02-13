@@ -42,7 +42,7 @@ export interface SkillsProcessorOptions {
    * Workspace instance containing skills.
    * Skills are accessed via workspace.skills.
    */
-  workspace: Workspace;
+  workspace: Workspace<any, any, any>;
 
   /**
    * Format for skill injection (default: 'xml')
@@ -63,7 +63,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   readonly name = 'Skills Processor';
 
   /** Workspace instance */
-  private readonly _workspace: Workspace;
+  private readonly _workspace: Workspace<any, any, any>;
 
   /** Format for skill injection */
   private readonly _format: SkillFormat;

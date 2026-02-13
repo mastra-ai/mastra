@@ -51,7 +51,7 @@ export type StreamInternal = {
   // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
   stepTools?: ToolSet;
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
-  stepWorkspace?: Workspace;
+  stepWorkspace?: Workspace<any, any, any>;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -64,7 +64,7 @@ export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
    * execution context, allowing tools to access workspace.filesystem and workspace.sandbox.
    * This enables dynamic workspace configuration per-step via prepareStep.
    */
-  workspace?: Workspace;
+  workspace?: Workspace<any, any, any>;
 };
 
 /**
@@ -134,7 +134,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * Default workspace for the agent. This workspace will be passed to tool execution
    * context unless overridden by prepareStep or processInputStep.
    */
-  workspace?: Workspace;
+  workspace?: Workspace<any, any, any>;
   /**
    * Shared processor state that persists across loop iterations.
    * Used by all processor methods (input and output) to share state.
