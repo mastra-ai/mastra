@@ -462,7 +462,14 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Discover skills in a single path
    */
   async #discoverSkillsInPath(skillsPath: string, source: ContentSource): Promise<void> {
-    if (!(await this.#source.exists(skillsPath))) {
+    try {
+      if (!(await this.#source.exists(skillsPath))) {
+        return;
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${error.message}`);
+      }
       return;
     }
 
