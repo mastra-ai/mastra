@@ -909,6 +909,23 @@ describe('createWorkspaceTools', () => {
       expect(result.truncated).toBe(false);
     });
 
+    it('should search a single file when path points to a file', async () => {
+      await fs.writeFile(path.join(tempDir, 'target.md'), '# Heading\n## Sub\nsome text');
+      await fs.writeFile(path.join(tempDir, 'other.md'), '# Other Heading');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+        pattern: '^#',
+        path: '/target.md',
+      });
+
+      expect(result.matchCount).toBe(2);
+      expect(result.matches.every((m: any) => m.file === '/target.md')).toBe(true);
+    });
+
     it('should report correct column for match', async () => {
       await fs.writeFile(path.join(tempDir, 'col.ts'), '    findme here');
       const workspace = new Workspace({

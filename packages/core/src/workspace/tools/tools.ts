@@ -561,7 +561,11 @@ Usage:
         requireApproval: grepConfig.requireApproval,
         inputSchema: z.object({
           pattern: z.string().describe('Regex pattern to search for'),
-          path: z.string().optional().default('/').describe('Directory to search within (default: "/")'),
+          path: z
+            .string()
+            .optional()
+            .default('/')
+            .describe('File or directory to search within (default: "/"). If a file path, searches that file only.'),
           glob: z
             .string()
             .optional()
@@ -643,39 +647,53 @@ Usage:
             globMatcher = createGlobMatcher(globPattern);
           }
 
-          // Recursively collect files
+          // Collect files to search
           const fs = workspace.filesystem!;
-          const collectFiles = async (dir: string): Promise<string[]> => {
-            const files: string[] = [];
-            let entries;
-            try {
-              entries = await fs.readdir(dir);
-            } catch {
-              return files;
-            }
+          let filePaths: string[];
 
-            for (const entry of entries) {
-              // Skip hidden files/dirs
-              if (entry.name.startsWith('.')) continue;
-
-              const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
-              if (entry.type === 'file') {
-                // Skip non-text files
-                if (!isTextFile(entry.name)) continue;
-                // Apply glob filter (match against path relative to search root)
-                if (globMatcher) {
-                  const relativePath = fullPath.startsWith('/') ? fullPath.slice(1) : fullPath;
-                  if (!globMatcher(relativePath)) continue;
+          // Check if searchPath is a file or directory
+          try {
+            const stat = await fs.stat(searchPath);
+            if (stat.type === 'file') {
+              // Single file — search it directly
+              filePaths = isTextFile(searchPath) ? [searchPath] : [];
+            } else {
+              // Directory — walk recursively
+              const collectFiles = async (dir: string): Promise<string[]> => {
+                const files: string[] = [];
+                let entries;
+                try {
+                  entries = await fs.readdir(dir);
+                } catch {
+                  return files;
                 }
-                files.push(fullPath);
-              } else if (entry.type === 'directory' && !entry.isSymlink) {
-                files.push(...(await collectFiles(fullPath)));
-              }
-            }
-            return files;
-          };
 
-          const filePaths = await collectFiles(searchPath);
+                for (const entry of entries) {
+                  // Skip hidden files/dirs
+                  if (entry.name.startsWith('.')) continue;
+
+                  const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+                  if (entry.type === 'file') {
+                    // Skip non-text files
+                    if (!isTextFile(entry.name)) continue;
+                    // Apply glob filter (match against path relative to search root)
+                    if (globMatcher) {
+                      const relativePath = fullPath.startsWith('/') ? fullPath.slice(1) : fullPath;
+                      if (!globMatcher(relativePath)) continue;
+                    }
+                    files.push(fullPath);
+                  } else if (entry.type === 'directory' && !entry.isSymlink) {
+                    files.push(...(await collectFiles(fullPath)));
+                  }
+                }
+                return files;
+              };
+              filePaths = await collectFiles(searchPath);
+            }
+          } catch {
+            // Path doesn't exist
+            filePaths = [];
+          }
 
           const matches: Array<{
             file: string;
