@@ -61,10 +61,3 @@ export function createAgentTests(config: AgentTestConfig = {}) {
     });
   });
 }
-
-declare module 'vitest' {
-  export interface ProvidedContext {
-    baseUrl: string;
-    port: number;
-  }
-}
