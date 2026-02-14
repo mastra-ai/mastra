@@ -174,6 +174,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
     'z-ai/glm4.7',
+    'z-ai/glm5',
   ];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',

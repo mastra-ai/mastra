@@ -195,7 +195,8 @@
         "qwen/qwen3-next-80b-a3b-instruct",
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwq-32b",
-        "z-ai/glm4.7"
+        "z-ai/glm4.7",
+        "z-ai/glm5"
       ],
       "docUrl": "https://docs.api.nvidia.com/nim/",
       "gateway": "models.dev"
@@ -3023,7 +3024,8 @@
       "qwen/qwen3-next-80b-a3b-instruct",
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwq-32b",
-      "z-ai/glm4.7"
+      "z-ai/glm4.7",
+      "z-ai/glm5"
     ],
     "fastrouter": [
       "anthropic/claude-opus-4.1",
