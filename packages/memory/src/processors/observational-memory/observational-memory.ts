@@ -1767,7 +1767,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
       if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-        msg.content.parts.push(marker as any);
+        // Only push if the marker isn't already in the parts array.
+        // writer.custom() adds the marker to the stream, and the AI SDK may have
+        // already appended it to the message's parts before this runs.
+        const markerData = marker.data as { cycleId?: string } | undefined;
+        const alreadyPresent =
+          markerData?.cycleId &&
+          msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+        if (!alreadyPresent) {
+          msg.content.parts.push(marker as any);
+        }
         // Upsert the modified message to DB so the marker part is persisted.
         // Non-critical — if this fails, the marker is still in the stream,
         // it just won't survive page reload.
@@ -1805,7 +1814,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       // Find the last assistant message
       for (const msg of messages) {
         if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          msg.content.parts.push(marker as any);
+          // Only push if the marker isn't already in the parts array.
+          const markerData = marker.data as { cycleId?: string } | undefined;
+          const alreadyPresent =
+            markerData?.cycleId &&
+            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+          if (!alreadyPresent) {
+            msg.content.parts.push(marker as any);
+          }
           await this.messageHistory.persistMessages({
             messages: [msg],
             threadId,
