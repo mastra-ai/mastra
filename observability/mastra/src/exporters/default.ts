@@ -87,7 +87,7 @@ function getObjectOrNull(value: unknown): Record<string, any> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
-type resolve = (value: void | PromiseLike<void>) => void;
+type Resolve = (value: void | PromiseLike<void>) => void;
 
 export class DefaultExporter extends BaseExporter {
   name = 'mastra-default-observability-exporter';
@@ -100,7 +100,7 @@ export class DefaultExporter extends BaseExporter {
   #flushTimer: NodeJS.Timeout | null = null;
 
   #isInitializing = false;
-  #initPromises: Set<resolve> = new Set();
+  #initPromises: Set<Resolve> = new Set();
 
   // Track all spans that have been created, persists across flushes
   private allCreatedSpans: Set<string> = new Set();
@@ -163,14 +163,11 @@ export class DefaultExporter extends BaseExporter {
       }
 
       this.initializeStrategy(this.#observability, this.#storage.constructor.name);
-    } catch (error) {
-      //propogate error
-      throw error;
     } finally {
       this.#isInitializing = false;
       /**
        * Assumes caller waits until export of a parent span is completed before calling
-       * export for child spans , order is not relvanat for resolve
+       * export for child spans , order is not relevant for resolve
        */
       this.#initPromises.forEach(resolve => {
         resolve();
