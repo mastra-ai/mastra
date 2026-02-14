@@ -1421,8 +1421,10 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
       await workspace.filesystem.writeFile(`${installPath}/.meta.json`, JSON.stringify(metadata, null, 2));
       filesWritten++;
 
-      // Refresh skills discovery so the new skill is immediately visible
-      await workspace.skills?.refresh();
+      // Surgically update the skills cache for the newly installed skill
+      if (workspace.skills?.addSkill) {
+        await workspace.skills.addSkill(installPath);
+      }
 
       return {
         success: true,
@@ -1460,7 +1462,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   summary: 'Remove an installed skill',
   description: 'Removes an installed skill by deleting its directory. Does not require sandbox.',
   tags: ['Workspace', 'Skills'],
-  handler: async ({ mastra, workspaceId, skillName, requestContext }) => {
+  handler: async ({ mastra, workspaceId, skillName }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -1480,10 +1482,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       // Validate skill name to prevent path traversal
       const safeSkillName = assertSafeSkillName(skillName);
 
-      // Refresh discovery cache so the lookup reflects the latest filesystem state
-      await workspace.skills?.maybeRefresh({ requestContext });
-
-      // Look up the skill's actual path from discovery (supports glob-discovered skills).
+      // Look up the skill's actual path from the cache (supports glob-discovered skills).
       // Only use the discovered path if it's under the skills.sh directory to avoid
       // accidentally deleting a locally-authored skill with the same name.
       const skill = await workspace.skills?.get(safeSkillName);
@@ -1503,8 +1502,10 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
       // Delete the skill directory
       await workspace.filesystem.rmdir(skillPath, { recursive: true });
 
-      // Refresh skills discovery so the removed skill is no longer visible
-      await workspace.skills?.refresh();
+      // Surgically remove the skill from the cache
+      if (workspace.skills?.removeSkill) {
+        await workspace.skills.removeSkill(safeSkillName);
+      }
 
       return {
         success: true,
@@ -1665,6 +1666,11 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           await workspace.filesystem.writeFile(metaPath, JSON.stringify(updatedMeta, null, 2));
           filesWritten++;
 
+          // Surgically update the skills cache for the updated skill
+          if (workspace.skills?.addSkill) {
+            await workspace.skills.addSkill(installPath);
+          }
+
           results.push({
             skillName: skill,
             success: true,
@@ -1678,9 +1684,6 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
           });
         }
       }
-
-      // Refresh skills discovery so updated skills are immediately visible
-      await workspace.skills?.refresh();
 
       return { updated: results };
     } catch (error) {

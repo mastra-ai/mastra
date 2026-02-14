@@ -32,6 +32,7 @@ import type {
  */
 interface SkillSearchEngine {
   index(doc: IndexDocument): Promise<void>;
+  remove?(id: string): Promise<void>;
   search(
     query: string,
     options?: { topK?: number; minScore?: number; mode?: 'bm25' | 'vector' | 'hybrid' },
@@ -95,6 +96,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   #globDirCache: Map<string, string[]> = new Map();
   #globResolveTimes: Map<string, number> = new Map();
   static readonly GLOB_RESOLVE_INTERVAL = 5_000; // Re-walk glob dirs every 5s
+  static readonly STALENESS_CHECK_COOLDOWN = 2_000; // Skip staleness check for 2s after discovery
 
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#source = config.source;
@@ -163,6 +165,55 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (isStale) {
       await this.refresh();
     }
+  }
+
+  async addSkill(skillPath: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    // Determine SKILL.md path and dirName
+    let skillFilePath: string;
+    let dirName: string;
+    if (skillPath.endsWith('/SKILL.md') || skillPath === 'SKILL.md') {
+      skillFilePath = skillPath;
+      dirName = this.#getParentPath(skillPath).split('/').pop() || 'unknown';
+    } else {
+      skillFilePath = this.#joinPath(skillPath, 'SKILL.md');
+      dirName = skillPath.split('/').pop() || 'unknown';
+    }
+
+    // Determine source from existing resolved paths
+    const source = this.#inferSource(skillPath);
+
+    // Parse and add to cache
+    const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
+
+    // Remove old index entries if skill already exists (for update case)
+    const existing = this.#skills.get(skill.name);
+    if (existing) {
+      await this.#removeSkillFromIndex(existing);
+    }
+
+    this.#skills.set(skill.name, skill);
+    await this.#indexSkill(skill);
+
+    // Update discovery time so maybeRefresh() doesn't trigger full scan
+    this.#lastDiscoveryTime = Date.now();
+  }
+
+  async removeSkill(skillName: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skills.get(skillName);
+    if (!skill) return;
+
+    // Remove from search index
+    await this.#removeSkillFromIndex(skill);
+
+    // Remove from cache
+    this.#skills.delete(skillName);
+
+    // Update discovery time so maybeRefresh() doesn't trigger full scan
+    this.#lastDiscoveryTime = Date.now();
   }
 
   /**
@@ -571,6 +622,15 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       return true;
     }
 
+    // Skip the expensive stat calls if discovery happened very recently
+    // (e.g., right after a surgical addSkill/removeSkill). This avoids
+    // a timing race where the filesystem write updates directory mtime
+    // to the same second as #lastDiscoveryTime, and also avoids slow
+    // stat calls to external mounts immediately after a known-good update.
+    if (Date.now() - this.#lastDiscoveryTime < WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN) {
+      return false;
+    }
+
     for (const skillsPath of this.#resolvedPaths) {
       let pathsToCheck: string[];
 
@@ -768,6 +828,33 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
 
     return parts.join('\n\n');
+  }
+
+  /**
+   * Remove a skill's entries from the search index.
+   */
+  async #removeSkillFromIndex(skill: InternalSkill): Promise<void> {
+    if (!this.#searchEngine?.remove) return;
+
+    // Remove SKILL.md index entry
+    await this.#searchEngine.remove(`skill:${skill.name}:SKILL.md`);
+
+    // Remove each reference index entry
+    for (const refPath of skill.references) {
+      await this.#searchEngine.remove(`skill:${skill.name}:${refPath}`);
+    }
+  }
+
+  /**
+   * Infer the ContentSource for a skill path by matching against resolved paths.
+   */
+  #inferSource(skillPath: string): ContentSource {
+    for (const rp of this.#resolvedPaths) {
+      if (skillPath.startsWith(rp) || rp.startsWith(skillPath)) {
+        return this.#determineSource(rp);
+      }
+    }
+    return this.#determineSource(skillPath);
   }
 
   /**
