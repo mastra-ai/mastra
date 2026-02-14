@@ -182,10 +182,3 @@ export function createMemoryTests(config: MemoryTestConfig = {}) {
     });
   });
 }
-
-declare module 'vitest' {
-  export interface ProvidedContext {
-    baseUrl: string;
-    port: number;
-  }
-}
