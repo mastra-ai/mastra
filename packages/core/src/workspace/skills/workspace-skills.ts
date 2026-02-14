@@ -416,14 +416,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #resolveGlobToDirectories(pattern: string): Promise<string[]> {
     const walkRoot = extractGlobBase(pattern);
-    // Strip leading slash from pattern for relative matching
-    const normalizedPattern = pattern.startsWith('/') ? pattern.slice(1) : pattern;
-    const matcher = createGlobMatcher(normalizedPattern, { dot: true });
+    const matcher = createGlobMatcher(pattern, { dot: true });
     const matchingDirs: string[] = [];
 
     await this.#walkForDirectories(walkRoot, dirPath => {
-      const relativePath = dirPath.startsWith('/') ? dirPath.slice(1) : dirPath;
-      if (matcher(relativePath)) {
+      if (matcher(dirPath)) {
         matchingDirs.push(dirPath);
       }
     });
@@ -438,7 +435,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     basePath: string,
     callback: (dirPath: string) => void,
     depth: number = 0,
-    maxDepth: number = 20,
+    maxDepth: number = 4,
   ): Promise<void> {
     if (depth >= maxDepth) return;
 

@@ -78,8 +78,25 @@ export interface GlobMatcherOptions {
 }
 
 /**
+ * Strip leading './' or '/' from a path for picomatch matching.
+ * picomatch does not match paths with these prefixes, so both
+ * patterns and test paths must be normalized before matching.
+ *
+ * This only affects matching — filesystem paths should keep their
+ * original form for correct resolution with contained/uncontained modes.
+ */
+function normalizeForMatch(input: string): string {
+  if (input.startsWith('./')) return input.slice(2);
+  if (input.startsWith('/')) return input.slice(1);
+  return input;
+}
+
+/**
  * Compile glob pattern(s) into a reusable matcher function.
  * The matcher tests paths using workspace-style forward slashes.
+ *
+ * Automatically normalizes leading './' and '/' from both patterns
+ * and test paths, since picomatch does not match these prefixes.
  *
  * @example
  * const match = createGlobMatcher('**\/*.ts');
@@ -90,12 +107,12 @@ export interface GlobMatcherOptions {
  * multi('App.tsx')           // true
  */
 export function createGlobMatcher(patterns: string | string[], options?: GlobMatcherOptions): GlobMatcher {
-  const patternArray = Array.isArray(patterns) ? patterns : [patterns];
+  const patternArray = (Array.isArray(patterns) ? patterns : [patterns]).map(normalizeForMatch);
   const matcher = picomatch(patternArray, {
     posix: true,
     dot: options?.dot ?? false,
   });
-  return matcher;
+  return (path: string) => matcher(normalizeForMatch(path));
 }
 
 /**

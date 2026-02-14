@@ -77,6 +77,13 @@ describe('extractGlobBase', () => {
   it('should return root when glob is at top level', () => {
     expect(extractGlobBase('/*.ts')).toBe('/');
   });
+
+  it('should extract base from ./ prefixed patterns', () => {
+    // ./**/skills → first meta at 2, prefix './', lastSlash 1, returns '.'
+    expect(extractGlobBase('./**/skills')).toBe('.');
+    // ./src/**/*.ts → first meta at 6, prefix './src/', lastSlash 5, returns './src'
+    expect(extractGlobBase('./src/**/*.ts')).toBe('./src');
+  });
 });
 
 // =============================================================================
@@ -142,6 +149,42 @@ describe('createGlobMatcher', () => {
     expect(match('src/index.ts')).toBe(true);
     expect(match('src/utils/helpers.ts')).toBe(true);
     expect(match('lib/index.ts')).toBe(false);
+  });
+
+  it('should normalize ./ prefix on patterns', () => {
+    const match = createGlobMatcher('./**/skills');
+    expect(match('skills')).toBe(true);
+    expect(match('a/skills')).toBe(true);
+    expect(match('./a/skills')).toBe(true);
+    expect(match('/a/skills')).toBe(true);
+  });
+
+  it('should normalize / prefix on patterns', () => {
+    const match = createGlobMatcher('/docs/**/*.md');
+    expect(match('/docs/readme.md')).toBe(true);
+    expect(match('docs/readme.md')).toBe(true);
+    expect(match('./docs/readme.md')).toBe(true);
+  });
+
+  it('should normalize / prefix on test paths', () => {
+    const match = createGlobMatcher('docs/**/*.md');
+    expect(match('/docs/readme.md')).toBe(true);
+    expect(match('./docs/readme.md')).toBe(true);
+    expect(match('docs/readme.md')).toBe(true);
+  });
+
+  it('should handle mixed prefixes between pattern and path', () => {
+    // ./ pattern, / path
+    const match1 = createGlobMatcher('./src/**/*.ts');
+    expect(match1('/src/index.ts')).toBe(true);
+
+    // / pattern, ./ path
+    const match2 = createGlobMatcher('/src/**/*.ts');
+    expect(match2('./src/index.ts')).toBe(true);
+
+    // ./ pattern, bare path
+    const match3 = createGlobMatcher('./src/**/*.ts');
+    expect(match3('src/index.ts')).toBe(true);
   });
 });
 
