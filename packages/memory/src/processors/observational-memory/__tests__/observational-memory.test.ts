@@ -1077,6 +1077,48 @@ describe('Token Counter', () => {
       const count = counter.countMessage(msg);
       expect(Number.isInteger(count)).toBe(true);
     });
+
+    it('should skip data-* parts when counting tokens', () => {
+      const largeObservationText = 'x'.repeat(10000);
+      const msgWithDataParts: MastraDBMessage = {
+        id: 'msg-data-parts',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+            },
+            { type: 'data-om-activation', data: { cycleId: 'cycle-1', observations: largeObservationText } } as any,
+            { type: 'data-om-buffering-start', data: { cycleId: 'cycle-2' } } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const msgWithoutDataParts: MastraDBMessage = {
+        id: 'msg-no-data-parts',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+            },
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const countWith = counter.countMessage(msgWithDataParts);
+      const countWithout = counter.countMessage(msgWithoutDataParts);
+      // data-* parts should be skipped, so counts should be equal
+      expect(countWith).toBe(countWithout);
+    });
   });
 
   describe('countMessages', () => {
