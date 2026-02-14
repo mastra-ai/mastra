@@ -2,11 +2,13 @@
  * JSON Exporter for Observability Testing
  *
  * A full-featured exporter primarily designed for testing purposes that provides:
- * - In-memory event collection with JSON serialization
+ * - In-memory event collection for ALL signals (Traces, Metrics, Logs, Scores, Feedback)
  * - File output support
  * - Span lifecycle tracking and validation
  * - Query methods for filtering spans by type, trace ID, span ID, etc.
- * - Statistics and analytics on collected spans
+ * - Query methods for filtering logs, metrics, scores, and feedback
+ * - Statistics and analytics on all collected signals
+ * - Internal metrics collection with summary on flush()
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -39,6 +41,16 @@ import type {
   AnyExportedSpan,
   ExportedSpan,
   SpanType,
+  LogEvent,
+  MetricEvent,
+  ScoreEvent,
+  FeedbackEvent,
+  ExportedLog,
+  ExportedMetric,
+  ExportedScore,
+  ExportedFeedback,
+  LogLevel,
+  MetricType,
 } from '@mastra/core/observability';
 import { TracingEventType as EventType } from '@mastra/core/observability';
 
@@ -62,11 +74,11 @@ interface SpanState {
 }
 
 /**
- * Statistics about collected spans
+ * Statistics about all collected signals
  */
 export interface JsonExporterStats {
-  /** Total number of events collected */
-  totalEvents: number;
+  /** Total number of tracing events collected */
+  totalTracingEvents: number;
   /** Number of unique spans */
   totalSpans: number;
   /** Number of unique traces */
@@ -75,7 +87,7 @@ export interface JsonExporterStats {
   completedSpans: number;
   /** Number of incomplete spans (started but not ended) */
   incompleteSpans: number;
-  /** Breakdown by event type */
+  /** Breakdown by tracing event type */
   byEventType: {
     started: number;
     updated: number;
@@ -83,6 +95,51 @@ export interface JsonExporterStats {
   };
   /** Breakdown by span type */
   bySpanType: Record<string, number>;
+  /** Total number of log events collected */
+  totalLogs: number;
+  /** Breakdown of logs by level */
+  logsByLevel: Record<string, number>;
+  /** Total number of metric events collected */
+  totalMetrics: number;
+  /** Breakdown of metrics by type */
+  metricsByType: Record<string, number>;
+  /** Breakdown of metrics by name */
+  metricsByName: Record<string, number>;
+  /** Total number of score events collected */
+  totalScores: number;
+  /** Breakdown of scores by scorer name */
+  scoresByScorer: Record<string, number>;
+  /** Total number of feedback events collected */
+  totalFeedback: number;
+  /** Breakdown of feedback by type */
+  feedbackByType: Record<string, number>;
+  /** @deprecated Use totalTracingEvents instead */
+  totalEvents: number;
+}
+
+/**
+ * Internal metrics collected by the JsonExporter while running.
+ * Dumped as a summary on flush().
+ */
+export interface JsonExporterInternalMetrics {
+  /** Timestamp when the exporter was created */
+  startedAt: Date;
+  /** Timestamp of the last event received */
+  lastEventAt: Date | null;
+  /** Total events received across all signal types */
+  totalEventsReceived: number;
+  /** Breakdown by signal type */
+  bySignal: {
+    tracing: number;
+    log: number;
+    metric: number;
+    score: number;
+    feedback: number;
+  };
+  /** Number of flush() calls */
+  flushCount: number;
+  /** Total bytes of JSON output produced (estimated from toJSON) */
+  estimatedJsonBytes: number;
 }
 
 /**
@@ -177,6 +234,11 @@ export interface JsonExporterConfig extends BaseExporterConfig {
    * @default 2
    */
   jsonIndent?: number;
+  /**
+   * Whether to log a summary of internal metrics on flush().
+   * @default true
+   */
+  logMetricsOnFlush?: boolean;
 }
 
 /**
@@ -218,17 +280,38 @@ export interface JsonExporterConfig extends BaseExporterConfig {
 export class JsonExporter extends BaseExporter {
   name = 'json-exporter';
 
-  /** All collected events */
-  #events: TracingEvent[] = [];
+  /** All collected tracing events */
+  #tracingEvents: TracingEvent[] = [];
 
   /** Per-span state tracking */
   #spanStates = new Map<string, SpanState>();
 
-  /** Logs for debugging */
-  #logs: string[] = [];
+  /** All collected log events */
+  #logEvents: LogEvent[] = [];
+
+  /** All collected metric events */
+  #metricEvents: MetricEvent[] = [];
+
+  /** All collected score events */
+  #scoreEvents: ScoreEvent[] = [];
+
+  /** All collected feedback events */
+  #feedbackEvents: FeedbackEvent[] = [];
+
+  /** Debug logs for the exporter itself */
+  #debugLogs: string[] = [];
 
   /** Configuration */
   readonly #config: JsonExporterConfig;
+
+  /** Internal metrics tracking */
+  #internalMetrics: {
+    startedAt: Date;
+    lastEventAt: Date | null;
+    totalEventsReceived: number;
+    bySignal: { tracing: number; log: number; metric: number; score: number; feedback: number };
+    flushCount: number;
+  };
 
   constructor(config: JsonExporterConfig = {}) {
     super(config);
@@ -236,7 +319,15 @@ export class JsonExporter extends BaseExporter {
       validateLifecycle: true,
       storeLogs: true,
       jsonIndent: 2,
+      logMetricsOnFlush: true,
       ...config,
+    };
+    this.#internalMetrics = {
+      startedAt: new Date(),
+      lastEventAt: null,
+      totalEventsReceived: 0,
+      bySignal: { tracing: 0, log: 0, metric: 0, score: 0, feedback: 0 },
+      flushCount: 0,
     };
   }
 
@@ -247,11 +338,14 @@ export class JsonExporter extends BaseExporter {
     const span = event.exportedSpan;
     const spanId = span.id;
 
+    // Track internal metrics
+    this.#trackEvent('tracing');
+
     // Generate log message
     const logMessage = `[JsonExporter] ${event.type}: ${span.type} "${span.name}" (entity: ${span.entityName ?? span.entityId ?? 'unknown'}, trace: ${span.traceId.slice(-8)}, span: ${spanId.slice(-8)})`;
 
     if (this.#config.storeLogs) {
-      this.#logs.push(logMessage);
+      this.#debugLogs.push(logMessage);
     }
 
     // Get or create span state
@@ -281,7 +375,83 @@ export class JsonExporter extends BaseExporter {
 
     state.events.push(event);
     this.#spanStates.set(spanId, state);
-    this.#events.push(event);
+    this.#tracingEvents.push(event);
+  }
+
+  // ============================================================================
+  // Signal Handlers (Logs, Metrics, Scores, Feedback)
+  // ============================================================================
+
+  /**
+   * Process incoming log events
+   */
+  async onLogEvent(event: LogEvent): Promise<void> {
+    this.#trackEvent('log');
+
+    if (this.#config.storeLogs) {
+      const log = event.log;
+      const logMessage = `[JsonExporter] log.${log.level}: "${log.message}"${log.traceId ? ` (trace: ${log.traceId.slice(-8)})` : ''}`;
+      this.#debugLogs.push(logMessage);
+    }
+
+    this.#logEvents.push(event);
+  }
+
+  /**
+   * Process incoming metric events
+   */
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    this.#trackEvent('metric');
+
+    if (this.#config.storeLogs) {
+      const metric = event.metric;
+      const labelsStr = Object.entries(metric.labels)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ');
+      const logMessage = `[JsonExporter] metric.${metric.metricType}: ${metric.name}=${metric.value}${labelsStr ? ` {${labelsStr}}` : ''}`;
+      this.#debugLogs.push(logMessage);
+    }
+
+    this.#metricEvents.push(event);
+  }
+
+  /**
+   * Process incoming score events
+   */
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    this.#trackEvent('score');
+
+    if (this.#config.storeLogs) {
+      const score = event.score;
+      const logMessage = `[JsonExporter] score: ${score.scorerName}=${score.score} (trace: ${score.traceId.slice(-8)}${score.spanId ? `, span: ${score.spanId.slice(-8)}` : ''})`;
+      this.#debugLogs.push(logMessage);
+    }
+
+    this.#scoreEvents.push(event);
+  }
+
+  /**
+   * Process incoming feedback events
+   */
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    this.#trackEvent('feedback');
+
+    if (this.#config.storeLogs) {
+      const fb = event.feedback;
+      const logMessage = `[JsonExporter] feedback: ${fb.feedbackType} from ${fb.source}=${fb.value} (trace: ${fb.traceId.slice(-8)}${fb.spanId ? `, span: ${fb.spanId.slice(-8)}` : ''})`;
+      this.#debugLogs.push(logMessage);
+    }
+
+    this.#feedbackEvents.push(event);
+  }
+
+  /**
+   * Track an event for internal metrics
+   */
+  #trackEvent(signal: 'tracing' | 'log' | 'metric' | 'score' | 'feedback'): void {
+    this.#internalMetrics.lastEventAt = new Date();
+    this.#internalMetrics.totalEventsReceived++;
+    this.#internalMetrics.bySignal[signal]++;
   }
 
   /**
@@ -313,14 +483,14 @@ export class JsonExporter extends BaseExporter {
   }
 
   // ============================================================================
-  // Query Methods
+  // Tracing Query Methods
   // ============================================================================
 
   /**
-   * Get all collected events
+   * Get all collected tracing events
    */
   get events(): TracingEvent[] {
-    return [...this.#events];
+    return [...this.#tracingEvents];
   }
 
   /**
@@ -350,19 +520,28 @@ export class JsonExporter extends BaseExporter {
    * @returns Array of events of the specified type
    */
   getByEventType(type: TracingEventType): TracingEvent[] {
-    return this.#events.filter(e => e.type === type);
+    return this.#tracingEvents.filter(e => e.type === type);
   }
 
   /**
    * Get all events and spans for a specific trace
    *
    * @param traceId - The trace ID to filter by
-   * @returns Object containing events and final spans for the trace
+   * @returns Object containing tracing events, final spans, plus logs/scores/feedback for the trace
    */
-  getByTraceId(traceId: string): { events: TracingEvent[]; spans: AnyExportedSpan[] } {
-    const events = this.#events.filter(e => e.exportedSpan.traceId === traceId);
+  getByTraceId(traceId: string): {
+    events: TracingEvent[];
+    spans: AnyExportedSpan[];
+    logs: ExportedLog[];
+    scores: ExportedScore[];
+    feedback: ExportedFeedback[];
+  } {
+    const events = this.#tracingEvents.filter(e => e.exportedSpan.traceId === traceId);
     const spans = this.#getUniqueSpansFromEvents(events);
-    return { events, spans };
+    const logs = this.#logEvents.filter(e => e.log.traceId === traceId).map(e => e.log);
+    const scores = this.#scoreEvents.filter(e => e.score.traceId === traceId).map(e => e.score);
+    const feedback = this.#feedbackEvents.filter(e => e.feedback.traceId === traceId).map(e => e.feedback);
+    return { events, spans, logs, scores, feedback };
   }
 
   /**
@@ -436,14 +615,151 @@ export class JsonExporter extends BaseExporter {
   }
 
   /**
-   * Get unique trace IDs from all collected spans
+   * Get unique trace IDs from all collected signals
    */
   getTraceIds(): string[] {
     const traceIds = new Set<string>();
-    for (const event of this.#events) {
+    for (const event of this.#tracingEvents) {
       traceIds.add(event.exportedSpan.traceId);
     }
+    for (const event of this.#logEvents) {
+      if (event.log.traceId) traceIds.add(event.log.traceId);
+    }
+    for (const event of this.#scoreEvents) {
+      traceIds.add(event.score.traceId);
+    }
+    for (const event of this.#feedbackEvents) {
+      traceIds.add(event.feedback.traceId);
+    }
     return Array.from(traceIds);
+  }
+
+  // ============================================================================
+  // Log Query Methods
+  // ============================================================================
+
+  /**
+   * Get all collected log events
+   */
+  getLogEvents(): LogEvent[] {
+    return [...this.#logEvents];
+  }
+
+  /**
+   * Get all collected logs (unwrapped from events)
+   */
+  getAllLogs(): ExportedLog[] {
+    return this.#logEvents.map(e => e.log);
+  }
+
+  /**
+   * Get logs filtered by level
+   */
+  getLogsByLevel(level: LogLevel): ExportedLog[] {
+    return this.#logEvents.filter(e => e.log.level === level).map(e => e.log);
+  }
+
+  /**
+   * Get logs for a specific trace
+   */
+  getLogsByTraceId(traceId: string): ExportedLog[] {
+    return this.#logEvents.filter(e => e.log.traceId === traceId).map(e => e.log);
+  }
+
+  // ============================================================================
+  // Metric Query Methods
+  // ============================================================================
+
+  /**
+   * Get all collected metric events
+   */
+  getMetricEvents(): MetricEvent[] {
+    return [...this.#metricEvents];
+  }
+
+  /**
+   * Get all collected metrics (unwrapped from events)
+   */
+  getAllMetrics(): ExportedMetric[] {
+    return this.#metricEvents.map(e => e.metric);
+  }
+
+  /**
+   * Get metrics filtered by name
+   */
+  getMetricsByName(name: string): ExportedMetric[] {
+    return this.#metricEvents.filter(e => e.metric.name === name).map(e => e.metric);
+  }
+
+  /**
+   * Get metrics filtered by type
+   */
+  getMetricsByType(metricType: MetricType): ExportedMetric[] {
+    return this.#metricEvents.filter(e => e.metric.metricType === metricType).map(e => e.metric);
+  }
+
+  // ============================================================================
+  // Score Query Methods
+  // ============================================================================
+
+  /**
+   * Get all collected score events
+   */
+  getScoreEvents(): ScoreEvent[] {
+    return [...this.#scoreEvents];
+  }
+
+  /**
+   * Get all collected scores (unwrapped from events)
+   */
+  getAllScores(): ExportedScore[] {
+    return this.#scoreEvents.map(e => e.score);
+  }
+
+  /**
+   * Get scores filtered by scorer name
+   */
+  getScoresByScorer(scorerName: string): ExportedScore[] {
+    return this.#scoreEvents.filter(e => e.score.scorerName === scorerName).map(e => e.score);
+  }
+
+  /**
+   * Get scores for a specific trace
+   */
+  getScoresByTraceId(traceId: string): ExportedScore[] {
+    return this.#scoreEvents.filter(e => e.score.traceId === traceId).map(e => e.score);
+  }
+
+  // ============================================================================
+  // Feedback Query Methods
+  // ============================================================================
+
+  /**
+   * Get all collected feedback events
+   */
+  getFeedbackEvents(): FeedbackEvent[] {
+    return [...this.#feedbackEvents];
+  }
+
+  /**
+   * Get all collected feedback (unwrapped from events)
+   */
+  getAllFeedback(): ExportedFeedback[] {
+    return this.#feedbackEvents.map(e => e.feedback);
+  }
+
+  /**
+   * Get feedback filtered by type
+   */
+  getFeedbackByType(feedbackType: string): ExportedFeedback[] {
+    return this.#feedbackEvents.filter(e => e.feedback.feedbackType === feedbackType).map(e => e.feedback);
+  }
+
+  /**
+   * Get feedback for a specific trace
+   */
+  getFeedbackByTraceId(traceId: string): ExportedFeedback[] {
+    return this.#feedbackEvents.filter(e => e.feedback.traceId === traceId).map(e => e.feedback);
   }
 
   // ============================================================================
@@ -451,7 +767,7 @@ export class JsonExporter extends BaseExporter {
   // ============================================================================
 
   /**
-   * Get comprehensive statistics about collected spans
+   * Get comprehensive statistics about all collected signals
    */
   getStatistics(): JsonExporterStats {
     const bySpanType: Record<string, number> = {};
@@ -471,18 +787,59 @@ export class JsonExporter extends BaseExporter {
       }
     }
 
+    // Log level breakdown
+    const logsByLevel: Record<string, number> = {};
+    for (const event of this.#logEvents) {
+      const level = event.log.level;
+      logsByLevel[level] = (logsByLevel[level] || 0) + 1;
+    }
+
+    // Metric breakdowns
+    const metricsByType: Record<string, number> = {};
+    const metricsByName: Record<string, number> = {};
+    for (const event of this.#metricEvents) {
+      const mType = event.metric.metricType;
+      metricsByType[mType] = (metricsByType[mType] || 0) + 1;
+      const mName = event.metric.name;
+      metricsByName[mName] = (metricsByName[mName] || 0) + 1;
+    }
+
+    // Score breakdown by scorer
+    const scoresByScorer: Record<string, number> = {};
+    for (const event of this.#scoreEvents) {
+      const scorer = event.score.scorerName;
+      scoresByScorer[scorer] = (scoresByScorer[scorer] || 0) + 1;
+    }
+
+    // Feedback breakdown by type
+    const feedbackByType: Record<string, number> = {};
+    for (const event of this.#feedbackEvents) {
+      const fbType = event.feedback.feedbackType;
+      feedbackByType[fbType] = (feedbackByType[fbType] || 0) + 1;
+    }
+
     return {
-      totalEvents: this.#events.length,
+      totalTracingEvents: this.#tracingEvents.length,
+      totalEvents: this.#tracingEvents.length, // deprecated alias
       totalSpans: this.#spanStates.size,
       totalTraces: this.getTraceIds().length,
       completedSpans,
       incompleteSpans,
       byEventType: {
-        started: this.#events.filter(e => e.type === EventType.SPAN_STARTED).length,
-        updated: this.#events.filter(e => e.type === EventType.SPAN_UPDATED).length,
-        ended: this.#events.filter(e => e.type === EventType.SPAN_ENDED).length,
+        started: this.#tracingEvents.filter(e => e.type === EventType.SPAN_STARTED).length,
+        updated: this.#tracingEvents.filter(e => e.type === EventType.SPAN_UPDATED).length,
+        ended: this.#tracingEvents.filter(e => e.type === EventType.SPAN_ENDED).length,
       },
       bySpanType,
+      totalLogs: this.#logEvents.length,
+      logsByLevel,
+      totalMetrics: this.#metricEvents.length,
+      metricsByType,
+      metricsByName,
+      totalScores: this.#scoreEvents.length,
+      scoresByScorer,
+      totalFeedback: this.#feedbackEvents.length,
+      feedbackByType,
     };
   }
 
@@ -505,8 +862,22 @@ export class JsonExporter extends BaseExporter {
       spans: this.getAllSpans(),
     };
 
+    // Include log/metric/score/feedback data
+    if (this.#logEvents.length > 0) {
+      data.logs = this.getAllLogs();
+    }
+    if (this.#metricEvents.length > 0) {
+      data.metrics = this.getAllMetrics();
+    }
+    if (this.#scoreEvents.length > 0) {
+      data.scores = this.getAllScores();
+    }
+    if (this.#feedbackEvents.length > 0) {
+      data.feedback = this.getAllFeedback();
+    }
+
     if (includeEvents) {
-      data.events = this.#events;
+      data.events = this.#tracingEvents;
     }
 
     if (includeStats) {
@@ -837,7 +1208,7 @@ export class JsonExporter extends BaseExporter {
     }
 
     await writeFile(filePath, json, 'utf-8');
-    this.logger.info(`JsonExporter: wrote ${this.#events.length} events to ${filePath}`);
+    this.logger.info(`JsonExporter: wrote ${this.#tracingEvents.length} tracing events to ${filePath}`);
   }
 
   /**
@@ -1140,18 +1511,18 @@ export class JsonExporter extends BaseExporter {
   // ============================================================================
 
   /**
-   * Get all stored logs
+   * Get all stored debug logs (internal exporter logging, not signal logs)
    */
   getLogs(): string[] {
-    return [...this.#logs];
+    return [...this.#debugLogs];
   }
 
   /**
-   * Dump logs to console for debugging (uses console.error for visibility in test output)
+   * Dump debug logs to console for debugging (uses console.error for visibility in test output)
    */
   dumpLogs(): void {
     console.error('\n=== JsonExporter Logs ===');
-    this.#logs.forEach(log => console.error(log));
+    this.#debugLogs.forEach(log => console.error(log));
     console.error('=== End Logs ===\n');
   }
 
@@ -1187,12 +1558,16 @@ export class JsonExporter extends BaseExporter {
   // ============================================================================
 
   /**
-   * Clear all collected events and state
+   * Clear all collected events and state across all signals
    */
   clearEvents(): void {
-    this.#events = [];
+    this.#tracingEvents = [];
     this.#spanStates.clear();
-    this.#logs = [];
+    this.#logEvents = [];
+    this.#metricEvents = [];
+    this.#scoreEvents = [];
+    this.#feedbackEvents = [];
+    this.#debugLogs = [];
   }
 
   /**
@@ -1202,7 +1577,44 @@ export class JsonExporter extends BaseExporter {
     this.clearEvents();
   }
 
+  /**
+   * Get internal metrics about the exporter's own activity.
+   */
+  getInternalMetrics(): JsonExporterInternalMetrics {
+    const json = this.toJSON({ includeEvents: false, includeStats: false });
+    return {
+      startedAt: this.#internalMetrics.startedAt,
+      lastEventAt: this.#internalMetrics.lastEventAt,
+      totalEventsReceived: this.#internalMetrics.totalEventsReceived,
+      bySignal: { ...this.#internalMetrics.bySignal },
+      flushCount: this.#internalMetrics.flushCount,
+      estimatedJsonBytes: new TextEncoder().encode(json).byteLength,
+    };
+  }
+
+  /**
+   * Flush buffered data and log internal metrics summary.
+   */
+  async flush(): Promise<void> {
+    this.#internalMetrics.flushCount++;
+
+    if (this.#config.logMetricsOnFlush) {
+      const metrics = this.getInternalMetrics();
+      const uptimeMs = Date.now() - metrics.startedAt.getTime();
+      const summary = [
+        `[JsonExporter] flush #${metrics.flushCount} summary:`,
+        `  uptime: ${(uptimeMs / 1000).toFixed(1)}s`,
+        `  total events received: ${metrics.totalEventsReceived}`,
+        `  by signal: tracing=${metrics.bySignal.tracing}, log=${metrics.bySignal.log}, metric=${metrics.bySignal.metric}, score=${metrics.bySignal.score}, feedback=${metrics.bySignal.feedback}`,
+        `  buffered: spans=${this.#spanStates.size}, logs=${this.#logEvents.length}, metrics=${this.#metricEvents.length}, scores=${this.#scoreEvents.length}, feedback=${this.#feedbackEvents.length}`,
+        `  estimated JSON size: ${(metrics.estimatedJsonBytes / 1024).toFixed(1)}KB`,
+      ].join('\n');
+      this.logger.info(summary);
+    }
+  }
+
   async shutdown(): Promise<void> {
+    await this.flush();
     this.logger.info('JsonExporter shutdown');
   }
 
