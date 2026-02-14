@@ -39,5 +39,4 @@ export const BUNDLE = [
   'v1/storage-list-threads-by-resource-to-list-threads',
   'v1/vector-pg-constructor',
   'v1/client-msg-function-args',
-  'v1/workspace-tools-enabled',
 ];
