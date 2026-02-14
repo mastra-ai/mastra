@@ -1,5 +1,105 @@
 # @mastra/core
 
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Added `allowedPaths` option to `LocalFilesystem` for granting agents access to specific directories outside `basePath` without disabling containment. ([#13054](https://github.com/mastra-ai/mastra/pull/13054))
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({
+      basePath: './workspace',
+      allowedPaths: ['/home/user/.config', '/home/user/documents'],
+    }),
+  });
+  ```
+
+  Allowed paths can be updated at runtime using `setAllowedPaths()`:
+
+  ```typescript
+  workspace.filesystem.setAllowedPaths(prev => [...prev, '/home/user/new-dir']);
+  ```
+
+  This is the recommended approach for least-privilege access — agents can only reach the specific directories you allow, while containment stays enabled for everything else.
+
+- Added glob pattern support for workspace configuration. The `list_files` tool now accepts a `pattern` parameter for filtering files (e.g., `**/*.ts`, `src/**/*.test.ts`). `autoIndexPaths` accepts glob patterns like `./docs/**/*.md` to selectively index files for BM25 search. Skills paths support globs like `./**/skills` to discover skill directories at any depth, including dot-directories like `.agents/skills`. ([#13023](https://github.com/mastra-ai/mastra/pull/13023))
+
+  **`list_files` tool with pattern:**
+
+  ```typescript
+  // Agent can now use glob patterns to filter files
+  const result = await workspace.tools.workspace_list_files({
+    path: '/',
+    pattern: '**/*.test.ts',
+  });
+  ```
+
+  **`autoIndexPaths` with globs:**
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './project' }),
+    bm25: true,
+    // Only index markdown files under ./docs
+    autoIndexPaths: ['./docs/**/*.md'],
+  });
+  ```
+
+  **Skills paths with globs:**
+
+  ```typescript
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './project' }),
+    // Discover any directory named 'skills' within 4 levels of depth
+    skills: ['./**/skills'],
+  });
+  ```
+
+  Note: Skills glob discovery walks up to 4 directory levels deep from the glob's static prefix. Use more specific patterns like `./src/**/skills` to narrow the search scope for large workspaces.
+
+- Added typed workspace providers — `workspace.filesystem` and `workspace.sandbox` now return the concrete types you passed to the constructor, improving autocomplete and eliminating casts. ([#13021](https://github.com/mastra-ai/mastra/pull/13021))
+
+  When mounts are configured, `workspace.filesystem` returns a typed `CompositeFilesystem<TMounts>` with per-key narrowing via `mounts.get()`.
+
+  **Before:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/tmp' }),
+    sandbox: new E2BSandbox({ timeout: 60000 }),
+  });
+  workspace.filesystem; // WorkspaceFilesystem | undefined
+  workspace.sandbox; // WorkspaceSandbox | undefined
+  ```
+
+  **After:**
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: '/tmp' }),
+    sandbox: new E2BSandbox({ timeout: 60000 }),
+  });
+  workspace.filesystem; // LocalFilesystem
+  workspace.sandbox; // E2BSandbox
+
+  // Mount-aware workspaces get typed per-key access:
+  const ws = new Workspace({
+    mounts: { '/local': new LocalFilesystem({ basePath: '/tmp' }) },
+  });
+  ws.filesystem.mounts.get('/local'); // LocalFilesystem
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e37ef84`](https://github.com/mastra-ai/mastra/commit/e37ef8404043c94ca0c8e35ecdedb093b8087878))
+
+- Fixed a bug where `requestContext` metadata was not propagated to child spans. When using `requestContextKeys`, only root spans were enriched with request context values — child spans (e.g. `agent_run` inside a workflow) were missing them. All spans in a trace are now correctly enriched. Fixes #12818. ([#12819](https://github.com/mastra-ai/mastra/pull/12819))
+
+- Fixed conditional rules not being persisted for workflows, agents, and scorers when creating or updating agents in the CMS. Rules configured on these entities are now correctly saved to storage. ([#13044](https://github.com/mastra-ai/mastra/pull/13044))
+
+- Fixed sub-agent memory context pollution that caused 'Exhausted all fallback models' errors when using Observational Memory with sub-agents. The parent agent's memory context is now preserved across sub-agent tool execution. ([#13051](https://github.com/mastra-ai/mastra/pull/13051))
+
 ## 1.4.0
 
 ### Minor Changes
