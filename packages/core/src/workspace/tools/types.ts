@@ -16,9 +16,12 @@ import type { WorkspaceToolName } from '../constants';
 /**
  * Configuration for a single workspace tool.
  * All fields are optional; unspecified fields inherit from top-level defaults.
+ *
+ * @deprecated Configure workspace tools by importing `createWorkspaceTools` from `@mastra/core/workspace`
+ * and passing the tools directly to your agent instead.
  */
 export interface WorkspaceToolConfig {
-  /** Whether the tool is enabled (default: true) */
+  /** Whether the tool is enabled (default: false) */
   enabled?: boolean;
 
   /** Whether the tool requires user approval before execution (default: false) */
@@ -38,8 +41,11 @@ export interface WorkspaceToolConfig {
  * Per-tool settings take precedence over top-level defaults.
  *
  * Default behavior (when no config provided):
- * - All tools are enabled
+ * - All tools are disabled
  * - No approval required
+ *
+ * @deprecated Configure workspace tools by importing `createWorkspaceTools` from `@mastra/core/workspace`
+ * and passing the tools directly to your agent instead.
  *
  * @example Top-level defaults with per-tool overrides
  * ```typescript
@@ -66,7 +72,7 @@ export interface WorkspaceToolConfig {
  * ```
  */
 export type WorkspaceToolsConfig = {
-  /** Default: whether all tools are enabled (default: true if not specified) */
+  /** Default: whether all tools are enabled (default: false if not specified) */
   enabled?: boolean;
 
   /** Default: whether all tools require user approval (default: false if not specified) */
