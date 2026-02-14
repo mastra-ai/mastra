@@ -35,6 +35,11 @@ vi.mock('empathic/package', () => ({
 vi.mock('local-pkg', () => ({
   resolveModule: vi.fn(),
 }));
+vi.mock('node:fs', () => ({
+  readFileSync: vi.fn().mockImplementation(() => {
+    throw new Error('ENOENT');
+  }),
+}));
 
 describe('watcher', () => {
   beforeEach(() => {
@@ -157,9 +162,9 @@ describe('watcher', () => {
         expect(pluginNames).not.toContain('alias-optimized-deps');
       });
 
-      it('resolves workspace imports to source with external: false', async () => {
-        const { resolveModule } = await import('local-pkg');
-        vi.mocked(resolveModule).mockReturnValue('/workspace/packages/core/src/index.ts');
+      it('prefers "source" field from package.json over resolveModule', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ source: './src/index.ts' }));
 
         const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
         bundlerGetInputOptions.mockResolvedValueOnce({
@@ -171,9 +176,47 @@ describe('watcher', () => {
         const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
         expect(resolver).toBeDefined();
 
-        // Call the resolveId hook with a workspace package import
         const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
         expect(resolved).toEqual({ id: '/workspace/packages/core/src/index.ts', external: false });
+      });
+
+      it('falls back to resolveModule when no "source" field exists', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ main: './dist/index.js' }));
+
+        const { resolveModule } = await import('local-pkg');
+        vi.mocked(resolveModule).mockReturnValue('/workspace/packages/core/dist/index.js');
+
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
+        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core');
+        expect(resolved).toEqual({ id: '/workspace/packages/core/dist/index.js', external: false });
+      });
+
+      it('falls back to resolveModule for subpath imports even when "source" field exists', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ source: './src/index.ts' }));
+
+        const { resolveModule } = await import('local-pkg');
+        vi.mocked(resolveModule).mockReturnValue('/workspace/packages/core/src/utils.ts');
+
+        const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+        bundlerGetInputOptions.mockResolvedValueOnce({
+          plugins: [{ name: 'alias-optimized-deps', resolveId: () => null } satisfies Plugin],
+        });
+
+        const result = await getInputOptions('test-entry.js', 'node');
+
+        const resolver = (result.plugins as Plugin[]).find(p => p.name === 'workspace-source-resolver');
+        // Subpath import — "source" field only applies to bare package name
+        const resolved = (resolver!.resolveId as Function).call(null, '@mastra/core/utils');
+        expect(resolved).toEqual({ id: '/workspace/packages/core/src/utils.ts', external: false });
       });
 
       it('returns null for non-workspace imports', async () => {
@@ -193,6 +236,11 @@ describe('watcher', () => {
       });
 
       it('returns null when resolveModule cannot resolve the import', async () => {
+        const { readFileSync } = await import('node:fs');
+        vi.mocked(readFileSync).mockImplementation(() => {
+          throw new Error('ENOENT');
+        });
+
         const { resolveModule } = await import('local-pkg');
         vi.mocked(resolveModule).mockReturnValue(undefined);
 

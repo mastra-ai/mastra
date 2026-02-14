@@ -1,4 +1,5 @@
-import { dirname, posix } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, join, posix } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
 import { resolveModule } from 'local-pkg';
@@ -64,6 +65,20 @@ export async function getInputOptions(
     { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
   );
 
+  // Pre-compute source entry points for workspace packages so the watcher
+  // tracks actual source files rather than compiled dist/ output.
+  const workspaceSourceEntries = new Map<string, string>();
+  for (const [pkgName, info] of workspaceMap.entries()) {
+    try {
+      const pkgJson = JSON.parse(readFileSync(join(info.location, 'package.json'), 'utf-8'));
+      if (pkgJson.source) {
+        workspaceSourceEntries.set(pkgName, slash(join(info.location, pkgJson.source)));
+      }
+    } catch {
+      // package.json unreadable — fall back to resolveModule
+    }
+  }
+
   if (Array.isArray(inputOptions.plugins)) {
     // filter out node-resolve plugin so all node_modules are external
     // and tsconfig-paths plugin as we are injection a custom one
@@ -93,7 +108,14 @@ export async function getInputOptions(
             if (!pkgName || !workspaceMap.has(pkgName)) {
               return null;
             }
-            // Resolve workspace import to actual source entry point
+            // Prefer "source" field so we watch source files, not compiled dist/
+            if (id === pkgName) {
+              const sourceEntry = workspaceSourceEntries.get(pkgName);
+              if (sourceEntry) {
+                return { id: sourceEntry, external: false };
+              }
+            }
+            // Fall back to resolveModule (uses main/exports)
             const resolved = resolveModule(id);
             if (resolved) {
               return { id: slash(resolved), external: false };
