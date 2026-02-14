@@ -105,10 +105,3 @@ export function createWorkflowTests(config: WorkflowTestConfig = {}) {
     });
   });
 }
-
-declare module 'vitest' {
-  export interface ProvidedContext {
-    baseUrl: string;
-    port: number;
-  }
-}
