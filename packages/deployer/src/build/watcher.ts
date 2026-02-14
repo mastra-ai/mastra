@@ -1,6 +1,7 @@
 import { dirname, posix } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import * as pkg from 'empathic/package';
+import { resolveModule } from 'local-pkg';
 import type { InputOptions, OutputOptions, Plugin } from 'rollup';
 import { watch } from 'rollup';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
@@ -78,6 +79,28 @@ export async function getInputOptions(
             localResolve: true,
           }),
         );
+        return;
+      }
+
+      // Replace alias-optimized-deps with workspace-source-resolver so that
+      // workspace package source files are included in Rollup's module graph
+      // and automatically watched for changes during `mastra dev`.
+      if ((plugin as Plugin | undefined)?.name === 'alias-optimized-deps') {
+        plugins.push({
+          name: 'workspace-source-resolver',
+          resolveId(id: string) {
+            const pkgName = getPackageName(id);
+            if (!pkgName || !workspaceMap.has(pkgName)) {
+              return null;
+            }
+            // Resolve workspace import to actual source entry point
+            const resolved = resolveModule(id);
+            if (resolved) {
+              return { id: slash(resolved), external: false };
+            }
+            return null;
+          },
+        } satisfies Plugin);
         return;
       }
 
