@@ -1,12 +1,12 @@
 /**
- * GrafanaCloudExporter - exports traces, metrics, and logs to Grafana Cloud.
+ * GrafanaExporter - exports traces, metrics, and logs to the Grafana stack.
  *
- * Signal routing:
+ * Supports both Grafana Cloud and self-hosted deployments:
  * - Traces → Grafana Tempo (via OTLP/HTTP JSON)
  * - Metrics → Grafana Mimir (via OTLP/HTTP JSON)
  * - Logs → Grafana Loki (via JSON push API)
  *
- * Authentication uses Basic auth with `instanceId:apiKey` for all endpoints.
+ * Use the `grafanaCloud()` or `grafana()` config helpers for easy setup.
  *
  * Supports batching with configurable batch size and flush interval.
  * In serverless environments, call `flush()` before function termination.
@@ -17,7 +17,6 @@ import type {
   AnyExportedSpan,
   TracingEvent,
   InitExporterOptions,
-  ObservabilityInstanceConfig,
 } from '@mastra/core/observability';
 import type { ExportedLog, LogEvent } from '@mastra/core/observability';
 import type { ExportedMetric, MetricEvent } from '@mastra/core/observability';
@@ -26,36 +25,63 @@ import { BaseExporter } from '@mastra/observability';
 import { formatLogsForLoki } from './formatters/logs.js';
 import { formatMetricsForMimir } from './formatters/metrics.js';
 import { formatSpansForTempo } from './formatters/traces.js';
-import type { GrafanaCloudExporterConfig } from './types.js';
+import type { GrafanaAuth, GrafanaExporterConfig } from './types.js';
 import { DEFAULTS } from './types.js';
 
 /**
- * GrafanaCloudExporter sends telemetry to Grafana Cloud's managed backends.
+ * Build HTTP headers from GrafanaAuth configuration.
+ */
+function buildAuthHeaders(auth: GrafanaAuth): Record<string, string> {
+  switch (auth.type) {
+    case 'basic':
+      return { Authorization: `Basic ${btoa(`${auth.username}:${auth.password}`)}` };
+    case 'bearer':
+      return { Authorization: `Bearer ${auth.token}` };
+    case 'custom':
+      return { ...auth.headers };
+    case 'none':
+      return {};
+  }
+}
+
+/**
+ * GrafanaExporter sends telemetry to the Grafana observability stack
+ * (Tempo, Mimir, Loki) — either Grafana Cloud or self-hosted.
  *
  * Implements `onTracingEvent`, `onLogEvent`, and `onMetricEvent` handlers,
  * indicating support for all three signals (T/M/L).
  *
- * @example
+ * @example Grafana Cloud
  * ```typescript
- * import { GrafanaCloudExporter } from '@mastra/grafana-cloud';
+ * import { GrafanaExporter, grafanaCloud } from '@mastra/grafana';
  *
- * const exporter = new GrafanaCloudExporter({
+ * const exporter = new GrafanaExporter(grafanaCloud({
  *   instanceId: process.env.GRAFANA_CLOUD_INSTANCE_ID,
  *   apiKey: process.env.GRAFANA_CLOUD_API_KEY,
- * });
+ * }));
+ * ```
+ *
+ * @example Self-hosted
+ * ```typescript
+ * import { GrafanaExporter, grafana } from '@mastra/grafana';
+ *
+ * const exporter = new GrafanaExporter(grafana({
+ *   tempoEndpoint: 'http://localhost:4318',
+ *   mimirEndpoint: 'http://localhost:9090',
+ *   lokiEndpoint: 'http://localhost:3100',
+ * }));
  * ```
  */
-export class GrafanaCloudExporter extends BaseExporter {
-  readonly name = 'grafana-cloud';
+export class GrafanaExporter extends BaseExporter {
+  readonly name = 'grafana';
 
-  private readonly instanceId: string;
-  private readonly apiKey: string;
   private readonly tempoEndpoint: string;
   private readonly mimirEndpoint: string;
   private readonly lokiEndpoint: string;
-  private readonly serviceName: string;
+  private serviceName: string;
   private readonly batchSize: number;
   private readonly flushIntervalMs: number;
+  private readonly tenantId?: string;
 
   // Batching buffers
   private spanBuffer: AnyExportedSpan[] = [];
@@ -65,71 +91,43 @@ export class GrafanaCloudExporter extends BaseExporter {
   // Flush timer
   private flushTimer: ReturnType<typeof setInterval> | undefined;
 
-  // Auth header (cached)
-  private readonly authHeader: string;
+  // Auth headers (cached)
+  private readonly authHeaders: Record<string, string>;
 
-  constructor(config: GrafanaCloudExporterConfig = {}) {
+  constructor(config: GrafanaExporterConfig = {}) {
     super(config);
 
-    // Resolve configuration from config and environment variables
-    const instanceId = config.instanceId ?? process.env['GRAFANA_CLOUD_INSTANCE_ID'];
-    const apiKey = config.apiKey ?? process.env['GRAFANA_CLOUD_API_KEY'];
+    // Resolve endpoints from config or env vars
+    const tempoEndpoint =
+      config.tempoEndpoint ?? process.env['GRAFANA_TEMPO_ENDPOINT'];
+    const mimirEndpoint =
+      config.mimirEndpoint ?? process.env['GRAFANA_MIMIR_ENDPOINT'];
+    const lokiEndpoint =
+      config.lokiEndpoint ?? process.env['GRAFANA_LOKI_ENDPOINT'];
 
-    if (!instanceId) {
-      this.instanceId = '';
-      this.apiKey = '';
-      this.authHeader = '';
+    // At least one endpoint must be configured
+    if (!tempoEndpoint && !mimirEndpoint && !lokiEndpoint) {
       this.tempoEndpoint = '';
       this.mimirEndpoint = '';
       this.lokiEndpoint = '';
+      this.authHeaders = {};
       this.serviceName = DEFAULTS.serviceName;
       this.batchSize = DEFAULTS.batchSize;
       this.flushIntervalMs = DEFAULTS.flushIntervalMs;
       this.setDisabled(
-        'Missing instanceId. Set GRAFANA_CLOUD_INSTANCE_ID env var or pass instanceId in config.',
+        'No endpoints configured. Provide tempoEndpoint, mimirEndpoint, or lokiEndpoint, ' +
+          'or use the grafanaCloud() / grafana() config helpers.',
       );
       return;
     }
 
-    if (!apiKey) {
-      this.instanceId = '';
-      this.apiKey = '';
-      this.authHeader = '';
-      this.tempoEndpoint = '';
-      this.mimirEndpoint = '';
-      this.lokiEndpoint = '';
-      this.serviceName = DEFAULTS.serviceName;
-      this.batchSize = DEFAULTS.batchSize;
-      this.flushIntervalMs = DEFAULTS.flushIntervalMs;
-      this.setDisabled(
-        'Missing apiKey. Set GRAFANA_CLOUD_API_KEY env var or pass apiKey in config.',
-      );
-      return;
-    }
+    this.tempoEndpoint = tempoEndpoint ?? '';
+    this.mimirEndpoint = mimirEndpoint ?? '';
+    this.lokiEndpoint = lokiEndpoint ?? '';
+    this.tenantId = config.tenantId;
 
-    this.instanceId = instanceId;
-    this.apiKey = apiKey;
-
-    // Build Basic auth header
-    this.authHeader = `Basic ${btoa(`${instanceId}:${apiKey}`)}`;
-
-    // Resolve endpoints
-    const zone = config.zone ?? process.env['GRAFANA_CLOUD_ZONE'] ?? DEFAULTS.zone;
-
-    this.tempoEndpoint =
-      config.tempoEndpoint ??
-      process.env['GRAFANA_CLOUD_TEMPO_ENDPOINT'] ??
-      `https://tempo-${zone}.grafana.net`;
-
-    this.mimirEndpoint =
-      config.mimirEndpoint ??
-      process.env['GRAFANA_CLOUD_MIMIR_ENDPOINT'] ??
-      `https://mimir-${zone}.grafana.net`;
-
-    this.lokiEndpoint =
-      config.lokiEndpoint ??
-      process.env['GRAFANA_CLOUD_LOKI_ENDPOINT'] ??
-      `https://logs-${zone}.grafana.net`;
+    // Build auth headers
+    this.authHeaders = config.auth ? buildAuthHeaders(config.auth) : {};
 
     this.serviceName = config.serviceName ?? DEFAULTS.serviceName;
     this.batchSize = config.batchSize ?? DEFAULTS.batchSize;
@@ -145,11 +143,11 @@ export class GrafanaCloudExporter extends BaseExporter {
       this.flushTimer.unref();
     }
 
-    this.logger.info('GrafanaCloudExporter initialized', {
-      zone,
-      tempoEndpoint: this.tempoEndpoint,
-      mimirEndpoint: this.mimirEndpoint,
-      lokiEndpoint: this.lokiEndpoint,
+    this.logger.info('GrafanaExporter initialized', {
+      tempoEndpoint: this.tempoEndpoint || '(disabled)',
+      mimirEndpoint: this.mimirEndpoint || '(disabled)',
+      lokiEndpoint: this.lokiEndpoint || '(disabled)',
+      authType: config.auth?.type ?? 'none',
     });
   }
 
@@ -158,8 +156,7 @@ export class GrafanaCloudExporter extends BaseExporter {
    */
   override init(options: InitExporterOptions): void {
     if (options.config?.serviceName && this.serviceName === DEFAULTS.serviceName) {
-      // We can't reassign readonly, so we use Object.defineProperty for this override
-      Object.defineProperty(this, 'serviceName', { value: options.config.serviceName });
+      this.serviceName = options.config.serviceName;
     }
   }
 
@@ -172,7 +169,7 @@ export class GrafanaCloudExporter extends BaseExporter {
    * Buffers spans and flushes when batch size is reached.
    */
   async onTracingEvent(event: TracingEvent): Promise<void> {
-    if (this.isDisabled) return;
+    if (this.isDisabled || !this.tempoEndpoint) return;
 
     // Only export completed spans
     if (event.type !== TracingEventType.SPAN_ENDED) return;
@@ -188,7 +185,7 @@ export class GrafanaCloudExporter extends BaseExporter {
    * Handle log events. Buffers logs and flushes when batch size is reached.
    */
   async onLogEvent(event: LogEvent): Promise<void> {
-    if (this.isDisabled) return;
+    if (this.isDisabled || !this.lokiEndpoint) return;
 
     this.logBuffer.push(event.log);
 
@@ -201,7 +198,7 @@ export class GrafanaCloudExporter extends BaseExporter {
    * Handle metric events. Buffers metrics and flushes when batch size is reached.
    */
   async onMetricEvent(event: MetricEvent): Promise<void> {
-    if (this.isDisabled) return;
+    if (this.isDisabled || !this.mimirEndpoint) return;
 
     this.metricBuffer.push(event.metric);
 
@@ -227,7 +224,7 @@ export class GrafanaCloudExporter extends BaseExporter {
   // ============================================================================
 
   /**
-   * Flush all buffered data to Grafana Cloud.
+   * Flush all buffered data to Grafana.
    */
   override async flush(): Promise<void> {
     if (this.isDisabled) return;
@@ -239,7 +236,7 @@ export class GrafanaCloudExporter extends BaseExporter {
    * Flush buffered spans to Tempo.
    */
   private async flushSpans(): Promise<void> {
-    if (this.spanBuffer.length === 0) return;
+    if (this.spanBuffer.length === 0 || !this.tempoEndpoint) return;
 
     const spans = this.spanBuffer;
     this.spanBuffer = [];
@@ -247,9 +244,9 @@ export class GrafanaCloudExporter extends BaseExporter {
     try {
       const body = formatSpansForTempo(spans, this.serviceName);
       await this.sendToTempo(body);
-      this.logger.debug(`[GrafanaCloud] Exported ${spans.length} spans to Tempo`);
+      this.logger.debug(`[Grafana] Exported ${spans.length} spans to Tempo`);
     } catch (error) {
-      this.logger.error('[GrafanaCloud] Failed to export spans to Tempo', { error });
+      this.logger.error('[Grafana] Failed to export spans to Tempo', { error });
       // Re-buffer for retry on next flush (with size cap to prevent unbounded growth)
       if (this.spanBuffer.length + spans.length <= this.batchSize * 5) {
         this.spanBuffer = spans.concat(this.spanBuffer);
@@ -261,7 +258,7 @@ export class GrafanaCloudExporter extends BaseExporter {
    * Flush buffered metrics to Mimir.
    */
   private async flushMetrics(): Promise<void> {
-    if (this.metricBuffer.length === 0) return;
+    if (this.metricBuffer.length === 0 || !this.mimirEndpoint) return;
 
     const metrics = this.metricBuffer;
     this.metricBuffer = [];
@@ -269,9 +266,9 @@ export class GrafanaCloudExporter extends BaseExporter {
     try {
       const body = formatMetricsForMimir(metrics, this.serviceName);
       await this.sendToMimir(body);
-      this.logger.debug(`[GrafanaCloud] Exported ${metrics.length} metrics to Mimir`);
+      this.logger.debug(`[Grafana] Exported ${metrics.length} metrics to Mimir`);
     } catch (error) {
-      this.logger.error('[GrafanaCloud] Failed to export metrics to Mimir', { error });
+      this.logger.error('[Grafana] Failed to export metrics to Mimir', { error });
       if (this.metricBuffer.length + metrics.length <= this.batchSize * 5) {
         this.metricBuffer = metrics.concat(this.metricBuffer);
       }
@@ -282,7 +279,7 @@ export class GrafanaCloudExporter extends BaseExporter {
    * Flush buffered logs to Loki.
    */
   private async flushLogs(): Promise<void> {
-    if (this.logBuffer.length === 0) return;
+    if (this.logBuffer.length === 0 || !this.lokiEndpoint) return;
 
     const logs = this.logBuffer;
     this.logBuffer = [];
@@ -290,9 +287,9 @@ export class GrafanaCloudExporter extends BaseExporter {
     try {
       const body = formatLogsForLoki(logs, this.serviceName);
       await this.sendToLoki(body);
-      this.logger.debug(`[GrafanaCloud] Exported ${logs.length} logs to Loki`);
+      this.logger.debug(`[Grafana] Exported ${logs.length} logs to Loki`);
     } catch (error) {
-      this.logger.error('[GrafanaCloud] Failed to export logs to Loki', { error });
+      this.logger.error('[Grafana] Failed to export logs to Loki', { error });
       if (this.logBuffer.length + logs.length <= this.batchSize * 5) {
         this.logBuffer = logs.concat(this.logBuffer);
       }
@@ -328,23 +325,28 @@ export class GrafanaCloudExporter extends BaseExporter {
   }
 
   /**
-   * Send an authenticated JSON request to a Grafana Cloud endpoint.
+   * Send an authenticated JSON request to a Grafana endpoint.
    */
   private async sendRequest(url: string, body: unknown): Promise<void> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.authHeaders,
+    };
+
+    if (this.tenantId) {
+      headers['X-Scope-OrgID'] = this.tenantId;
+    }
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: this.authHeader,
-        'X-Scope-OrgID': this.instanceId,
-      },
+      headers,
       body: JSON.stringify(body),
     });
 
     if (!response.ok) {
       const responseText = await response.text().catch(() => '(no body)');
       throw new Error(
-        `Grafana Cloud API error: ${response.status} ${response.statusText} - ${responseText}`,
+        `Grafana API error: ${response.status} ${response.statusText} - ${responseText}`,
       );
     }
   }

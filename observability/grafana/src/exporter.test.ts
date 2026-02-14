@@ -4,7 +4,8 @@ import type { ExportedLog, LogEvent } from '@mastra/core/observability';
 import type { ExportedMetric, MetricEvent } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GrafanaCloudExporter } from './exporter';
+import { grafana, grafanaCloud } from './config-helpers';
+import { GrafanaExporter } from './exporter';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -60,24 +61,38 @@ function makeMetricEvent(overrides: Partial<ExportedMetric> = {}): MetricEvent {
   };
 }
 
-function createExporter(config?: Record<string, unknown>) {
-  return new GrafanaCloudExporter({
-    instanceId: 'test-instance-id',
-    apiKey: 'test-api-key',
-    zone: 'prod-us-central-0',
+const mockLogger = () =>
+  ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) as any;
+
+function createCloudExporter(config?: Record<string, unknown>) {
+  return new GrafanaExporter({
+    ...grafanaCloud({
+      instanceId: 'test-instance-id',
+      apiKey: 'test-api-key',
+      zone: 'prod-us-central-0',
+    }),
     batchSize: 2,
     flushIntervalMs: 60000, // Long interval so we control flushing manually
-    logger: {
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    } as any,
+    logger: mockLogger(),
     ...config,
   });
 }
 
-describe('GrafanaCloudExporter', () => {
+function createSelfHostedExporter(config?: Record<string, unknown>) {
+  return new GrafanaExporter({
+    ...grafana({
+      tempoEndpoint: 'http://localhost:4318',
+      mimirEndpoint: 'http://localhost:9090',
+      lokiEndpoint: 'http://localhost:3100',
+    }),
+    batchSize: 2,
+    flushIntervalMs: 60000,
+    logger: mockLogger(),
+    ...config,
+  });
+}
+
+describe('GrafanaExporter', () => {
   beforeEach(() => {
     mockFetch.mockResolvedValue({ ok: true, text: () => Promise.resolve('') });
   });
@@ -92,59 +107,207 @@ describe('GrafanaCloudExporter', () => {
   // ============================================================================
 
   describe('configuration', () => {
-    it('should disable when instanceId is missing', () => {
-      const exporter = new GrafanaCloudExporter({
-        apiKey: 'key',
-        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+    it('should disable when no endpoints are configured', () => {
+      const exporter = new GrafanaExporter({
+        logger: mockLogger(),
       });
 
       expect(exporter.isDisabled).toBe(true);
     });
 
-    it('should disable when apiKey is missing', () => {
-      const exporter = new GrafanaCloudExporter({
-        instanceId: '12345',
-        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
-      });
-
-      expect(exporter.isDisabled).toBe(true);
-    });
-
-    it('should initialize when both instanceId and apiKey are provided', () => {
-      const exporter = createExporter();
+    it('should initialize with grafanaCloud() helper', () => {
+      const exporter = createCloudExporter();
       expect(exporter.isDisabled).toBe(false);
     });
 
-    it('should use zone to construct default endpoints', async () => {
-      const exporter = createExporter({ zone: 'prod-eu-west-0' });
-
-      // Trigger a span flush
-      await exporter.onTracingEvent(makeTracingEvent());
-      await exporter.onTracingEvent(makeTracingEvent()); // triggers batch
-      await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
-
-      const url = mockFetch.mock.calls[0]![0] as string;
-      expect(url).toContain('tempo-prod-eu-west-0.grafana.net');
+    it('should initialize with grafana() helper (self-hosted)', () => {
+      const exporter = createSelfHostedExporter();
+      expect(exporter.isDisabled).toBe(false);
     });
 
-    it('should use custom endpoints when provided', async () => {
-      const exporter = createExporter({
+    it('should have the correct exporter name', () => {
+      const exporter = createCloudExporter();
+      expect(exporter.name).toBe('grafana');
+    });
+  });
+
+  // ============================================================================
+  // Config Helpers
+  // ============================================================================
+
+  describe('grafanaCloud() helper', () => {
+    it('should construct zone-based endpoints', () => {
+      const config = grafanaCloud({
+        instanceId: '123',
+        apiKey: 'key',
+        zone: 'prod-eu-west-0',
+      });
+
+      expect(config.tempoEndpoint).toBe('https://tempo-prod-eu-west-0.grafana.net');
+      expect(config.mimirEndpoint).toBe('https://mimir-prod-eu-west-0.grafana.net');
+      expect(config.lokiEndpoint).toBe('https://logs-prod-eu-west-0.grafana.net');
+    });
+
+    it('should set Basic auth with instanceId:apiKey', () => {
+      const config = grafanaCloud({
+        instanceId: '123',
+        apiKey: 'my-api-key',
+      });
+
+      expect(config.auth).toEqual({
+        type: 'basic',
+        username: '123',
+        password: 'my-api-key',
+      });
+    });
+
+    it('should set tenantId to instanceId', () => {
+      const config = grafanaCloud({
+        instanceId: '123',
+        apiKey: 'key',
+      });
+
+      expect(config.tenantId).toBe('123');
+    });
+
+    it('should allow endpoint overrides', () => {
+      const config = grafanaCloud({
+        instanceId: '123',
+        apiKey: 'key',
         tempoEndpoint: 'https://custom-tempo.example.com',
-        mimirEndpoint: 'https://custom-mimir.example.com',
-        lokiEndpoint: 'https://custom-loki.example.com',
+      });
+
+      expect(config.tempoEndpoint).toBe('https://custom-tempo.example.com');
+    });
+
+    it('should use default zone when not specified', () => {
+      const config = grafanaCloud({
+        instanceId: '123',
+        apiKey: 'key',
+      });
+
+      expect(config.tempoEndpoint).toContain('prod-us-central-0');
+    });
+  });
+
+  describe('grafana() helper', () => {
+    it('should pass through endpoints directly', () => {
+      const config = grafana({
+        tempoEndpoint: 'http://tempo:4318',
+        mimirEndpoint: 'http://mimir:9090',
+        lokiEndpoint: 'http://loki:3100',
+      });
+
+      expect(config.tempoEndpoint).toBe('http://tempo:4318');
+      expect(config.mimirEndpoint).toBe('http://mimir:9090');
+      expect(config.lokiEndpoint).toBe('http://loki:3100');
+    });
+
+    it('should default to no auth', () => {
+      const config = grafana({
+        tempoEndpoint: 'http://localhost:4318',
+      });
+
+      expect(config.auth).toEqual({ type: 'none' });
+    });
+
+    it('should support bearer auth', () => {
+      const config = grafana({
+        tempoEndpoint: 'http://localhost:4318',
+        auth: { type: 'bearer', token: 'my-token' },
+      });
+
+      expect(config.auth).toEqual({ type: 'bearer', token: 'my-token' });
+    });
+
+    it('should support custom headers auth', () => {
+      const config = grafana({
+        tempoEndpoint: 'http://localhost:4318',
+        auth: { type: 'custom', headers: { 'X-Custom-Auth': 'secret' } },
+      });
+
+      expect(config.auth).toEqual({
+        type: 'custom',
+        headers: { 'X-Custom-Auth': 'secret' },
+      });
+    });
+
+    it('should support tenantId for multi-tenant', () => {
+      const config = grafana({
+        tempoEndpoint: 'http://localhost:4318',
+        tenantId: 'my-org',
+      });
+
+      expect(config.tenantId).toBe('my-org');
+    });
+  });
+
+  // ============================================================================
+  // Auth Headers
+  // ============================================================================
+
+  describe('auth headers', () => {
+    it('should send Basic auth for grafanaCloud config', async () => {
+      const exporter = createCloudExporter();
+
+      await exporter.onTracingEvent(makeTracingEvent());
+      await exporter.onTracingEvent(makeTracingEvent());
+
+      const options = mockFetch.mock.calls[0]![1] as RequestInit;
+      const headers = options.headers as Record<string, string>;
+      expect(headers['Authorization']).toContain('Basic');
+    });
+
+    it('should send Bearer auth when configured', async () => {
+      const exporter = new GrafanaExporter({
+        ...grafana({
+          tempoEndpoint: 'http://localhost:4318',
+          auth: { type: 'bearer', token: 'my-token' },
+        }),
+        batchSize: 2,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
       });
 
       await exporter.onTracingEvent(makeTracingEvent());
       await exporter.onTracingEvent(makeTracingEvent());
-      await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
 
-      const url = mockFetch.mock.calls[0]![0] as string;
-      expect(url).toBe('https://custom-tempo.example.com/v1/traces');
+      const options = mockFetch.mock.calls[0]![1] as RequestInit;
+      const headers = options.headers as Record<string, string>;
+      expect(headers['Authorization']).toBe('Bearer my-token');
     });
 
-    it('should have the correct exporter name', () => {
-      const exporter = createExporter();
-      expect(exporter.name).toBe('grafana-cloud');
+    it('should send no auth header when auth is none', async () => {
+      const exporter = createSelfHostedExporter();
+
+      await exporter.onTracingEvent(makeTracingEvent());
+      await exporter.onTracingEvent(makeTracingEvent());
+
+      const options = mockFetch.mock.calls[0]![1] as RequestInit;
+      const headers = options.headers as Record<string, string>;
+      expect(headers['Authorization']).toBeUndefined();
+    });
+
+    it('should send X-Scope-OrgID when tenantId is set', async () => {
+      const exporter = createCloudExporter();
+
+      await exporter.onTracingEvent(makeTracingEvent());
+      await exporter.onTracingEvent(makeTracingEvent());
+
+      const options = mockFetch.mock.calls[0]![1] as RequestInit;
+      const headers = options.headers as Record<string, string>;
+      expect(headers['X-Scope-OrgID']).toBe('test-instance-id');
+    });
+
+    it('should not send X-Scope-OrgID when tenantId is not set', async () => {
+      const exporter = createSelfHostedExporter();
+
+      await exporter.onTracingEvent(makeTracingEvent());
+      await exporter.onTracingEvent(makeTracingEvent());
+
+      const options = mockFetch.mock.calls[0]![1] as RequestInit;
+      const headers = options.headers as Record<string, string>;
+      expect(headers['X-Scope-OrgID']).toBeUndefined();
     });
   });
 
@@ -154,9 +317,8 @@ describe('GrafanaCloudExporter', () => {
 
   describe('tracing', () => {
     it('should only export on SPAN_ENDED events', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
-      // SPAN_STARTED should be ignored
       await exporter.onTracingEvent(makeTracingEvent(TracingEventType.SPAN_STARTED));
       await exporter.flush();
 
@@ -164,19 +326,18 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should buffer spans until batch size is reached', async () => {
-      const exporter = createExporter({ batchSize: 3 });
+      const exporter = createCloudExporter({ batchSize: 3 });
 
       await exporter.onTracingEvent(makeTracingEvent());
       await exporter.onTracingEvent(makeTracingEvent());
       expect(mockFetch).not.toHaveBeenCalled();
 
-      // Third span should trigger flush
       await exporter.onTracingEvent(makeTracingEvent());
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('should send spans to Tempo OTLP endpoint', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.onTracingEvent(makeTracingEvent());
       await exporter.onTracingEvent(makeTracingEvent());
@@ -185,19 +346,8 @@ describe('GrafanaCloudExporter', () => {
       expect(url).toContain('/v1/traces');
     });
 
-    it('should include Authorization header', async () => {
-      const exporter = createExporter();
-
-      await exporter.onTracingEvent(makeTracingEvent());
-      await exporter.onTracingEvent(makeTracingEvent());
-
-      const options = mockFetch.mock.calls[0]![1] as RequestInit;
-      expect(options.headers).toHaveProperty('Authorization');
-      expect((options.headers as Record<string, string>)['Authorization']).toContain('Basic');
-    });
-
     it('should send JSON content type', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.onTracingEvent(makeTracingEvent());
       await exporter.onTracingEvent(makeTracingEvent());
@@ -207,7 +357,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should send valid OTLP JSON body', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.onTracingEvent(makeTracingEvent());
       await exporter.onTracingEvent(makeTracingEvent());
@@ -218,6 +368,20 @@ describe('GrafanaCloudExporter', () => {
       expect(body.resourceSpans).toBeDefined();
       expect(body.resourceSpans[0].scopeSpans[0].spans).toHaveLength(2);
     });
+
+    it('should skip traces when tempoEndpoint is not set', async () => {
+      const exporter = new GrafanaExporter({
+        ...grafana({ lokiEndpoint: 'http://localhost:3100' }),
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onTracingEvent(makeTracingEvent());
+      await exporter.flush();
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   // ============================================================================
@@ -226,7 +390,7 @@ describe('GrafanaCloudExporter', () => {
 
   describe('logging', () => {
     it('should buffer logs until batch size is reached', async () => {
-      const exporter = createExporter({ batchSize: 3 });
+      const exporter = createCloudExporter({ batchSize: 3 });
 
       await exporter.onLogEvent(makeLogEvent());
       await exporter.onLogEvent(makeLogEvent());
@@ -237,7 +401,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should send logs to Loki push endpoint', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.onLogEvent(makeLogEvent());
       await exporter.onLogEvent(makeLogEvent());
@@ -247,7 +411,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should send valid Loki JSON body', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.onLogEvent(makeLogEvent({ message: 'Hello world' }));
       await exporter.onLogEvent(makeLogEvent({ message: 'Second message' }));
@@ -258,6 +422,20 @@ describe('GrafanaCloudExporter', () => {
       expect(body.streams).toBeDefined();
       expect(body.streams.length).toBeGreaterThan(0);
     });
+
+    it('should skip logs when lokiEndpoint is not set', async () => {
+      const exporter = new GrafanaExporter({
+        ...grafana({ tempoEndpoint: 'http://localhost:4318' }),
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onLogEvent(makeLogEvent());
+      await exporter.flush();
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   // ============================================================================
@@ -266,7 +444,7 @@ describe('GrafanaCloudExporter', () => {
 
   describe('metrics', () => {
     it('should buffer metrics until batch size is reached', async () => {
-      const exporter = createExporter({ batchSize: 3 });
+      const exporter = createCloudExporter({ batchSize: 3 });
 
       await exporter.onMetricEvent(makeMetricEvent());
       await exporter.onMetricEvent(makeMetricEvent());
@@ -277,7 +455,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should send metrics to Mimir OTLP endpoint', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.onMetricEvent(makeMetricEvent());
       await exporter.onMetricEvent(makeMetricEvent());
@@ -287,7 +465,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should send valid OTLP metrics JSON body', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.onMetricEvent(makeMetricEvent());
       await exporter.onMetricEvent(makeMetricEvent());
@@ -298,6 +476,20 @@ describe('GrafanaCloudExporter', () => {
       expect(body.resourceMetrics).toBeDefined();
       expect(body.resourceMetrics[0].scopeMetrics[0].metrics).toHaveLength(2);
     });
+
+    it('should skip metrics when mimirEndpoint is not set', async () => {
+      const exporter = new GrafanaExporter({
+        ...grafana({ tempoEndpoint: 'http://localhost:4318' }),
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onMetricEvent(makeMetricEvent());
+      await exporter.flush();
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   // ============================================================================
@@ -306,7 +498,7 @@ describe('GrafanaCloudExporter', () => {
 
   describe('flush and shutdown', () => {
     it('should flush all signals on flush()', async () => {
-      const exporter = createExporter({ batchSize: 100 }); // Large batch so nothing auto-flushes
+      const exporter = createCloudExporter({ batchSize: 100 });
 
       await exporter.onTracingEvent(makeTracingEvent());
       await exporter.onLogEvent(makeLogEvent());
@@ -321,7 +513,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should not send requests when buffers are empty', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       await exporter.flush();
 
@@ -329,7 +521,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should flush on shutdown', async () => {
-      const exporter = createExporter({ batchSize: 100 });
+      const exporter = createCloudExporter({ batchSize: 100 });
 
       await exporter.onTracingEvent(makeTracingEvent());
       await exporter.shutdown();
@@ -338,10 +530,9 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should not export when disabled', async () => {
-      const exporter = new GrafanaCloudExporter({
-        // Missing instanceId → disabled
-        apiKey: 'key',
-        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      const exporter = new GrafanaExporter({
+        // No endpoints → disabled
+        logger: mockLogger(),
       });
 
       await exporter.onTracingEvent(makeTracingEvent());
@@ -359,7 +550,7 @@ describe('GrafanaCloudExporter', () => {
 
   describe('error handling', () => {
     it('should handle fetch errors gracefully', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
@@ -370,7 +561,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should handle non-OK HTTP responses', async () => {
-      const exporter = createExporter();
+      const exporter = createCloudExporter();
 
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -386,7 +577,7 @@ describe('GrafanaCloudExporter', () => {
     });
 
     it('should re-buffer spans on export failure (up to limit)', async () => {
-      const exporter = createExporter({ batchSize: 2 });
+      const exporter = createCloudExporter({ batchSize: 2 });
 
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
@@ -405,7 +596,6 @@ describe('GrafanaCloudExporter', () => {
       const body = JSON.parse(lastCallOptions.body as string);
       const spanCount = body.resourceSpans[0].scopeSpans[0].spans.length;
 
-      // Should have the re-buffered spans + new spans
       expect(spanCount).toBeGreaterThanOrEqual(2);
     });
   });
@@ -416,7 +606,7 @@ describe('GrafanaCloudExporter', () => {
 
   describe('exportTracingEvent (legacy path)', () => {
     it('should delegate to onTracingEvent', async () => {
-      const exporter = createExporter({ batchSize: 100 });
+      const exporter = createCloudExporter({ batchSize: 100 });
 
       await exporter.exportTracingEvent(makeTracingEvent());
       await exporter.flush();

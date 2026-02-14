@@ -32,7 +32,7 @@ describe('formatSpansForTempo', () => {
 
     // Check scope
     expect(rs.scopeSpans).toHaveLength(1);
-    expect(rs.scopeSpans[0]!.scope.name).toBe('@mastra/grafana-cloud');
+    expect(rs.scopeSpans[0]!.scope.name).toBe('@mastra/grafana');
 
     // Check spans
     expect(rs.scopeSpans[0]!.spans).toHaveLength(1);

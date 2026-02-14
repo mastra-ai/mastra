@@ -25,7 +25,7 @@ describe('formatMetricsForMimir', () => {
     expect(serviceNameAttr?.value.stringValue).toBe('my-service');
 
     expect(rm.scopeMetrics).toHaveLength(1);
-    expect(rm.scopeMetrics[0]!.scope.name).toBe('@mastra/grafana-cloud');
+    expect(rm.scopeMetrics[0]!.scope.name).toBe('@mastra/grafana');
   });
 
   it('should format counter metrics as Sum', () => {

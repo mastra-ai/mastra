@@ -245,14 +245,14 @@ export function formatMetricsForMimir(
         resource: {
           attributes: [
             { key: 'service.name', value: { stringValue: serviceName } },
-            { key: 'telemetry.sdk.name', value: { stringValue: '@mastra/grafana-cloud' } },
+            { key: 'telemetry.sdk.name', value: { stringValue: '@mastra/grafana' } },
             { key: 'telemetry.sdk.language', value: { stringValue: 'nodejs' } },
           ],
         },
         scopeMetrics: [
           {
             scope: {
-              name: '@mastra/grafana-cloud',
+              name: '@mastra/grafana',
             },
             metrics: metrics.map(convertMetricToOtlp),
           },

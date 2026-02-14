@@ -251,14 +251,14 @@ export function formatSpansForTempo(
         resource: {
           attributes: [
             { key: 'service.name', value: { stringValue: serviceName } },
-            { key: 'telemetry.sdk.name', value: { stringValue: '@mastra/grafana-cloud' } },
+            { key: 'telemetry.sdk.name', value: { stringValue: '@mastra/grafana' } },
             { key: 'telemetry.sdk.language', value: { stringValue: 'nodejs' } },
           ],
         },
         scopeSpans: [
           {
             scope: {
-              name: '@mastra/grafana-cloud',
+              name: '@mastra/grafana',
             },
             spans: spans.map(convertSpanToOtlp),
           },
