@@ -119,10 +119,3 @@ export function createVectorTests(config: VectorTestConfig = {}) {
     });
   });
 }
-
-declare module 'vitest' {
-  export interface ProvidedContext {
-    baseUrl: string;
-    port: number;
-  }
-}
