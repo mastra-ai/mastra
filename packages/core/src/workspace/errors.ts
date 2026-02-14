@@ -25,6 +25,13 @@ export class WorkspaceError extends Error {
 // Availability Errors
 // =============================================================================
 
+export class WorkspaceNotAvailableError extends WorkspaceError {
+  constructor() {
+    super('Workspace not available. Ensure the agent has a workspace configured.', 'NO_WORKSPACE');
+    this.name = 'WorkspaceNotAvailableError';
+  }
+}
+
 export class FilesystemNotAvailableError extends WorkspaceError {
   constructor() {
     super('Workspace does not have a filesystem configured', 'NO_FILESYSTEM');
