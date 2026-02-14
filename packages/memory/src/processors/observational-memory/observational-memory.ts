@@ -4492,12 +4492,26 @@ ${formattedMessages}
       return { success: false };
     }
 
+    // Re-check whether activation is still needed. A previous activation on this
+    // turn (or an in-flight buffering op that just completed) may have already
+    // brought us well below the threshold. Activating unnecessarily invalidates
+    // the prompt cache, so we skip if we're already under the threshold.
+    const messageTokensThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+    if (messageList) {
+      const freshPendingTokens = this.tokenCounter.countMessages(messageList.get.all.db());
+      if (freshPendingTokens < messageTokensThreshold) {
+        omDebug(
+          `[OM:tryActivate] skipping activation: freshPendingTokens=${freshPendingTokens} < threshold=${messageTokensThreshold}`,
+        );
+        return { success: false };
+      }
+    }
+
     // Perform partial swap with bufferActivation percentage
     const activationRatio = this.observationConfig.bufferActivation ?? 0.7;
     omDebug(
       `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, activationRatio=${activationRatio}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
     );
-    const messageTokensThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
       activationRatio,
