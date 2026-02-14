@@ -6,6 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
+import { TracingEventType } from '@mastra/core/observability';
 import type {
   Span,
   SpanType,
@@ -24,9 +25,10 @@ import type {
   AnyExportedSpan,
   TraceState,
   TracingOptions,
+  ObservabilityEvent,
 } from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
+import { ObservabilityBus } from '../bus';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { NoOpSpan } from '../spans';
@@ -40,6 +42,12 @@ import { NoOpSpan } from '../spans';
  */
 export abstract class BaseObservabilityInstance extends MastraBase implements ObservabilityInstance {
   protected config: ObservabilityInstanceConfig;
+
+  /**
+   * Unified event bus for all observability signals.
+   * Routes events to registered exporters based on event type.
+   */
+  protected observabilityBus: ObservabilityBus;
 
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
@@ -56,6 +64,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       requestContextKeys: config.requestContextKeys ?? [],
       serializationOptions: config.serializationOptions,
     };
+
+    // Initialize the unified ObservabilityBus and register all exporters
+    this.observabilityBus = new ObservabilityBus();
+    for (const exporter of this.exporters) {
+      this.observabilityBus.registerExporter(exporter);
+    }
 
     // Initialize bridge if present
     if (this.config.bridge?.init) {
@@ -279,6 +293,27 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getLogger() {
     return this.logger;
+  }
+
+  /**
+   * Get the ObservabilityBus for this instance.
+   * The bus routes all observability events (tracing, logs, metrics, scores, feedback)
+   * to registered exporters based on event type.
+   */
+  getObservabilityBus(): ObservabilityBus {
+    return this.observabilityBus;
+  }
+
+  /**
+   * Emit any observability event through the bus.
+   * The bus routes the event to the appropriate handler on each registered exporter.
+   *
+   * Use this for non-tracing events (logs, metrics, scores, feedback).
+   * Tracing events continue to flow through emitSpanStarted/emitSpanEnded/emitSpanUpdated
+   * which call exportTracingEvent for backward compat with bridges.
+   */
+  protected emitObservabilityEvent(event: ObservabilityEvent): void {
+    this.observabilityBus.emit(event);
   }
 
   // ============================================================================
@@ -555,8 +590,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   async flush(): Promise<void> {
     this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
 
+    // Flush the ObservabilityBus (delivers any buffered events to subscribers)
+    const flushPromises: Promise<void>[] = [this.observabilityBus.flush()];
+
     // Flush all exporters and bridge
-    const flushPromises = [...this.exporters.map(e => e.flush())];
+    flushPromises.push(...this.exporters.map(e => e.flush()));
 
     // Add bridge flush if present
     if (this.config.bridge) {
@@ -568,7 +606,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Log any errors but don't throw
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        const targetName = index < this.exporters.length ? this.exporters[index]?.name : 'bridge';
+        const targetName =
+          index === 0
+            ? 'observability-bus'
+            : index <= this.exporters.length
+              ? this.exporters[index - 1]?.name
+              : 'bridge';
         this.logger.error(`[Observability] Flush error [target=${targetName}]`, result.reason);
       }
     });
@@ -582,11 +625,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   async shutdown(): Promise<void> {
     this.logger.debug(`[Observability] Shutdown started [name=${this.name}]`);
 
+    // Shutdown the ObservabilityBus first (flushes remaining events, clears subscribers)
+    const shutdownPromises: Promise<void>[] = [this.observabilityBus.shutdown()];
+
     // Shutdown all components including bridge
-    const shutdownPromises = [
-      ...this.exporters.map(e => e.shutdown()),
-      ...this.spanOutputProcessors.map(p => p.shutdown()),
-    ];
+    shutdownPromises.push(...this.exporters.map(e => e.shutdown()));
+    shutdownPromises.push(...this.spanOutputProcessors.map(p => p.shutdown()));
 
     // Add bridge shutdown if present
     if (this.config.bridge) {

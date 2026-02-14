@@ -12,6 +12,7 @@ export { Observability } from './default';
 export * from './config';
 
 // Export all implementations
+export * from './bus';
 export * from './instances';
 export * from './spans';
 export * from './exporters';
