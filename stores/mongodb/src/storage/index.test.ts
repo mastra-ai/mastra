@@ -758,5 +758,139 @@ createDomainIndexTests({
     name: 'invalid_domain_collection_idx',
     collection: 'nonexistent_collection_xyz',
     columns: ['id'],
+
   },
+});
+describe('MongoDB Message Upsert Behavior', () => {
+  let store: MongoDBStore;
+
+  beforeAll(async () => {
+    store = new MongoDBStore(TEST_CONFIG);
+    await store.init();
+  });
+
+  afterAll(async () => {
+    await store.close();
+  });
+
+  it('should not overwrite createdAt when updating existing message via saveMessages', async () => {
+    const threadId = `thread-upsert-test-${Date.now()}`;
+    const resourceId = 'user-test-upsert';
+    const memoryStore = await store.getStore('memory');
+
+    await memoryStore?.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Upsert Test Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const message = {
+      id: `msg-upsert-${Date.now()}`,
+      threadId,
+      resourceId,
+      content: [{ type: 'text', text: 'Original content' }],
+      role: 'user' as const,
+      type: 'v2' as const,
+      createdAt: new Date(),
+    };
+
+    await memoryStore?.saveMessages({ messages: [message] });
+
+    const result1 = await memoryStore?.listMessages({ threadId });
+    expect(result1?.messages).toHaveLength(1);
+    const originalCreatedAt = result1?.messages[0]?.createdAt;
+    expect(originalCreatedAt).toBeDefined();
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    await memoryStore?.saveMessages({
+      messages: [{ ...message, content: [{ type: 'text', text: 'Updated content' }] }],
+    });
+
+    const result2 = await memoryStore?.listMessages({ threadId });
+    expect(result2?.messages).toHaveLength(1);
+
+    const finalMessage = result2?.messages[0];
+    expect(finalMessage?.createdAt).toEqual(originalCreatedAt);
+    expect(finalMessage?.content).toEqual([{ type: 'text', text: 'Updated content' }]);
+    expect(finalMessage?.id).toBe(message.id);
+    expect(finalMessage?.role).toBe('user');
+  });
+
+  it('should handle multiple messages with mixed insert and update operations', async () => {
+    const threadId = `thread-mixed-test-${Date.now()}`;
+    const resourceId = 'user-test-mixed';
+    const memoryStore = await store.getStore('memory');
+
+    await memoryStore?.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Mixed Operations Test',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const message1 = {
+      id: `msg-mixed-1-${Date.now()}`,
+      threadId,
+      resourceId,
+      content: [{ type: 'text', text: 'Message 1' }],
+      role: 'user' as const,
+      type: 'v2' as const,
+      createdAt: new Date(),
+    };
+
+    const message2 = {
+      id: `msg-mixed-2-${Date.now()}`,
+      threadId,
+      resourceId,
+      content: [{ type: 'text', text: 'Message 2' }],
+      role: 'assistant' as const,
+      type: 'v2' as const,
+      createdAt: new Date(),
+    };
+
+    await memoryStore?.saveMessages({ messages: [message1, message2] });
+
+    const batch1 = await memoryStore?.listMessages({ threadId });
+    expect(batch1?.messages).toHaveLength(2);
+    const createdAt1 = batch1?.messages.find(m => m.id === message1.id)?.createdAt;
+    const createdAt2 = batch1?.messages.find(m => m.id === message2.id)?.createdAt;
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const message3 = {
+      id: `msg-mixed-3-${Date.now()}`,
+      threadId,
+      resourceId,
+      content: [{ type: 'text', text: 'Message 3' }],
+      role: 'user' as const,
+      type: 'v2' as const,
+      createdAt: new Date(),
+    };
+
+    await memoryStore?.saveMessages({
+      messages: [{ ...message1, content: [{ type: 'text', text: 'Message 1 updated' }] }, message3],
+    });
+
+    const batch2 = await memoryStore?.listMessages({ threadId });
+    expect(batch2?.messages).toHaveLength(3);
+
+    const msg1 = batch2?.messages.find(m => m.id === message1.id);
+    const msg2 = batch2?.messages.find(m => m.id === message2.id);
+    const msg3 = batch2?.messages.find(m => m.id === message3.id);
+
+    expect(msg1?.createdAt).toEqual(createdAt1);
+    expect(msg1?.content).toEqual([{ type: 'text', text: 'Message 1 updated' }]);
+    expect(msg2?.createdAt).toEqual(createdAt2);
+    expect(msg3?.createdAt).toBeDefined();
+  });
 });
