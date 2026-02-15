@@ -805,10 +805,11 @@ export class InternalMastraMCPClient extends MastraBase {
               mcpSpan?.end({ output: result, attributes: { success: true } });
               return result;
             } catch (e) {
+              const normalizedError = e instanceof Error ? e : new Error(String(e));
               // Check if this is a session-related error that requires reconnection
               if (this.isSessionError(e)) {
                 this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
-                  error: e instanceof Error ? e.message : String(e),
+                  error: normalizedError.message,
                 });
 
                 try {
@@ -821,12 +822,14 @@ export class InternalMastraMCPClient extends MastraBase {
                   mcpSpan?.end({ output: result, attributes: { success: true } });
                   return result;
                 } catch (reconnectError) {
+                  const normalizedReconnectError =
+                    reconnectError instanceof Error ? reconnectError : new Error(String(reconnectError));
                   this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
-                    originalError: e instanceof Error ? e.message : String(e),
-                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
+                    originalError: normalizedError.message,
+                    reconnectError: normalizedReconnectError.stack,
                     toolArgs: input,
                   });
-                  mcpSpan?.error({ error: e as Error, attributes: { success: false } });
+                  mcpSpan?.error({ error: normalizedError, attributes: { success: false } });
                   // Throw the original error if reconnection/retry fails
                   throw e;
                 }
@@ -834,10 +837,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
               // For non-session errors, log and rethrow
               this.log('error', `Error calling tool: ${tool.name}`, {
-                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
+                error: normalizedError.stack,
                 toolArgs: input,
               });
-              mcpSpan?.error({ error: e as Error, attributes: { success: false } });
+              mcpSpan?.error({ error: normalizedError, attributes: { success: false } });
               throw e;
             } finally {
               this.currentOperationContext = previousContext; // Restore previous context
