@@ -109,5 +109,19 @@
     "@mastra/gcs": "0.1.0",
     "@mastra/s3": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "allowed-paths-filesystem",
+    "automated-provider-registry-20260213-063209",
+    "beige-phones-smoke",
+    "clean-cloths-behave",
+    "dirty-carrots-sing",
+    "every-flowers-admire",
+    "fluffy-dots-report",
+    "great-facts-look",
+    "green-impalas-bake",
+    "icy-jobs-rescue",
+    "lovely-comics-thank",
+    "proud-pandas-nail",
+    "slick-poems-post"
+  ]
 }

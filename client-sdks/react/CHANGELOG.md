@@ -1,5 +1,12 @@
 # @mastra/react
 
+## 0.2.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`55a0ab1`](https://github.com/mastra-ai/mastra/commit/55a0ab13187b3c656247a1d9bfa715077af6e422), [`5ffadfe`](https://github.com/mastra-ai/mastra/commit/5ffadfefb1468ac2612b20bb84d24c39de6961c0), [`55a0ab1`](https://github.com/mastra-ai/mastra/commit/55a0ab13187b3c656247a1d9bfa715077af6e422)]:
+  - @mastra/client-js@1.4.1-alpha.0
+
 ## 0.2.3
 
 ### Patch Changes

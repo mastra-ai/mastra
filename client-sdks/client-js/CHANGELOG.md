@@ -1,5 +1,18 @@
 # @mastra/client-js
 
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Fixed schema form to apply changes only on Save click instead of every keystroke. Removed AgentPromptExperimentProvider in favor of inline prompt rendering. Switched hooks to use merged request context for proper request-scoped data fetching. ([#13034](https://github.com/mastra-ai/mastra/pull/13034))
+
+- Fixed conditional rules not being persisted for workflows, agents, and scorers when creating or updating agents in the CMS. Rules configured on these entities are now correctly saved to storage. ([#13044](https://github.com/mastra-ai/mastra/pull/13044))
+
+- Added requestContext support to listScorers for request-scoped scorer resolution ([#13034](https://github.com/mastra-ai/mastra/pull/13034))
+
+- Updated dependencies [[`5c75261`](https://github.com/mastra-ai/mastra/commit/5c7526120d936757d4ffb7b82232e1641ebd45cb), [`e37ef84`](https://github.com/mastra-ai/mastra/commit/e37ef8404043c94ca0c8e35ecdedb093b8087878), [`10cf521`](https://github.com/mastra-ai/mastra/commit/10cf52183344743a0d7babe24cd24fd78870c354), [`0dee7a0`](https://github.com/mastra-ai/mastra/commit/0dee7a0ff4c2507e6eb6e6ee5f9738877ebd4ad1), [`5ffadfe`](https://github.com/mastra-ai/mastra/commit/5ffadfefb1468ac2612b20bb84d24c39de6961c0), [`b6a855e`](https://github.com/mastra-ai/mastra/commit/b6a855edc056e088279075506442ba1d6fa6def9), [`2be1d99`](https://github.com/mastra-ai/mastra/commit/2be1d99564ce79acc4846071082bff353035a87a)]:
+  - @mastra/core@1.5.0-alpha.0
+
 ## 1.4.0
 
 ### Minor Changes
