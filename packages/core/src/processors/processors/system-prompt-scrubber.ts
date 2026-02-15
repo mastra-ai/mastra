@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -99,14 +100,16 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   /**
    * Process streaming chunks to detect and handle system prompts
    */
-  async processOutputStream(args: {
-    part: ChunkType;
-    streamParts: ChunkType[];
-    state: Record<string, any>;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<ChunkType | null> {
-    const { part, abort, tracingContext } = args;
+  async processOutputStream(
+    args: {
+      part: ChunkType;
+      streamParts: ChunkType[];
+      state: Record<string, any>;
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<ChunkType | null> {
+    const { part, abort, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
 
     // Only process text-delta chunks
     if (part.type !== 'text-delta') {
@@ -119,7 +122,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     }
 
     try {
-      const detectionResult = await this.detectSystemPrompts(text, tracingContext);
+      const detectionResult = await this.detectSystemPrompts(text, observabilityContext);
 
       if (detectionResult.detections && detectionResult.detections.length > 0) {
         const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -170,12 +173,12 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   async processOutputResult({
     messages,
     abort,
-    tracingContext,
+    ...rest
   }: {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<MastraDBMessage[]> {
+  } & Partial<ObservabilityContext>): Promise<MastraDBMessage[]> {
+    const observabilityContext = resolveObservabilityContext(rest);
     const processedMessages: MastraDBMessage[] = [];
 
     for (const message of messages) {
@@ -191,7 +194,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       }
 
       try {
-        const detectionResult = await this.detectSystemPrompts(textContent, tracingContext);
+        const detectionResult = await this.detectSystemPrompts(textContent, observabilityContext);
 
         if (detectionResult.detections && detectionResult.detections.length > 0) {
           const detectedTypes = detectionResult.detections.map(detection => detection.type);
@@ -243,7 +246,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
    */
   private async detectSystemPrompts(
     text: string,
-    tracingContext?: TracingContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<SystemPromptDetectionResult> {
     try {
       const model = await this.detectionAgent.getModel();
@@ -282,12 +285,12 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
             schema,
             ...(this.structuredOutputOptions ?? {}),
           },
-          tracingContext,
+          ...observabilityContext,
         });
       } else {
         result = await this.detectionAgent.generateLegacy(text, {
           output: schema,
-          tracingContext,
+          ...observabilityContext,
         });
       }
 

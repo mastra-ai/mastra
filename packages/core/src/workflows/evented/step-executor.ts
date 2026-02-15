@@ -6,6 +6,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import { createObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
@@ -198,7 +199,7 @@ export class StepExecutor extends MastraBase {
             engine: {},
             abortSignal: abortController?.signal,
             // TODO
-            tracingContext: {},
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',
@@ -407,7 +408,7 @@ export class StepExecutor extends MastraBase {
           engine: {},
           abortSignal: abortController?.signal,
           // TODO
-          tracingContext: {},
+          ...createObservabilityContext(),
           iterationCount,
         },
         {
@@ -487,7 +488,7 @@ export class StepExecutor extends MastraBase {
             engine: {},
             abortSignal: abortController?.signal,
             // TODO
-            tracingContext: {},
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',
@@ -570,7 +571,7 @@ export class StepExecutor extends MastraBase {
             engine: {},
             abortSignal: abortController?.signal,
             // TODO
-            tracingContext: {},
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',

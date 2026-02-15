@@ -5,7 +5,7 @@ import { MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
@@ -162,13 +162,14 @@ export class SemanticRecall implements Processor {
     }
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> {
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList | MastraDBMessage[]> {
     const { messages, messageList, requestContext } = args;
 
     // Get memory context from RequestContext
@@ -483,13 +484,14 @@ export class SemanticRecall implements Processor {
    * Process output messages to create embeddings for messages being saved
    * This allows semantic recall to index new messages for future retrieval
    */
-  async processOutputResult(args: {
-    messages: MastraDBMessage[];
-    messageList?: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> {
+  async processOutputResult(
+    args: {
+      messages: MastraDBMessage[];
+      messageList?: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList | MastraDBMessage[]> {
     const { messages, messageList, requestContext } = args;
 
     if (!this.vector || !this.embedder || !this.storage) {
