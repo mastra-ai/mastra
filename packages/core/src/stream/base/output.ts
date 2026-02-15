@@ -339,6 +339,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               }
 
+              // Create a ProcessorStreamWriter from the controller so processOutputStream can emit custom chunks
+              const streamWriter = {
+                custom: async (data: { type: string }) => controller.enqueue(data as ChunkType<OUTPUT>),
+              };
+
               const {
                 part: processed,
                 blocked,
@@ -351,6 +356,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 options.tracingContext,
                 options.requestContext,
                 self.messageList,
+                0,
+                streamWriter,
               );
               if (blocked) {
                 // Emit a tripwire chunk so downstream knows about the abort

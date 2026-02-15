@@ -45,6 +45,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   // Get tracing context from modelSpanTracker if available
   const tracingContext = rest.modelSpanTracker?.getTracingContext();
 
+  // Create a ProcessorStreamWriter from outputWriter so processOutputStream can emit custom chunks
+  const streamWriter = rest.outputWriter
+    ? { custom: async (data: { type: string }) => rest.outputWriter(data as ChunkType<OUTPUT>) }
+    : undefined;
+
   // Helper function to process a chunk through output processors and enqueue it
   async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
     if (processorRunner && rest.processorStates) {
@@ -60,6 +65,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         tracingContext,
         rest.requestContext,
         rest.messageList,
+        0,
+        streamWriter,
       );
 
       if (blocked) {
