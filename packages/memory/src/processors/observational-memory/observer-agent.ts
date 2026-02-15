@@ -611,8 +611,8 @@ export function formatMessagesForObserver(messages: MastraDBMessage[], options?:
               const argsStr = JSON.stringify(inv.args, null, 2);
               return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
             }
-            // Skip observation marker parts
-            if (part.type?.startsWith('data-om-observation-')) return '';
+            // Skip all data-* parts (observation markers, activation markers, buffering markers, etc.)
+            if (part.type?.startsWith('data-')) return '';
             return '';
           })
           .filter(Boolean)
