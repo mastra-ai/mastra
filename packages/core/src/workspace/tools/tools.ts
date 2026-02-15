@@ -27,7 +27,7 @@ import type { WorkspaceToolsConfig } from './types';
  * Resolves the effective configuration for a specific tool.
  *
  * Resolution order (later overrides earlier):
- * 1. Built-in defaults (enabled: true, requireApproval: false)
+ * 1. Built-in defaults (enabled: false, requireApproval: false)
  * 2. Top-level config (tools.enabled, tools.requireApproval)
  * 3. Per-tool config (tools[toolName].enabled, tools[toolName].requireApproval)
  *
@@ -40,7 +40,7 @@ export function resolveToolConfig(
   toolName: WorkspaceToolName,
 ): { enabled: boolean; requireApproval: boolean; requireReadBeforeWrite?: boolean } {
   // Built-in defaults
-  let enabled = true;
+  let enabled = false;
   let requireApproval = false;
   let requireReadBeforeWrite: boolean | undefined;
 

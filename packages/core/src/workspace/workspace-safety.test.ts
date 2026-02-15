@@ -49,6 +49,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
+          enabled: true,
           [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
             requireReadBeforeWrite: true,
           },
@@ -78,6 +79,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
+          enabled: true,
           [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
             requireReadBeforeWrite: true,
           },
@@ -109,6 +111,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
+          enabled: true,
           [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
             requireReadBeforeWrite: true,
           },
@@ -132,6 +135,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
+          enabled: true,
           [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
             requireReadBeforeWrite: true,
           },
@@ -166,6 +170,7 @@ describe('Workspace Safety Features', () => {
     it('should not require read-before-write when not configured', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: { enabled: true },
         // No requireReadBeforeWrite in tools config
       });
       await workspace.init();
@@ -189,6 +194,7 @@ describe('Workspace Safety Features', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
+          enabled: true,
           [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: {
             requireReadBeforeWrite: true,
           },
@@ -317,6 +323,7 @@ describe('Workspace Safety Features', () => {
           readOnly: true,
         }),
         bm25: true,
+        tools: { enabled: true },
       });
       await workspace.init();
 
@@ -344,6 +351,7 @@ describe('Workspace Safety Features', () => {
           readOnly: false,
         }),
         bm25: true,
+        tools: { enabled: true },
       });
       await workspace.init();
 
@@ -357,7 +365,7 @@ describe('Workspace Safety Features', () => {
       await workspace.destroy();
     });
 
-    it('should default to all tools enabled and no approval required', async () => {
+    it('should default to all tools disabled and no approval required', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
@@ -367,7 +375,32 @@ describe('Workspace Safety Features', () => {
 
       const tools = createWorkspaceTools(workspace);
 
-      // All tools should be enabled by default
+      // All tools should be disabled by default
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.SEARCH.SEARCH]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.SEARCH.INDEX]).toBeUndefined();
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeUndefined();
+
+      await workspace.destroy();
+    });
+
+    it('should enable all tools with enabled: true and no approval required', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        bm25: true,
+        tools: { enabled: true },
+      });
+      await workspace.init();
+
+      const tools = createWorkspaceTools(workspace);
+
+      // All tools should be enabled
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]).toBeDefined();
@@ -391,6 +424,7 @@ describe('Workspace Safety Features', () => {
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
         tools: {
+          enabled: true,
           requireApproval: true,
         },
       });
@@ -431,7 +465,8 @@ describe('Workspace Safety Features', () => {
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
         tools: {
-          // Top-level: all tools require approval
+          // Top-level: all tools enabled and require approval
+          enabled: true,
           requireApproval: true,
           // Override: read_file doesn't require approval
           [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
@@ -499,6 +534,7 @@ describe('Workspace Safety Features', () => {
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
         tools: {
+          enabled: true,
           [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
             requireApproval: true,
           },
