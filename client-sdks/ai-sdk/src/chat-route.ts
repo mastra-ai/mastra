@@ -92,6 +92,21 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
     }
   }
 
+  // When memory is configured with thread/resource, only send the latest message(s).
+  // This prevents message duplication since memory.recall() will provide the conversation history.
+  // Without this, useChat sends full history AND memory recalls history, causing duplicates.
+  // See: https://github.com/mastra-ai/mastra/issues/11913
+  const memoryConfig = rest.memory;
+  if (memoryConfig?.thread && memoryConfig?.resource && messagesToSend.length > 0) {
+    // Find all trailing user messages (there could be multiple in a batch)
+    // but typically useChat sends one new user message at a time
+    const lastUserMessageIndex = messagesToSend.findLastIndex(m => m.role === 'user');
+    if (lastUserMessageIndex !== -1) {
+      // Only send from the last user message onwards (includes any trailing assistant messages for context)
+      messagesToSend = messagesToSend.slice(lastUserMessageIndex);
+    }
+  }
+
   const mergedOptions = {
     ...defaultOptions,
     ...rest,
