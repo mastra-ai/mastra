@@ -301,6 +301,55 @@ describe('DefaultExporter', () => {
         });
       });
 
+      it('should buffer events and flush when batch size reached when not using await on init', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 2,
+          logger: mockLogger,
+        });
+        //no await , let exporter handle a initialization in progress internally
+        //this replicates no await call by observability.setMastraContext
+        exporter.init({ mastra: mockMastra });
+
+        const event1 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        const event2 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
+
+        await exporter.exportTracingEvent(event1);
+        // First event should schedule timer but not flush yet
+        expect(mockObservabilityStore.batchCreateSpans).not.toHaveBeenCalled();
+
+        await exporter.exportTracingEvent(event2);
+
+        // Wait for the async flush to complete (it's called in a fire-and-forget manner)
+        await new Promise(resolve => setImmediate(resolve));
+
+        // Should flush when batch size reached
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledWith({
+          records: expect.arrayContaining([
+            expect.objectContaining({ spanId: 'span-1' }),
+            expect.objectContaining({ spanId: 'span-2' }),
+          ]),
+        });
+      });
+
+      it('should log when init is not called', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 1,
+          logger: mockLogger,
+        });
+
+        const event1 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+
+        await exporter.exportTracingEvent(event1);
+        //provide window for async flush execution (it's called in a fire-and-forget manner)
+        await new Promise(resolve => setImmediate(resolve));
+
+        // no flush as not initialized
+        expect(mockObservabilityStore.batchCreateSpans).not.toHaveBeenCalled();
+        expect(mockLogger.debug).toHaveBeenCalledWith('Cannot store traces. Observability storage is not initialized');
+      });
+
       it('should handle span updates with sequence numbers', async () => {
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',

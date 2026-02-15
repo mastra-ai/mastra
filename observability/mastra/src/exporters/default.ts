@@ -87,6 +87,8 @@ function getObjectOrNull(value: unknown): Record<string, any> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
+type Resolve = (value: void | PromiseLike<void>) => void;
+
 export class DefaultExporter extends BaseExporter {
   name = 'mastra-default-observability-exporter';
 
@@ -96,6 +98,9 @@ export class DefaultExporter extends BaseExporter {
   #resolvedStrategy: TracingStorageStrategy;
   private buffer: BatchBuffer;
   #flushTimer: NodeJS.Timeout | null = null;
+
+  #isInitializing = false;
+  #initPromises: Set<Resolve> = new Set();
 
   // Track all spans that have been created, persists across flushes
   private allCreatedSpans: Set<string> = new Set();
@@ -140,19 +145,35 @@ export class DefaultExporter extends BaseExporter {
    * Initialize the exporter (called after all dependencies are ready)
    */
   async init(options: InitExporterOptions): Promise<void> {
-    this.#storage = options.mastra?.getStorage();
-    if (!this.#storage) {
-      this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
-      return;
-    }
+    try {
+      this.#isInitializing = true;
 
-    this.#observability = await this.#storage.getStore('observability');
-    if (!this.#observability) {
-      this.logger.warn('DefaultExporter disabled: Observability storage not available. Traces will not be persisted.');
-      return;
-    }
+      this.#storage = options.mastra?.getStorage();
+      if (!this.#storage) {
+        this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
+        return;
+      }
 
-    this.initializeStrategy(this.#observability, this.#storage.constructor.name);
+      this.#observability = await this.#storage.getStore('observability');
+      if (!this.#observability) {
+        this.logger.warn(
+          'DefaultExporter disabled: Observability storage not available. Traces will not be persisted.',
+        );
+        return;
+      }
+
+      this.initializeStrategy(this.#observability, this.#storage.constructor.name);
+    } finally {
+      this.#isInitializing = false;
+      /**
+       * Assumes caller waits until export of a parent span is completed before calling
+       * export for child spans , order is not relevant for resolve
+       */
+      this.#initPromises.forEach(resolve => {
+        resolve();
+      });
+      this.#initPromises.clear();
+    }
   }
 
   /**
@@ -662,6 +683,7 @@ export class DefaultExporter extends BaseExporter {
   }
 
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
+    await this.waitForInit();
     if (!this.#observability) {
       this.logger.debug('Cannot store traces. Observability storage is not initialized');
       return;
@@ -684,6 +706,18 @@ export class DefaultExporter extends BaseExporter {
         this.handleInsertOnlyEvent(event);
         break;
     }
+  }
+
+  /**
+   * Resolves when an ongoing init call is finished
+   * Doesn't wait for the caller to call init
+   * @returns
+   */
+  private async waitForInit(): Promise<void> {
+    if (!this.#isInitializing) return;
+    return new Promise(resolve => {
+      this.#initPromises.add(resolve);
+    });
   }
 
   /**
