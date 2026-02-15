@@ -173,7 +173,7 @@ export default function Scorer() {
           </Breadcrumb>
 
           <HeaderAction>
-            {scorer?.isRegistered && (
+            {scorer?.scorer?.source === 'stored' && (
               <Button variant="light" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
                 <Icon>
                   <PencilIcon />
