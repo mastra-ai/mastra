@@ -4,3 +4,4 @@ export * from './ui-types';
 export { isVercelTool } from './toolchecks';
 export { ToolStream } from './stream';
 export { type ValidationError } from './validation';
+export { safeExecuteTool, type SafeExecuteToolOptions } from './safe-execute';
