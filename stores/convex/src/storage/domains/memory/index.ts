@@ -67,6 +67,7 @@ export class MemoryConvex extends MemoryStorage {
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
+      lastMessageAt: (row as any).lastMessageAt ? new Date((row as any).lastMessageAt) : null,
     };
   }
 
@@ -165,6 +166,7 @@ export class MemoryConvex extends MemoryStorage {
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
+      lastMessageAt: (row as any).lastMessageAt ? new Date((row as any).lastMessageAt) : null,
     }));
 
     // Apply metadata filters if provided (AND logic)
@@ -178,6 +180,10 @@ export class MemoryConvex extends MemoryStorage {
     threads.sort((a, b) => {
       const aValue = a[field];
       const bValue = b[field];
+      // Handle null/undefined - nulls last for DESC, nulls first for ASC
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return direction === 'DESC' ? 1 : -1;
+      if (bValue == null) return direction === 'DESC' ? -1 : 1;
       const aTime = aValue instanceof Date ? aValue.getTime() : new Date(aValue as any).getTime();
       const bTime = bValue instanceof Date ? bValue.getTime() : new Date(bValue as any).getTime();
       return direction === 'ASC' ? aTime - bTime : bTime - aTime;
@@ -379,18 +385,25 @@ export class MemoryConvex extends MemoryStorage {
       records: normalized,
     });
 
-    // Update thread updatedAt timestamps for all affected threads
+    // Update thread updatedAt and lastMessageAt timestamps for all affected threads
     const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean) as string[])];
     const now = new Date();
     for (const threadId of threadIds) {
       const thread = await this.getThreadById({ threadId });
       if (thread) {
+        // Compute lastMessageAt from the max createdAt of saved messages for this thread
+        const threadMsgs = messages.filter(m => m.threadId === threadId);
+        const maxCreatedAt = new Date(Math.max(...threadMsgs.map(m => new Date(m.createdAt).getTime())));
+        // Only advance lastMessageAt, never regress
+        const lastMessageAt =
+          thread.lastMessageAt && thread.lastMessageAt > maxCreatedAt ? thread.lastMessageAt : maxCreatedAt;
         await this.#db.insert({
           tableName: TABLE_THREADS,
           record: {
             ...thread,
             id: thread.id,
             updatedAt: now.toISOString(),
+            lastMessageAt: lastMessageAt.toISOString(),
             createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
             metadata: thread.metadata ?? {},
           },
@@ -478,7 +491,42 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async deleteMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    // Get thread IDs from messages before deleting
+    const rows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
+    const threadIds = [
+      ...new Set(
+        rows
+          .filter(r => messageIds.includes(r.id))
+          .map(r => r.thread_id)
+          .filter(Boolean),
+      ),
+    ];
+
     await this.#db.deleteMany(TABLE_MESSAGES, messageIds);
+
+    // Recompute lastMessageAt for affected threads
+    for (const threadId of threadIds) {
+      const thread = await this.getThreadById({ threadId });
+      if (thread) {
+        const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
+        const lastMessageAt =
+          remaining.length > 0 ? new Date(Math.max(...remaining.map(m => new Date(m.createdAt).getTime()))) : null;
+        await this.#db.insert({
+          tableName: TABLE_THREADS,
+          record: {
+            id: threadId,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: thread.metadata ?? {},
+            createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : thread.createdAt,
+            updatedAt: new Date().toISOString(),
+            lastMessageAt: lastMessageAt ? lastMessageAt.toISOString() : null,
+          },
+        });
+      }
+    }
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {

@@ -79,10 +79,25 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
       }
 
-      // Update thread timestamps
+      // Recompute lastMessageAt and update thread timestamps
       const now = new Date().toISOString();
       for (const threadId of threadIds) {
-        await this.service.entities.thread.update({ entity: 'thread', id: threadId }).set({ updatedAt: now }).go();
+        const { messages: remaining } = await this.listMessages({ threadId, perPage: false });
+        if (remaining.length > 0) {
+          const lastMessageAt = new Date(
+            Math.max(...remaining.map(m => new Date(m.createdAt).getTime())),
+          ).toISOString();
+          await this.service.entities.thread
+            .update({ entity: 'thread', id: threadId })
+            .set({ updatedAt: now, lastMessageAt })
+            .go();
+        } else {
+          await this.service.entities.thread
+            .update({ entity: 'thread', id: threadId })
+            .set({ updatedAt: now })
+            .remove(['lastMessageAt'])
+            .go();
+        }
       }
     } catch (error) {
       throw new MastraError(
@@ -119,12 +134,22 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Convert date strings back to Date objects for consistency
         createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
+        lastMessageAt: data.lastMessageAt ? new Date(data.lastMessageAt) : null,
       }))
       .sort((a: StorageThreadType, b: StorageThreadType) => {
-        const fieldA = field === 'createdAt' ? a.createdAt : a.updatedAt;
-        const fieldB = field === 'createdAt' ? b.createdAt : b.updatedAt;
+        const getField = (t: StorageThreadType) =>
+          field === 'lastMessageAt' ? (t.lastMessageAt ?? null) : field === 'createdAt' ? t.createdAt : t.updatedAt;
+        const aRaw = getField(a);
+        const bRaw = getField(b);
 
-        const comparison = fieldA.getTime() - fieldB.getTime();
+        // Handle null/undefined - nulls last for DESC, nulls first for ASC
+        if (aRaw == null && bRaw == null) return 0;
+        if (aRaw == null) return direction === 'DESC' ? 1 : -1;
+        if (bRaw == null) return direction === 'DESC' ? -1 : 1;
+
+        const aTime = aRaw instanceof Date ? aRaw.getTime() : new Date(aRaw).getTime();
+        const bTime = bRaw instanceof Date ? bRaw.getTime() : new Date(bRaw).getTime();
+        const comparison = aTime - bTime;
         return direction === 'DESC' ? -comparison : comparison;
       }) as StorageThreadType[];
   }
@@ -145,8 +170,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Convert date strings back to Date objects for consistency
         createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
-        // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
-        // metadata is already transformed by the entity's getter
+        lastMessageAt: data.lastMessageAt ? new Date(data.lastMessageAt) : null,
       } as StorageThreadType;
     } catch (error) {
       throw new MastraError(
@@ -174,6 +198,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
       updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
+      lastMessageAt: thread.lastMessageAt ? thread.lastMessageAt.toISOString() : undefined,
       ...getTtlProps('thread', this.ttlConfig),
     };
 
@@ -587,11 +612,17 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         }
       }
 
-      // Update thread's updatedAt timestamp
+      // Update thread's updatedAt and lastMessageAt timestamps
+      const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt).getTime())));
+      const thread = await this.getThreadById({ threadId });
+      // Only advance lastMessageAt, never regress
+      const lastMessageAt =
+        thread?.lastMessageAt && thread.lastMessageAt > maxCreatedAt ? thread.lastMessageAt : maxCreatedAt;
       await this.service.entities.thread
         .update({ entity: 'thread', id: threadId })
         .set({
           updatedAt: new Date().toISOString(),
+          lastMessageAt: lastMessageAt.toISOString(),
         })
         .go();
 

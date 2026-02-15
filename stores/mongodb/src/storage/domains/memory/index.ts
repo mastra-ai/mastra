@@ -604,10 +604,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       });
 
+      // Compute lastMessageAt from the max createdAt of saved messages
+      const now = new Date();
+      const maxCreatedAt = new Date(Math.max(...messages.map(m => new Date(m.createdAt ?? now).getTime())));
       // Execute message inserts and thread update in parallel
+      // Only advance lastMessageAt, never regress (use $max)
       await Promise.all([
         collection.bulkWrite(messagesToInsert),
-        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
+        threadsCollection.updateOne(
+          { id: threadId },
+          { $set: { updatedAt: now }, $max: { lastMessageAt: maxCreatedAt } },
+        ),
       ]);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
@@ -954,6 +961,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           resourceId: thread.resourceId,
           createdAt: formatDateForMongoDB(thread.createdAt),
           updatedAt: formatDateForMongoDB(thread.updatedAt),
+          lastMessageAt: thread.lastMessageAt ? formatDateForMongoDB(thread.lastMessageAt) : null,
           metadata: thread.metadata || {},
         })),
         total,
@@ -1035,15 +1043,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     try {
       const collection = await this.getCollection(TABLE_THREADS);
+      const now = new Date();
       await collection.updateOne(
         { id },
         {
           $set: {
             title,
             metadata: updatedThread.metadata,
+            updatedAt: now,
           },
         },
       );
+      updatedThread.updatedAt = now;
     } catch (error) {
       throw new MastraError(
         {
@@ -1094,9 +1105,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Delete the messages
       await messagesCollection.deleteMany({ id: { $in: messageIds } });
 
-      // Update thread timestamps for affected threads
-      if (threadIds.length > 0) {
-        await threadsCollection.updateMany({ id: { $in: threadIds } }, { $set: { updatedAt: new Date() } });
+      // Recompute lastMessageAt and update thread timestamps for affected threads
+      for (const threadId of threadIds) {
+        const remaining = await messagesCollection
+          .find({ thread_id: threadId })
+          .sort({ createdAt: -1 })
+          .limit(1)
+          .toArray();
+        const lastMessageAt = remaining.length > 0 ? new Date(remaining[0]!.createdAt) : null;
+        await threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date(), lastMessageAt } });
       }
     } catch (error) {
       throw new MastraError(

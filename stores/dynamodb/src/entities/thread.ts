@@ -51,6 +51,10 @@ export const threadEntity = new Entity({
         return value;
       },
     },
+    lastMessageAt: {
+      type: 'string',
+      required: false,
+    },
   },
   indexes: {
     primary: {
