@@ -36,12 +36,27 @@ export const useMemoryConfig = (agentId?: string) => {
   });
 };
 
+export const useThread = ({ threadId, agentId }: { threadId?: string; agentId?: string }) => {
+  const client = useMastraClient();
+  const requestContext = useMergedRequestContext();
+
+  return useQuery({
+    queryKey: ['memory', 'thread', threadId, agentId, requestContext],
+    queryFn: () => client.getMemoryThread({ threadId: threadId!, agentId }).get({ requestContext }),
+    enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+};
+
 export const useThreads = ({
   resourceId,
   agentId,
   isMemoryEnabled,
 }: {
-  resourceId: string;
+  resourceId?: string;
   agentId: string;
   isMemoryEnabled: boolean;
 }) => {
@@ -73,11 +88,8 @@ export const useDeleteThread = () => {
       const thread = client.getMemoryThread({ threadId, agentId });
       return thread.delete({ requestContext });
     },
-    onSuccess: (_, variables) => {
-      const { agentId } = variables;
-      if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['memory', 'threads'] });
       toast.success('Chat deleted successfully');
     },
     onError: () => {
@@ -114,11 +126,8 @@ export const useCloneThread = () => {
       const thread = client.getMemoryThread({ threadId, agentId });
       return thread.clone({ title, requestContext });
     },
-    onSuccess: (_, variables) => {
-      const { agentId } = variables;
-      if (agentId) {
-        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['memory', 'threads'] });
       toast.success('Thread cloned successfully');
     },
     onError: () => {
