@@ -174,6 +174,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
     'z-ai/glm4.7',
+    'z-ai/glm5',
   ];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
@@ -493,6 +494,7 @@ export type ProviderModelsMap = {
     'gemini-3-pro',
     'glm-4.6',
     'glm-4.7',
+    'glm-5',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -507,6 +509,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
     'kimi-k2.5-free',
     'minimax-m2.1',
+    'minimax-m2.5',
     'minimax-m2.5-free',
   ];
   readonly poe: readonly [
@@ -874,6 +877,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/kimi-k2p5',
     'accounts/fireworks/models/minimax-m2',
     'accounts/fireworks/models/minimax-m2p1',
+    'accounts/fireworks/models/minimax-m2p5',
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
   ];
@@ -1116,6 +1120,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b:free',
     'openai/gpt-oss-safeguard-20b',
     'openai/o4-mini',
+    'openrouter/aurora-alpha',
     'openrouter/sherlock-dash-alpha',
     'openrouter/sherlock-think-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
