@@ -23,7 +23,7 @@ export { SkillDetail, type SkillDetailProps } from './skill-detail';
 export { ReferenceViewerDialog, type ReferenceViewerDialogProps } from './reference-viewer-dialog';
 
 // Skills.sh components
-export { AddSkillDialog, type AddSkillDialogProps } from './add-skill-dialog';
+export { AddSkillDialog, type AddSkillDialogProps, type WritableMount } from './add-skill-dialog';
 
 export {
   SkillRemoveButton,
