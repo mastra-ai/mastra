@@ -69,6 +69,13 @@ export class Tool<
   TId extends string = string,
   TRequestContext extends Record<string, any> | unknown = unknown,
 > implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext> {
+  /**
+   * Brand marker to identify Mastra tools even when `instanceof` fails.
+   * This can happen in environments like Vite SSR where the same module
+   * may be loaded multiple times, creating different class instances.
+   */
+  readonly __brand = 'MastraTool' as const;
+
   /** Unique identifier for the tool */
   id: TId;
 
