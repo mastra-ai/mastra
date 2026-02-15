@@ -15,6 +15,7 @@ import type { ServerRoute } from './routes';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
+export { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 

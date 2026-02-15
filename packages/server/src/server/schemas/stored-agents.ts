@@ -11,7 +11,7 @@ import { serializedMemoryConfigSchema } from './memory-config';
  * Path parameter for stored agent ID
  */
 export const storedAgentIdPathParams = z.object({
-  storedAgentId: z.string().describe('Unique identifier for the stored agent'),
+  agentId: z.string().describe('Unique identifier for the stored agent'),
 });
 
 // ============================================================================
