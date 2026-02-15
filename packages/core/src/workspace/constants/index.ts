@@ -29,6 +29,7 @@ export const WORKSPACE_TOOLS = {
   SEARCH: {
     SEARCH: `${WORKSPACE_TOOLS_PREFIX}_search` as const,
     INDEX: `${WORKSPACE_TOOLS_PREFIX}_index` as const,
+    GREP: `${WORKSPACE_TOOLS_PREFIX}_grep` as const,
   },
 } as const;
 
