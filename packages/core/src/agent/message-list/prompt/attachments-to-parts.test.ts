@@ -343,6 +343,107 @@ describe('attachmentsToParts', () => {
     });
   });
 
+  it('should handle video URL attachments as file parts', () => {
+    const attachments: Attachment[] = [
+      {
+        url: 'https://example.com/video.mp4',
+        contentType: 'video/mp4',
+        name: 'video.mp4',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const filePart = parts[0] as unknown as FilePart;
+    expect(filePart).toMatchObject({
+      type: 'file',
+      data: 'https://example.com/video.mp4',
+      mimeType: 'video/mp4',
+    });
+  });
+
+  it('should handle video data URI attachments as file parts', () => {
+    const dataUri = 'data:video/webm;base64,GkXfowEAAAA';
+
+    const attachments: Attachment[] = [
+      {
+        url: dataUri,
+        contentType: 'video/webm',
+        name: 'video.webm',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const filePart = parts[0] as unknown as FilePart;
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'video/webm',
+    });
+    expect(filePart.data).toContain('data:video/webm;base64,');
+  });
+
+  it('should handle raw base64 video attachments as file parts', () => {
+    const base64Data = 'AAAAIGZ0eXBpc29tAAAAAGlzb21pc28y';
+
+    const attachments: Attachment[] = [
+      {
+        url: base64Data,
+        contentType: 'video/mp4',
+        name: 'video.mp4',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const filePart = parts[0] as unknown as FilePart;
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'video/mp4',
+    });
+    expect(filePart.data).toContain('data:video/mp4;base64,');
+  });
+
+  it('should handle various video formats via URL', () => {
+    const videoFormats = [
+      { url: 'https://example.com/video.mp4', contentType: 'video/mp4', name: 'video.mp4' },
+      { url: 'https://example.com/video.webm', contentType: 'video/webm', name: 'video.webm' },
+      { url: 'https://example.com/video.mov', contentType: 'video/quicktime', name: 'video.mov' },
+      { url: 'https://example.com/video.avi', contentType: 'video/avi', name: 'video.avi' },
+    ];
+
+    const parts = attachmentsToParts(videoFormats);
+    expect(parts).toHaveLength(4);
+
+    videoFormats.forEach((format, index) => {
+      const filePart = parts[index] as unknown as FilePart;
+      expect(filePart).toMatchObject({
+        type: 'file',
+        data: format.url,
+        mimeType: format.contentType,
+      });
+    });
+  });
+
+  it('should handle gs:// URL for video', () => {
+    const attachments: Attachment[] = [
+      {
+        url: 'gs://my-bucket/path/to/video.mp4',
+        contentType: 'video/mp4',
+        name: 'video.mp4',
+      },
+    ];
+
+    const parts = attachmentsToParts(attachments);
+    expect(parts).toHaveLength(1);
+    const filePart = parts[0] as unknown as FilePart;
+    expect(filePart).toMatchObject({
+      type: 'file',
+      data: 'gs://my-bucket/path/to/video.mp4',
+      mimeType: 'video/mp4',
+    });
+  });
+
   it('should not convert URLs to data URIs', () => {
     // URLs should remain as URLs, not be converted to data URIs
     const attachments: Attachment[] = [
