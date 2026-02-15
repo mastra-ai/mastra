@@ -199,7 +199,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryAgentsStorage: list called`);
@@ -219,6 +219,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
+
+    // Filter by status
+    agents = agents.filter(agent => agent.status === status);
 
     // Filter by authorId if provided
     if (authorId !== undefined) {

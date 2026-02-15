@@ -402,7 +402,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -421,7 +421,20 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const collection = await this.getCollection(TABLE_AGENTS);
-      const total = await collection.countDocuments({});
+
+      // Build filter
+      const filter: Record<string, any> = {};
+      filter.status = status;
+      if (authorId) {
+        filter.authorId = authorId;
+      }
+      if (metadata) {
+        for (const [key, value] of Object.entries(metadata)) {
+          filter[`metadata.${key}`] = value;
+        }
+      }
+
+      const total = await collection.countDocuments(filter);
 
       if (total === 0 || perPage === 0) {
         return {
@@ -437,7 +450,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
       let cursor = collection
-        .find({})
+        .find(filter)
         .sort({ [field]: sortOrder })
         .skip(offset);
 

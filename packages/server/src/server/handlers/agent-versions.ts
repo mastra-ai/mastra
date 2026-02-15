@@ -434,22 +434,14 @@ export async function handleAutoVersioning<TAgent>(
     changeMessage: 'Auto-saved after edit',
   });
 
-  // Update the agent's activeVersionId to point to the new version
-  await agentsStore.update({
-    id: agentId,
-    activeVersionId: versionId,
-  });
+  // Do NOT update activeVersionId here — the new version stays as a draft.
+  // activeVersionId is only updated when the user explicitly publishes/activates a version.
 
-  // Update the updatedAgent object with the new activeVersionId
-  const agentWithNewVersion = {
-    ...updatedAgent,
-    activeVersionId: versionId,
-  };
+  // Enforce retention limit, protecting the current active version
+  const activeVersionId = existingAgent.activeVersionId || versionId;
+  await enforceRetentionLimit(agentsStore, agentId, activeVersionId);
 
-  // Enforce retention limit with the new activeVersionId
-  await enforceRetentionLimit(agentsStore, agentId, versionId);
-
-  return { agent: agentWithNewVersion, versionCreated: true };
+  return { agent: updatedAgent, versionCreated: true };
 }
 
 // ============================================================================

@@ -339,7 +339,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -361,6 +361,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
 
       // Build filter
       const filter: Record<string, any> = {};
+      filter.status = status;
       if (authorId) {
         filter.authorId = authorId;
       }

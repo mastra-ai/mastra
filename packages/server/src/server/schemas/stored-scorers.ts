@@ -19,8 +19,21 @@ const storageOrderBySchema = z.object({
   direction: z.enum(['ASC', 'DESC']).optional(),
 });
 
+export const statusQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Which version to resolve: published (active version) or draft (latest version)'),
+});
+
 export const listStoredScorersQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Filter scorers by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter scorers by author identifier'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter scorers by metadata key-value pairs'),
 });
