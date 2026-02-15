@@ -377,6 +377,49 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     await memoryStore.deleteThread({ threadId });
+    if (this.vector) {
+      void this.deleteThreadVectors(threadId);
+    }
+  }
+
+  /**
+   * Deletes all vector embeddings associated with a thread.
+   * This is called internally by deleteThread to clean up orphaned vectors.
+   *
+   * @param threadId - The ID of the thread whose vectors should be deleted
+   */
+  private async deleteThreadVectors(threadId: string): Promise<void> {
+    if (!this.vector) return;
+
+    try {
+      const indexes = await this.vector!.listIndexes();
+      const memoryIndexes = indexes.filter((name: string) => name.startsWith('memory_messages'));
+
+      // Delete vectors from each memory index that match the thread_id
+      await Promise.all(
+        memoryIndexes.map(async (indexName: string) => {
+          try {
+            await this.vector!.deleteVectors({
+              indexName,
+              filter: { thread_id: threadId },
+            });
+            this.logger.debug(`Deleted vectors for thread ${threadId} from index ${indexName}`);
+          } catch (error) {
+            this.logger.debug(
+              `Could not delete vectors for thread ${threadId} from index ${indexName}: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          }
+        }),
+      );
+    } catch (error) {
+      this.logger.debug(
+        `No memory indexes found to clean up for thread ${threadId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async updateWorkingMemory({
@@ -1279,13 +1322,51 @@ Notes:
       throw new Error('All message IDs must be non-empty strings');
     }
 
-    // Delete from storage
+    // Delete from storage, then fire-and-forget vector cleanup
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.deleteMessages(messageIds);
 
-    // TODO: Delete from vector store if semantic recall is enabled
-    // This would require getting the messages first to know their threadId/resourceId
-    // and then querying the vector store to delete associated embeddings
+    await memoryStore.deleteMessages(messageIds);
+    if (this.vector && messageIds.length > 0) {
+      void this.deleteMessageVectors(messageIds);
+    }
+  }
+
+  /**
+   * Deletes vector embeddings for specific messages.
+   * This is called internally by deleteMessages to clean up orphaned vectors.
+   *
+   * @param messageIds - The IDs of the messages whose vectors should be deleted
+   */
+  private async deleteMessageVectors(messageIds: string[]): Promise<void> {
+    if (!this.vector) return;
+
+    try {
+      const indexes = await this.vector!.listIndexes();
+      const memoryIndexes = indexes.filter((name: string) => name.startsWith('memory_messages'));
+
+      // Delete vectors from each memory index in parallel
+      await Promise.all(
+        memoryIndexes.map(async indexName => {
+          // Delete all message vectors for this index in parallel
+          await Promise.all(
+            messageIds.map(async messageId => {
+              try {
+                await this.vector!.deleteVectors({
+                  indexName,
+                  filter: { message_id: messageId },
+                });
+              } catch {
+                this.logger.debug(
+                  `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
+                );
+              }
+            }),
+          );
+        }),
+      );
+    } catch {
+      this.logger.debug(`No memory indexes found to clean up for deleted messages`);
+    }
   }
 
   /**
