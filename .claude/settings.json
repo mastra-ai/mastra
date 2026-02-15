@@ -1,3 +1,5 @@
 {
-  "apiKeyHelper": "source .env && echo $ANTHROPIC_API_KEY"
+  "enabledPlugins": {
+    "ralph-wiggum@claude-plugins-official": true
+  }
 }
