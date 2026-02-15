@@ -65,11 +65,13 @@ const scoringSamplingConfigSchema = z.object({
 
 const entityConfigSchema = z.object({
   description: z.string().max(500).optional(),
+  rules: ruleGroupSchema.optional(),
 });
 
 const scorerConfigSchema = z.object({
   description: z.string().max(500).optional(),
   sampling: scoringSamplingConfigSchema.optional(),
+  rules: ruleGroupSchema.optional(),
 });
 
 const memoryConfigSchema = z
@@ -155,3 +157,5 @@ export const agentFormSchema = z.object({
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
+export type EntityConfig = z.infer<typeof entityConfigSchema>;
+export type ScorerConfig = z.infer<typeof scorerConfigSchema>;
