@@ -464,7 +464,7 @@ export async function createNetworkLoop({
   requestContext: RequestContext;
   runId: string;
   agent: Agent;
-  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
+  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings' | 'tracingContext'>;
   generateId: NetworkIdGenerator;
   routing?: {
     additionalInstructions?: string;
@@ -703,7 +703,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, writer, getInitData, suspend, resumeData }) => {
+    execute: async ({ inputData, writer, getInitData, suspend, resumeData, tracingContext }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
         await onAbort?.({
@@ -789,6 +789,7 @@ export async function createNetworkLoop({
         ? agentForStep.resumeStream(resumeData, {
             requestContext: requestContext,
             runId,
+            tracingContext,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -802,6 +803,7 @@ export async function createNetworkLoop({
         : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
             runId,
+            tracingContext,
             memory: {
               thread: threadId,
               resource: resourceId,
@@ -1043,7 +1045,7 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, writer, getInitData, suspend, resumeData, mastra }) => {
+    execute: async ({ inputData, writer, getInitData, suspend, resumeData, mastra, tracingContext }) => {
       // Check if aborted before executing
       if (abortSignal?.aborted) {
         await onAbort?.({
@@ -1148,10 +1150,12 @@ export async function createNetworkLoop({
         ? run.resumeStream({
             resumeData,
             requestContext: requestContext,
+            tracingContext,
           })
         : run.stream({
             inputData: input,
             requestContext: requestContext,
+            tracingContext,
           });
 
       // const wflowAbortCb = () => {
@@ -1375,7 +1379,7 @@ export async function createNetworkLoop({
         .boolean()
         .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
     }),
-    execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
+    execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend, tracingContext }) => {
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
       const logger = mastra?.getLogger();
 
@@ -1721,8 +1725,7 @@ export async function createNetworkLoop({
           runId,
           memory,
           context: inputDataToUse,
-          // TODO: Pass proper tracing context when network supports tracing
-          tracingContext: { currentSpan: undefined },
+          tracingContext,
           writer,
         },
         { toolCallId, messages: [] },
@@ -2587,6 +2590,7 @@ export async function networkLoop<OUTPUT = undefined>({
         return run.resumeStream({
           resumeData: resumeDataToUse,
           requestContext,
+          tracingContext: routingAgentOptions?.tracingContext,
         }).fullStream;
       }
       return run.stream({
@@ -2602,6 +2606,7 @@ export async function networkLoop<OUTPUT = undefined>({
           verboseIntrospection: true,
         },
         requestContext,
+        tracingContext: routingAgentOptions?.tracingContext,
       }).fullStream;
     },
   });
