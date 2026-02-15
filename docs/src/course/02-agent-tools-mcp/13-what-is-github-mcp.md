@@ -1,6 +1,6 @@
 # Adding the GitHub MCP Server
 
-In this step, we'll add the Composio GitHub MCP server to our agent, which will give it the ability to monitor and interact with GitHub repositories.
+In this step, we'll add the GitHub MCP server to our agent via the Smithery CLI, which will give it the ability to monitor and interact with GitHub repositories.
 
 ## What is the GitHub MCP Server?
 
