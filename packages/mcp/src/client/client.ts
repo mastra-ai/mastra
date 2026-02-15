@@ -2,6 +2,8 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { SpanType, EntityType } from '@mastra/core/observability';
+import type { TracingContext } from '@mastra/core/observability';
 import { createTool } from '@mastra/core/tools';
 import type { Tool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
@@ -11,11 +13,7 @@ import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotoc
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type {
-  GetPromptResult,
-  ListPromptsResult,
-  LoggingLevel,
-} from '@modelcontextprotocol/sdk/types.js';
+import type { GetPromptResult, ListPromptsResult, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
   ListResourcesResultSchema,
@@ -314,11 +312,10 @@ export class InternalMastraMCPClient extends MastraBase {
           requestInit,
           reconnectionOptions: this.serverConfig.reconnectionOptions,
           authProvider: authProvider,
-          fetch
+          fetch,
         });
         await this.client.connect(streamableTransport, {
-          timeout:
-            connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
+          timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         });
         this.transport = streamableTransport;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
@@ -341,15 +338,13 @@ export class InternalMastraMCPClient extends MastraBase {
         // Fallback to SSE transport
         // If fetch is provided, ensure it's also in eventSourceInit for the EventSource connection
         // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream
-        const sseEventSourceInit = fetch 
-          ? { ...eventSourceInit, fetch }
-          : eventSourceInit;
-        
-        const sseTransport = new SSEClientTransport(url, { 
-          requestInit, 
-          eventSourceInit: sseEventSourceInit, 
-          authProvider, 
-          fetch 
+        const sseEventSourceInit = fetch ? { ...eventSourceInit, fetch } : eventSourceInit;
+
+        const sseTransport = new SSEClientTransport(url, {
+          requestInit,
+          eventSourceInit: sseEventSourceInit,
+          authProvider,
+          fetch,
         });
         await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
         this.transport = sseTransport;
@@ -481,25 +476,25 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Checks if an error indicates a session invalidation that requires reconnection.
-   * 
+   *
    * Common session-related errors include:
    * - "No valid session ID provided" (HTTP 400)
    * - "Server not initialized" (HTTP 400)
    * - "Not connected" (protocol state error)
    * - Connection refused errors
-   * 
+   *
    * @param error - The error to check
    * @returns true if the error indicates a session problem requiring reconnection
-   * 
+   *
    * @internal
    */
   private isSessionError(error: unknown): boolean {
     if (!(error instanceof Error)) {
       return false;
     }
-    
+
     const errorMessage = error.message.toLowerCase();
-    
+
     // Check for session-related error patterns
     return (
       errorMessage.includes('no valid session') ||
@@ -517,18 +512,18 @@ export class InternalMastraMCPClient extends MastraBase {
 
   /**
    * Forces a reconnection to the MCP server by disconnecting and reconnecting.
-   * 
+   *
    * This is useful when the session becomes invalid (e.g., after server restart)
    * and the client needs to establish a fresh connection.
-   * 
+   *
    * @returns Promise resolving when reconnection is complete
    * @throws {Error} If reconnection fails
-   * 
+   *
    * @internal
    */
   async forceReconnect(): Promise<void> {
     this.log('debug', 'Forcing reconnection to MCP server...');
-    
+
     // Disconnect current connection (ignore errors as connection may already be broken)
     try {
       if (this.transport) {
@@ -539,11 +534,11 @@ export class InternalMastraMCPClient extends MastraBase {
         error: e instanceof Error ? e.message : String(e),
       });
     }
-    
+
     // Reset connection state
     this.transport = undefined;
     this.isConnected = null;
-    
+
     // Reconnect
     await this.connect();
     this.log('debug', 'Successfully reconnected to MCP server');
@@ -756,10 +751,27 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async (input: any, context?: { requestContext?: RequestContext | null, runId?: string }) => {
+          execute: async (
+            input: any,
+            context?: { requestContext?: RequestContext | null; runId?: string; tracingContext?: TracingContext },
+          ) => {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = context?.requestContext || null; // Set current context
-            
+
+            const serverVersion = this.client.getServerVersion();
+            const mcpSpan = context?.tracingContext?.currentSpan?.createChildSpan({
+              type: SpanType.MCP_TOOL_CALL,
+              name: `mcp_tool: '${tool.name}' on '${this.name}'`,
+              input,
+              entityType: EntityType.TOOL,
+              entityId: `${this.name}_${tool.name}`,
+              entityName: tool.name,
+              attributes: {
+                mcpServer: this.name,
+                serverVersion: serverVersion?.version,
+              },
+            });
+
             const executeToolCall = async () => {
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
               const res = await this.client.callTool(
@@ -767,7 +779,9 @@ export class InternalMastraMCPClient extends MastraBase {
                   name: tool.name,
                   arguments: input,
                   // Use runId as progress token if available, otherwise generate a random UUID
-                  ...(this.enableProgressTracking ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } } : {}),
+                  ...(this.enableProgressTracking
+                    ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
+                    : {}),
                 },
                 CallToolResultSchema,
                 {
@@ -785,39 +799,45 @@ export class InternalMastraMCPClient extends MastraBase {
 
               return res;
             };
-            
+
             try {
-              return await executeToolCall();
+              const result = await executeToolCall();
+              mcpSpan?.end({ output: result, attributes: { success: true } });
+              return result;
             } catch (e) {
               // Check if this is a session-related error that requires reconnection
               if (this.isSessionError(e)) {
                 this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
                   error: e instanceof Error ? e.message : String(e),
                 });
-                
+
                 try {
                   // Force reconnection
                   await this.forceReconnect();
-                  
+
                   // Retry the tool call with fresh connection
                   this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
-                  return await executeToolCall();
+                  const result = await executeToolCall();
+                  mcpSpan?.end({ output: result, attributes: { success: true } });
+                  return result;
                 } catch (reconnectError) {
                   this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
                     originalError: e instanceof Error ? e.message : String(e),
                     reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
                     toolArgs: input,
                   });
+                  mcpSpan?.error({ error: e as Error, attributes: { success: false } });
                   // Throw the original error if reconnection/retry fails
                   throw e;
                 }
               }
-              
+
               // For non-session errors, log and rethrow
               this.log('error', `Error calling tool: ${tool.name}`, {
                 error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
                 toolArgs: input,
               });
+              mcpSpan?.error({ error: e as Error, attributes: { success: false } });
               throw e;
             } finally {
               this.currentOperationContext = previousContext; // Restore previous context
