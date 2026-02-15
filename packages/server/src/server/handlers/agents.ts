@@ -1052,20 +1052,16 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
         threadId: effectiveThreadId ?? '',
       });
 
+      // Note: Do NOT set Transfer-Encoding header explicitly in the headers option.
+      // Runtimes automatically add this header for streaming responses,
+      // and setting it explicitly causes duplicate headers which break HTTP protocol.
       const streamResponse = rest.output
-        ? streamResult.toTextStreamResponse({
-            headers: {
-              'Transfer-Encoding': 'chunked',
-            },
-          })
+        ? streamResult.toTextStreamResponse()
         : streamResult.toDataStreamResponse({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
               return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-            },
-            headers: {
-              'Transfer-Encoding': 'chunked',
             },
           });
 
