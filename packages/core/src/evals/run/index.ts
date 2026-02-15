@@ -1,5 +1,7 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
+import type { JSONSchema7 } from 'json-schema';
+import type { ZodSchema } from 'zod';
+import type { Agent, AiMessageType, StructuredOutputOptions, UIMessageWithMetadata } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
@@ -19,6 +21,8 @@ type RunEvalsDataItem<TTarget = unknown> = {
   groundTruth?: any;
   requestContext?: RequestContext;
   tracingContext?: TracingContext;
+  /** Initial state for workflow targets. Ignored for agent targets. */
+  initialState?: any;
 };
 
 type WorkflowScorerConfig = {
@@ -38,6 +42,10 @@ export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
   scorers: MastraScorer<any, any, any, any>[];
   target: TAgent;
+  /** Structured output configuration for v5+ (AI SDK v5/v6) models */
+  structuredOutput?: StructuredOutputOptions<any>;
+  /** Output schema for legacy (AI SDK v4) models */
+  output?: ZodSchema | JSONSchema7;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
     targetResult: Awaited<ReturnType<Agent['generate']>>;
@@ -78,6 +86,8 @@ export async function runEvals(config: {
   data: RunEvalsDataItem<any>[];
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig;
   target: Agent | Workflow;
+  structuredOutput?: StructuredOutputOptions<any>;
+  output?: ZodSchema | JSONSchema7;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<any>;
     targetResult: any;
@@ -85,7 +95,7 @@ export async function runEvals(config: {
   }) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult> {
-  const { data, scorers, target, onItemComplete, concurrency = 1 } = config;
+  const { data, scorers, target, onItemComplete, concurrency = 1, structuredOutput, output } = config;
 
   validateEvalsInputs(data, scorers, target);
 
@@ -101,7 +111,7 @@ export async function runEvals(config: {
   await pMap(
     data,
     async (item: RunEvalsDataItem<any>) => {
-      const targetResult = await executeTarget(target, item);
+      const targetResult = await executeTarget(target, item, { structuredOutput, output });
       const scorerResults = await runScorers(scorers, targetResult, item);
       scoreAccumulator.addScores(scorerResults);
 
@@ -203,12 +213,16 @@ function validateEvalsInputs(
   }
 }
 
-async function executeTarget(target: Agent | Workflow, item: RunEvalsDataItem<any>) {
+async function executeTarget(
+  target: Agent | Workflow,
+  item: RunEvalsDataItem<any>,
+  agentOptions?: { structuredOutput?: StructuredOutputOptions<any>; output?: ZodSchema | JSONSchema7 },
+) {
   try {
     if (isWorkflow(target)) {
       return await executeWorkflow(target, item);
     } else {
-      return await executeAgent(target, item);
+      return await executeAgent(target, item, agentOptions);
     }
   } catch (error) {
     throw new MastraError(
@@ -228,10 +242,14 @@ async function executeTarget(target: Agent | Workflow, item: RunEvalsDataItem<an
 
 async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
   const run = await target.createRun({ disableScorers: true });
-  const workflowResult = await run.start({
+  const startArgs: Record<string, any> = {
     inputData: item.input,
     requestContext: item.requestContext,
-  });
+  };
+  if (item.initialState !== undefined) {
+    startArgs.initialState = item.initialState;
+  }
+  const workflowResult = await run.start(startArgs as any);
 
   return {
     scoringData: {
@@ -242,20 +260,32 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
   };
 }
 
-async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
+async function executeAgent(
+  agent: Agent,
+  item: RunEvalsDataItem<any>,
+  agentOptions?: { structuredOutput?: StructuredOutputOptions<any>; output?: ZodSchema | JSONSchema7 },
+) {
   const model = await agent.getModel();
   if (isSupportedLanguageModel(model)) {
-    return await agent.generate(item.input as any, {
+    const options: Record<string, any> = {
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
-    });
+    };
+    if (agentOptions?.structuredOutput) {
+      options.structuredOutput = agentOptions.structuredOutput;
+    }
+    return await agent.generate(item.input as any, options as any);
   } else {
-    return await agent.generateLegacy(item.input as any, {
+    const options: Record<string, any> = {
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
-    });
+    };
+    if (agentOptions?.output) {
+      options.output = agentOptions.output;
+    }
+    return await agent.generateLegacy(item.input as any, options as any);
   }
 }
 

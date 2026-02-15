@@ -531,6 +531,173 @@ describe('runEvals', () => {
     });
   });
 
+  describe('Structured output support', () => {
+    it('should pass structuredOutput option to agent.generate (v2 model)', async () => {
+      const outputSchema = z.object({
+        answer: z.string(),
+        confidence: z.number(),
+      });
+
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ answer: 'test', confidence: 0.9 }),
+            },
+          ],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            {
+              type: 'text-delta',
+              id: 'text-1',
+              delta: JSON.stringify({ answer: 'test', confidence: 0.9 }),
+            },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'structuredAgent',
+        name: 'structuredAgent',
+        instructions: 'Return structured output',
+        model: dummyModel,
+      });
+
+      const generateSpy = vi.spyOn(agent, 'generate');
+      const scorer = createMockScorer('test-scorer', 0.8);
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'expected' }],
+        scorers: [scorer],
+        target: agent,
+        structuredOutput: {
+          schema: outputSchema,
+        },
+      });
+
+      // Verify structuredOutput was passed through to agent.generate()
+      expect(generateSpy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          structuredOutput: expect.objectContaining({
+            schema: outputSchema,
+          }),
+        }),
+      );
+    });
+
+    it('should pass output option to agent.generateLegacy (v1 model)', async () => {
+      const outputSchema = z.object({
+        answer: z.string(),
+        confidence: z.number(),
+      });
+
+      const dummyModel = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: JSON.stringify({ answer: 'test', confidence: 0.9 }),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'structuredAgentV1',
+        name: 'structuredAgentV1',
+        instructions: 'Return structured output',
+        model: dummyModel,
+      });
+
+      const legacySpy = vi.spyOn(agent, 'generateLegacy');
+      const scorer = createMockScorer('test-scorer', 0.8);
+
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'expected' }],
+        scorers: [scorer],
+        target: agent,
+        output: outputSchema,
+      });
+
+      // Verify output schema was passed through to agent.generateLegacy()
+      expect(legacySpy).toHaveBeenCalledWith(
+        'test input',
+        expect.objectContaining({
+          output: outputSchema,
+        }),
+      );
+    });
+  });
+
+  describe('Workflow initialState support', () => {
+    it('should pass initialState to workflow run.start()', async () => {
+      const stateSchema = z.object({
+        counter: z.number(),
+        label: z.string(),
+      });
+
+      // Step reads from state and includes state values in output
+      const mockStep = createStep({
+        id: 'state-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        stateSchema,
+        execute: async ({ state }) => {
+          return { output: `counter=${state?.counter ?? 'undefined'}, label=${state?.label ?? 'undefined'}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'state-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        stateSchema,
+        options: { validateInputs: false },
+      })
+        .then(mockStep)
+        .commit();
+
+      // Use a scorer that captures the output to verify state was passed through
+      let capturedOutput: any;
+      const scorer = createScorer({
+        id: 'state-scorer',
+        description: 'Captures output for verification',
+        name: 'state-scorer',
+      }).generateScore(({ run }) => {
+        capturedOutput = run.output;
+        return 1.0;
+      });
+
+      await runEvals({
+        data: [
+          {
+            input: { input: 'Test' },
+            initialState: { counter: 42, label: 'test-label' },
+            groundTruth: 'Expected',
+          },
+        ],
+        scorers: [scorer],
+        target: workflow,
+      });
+
+      // The output should contain the state values from initialState
+      // If initialState is not passed through, the output will contain "undefined" values
+      expect(capturedOutput).toEqual({ output: 'counter=42, label=test-label' });
+    });
+  });
+
   describe('Score persistence', () => {
     it('should save scores to storage when runEvals is called', async () => {
       // Create agent
