@@ -829,9 +829,12 @@ export class InternalMastraMCPClient extends MastraBase {
                     reconnectError: normalizedReconnectError.stack,
                     toolArgs: input,
                   });
-                  mcpSpan?.error({ error: normalizedError, attributes: { success: false } });
-                  // Throw the original error if reconnection/retry fails
-                  throw e;
+                  mcpSpan?.error({
+                    error: normalizedReconnectError,
+                    attributes: { success: false, originalError: normalizedError.message },
+                  });
+                  // Throw the reconnect/retry error since that's the actual failure
+                  throw reconnectError;
                 }
               }
 
