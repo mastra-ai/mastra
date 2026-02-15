@@ -1,6 +1,12 @@
 import type { MastraUnion } from '@mastra/core/action';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraVector, MastraEmbeddingModel, MastraEmbeddingOptions } from '@mastra/core/vector';
+import type {
+  MastraVector,
+  MastraEmbeddingModel,
+  MastraEmbeddingOptions,
+  SearchMode,
+  HybridConfig,
+} from '@mastra/core/vector';
 
 import type { RerankConfig } from '../rerank';
 
@@ -143,6 +149,15 @@ export type VectorQueryToolOptions = {
   reranker?: RerankConfig;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
+  /**
+   * Search strategy to use.
+   * - 'vector': Pure vector similarity search (default)
+   * - 'fulltext': Keyword-based full-text search
+   * - 'hybrid': Combined vector similarity + full-text relevance
+   */
+  searchMode?: SearchMode;
+  /** Configuration for hybrid search score fusion weights */
+  hybridConfig?: HybridConfig;
 } & ProviderOptions &
   (
     | {

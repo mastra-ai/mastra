@@ -38,6 +38,22 @@ export interface UpsertVectorParams<Filter = VectorFilter> {
   /** Optional array of sparse vectors for hybrid search */
   sparseVectors?: SparseVector[];
   /**
+   * Optional array of document texts, one per vector.
+   * Used for full-text search indexing when the vector store supports it.
+   * Each entry corresponds to the vector at the same index.
+   *
+   * @example
+   * ```ts
+   * await vectorStore.upsert({
+   *   indexName: 'docs',
+   *   vectors: embeddings,
+   *   metadata: chunks.map(c => ({ source_id: 'doc.pdf' })),
+   *   documents: chunks.map(c => c.text),
+   * });
+   * ```
+   */
+  documents?: string[];
+  /**
    * Optional filter to delete vectors before upserting.
    * Useful for replacing all chunks from a source document.
    * The delete and insert operations happen atomically in a transaction.
@@ -62,6 +78,17 @@ export interface CreateIndexParams {
   metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
+/** Search mode for vector queries */
+export type SearchMode = 'vector' | 'fulltext' | 'hybrid';
+
+/** Configuration for hybrid search score fusion */
+export interface HybridConfig {
+  /** Weight for vector/semantic similarity score (0-1). Defaults to 0.5 */
+  semanticWeight?: number;
+  /** Weight for keyword/full-text relevance score (0-1). Defaults to 0.5 */
+  keywordWeight?: number;
+}
+
 export interface QueryVectorParams<Filter = VectorFilter> {
   indexName: string;
   queryVector: number[];
@@ -70,6 +97,20 @@ export interface QueryVectorParams<Filter = VectorFilter> {
   includeVector?: boolean;
   /** Optional sparse vector for hybrid query */
   sparseVector?: SparseVector;
+  /**
+   * Search strategy to use.
+   * - 'vector': Pure vector similarity search (default)
+   * - 'fulltext': Keyword-based full-text search using the document content
+   * - 'hybrid': Combined vector similarity + full-text relevance
+   */
+  searchMode?: SearchMode;
+  /**
+   * Raw query text for full-text and hybrid search modes.
+   * Required when searchMode is 'fulltext' or 'hybrid'.
+   */
+  queryText?: string;
+  /** Configuration for hybrid search score fusion weights */
+  hybridConfig?: HybridConfig;
 }
 
 export interface DescribeIndexParams {
