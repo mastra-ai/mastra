@@ -29,7 +29,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
         }
       }
 
-      return { packages };
+      return { packages, isDev: process.env.MASTRA_DEV === 'true' };
     } catch (error) {
       return handleError(error, 'Error getting system packages');
     }
