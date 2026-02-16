@@ -32,10 +32,10 @@
  *
  * const agent = new Agent({
  *   initialState: {
- *     systemPrompt: await om.wrapSystemPrompt('You are helpful.', sessionId),
+ *     systemPrompt: await om.wrapSystemPrompt({ basePrompt: 'You are helpful.', sessionId }),
  *     model: getModel('anthropic', 'claude-sonnet-4-20250514'),
  *   },
- *   transformContext: om.createTransformContext(sessionId),
+ *   transformContext: om.createTransformContext({ sessionId }),
  * });
  * ```
  *
@@ -227,14 +227,11 @@ export interface MastraOMIntegration extends OMIntegration {
    * Plugs into `new Agent({ transformContext })`.
    * Runs observation on the current messages, then filters out already-observed
    * messages so the model sees observations + recent unobserved turns.
-   *
-   * @param sessionId - The session / thread identifier.
-   * @param hooks - Optional callbacks for observation/reflection lifecycle.
    */
-  createTransformContext(
-    sessionId: string,
-    hooks?: ObserveHooks,
-  ): NonNullable<AgentOptions['transformContext']>;
+  createTransformContext(params: {
+    sessionId: string;
+    hooks?: ObserveHooks;
+  }): NonNullable<AgentOptions['transformContext']>;
 }
 
 /**
@@ -263,23 +260,26 @@ export interface MastraOMIntegration extends OMIntegration {
  * const sessionId = 'session-1';
  * const agent = new Agent({
  *   initialState: {
- *     systemPrompt: await om.wrapSystemPrompt('You are helpful.', sessionId),
+ *     systemPrompt: await om.wrapSystemPrompt({ basePrompt: 'You are helpful.', sessionId }),
  *     model: getModel('anthropic', 'claude-sonnet-4-20250514'),
  *   },
- *   transformContext: om.createTransformContext(sessionId),
+ *   transformContext: om.createTransformContext({ sessionId }),
  * });
  * ```
  */
 export function createMastraOM(options: CreateMastraOMOptions): MastraOMIntegration {
   const base = createOMIntegration(options);
 
-  function createTransformContext(
-    sessionId: string,
-    hooks?: ObserveHooks,
-  ): NonNullable<AgentOptions['transformContext']> {
+  function createTransformContext({
+    sessionId,
+    hooks,
+  }: {
+    sessionId: string;
+    hooks?: ObserveHooks;
+  }): NonNullable<AgentOptions['transformContext']> {
     return async (messages: AgentMessage[]) => {
       const mastraMessages = convertMessages(messages, sessionId);
-      const cutoff = await base.observeAndGetCutoff(sessionId, mastraMessages, hooks);
+      const cutoff = await base.observeAndGetCutoff({ sessionId, messages: mastraMessages, hooks });
 
       if (cutoff) {
         return messages.filter(msg => {
@@ -337,13 +337,16 @@ export async function createMastraOMFromConfig(
   });
 
   // Extend with Pi-specific createTransformContext
-  function createTransformContext(
-    sessionId: string,
-    hooks?: ObserveHooks,
-  ): NonNullable<AgentOptions['transformContext']> {
+  function createTransformContext({
+    sessionId,
+    hooks,
+  }: {
+    sessionId: string;
+    hooks?: ObserveHooks;
+  }): NonNullable<AgentOptions['transformContext']> {
     return async (messages: AgentMessage[]) => {
       const mastraMessages = convertMessages(messages, sessionId);
-      const cutoff = await base.observeAndGetCutoff(sessionId, mastraMessages, hooks);
+      const cutoff = await base.observeAndGetCutoff({ sessionId, messages: mastraMessages, hooks });
 
       if (cutoff) {
         return messages.filter(msg => {

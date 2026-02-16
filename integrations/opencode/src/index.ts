@@ -202,7 +202,7 @@ export const MastraPlugin: Plugin = async ctx => {
       if (event.type === 'session.created') {
         const sessionId = event.properties.info.id;
         try {
-          await integration.initSession(sessionId);
+          await integration.initSession({ sessionId });
         } catch (err) {
           void ctx.client.tui.showToast({
             body: {
@@ -226,27 +226,29 @@ export const MastraPlugin: Plugin = async ctx => {
 
       try {
         const mastraMessages = convertMessages(output.messages, sessionId);
-        const cutoff = await integration.observeAndGetCutoff(sessionId, mastraMessages, {
-          onObservationStart: () => {
-            void ctx.client.tui.showToast({
-              body: { title: 'Mastra', message: 'Observing conversation...', variant: 'info', duration: 10000 },
-            });
-          },
-          onObservationEnd: () => {
-            void ctx.client.tui.showToast({
-              body: { title: 'Mastra', message: 'Observation complete', variant: 'success', duration: 3000 },
-            });
-          },
-          onReflectionStart: () => {
-            void ctx.client.tui.showToast({
-              body: { title: 'Mastra', message: 'Reflecting on observations...', variant: 'info', duration: 10000 },
-            });
-          },
-          onReflectionEnd: () => {
-            void ctx.client.tui.showToast({
-              body: { title: 'Mastra', message: 'Reflection complete', variant: 'success', duration: 3000 },
-            });
-          },
+        const cutoff = await integration.observeAndGetCutoff({
+          sessionId, messages: mastraMessages, hooks: {
+            onObservationStart: () => {
+              void ctx.client.tui.showToast({
+                body: { title: 'Mastra', message: 'Observing conversation...', variant: 'info', duration: 10000 },
+              });
+            },
+            onObservationEnd: () => {
+              void ctx.client.tui.showToast({
+                body: { title: 'Mastra', message: 'Observation complete', variant: 'success', duration: 3000 },
+              });
+            },
+            onReflectionStart: () => {
+              void ctx.client.tui.showToast({
+                body: { title: 'Mastra', message: 'Reflecting on observations...', variant: 'info', duration: 10000 },
+              });
+            },
+            onReflectionEnd: () => {
+              void ctx.client.tui.showToast({
+                body: { title: 'Mastra', message: 'Reflection complete', variant: 'success', duration: 3000 },
+              });
+            },
+          }
         });
 
         // Discard already-observed messages — observations replace them
@@ -274,7 +276,7 @@ export const MastraPlugin: Plugin = async ctx => {
       if (!sessionId) return;
 
       try {
-        const block = await integration.getSystemPromptBlock(sessionId);
+        const block = await integration.getSystemPromptBlock({ sessionId });
         if (block) {
           output.system.push(block);
         }
@@ -302,7 +304,7 @@ export const MastraPlugin: Plugin = async ctx => {
             // Fall back to record's pending count
           }
 
-          return integration.getStatus(threadId, liveMessages);
+          return integration.getStatus({ sessionId: threadId, messages: liveMessages });
         },
       }),
 
@@ -311,7 +313,7 @@ export const MastraPlugin: Plugin = async ctx => {
         args: {},
         async execute(_args, context) {
           const threadId = context.sessionID;
-          const observations = await integration.getObservations(threadId);
+          const observations = await integration.getObservations({ sessionId: threadId });
           return observations ?? 'No observations stored yet.';
         },
       }),

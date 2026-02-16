@@ -72,23 +72,25 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
 
     try {
       const mastraMessages = convertMessages(messages, sessionId);
-      const cutoff = await integration.observeAndGetCutoff(sessionId, mastraMessages, {
-        onObservationStart: () => {
-          ctx.ui.notify('Mastra: observing conversation...', 'info');
-          ctx.ui.setStatus('mastra-om', 'Observing...');
-        },
-        onObservationEnd: () => {
-          ctx.ui.notify('Mastra: observation complete', 'info');
-          ctx.ui.setStatus('mastra-om', undefined);
-        },
-        onReflectionStart: () => {
-          ctx.ui.notify('Mastra: reflecting on observations...', 'info');
-          ctx.ui.setStatus('mastra-om', 'Reflecting...');
-        },
-        onReflectionEnd: () => {
-          ctx.ui.notify('Mastra: reflection complete', 'info');
-          ctx.ui.setStatus('mastra-om', undefined);
-        },
+      const cutoff = await integration.observeAndGetCutoff({
+        sessionId, messages: mastraMessages, hooks: {
+          onObservationStart: () => {
+            ctx.ui.notify('Mastra: observing conversation...', 'info');
+            ctx.ui.setStatus('mastra-om', 'Observing...');
+          },
+          onObservationEnd: () => {
+            ctx.ui.notify('Mastra: observation complete', 'info');
+            ctx.ui.setStatus('mastra-om', undefined);
+          },
+          onReflectionStart: () => {
+            ctx.ui.notify('Mastra: reflecting on observations...', 'info');
+            ctx.ui.setStatus('mastra-om', 'Reflecting...');
+          },
+          onReflectionEnd: () => {
+            ctx.ui.notify('Mastra: reflection complete', 'info');
+            ctx.ui.setStatus('mastra-om', undefined);
+          },
+        }
       });
 
       if (cutoff) {
@@ -117,7 +119,7 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
     const sessionId = ctx.sessionManager.getSessionId();
 
     try {
-      const block = await integration.getSystemPromptBlock(sessionId);
+      const block = await integration.getSystemPromptBlock({ sessionId });
       if (!block) return {};
 
       return {
@@ -140,7 +142,7 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = ctx.sessionManager.getSessionId();
-      const status = await integration.getStatus(sessionId);
+      const status = await integration.getStatus({ sessionId });
       return {
         content: [{ type: 'text', text: status }],
         details: {},
@@ -155,7 +157,7 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = ctx.sessionManager.getSessionId();
-      const observations = await integration.getObservations(sessionId);
+      const observations = await integration.getObservations({ sessionId });
       return {
         content: [{ type: 'text', text: observations ?? 'No observations stored yet.' }],
         details: {},

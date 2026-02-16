@@ -16,7 +16,7 @@ import { mkdir } from 'node:fs/promises';
 import Readline from 'readline';
 import { Agent } from '@mariozechner/pi-agent-core';
 import { getModel } from '@mariozechner/pi-ai';
-import { createMastraOM } from '@mastra/pi';
+import { createMastraOM, convertMessages } from '@mastra/pi';
 import { LibSQLStore } from '@mastra/libsql';
 
 // ---------------------------------------------------------------------------
@@ -56,26 +56,29 @@ async function main() {
     storage,
     model: `${MODEL_PROVIDER}/${MODEL_ID}`,
     observation: {
-      messageTokens: { min: 4_000, max: 8_000 },
+      messageTokens: 4_000,
     },
     reflection: {
-      observationTokens: { min: 40_000, max: 60_000 },
+      observationTokens: 40_000,
     },
   });
 
-  await om.initSession(SESSION_ID);
+  await om.initSession({ sessionId: SESSION_ID });
 
   // Pi Agent
   const agent = new Agent({
     initialState: {
-      systemPrompt: await om.wrapSystemPrompt(SYSTEM_PROMPT, SESSION_ID),
+      systemPrompt: await om.wrapSystemPrompt({ basePrompt: SYSTEM_PROMPT, sessionId: SESSION_ID }),
       model: getModel(MODEL_PROVIDER, MODEL_ID),
     },
-    transformContext: om.createTransformContext(SESSION_ID, {
-      onObservationStart: () => process.stdout.write('\n  ◉ Observing conversation...'),
-      onObservationEnd: () => process.stdout.write(' done\n'),
-      onReflectionStart: () => process.stdout.write('\n  ◉ Reflecting on observations...'),
-      onReflectionEnd: () => process.stdout.write(' done\n'),
+    transformContext: om.createTransformContext({
+      sessionId: SESSION_ID,
+      hooks: {
+        onObservationStart: () => process.stdout.write('\n  ◉ Observing conversation...'),
+        onObservationEnd: () => process.stdout.write(' done\n'),
+        onReflectionStart: () => process.stdout.write('\n  ◉ Reflecting on observations...'),
+        onReflectionEnd: () => process.stdout.write(' done\n'),
+      },
     }),
   });
 
@@ -129,21 +132,21 @@ async function main() {
     }
 
     if (input === '/status') {
-      const status = await om.getStatus(SESSION_ID, agent.state.messages);
+      const status = await om.getStatus({ sessionId: SESSION_ID, messages: convertMessages(agent.state.messages, SESSION_ID) });
       console.log(`\n${status}\n`);
       continue;
     }
 
     if (input === '/obs') {
-      const observations = await om.getObservations(SESSION_ID);
+      const observations = await om.getObservations({ sessionId: SESSION_ID });
       console.log(observations ? `\n${observations}\n` : '\n  No observations yet — keep chatting!\n');
       continue;
     }
 
     if (input === '/clear') {
       agent.reset();
-      await om.initSession(SESSION_ID);
-      agent.state.systemPrompt = await om.wrapSystemPrompt(SYSTEM_PROMPT, SESSION_ID);
+      await om.initSession({ sessionId: SESSION_ID });
+      agent.state.systemPrompt = await om.wrapSystemPrompt({ basePrompt: SYSTEM_PROMPT, sessionId: SESSION_ID });
       console.log('\n  Conversation cleared.\n');
       continue;
     }
@@ -155,10 +158,10 @@ async function main() {
       await agent.waitForIdle();
 
       // Refresh system prompt with latest observations
-      agent.state.systemPrompt = await om.wrapSystemPrompt(SYSTEM_PROMPT, SESSION_ID);
+      agent.state.systemPrompt = await om.wrapSystemPrompt({ basePrompt: SYSTEM_PROMPT, sessionId: SESSION_ID });
 
       if (SHOW_STATUS) {
-        const status = await om.getStatus(SESSION_ID, agent.state.messages);
+        const status = await om.getStatus({ sessionId: SESSION_ID, messages: convertMessages(agent.state.messages, SESSION_ID) });
         console.log(status);
       }
     } catch (err) {

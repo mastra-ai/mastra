@@ -120,13 +120,13 @@ describe('Extension behavior: system prompt injection', () => {
 
   it('should return base prompt when no observations exist', async () => {
     const integration = createIntegration();
-    const result = await integration.wrapSystemPrompt('You are a coding assistant.', 'session-1');
+    const result = await integration.wrapSystemPrompt({ basePrompt: 'You are a coding assistant.', sessionId: 'session-1' });
     expect(result).toBe('You are a coding assistant.');
   });
 
   it('should inject observations into system prompt', async () => {
     const integration = createIntegration();
-    await integration.initSession('session-1');
+    await integration.initSession({ sessionId: 'session-1' });
 
     const record = await integration.om.getRecord('session-1');
     await storage.updateActiveObservations({
@@ -138,7 +138,7 @@ describe('Extension behavior: system prompt injection', () => {
       pendingMessageTokens: 0,
     });
 
-    const result = await integration.wrapSystemPrompt('You are a coding assistant.', 'session-1');
+    const result = await integration.wrapSystemPrompt({ basePrompt: 'You are a coding assistant.', sessionId: 'session-1' });
     expect(result).toContain('You are a coding assistant.');
     expect(result).toContain('<observations>');
     expect(result).toContain('User prefers functional style');
@@ -160,7 +160,7 @@ describe('Extension behavior: diagnostic tool responses', () => {
 
   it('memory_status should report no record for unknown session', async () => {
     const integration = createIntegration();
-    const status = await integration.getStatus('unknown-session');
+    const status = await integration.getStatus({ sessionId: 'unknown-session' });
     expect(status).toContain('No Observational Memory record');
   });
 
@@ -169,9 +169,9 @@ describe('Extension behavior: diagnostic tool responses', () => {
       observation: { messageTokens: 30_000 },
       reflection: { observationTokens: 40_000 },
     });
-    await integration.initSession('session-1');
+    await integration.initSession({ sessionId: 'session-1' });
 
-    const status = await integration.getStatus('session-1');
+    const status = await integration.getStatus({ sessionId: 'session-1' });
     expect(status).toContain('Observational Memory');
     expect(status).toContain('30.0k');
     expect(status).toContain('40.0k');
@@ -180,13 +180,13 @@ describe('Extension behavior: diagnostic tool responses', () => {
 
   it('memory_observations should return undefined for empty session', async () => {
     const integration = createIntegration();
-    const obs = await integration.getObservations('session-1');
+    const obs = await integration.getObservations({ sessionId: 'session-1' });
     expect(obs).toBeUndefined();
   });
 
   it('memory_observations should return stored observations', async () => {
     const integration = createIntegration();
-    await integration.initSession('session-1');
+    await integration.initSession({ sessionId: 'session-1' });
 
     const record = await integration.om.getRecord('session-1');
     await storage.updateActiveObservations({
@@ -198,7 +198,7 @@ describe('Extension behavior: diagnostic tool responses', () => {
       pendingMessageTokens: 0,
     });
 
-    const obs = await integration.getObservations('session-1');
+    const obs = await integration.getObservations({ sessionId: 'session-1' });
     expect(obs).toContain('User prefers dark mode');
   });
 });
@@ -272,7 +272,7 @@ describe('Extension API registration contract', () => {
       om: brokenOm,
       createTransformContext: () => async (msgs: any) => msgs,
       getSystemPromptBlock: async () => '',
-      wrapSystemPrompt: async (p: string) => p,
+      wrapSystemPrompt: async () => '',
       getStatus: async () => 'error',
       getObservations: async () => undefined,
       initSession: async () => { await brokenOm.getOrCreateRecord('x'); },

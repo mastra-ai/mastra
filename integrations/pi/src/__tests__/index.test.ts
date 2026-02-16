@@ -227,7 +227,7 @@ describe('createMastraOM', () => {
   describe('initSession', () => {
     it('should create an OM record for a new session', async () => {
       const integration = createIntegration();
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
       const record = await integration.om.getRecord('session-1');
       expect(record).not.toBeNull();
@@ -236,8 +236,8 @@ describe('createMastraOM', () => {
 
     it('should be idempotent', async () => {
       const integration = createIntegration();
-      await integration.initSession('session-1');
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
+      await integration.initSession({ sessionId: 'session-1' });
 
       const record = await integration.om.getRecord('session-1');
       expect(record).not.toBeNull();
@@ -247,13 +247,13 @@ describe('createMastraOM', () => {
   describe('getObservations', () => {
     it('should return undefined when no observations exist', async () => {
       const integration = createIntegration();
-      const result = await integration.getObservations('session-1');
+      const result = await integration.getObservations({ sessionId: 'session-1' });
       expect(result).toBeUndefined();
     });
 
     it('should return observations after they are stored', async () => {
       const integration = createIntegration();
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
       // Manually set observations via storage
       const record = await integration.om.getRecord('session-1');
@@ -266,7 +266,7 @@ describe('createMastraOM', () => {
         pendingMessageTokens: 0,
       });
 
-      const result = await integration.getObservations('session-1');
+      const result = await integration.getObservations({ sessionId: 'session-1' });
       expect(result).toContain('User likes TypeScript');
     });
   });
@@ -274,13 +274,13 @@ describe('createMastraOM', () => {
   describe('getSystemPromptBlock', () => {
     it('should return empty string when no observations exist', async () => {
       const integration = createIntegration();
-      const block = await integration.getSystemPromptBlock('session-1');
+      const block = await integration.getSystemPromptBlock({ sessionId: 'session-1' });
       expect(block).toBe('');
     });
 
     it('should return formatted block with observations', async () => {
       const integration = createIntegration();
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
       const record = await integration.om.getRecord('session-1');
       await storage.updateActiveObservations({
@@ -292,7 +292,7 @@ describe('createMastraOM', () => {
         pendingMessageTokens: 0,
       });
 
-      const block = await integration.getSystemPromptBlock('session-1');
+      const block = await integration.getSystemPromptBlock({ sessionId: 'session-1' });
       expect(block).toContain('<observations>');
       expect(block).toContain('</observations>');
       expect(block).toContain('User prefers Postgres');
@@ -303,13 +303,13 @@ describe('createMastraOM', () => {
   describe('wrapSystemPrompt', () => {
     it('should return base prompt unchanged when no observations', async () => {
       const integration = createIntegration();
-      const result = await integration.wrapSystemPrompt('You are helpful.', 'session-1');
+      const result = await integration.wrapSystemPrompt({ basePrompt: 'You are helpful.', sessionId: 'session-1' });
       expect(result).toBe('You are helpful.');
     });
 
     it('should append observations to base prompt', async () => {
       const integration = createIntegration();
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
       const record = await integration.om.getRecord('session-1');
       await storage.updateActiveObservations({
@@ -321,7 +321,7 @@ describe('createMastraOM', () => {
         pendingMessageTokens: 0,
       });
 
-      const result = await integration.wrapSystemPrompt('You are helpful.', 'session-1');
+      const result = await integration.wrapSystemPrompt({ basePrompt: 'You are helpful.', sessionId: 'session-1' });
       expect(result).toContain('You are helpful.');
       expect(result).toContain('<observations>');
       expect(result).toContain('User likes tests');
@@ -331,15 +331,15 @@ describe('createMastraOM', () => {
   describe('getStatus', () => {
     it('should return "no record" when session is not initialized', async () => {
       const integration = createIntegration();
-      const status = await integration.getStatus('no-such-session');
+      const status = await integration.getStatus({ sessionId: 'no-such-session' });
       expect(status).toContain('No Observational Memory record');
     });
 
     it('should return formatted status for initialized session', async () => {
       const integration = createIntegration();
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
-      const status = await integration.getStatus('session-1');
+      const status = await integration.getStatus({ sessionId: 'session-1' });
       expect(status).toContain('Observational Memory');
       expect(status).toContain('Observation');
       expect(status).toContain('Reflection');
@@ -350,7 +350,7 @@ describe('createMastraOM', () => {
   describe('createTransformContext', () => {
     it('should return a function', () => {
       const integration = createIntegration();
-      const transform = integration.createTransformContext('session-1');
+      const transform = integration.createTransformContext({ sessionId: 'session-1' });
       expect(typeof transform).toBe('function');
     });
 
@@ -367,9 +367,9 @@ describe('createMastraOM', () => {
           model: createMockObserverModel() as any,
         },
       });
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
-      const transform = integration.createTransformContext('session-1');
+      const transform = integration.createTransformContext({ sessionId: 'session-1' });
       const messages = [piMessage('user', 'hello'), piMessage('assistant', 'hi')];
 
       const result = await transform(messages);
@@ -394,9 +394,9 @@ describe('createMastraOM', () => {
           model: createMockObserverModel() as any,
         },
       });
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
-      const transform = integration.createTransformContext('session-1', hooks);
+      const transform = integration.createTransformContext({ sessionId: 'session-1', hooks });
       const messages = createMessagesExceedingThreshold(20);
       await transform(messages);
 
@@ -417,9 +417,9 @@ describe('createMastraOM', () => {
           model: createMockObserverModel() as any,
         },
       });
-      await integration.initSession('session-1');
+      await integration.initSession({ sessionId: 'session-1' });
 
-      const transform = integration.createTransformContext('session-1');
+      const transform = integration.createTransformContext({ sessionId: 'session-1' });
       const messages = createMessagesExceedingThreshold(20);
 
       const result = await transform(messages);

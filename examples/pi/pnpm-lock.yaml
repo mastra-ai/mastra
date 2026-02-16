@@ -23,9 +23,15 @@ importers:
       '@mariozechner/pi-coding-agent':
         specifier: '*'
         version: 0.52.12(ws@8.19.0)(zod@3.25.76)
+      '@mastra/core':
+        specifier: link:../../packages/core
+        version: link:../../packages/core
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: link:../../packages/memory
+        version: link:../../packages/memory
       '@mastra/pi':
         specifier: link:../../integrations/pi
         version: link:../../integrations/pi

@@ -13,6 +13,8 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
     "@mastra/pi": "latest",
     "@mastra/libsql": "latest",
     "@mariozechner/pi-agent-core": "*",

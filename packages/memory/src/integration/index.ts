@@ -16,7 +16,7 @@
  * const storage = await store.getStore('memory');
  *
  * const integration = createOMIntegration({ storage });
- * const block = await integration.getSystemPromptBlock('session-1');
+ * const block = await integration.getSystemPromptBlock({ sessionId: 'session-1' });
  * ```
  *
  * @example File-based config with LibSQL
@@ -233,49 +233,39 @@ export interface OMIntegration {
 
   /**
    * Build the observation context block for injection into a system prompt.
-   *
-   * @param sessionId - The session / thread identifier.
    * @returns The observations block (or empty string if none exist).
    */
-  getSystemPromptBlock(sessionId: string): Promise<string>;
+  getSystemPromptBlock(params: { sessionId: string }): Promise<string>;
 
   /**
    * Wrap a base system prompt with the observations block appended.
-   *
-   * @param basePrompt - The original system prompt.
-   * @param sessionId - The session / thread identifier.
    */
-  wrapSystemPrompt(basePrompt: string, sessionId: string): Promise<string>;
+  wrapSystemPrompt(params: { basePrompt: string; sessionId: string }): Promise<string>;
 
   /**
    * Format a status string showing OM progress for diagnostics.
-   *
-   * @param sessionId - The session / thread identifier.
-   * @param messages - Optional converted MastraDBMessages for live token count.
    */
-  getStatus(sessionId: string, messages?: MastraDBMessage[]): Promise<string>;
+  getStatus(params: { sessionId: string; messages?: MastraDBMessage[] }): Promise<string>;
 
   /**
    * Get current active observations as a string.
    */
-  getObservations(sessionId: string): Promise<string | undefined>;
+  getObservations(params: { sessionId: string }): Promise<string | undefined>;
 
   /** Eagerly initialize the OM record for a session. */
-  initSession(sessionId: string): Promise<void>;
+  initSession(params: { sessionId: string }): Promise<void>;
 
   /**
-   * Run observation on converted messages and return a filter predicate
-   * for removing already-observed messages from context.
+   * Run observation on converted messages and return a cutoff timestamp
+   * for filtering already-observed messages from context.
    *
-   * The returned `lastObservedAt` can be used by the integration to filter
-   * platform-specific messages by their timestamps.
-   *
-   * @param sessionId - The session / thread identifier.
-   * @param mastraMessages - Messages already converted to MastraDBMessage format.
-   * @param hooks - Optional callbacks for observation/reflection lifecycle.
    * @returns The `lastObservedAt` timestamp (or null if no observation has occurred).
    */
-  observeAndGetCutoff(sessionId: string, mastraMessages: MastraDBMessage[], hooks?: ObserveHooks): Promise<Date | null>;
+  observeAndGetCutoff(params: {
+    sessionId: string;
+    messages: MastraDBMessage[];
+    hooks?: ObserveHooks;
+  }): Promise<Date | null>;
 }
 
 /**
@@ -291,8 +281,8 @@ export interface OMIntegration {
  * import { createOMIntegration } from '@mastra/memory/integration';
  *
  * const integration = createOMIntegration({ storage });
- * const block = await integration.getSystemPromptBlock('session-1');
- * const status = await integration.getStatus('session-1');
+ * const block = await integration.getSystemPromptBlock({ sessionId: 'session-1' });
+ * const status = await integration.getStatus({ sessionId: 'session-1' });
  * ```
  */
 export function createOMIntegration(options: OMIntegrationOptions): OMIntegration {
@@ -308,17 +298,29 @@ export function createOMIntegration(options: OMIntegrationOptions): OMIntegratio
 
   let tokenCounter: TokenCounter | undefined;
 
-  async function getSystemPromptBlock(sessionId: string): Promise<string> {
+  async function getSystemPromptBlock({ sessionId }: { sessionId: string }): Promise<string> {
     const observations = await om.getObservations(sessionId);
     return buildObservationBlock(observations);
   }
 
-  async function wrapSystemPrompt(basePrompt: string, sessionId: string): Promise<string> {
-    const block = await getSystemPromptBlock(sessionId);
+  async function wrapSystemPrompt({
+    basePrompt,
+    sessionId,
+  }: {
+    basePrompt: string;
+    sessionId: string;
+  }): Promise<string> {
+    const block = await getSystemPromptBlock({ sessionId });
     return block ? `${basePrompt}\n\n${block}` : basePrompt;
   }
 
-  async function getStatus(sessionId: string, messages?: MastraDBMessage[]): Promise<string> {
+  async function getStatus({
+    sessionId,
+    messages,
+  }: {
+    sessionId: string;
+    messages?: MastraDBMessage[];
+  }): Promise<string> {
     const record = await om.getRecord(sessionId);
     if (!record) {
       return 'No Observational Memory record found for this session.';
@@ -336,19 +338,23 @@ export function createOMIntegration(options: OMIntegrationOptions): OMIntegratio
     return formatOMStatus(record, om.config, unobservedTokens);
   }
 
-  async function getObservations(sessionId: string): Promise<string | undefined> {
+  async function getObservations({ sessionId }: { sessionId: string }): Promise<string | undefined> {
     return om.getObservations(sessionId);
   }
 
-  async function initSession(sessionId: string): Promise<void> {
+  async function initSession({ sessionId }: { sessionId: string }): Promise<void> {
     await om.getOrCreateRecord(sessionId);
   }
 
-  async function observeAndGetCutoff(
-    sessionId: string,
-    mastraMessages: MastraDBMessage[],
-    hooks?: ObserveHooks,
-  ): Promise<Date | null> {
+  async function observeAndGetCutoff({
+    sessionId,
+    messages: mastraMessages,
+    hooks,
+  }: {
+    sessionId: string;
+    messages: MastraDBMessage[];
+    hooks?: ObserveHooks;
+  }): Promise<Date | null> {
     if (mastraMessages.length > 0) {
       await om.observe({ threadId: sessionId, messages: mastraMessages, hooks });
     }
