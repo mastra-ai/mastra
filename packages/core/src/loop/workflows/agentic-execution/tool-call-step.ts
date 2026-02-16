@@ -374,6 +374,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
           workspace: _internal?.stepWorkspace,
+          // Forward requestContext so tools receive values set by the workflow step
+          requestContext,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
               controller.enqueue({
