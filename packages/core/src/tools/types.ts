@@ -86,6 +86,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
   outputWriter?: OutputWriter;
   tracingContext?: TracingContext;
   /**
+   * Request context for tool execution. When provided at execution time, this overrides
+   * any request context configured at tool build time. Allows dynamic context propagation
+   * per-step via workflow execution.
+   */
+  requestContext?: RequestContext;
+  /**
    * Optional MCP-specific context passed when tool is executed in MCP server.
    * This is populated by the MCP server and passed through to the tool's execution context.
    */
