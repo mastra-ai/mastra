@@ -3,6 +3,7 @@ import { Check, PlusIcon, XIcon } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Button } from '@/ds/components/Button';
+import { ButtonWithTooltip } from '@/ds/components/Button/ButtonWithTooltip';
 import { Icon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
@@ -22,9 +23,11 @@ interface MCPClientFormSidebarProps {
   containerRef?: React.RefObject<HTMLElement | null>;
   readOnly?: boolean;
   submitLabel?: string;
+  onTryConnect?: () => void;
+  isTryingConnect?: boolean;
 }
 
-export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillFromServer, containerRef, readOnly, submitLabel = 'Create MCP Client' }: MCPClientFormSidebarProps) {
+export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillFromServer, containerRef, readOnly, submitLabel = 'Create MCP Client', onTryConnect, isTryingConnect }: MCPClientFormSidebarProps) {
   const {
     register,
     control,
@@ -34,6 +37,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
   } = form;
 
   const serverType = useWatch({ control, name: 'serverType' });
+  const url = useWatch({ control, name: 'url' });
   const env = useWatch({ control, name: 'env' });
 
   const addEnvVar = () => {
@@ -237,7 +241,51 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
       </ScrollArea>
 
       {!readOnly && (
-        <div className="flex-shrink-0 p-4">
+        <div className="flex-shrink-0 p-4 flex flex-col gap-2">
+          {(() => {
+            const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;
+            const tooltipContent =
+              serverType !== 'http'
+                ? 'Only available for HTTP servers'
+                : !url.trim()
+                  ? 'Enter a URL first'
+                  : undefined;
+
+            return tooltipContent ? (
+              <ButtonWithTooltip
+                variant="outline"
+                onClick={onTryConnect}
+                disabled={isDisabled}
+                className="w-full"
+                tooltipContent={tooltipContent}
+              >
+                {isTryingConnect ? (
+                  <>
+                    <Spinner className="h-4 w-4" />
+                    Connecting...
+                  </>
+                ) : (
+                  'Try to connect'
+                )}
+              </ButtonWithTooltip>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={onTryConnect}
+                disabled={isDisabled}
+                className="w-full"
+              >
+                {isTryingConnect ? (
+                  <>
+                    <Spinner className="h-4 w-4" />
+                    Connecting...
+                  </>
+                ) : (
+                  'Try to connect'
+                )}
+              </Button>
+            );
+          })()}
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>

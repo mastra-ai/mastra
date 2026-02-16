@@ -1,10 +1,11 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import type { StoredMCPServerConfig } from '@mastra/client-js';
 
 import { toast } from '@/lib/toast';
 
+import { useTryConnectMcp } from '../../hooks/use-try-connect-mcp';
 import { useMCPClientForm, type MCPClientFormValues } from './use-mcp-client-form';
 import { MCPClientEditLayout } from './mcp-client-edit-layout';
 import { MCPClientFormSidebar } from './mcp-client-form-sidebar';
@@ -23,6 +24,22 @@ export function MCPClientCreateContent({ onAdd, readOnly, initialValues, submitL
 
   const serverType = useWatch({ control: form.control, name: 'serverType' });
   const url = useWatch({ control: form.control, name: 'url' });
+
+  const tryConnect = useTryConnectMcp();
+  const hasAutoConnected = useRef(false);
+
+  useEffect(() => {
+    if (readOnly && serverType === 'http' && url.trim() && !hasAutoConnected.current) {
+      hasAutoConnected.current = true;
+      tryConnect.mutate(url);
+    }
+  }, [readOnly, serverType, url, tryConnect]);
+
+  const handleTryConnect = useCallback(() => {
+    if (serverType === 'http' && url.trim()) {
+      tryConnect.mutate(url);
+    }
+  }, [serverType, url, tryConnect]);
 
   const handlePreFillFromServer = (serverId: string) => {
     const host = window.MASTRA_SERVER_HOST;
@@ -92,10 +109,12 @@ export function MCPClientCreateContent({ onAdd, readOnly, initialValues, submitL
             containerRef={containerRef}
             readOnly={readOnly}
             submitLabel={submitLabel}
+            onTryConnect={handleTryConnect}
+            isTryingConnect={tryConnect.isPending}
           />
         }
       >
-        <MCPClientToolPreview serverType={serverType} url={url} autoConnect={readOnly} />
+        <MCPClientToolPreview serverType={serverType} url={url} tryConnect={tryConnect} />
       </MCPClientEditLayout>
     </div>
   );

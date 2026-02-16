@@ -10,6 +10,28 @@ export interface TryConnectResult {
   tools: McpTool[];
 }
 
+async function parseResponse(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (contentType.includes('text/event-stream')) {
+    const text = await response.text();
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data:')) {
+        const data = line.slice('data:'.length).trim();
+        if (data) {
+          return JSON.parse(data);
+        }
+      }
+    }
+
+    throw new Error('No data found in SSE response');
+  }
+
+  return response.json();
+}
+
 async function connectAndListTools(url: string): Promise<TryConnectResult> {
   // Step 1: Initialize
   const initResponse = await fetch(url, {
@@ -32,7 +54,7 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
   }
 
   const sessionId = initResponse.headers.get('Mcp-Session-Id');
-  await initResponse.json();
+  await parseResponse(initResponse);
 
   const sessionHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -67,7 +89,7 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
     throw new Error(`tools/list failed: ${toolsResponse.status} ${toolsResponse.statusText}`);
   }
 
-  const toolsResult = await toolsResponse.json();
+  const toolsResult = (await parseResponse(toolsResponse)) as { result?: { tools?: McpTool[] } };
 
   return {
     tools: toolsResult.result?.tools ?? [],
@@ -79,3 +101,5 @@ export const useTryConnectMcp = () => {
     mutationFn: (url: string) => connectAndListTools(url),
   });
 };
+
+export type TryConnectMcpMutation = ReturnType<typeof useTryConnectMcp>;

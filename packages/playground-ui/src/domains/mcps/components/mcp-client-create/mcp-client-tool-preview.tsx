@@ -1,31 +1,18 @@
-import { useEffect, useRef } from 'react';
-
 import { Icon, McpServerIcon } from '@/ds/icons';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { Txt } from '@/ds/components/Txt';
-import { Button } from '@/ds/components/Button';
 import { Spinner } from '@/ds/components/Spinner';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
 
-import { useTryConnectMcp } from '../../hooks/use-try-connect-mcp';
+import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 
 interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';
   url: string;
-  autoConnect?: boolean;
+  tryConnect: TryConnectMcpMutation;
 }
 
-export function MCPClientToolPreview({ serverType, url, autoConnect }: MCPClientToolPreviewProps) {
-  const tryConnect = useTryConnectMcp();
-  const hasAutoConnected = useRef(false);
-
-  useEffect(() => {
-    if (autoConnect && serverType === 'http' && url.trim() && !hasAutoConnected.current) {
-      hasAutoConnected.current = true;
-      tryConnect.mutate(url);
-    }
-  }, [autoConnect, serverType, url, tryConnect]);
-
+export function MCPClientToolPreview({ serverType, url, tryConnect }: MCPClientToolPreviewProps) {
   if (serverType === 'stdio') {
     return (
       <EmptyState>
@@ -37,62 +24,33 @@ export function MCPClientToolPreview({ serverType, url, autoConnect }: MCPClient
   if (!url.trim()) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">Enter a URL and click "Try Connect" to preview available tools.</Txt>
+        <Txt className="text-neutral3">Enter a URL and click &quot;Try to connect&quot; to preview available tools.</Txt>
       </EmptyState>
     );
   }
 
-  if (autoConnect) {
+  if (tryConnect.isIdle) {
     return (
-      <div className="p-5">
-        {tryConnect.isPending && (
-          <div className="flex items-center gap-2">
-            <Spinner className="h-3 w-3" />
-            <Txt className="text-neutral3">Connecting...</Txt>
-          </div>
-        )}
-
-        {tryConnect.isError && (
-          <Txt variant="ui-sm" className="text-accent2">
-            {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
-          </Txt>
-        )}
-
-        {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
-          <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
-        )}
-
-        {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
-          <ToolList tools={tryConnect.data.tools} />
-        )}
-      </div>
+      <EmptyState>
+        <Txt className="text-neutral3">Click &quot;Try to connect&quot; to preview available tools.</Txt>
+      </EmptyState>
     );
   }
 
   return (
     <div className="p-5">
-      <div className="flex items-center gap-3 pb-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => tryConnect.mutate(url)}
-          disabled={tryConnect.isPending}
-        >
-          {tryConnect.isPending ? (
-            <>
-              <Spinner className="h-3 w-3" />
-              Connecting...
-            </>
-          ) : (
-            'Try Connect'
-          )}
-        </Button>
-        {tryConnect.isError && (
-          <Txt variant="ui-sm" className="text-accent2">
-            {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
-          </Txt>
-        )}
-      </div>
+      {tryConnect.isPending && (
+        <div className="flex items-center gap-2">
+          <Spinner className="h-3 w-3" />
+          <Txt className="text-neutral3">Connecting...</Txt>
+        </div>
+      )}
+
+      {tryConnect.isError && (
+        <Txt variant="ui-sm" className="text-accent2">
+          {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
+        </Txt>
+      )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
         <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
