@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Agent } from '../agent';
+import type { Agent } from '../agent';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import type { BundlerConfig } from '../bundler/types';
