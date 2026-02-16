@@ -21,20 +21,25 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
       return lastPageParam + 1;
     },
     select: data => {
-      return data.pages.flatMap(page => page.runs);
+      const seen = new Set<string>();
+      return data.pages.flatMap(page => page.runs).filter(run => {
+        if (seen.has(run.runId)) return false;
+        seen.add(run.runId);
+        return true;
+      });
     },
     retry: false,
     enabled,
     refetchInterval: 5000,
-    gcTime: 0,
-    staleTime: 0,
   });
 
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+
   useEffect(() => {
-    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
-      query.fetchNextPage();
+    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
     }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return { ...query, setEndOfListElement };
 };

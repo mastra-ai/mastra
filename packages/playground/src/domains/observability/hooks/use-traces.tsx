@@ -13,15 +13,13 @@ const fetchTracesFn = async ({
   page: number;
   perPage: number;
 }) => {
-  const res = await client.listTraces({
+  return client.listTraces({
     pagination: {
       page,
       perPage,
     },
     filters,
   });
-
-  return res.spans || [];
 };
 
 export interface TracesFilters {
@@ -43,25 +41,32 @@ export const useTraces = ({ filters }: TracesFilters) => {
       }),
     initialPageParam: 0,
     getNextPageParam: (lastPage, _, lastPageParam) => {
-      if (!lastPage?.length) {
-        return undefined;
+      if (lastPage?.pagination?.hasMore) {
+        return lastPageParam + 1;
       }
-      return lastPageParam + 1;
+      return undefined;
     },
-    staleTime: 0,
-    gcTime: 0,
     select: data => {
-      return data.pages.flatMap(page => page);
+      const seen = new Set<string>();
+      return data.pages
+        .flatMap(page => page.spans ?? [])
+        .filter(span => {
+          if (seen.has(span.traceId)) return false;
+          seen.add(span.traceId);
+          return true;
+        });
     },
     retry: false,
     refetchInterval: 3000,
   });
 
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
+
   useEffect(() => {
-    if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
-      query.fetchNextPage();
+    if (isEndOfListInView && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
     }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+  }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return { ...query, setEndOfListElement };
 };
