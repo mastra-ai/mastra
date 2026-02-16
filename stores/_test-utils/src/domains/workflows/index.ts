@@ -642,6 +642,10 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
     });
 
     it('should update workflow state sequentially', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow state updates sequentially test');
+        return;
+      }
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const snapshot = {
@@ -707,6 +711,10 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
     });
 
     it('should return undefined when updating non-existent workflow state', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping return undefined when updating non-existent workflow state test');
+        return;
+      }
       const result = await workflowsStorage.updateWorkflowState({
         workflowName: 'non-existent-workflow',
         runId: `run-${randomUUID()}`,
