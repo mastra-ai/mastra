@@ -80,8 +80,12 @@ export class MockMemory extends MastraMemory {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig;
   }): Promise<{ messages: MastraDBMessage[] }> {
+    const messagesWithIds = messages.map(msg => ({
+      ...msg,
+      id: msg.id || this.generateId(),
+    }));
     const memoryStorage = await this.getMemoryStore();
-    return memoryStorage.saveMessages({ messages });
+    return memoryStorage.saveMessages({ messages: messagesWithIds });
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
