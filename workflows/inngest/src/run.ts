@@ -233,7 +233,14 @@ export class InngestRun<
             const run = runs?.find((r: { event_id: string }) => r.event_id === eventId);
 
             if (run?.status === 'Completed') {
-              handleResult(run, 'polling');
+              const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: this.workflowId,
+                runId: this.runId,
+              });
+              if (snapshot?.context) {
+                snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+              }
+              handleResult({ output: { result: { steps: snapshot?.context, status: 'success' } } }, 'polling');
               return;
             }
 
