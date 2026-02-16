@@ -27,7 +27,17 @@ interface MCPClientFormSidebarProps {
   isTryingConnect?: boolean;
 }
 
-export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillFromServer, containerRef, readOnly, submitLabel = 'Create MCP Client', onTryConnect, isTryingConnect }: MCPClientFormSidebarProps) {
+export function MCPClientFormSidebar({
+  form,
+  onPublish,
+  isSubmitting,
+  onPreFillFromServer,
+  containerRef,
+  readOnly,
+  submitLabel = 'Create MCP Client',
+  onTryConnect,
+  isTryingConnect,
+}: MCPClientFormSidebarProps) {
   const {
     register,
     control,
@@ -89,7 +99,10 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
 
           {!readOnly && (
             <>
-              <SectionHeader title="Pre-fill from server" subtitle="Select an existing MCP server to pre-fill settings." />
+              <SectionHeader
+                title="Pre-fill from server"
+                subtitle="Select an existing MCP server to pre-fill settings."
+              />
 
               <div className="flex flex-col gap-1.5">
                 <MCPServerCombobox
@@ -245,11 +258,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
           {(() => {
             const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;
             const tooltipContent =
-              serverType !== 'http'
-                ? 'Only available for HTTP servers'
-                : !url.trim()
-                  ? 'Enter a URL first'
-                  : undefined;
+              serverType !== 'http' ? 'Only available for HTTP servers' : !url.trim() ? 'Enter a URL first' : undefined;
 
             return tooltipContent ? (
               <ButtonWithTooltip
@@ -269,12 +278,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
                 )}
               </ButtonWithTooltip>
             ) : (
-              <Button
-                variant="outline"
-                onClick={onTryConnect}
-                disabled={isDisabled}
-                className="w-full"
-              >
+              <Button variant="outline" onClick={onTryConnect} disabled={isDisabled} className="w-full">
                 {isTryingConnect ? (
                   <>
                     <Spinner className="h-4 w-4" />

@@ -1,6 +1,11 @@
 import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
 
-import type { EntityConfig, ScorerConfig, InstructionBlock, AgentFormValues } from '../components/agent-edit-page/utils/form-validation';
+import type {
+  EntityConfig,
+  ScorerConfig,
+  InstructionBlock,
+  AgentFormValues,
+} from '../components/agent-edit-page/utils/form-validation';
 import { createInstructionBlock } from '../components/agent-edit-page/utils/form-validation';
 
 // ---------------------------------------------------------------------------
@@ -18,7 +23,11 @@ export const arrayToRecord = (arr: string[]): Record<string, EntityConfig> => {
 
 /** Normalize tools from `string[]` (legacy), `Record`, or `ConditionalVariant[]` format. */
 export const normalizeToolsToRecord = (
-  tools: string[] | Record<string, EntityConfig> | StorageConditionalVariant<Record<string, EntityConfig>>[] | undefined,
+  tools:
+    | string[]
+    | Record<string, EntityConfig>
+    | StorageConditionalVariant<Record<string, EntityConfig>>[]
+    | undefined,
 ): Record<string, EntityConfig> => {
   if (!tools) return {};
   if (!Array.isArray(tools)) return { ...tools };
@@ -166,14 +175,23 @@ export const mapScorersToApi = (
 /** Normalize API scorers (possibly wrapped in ConditionalField) to form format. */
 export const normalizeScorersFromApi = (
   scorers:
-    | Record<string, { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }>
+    | Record<
+        string,
+        { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }
+      >
     | StorageConditionalVariant<
-        Record<string, { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }>
+        Record<
+          string,
+          { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }
+        >
       >[]
     | undefined,
 ): Record<string, ScorerConfig> => {
   if (!scorers) return {};
-  let record: Record<string, { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }>;
+  let record: Record<
+    string,
+    { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }
+  >;
   if (Array.isArray(scorers)) {
     record = {};
     for (const variant of scorers) {

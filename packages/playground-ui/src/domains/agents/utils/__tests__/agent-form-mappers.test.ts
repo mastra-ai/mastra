@@ -309,9 +309,7 @@ describe('buildObservationalMemoryForApi', () => {
       enabled: true,
       scope: 'thread',
     });
-    expect(result).toEqual(
-      expect.objectContaining({ scope: 'thread' }),
-    );
+    expect(result).toEqual(expect.objectContaining({ scope: 'thread' }));
   });
 
   it('builds observation sub-config', () => {

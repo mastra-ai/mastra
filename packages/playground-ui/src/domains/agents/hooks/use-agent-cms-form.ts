@@ -105,9 +105,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         mcpClients: mcpClientsParam,
         scorers: mapScorersToApi(values.scorers),
-        requestContextSchema: values.variables
-          ? Object.fromEntries(Object.entries(values.variables))
-          : undefined,
+        requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
       };
 
       const memoryBase = values.memory?.enabled

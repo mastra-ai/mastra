@@ -16,7 +16,9 @@ export function MCPClientToolPreview({ serverType, url, tryConnect }: MCPClientT
   if (serverType === 'stdio') {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">Tool preview is available for HTTP servers. Stdio servers cannot be previewed.</Txt>
+        <Txt className="text-neutral3">
+          Tool preview is available for HTTP servers. Stdio servers cannot be previewed.
+        </Txt>
       </EmptyState>
     );
   }
@@ -24,7 +26,9 @@ export function MCPClientToolPreview({ serverType, url, tryConnect }: MCPClientT
   if (!url.trim()) {
     return (
       <EmptyState>
-        <Txt className="text-neutral3">Enter a URL and click &quot;Try to connect&quot; to preview available tools.</Txt>
+        <Txt className="text-neutral3">
+          Enter a URL and click &quot;Try to connect&quot; to preview available tools.
+        </Txt>
       </EmptyState>
     );
   }
@@ -56,9 +60,7 @@ export function MCPClientToolPreview({ serverType, url, tryConnect }: MCPClientT
         <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
       )}
 
-      {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
-        <ToolList tools={tryConnect.data.tools} />
-      )}
+      {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && <ToolList tools={tryConnect.data.tools} />}
     </div>
   );
 }
