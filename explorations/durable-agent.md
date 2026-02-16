@@ -149,6 +149,89 @@ const text = await output.text;
 cleanup();
 ```
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        DurableAgent.stream()                        │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    PREPARATION PHASE (non-durable)                  │
+│                                                                     │
+│  1. Resolve tools → store as { id, name, schema } (no execute fn)   │
+│  2. Create MessageList, load memory, run input processors           │
+│  3. Serialize: { messageListState, toolsMetadata, modelConfig, ... }│
+│  4. Store non-serializable state in per-run registry                │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                   DURABLE AGENTIC LOOP (workflow)                   │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  dowhile(shouldContinue)                                     │   │
+│  │    │                                                         │   │
+│  │    ▼                                                         │   │
+│  │  ┌─────────────────────────────────────────────────────┐    │   │
+│  │  │ durableLLMExecutionStep                              │    │   │
+│  │  │  - Deserialize messageList from inputData            │    │   │
+│  │  │  - Resolve model from mastra via modelConfig         │    │   │
+│  │  │  - Execute LLM call                                  │    │   │
+│  │  │  - Emit chunks via pubsub (agent.stream.{runId})     │    │   │
+│  │  │  - Serialize messageList to output                   │    │   │
+│  │  └─────────────────────────────────────────────────────┘    │   │
+│  │    │                                                         │   │
+│  │    ▼                                                         │   │
+│  │  ┌─────────────────────────────────────────────────────┐    │   │
+│  │  │ foreach(toolCalls) → durableToolCallStep             │    │   │
+│  │  │  - Resolve tool from registry via toolName           │    │   │
+│  │  │  - Check approval requirements                       │    │   │
+│  │  │  - If needs approval: suspend with waitForEvent      │    │   │
+│  │  │  - Execute tool                                      │    │   │
+│  │  │  - Emit result via pubsub                            │    │   │
+│  │  └─────────────────────────────────────────────────────┘    │   │
+│  │    │                                                         │   │
+│  │    ▼                                                         │   │
+│  │  Check stopWhen condition                                    │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         OUTPUT (streaming)                          │
+│                                                                     │
+│  MastraModelOutput subscribes to pubsub channel                     │
+│  Invokes callbacks (onChunk, onStepFinish, onFinish) as events arrive│
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## File Structure
+
+```
+packages/core/src/agent/durable/
+├── index.ts                          # Exports
+├── durable-agent.ts                  # DurableAgent class (extends Agent)
+├── types.ts                          # DurableAgentState, DurableStepInput, etc.
+├── constants.ts                      # AGENT_STREAM_TOPIC, etc.
+├── run-registry.ts                   # Per-run tool/state registry
+├── stream-adapter.ts                 # Pubsub → MastraModelOutput adapter
+├── preparation.ts                    # Preparation phase logic
+├── workflows/
+│   ├── index.ts                      # Workflow exports
+│   ├── create-durable-agentic-workflow.ts  # Main workflow factory
+│   └── steps/
+│       ├── index.ts                  # Step exports
+│       ├── llm-execution.ts          # Durable LLM step
+│       ├── tool-call.ts              # Durable tool call step
+│       └── llm-mapping.ts           # Durable mapping step
+└── utils/
+    ├── index.ts                      # Utility exports
+    ├── resolve-runtime.ts            # Resolve _internal, tools, etc.
+    └── serialize-state.ts            # State serialization helpers
+```
+
 ## Key Design Decisions
 
 1. **Separation of concerns** - `DurableAgent` in core handles the abstraction, `InngestAgent` handles Inngest-specific implementation
@@ -159,10 +242,6 @@ cleanup();
 
 4. **Shared test suite** - One test suite, multiple implementations. Ensures parity between EventEmitter (fast) and Inngest (real) backends
 
-## Stats
+5. **Tool registration** - Tools have `execute` functions that can't be serialized. During preparation, tool metadata (id, name, schema) is extracted for serialization. Actual tool objects are stored in a per-run registry on the DurableAgent and resolved at execution time.
 
-- ~19,600 lines added
-- 83 files changed
-- 170 tests in shared suite
-- 155 Inngest integration tests passing
-- Full documentation (guide + API reference)
+6. **Runtime dependency resolution** - The `_internal` object contains non-serializable items (functions, class instances). These are split into serializable state that flows through the workflow and runtime dependencies that are resolved fresh at each step (memory from mastra, fresh ID generators, etc.).
