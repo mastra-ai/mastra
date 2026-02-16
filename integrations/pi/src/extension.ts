@@ -30,7 +30,7 @@
 import type { ExtensionAPI, ExtensionFactory } from '@mariozechner/pi-coding-agent';
 import { Type } from '@sinclair/typebox';
 
-import type { MastraOMConfig, MastraOMIntegration } from './index.js';
+import type { MastraOMConfig, MastraOMIntegration, PiMessage } from './index.js';
 import { loadConfig, convertMessages, createMastraOMFromConfig } from './index.js';
 
 export type { MastraOMConfig };
@@ -44,8 +44,6 @@ export type { MastraOMConfig };
  * @internal Exported for testing — not part of the public API contract.
  */
 export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegration): void {
-  const { om } = integration;
-
   // ---------------------------------------------------------------------------
   // Session initialization — eagerly create OM record
   // ---------------------------------------------------------------------------
@@ -53,7 +51,7 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
   api.on('session_start', async (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     try {
-      await om.getOrCreateRecord(sessionId);
+      await integration.initSession({ sessionId });
     } catch (err) {
       ctx.ui.notify(
         `Mastra OM: failed to initialize — ${err instanceof Error ? err.message : String(err)}`,
@@ -94,10 +92,11 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
       });
 
       if (cutoff) {
+        const cutoffMs = cutoff.getTime();
         const filtered = messages.filter(msg => {
-          const timestamp = (msg as unknown as { timestamp?: number }).timestamp;
+          const timestamp = (msg as unknown as PiMessage).timestamp;
           if (!timestamp) return true;
-          return new Date(timestamp) > cutoff;
+          return timestamp > cutoffMs;
         });
         return { messages: filtered };
       }
@@ -191,9 +190,10 @@ export const mastraOMExtension: ExtensionFactory = async (api: ExtensionAPI) => 
 /**
  * Create an extension factory with custom config overrides.
  *
- * Merges disk config (`.pi/mastra.json`) with provided overrides — override
- * values take precedence over disk values. If no disk config exists, the
- * overrides are used as-is.
+ * Shallow-merges disk config (`.pi/mastra.json`) with provided overrides —
+ * override values take precedence. Nested objects like `observation` and
+ * `reflection` are replaced entirely, not deep-merged. If no disk config
+ * exists, the overrides are used as-is.
  *
  * @example
  * ```ts
@@ -211,8 +211,12 @@ export function createMastraOMExtension(overrideConfig?: MastraOMConfig): Extens
 
     let config: MastraOMConfig | undefined;
     if (overrideConfig) {
-      const diskConfig = await loadConfig(cwd);
-      config = { ...diskConfig, ...overrideConfig };
+      try {
+        const diskConfig = await loadConfig(cwd);
+        config = { ...diskConfig, ...overrideConfig };
+      } catch {
+        config = overrideConfig;
+      }
     }
 
     const integration = await createMastraOMFromConfig({ cwd, config });

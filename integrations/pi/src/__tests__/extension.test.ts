@@ -2,13 +2,13 @@ import type { InMemoryMemory } from '@mastra/core/storage';
 import { ObservationalMemory } from '@mastra/memory/processors';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { convertMessages, createMastraOM, type MastraOMIntegration } from '../index.js';
 import { registerExtension } from '../extension.js';
+import { convertMessages, createMastraOM  } from '../index.js';
+import type {MastraOMIntegration} from '../index.js';
 
 import {
   createInMemoryStorage,
   createMockObserverModel,
-  piMessage,
   createMessagesExceedingThreshold,
   createMockExtensionAPI,
   createMockContext,
@@ -275,7 +275,7 @@ describe('Extension API registration contract', () => {
       wrapSystemPrompt: async () => '',
       getStatus: async () => 'error',
       getObservations: async () => undefined,
-      initSession: async () => { await brokenOm.getOrCreateRecord('x'); },
+      initSession: async ({ sessionId }) => { await brokenOm.getOrCreateRecord(sessionId); },
       observeAndGetCutoff: async () => null,
     };
 

@@ -158,8 +158,6 @@ export const MastraPlugin: Plugin = async ctx => {
     return {};
   }
 
-  const { om } = integration;
-
   // Resolve API keys from opencode's provider store (deferred so it doesn't block plugin init).
   // .env takes priority — opencode keys only fill in gaps.
   let credentialsReady = false;

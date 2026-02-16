@@ -83,6 +83,8 @@ async function main() {
   });
 
   // Stream assistant text to stdout
+  let printedChars = 0;
+
   agent.subscribe(event => {
     if (event.type === 'message_update') {
       const msg = event.message;
@@ -90,17 +92,16 @@ async function main() {
         for (const part of msg.content) {
           if ('text' in part && part.text) {
             const text = part.text;
-            const printed = (agent as any).__printed ?? 0;
-            if (text.length > printed) {
-              process.stdout.write(text.slice(printed));
-              (agent as any).__printed = text.length;
+            if (text.length > printedChars) {
+              process.stdout.write(text.slice(printedChars));
+              printedChars = text.length;
             }
           }
         }
       }
     }
     if (event.type === 'message_end') {
-      (agent as any).__printed = 0;
+      printedChars = 0;
       process.stdout.write('\n\n');
     }
   });
@@ -132,22 +133,34 @@ async function main() {
     }
 
     if (input === '/status') {
-      const status = await om.getStatus({ sessionId: SESSION_ID, messages: convertMessages(agent.state.messages, SESSION_ID) });
-      console.log(`\n${status}\n`);
+      try {
+        const status = await om.getStatus({ sessionId: SESSION_ID, messages: convertMessages(agent.state.messages, SESSION_ID) });
+        console.log(`\n${status}\n`);
+      } catch (err) {
+        console.error(`\n  Error fetching status: ${err instanceof Error ? err.message : String(err)}\n`);
+      }
       continue;
     }
 
     if (input === '/obs') {
-      const observations = await om.getObservations({ sessionId: SESSION_ID });
-      console.log(observations ? `\n${observations}\n` : '\n  No observations yet — keep chatting!\n');
+      try {
+        const observations = await om.getObservations({ sessionId: SESSION_ID });
+        console.log(observations ? `\n${observations}\n` : '\n  No observations yet — keep chatting!\n');
+      } catch (err) {
+        console.error(`\n  Error fetching observations: ${err instanceof Error ? err.message : String(err)}\n`);
+      }
       continue;
     }
 
     if (input === '/clear') {
-      agent.reset();
-      await om.initSession({ sessionId: SESSION_ID });
-      agent.state.systemPrompt = await om.wrapSystemPrompt({ basePrompt: SYSTEM_PROMPT, sessionId: SESSION_ID });
-      console.log('\n  Conversation cleared.\n');
+      try {
+        agent.reset();
+        await om.initSession({ sessionId: SESSION_ID });
+        agent.state.systemPrompt = await om.wrapSystemPrompt({ basePrompt: SYSTEM_PROMPT, sessionId: SESSION_ID });
+        console.log('\n  Conversation cleared.\n');
+      } catch (err) {
+        console.error(`\n  Error clearing session: ${err instanceof Error ? err.message : String(err)}\n`);
+      }
       continue;
     }
 

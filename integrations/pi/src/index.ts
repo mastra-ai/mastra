@@ -47,6 +47,7 @@
  * ```
  */
 
+import { join } from 'node:path';
 import type { AgentMessage, AgentOptions } from '@mariozechner/pi-agent-core';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ObservationalMemoryOptions } from '@mastra/core/memory';
@@ -91,11 +92,11 @@ export {
 
 /**
  * Config read from `.pi/mastra.json`.
- * Extends Mastra's ObservationalMemoryOptions with pi-specific fields.
+ *
+ * Currently inherits all fields from `OMFileConfig` (including `storagePath`).
+ * Extend with Pi-specific config fields as needed.
  */
-export interface MastraOMConfig extends OMFileConfig {
-  // Inherits storagePath from OMFileConfig
-}
+export interface MastraOMConfig extends OMFileConfig {}
 
 const CONFIG_FILE = '.pi/mastra.json';
 const DEFAULT_STORAGE_PATH = '.pi/memory/observations.db';
@@ -104,7 +105,6 @@ const DEFAULT_STORAGE_PATH = '.pi/memory/observations.db';
  * Load OM config from `.pi/mastra.json`.
  */
 export async function loadConfig(directory: string): Promise<MastraOMConfig> {
-  const { join } = await import('node:path');
   return loadOMConfig(join(directory, CONFIG_FILE));
 }
 
@@ -116,8 +116,9 @@ type ContentPart = { type: string;[key: string]: any };
 
 /**
  * Structural type matching Pi's AgentMessage shape.
+ * Exported so extension.ts can reuse it for type-safe timestamp filtering.
  */
-interface PiMessage {
+export interface PiMessage {
   role: string;
   content?: string | Array<PiContentPart>;
   timestamp?: number;
@@ -267,35 +268,36 @@ export interface MastraOMIntegration extends OMIntegration {
  * });
  * ```
  */
+/**
+ * Shared helper — builds a `transformContext` closure that converts messages,
+ * runs observation, and filters out already-observed messages by timestamp.
+ */
+function buildTransformContext(
+  base: OMIntegration,
+  { sessionId, hooks }: { sessionId: string; hooks?: ObserveHooks },
+): NonNullable<AgentOptions['transformContext']> {
+  return async (messages: AgentMessage[]) => {
+    const mastraMessages = convertMessages(messages, sessionId);
+    const cutoff = await base.observeAndGetCutoff({ sessionId, messages: mastraMessages, hooks });
+
+    if (cutoff) {
+      const cutoffMs = cutoff.getTime();
+      return messages.filter(msg => {
+        const timestamp = (msg as unknown as PiMessage).timestamp;
+        if (!timestamp) return true;
+        return timestamp > cutoffMs;
+      });
+    }
+
+    return messages;
+  };
+}
+
 export function createMastraOM(options: CreateMastraOMOptions): MastraOMIntegration {
   const base = createOMIntegration(options);
-
-  function createTransformContext({
-    sessionId,
-    hooks,
-  }: {
-    sessionId: string;
-    hooks?: ObserveHooks;
-  }): NonNullable<AgentOptions['transformContext']> {
-    return async (messages: AgentMessage[]) => {
-      const mastraMessages = convertMessages(messages, sessionId);
-      const cutoff = await base.observeAndGetCutoff({ sessionId, messages: mastraMessages, hooks });
-
-      if (cutoff) {
-        return messages.filter(msg => {
-          const timestamp = (msg as unknown as PiMessage).timestamp;
-          if (!timestamp) return true;
-          return new Date(timestamp) > cutoff;
-        });
-      }
-
-      return messages;
-    };
-  }
-
   return {
     ...base,
-    createTransformContext,
+    createTransformContext: params => buildTransformContext(base, params),
   };
 }
 
@@ -336,32 +338,8 @@ export async function createMastraOMFromConfig(
     config: options.config,
   });
 
-  // Extend with Pi-specific createTransformContext
-  function createTransformContext({
-    sessionId,
-    hooks,
-  }: {
-    sessionId: string;
-    hooks?: ObserveHooks;
-  }): NonNullable<AgentOptions['transformContext']> {
-    return async (messages: AgentMessage[]) => {
-      const mastraMessages = convertMessages(messages, sessionId);
-      const cutoff = await base.observeAndGetCutoff({ sessionId, messages: mastraMessages, hooks });
-
-      if (cutoff) {
-        return messages.filter(msg => {
-          const timestamp = (msg as unknown as PiMessage).timestamp;
-          if (!timestamp) return true;
-          return new Date(timestamp) > cutoff;
-        });
-      }
-
-      return messages;
-    };
-  }
-
   return {
     ...base,
-    createTransformContext,
+    createTransformContext: params => buildTransformContext(base, params),
   };
 }

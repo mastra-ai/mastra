@@ -14,7 +14,19 @@ export function createInMemoryStorage(): InMemoryMemory {
 // Mock observer model (satisfies the ai-sdk LanguageModelV2 contract)
 // ---------------------------------------------------------------------------
 
-export function createMockObserverModel() {
+/** Minimal LanguageModelV2 shape needed for ObservationalMemory. */
+interface MockLanguageModel {
+  specificationVersion: 'v2';
+  provider: string;
+  modelId: string;
+  defaultObjectGenerationMode: undefined;
+  supportsImageUrls: boolean;
+  supportedUrls: Record<string, never>;
+  doGenerate: (...args: unknown[]) => Promise<unknown>;
+  doStream: (...args: unknown[]) => Promise<unknown>;
+}
+
+export function createMockObserverModel(): MockLanguageModel {
   return {
     specificationVersion: 'v2' as const,
     provider: 'mock-observer',

@@ -8,9 +8,10 @@ import {
   loadConfig,
   progressBar,
   formatTokens,
-  resolveThreshold,
-  type CreateMastraOMOptions,
+  resolveThreshold
+  
 } from '../index.js';
+import type {CreateMastraOMOptions} from '../index.js';
 
 import {
   createInMemoryStorage,
@@ -437,6 +438,19 @@ describe('loadConfig', () => {
   it('should return empty object for missing config file', async () => {
     const config = await loadConfig('/nonexistent/path');
     expect(config).toEqual({});
+  });
+
+  it('should throw on invalid JSON in config file', async () => {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const tmpDir = path.join(import.meta.dirname ?? '.', '__tmp_config_test__');
+    await fs.mkdir(path.join(tmpDir, '.pi'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, '.pi/mastra.json'), '{ invalid json }');
+    try {
+      await expect(loadConfig(tmpDir)).rejects.toThrow('invalid JSON');
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

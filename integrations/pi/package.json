@@ -35,7 +35,8 @@
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build:lib --watch",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "keywords": [
     "mastra",

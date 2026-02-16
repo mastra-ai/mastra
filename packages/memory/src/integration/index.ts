@@ -76,7 +76,7 @@ export { optimizeObservationsForContext } from '../processors/observational-memo
  * @param width - Bar width in characters (default 20)
  */
 export function progressBar(current: number, total: number, width = 20): string {
-  const pct = total > 0 ? Math.min(current / total, 1) : 0;
+  const pct = Math.min(Math.max(total > 0 ? current / total : 0, 0), 1);
   const filled = Math.round(pct * width);
   return `[${'█'.repeat(filled)}${'░'.repeat(width - filled)}] ${(pct * 100).toFixed(1)}%`;
 }
@@ -402,8 +402,13 @@ export async function loadOMConfig(configPath: string): Promise<OMFileConfig> {
   let raw: string;
   try {
     raw = await readFile(configPath, 'utf-8');
-  } catch {
-    return {};
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+      return {};
+    }
+    throw new Error(
+      `@mastra/memory: failed to read config ${configPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
   try {
     return JSON.parse(raw) as OMFileConfig;
@@ -445,6 +450,10 @@ export interface CreateOMFromConfigOptions {
 
   /**
    * Override config instead of (or merged with) loading from disk.
+   *
+   * When both `configPath` and `config` are provided, values are **shallow-merged**
+   * (`{ ...diskConfig, ...config }`). Nested objects like `observation` and
+   * `reflection` are replaced entirely — provide complete sub-objects when overriding.
    */
   config?: OMFileConfig;
 }
