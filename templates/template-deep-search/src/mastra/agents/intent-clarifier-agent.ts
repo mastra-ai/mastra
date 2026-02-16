@@ -1,11 +1,11 @@
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent';
 
 const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
 export const intentClarifierAgent = new Agent({
-  id: "intent-clarifier-agent",
-  name: "Intent Clarifier Agent",
-  model: "openai/gpt-5-mini",
+  id: 'intent-clarifier-agent',
+  name: 'Intent Clarifier Agent',
+  model: 'openai/gpt-5-mini',
   instructions: `Today's date is ${currentDate}.
 
 You are an expert at understanding user intent and generating clarifying questions.

@@ -1,12 +1,12 @@
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent';
 
 const currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
 export const researchPlannerAgent = new Agent({
-  id: "research-planner",
-  name: "Research Planner Agent",
-  model: "openai/gpt-5.2",
-   instructions: `Today's date is ${currentDate}.
+  id: 'research-planner',
+  name: 'Research Planner Agent',
+  model: 'openai/gpt-5.2',
+  instructions: `Today's date is ${currentDate}.
 
 You write search queries for a research workflow.
 

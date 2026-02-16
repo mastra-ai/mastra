@@ -1,18 +1,13 @@
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-import {
-  Observability,
-  DefaultExporter,
-  CloudExporter,
-  SensitiveDataFilter,
-} from "@mastra/observability";
-import { BraintrustExporter } from "@mastra/braintrust";
-import { intentClarifierAgent } from "./agents/intent-clarifier-agent";
-import { researchPlannerAgent } from "./agents/research-planner-agent";
-import { searchResultEvaluatorAgent } from "./agents/search-result-evaluator-agent";
-import { answererAgent } from "./agents/answerer-agent";
-import { deepSearch } from "./workflows/deep-search-workflow";
+import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { BraintrustExporter } from '@mastra/braintrust';
+import { intentClarifierAgent } from './agents/intent-clarifier-agent';
+import { researchPlannerAgent } from './agents/research-planner-agent';
+import { searchResultEvaluatorAgent } from './agents/search-result-evaluator-agent';
+import { answererAgent } from './agents/answerer-agent';
+import { deepSearch } from './workflows/deep-search-workflow';
 
 export const mastra = new Mastra({
   workflows: { deepSearch },
@@ -23,21 +18,21 @@ export const mastra = new Mastra({
     answererAgent,
   },
   storage: new LibSQLStore({
-    id: "mastra-storage",
+    id: 'mastra-storage',
     // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:",
+    url: ':memory:',
   }),
   logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
+    name: 'Mastra',
+    level: 'info',
   }),
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "mastra",
+        serviceName: 'mastra',
         exporters: [
           new BraintrustExporter({
-            projectName: "deep search template",
+            projectName: 'deep search template',
           }),
         ],
         spanOutputProcessors: [

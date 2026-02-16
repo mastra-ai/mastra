@@ -1,15 +1,15 @@
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent';
 
-const currentDate = new Date().toLocaleDateString("en-US", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
+const currentDate = new Date().toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
 });
 
 export const searchResultEvaluatorAgent = new Agent({
-  id: "search-result-evaluator",
-  name: "Search Result Evaluator Agent",
-  model: "openai/gpt-5.2",
+  id: 'search-result-evaluator',
+  name: 'Search Result Evaluator Agent',
+  model: 'openai/gpt-5.2',
   instructions: `Today's date is ${currentDate}.
 
 You are an expert at evaluating research quality and completeness.

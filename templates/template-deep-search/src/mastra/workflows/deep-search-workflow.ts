@@ -1,6 +1,6 @@
-import { createStep, createWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
-import Exa from "exa-js";
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+import Exa from 'exa-js';
 
 const stateSchema = z.object({
   initialQuery: z.string().optional(),
@@ -28,7 +28,7 @@ const stateSchema = z.object({
 });
 
 const clarifyIntent = createStep({
-  id: "clarify-intent",
+  id: 'clarify-intent',
   inputSchema: z.object({ initialQuery: z.string() }),
   outputSchema: z.object({}),
   stateSchema,
@@ -38,13 +38,13 @@ const clarifyIntent = createStep({
     const log = mastra.getLogger();
 
     if (!resumeData) {
-      log.info("clarifyIntent start", {
-        step: "clarifyIntent",
+      log.info('clarifyIntent start', {
+        step: 'clarifyIntent',
         initialQuery: inputData.initialQuery,
       });
       await setState({ initialQuery: inputData.initialQuery });
 
-      const intentAgent = mastra.getAgent("intentClarifierAgent");
+      const intentAgent = mastra.getAgent('intentClarifierAgent');
       const response = await intentAgent.generate(
         `User query: "${inputData.initialQuery}"\n\nGenerate exactly 3 clarifying questions to better understand the user's intent.`,
         {
@@ -55,19 +55,19 @@ const clarifyIntent = createStep({
       );
 
       const questions = response.object.questions;
-      const formatted = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
+      const formatted = questions.map((q, i) => `${i + 1}. ${q}`).join('\n');
       const assistantMessage = `To help you better, I have a few questions:\n\n${formatted}`;
 
-      log.info("clarifyIntent suspend", {
-        step: "clarifyIntent",
+      log.info('clarifyIntent suspend', {
+        step: 'clarifyIntent',
         questionCount: questions.length,
         assistantMessage,
       });
       return suspend({ assistantMessage });
     }
 
-    log.info("clarifyIntent resume", {
-      step: "clarifyIntent",
+    log.info('clarifyIntent resume', {
+      step: 'clarifyIntent',
       clarifiedIntent: resumeData.clarifiedIntent,
     });
     await setState({
@@ -79,32 +79,28 @@ const clarifyIntent = createStep({
 });
 
 const generateQueries = createStep({
-  id: "generate-queries",
+  id: 'generate-queries',
   inputSchema: z.object({}),
   outputSchema: z.object({}),
   stateSchema,
   execute: async ({ state, setState, mastra }) => {
     const log = mastra.getLogger();
-    log.info("generateQueries start", {
-      step: "generateQueries",
+    log.info('generateQueries start', {
+      step: 'generateQueries',
       initialQuery: state.initialQuery,
       clarifiedIntent: state.clarifiedIntent,
       gaps: state.gaps?.length ?? 0,
     });
 
-    const priorQueries = state.searchResults?.map((r) => r.query) ?? [];
+    const priorQueries = state.searchResults?.map(r => r.query) ?? [];
     const uniquePrior = [...new Set(priorQueries)];
 
     const priorText =
-      uniquePrior.length > 0
-        ? `\nPrevious queries (avoid repeating):\n- ${uniquePrior.join("\n- ")}`
-        : "";
+      uniquePrior.length > 0 ? `\nPrevious queries (avoid repeating):\n- ${uniquePrior.join('\n- ')}` : '';
 
-    const gapsText = state.gaps?.length
-      ? `\nKnown gaps:\n- ${state.gaps.join("\n- ")}`
-      : "";
+    const gapsText = state.gaps?.length ? `\nKnown gaps:\n- ${state.gaps.join('\n- ')}` : '';
 
-    const plannerAgent = mastra.getAgent("researchPlannerAgent");
+    const plannerAgent = mastra.getAgent('researchPlannerAgent');
     const response = await plannerAgent.generate(
       `User initial query: "${state.initialQuery}"
 Additional context: "${state.clarifiedIntent}"
@@ -120,8 +116,8 @@ Generate 3-5 focused search queries.`,
     );
 
     const expandedQueries = response.object.queries;
-    log.info("generateQueries state update", {
-      step: "generateQueries",
+    log.info('generateQueries state update', {
+      step: 'generateQueries',
       expandedQueries,
     });
 
@@ -131,14 +127,14 @@ Generate 3-5 focused search queries.`,
 });
 
 const search = createStep({
-  id: "search",
+  id: 'search',
   inputSchema: z.object({}),
   outputSchema: z.object({}),
   stateSchema,
   execute: async ({ state, setState, mastra }) => {
     const log = mastra.getLogger();
-    log.info("search start", {
-      step: "search",
+    log.info('search start', {
+      step: 'search',
       queryCount: state.expandedQueries!.length,
     });
 
@@ -146,23 +142,23 @@ const search = createStep({
     const previousResults = state.searchResults ?? [];
 
     const searchResults = await Promise.all(
-      state.expandedQueries!.map(async (query) => {
-        log.info("search query start", { step: "search", query });
+      state.expandedQueries!.map(async query => {
+        log.info('search query start', { step: 'search', query });
 
         const response = await exa.search(query, {
           numResults: 10,
           contents: { summary: true },
         });
 
-        log.info("search query done", {
-          step: "search",
+        log.info('search query done', {
+          step: 'search',
           query,
           results: response.results.length,
         });
 
         return {
           query,
-          results: response.results.map((r) => ({
+          results: response.results.map(r => ({
             title: r.title,
             url: r.url,
             summary: r.summary,
@@ -173,8 +169,8 @@ const search = createStep({
       }),
     );
 
-    log.info("search state update", {
-      step: "search",
+    log.info('search state update', {
+      step: 'search',
       queriesSearched: previousResults.length + searchResults.length,
     });
 
@@ -187,18 +183,18 @@ const search = createStep({
 });
 
 const evaluateResults = createStep({
-  id: "evaluate-results",
+  id: 'evaluate-results',
   inputSchema: z.object({}),
   outputSchema: z.object({}),
   stateSchema,
   execute: async ({ state, setState, mastra }) => {
     const log = mastra.getLogger();
-    log.info("evaluateResults start", {
-      step: "evaluateResults",
+    log.info('evaluateResults start', {
+      step: 'evaluateResults',
       queriesSearched: state.searchResults?.length ?? 0,
     });
 
-    const evaluatorAgent = mastra.getAgent("searchResultEvaluatorAgent");
+    const evaluatorAgent = mastra.getAgent('searchResultEvaluatorAgent');
     const response = await evaluatorAgent.generate(
       `User query: "${state.initialQuery}"
 Clarified intent: "${state.clarifiedIntent}"
@@ -217,8 +213,8 @@ Determine if the results are sufficient.`,
     );
 
     const { answerIsSatisfactory, gaps } = response.object;
-    log.info("evaluateResults state update", {
-      step: "evaluateResults",
+    log.info('evaluateResults state update', {
+      step: 'evaluateResults',
       answerIsSatisfactory,
       gaps,
     });
@@ -233,22 +229,22 @@ Determine if the results are sufficient.`,
 });
 
 const finalizeAnswer = createStep({
-  id: "finalize-answer",
+  id: 'finalize-answer',
   inputSchema: z.object({}),
   outputSchema: z.object({ answer: z.string() }),
   stateSchema,
   execute: async ({ state, mastra }) => {
     const log = mastra.getLogger();
-    const queries = state.searchResults?.map((r) => r.query);
-    log.info("finalizeAnswer queries", { step: "finalizeAnswer", queries });
+    const queries = state.searchResults?.map(r => r.query);
+    log.info('finalizeAnswer queries', { step: 'finalizeAnswer', queries });
 
     const exhausted = !state.answerIsSatisfactory;
-    log.info("finalizeAnswer exhausted", { step: "finalizeAnswer", exhausted });
+    log.info('finalizeAnswer exhausted', { step: 'finalizeAnswer', exhausted });
 
-    const answerAgent = mastra.getAgent("answererAgent");
+    const answerAgent = mastra.getAgent('answererAgent');
     const exhaustionNote = exhausted
-      ? "Note: We may not have all the information needed. Please provide your best attempt based on available information.\n"
-      : "";
+      ? 'Note: We may not have all the information needed. Please provide your best attempt based on available information.\n'
+      : '';
 
     const stream = await answerAgent.stream(
       `Query: "${state.initialQuery}"
@@ -262,16 +258,16 @@ ${JSON.stringify(state.searchResults, null, 2)}`,
       process.stdout.write(chunk);
     }
 
-    log.info("finalizeAnswer answer ready", { step: "finalizeAnswer" });
+    log.info('finalizeAnswer answer ready', { step: 'finalizeAnswer' });
     const answer = await stream.text;
-    log.info("finalizeAnswer output", { step: "finalizeAnswer", answer });
+    log.info('finalizeAnswer output', { step: 'finalizeAnswer', answer });
 
     return { answer };
   },
 });
 
 const searchPass = createWorkflow({
-  id: "search-pass",
+  id: 'search-pass',
   inputSchema: z.object({}),
   outputSchema: z.object({
     answerIsSatisfactory: z.boolean(),
@@ -285,7 +281,7 @@ const searchPass = createWorkflow({
   .commit();
 
 const deepSearch = createWorkflow({
-  id: "deep-search",
+  id: 'deep-search',
   inputSchema: z.object({ initialQuery: z.string() }),
   outputSchema: z.object({ answer: z.string() }),
   stateSchema,
