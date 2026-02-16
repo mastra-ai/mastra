@@ -139,7 +139,10 @@ export class InngestPubSub extends PubSub {
     const inngestTopic = topicType === 'agent' ? 'agent-stream' : 'watch';
     const channel = topicType === 'agent' ? `agent:${runId}` : `workflow:${this.workflowId}:${runId}`;
 
-    const streamPromise = subscribe(
+    // Await the subscribe call to ensure the WebSocket connection is established
+    // before we consider the subscription "ready". This prevents race conditions
+    // where the workflow triggers before the subscription can receive events.
+    const stream = await subscribe(
       {
         channel,
         topics: [inngestTopic],
@@ -148,10 +151,17 @@ export class InngestPubSub extends PubSub {
       (message: any) => {
         // For agent stream events, message.data is the full AgentStreamEvent structure (type, runId, data)
         // For workflow events, wrap message.data in a PubSub Event format
+        // IMPORTANT: Always generate a unique `id` and `createdAt` for every event.
+        // CachingPubSub deduplicates events by `id` — without a unique id, all events
+        // after the first would be filtered out (since undefined === undefined in the seen set).
         let event: Event;
         if (topicType === 'agent' && message.data?.type && message.data?.runId) {
-          // Agent stream event - pass through the structure as-is (it's already an AgentStreamEvent)
-          event = message.data as unknown as Event;
+          // Agent stream event - spread the AgentStreamEvent data and add required Event fields
+          event = {
+            id: crypto.randomUUID(),
+            createdAt: new Date(),
+            ...message.data,
+          } as unknown as Event;
         } else {
           // Workflow event or fallback - wrap in standard Event format
           event = {
@@ -171,11 +181,11 @@ export class InngestPubSub extends PubSub {
 
     this.subscriptions.set(topic, {
       unsubscribe: () => {
-        streamPromise
-          .then(stream => stream.cancel())
-          .catch(err => {
-            console.error('InngestPubSub unsubscribe error:', err);
-          });
+        try {
+          void stream.cancel();
+        } catch (err) {
+          console.error('InngestPubSub unsubscribe error:', err);
+        }
       },
       callbacks,
     });
