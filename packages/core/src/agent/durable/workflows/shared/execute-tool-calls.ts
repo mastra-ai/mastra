@@ -1,3 +1,4 @@
+import type { Workspace } from '../../../../workspace';
 import type { DurableToolCallInput, DurableToolCallOutput } from '../../types';
 
 /**
@@ -16,6 +17,8 @@ export interface ToolExecutionContext {
   messageId: string;
   /** Serializable state */
   state: any;
+  /** Workspace for file/sandbox operations */
+  workspace?: Workspace;
 
   /**
    * Optional hooks for observability/streaming.
@@ -88,6 +91,7 @@ export async function executeDurableToolCalls(ctx: ToolExecutionContext): Promis
         const result = await tool.execute(toolCall.args, {
           toolCallId: toolCall.toolCallId,
           messages: [],
+          workspace: ctx.workspace,
         });
         await ctx.onToolResult?.(toolCall, result);
         toolResults.push({

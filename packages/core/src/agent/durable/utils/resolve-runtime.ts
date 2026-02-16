@@ -6,6 +6,7 @@ import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { RequestContext } from '../../../request-context';
 import type { CoreTool } from '../../../tools/types';
+import type { Workspace } from '../../../workspace';
 import { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import { globalRunRegistry } from '../run-registry';
@@ -37,6 +38,8 @@ export interface ResolvedRuntimeDependencies {
   memory?: MastraMemory;
   /** SaveQueueManager for message persistence */
   saveQueueManager?: SaveQueueManager;
+  /** Workspace for file/sandbox operations */
+  workspace?: Workspace;
 }
 
 /**
@@ -83,6 +86,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let tools: Record<string, CoreTool> = globalEntry?.tools ?? {};
   let model: MastraLanguageModel = globalEntry?.model as MastraLanguageModel;
   let modelList: RegistryModelListEntry[] | undefined = globalEntry?.modelList;
+  let workspace: Workspace | undefined = globalEntry?.workspace;
   let memory: MastraMemory | undefined;
 
   // If we found the entry in global registry, we already have model and tools
@@ -117,6 +121,9 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       // Get memory from agent
       memory = await (agent as any).getMemory?.({});
+
+      // Get workspace from agent for tool execution context
+      workspace = await (agent as any).getWorkspace?.({});
     } catch (error) {
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
       // Fallback to config-based model resolution
@@ -156,6 +163,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     messageList,
     memory,
     saveQueueManager,
+    workspace,
   };
 }
 

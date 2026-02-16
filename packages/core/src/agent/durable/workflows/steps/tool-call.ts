@@ -3,8 +3,10 @@ import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
+import type { Workspace } from '../../../../workspace';
 import { DurableStepIds } from '../../constants';
 import type { RunRegistry } from '../../run-registry';
+import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent } from '../../stream-adapter';
 import type { DurableToolCallInput, SerializableDurableOptions } from '../../types';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
@@ -155,11 +157,15 @@ export function createDurableToolCallStep(options: DurableToolCallStepOptions) {
         };
       }
 
+      // Get workspace from global registry for tool execution context
+      const registryEntry = globalRunRegistry.get(context.runId);
+      const workspace: Workspace | undefined = registryEntry?.workspace;
+
       try {
         const result = await tool.execute(args, {
           toolCallId,
           messages: [],
-          // Note: In the full implementation, we'd pass more context here
+          workspace,
         });
 
         return {

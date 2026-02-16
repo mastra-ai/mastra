@@ -9,6 +9,7 @@ import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
+import { globalRunRegistry } from '../run-registry';
 import { emitFinishEvent, emitChunkEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -141,9 +142,13 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           };
         }
 
-        // Get tools from the agent via Mastra
-        let tools: Record<string, any> = {};
-        if (mastra) {
+        // Get tools from global registry first (for local/test execution)
+        // This allows tools to work without Mastra registration
+        const registryEntry = globalRunRegistry.get(initData.runId);
+        let tools: Record<string, any> = registryEntry?.tools ?? {};
+
+        // If no tools in registry, try to get from agent via Mastra
+        if (Object.keys(tools).length === 0 && mastra) {
           try {
             const agent = (mastra as Mastra).getAgentById(initData.agentId);
             tools = await agent.getToolsForExecution({
@@ -161,6 +166,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // Access pubsub via symbol for emitting tool-result chunks
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
+        // Get workspace from registry (already fetched above)
+        const workspace = registryEntry?.workspace;
+
         // Execute tool calls using shared function with pubsub hooks
         const toolResults = await executeDurableToolCalls({
           toolCalls: llmOutput.toolCalls,
@@ -169,6 +177,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           agentId: initData.agentId,
           messageId: initData.messageId,
           state: llmOutput.state,
+          workspace,
 
           // Emit tool-result chunk on success so client stream receives it
           onToolResult: async (toolCall: DurableToolCallInput, result: unknown) => {

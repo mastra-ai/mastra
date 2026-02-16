@@ -82,7 +82,9 @@ export type DurableAgentTestDomain =
   | 'modelFallback'
   | 'modelFallbackRuntime'
   // Observe domain (resumable streams)
-  | 'observe';
+  | 'observe'
+  // Workspace domain
+  | 'workspace';
 
 /**
  * Configuration for creating a DurableAgent test suite

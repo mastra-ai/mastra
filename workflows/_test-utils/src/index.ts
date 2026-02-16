@@ -73,4 +73,6 @@ export {
   createToolSuspensionTests,
   createUIMessageTests,
   createUsageTests,
+  // Workspace tests
+  createWorkspaceTests,
 } from './domains';

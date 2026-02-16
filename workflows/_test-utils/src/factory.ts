@@ -39,6 +39,8 @@ import {
   createModelFallbackRuntimeTests,
   // Observe test creators
   createObserveTests,
+  // Workspace test creators
+  createWorkspaceTests,
 } from './domains';
 
 const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
@@ -216,6 +218,11 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     // Observe tests (resumable streams)
     if (!skip.observe) {
       createObserveTests(context);
+    }
+
+    // Workspace tests
+    if (!skip.workspace) {
+      createWorkspaceTests(context);
     }
   });
 }

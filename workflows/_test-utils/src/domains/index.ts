@@ -33,3 +33,6 @@ export { createModelFallbackRuntimeTests } from './model-fallback-runtime';
 
 // Observe tests (resumable streams)
 export { createObserveTests } from './observe';
+
+// Workspace tests
+export { createWorkspaceTests } from './workspace';

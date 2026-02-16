@@ -4,6 +4,7 @@ import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig } from '../../memory/types';
 import type { RequestContext } from '../../request-context';
 import type { CoreTool } from '../../tools/types';
+import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { MessageList } from '../message-list';
@@ -24,6 +25,7 @@ interface DurablePreparationAgent {
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
   getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
   getMemory(opts: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
+  getWorkspace(opts: { requestContext: RequestContext }): Promise<Workspace | undefined>;
   listScorers(opts: {
     requestContext: RequestContext;
   }): Promise<Record<string, { scorer: unknown; sampling?: unknown }> | undefined>;
@@ -203,6 +205,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       })
     : undefined;
 
+  // 7b. Get workspace for tool execution context
+  const workspace = await typedAgent.getWorkspace({ requestContext });
+
   // 8. Create serialized workflow input
   const workflowInput = createWorkflowInput({
     runId,
@@ -247,6 +252,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           enabled: entry.enabled ?? true,
         }))
       : undefined,
+    // Store workspace for tool execution context
+    workspace,
     cleanup: () => {
       // Cleanup resources when run completes
       // Note: SaveQueueManager handles cleanup internally via flushMessages

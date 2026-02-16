@@ -12,6 +12,7 @@ import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MemoryConfig } from '../../memory/types';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
+import type { Workspace } from '../../workspace';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 
@@ -366,6 +367,8 @@ export interface RunRegistryEntry {
   model: MastraLanguageModel;
   /** Model list for fallback support (stores actual model instances) */
   modelList?: RegistryModelListEntry[];
+  /** Workspace for file/sandbox operations (non-serializable) */
+  workspace?: Workspace;
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
 }

@@ -725,6 +725,7 @@ export class DurableAgent<
       runId: preparation.runId,
       messageId: preparation.messageId,
       workflowInput: preparation.workflowInput,
+      registryEntry: preparation.registryEntry,
       threadId: preparation.threadId,
       resourceId: preparation.resourceId,
     };
