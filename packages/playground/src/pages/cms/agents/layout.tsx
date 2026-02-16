@@ -401,25 +401,17 @@ function EditFormContent({
   const { form } = useAgentEditForm({ initialValues });
 
   useEffect(() => {
-    if (initialValues) {
-      form.reset(initialValues);
-    }
-  }, [initialValues, form]);
+    if (!initialValues) return;
 
-  // Load existing MCP client details when editing an agent
-  const mcpClientIds = useMemo(() => {
+    form.reset(initialValues);
+
+    // Resolve MCP client IDs to full details
     const dataSource = isViewingVersion ? versionData : agent;
     const mcpClientRecord = dataSource.mcpClients as Record<string, unknown> | undefined;
-    if (!mcpClientRecord) return [];
-    return Object.keys(mcpClientRecord);
-  }, [agent, versionData, isViewingVersion]);
+    const ids = Object.keys(mcpClientRecord ?? {});
+    if (ids.length === 0) return;
 
-  console.log('loool', mcpClientIds);
-
-  useEffect(() => {
-    if (mcpClientIds.length === 0) return;
-
-    Promise.all(mcpClientIds.map(id => client.getStoredMCPClient(id).details()))
+    Promise.all(ids.map(id => client.getStoredMCPClient(id).details()))
       .then(results => {
         form.setValue(
           'mcpClients',
@@ -434,7 +426,7 @@ function EditFormContent({
       .catch(() => {
         // Silently ignore — clients may have been deleted
       });
-  }, [mcpClientIds, client, form]);
+  }, [initialValues, form, agent, versionData, isViewingVersion, client]);
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
