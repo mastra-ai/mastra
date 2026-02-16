@@ -477,6 +477,12 @@ export class BraintrustExporter extends TrackingExporter<
         payload.metadata.provider = modelAttr.provider;
       }
 
+      // Prefer resolved model ID (e.g. "claude-sonnet-4-5-20250929") over
+      // gateway aliases (e.g. "claude-sonnet-4.5") for accurate cost estimation
+      if (modelAttr.responseModel !== undefined) {
+        payload.metadata.model = modelAttr.responseModel;
+      }
+
       // Usage/token info goes to metrics
       payload.metrics = formatUsageMetrics(modelAttr.usage);
 
@@ -493,7 +499,13 @@ export class BraintrustExporter extends TrackingExporter<
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
+      const otherAttributes = omitKeys(attributes, [
+        'model',
+        'responseModel',
+        'usage',
+        'parameters',
+        'completionStartTime',
+      ]);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,
