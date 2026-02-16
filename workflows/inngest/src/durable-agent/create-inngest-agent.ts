@@ -39,12 +39,7 @@
  */
 
 import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
-import {
-  prepareForDurableExecution,
-  createDurableAgentStream,
-  emitErrorEvent,
-  DurableStepIds,
-} from '@mastra/core/agent/durable';
+import { prepareForDurableExecution, createDurableAgentStream, emitErrorEvent } from '@mastra/core/agent/durable';
 import type {
   AgentFinishEventData,
   AgentStepFinishEventData,
@@ -61,7 +56,7 @@ import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
 
 import { InngestPubSub } from '../pubsub';
-import { createInngestDurableAgenticWorkflow } from './create-inngest-agentic-workflow';
+import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
 // =============================================================================
 // Types
@@ -305,7 +300,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   // Set up pubsub with lazy CachingPubSub creation
   // CachingPubSub is an internal implementation detail - users just configure cache and pubsub separately
-  const innerPubsub = customPubsub ?? new InngestPubSub(inngest, DurableStepIds.AGENTIC_LOOP);
+  const innerPubsub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
   let _cachingPubsub: PubSub | null = null;
 
   // Lazily create CachingPubSub - this allows inheriting cache from mastra if not provided
@@ -338,7 +333,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     workflowInput: any,
     tracingOptions?: { traceId: string; parentSpanId: string },
   ): Promise<void> {
-    const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}`;
+    const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
     await inngest.send({
       name: eventName,
@@ -519,7 +514,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       });
 
       // Send resume event to Inngest after subscription is ready
-      const eventName = `workflow.${DurableStepIds.AGENTIC_LOOP}.resume`;
+      const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}.resume`;
 
       ready
         .then(() =>

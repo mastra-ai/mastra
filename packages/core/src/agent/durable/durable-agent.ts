@@ -708,10 +708,23 @@ export class DurableAgent<
 
   /**
    * Get the workflow instance for direct execution.
+   * Lazily creates the workflow and registers Mastra on it (needed for
+   * getAgentById in execution steps).
    */
   getWorkflow() {
     if (!this.#workflow) {
       this.#workflow = this.createWorkflow();
+      // Register mastra on the workflow so execution steps can access agents/tools.
+      // DurableAgent goes through the normal Agent registration path (not the durable wrapper
+      // path that calls addWorkflow), so the workflow isn't registered in Mastra's #workflows.
+      // We set mastra directly here instead.
+      if (this.#mastra) {
+        this.#workflow.__registerMastra(this.#mastra);
+        this.#workflow.__registerPrimitives({
+          logger: this.#mastra.getLogger(),
+          storage: this.#mastra.getStorage(),
+        });
+      }
     }
     return this.#workflow;
   }
@@ -752,8 +765,18 @@ export class DurableAgent<
   }
 
   /**
+   * Set the Mastra instance.
+   * Called by the durable agent registration path in addAgent().
+   * Only sets this.#mastra — the underlying agent is registered separately.
+   * @internal
+   */
+  __setMastra(mastra: Mastra): void {
+    this.#mastra = mastra;
+  }
+
+  /**
    * Register the Mastra instance.
-   * Called by Mastra during agent registration.
+   * Called by Mastra during agent registration (normal Agent path).
    * @internal
    */
   __registerMastra(mastra: Mastra): void {

@@ -96,6 +96,15 @@ type IterationState = z.infer<typeof iterationStateSchema> & {
  * @param options - Configuration options
  * @returns An InngestWorkflow instance that implements the agentic loop
  */
+/** Prefix for Inngest engine workflow IDs to avoid collision with other engines */
+const INNGEST_ENGINE_PREFIX = 'inngest';
+
+/** Inngest-prefixed workflow IDs */
+export const InngestDurableStepIds = {
+  AGENTIC_EXECUTION: `${INNGEST_ENGINE_PREFIX}:${DurableStepIds.AGENTIC_EXECUTION}`,
+  AGENTIC_LOOP: `${INNGEST_ENGINE_PREFIX}:${DurableStepIds.AGENTIC_LOOP}`,
+} as const;
+
 export function createInngestDurableAgenticWorkflow(options: InngestDurableAgenticWorkflowOptions) {
   const { inngest, maxSteps = DurableAgentDefaults.MAX_STEPS } = options;
   const { createWorkflow } = init(inngest);
@@ -108,7 +117,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   const singleIterationWorkflow = createWorkflow({
-    id: DurableStepIds.AGENTIC_EXECUTION,
+    id: InngestDurableStepIds.AGENTIC_EXECUTION,
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
     options: {
@@ -360,7 +369,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
   // Create the main agentic loop workflow with dowhile
   return (
     createWorkflow({
-      id: DurableStepIds.AGENTIC_LOOP,
+      id: InngestDurableStepIds.AGENTIC_LOOP,
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
       options: {
