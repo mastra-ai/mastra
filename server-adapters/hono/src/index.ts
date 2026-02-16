@@ -26,6 +26,7 @@ export type HonoVariables = {
   abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
+  cachedBody?: unknown;
 };
 
 export type HonoBindings = {};
@@ -54,6 +55,22 @@ export interface HonoApp {
 export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
+      // Patch req.json() to prevent "Body is unusable" errors when the body is read multiple times
+      // e.g. by middleware and then by an agent.
+      const originalJson = c.req.json.bind(c.req);
+      let jsonPromise: Promise<any> | undefined;
+
+      c.req.json = () => {
+        if (!jsonPromise) {
+          jsonPromise = originalJson().then(body => {
+            // Cache in context if needed explicitly, though the promise memoization handles the reuse
+            c.set('cachedBody', body);
+            return body;
+          });
+        }
+        return jsonPromise;
+      };
+
       // Parse request context from request body and add to context
 
       let bodyRequestContext: Record<string, any> | undefined;
@@ -64,8 +81,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         const contentType = c.req.header('content-type');
         if (contentType?.includes('application/json')) {
           try {
-            const clonedReq = c.req.raw.clone();
-            const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
+            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
               bodyRequestContext = body.requestContext;
             }
@@ -146,13 +162,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
           await stream.write('data: [DONE]\n\n');
         } catch (error) {
-          console.error(error);
+          this.mastra.getLogger()?.error('Error in stream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
           await stream.close();
         }
       },
       async err => {
-        console.error(err);
+        this.mastra.getLogger()?.error('Stream error callback', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        });
       },
     );
   }
@@ -164,7 +184,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.header('content-type') || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -172,7 +192,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           const formData = await request.formData();
           body = await this.parseFormData(formData);
         } catch (error) {
-          console.error('Failed to parse multipart form data:', error);
+          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Re-throw size limit errors, let others fall through to validation
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
@@ -192,7 +214,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           try {
             body = JSON.parse(bodyText);
           } catch (error) {
-            console.error('Failed to parse JSON body:', error);
+            this.mastra.getLogger()?.error('Failed to parse JSON body', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
             // Track JSON parse error to return 400 Bad Request
             bodyParseError = {
               message: error instanceof Error ? error.message : 'Invalid JSON in request body',
@@ -350,7 +374,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           try {
             params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
-            console.error('Error parsing query params', error);
+            this.mastra.getLogger()?.error('Error parsing query params', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
             // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
               return c.json(formatZodError(error, 'query parameters'), 400);
@@ -369,7 +395,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
-            console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
+            this.mastra.getLogger()?.error('Error parsing body', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
             // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
               return c.json(formatZodError(error, 'request body'), 400);
@@ -400,7 +428,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           const result = await route.handler(handlerParams);
           return this.sendResponse(route, c, result, prefix);
         } catch (error) {
-          console.error('Error calling handler', error);
+          this.mastra.getLogger()?.error('Error calling handler', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            path: route.path,
+            method: route.method,
+          });
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
             // Check for direct status property (HTTPException)
@@ -418,6 +450,30 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         }
       },
     );
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (!routes || routes.length === 0) return;
+
+    for (const route of routes) {
+      const handler =
+        'handler' in route && route.handler
+          ? route.handler
+          : 'createHandler' in route
+            ? await route.createHandler({ mastra: this.mastra })
+            : undefined;
+      if (!handler) continue;
+
+      const middlewares: MiddlewareHandler[] = [];
+      if (route.middleware) {
+        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
+      }
+
+      const allHandlers = [...middlewares, handler];
+      const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
+      this.app[method](route.path, allHandlers[0]!, ...allHandlers.slice(1));
+    }
   }
 
   registerContextMiddleware(): void {

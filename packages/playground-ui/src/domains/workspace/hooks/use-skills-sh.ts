@@ -134,7 +134,7 @@ export const useInstallSkill = () => {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `Failed to install skill: ${response.statusText}`);
+        throw new Error(error.error || error.message || `Failed to install skill: ${response.statusText}`);
       }
 
       return response.json().catch(() => {
@@ -171,7 +171,7 @@ export const useUpdateSkills = () => {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `Failed to update skill: ${response.statusText}`);
+        throw new Error(error.error || error.message || `Failed to update skill: ${response.statusText}`);
       }
 
       return response.json().catch(() => {
@@ -208,7 +208,7 @@ export const useRemoveSkill = () => {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `Failed to remove skill: ${response.statusText}`);
+        throw new Error(error.error || error.message || `Failed to remove skill: ${response.statusText}`);
       }
 
       return response.json().catch(() => {

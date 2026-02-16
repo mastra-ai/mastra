@@ -1,5 +1,5 @@
 ---
-title: "Synthetic | Models | Mastra"
+title: "Synthetic | Models"
 description: "Use Synthetic models with Mastra. 26 models available."
 ---
 
@@ -262,6 +262,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.19
   },
   {
+    "model": "synthetic/hf:nvidia/Kimi-K2.5-NVFP4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.55,
+    "outputCost": 2.19
+  },
+  {
     "model": "synthetic/hf:openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -320,18 +332,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32000,
     "inputCost": 2,
     "outputCost": 2
-  },
-  {
-    "model": "synthetic/hf:zai-org/GLM-4.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 96000,
-    "inputCost": 0.55,
-    "outputCost": 2.19
   },
   {
     "model": "synthetic/hf:zai-org/GLM-4.6",

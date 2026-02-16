@@ -23,6 +23,12 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
+        { type: 'doc', id: 'agents/generate', label: '.generate()' },
+        {
+          type: 'doc',
+          id: 'agents/generateLegacy',
+          label: '.generateLegacy()',
+        },
         {
           type: 'doc',
           id: 'agents/getDefaultGenerateOptions',
@@ -52,12 +58,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/getMemory', label: '.getMemory()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
-        { type: 'doc', id: 'agents/generate', label: '.generate()' },
-        {
-          type: 'doc',
-          id: 'agents/generateLegacy',
-          label: '.generateLegacy()',
-        },
+        { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
         { type: 'doc', id: 'agents/listTools', label: '.listTools()' },
@@ -112,6 +113,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'auth/auth0', label: 'Auth0' },
+        { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
@@ -313,6 +315,8 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
         { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
+        { type: 'doc', id: 'memory/clone-utilities', label: 'Cloned Thread Utilities' },
+        { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         {
           type: 'doc',
@@ -572,6 +576,7 @@ const sidebars = {
           id: 'server/mastra-server',
           label: 'MastraServer',
         },
+        { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
       ],
     },
@@ -628,7 +633,18 @@ const sidebars = {
           id: 'workspace/local-filesystem',
           label: 'LocalFilesystem',
         },
+        {
+          type: 'doc',
+          id: 'workspace/s3-filesystem',
+          label: 'S3Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/gcs-filesystem',
+          label: 'GCSFilesystem',
+        },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
         {
           type: 'doc',
           id: 'workspace/filesystem',

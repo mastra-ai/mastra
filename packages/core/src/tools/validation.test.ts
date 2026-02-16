@@ -1597,3 +1597,229 @@ describe('validateToolInput - Built-in Object Preservation (GitHub #11502)', () 
     expect((result.data as any).nested.map.get('key')).toBe('value');
   });
 });
+
+describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/12757
+  // Some LLMs (e.g., GLM4.7) generate tool arguments where array or object
+  // parameters are returned as stringified JSON strings instead of actual
+  // arrays/objects, causing Zod validation to fail.
+
+  it('should coerce a stringified JSON array to an actual array', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+      timeout: z.number().nullish().default(30000),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should coerce a stringified JSON array with multiple items', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '["item1", "item2", "item3"]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: ['item1', 'item2', 'item3'],
+    });
+  });
+
+  it('should coerce a stringified numeric array', () => {
+    const schema = z.object({
+      values: z.array(z.number()),
+    });
+
+    const input = {
+      values: '[1, 2, 3]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      values: [1, 2, 3],
+    });
+  });
+
+  it('should coerce a stringified empty array', () => {
+    const schema = z.object({
+      tags: z.array(z.string()).default([]),
+    });
+
+    const input = {
+      tags: '[]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      tags: [],
+    });
+  });
+
+  it('should coerce a stringified JSON object to an actual object', () => {
+    const schema = z.object({
+      name: z.string(),
+      metadata: z.object({
+        key: z.string(),
+        value: z.string(),
+      }),
+    });
+
+    const input = {
+      name: 'test',
+      metadata: '{"key": "color", "value": "blue"}',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      metadata: { key: 'color', value: 'blue' },
+    });
+  });
+
+  it('should handle the exact GLM4.7 output for mastra_workspace_execute_command', () => {
+    const schema = z.object({
+      command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
+      args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
+      timeout: z.number().nullish().default(30000).describe('Maximum execution time in milliseconds.'),
+      cwd: z.string().nullish().describe('Working directory for the command'),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should work end-to-end with createTool when LLM sends stringified array', async () => {
+    const tool = createTool({
+      id: 'mastra_workspace_execute_command',
+      description: 'Execute a command',
+      inputSchema: z.object({
+        command: z.string(),
+        args: z.array(z.string()).nullish().default([]),
+        timeout: z.number().nullish().default(30000),
+      }),
+      execute: async ({ command, args, timeout }) => {
+        return { command, args: args ?? [], timeout: timeout ?? 30000 };
+      },
+    });
+
+    const result = await tool.execute({
+      command: 'python3',
+      args: '["parse_excel.py"]' as any,
+      timeout: 60000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should NOT coerce regular strings that are not valid JSON', () => {
+    const schema = z.object({
+      name: z.string(),
+      tags: z.array(z.string()),
+    });
+
+    const input = {
+      name: 'test',
+      tags: 'not-json-at-all',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should NOT coerce a string that parses to wrong type', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '42',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should still accept actual arrays (no regression)', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+    });
+
+    const input = {
+      command: 'python3',
+      args: ['parse_excel.py'],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+    });
+  });
+
+  it('should still accept actual objects (no regression)', () => {
+    const schema = z.object({
+      name: z.string(),
+      config: z.object({ key: z.string() }),
+    });
+
+    const input = {
+      name: 'test',
+      config: { key: 'value' },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      config: { key: 'value' },
+    });
+  });
+});

@@ -484,6 +484,69 @@ describe('Memory', () => {
       expect(clonedThread.metadata?.anotherField).toBe(123);
       expect(clonedThread.metadata?.clone).toBeDefined();
     });
+
+    it('should clone thread-scoped working memory to the cloned thread', async () => {
+      const wmMemory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: {
+            enabled: true,
+            scope: 'thread',
+          },
+        },
+      });
+
+      // Create source thread
+      const sourceThread = await wmMemory.saveThread({
+        thread: {
+          id: 'source-thread-wm',
+          resourceId,
+          title: 'Thread with Working Memory',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Save a message to the source thread
+      await wmMemory.saveMessages({
+        messages: [
+          {
+            id: 'msg-wm-1',
+            threadId: sourceThread.id,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+
+      // Set working memory on the source thread
+      await wmMemory.updateWorkingMemory({
+        threadId: sourceThread.id,
+        resourceId,
+        workingMemory: 'User name is Alice. Lives in New York.',
+      });
+
+      // Verify source thread has working memory
+      const sourceWm = await wmMemory.getWorkingMemory({
+        threadId: sourceThread.id,
+        resourceId,
+      });
+      expect(sourceWm).toBe('User name is Alice. Lives in New York.');
+
+      // Clone the thread
+      const { thread: clonedThread } = await wmMemory.cloneThread({
+        sourceThreadId: sourceThread.id,
+      });
+
+      // The cloned thread should have the working memory from the source
+      const clonedWm = await wmMemory.getWorkingMemory({
+        threadId: clonedThread.id,
+        resourceId,
+      });
+      expect(clonedWm).toBe('User name is Alice. Lives in New York.');
+    });
   });
 
   describe('clone utility methods', () => {
