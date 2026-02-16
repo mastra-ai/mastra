@@ -36,7 +36,7 @@
     "@mastra/playground-ui": "workspace:^",
     "@mastra/react": "workspace:*",
     "@posthog/react": "^1.5.2",
-    "@tanstack/react-query": "^5.90.9",
+    "@tanstack/react-query": "^5.90.21",
     "lucide-react": "^0.522.0",
     "posthog-js": "^1.281.0",
     "react": "^19.2.3",

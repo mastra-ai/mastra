@@ -1157,6 +1157,15 @@
       "docUrl": "https://fireworks.ai/docs/",
       "gateway": "models.dev"
     },
+    "stepfun": {
+      "url": "https://api.stepfun.com/v1",
+      "apiKeyEnvVar": "STEPFUN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "StepFun",
+      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
+      "docUrl": "https://platform.stepfun.com/docs/zh/overview/concept",
+      "gateway": "models.dev"
+    },
     "siliconflow": {
       "url": "https://api.siliconflow.com/v1",
       "apiKeyEnvVar": "SILICONFLOW_API_KEY",
@@ -1241,6 +1250,7 @@
       "apiKeyEnvVar": "TOGETHER_API_KEY",
       "name": "Together AI",
       "models": [
+        "MiniMaxAI/MiniMax-M2.5",
         "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
         "Qwen/Qwen3-Coder-Next-FP8",
@@ -2564,6 +2574,10 @@
         "openai/gpt-oss-120b",
         "qwen/qwen3-235b-a22b-thinking-2507",
         "qwen/qwen3-coder",
+        "qwen/qwen3.5-397b-a17b",
+        "qwen/qwen3.5-397b-a17b-thinking",
+        "qwen/qwen3.5-plus",
+        "qwen/qwen3.5-plus-thinking",
         "zai-org/glm-4.5-air",
         "zai-org/glm-4.5-air:thinking",
         "zai-org/glm-4.6",
@@ -2728,6 +2742,7 @@
       "name": "Chutes",
       "models": [
         "MiniMaxAI/MiniMax-M2.1-TEE",
+        "MiniMaxAI/MiniMax-M2.5-TEE",
         "NousResearch/DeepHermes-3-Mistral-24B-Preview",
         "NousResearch/Hermes-4-14B",
         "NousResearch/Hermes-4-405B-FP8-TEE",
@@ -3732,6 +3747,7 @@
       "accounts/fireworks/models/qwen3-235b-a22b",
       "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
     ],
+    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
     "siliconflow": [
       "ByteDance-Seed/Seed-OSS-36B-Instruct",
       "MiniMaxAI/MiniMax-M2.1",
@@ -3805,6 +3821,7 @@
       "zai-org/GLM-5"
     ],
     "togetherai": [
+      "MiniMaxAI/MiniMax-M2.5",
       "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
       "Qwen/Qwen3-Coder-Next-FP8",
@@ -4848,6 +4865,10 @@
       "openai/gpt-oss-120b",
       "qwen/qwen3-235b-a22b-thinking-2507",
       "qwen/qwen3-coder",
+      "qwen/qwen3.5-397b-a17b",
+      "qwen/qwen3.5-397b-a17b-thinking",
+      "qwen/qwen3.5-plus",
+      "qwen/qwen3.5-plus-thinking",
       "zai-org/glm-4.5-air",
       "zai-org/glm-4.5-air:thinking",
       "zai-org/glm-4.6",
@@ -4974,6 +4995,7 @@
     ],
     "chutes": [
       "MiniMaxAI/MiniMax-M2.1-TEE",
+      "MiniMaxAI/MiniMax-M2.5-TEE",
       "NousResearch/DeepHermes-3-Mistral-24B-Preview",
       "NousResearch/Hermes-4-14B",
       "NousResearch/Hermes-4-405B-FP8-TEE",
