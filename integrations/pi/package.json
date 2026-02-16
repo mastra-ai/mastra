@@ -82,7 +82,6 @@
     "@internal/types-builder": "workspace:*",
     "@mariozechner/pi-agent-core": "*",
     "@mariozechner/pi-coding-agent": "*",
-    "@sinclair/typebox": "^0.34.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

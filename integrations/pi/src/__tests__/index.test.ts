@@ -1,4 +1,4 @@
-import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
+import type { InMemoryMemory } from '@mastra/core/storage';
 import { ObservationalMemory } from '@mastra/memory/processors';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -12,109 +12,12 @@ import {
   type CreateMastraOMOptions,
 } from '../index.js';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function createInMemoryStorage(): InMemoryMemory {
-  const db = new InMemoryDB();
-  return new InMemoryMemory({ db });
-}
-
-function createMockObserverModel() {
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock-observer',
-    modelId: 'mock-observer-model',
-    defaultObjectGenerationMode: undefined,
-    supportsImageUrls: false,
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-        content: [
-          {
-            type: 'text' as const,
-            text: `<observations>
-## February 15, 2026
-
-### Session observations
-- 🔴 User asked for help building a Pi agent integration
-- 🟡 Assistant explained the architecture of observational memory
-</observations>
-<current-task>Building Pi agent integration</current-task>
-<suggested-response>Let me continue helping with the integration.</suggested-response>`,
-          },
-        ],
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const text = `<observations>
-## February 15, 2026
-
-### Session observations
-- 🔴 User asked for help building a Pi agent integration
-</observations>
-<current-task>Building Pi agent integration</current-task>
-<suggested-response>Let me continue helping.</suggested-response>`;
-
-      const stream = new ReadableStream({
-        async start(controller) {
-          controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
-            type: 'response-metadata',
-            id: 'obs-1',
-            modelId: 'mock-observer-model',
-            timestamp: new Date(),
-          });
-          controller.enqueue({ type: 'text-start', id: 'text-1' });
-          controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
-          controller.enqueue({ type: 'text-end', id: 'text-1' });
-          controller.enqueue({
-            type: 'finish',
-            finishReason: 'stop',
-            usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-          });
-          controller.close();
-        },
-      });
-
-      return {
-        stream,
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
-    },
-  };
-}
-
-/** Create a Pi-style AgentMessage. */
-function piMessage(
-  role: 'user' | 'assistant',
-  text: string,
-  timestamp?: number,
-): any {
-  return {
-    role,
-    content: [{ type: 'text', text }],
-    timestamp: timestamp ?? Date.now(),
-  };
-}
-
-/** Create multiple Pi messages that exceed a given token threshold when converted. */
-function createMessagesExceedingThreshold(count: number): any[] {
-  const now = Date.now();
-  return Array.from({ length: count }, (_, i) => ({
-    role: i % 2 === 0 ? 'user' : 'assistant',
-    content: [{ type: 'text', text: `Message ${i}: ${'x'.repeat(200)}` }],
-    timestamp: now - (count - i) * 1000,
-  }));
-}
+import {
+  createInMemoryStorage,
+  createMockObserverModel,
+  piMessage,
+  createMessagesExceedingThreshold,
+} from './helpers.js';
 
 // ============================================================================
 // convertMessages

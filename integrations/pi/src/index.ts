@@ -49,8 +49,11 @@
 
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import type { MemoryStorage } from '@mastra/core/storage';
+import type { AgentMessage, AgentOptions } from '@mariozechner/pi-agent-core';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ObservationalMemoryOptions } from '@mastra/core/memory';
+import type { MemoryStorage } from '@mastra/core/storage';
+import type { ObserveHooks, ObservationalMemoryConfig } from '@mastra/memory/processors';
 import {
   ObservationalMemory,
   TokenCounter,
@@ -58,10 +61,7 @@ import {
   OBSERVATION_CONTINUATION_HINT,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
-  type ObserveHooks,
-  type ObservationalMemoryConfig,
 } from '@mastra/memory/processors';
-import type { AgentMessage, AgentOptions } from '@mariozechner/pi-agent-core';
 
 // ---------------------------------------------------------------------------
 // Re-exports
@@ -104,12 +104,20 @@ const DEFAULT_STORAGE_PATH = '.pi/memory/observations.db';
  * Load OM config from `.pi/mastra.json`.
  */
 export async function loadConfig(directory: string): Promise<MastraOMConfig> {
+  const configPath = join(directory, CONFIG_FILE);
+  let raw: string;
   try {
-    const configPath = join(directory, CONFIG_FILE);
-    const raw = await readFile(configPath, 'utf-8');
-    return JSON.parse(raw) as MastraOMConfig;
+    raw = await readFile(configPath, 'utf-8');
   } catch {
+    // Config file doesn't exist — use defaults
     return {};
+  }
+  try {
+    return JSON.parse(raw) as MastraOMConfig;
+  } catch (err) {
+    throw new Error(
+      `@mastra/pi: invalid JSON in ${configPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -117,7 +125,33 @@ export async function loadConfig(directory: string): Promise<MastraOMConfig> {
 // Message Conversion
 // ---------------------------------------------------------------------------
 
-type ContentPart = { type: string;[key: string]: any };
+type ContentPart = { type: string; [key: string]: any };
+
+/**
+ * Structural type matching Pi's AgentMessage shape.
+ *
+ * We define this locally so `convertMessages` can access properties in a
+ * type-safe way without needing `as any` throughout.
+ */
+interface PiMessage {
+  role: string;
+  content?: string | Array<PiContentPart>;
+  timestamp?: number;
+  id?: string;
+}
+
+interface PiContentPart {
+  type?: string;
+  text?: string;
+  thinking?: string;
+  data?: string;
+  image?: string;
+  toolCallId?: string;
+  id?: string;
+  name?: string;
+  toolName?: string;
+  args?: unknown;
+}
 
 /**
  * Convert Pi `AgentMessage[]` to Mastra's `MastraDBMessage` format.
@@ -126,13 +160,12 @@ type ContentPart = { type: string;[key: string]: any };
  * and tool call content. We map what we can — text, tool invocations,
  * and images — and skip the rest.
  */
-export function convertMessages(messages: AgentMessage[], sessionId: string) {
-  return messages
+export function convertMessages(messages: AgentMessage[], sessionId: string): MastraDBMessage[] {
+  return (messages as unknown as PiMessage[])
     .map(msg => {
-      const role = (msg as any).role as string;
-      if (role !== 'user' && role !== 'assistant') return null;
+      if (msg.role !== 'user' && msg.role !== 'assistant') return null;
 
-      const rawContent = (msg as any).content;
+      const rawContent = msg.content;
       if (!rawContent) return null;
 
       const parts: ContentPart[] = [];
@@ -140,9 +173,8 @@ export function convertMessages(messages: AgentMessage[], sessionId: string) {
       if (typeof rawContent === 'string') {
         parts.push({ type: 'text', text: rawContent });
       } else if (Array.isArray(rawContent)) {
-        for (const part of rawContent) {
-          const p = part as any;
-          const type = p?.type as string | undefined;
+        for (const p of rawContent) {
+          const type = p.type;
 
           if (type === 'text' && p.text) {
             parts.push({ type: 'text', text: p.text });
@@ -170,14 +202,14 @@ export function convertMessages(messages: AgentMessage[], sessionId: string) {
 
       if (parts.length === 0) return null;
 
-      const timestamp = (msg as any).timestamp;
+      const timestamp = msg.timestamp;
       const id =
-        (msg as any).id ??
+        msg.id ??
         `${sessionId}-${timestamp ?? Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       return {
         id,
-        role: role as 'user' | 'assistant',
+        role: msg.role as 'user' | 'assistant',
         createdAt: new Date(timestamp ?? Date.now()),
         threadId: sessionId,
         resourceId: sessionId,
@@ -187,7 +219,7 @@ export function convertMessages(messages: AgentMessage[], sessionId: string) {
         },
       };
     })
-    .filter((m): m is NonNullable<typeof m> => m !== null);
+    .filter((m): m is NonNullable<typeof m> => m !== null) as MastraDBMessage[];
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +404,7 @@ export function createMastraOM(options: CreateMastraOMOptions): MastraOMIntegrat
     onDebugEvent: options.onDebugEvent,
   });
 
-  const tokenCounter = new TokenCounter();
+  let tokenCounter: TokenCounter | undefined;
 
   function createTransformContext(
     sessionId: string,
@@ -389,7 +421,7 @@ export function createMastraOM(options: CreateMastraOMOptions): MastraOMIntegrat
       if (record?.lastObservedAt) {
         const lastObservedAt = new Date(record.lastObservedAt);
         return messages.filter(msg => {
-          const timestamp = (msg as any).timestamp;
+          const timestamp = (msg as unknown as PiMessage).timestamp;
           if (!timestamp) return true;
           return new Date(timestamp) > lastObservedAt;
         });
@@ -429,6 +461,7 @@ export function createMastraOM(options: CreateMastraOMOptions): MastraOMIntegrat
       const unobserved = record.lastObservedAt
         ? mastraMessages.filter(m => m.createdAt > new Date(record.lastObservedAt!))
         : mastraMessages;
+      tokenCounter ??= new TokenCounter();
       unobservedTokens = tokenCounter.countMessages(unobserved);
     }
 
