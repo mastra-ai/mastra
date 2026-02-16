@@ -104,13 +104,13 @@ export function ToolsPage() {
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6 p-4">
-        <MCPClientList />
-
         <SectionHeader
           title="Tools"
           subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
           icon={<ToolsIcon className="text-accent6" />}
         />
+
+        <MCPClientList />
 
         <IntegrationToolsSection
           selectedToolIds={selectedIntegrationTools}
