@@ -11,7 +11,7 @@
   "author": "",
   "license": "Apache-2.0",
   "description": "",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.29.3",
   "dependencies": {
     "@ai-sdk/openai": "^2.0.89",
     "@mastra/core": "commonjs-e2e-test",

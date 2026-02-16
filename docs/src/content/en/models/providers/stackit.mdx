@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "stackit/e5-mistral-7b"
+  model: "stackit/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8"
 });
 
 // Generate a response
@@ -46,7 +46,31 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "stackit/e5-mistral-7b",
+    "model": "stackit/cortecs/Llama-3.3-70B-Instruct-FP8-Dynamic",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.49,
+    "outputCost": 0.71
+  },
+  {
+    "model": "stackit/google/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 37000,
+    "maxOutput": 8192,
+    "inputCost": 0.49,
+    "outputCost": 0.71
+  },
+  {
+    "model": "stackit/intfloat/e5-mistral-7b-instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -58,67 +82,43 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.02
   },
   {
-    "model": "stackit/gemma-3-27b",
-    "imageInput": true,
+    "model": "stackit/neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8",
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 37000,
+    "contextWindow": 128000,
     "maxOutput": 8192,
-    "inputCost": 0.53,
-    "outputCost": 0.77
+    "inputCost": 0.16,
+    "outputCost": 0.27
   },
   {
-    "model": "stackit/gpt-oss-120b",
+    "model": "stackit/neuralmagic/Mistral-Nemo-Instruct-2407-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.49,
+    "outputCost": 0.71
+  },
+  {
+    "model": "stackit/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
+    "contextWindow": 131000,
     "maxOutput": 8192,
-    "inputCost": 0.53,
-    "outputCost": 0.77
+    "inputCost": 0.49,
+    "outputCost": 0.71
   },
   {
-    "model": "stackit/llama-3.1-8b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.18,
-    "outputCost": 0.3
-  },
-  {
-    "model": "stackit/llama-3.3-70b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.53,
-    "outputCost": 0.77
-  },
-  {
-    "model": "stackit/mistral-nemo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.53,
-    "outputCost": 0.77
-  },
-  {
-    "model": "stackit/qwen3-vl-235b",
+    "model": "stackit/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -126,11 +126,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 218000,
     "maxOutput": 8192,
-    "inputCost": 1.77,
-    "outputCost": 2.07
+    "inputCost": 1.64,
+    "outputCost": 1.91
   },
   {
-    "model": "stackit/qwen3-vl-embedding-8b",
+    "model": "stackit/Qwen/Qwen3-VL-Embedding-8B",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -154,7 +154,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.openai-compat.model-serving.eu01.onstackit.cloud/v1",
-    id: "stackit/e5-mistral-7b",
+    id: "stackit/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8",
     apiKey: process.env.STACKIT_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -172,8 +172,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "stackit/qwen3-vl-embedding-8b"
-      : "stackit/e5-mistral-7b";
+      ? "stackit/openai/gpt-oss-120b"
+      : "stackit/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8";
   }
 });
 ```
