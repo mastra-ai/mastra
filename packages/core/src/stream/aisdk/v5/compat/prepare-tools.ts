@@ -10,6 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat';
 
 /** Model specification version for tool type conversion */
 export type ModelSpecVersion = 'v2' | 'v3';
@@ -117,11 +118,33 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
             case undefined:
             case 'dynamic':
             case 'function':
+              // Convert tool input schema to JSON Schema
+              let parameters;
+              if (sdkTool.inputSchema) {
+                // Use standardSchemaToJSONSchema directly for consistent draft-07 output
+                if (isStandardSchemaWithJSON(sdkTool.inputSchema)) {
+                  parameters = standardSchemaToJSONSchema(sdkTool.inputSchema, {
+                    io: 'input',
+                    target: 'draft-07',
+                  });
+                } else {
+                  // Fallback to AI SDK's asSchema for non-standard schemas
+                  parameters = asSchema(sdkTool.inputSchema).jsonSchema;
+                }
+              } else {
+                // No schema provided - use empty object
+                parameters = {
+                  type: 'object',
+                  properties: {},
+                  additionalProperties: false,
+                };
+              }
+
               return {
                 type: 'function' as const,
                 name,
                 description: sdkTool.description,
-                inputSchema: asSchema(sdkTool.inputSchema).jsonSchema,
+                inputSchema: parameters,
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {

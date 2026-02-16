@@ -31,6 +31,9 @@ export { SchemaCompatLayer } from './schema-compatibility';
 // Utility functions
 export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod, isZodType } from './utils';
 
+// Standard Schema compatibility utilities
+export { extractZodSchema, applyOpenAICompatTransforms, applyOpenAICompatToTools } from './standard-schema-compat';
+
 // Provider compatibility implementations
 export { AnthropicSchemaCompatLayer } from './provider-compats/anthropic';
 export { DeepSeekSchemaCompatLayer } from './provider-compats/deepseek';

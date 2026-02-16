@@ -194,6 +194,16 @@ export class CoreToolBuilder extends MastraBase {
           // Assume Zod schema - convert to AI SDK Schema
           processedParameters = convertZodSchemaToAISDKSchema(parameters as any);
         }
+      } else {
+        // No schema provided - create default empty object schema for AI SDK v1 compatibility
+        // OpenAI requires at minimum type: "object" even for tools without parameters
+        processedParameters = {
+          jsonSchema: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+          },
+        };
       }
 
       // Convert output schema to AI SDK Schema format if present
@@ -672,7 +682,7 @@ export class CoreToolBuilder extends MastraBase {
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
-      parameters: processedSchema ?? z.object({}),
+      parameters: processedSchema ?? convertZodSchemaToAISDKSchema(z.object({})),
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
