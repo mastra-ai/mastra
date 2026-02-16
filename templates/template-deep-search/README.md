@@ -10,7 +10,9 @@ This template shows how Mastra's workflow primitives and agent orchestration com
 
 ## Demo
 
-<video src="assets/demo.mp4" controls></video>
+https://github.com/user-attachments/assets/dfea59c3-8038-461c-a4b4-504f8fc01575
+
+This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra client SDK](https://mastra.ai/docs/client-sdk) or agentic UI libraries like [AI SDK UI](https://sdk.vercel.ai/docs/ai-sdk-ui/overview), [CopilotKit](https://copilotkit.ai), or [Assistant UI](https://assistant-ui.com).
 
 ## Quick start
 
