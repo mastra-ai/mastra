@@ -56,7 +56,7 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
       id: 'cond-follow-chains',
       inputSchema: z.object({ status: z.string() }),
       outputSchema: z.object({ result: z.string() }),
-      steps: [step1, step2, step3],
+      steps: [step1, step2, step3, step4],
     });
 
     workflow
@@ -137,7 +137,7 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
       id: 'cond-chains-with-state',
       inputSchema: z.object({ status: z.string() }),
       outputSchema: z.object({ result: z.string() }),
-      steps: [step1, step2, step3],
+      steps: [step1, step2, step3, step4],
       stateSchema: z.object({ value: z.string() }),
     });
 
@@ -299,6 +299,7 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
       id: 'cond-custom-function',
       inputSchema: z.object({}),
       outputSchema: z.object({}),
+      steps: [step1, step2],
       options: {
         validateInputs: false,
       },

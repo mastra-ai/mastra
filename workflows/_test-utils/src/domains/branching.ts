@@ -560,7 +560,7 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
     const firstStep = createStep({
       id: 'first-step',
       inputSchema: startInputSchema,
-      outputSchema: startInputSchema,
+      outputSchema: z.object({ success: z.boolean() }),
       execute: async (ctx: any) => mockRegistry.get('branch-nested:first')(ctx),
     });
 

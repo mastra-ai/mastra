@@ -498,14 +498,7 @@ export interface TimeTravelWorkflowOptions {
   /** The step to time travel to (ID string or step reference) */
   step: string | unknown;
   /** The context to provide (step results from previous execution) */
-  context: Record<string, {
-    status: 'success' | 'failed' | 'paused' | 'skipped';
-    output?: unknown;
-    payload?: unknown;
-    startedAt?: number;
-    endedAt?: number;
-    error?: unknown;
-  }>;
+  context: Record<string, StepResult>;
   /** Optional run ID to use */
   runId?: string;
   /** Whether to run only one step (perStep mode) */

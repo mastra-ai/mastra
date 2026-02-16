@@ -164,7 +164,7 @@ async function startInngest() {
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
-  console.log('[startInngest] WARNING: No functions registered - tests will likely fail');
+  throw new Error('[startInngest] No functions registered after 30 attempts - aborting test suite');
 }
 
 /**
@@ -300,13 +300,13 @@ createWorkflowTestSuite({
     multipleChains: false,
     complexConditions: false,
 
-    // SKIPPED DOMAINS - testing all of these now
-    schemaValidation: false, // Testing - some tests may need individual skips
-    suspendResume: false, // Works!
-    timeTravel: false, // Works!
-    agentStep: false, // Works!
-    abort: false, // Testing - abortStatus test may need skip
-    interoperability: false, // Testing - tool as step should work
+    // ENABLED DOMAINS - individual tests may be skipped via skipTests below
+    schemaValidation: false,
+    suspendResume: false,
+    timeTravel: false,
+    agentStep: false,
+    abort: false,
+    interoperability: false,
 
     // SKIPPED DOMAINS - not supported on Inngest engine
     restart: true, // restart() throws "not supported on inngest workflows"
