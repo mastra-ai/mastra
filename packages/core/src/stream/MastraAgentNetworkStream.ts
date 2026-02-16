@@ -78,6 +78,12 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
       this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
     };
 
+    // Track whether the controller has been closed to prevent
+    // "Controller is already closed" errors when the stream consumer
+    // disconnects or the controller is closed between agent loop iterations
+    // (e.g., after a tool call completes but before the next LLM call starts).
+    let controllerClosed = false;
+
     super({
       start: async controller => {
         try {
@@ -105,7 +111,9 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
                 }
               }
 
-              controller.enqueue(chunk);
+              if (!controllerClosed) {
+                controller.enqueue(chunk);
+              }
             },
           });
 
@@ -121,6 +129,8 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
           let objectResolved = false;
 
           for await (const chunk of stream) {
+            if (controllerClosed) break;
+
             if (chunk.type === 'workflow-step-output') {
               const innerChunk = getInnerChunk(chunk);
               if (
@@ -138,7 +148,9 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
                 if (objectStreamController) {
                   objectStreamController.enqueue((innerChunk as any).payload?.object);
                 }
-                controller.enqueue(innerChunk);
+                if (!controllerClosed) {
+                  controller.enqueue(innerChunk);
+                }
               }
               // Handle network-object-result chunks (final structured object)
               else if (innerChunk.type === 'network-object-result') {
@@ -149,15 +161,21 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
                     objectStreamController.close();
                   }
                 }
-                controller.enqueue(innerChunk);
+                if (!controllerClosed) {
+                  controller.enqueue(innerChunk);
+                }
               } else if (innerChunk.type === 'network-execution-event-finish') {
                 const finishPayload = {
                   ...innerChunk.payload,
                   usage: this.#usageCount,
                 };
-                controller.enqueue({ ...innerChunk, payload: finishPayload });
+                if (!controllerClosed) {
+                  controller.enqueue({ ...innerChunk, payload: finishPayload });
+                }
               } else {
-                controller.enqueue(innerChunk);
+                if (!controllerClosed) {
+                  controller.enqueue(innerChunk);
+                }
               }
             }
           }
@@ -170,16 +188,25 @@ export class MastraAgentNetworkStream<OUTPUT = undefined> extends ReadableStream
             }
           }
 
-          controller.close();
+          if (!controllerClosed) {
+            controllerClosed = true;
+            controller.close();
+          }
           deferredPromise.resolve();
         } catch (error) {
-          controller.error(error);
+          if (!controllerClosed) {
+            controllerClosed = true;
+            controller.error(error);
+          }
           deferredPromise.reject(error);
           objectDeferredPromise.reject(error);
           if (objectStreamController) {
             objectStreamController.error(error);
           }
         }
+      },
+      cancel() {
+        controllerClosed = true;
       },
     });
 

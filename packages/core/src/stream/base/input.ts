@@ -15,6 +15,7 @@ export abstract class MastraModelInput extends MastraBase {
 
   initialize({ runId, createStream, onResult }: { createStream: CreateStream; runId: string; onResult: OnResult }) {
     const self = this;
+    let controllerClosed = false;
 
     const stream = new ReadableStream<ChunkType>({
       async start(controller) {
@@ -33,10 +34,19 @@ export abstract class MastraModelInput extends MastraBase {
             controller,
           });
 
-          controller.close();
+          if (!controllerClosed) {
+            controllerClosed = true;
+            controller.close();
+          }
         } catch (error) {
-          controller.error(error);
+          if (!controllerClosed) {
+            controllerClosed = true;
+            controller.error(error);
+          }
         }
+      },
+      cancel() {
+        controllerClosed = true;
       },
     });
 
