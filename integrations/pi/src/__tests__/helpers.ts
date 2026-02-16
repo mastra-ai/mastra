@@ -145,7 +145,10 @@ export function createMockExtensionAPI() {
   };
 }
 
-export function createMockContext(sessionId: string) {
+export function createMockContext(sessionId: string): {
+  sessionManager: { getSessionId: () => string };
+  ui: { notify: (...args: any[]) => void; setStatus: (...args: any[]) => void };
+} {
   return {
     sessionManager: {
       getSessionId: () => sessionId,
