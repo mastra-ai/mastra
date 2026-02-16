@@ -158,11 +158,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
-    // Inherit tracingPolicy from parent if not explicitly provided
-    const effectiveTracingPolicy = options.tracingPolicy ?? options.parent?.tracingPolicy;
-    this.isInternal = isSpanInternal(this.type, effectiveTracingPolicy?.internal);
-    // Store tracingPolicy for propagation to child spans
-    this.tracingPolicy = effectiveTracingPolicy;
+    this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
+    this.tracingPolicy = options.tracingPolicy;
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
