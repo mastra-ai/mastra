@@ -1722,8 +1722,11 @@
       "apiKeyHeader": "Authorization",
       "name": "Vivgrid",
       "models": [
+        "deepseek-v3.2",
         "gemini-3-flash-preview",
         "gemini-3-pro-preview",
+        "glm-5",
+        "gpt-5-mini",
         "gpt-5.1-codex",
         "gpt-5.1-codex-max",
         "gpt-5.2-codex"
@@ -1806,7 +1809,6 @@
         "claude-opus-4-5",
         "claude-opus-4-6",
         "claude-sonnet-4-5",
-        "deepseek-r1",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
         "gemini-3-flash-preview",
@@ -1817,11 +1819,7 @@
         "gpt-5-nano",
         "gpt-5.2",
         "gpt-oss-120b",
-        "gpt-oss-20b",
-        "kimi-k2-thinking",
-        "kimi-k2.5",
-        "zai-glm-4.7",
-        "zai-glm-4.7-flash"
+        "gpt-oss-20b"
       ],
       "docUrl": "https://docs.firmware.ai",
       "gateway": "models.dev"
@@ -2792,7 +2790,8 @@
         "zai-org/GLM-4.6V",
         "zai-org/GLM-4.7-FP8",
         "zai-org/GLM-4.7-Flash",
-        "zai-org/GLM-4.7-TEE"
+        "zai-org/GLM-4.7-TEE",
+        "zai-org/GLM-5-TEE"
       ],
       "docUrl": "https://llm.chutes.ai/v1/models",
       "gateway": "models.dev"
@@ -4191,8 +4190,11 @@
       "gemini-live-2.5-flash-preview-native-audio"
     ],
     "vivgrid": [
+      "deepseek-v3.2",
       "gemini-3-flash-preview",
       "gemini-3-pro-preview",
+      "glm-5",
+      "gpt-5-mini",
       "gpt-5.1-codex",
       "gpt-5.1-codex-max",
       "gpt-5.2-codex"
@@ -4233,7 +4235,6 @@
       "claude-opus-4-5",
       "claude-opus-4-6",
       "claude-sonnet-4-5",
-      "deepseek-r1",
       "gemini-2.5-flash",
       "gemini-2.5-pro",
       "gemini-3-flash-preview",
@@ -4244,11 +4245,7 @@
       "gpt-5-nano",
       "gpt-5.2",
       "gpt-oss-120b",
-      "gpt-oss-20b",
-      "kimi-k2-thinking",
-      "kimi-k2.5",
-      "zai-glm-4.7",
-      "zai-glm-4.7-flash"
+      "gpt-oss-20b"
     ],
     "ovhcloud": [
       "deepseek-r1-distill-llama-70b",
@@ -5039,7 +5036,8 @@
       "zai-org/GLM-4.6V",
       "zai-org/GLM-4.7-FP8",
       "zai-org/GLM-4.7-Flash",
-      "zai-org/GLM-4.7-TEE"
+      "zai-org/GLM-4.7-TEE",
+      "zai-org/GLM-5-TEE"
     ],
     "netlify": [
       "anthropic/claude-3-5-haiku-20241022",
