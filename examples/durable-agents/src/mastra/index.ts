@@ -15,6 +15,7 @@ import { serve as inngestServe } from '@mastra/inngest';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { RedisServerCache } from '@mastra/redis';
+import Redis from 'ioredis';
 
 import { inngest } from './workflows/inngest';
 import {
@@ -30,7 +31,7 @@ const storage = new LibSQLStore({
 });
 
 // Redis cache for resumable streams - events persist across reconnections
-const cache = new RedisServerCache({ url: 'redis://localhost:6379' });
+const cache = new RedisServerCache({ client: new Redis('redis://localhost:6379') });
 
 // EventEmitter pubsub for real-time delivery (process-local)
 const pubsub = new EventEmitterPubSub();

@@ -145,6 +145,8 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
 export interface InngestAgentStreamResult<OUTPUT = undefined> {
   /** The streaming output */
   output: MastraModelOutput<OUTPUT>;
+  /** The full stream - delegates to output.fullStream for server compatibility */
+  readonly fullStream: ReadableStream<any>;
   /** The unique run ID */
   runId: string;
   /** Thread ID if using memory */
@@ -535,6 +537,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       return {
         output,
+        get fullStream() {
+          return output.fullStream as ReadableStream<any>;
+        },
         runId,
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
@@ -584,6 +589,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
       return {
         output,
+        get fullStream() {
+          return output.fullStream as ReadableStream<any>;
+        },
         runId,
         cleanup: streamCleanup,
       };
