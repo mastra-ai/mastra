@@ -64,17 +64,13 @@
   },
   "peerDependencies": {
     "@mariozechner/pi-agent-core": "*",
-    "@mariozechner/pi-coding-agent": "*",
-    "@mastra/libsql": "workspace:*"
+    "@mariozechner/pi-coding-agent": "*"
   },
   "peerDependenciesMeta": {
     "@mariozechner/pi-agent-core": {
       "optional": true
     },
     "@mariozechner/pi-coding-agent": {
-      "optional": true
-    },
-    "@mastra/libsql": {
       "optional": true
     }
   },

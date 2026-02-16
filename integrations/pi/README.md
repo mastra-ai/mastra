@@ -9,7 +9,7 @@ Observational Memory compresses long conversation history into structured observ
 | Package | Integration |
 | --- | --- |
 | `@mariozechner/pi-agent-core` | `createMastraOM()` — plugs into `Agent({ transformContext })` |
-| `@mariozechner/pi-coding-agent` | `mastraOMExtension` — full extension with lifecycle hooks and diagnostic tools |
+| `@mariozechner/pi-coding-agent` | `createMastraOMExtension()` — full extension with lifecycle hooks and diagnostic tools |
 
 ## Installation
 
@@ -62,14 +62,14 @@ const om = createMastraOM({
 
 // 3. Wire into the Pi Agent
 const sessionId = 'session-1';
-await om.initSession(sessionId);
+await om.initSession({ sessionId });
 
 const agent = new Agent({
   initialState: {
-    systemPrompt: await om.wrapSystemPrompt('You are a helpful assistant.', sessionId),
+    systemPrompt: await om.wrapSystemPrompt({ basePrompt: 'You are a helpful assistant.', sessionId }),
     model: getModel('anthropic', 'claude-sonnet-4-20250514'),
   },
-  transformContext: om.createTransformContext(sessionId),
+  transformContext: om.createTransformContext({ sessionId }),
 });
 
 await agent.prompt('Hello!');
@@ -107,12 +107,12 @@ const om = createMastraOM({ storage, model: 'google/gemini-2.5-flash' });
 
 | Method | Description |
 | --- | --- |
-| `createTransformContext(sessionId, hooks?)` | Returns a `transformContext` function for `Agent` |
-| `wrapSystemPrompt(basePrompt, sessionId)` | Appends observation context to a system prompt |
-| `getSystemPromptBlock(sessionId)` | Returns just the observations block |
-| `getStatus(sessionId, messages?)` | Formatted diagnostic string |
-| `getObservations(sessionId)` | Raw observation text |
-| `initSession(sessionId)` | Eagerly create the OM record |
+| `createTransformContext({ sessionId, hooks? })` | Returns a `transformContext` function for `Agent` |
+| `wrapSystemPrompt({ basePrompt, sessionId })` | Appends observation context to a system prompt |
+| `getSystemPromptBlock({ sessionId })` | Returns just the observations block |
+| `getStatus({ sessionId, messages? })` | Formatted diagnostic string |
+| `getObservations({ sessionId })` | Raw observation text |
+| `initSession({ sessionId })` | Eagerly create the OM record |
 
 ## Usage: pi-coding-agent
 
@@ -120,11 +120,17 @@ The extension hooks into the coding agent's lifecycle automatically. Create a fi
 
 ```ts
 // .pi/extensions/mastra-om.ts
-import { mastraOMExtension } from '@mastra/pi/extension';
-export default mastraOMExtension;
+import { createMastraOMExtension } from '@mastra/pi/extension';
+import { LibSQLStore } from '@mastra/libsql';
+
+const store = new LibSQLStore({ url: 'file:.pi/memory/observations.db' });
+await store.init();
+const storage = await store.getStore('memory');
+
+export default createMastraOMExtension({ storage: storage! });
 ```
 
-That's it. The extension will:
+The extension will:
 
 - **Initialize** OM records on `session_start`
 - **Observe** conversation on each `context` event, filtering out already-observed messages
@@ -143,36 +149,31 @@ Create `.pi/mastra.json` in your project root:
   },
   "reflection": {
     "observationTokens": 90000
-  },
-  "storagePath": ".pi/memory/observations.db"
+  }
 }
 ```
 
 All fields are optional — defaults match the table above.
 
-### Custom config overrides
+### Config overrides
 
 ```ts
 // .pi/extensions/mastra-om.ts
 import { createMastraOMExtension } from '@mastra/pi/extension';
+import { LibSQLStore } from '@mastra/libsql';
+
+const store = new LibSQLStore({ url: 'file:.pi/memory/observations.db' });
+await store.init();
+const storage = await store.getStore('memory');
 
 export default createMastraOMExtension({
-  model: 'anthropic/claude-sonnet-4-20250514',
-  observation: { messageTokens: 50_000 },
+  storage: storage!,
+  config: {
+    model: 'anthropic/claude-sonnet-4-20250514',
+    observation: { messageTokens: 50_000 },
+  },
 });
 ```
-
-### Convenience: `createMastraOMFromConfig`
-
-If you want the file-based config + LibSQLStore convenience path outside the extension system:
-
-```ts
-import { createMastraOMFromConfig } from '@mastra/pi';
-
-const om = await createMastraOMFromConfig({ cwd: process.cwd() });
-```
-
-This reads `.pi/mastra.json` and creates a LibSQLStore automatically. Requires `@mastra/libsql` to be installed.
 
 ## How it works
 

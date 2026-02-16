@@ -10,9 +10,6 @@ export default defineConfig({
   treeshake: {
     preset: 'smallest',
   },
-  // @mastra/libsql is dynamically imported in the integration module —
-  // mark external so tsup leaves the import() as-is for consumers to resolve.
-  external: ['@mastra/libsql'],
   sourcemap: true,
   onSuccess: async () => {
     await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5']));

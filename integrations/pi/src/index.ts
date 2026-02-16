@@ -14,20 +14,20 @@
  *    coding agent's lifecycle events.
  *
  * Storage is fully pluggable — pass any Mastra `MemoryStorage` adapter
- * (LibSQL, Postgres, in-memory, etc.) or use the convenience helpers to
- * create one from a config file or a LibSQL path.
+ * (LibSQL, Postgres, in-memory, etc.).
  *
- * @example Minimal — bring your own storage
+ * @example
  * ```ts
  * import { Agent } from '@mariozechner/pi-agent-core';
- * import { createMastraOM } from '@mastra/pi';
+ * import { createMastraOM, loadConfig } from '@mastra/pi';
  * import { LibSQLStore } from '@mastra/libsql';
  *
- * const store = new LibSQLStore({ url: 'file:memory.db' });
+ * const config = await loadConfig(process.cwd());
+ * const store = new LibSQLStore({ url: `file:${config.storagePath ?? '.pi/memory/observations.db'}` });
  * await store.init();
  * const storage = await store.getStore('memory');
  *
- * const om = createMastraOM({ storage });
+ * const om = createMastraOM({ storage, ...config });
  * const sessionId = 'session-1';
  *
  * const agent = new Agent({
@@ -37,13 +37,6 @@
  *   },
  *   transformContext: om.createTransformContext({ sessionId }),
  * });
- * ```
- *
- * @example From config file (.pi/mastra.json)
- * ```ts
- * import { createMastraOMFromConfig } from '@mastra/pi';
- *
- * const om = await createMastraOMFromConfig({ cwd: process.cwd() });
  * ```
  */
 
@@ -59,7 +52,6 @@ import type {
 } from '@mastra/memory/integration';
 import {
   createOMIntegration,
-  createOMFromConfig,
   loadOMConfig,
 } from '@mastra/memory/integration';
 
@@ -82,7 +74,6 @@ export {
   buildObservationBlock,
   formatOMStatus,
   createOMIntegration,
-  createOMFromConfig,
   loadOMConfig,
 } from '@mastra/memory/integration';
 
@@ -99,7 +90,6 @@ export {
 export interface MastraOMConfig extends OMFileConfig {}
 
 const CONFIG_FILE = '.pi/mastra.json';
-const DEFAULT_STORAGE_PATH = '.pi/memory/observations.db';
 
 /**
  * Load OM config from `.pi/mastra.json`.
@@ -301,45 +291,3 @@ export function createMastraOM(options: CreateMastraOMOptions): MastraOMIntegrat
   };
 }
 
-// ---------------------------------------------------------------------------
-// Convenience: File-based config + LibSQLStore
-// ---------------------------------------------------------------------------
-
-export interface CreateMastraOMFromConfigOptions {
-  /** Working directory for config file and default storage path. @default process.cwd() */
-  cwd?: string;
-  /** Override config instead of loading from disk. */
-  config?: MastraOMConfig;
-}
-
-/**
- * Convenience wrapper that reads `.pi/mastra.json` and creates a LibSQLStore.
- *
- * This is the file-system-aware path intended for CLI tools and coding agents.
- * For server deployments or custom storage, use `createMastraOM` directly with
- * your own `MemoryStorage` adapter.
- *
- * @example
- * ```ts
- * import { createMastraOMFromConfig } from '@mastra/pi';
- *
- * const om = await createMastraOMFromConfig({ cwd: process.cwd() });
- * ```
- */
-export async function createMastraOMFromConfig(
-  options: CreateMastraOMFromConfigOptions = {},
-): Promise<MastraOMIntegration> {
-  const cwd = options.cwd ?? process.cwd();
-
-  const base = await createOMFromConfig({
-    cwd,
-    configPath: CONFIG_FILE,
-    defaultStoragePath: DEFAULT_STORAGE_PATH,
-    config: options.config,
-  });
-
-  return {
-    ...base,
-    createTransformContext: params => buildTransformContext(base, params),
-  };
-}

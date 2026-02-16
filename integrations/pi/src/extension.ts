@@ -10,28 +10,27 @@
  * - Registers `memory_status` and `memory_observations` diagnostic tools
  * - Eagerly initializes the OM record on `session_start`
  *
+ * Storage must be provided explicitly — bring any Mastra storage adapter.
+ *
  * @example .pi/extensions/mastra-om.ts
  * ```ts
- * import { mastraOMExtension } from '@mastra/pi/extension';
- * export default mastraOMExtension;
- * ```
- *
- * @example Programmatic registration with overrides
- * ```ts
  * import { createMastraOMExtension } from '@mastra/pi/extension';
+ * import { LibSQLStore } from '@mastra/libsql';
  *
- * export default createMastraOMExtension({
- *   model: 'anthropic/claude-sonnet-4-20250514',
- *   observation: { messageTokens: 50_000 },
- * });
+ * const store = new LibSQLStore({ url: 'file:.pi/memory/observations.db' });
+ * await store.init();
+ * const storage = await store.getStore('memory');
+ *
+ * export default createMastraOMExtension({ storage });
  * ```
  */
 
 import type { ExtensionAPI, ExtensionFactory } from '@mariozechner/pi-coding-agent';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { Type } from '@sinclair/typebox';
 
 import type { MastraOMConfig, MastraOMIntegration, PiMessage } from './index.js';
-import { loadConfig, convertMessages, createMastraOMFromConfig } from './index.js';
+import { loadConfig, convertMessages, createMastraOM } from './index.js';
 
 export type { MastraOMConfig };
 
@@ -170,61 +169,74 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
 // ---------------------------------------------------------------------------
 
 /**
- * Default extension factory for pi-coding-agent.
- *
- * Loads config from `.pi/mastra.json`, creates a LibSQLStore, and registers
- * all OM hooks and tools. This is the file-system-aware path — appropriate
- * for the coding agent which always has a `cwd`.
- *
- * @example .pi/extensions/mastra-om.ts
- * ```ts
- * import { mastraOMExtension } from '@mastra/pi/extension';
- * export default mastraOMExtension;
- * ```
+ * Options for `createMastraOMExtension`.
  */
-export const mastraOMExtension: ExtensionFactory = async (api: ExtensionAPI) => {
-  const integration = await createMastraOMFromConfig({ cwd: process.cwd() });
-  registerExtension(api, integration);
-};
+export interface CreateMastraOMExtensionOptions {
+  /**
+   * Storage adapter for persisting observations.
+   *
+   * Bring any Mastra storage provider — LibSQL, Postgres, etc.
+   */
+  storage: MemoryStorage;
 
-/**
- * Create an extension factory with custom config overrides.
- *
- * Shallow-merges disk config (`.pi/mastra.json`) with provided overrides —
- * override values take precedence. Nested objects like `observation` and
- * `reflection` are replaced entirely, not deep-merged. If no disk config
- * exists, the overrides are used as-is.
- *
- * @example
- * ```ts
- * import { createMastraOMExtension } from '@mastra/pi/extension';
- *
- * export default createMastraOMExtension({
- *   model: 'anthropic/claude-sonnet-4-20250514',
- *   observation: { messageTokens: 50_000 },
- * });
- * ```
- */
-export function createMastraOMExtension(overrideConfig?: MastraOMConfig): ExtensionFactory {
-  return async (api: ExtensionAPI) => {
-    const cwd = process.cwd();
-
-    let config: MastraOMConfig | undefined;
-    if (overrideConfig) {
-      try {
-        const diskConfig = await loadConfig(cwd);
-        config = { ...diskConfig, ...overrideConfig };
-      } catch {
-        config = overrideConfig;
-      }
-    }
-
-    const integration = await createMastraOMFromConfig({ cwd, config });
-    registerExtension(api, integration);
-  };
+  /**
+   * Override config instead of (or merged with) loading from disk.
+   * When provided alongside `.pi/mastra.json`, values are shallow-merged
+   * with overrides taking precedence.
+   */
+  config?: MastraOMConfig;
 }
 
 /**
- * Convenience default export for direct use in `.pi/extensions/` files.
+ * Create an extension factory for pi-coding-agent with explicit storage.
+ *
+ * Loads config from `.pi/mastra.json` (if present), merges with any
+ * provided overrides, and registers all OM hooks and tools.
+ *
+ * @example .pi/extensions/mastra-om.ts
+ * ```ts
+ * import { createMastraOMExtension } from '@mastra/pi/extension';
+ * import { LibSQLStore } from '@mastra/libsql';
+ *
+ * const store = new LibSQLStore({ url: 'file:.pi/memory/observations.db' });
+ * await store.init();
+ * const storage = await store.getStore('memory');
+ *
+ * export default createMastraOMExtension({ storage });
+ * ```
+ *
+ * @example With config overrides
+ * ```ts
+ * export default createMastraOMExtension({
+ *   storage,
+ *   config: {
+ *     model: 'anthropic/claude-sonnet-4-20250514',
+ *     observation: { messageTokens: 50_000 },
+ *   },
+ * });
+ * ```
  */
-export default mastraOMExtension;
+export function createMastraOMExtension(options: CreateMastraOMExtensionOptions): ExtensionFactory {
+  return async (api: ExtensionAPI) => {
+    const cwd = process.cwd();
+
+    let config: MastraOMConfig;
+    try {
+      const diskConfig = await loadConfig(cwd);
+      config = options.config ? { ...diskConfig, ...options.config } : diskConfig;
+    } catch {
+      config = options.config ?? {};
+    }
+
+    const integration = createMastraOM({
+      storage: options.storage,
+      model: config.model,
+      observation: config.observation,
+      reflection: config.reflection,
+      scope: config.scope,
+      shareTokenBudget: config.shareTokenBudget,
+    });
+
+    registerExtension(api, integration);
+  };
+}

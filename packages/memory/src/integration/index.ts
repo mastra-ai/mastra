@@ -3,8 +3,8 @@
  *
  * Shared integration helpers for adding Observational Memory to any agent
  * framework. Provides the core factory, system prompt construction, status
- * formatting, and a convenience LibSQL setup — so platform-specific
- * integrations only need to handle message conversion and hook wiring.
+ * formatting, and config loading — so platform-specific integrations only
+ * need to handle message conversion, hook wiring, and storage setup.
  *
  * @example Bring your own storage
  * ```ts
@@ -19,20 +19,21 @@
  * const block = await integration.getSystemPromptBlock({ sessionId: 'session-1' });
  * ```
  *
- * @example File-based config with LibSQL
+ * @example With config from disk
  * ```ts
- * import { createOMFromConfig } from '@mastra/memory/integration';
+ * import { createOMIntegration, loadOMConfig } from '@mastra/memory/integration';
+ * import { LibSQLStore } from '@mastra/libsql';
  *
- * const integration = await createOMFromConfig({
- *   cwd: process.cwd(),
- *   configPath: '.myagent/mastra.json',
- *   defaultStoragePath: '.myagent/memory/observations.db',
- * });
+ * const config = await loadOMConfig('.myagent/mastra.json');
+ * const store = new LibSQLStore({ url: `file:${config.storagePath ?? 'memory.db'}` });
+ * await store.init();
+ * const storage = await store.getStore('memory');
+ *
+ * const integration = createOMIntegration({ storage, ...config });
  * ```
  */
 
-import { readFile, mkdir } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ObservationalMemoryOptions } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -417,101 +418,4 @@ export async function loadOMConfig(configPath: string): Promise<OMFileConfig> {
       `@mastra/memory: invalid JSON in ${configPath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-}
-
-// ---------------------------------------------------------------------------
-// Convenience: File-based config + LibSQL
-// ---------------------------------------------------------------------------
-
-/**
- * Options for `createOMFromConfig`.
- */
-export interface CreateOMFromConfigOptions {
-  /** Working directory (base for relative paths). @default process.cwd() */
-  cwd?: string;
-
-  /**
-   * Path to the JSON config file, relative to `cwd`.
-   *
-   * @example '.opencode/mastra.json'
-   * @example '.pi/mastra.json'
-   */
-  configPath?: string;
-
-  /**
-   * Default storage path when not specified in the config file.
-   * Relative to `cwd`.
-   *
-   * @example '.opencode/memory/observations.db'
-   * @example '.pi/memory/observations.db'
-   * @default 'memory/observations.db'
-   */
-  defaultStoragePath?: string;
-
-  /**
-   * Override config instead of (or merged with) loading from disk.
-   *
-   * When both `configPath` and `config` are provided, values are **shallow-merged**
-   * (`{ ...diskConfig, ...config }`). Nested objects like `observation` and
-   * `reflection` are replaced entirely — provide complete sub-objects when overriding.
-   */
-  config?: OMFileConfig;
-}
-
-/**
- * Convenience wrapper that reads a JSON config file and creates a LibSQLStore.
- *
- * Dynamically imports `@mastra/libsql` so it's not required in the dependency
- * graph when consumers bring their own storage via `createOMIntegration`.
- *
- * @example
- * ```ts
- * import { createOMFromConfig } from '@mastra/memory/integration';
- *
- * const om = await createOMFromConfig({
- *   cwd: process.cwd(),
- *   configPath: '.myagent/mastra.json',
- *   defaultStoragePath: '.myagent/memory/observations.db',
- * });
- * ```
- */
-export async function createOMFromConfig(options: CreateOMFromConfigOptions = {}): Promise<OMIntegration> {
-  const { LibSQLStore } = await import('@mastra/libsql');
-
-  const cwd = options.cwd ?? process.cwd();
-
-  let config: OMFileConfig;
-  if (options.config) {
-    // If a configPath is also specified, load and merge disk config with overrides
-    if (options.configPath) {
-      const diskConfig = await loadOMConfig(join(cwd, options.configPath));
-      config = { ...diskConfig, ...options.config };
-    } else {
-      config = options.config;
-    }
-  } else if (options.configPath) {
-    config = await loadOMConfig(join(cwd, options.configPath));
-  } else {
-    config = {};
-  }
-
-  const dbRelativePath = config.storagePath ?? options.defaultStoragePath ?? 'memory/observations.db';
-  const dbAbsolutePath = join(cwd, dbRelativePath);
-  await mkdir(dirname(dbAbsolutePath), { recursive: true });
-  const storagePath = `file:${dbAbsolutePath}`;
-  const store = new LibSQLStore({ id: 'mastra-om', url: storagePath });
-  await store.init();
-  const storage = await store.getStore('memory');
-  if (!storage) {
-    throw new Error(`@mastra/memory: failed to initialize memory storage from ${storagePath}`);
-  }
-
-  return createOMIntegration({
-    storage,
-    model: config.model,
-    observation: config.observation,
-    reflection: config.reflection,
-    scope: config.scope,
-    shareTokenBudget: config.shareTokenBudget,
-  });
 }

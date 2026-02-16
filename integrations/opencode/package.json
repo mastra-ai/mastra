@@ -48,9 +48,7 @@
   },
   "dependencies": {
     "@mastra/memory": "workspace:*",
-    "@mastra/core": "workspace:*"
-  },
-  "optionalDependencies": {
+    "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*"
   },
   "peerDependencies": {

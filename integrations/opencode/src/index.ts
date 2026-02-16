@@ -19,10 +19,14 @@
  * ```
  */
 
+import { mkdir } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 import type { ObservationalMemoryOptions } from '@mastra/core/memory';
+import { LibSQLStore } from '@mastra/libsql';
+import type { OMIntegration } from '@mastra/memory/integration';
 import {
-  createOMFromConfig,
-  type OMIntegration,
+  createOMIntegration,
+  loadOMConfig,
 } from '@mastra/memory/integration';
 import type { Plugin } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin';
@@ -137,13 +141,28 @@ function convertMessages(messages: { info: Message; parts: Part[] }[], sessionId
 // ---------------------------------------------------------------------------
 
 export const MastraPlugin: Plugin = async ctx => {
-  // Initialize OM via the shared module — handles config loading + LibSQL setup
+  // Initialize storage explicitly, then load config and create integration
   let integration: OMIntegration;
   try {
-    integration = await createOMFromConfig({
-      cwd: ctx.directory,
-      configPath: CONFIG_PATH,
-      defaultStoragePath: DEFAULT_STORAGE_PATH,
+    const config = await loadOMConfig(join(ctx.directory, CONFIG_PATH));
+    const dbRelativePath = config.storagePath ?? DEFAULT_STORAGE_PATH;
+    const dbAbsolutePath = join(ctx.directory, dbRelativePath);
+    await mkdir(dirname(dbAbsolutePath), { recursive: true });
+
+    const store = new LibSQLStore({ id: 'mastra-om', url: `file:${dbAbsolutePath}` });
+    await store.init();
+    const storage = await store.getStore('memory');
+    if (!storage) {
+      throw new Error(`Failed to initialize memory storage from ${dbAbsolutePath}`);
+    }
+
+    integration = createOMIntegration({
+      storage,
+      model: config.model,
+      observation: config.observation,
+      reflection: config.reflection,
+      scope: config.scope,
+      shareTokenBudget: config.shareTokenBudget,
     });
   } catch (err) {
     void ctx.client.tui.showToast({

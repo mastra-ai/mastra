@@ -8,12 +8,15 @@
  *
  * Config is read from .pi/mastra.json (optional — defaults are sensible).
  */
-import { mastraOMExtension } from '@mastra/pi/extension';
-import type { ExtensionFactory } from '@mariozechner/pi-coding-agent';
+import { createMastraOMExtension } from '@mastra/pi/extension';
+import { LibSQLStore } from '@mastra/libsql';
 
-const extension: ExtensionFactory = async (api) => {
-    console.log('[mastra-om] Extension loaded — Observational Memory active');
-    return mastraOMExtension(api);
-};
+const store = new LibSQLStore({ url: 'file:.pi/memory/observations.db' });
+await store.init();
+const storage = await store.getStore('memory');
+
+const extension = createMastraOMExtension({ storage: storage! });
+
+console.log('[mastra-om] Extension loaded — Observational Memory active');
 
 export default extension;
