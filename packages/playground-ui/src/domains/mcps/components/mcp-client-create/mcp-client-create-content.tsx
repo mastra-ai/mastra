@@ -1,23 +1,25 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import type { StoredMCPServerConfig } from '@mastra/client-js';
 
 import { toast } from '@/lib/toast';
 
-import { useMCPClientForm } from './use-mcp-client-form';
+import { useMCPClientForm, type MCPClientFormValues } from './use-mcp-client-form';
 import { MCPClientEditLayout } from './mcp-client-edit-layout';
 import { MCPClientFormSidebar } from './mcp-client-form-sidebar';
 import { MCPClientToolPreview } from './mcp-client-tool-preview';
 
 interface MCPClientCreateContentProps {
-  onAdd: (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => void;
+  onAdd?: (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => void;
+  readOnly?: boolean;
+  initialValues?: MCPClientFormValues;
+  submitLabel?: string;
 }
 
-export function MCPClientCreateContent({ onAdd }: MCPClientCreateContentProps) {
-  const { form } = useMCPClientForm();
+export function MCPClientCreateContent({ onAdd, readOnly, initialValues, submitLabel }: MCPClientCreateContentProps) {
+  const { form } = useMCPClientForm(initialValues);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [preFilledServerId, setPreFilledServerId] = useState<string | null>(null);
 
   const serverType = useWatch({ control: form.control, name: 'serverType' });
   const url = useWatch({ control: form.control, name: 'url' });
@@ -31,10 +33,11 @@ export function MCPClientCreateContent({ onAdd }: MCPClientCreateContentProps) {
     form.setValue('serverType', 'http');
     form.setValue('url', serverUrl);
     form.setValue('serverName', serverId);
-    setPreFilledServerId(serverId);
   };
 
   const handlePublish = async () => {
+    if (!onAdd) return;
+
     const isValid = await form.trigger();
     if (!isValid) {
       toast.error('Please fill in all required fields');
@@ -87,10 +90,12 @@ export function MCPClientCreateContent({ onAdd }: MCPClientCreateContentProps) {
             isSubmitting={false}
             onPreFillFromServer={handlePreFillFromServer}
             containerRef={containerRef}
+            readOnly={readOnly}
+            submitLabel={submitLabel}
           />
         }
       >
-        <MCPClientToolPreview preFilledServerId={preFilledServerId} serverType={serverType} url={url} />
+        <MCPClientToolPreview serverType={serverType} url={url} autoConnect={readOnly} />
       </MCPClientEditLayout>
     </div>
   );

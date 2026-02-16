@@ -1,25 +1,32 @@
+import { useEffect, useRef } from 'react';
+
 import { Icon, McpServerIcon } from '@/ds/icons';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { Txt } from '@/ds/components/Txt';
 import { Button } from '@/ds/components/Button';
 import { Spinner } from '@/ds/components/Spinner';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
-import { Skeleton } from '@/ds/components/Skeleton';
 
-import { useMCPServerToolsById } from '../../hooks/use-mcp-server-tools-by-id';
 import { useTryConnectMcp } from '../../hooks/use-try-connect-mcp';
 
 interface MCPClientToolPreviewProps {
-  preFilledServerId: string | null;
   serverType: 'stdio' | 'http';
   url: string;
+  autoConnect?: boolean;
 }
 
-export function MCPClientToolPreview({ preFilledServerId, serverType, url }: MCPClientToolPreviewProps) {
-  const { data: serverTools, isLoading: isLoadingServerTools } = useMCPServerToolsById(preFilledServerId);
+export function MCPClientToolPreview({ serverType, url, autoConnect }: MCPClientToolPreviewProps) {
   const tryConnect = useTryConnectMcp();
+  const hasAutoConnected = useRef(false);
 
-  if (serverType === 'stdio' && !preFilledServerId) {
+  useEffect(() => {
+    if (autoConnect && serverType === 'http' && url.trim() && !hasAutoConnected.current) {
+      hasAutoConnected.current = true;
+      tryConnect.mutate(url);
+    }
+  }, [autoConnect, serverType, url, tryConnect]);
+
+  if (serverType === 'stdio') {
     return (
       <EmptyState>
         <Txt className="text-neutral3">Tool preview is available for HTTP servers. Stdio servers cannot be previewed.</Txt>
@@ -27,36 +34,38 @@ export function MCPClientToolPreview({ preFilledServerId, serverType, url }: MCP
     );
   }
 
-  // Pre-filled from server
-  if (preFilledServerId) {
-    if (isLoadingServerTools) {
-      return (
-        <div className="p-5 flex flex-col gap-2">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
-      );
-    }
-
-    if (!serverTools || Object.keys(serverTools).length === 0) {
-      return (
-        <EmptyState>
-          <Txt className="text-neutral3">No tools found for this server.</Txt>
-        </EmptyState>
-      );
-    }
-
-    return <ToolList tools={Object.entries(serverTools).map(([id, tool]) => ({ name: id, description: tool.description }))} />;
-  }
-
-  // Manual URL mode
   if (!url.trim()) {
     return (
       <EmptyState>
         <Txt className="text-neutral3">Enter a URL and click "Try Connect" to preview available tools.</Txt>
       </EmptyState>
+    );
+  }
+
+  if (autoConnect) {
+    return (
+      <div className="p-5">
+        {tryConnect.isPending && (
+          <div className="flex items-center gap-2">
+            <Spinner className="h-3 w-3" />
+            <Txt className="text-neutral3">Connecting...</Txt>
+          </div>
+        )}
+
+        {tryConnect.isError && (
+          <Txt variant="ui-sm" className="text-accent2">
+            {tryConnect.error instanceof Error ? tryConnect.error.message : 'Connection failed'}
+          </Txt>
+        )}
+
+        {tryConnect.isSuccess && tryConnect.data.tools.length === 0 && (
+          <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
+        )}
+
+        {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
+          <ToolList tools={tryConnect.data.tools} />
+        )}
+      </div>
     );
   }
 

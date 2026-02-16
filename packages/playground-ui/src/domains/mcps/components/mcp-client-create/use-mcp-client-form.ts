@@ -12,7 +12,7 @@ export interface MCPClientFormValues {
   env: { key: string; value: string }[];
 }
 
-export const useMCPClientForm = () => {
+export const useMCPClientForm = (defaultValues?: Partial<MCPClientFormValues>) => {
   const form = useForm<MCPClientFormValues>({
     defaultValues: {
       name: '',
@@ -24,6 +24,7 @@ export const useMCPClientForm = () => {
       command: '',
       args: '',
       env: [],
+      ...defaultValues,
     },
     resolver: async values => {
       const errors: Record<string, { type: string; message: string }> = {};

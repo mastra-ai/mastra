@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 import { PlusIcon, XIcon } from 'lucide-react';
 
@@ -12,17 +12,62 @@ import { Entity, EntityContent, EntityDescription, EntityName, EntityIcon } from
 import { SideDialog } from '@/ds/components/SideDialog';
 
 import { useAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
-import { MCPClientCreateContent } from '../mcp-client-create';
+import { MCPClientCreateContent, type MCPClientFormValues } from '../mcp-client-create';
+
+function mcpClientToFormValues(mcpClient: {
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}): MCPClientFormValues {
+  const entries = Object.entries(mcpClient.servers ?? {});
+  const [serverName, config] = entries[0] ?? ['default', { type: 'http' as const }];
+
+  const serverType = (config as { type?: string }).type === 'stdio' ? ('stdio' as const) : ('http' as const);
+
+  const httpConfig = config as { url?: string; timeout?: number };
+  const stdioConfig = config as { command?: string; args?: string[]; env?: Record<string, string> };
+
+  return {
+    name: mcpClient.name,
+    description: mcpClient.description ?? '',
+    serverName,
+    serverType,
+    url: httpConfig.url ?? '',
+    timeout: httpConfig.timeout ?? 30000,
+    command: stdioConfig.command ?? '',
+    args: Array.isArray(stdioConfig.args) ? stdioConfig.args.join('\n') : '',
+    env: stdioConfig.env
+      ? Object.entries(stdioConfig.env).map(([key, value]) => ({ key, value }))
+      : [],
+  };
+}
 
 export function MCPClientList() {
   const { form, readOnly } = useAgentEditFormContext();
   const mcpClients = useWatch({ control: form.control, name: 'mcpClients' }) ?? [];
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [viewIndex, setViewIndex] = useState<number | null>(null);
+
+  const viewingClient = viewIndex !== null ? mcpClients[viewIndex] : null;
+  const isViewingPersisted = Boolean(viewingClient?.id);
+  const viewFormValues = useMemo(
+    () => (viewingClient ? mcpClientToFormValues(viewingClient) : null),
+    [viewingClient],
+  );
 
   const handleAdd = (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => {
     const current = form.getValues('mcpClients') ?? [];
     form.setValue('mcpClients', [...current, config]);
     setIsCreateOpen(false);
+  };
+
+  const handleUpdate = (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => {
+    if (viewIndex === null) return;
+    const current = form.getValues('mcpClients') ?? [];
+    const updated = [...current];
+    updated[viewIndex] = { ...updated[viewIndex], ...config };
+    form.setValue('mcpClients', updated);
+    setViewIndex(null);
   };
 
   const handleRemove = (index: number) => {
@@ -68,7 +113,11 @@ export function MCPClientList() {
             {mcpClients.map((mcpClient, index) => {
               const serverCount = Object.keys(mcpClient.servers ?? {}).length;
               return (
-                <Entity key={mcpClient.id ?? `pending-${index}`} className="items-center">
+                <Entity
+                  key={mcpClient.id ?? `pending-${index}`}
+                  className="items-center"
+                  onClick={() => setViewIndex(index)}
+                >
                   <EntityIcon>
                     <McpServerIcon />
                   </EntityIcon>
@@ -79,13 +128,15 @@ export function MCPClientList() {
                     </EntityDescription>
                   </EntityContent>
                   {!readOnly && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemove(index)}
-                    >
-                      <XIcon className="h-3 w-3" />
-                    </Button>
+                    <div onClickCapture={e => e.stopPropagation()}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemove(index)}
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </Button>
+                    </div>
                   )}
                 </Entity>
               );
@@ -104,6 +155,25 @@ export function MCPClientList() {
           <SideDialog.Heading>Create a new MCP Client</SideDialog.Heading>
         </SideDialog.Top>
         <MCPClientCreateContent onAdd={handleAdd} />
+      </SideDialog>
+
+      <SideDialog
+        isOpen={viewIndex !== null}
+        onClose={() => setViewIndex(null)}
+        dialogTitle={viewingClient?.name ?? 'MCP Client'}
+        dialogDescription={isViewingPersisted ? 'View MCP client configuration.' : 'Edit MCP client configuration.'}
+      >
+        <SideDialog.Top>
+          <SideDialog.Heading>{viewingClient?.name ?? 'MCP Client'}</SideDialog.Heading>
+        </SideDialog.Top>
+        {viewFormValues && (
+          <MCPClientCreateContent
+            readOnly={isViewingPersisted}
+            initialValues={viewFormValues}
+            onAdd={isViewingPersisted ? undefined : handleUpdate}
+            submitLabel={isViewingPersisted ? undefined : 'Update MCP Client'}
+          />
+        )}
       </SideDialog>
     </>
   );

@@ -20,9 +20,11 @@ interface MCPClientFormSidebarProps {
   isSubmitting: boolean;
   onPreFillFromServer: (serverId: string) => void;
   containerRef?: React.RefObject<HTMLElement | null>;
+  readOnly?: boolean;
+  submitLabel?: string;
 }
 
-export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillFromServer, containerRef }: MCPClientFormSidebarProps) {
+export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillFromServer, containerRef, readOnly, submitLabel = 'Create MCP Client' }: MCPClientFormSidebarProps) {
   const {
     register,
     control,
@@ -61,6 +63,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
               id="mcp-client-name"
               placeholder="My MCP Client"
               className="bg-surface3"
+              disabled={readOnly}
               {...register('name')}
               error={!!errors.name}
             />
@@ -75,22 +78,27 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
               id="mcp-client-description"
               placeholder="Describe what this MCP client connects to"
               className="bg-surface3"
+              disabled={readOnly}
               {...register('description')}
             />
           </div>
 
-          <SectionHeader title="Pre-fill from server" subtitle="Select an existing MCP server to pre-fill settings." />
+          {!readOnly && (
+            <>
+              <SectionHeader title="Pre-fill from server" subtitle="Select an existing MCP server to pre-fill settings." />
 
-          <div className="flex flex-col gap-1.5">
-            <MCPServerCombobox
-              onValueChange={onPreFillFromServer}
-              placeholder="Select a server..."
-              searchPlaceholder="Search servers..."
-              emptyText="No servers found"
-              variant="light"
-              container={containerRef}
-            />
-          </div>
+              <div className="flex flex-col gap-1.5">
+                <MCPServerCombobox
+                  onValueChange={onPreFillFromServer}
+                  placeholder="Select a server..."
+                  searchPlaceholder="Search servers..."
+                  emptyText="No servers found"
+                  variant="light"
+                  container={containerRef}
+                />
+              </div>
+            </>
+          )}
 
           <SectionHeader title="Server Configuration" subtitle="Configure the MCP server connection details." />
 
@@ -102,6 +110,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
               id="mcp-server-name"
               placeholder="default"
               className="bg-surface3"
+              disabled={readOnly}
               {...register('serverName')}
               error={!!errors.serverName}
             />
@@ -114,7 +123,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
               name="serverType"
               control={control}
               render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
+                <Select value={field.value} onValueChange={field.onChange} disabled={readOnly}>
                   <SelectTrigger className="bg-surface3">
                     <SelectValue />
                   </SelectTrigger>
@@ -137,6 +146,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
                   id="mcp-url"
                   placeholder="http://localhost:4111/api/mcp/server/mcp"
                   className="bg-surface3"
+                  disabled={readOnly}
                   {...register('url')}
                   error={!!errors.url}
                 />
@@ -152,6 +162,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
                   type="number"
                   placeholder="30000"
                   className="bg-surface3"
+                  disabled={readOnly}
                   {...register('timeout', { valueAsNumber: true })}
                 />
               </div>
@@ -168,6 +179,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
                   id="mcp-command"
                   placeholder="npx"
                   className="bg-surface3"
+                  disabled={readOnly}
                   {...register('command')}
                   error={!!errors.command}
                 />
@@ -182,6 +194,7 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
                   id="mcp-args"
                   placeholder={'-y\n@modelcontextprotocol/server'}
                   className="bg-surface3"
+                  disabled={readOnly}
                   {...register('args')}
                 />
               </div>
@@ -194,22 +207,28 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
                       <Input
                         placeholder="KEY"
                         className="bg-surface3 flex-1"
+                        disabled={readOnly}
                         {...register(`env.${index}.key`)}
                       />
                       <Input
                         placeholder="VALUE"
                         className="bg-surface3 flex-1"
+                        disabled={readOnly}
                         {...register(`env.${index}.value`)}
                       />
-                      <Button variant="ghost" size="sm" onClick={() => removeEnvVar(index)}>
-                        <XIcon className="h-3 w-3" />
-                      </Button>
+                      {!readOnly && (
+                        <Button variant="ghost" size="sm" onClick={() => removeEnvVar(index)}>
+                          <XIcon className="h-3 w-3" />
+                        </Button>
+                      )}
                     </div>
                   ))}
-                  <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit">
-                    <PlusIcon className="h-3 w-3 mr-1" />
-                    Add variable
-                  </Button>
+                  {!readOnly && (
+                    <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit">
+                      <PlusIcon className="h-3 w-3 mr-1" />
+                      Add variable
+                    </Button>
+                  )}
                 </div>
               </div>
             </>
@@ -217,23 +236,25 @@ export function MCPClientFormSidebar({ form, onPublish, isSubmitting, onPreFillF
         </div>
       </ScrollArea>
 
-      <div className="flex-shrink-0 p-4">
-        <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-          {isSubmitting ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Check />
-              </Icon>
-              Create MCP Client
-            </>
-          )}
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="flex-shrink-0 p-4">
+          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
+            {isSubmitting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Check />
+                </Icon>
+                {submitLabel}
+              </>
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

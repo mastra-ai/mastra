@@ -14,7 +14,7 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
   // Step 1: Initialize
   const initResponse = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
@@ -36,6 +36,7 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
 
   const sessionHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
   };
   if (sessionId) {
     sessionHeaders['Mcp-Session-Id'] = sessionId;
