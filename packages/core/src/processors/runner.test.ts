@@ -1810,4 +1810,201 @@ describe('ProcessorRunner', () => {
       expect(allMessages[1].role).toBe('assistant');
     });
   });
+
+  describe('Span Parent Resolution', () => {
+    it('should use findParent to resolve AGENT_RUN span for input step processor spans', async () => {
+      // Track what span methods were called
+      const spanMethodCalls: { method: string; args?: any }[] = [];
+
+      // Create a mock MODEL_GENERATION span (what modelSpanTracker returns)
+      const mockModelGenerationSpan = {
+        type: 'model_generation',
+        id: 'model-gen-span-id',
+        findParent: vi.fn((type: string) => {
+          spanMethodCalls.push({ method: 'findParent', args: type });
+          // Return a mock AGENT_RUN span
+          return mockAgentRunSpan;
+        }),
+        parent: null,
+        createChildSpan: vi.fn(() => mockProcessorSpan),
+      };
+
+      // Create a mock AGENT_RUN span (what findParent should return)
+      const mockAgentRunSpan = {
+        type: 'agent_run',
+        id: 'agent-run-span-id',
+        createChildSpan: vi.fn(() => {
+          spanMethodCalls.push({ method: 'createChildSpan' });
+          return mockProcessorSpan;
+        }),
+      };
+
+      // Create a mock processor span (what createChildSpan returns)
+      const mockProcessorSpan = {
+        type: 'processor_run',
+        id: 'processor-span-id',
+        end: vi.fn(),
+        error: vi.fn(),
+      };
+
+      const inputProcessors: Processor[] = [
+        {
+          id: 'test-processor',
+          name: 'Test Processor',
+          processInputStep: async ({ messageList }) => {
+            return messageList;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test message', 'user')], 'user');
+
+      const mockModel = {
+        modelId: 'test-model',
+        specificationVersion: 'v2',
+        provider: 'test',
+      } as any;
+
+      // Run with tracing context that has MODEL_GENERATION as currentSpan
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: mockModel,
+        steps: [],
+        tracingContext: { currentSpan: mockModelGenerationSpan as any },
+      });
+
+      // Verify findParent was called with 'agent_run' to find the correct parent
+      expect(mockModelGenerationSpan.findParent).toHaveBeenCalledWith('agent_run');
+
+      // Verify createChildSpan was called on the AGENT_RUN span, not MODEL_GENERATION
+      expect(mockAgentRunSpan.createChildSpan).toHaveBeenCalled();
+      expect(mockModelGenerationSpan.createChildSpan).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to parent span if AGENT_RUN not found', async () => {
+      const mockParentSpan = {
+        type: 'some_other_span',
+        id: 'parent-span-id',
+        createChildSpan: vi.fn(() => mockProcessorSpan),
+      };
+
+      const mockCurrentSpan = {
+        type: 'model_generation',
+        id: 'model-gen-span-id',
+        findParent: vi.fn(() => null), // AGENT_RUN not found
+        parent: mockParentSpan,
+        createChildSpan: vi.fn(() => mockProcessorSpan),
+      };
+
+      const mockProcessorSpan = {
+        type: 'processor_run',
+        id: 'processor-span-id',
+        end: vi.fn(),
+        error: vi.fn(),
+      };
+
+      const inputProcessors: Processor[] = [
+        {
+          id: 'test-processor',
+          name: 'Test Processor',
+          processInputStep: async ({ messageList }) => {
+            return messageList;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test message', 'user')], 'user');
+
+      const mockModel = {
+        modelId: 'test-model',
+        specificationVersion: 'v2',
+        provider: 'test',
+      } as any;
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: mockModel,
+        steps: [],
+        tracingContext: { currentSpan: mockCurrentSpan as any },
+      });
+
+      // Should have tried findParent first
+      expect(mockCurrentSpan.findParent).toHaveBeenCalledWith('agent_run');
+
+      // Should fall back to parent span
+      expect(mockParentSpan.createChildSpan).toHaveBeenCalled();
+    });
+
+    it('should fall back to currentSpan if no parent chain exists', async () => {
+      const mockCurrentSpan = {
+        type: 'model_generation',
+        id: 'model-gen-span-id',
+        findParent: vi.fn(() => null), // AGENT_RUN not found
+        parent: null, // No parent
+        createChildSpan: vi.fn(() => mockProcessorSpan),
+      };
+
+      const mockProcessorSpan = {
+        type: 'processor_run',
+        id: 'processor-span-id',
+        end: vi.fn(),
+        error: vi.fn(),
+      };
+
+      const inputProcessors: Processor[] = [
+        {
+          id: 'test-processor',
+          name: 'Test Processor',
+          processInputStep: async ({ messageList }) => {
+            return messageList;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors,
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('test message', 'user')], 'user');
+
+      const mockModel = {
+        modelId: 'test-model',
+        specificationVersion: 'v2',
+        provider: 'test',
+      } as any;
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: mockModel,
+        steps: [],
+        tracingContext: { currentSpan: mockCurrentSpan as any },
+      });
+
+      // Should have tried findParent first
+      expect(mockCurrentSpan.findParent).toHaveBeenCalledWith('agent_run');
+
+      // Falls back to currentSpan since no parent exists
+      expect(mockCurrentSpan.createChildSpan).toHaveBeenCalled();
+    });
+  });
 });
