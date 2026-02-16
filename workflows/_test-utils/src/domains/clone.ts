@@ -64,7 +64,7 @@ export function createCloneWorkflows(ctx: WorkflowCreatorContext) {
 
     // Create nested workflow A using cloned step
     const nestedWfA = createWorkflow({
-      id: 'nested-workflow-a',
+      id: 'clone-nested-wf-a',
       inputSchema: z.object({ startValue: z.number() }),
       outputSchema: z.object({ finalValue: z.number() }),
       options: { validateInputs: false },
@@ -76,7 +76,7 @@ export function createCloneWorkflows(ctx: WorkflowCreatorContext) {
 
     // Create nested workflow B without the other step
     const nestedWfB = createWorkflow({
-      id: 'nested-workflow-b',
+      id: 'clone-nested-wf-b',
       inputSchema: z.object({ startValue: z.number() }),
       outputSchema: z.object({ finalValue: z.number() }),
       options: { validateInputs: false },
@@ -93,14 +93,14 @@ export function createCloneWorkflows(ctx: WorkflowCreatorContext) {
       .commit();
 
     // Clone workflow A
-    const nestedWfAClone = cloneWorkflow(nestedWfA, { id: 'nested-workflow-a-clone' });
+    const nestedWfAClone = cloneWorkflow(nestedWfA, { id: 'clone-nested-wf-a-clone' });
 
     // Create main workflow that runs cloned workflows in parallel
     const lastStep = createStep({
       id: 'last-step',
       inputSchema: z.object({
-        'nested-workflow-b': z.object({ finalValue: z.number() }),
-        'nested-workflow-a-clone': z.object({ finalValue: z.number() }),
+        'clone-nested-wf-b': z.object({ finalValue: z.number() }),
+        'clone-nested-wf-a-clone': z.object({ finalValue: z.number() }),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       execute: async ctx => mockRegistry.get('clone-workflow:last')(ctx),
@@ -260,13 +260,13 @@ export function createCloneTests(ctx: WorkflowTestContext, registry?: WorkflowRe
         expect(mocks.last).toHaveBeenCalledTimes(1);
 
         // Check cloned workflow output
-        expect(result.steps['nested-workflow-a-clone']).toMatchObject({
+        expect(result.steps['clone-nested-wf-a-clone']).toMatchObject({
           status: 'success',
           output: { finalValue: 27 }, // 1 + 26
         });
 
         // Check workflow B output
-        expect(result.steps['nested-workflow-b']).toMatchObject({
+        expect(result.steps['clone-nested-wf-b']).toMatchObject({
           status: 'success',
           output: { finalValue: 1 },
         });

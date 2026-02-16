@@ -497,7 +497,7 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
     });
 
     const wfA = createWorkflow({
-      id: 'nested-workflow-a',
+      id: 'branch-nested-wf-a',
       inputSchema: startInputSchema,
       outputSchema: finalOutputSchema,
       options: { validateInputs: false },
@@ -508,7 +508,7 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
       .commit();
 
     const wfB = createWorkflow({
-      id: 'nested-workflow-b',
+      id: 'branch-nested-wf-b',
       inputSchema: startInputSchema,
       outputSchema: finalOutputSchema,
       options: { validateInputs: false },
@@ -567,8 +567,8 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
     const lastStep = createStep({
       id: 'last-step',
       inputSchema: z.object({
-        'nested-workflow-a': finalOutputSchema.optional(),
-        'nested-workflow-b': finalOutputSchema.optional(),
+        'branch-nested-wf-a': finalOutputSchema.optional(),
+        'branch-nested-wf-b': finalOutputSchema.optional(),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       execute: async (ctx: any) => mockRegistry.get('branch-nested:last')(ctx),
@@ -709,7 +709,7 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
 
       // Top-level branch takes else path (wfB), wfB's inner branch takes if path (nested-workflow-c)
       // @ts-expect-error - testing dynamic workflow result
-      expect(result.steps['nested-workflow-b'].output).toEqual({
+      expect(result.steps['branch-nested-wf-b'].output).toEqual({
         finalValue: 1,
       });
 
@@ -727,8 +727,8 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
         output: { success: true },
         status: 'success',
         payload: {
-          'nested-workflow-a': undefined,
-          'nested-workflow-b': {
+          'branch-nested-wf-a': undefined,
+          'branch-nested-wf-b': {
             finalValue: 1,
           },
         },

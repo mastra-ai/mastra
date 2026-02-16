@@ -784,7 +784,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     });
 
     const nestedWorkflow = createWorkflow({
-      id: 'nested-workflow-a',
+      id: 'sr-nested-wf-a',
       inputSchema: z.object({ startValue: z.number() }),
       outputSchema: z.object({ finalValue: z.number() }),
       options: { validateInputs: false },
@@ -805,7 +805,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
 
     workflows['nested-resume-workflow'] = {
       workflow: mainWorkflow,
-      nestedWorkflowId: 'nested-workflow-a',
+      nestedWorkflowId: 'sr-nested-wf-a',
       mocks: { beginAction, startAction, otherAction, finalAction, lastAction },
       resetMocks: () => {
         beginAction.mockClear();

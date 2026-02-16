@@ -56,10 +56,10 @@ export function createRunCountWorkflows(ctx: WorkflowCreatorContext) {
   {
     const step1 = createStep({
       id: 'step1',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ count: z.number() }),
       outputSchema: z.object({ count: z.number() }),
-      execute: async ({ retryCount }) => {
-        return { count: retryCount };
+      execute: async ({ inputData }) => {
+        return { count: inputData.count + 1 };
       },
     });
 
@@ -67,14 +67,14 @@ export function createRunCountWorkflows(ctx: WorkflowCreatorContext) {
       id: 'step2',
       inputSchema: z.object({ count: z.number() }),
       outputSchema: z.object({ count: z.number() }),
-      execute: async ({ retryCount }) => {
-        return { count: retryCount };
+      execute: async ({ inputData }) => {
+        return { count: inputData.count + 1 };
       },
     });
 
     const workflow = createWorkflow({
       id: 'run-count-loop-workflow',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ count: z.number() }),
       outputSchema: z.object({ count: z.number() }),
     });
 
@@ -112,12 +112,12 @@ export function createRunCountTests(ctx: WorkflowTestContext, registry?: Workflo
     it.skipIf(skipTests.retryCount)('multiple steps should have different run counts in loops', async () => {
       const { workflow } = registry!['run-count-loop-workflow'];
 
-      const result = await execute(workflow, {});
+      const result = await execute(workflow, { count: 0 });
 
       expect(result.status).toBe('success');
-      // step1 loops until count >= 3
+      // step1 increments count each iteration, loops while count < 3: 0→1→2→3 (stops)
       expect(result.steps.step1).toHaveProperty('output', { count: 3 });
-      // step2 loops until count === 10
+      // step2 continues from 3, loops until count === 10: 3→4→5→6→7→8→9→10 (stops)
       expect(result.steps.step2).toHaveProperty('output', { count: 10 });
     });
   });

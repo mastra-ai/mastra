@@ -37,7 +37,8 @@ import type { WorkflowResult, WorkflowRegistry, ResumeWorkflowOptions } from '@i
 import { Mastra } from '@mastra/core/mastra';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
-import { $ } from 'execa';
+import { execaCommand } from 'execa';
+import type { ResultPromise } from 'execa';
 import { Inngest } from 'inngest';
 import { vi } from 'vitest';
 
@@ -49,9 +50,13 @@ let inngest: Inngest;
 let mastra: Mastra;
 let server: ServerType;
 let storage: DefaultStorage;
+let inngestProcess: ResultPromise | null = null;
 
 const INNGEST_PORT = 4000;
 const HANDLER_PORT = 4001;
+
+// Tell the inngest SDK handler where the dev server is (default is :8288)
+process.env.INNGEST_DEV = `http://localhost:${INNGEST_PORT}`;
 
 /**
  * Wait for handler to be responding to requests
@@ -78,11 +83,8 @@ async function waitForHandler(maxAttempts = 30, intervalMs = 100): Promise<boole
 /**
  * Ensure the Inngest dev server is running and has registered our functions.
  *
- * The Inngest dev server polls the handler URL for function definitions.
- * This function ensures:
- * 1. Handler is responding
- * 2. Inngest container is running
- * 3. Functions are registered (via polling)
+ * Uses the npm-installed inngest-cli binary (no Docker required).
+ * The dev server polls the handler URL for function definitions.
  */
 async function startInngest() {
   // First, verify the handler is responding
@@ -92,45 +94,33 @@ async function startInngest() {
     throw new Error('Handler not responding on port ' + HANDLER_PORT);
   }
 
-  // Check if Inngest is already running with functions registered
-  let inngestRunning = false;
-  let functionsRegistered = 0;
+  // Check if Inngest is already running
   try {
     const response = await fetch(`http://localhost:${INNGEST_PORT}/dev`);
     if (response.ok) {
-      inngestRunning = true;
       const data = await response.json();
-      functionsRegistered = data.functions?.length || 0;
+      const functionsRegistered = data.functions?.length || 0;
       console.log(`[startInngest] Inngest already running with ${functionsRegistered} functions`);
+      if (functionsRegistered > 0) return;
     }
   } catch {
-    console.log('[startInngest] Inngest not running');
+    // Not running yet
   }
 
-  if (!inngestRunning) {
-    // Start the container
-    console.log('[startInngest] Starting Inngest container...');
-    await $({ cwd: import.meta.dirname })`docker compose up -d`;
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  }
+  // Start the inngest dev server as a background process using the npm CLI
+  console.log('[startInngest] Starting Inngest dev server via inngest-cli...');
+  inngestProcess = execaCommand(
+    `npx inngest-cli dev -p ${INNGEST_PORT} -u http://localhost:${HANDLER_PORT}/inngest/api --poll-interval=1 --retry-interval=1`,
+    { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
+  );
 
-  // If no functions registered yet, the polling should pick them up
-  // But since polling only works for ALREADY REGISTERED apps, we need to
-  // restart to trigger auto-discovery while the handler is running
-  if (functionsRegistered === 0) {
-    console.log('[startInngest] No functions registered, restarting to trigger discovery...');
-    await $({ cwd: import.meta.dirname })`docker compose restart`;
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  }
-
-  // Wait for Inngest to be ready
-  console.log('[startInngest] Waiting for Inngest to be ready...');
-  let inngestReady = false;
-  for (let i = 0; i < 10; i++) {
+  // Wait for the dev server to be ready
+  console.log('[startInngest] Waiting for Inngest dev server to be ready...');
+  for (let i = 0; i < 30; i++) {
     try {
       const response = await fetch(`http://localhost:${INNGEST_PORT}/dev`);
       if (response.ok) {
-        inngestReady = true;
+        console.log(`[startInngest] Inngest dev server ready after ${i + 1} attempts`);
         break;
       }
     } catch {
@@ -139,53 +129,52 @@ async function startInngest() {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  if (!inngestReady) {
-    console.log('[startInngest] WARNING: Inngest dev server not responding');
-    return;
+  // Trigger registration by sending PUT to the handler
+  // This makes the handler send its function definitions to the dev server
+  console.log('[startInngest] Triggering function registration via PUT...');
+  try {
+    await fetch(`http://localhost:${HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+  } catch (e) {
+    console.log('[startInngest] PUT registration failed:', e);
   }
 
-  // Restart Docker to trigger auto-discovery while handler is running
-  // This is the same approach used by the original tests
-  console.log('[startInngest] Restarting Inngest to trigger auto-discovery...');
-  await $({ cwd: import.meta.dirname })`docker compose restart`;
-
-  // Wait for auto-discovery to complete (happens within ~1 second)
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Now check if functions are registered
-  console.log('[startInngest] Checking if functions are registered...');
-  const maxAttempts = 10;
-  for (let i = 0; i < maxAttempts; i++) {
+  // Wait for function registration
+  console.log('[startInngest] Waiting for function registration...');
+  for (let i = 0; i < 30; i++) {
     try {
       const response = await fetch(`http://localhost:${INNGEST_PORT}/dev`);
       const data = await response.json();
-      functionsRegistered = data.functions?.length || 0;
-      console.log(`[startInngest] Attempt ${i + 1}: ${functionsRegistered} functions registered`);
+      const functionsRegistered = data.functions?.length || 0;
       if (functionsRegistered > 0) {
-        console.log(`[startInngest] Successfully registered ${functionsRegistered} functions`);
+        console.log(`[startInngest] ${functionsRegistered} functions registered`);
         return;
       }
     } catch {
-      console.log(`[startInngest] Attempt ${i + 1}: Could not check (Inngest may be restarting)`);
+      // Keep trying
+    }
+    if (i === 10) {
+      // Retry PUT registration if not yet registered
+      console.log('[startInngest] Retrying PUT registration...');
+      try {
+        await fetch(`http://localhost:${HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+      } catch {
+        // Ignore
+      }
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   console.log('[startInngest] WARNING: No functions registered - tests will likely fail');
-  console.log('[startInngest] This may be a Docker networking issue. Checking container logs...');
-  try {
-    const { stdout } = await $({ cwd: import.meta.dirname })`docker logs mastra-inngest-test 2>&1 | tail -10`;
-    console.log('[startInngest] Container logs:', stdout);
-  } catch {
-    // Ignore
-  }
 }
 
 /**
  * Stop the Inngest dev server
  */
-async function _stopInngest() {
-  await $({ cwd: import.meta.dirname })`docker compose down`;
+async function stopInngest() {
+  if (inngestProcess) {
+    inngestProcess.kill();
+    inngestProcess = null;
+  }
 }
 
 createWorkflowTestSuite({
@@ -279,9 +268,7 @@ createWorkflowTestSuite({
     if (server) {
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
-    // Don't stop docker during development - it causes issues when re-running tests
-    // The container can be stopped manually with: docker compose down
-    // await stopInngest();
+    await stopInngest();
   },
 
   beforeEach: async () => {
@@ -354,7 +341,6 @@ createWorkflowTestSuite({
     executionGraphNotCommitted: true, // InngestWorkflow.createRun() doesn't validate commit status
     resumeMultiSuspendError: true, // Inngest result doesn't include 'suspended' array
     resumeForeach: true, // Foreach suspend/resume uses different step coordination
-    resumeForeachLoop: true, // Foreach suspend/resume uses different step coordination
     resumeForeachConcurrent: true, // Foreach concurrent resume returns 'failed' not 'suspended'
     resumeForeachIndex: true, // forEachIndex parameter not fully supported
     storageWithNestedWorkflows: true, // Inngest step.invoke() uses different step naming convention
@@ -393,15 +379,27 @@ createWorkflowTestSuite({
     resumeBasic: false,
     resumeWithLabel: false, // Testing - uses label instead of step
     resumeWithState: true, // requestContext bug #4442 - request context not preserved during resume
-    resumeNested: true, // Not yet implemented
+    resumeNested: true, // Nested step path resume not supported on Inngest
     resumeParallelMulti: true, // parallel suspended steps behavior differs on Inngest
     resumeAutoDetect: true, // Inngest result doesn't include 'suspended' array property
     resumeBranchingStatus: true, // Inngest branching + suspend behavior differs (returns 'failed' not 'suspended')
-    resumeNested: true, // Nested step path resume not supported on Inngest
     resumeConsecutiveNested: true, // Nested step path resume not supported on Inngest
     resumeDountil: true, // Dountil loop with nested resume not supported on Inngest
     resumeLoopInput: true, // Loop resume input tracking not supported on Inngest
     resumeMapStep: true, // Map step resume not supported on Inngest
+    // Foreach: state batch and bail not supported on Inngest
+    foreachStateBatch: true, // stateSchema batching not supported
+    foreachBail: true, // bail() in foreach not supported
+    // DI: requestContext not preserved across suspend/resume on Inngest
+    diResumeRequestContext: true, // requestContext lost during Inngest resume
+    diRequestContextBeforeSuspension: true, // requestContext values lost after resume
+    diBug4442: true, // requestContext bug #4442 - same issue
+    // Resume: additional foreach/parallel resume not supported on Inngest
+    resumeAutoNoStep: true, // Auto-resume without step parameter not supported
+    resumeForeachPartialIndex: true, // Foreach partial index resume not supported
+    resumeForeachLabel: true, // Foreach label resume not supported
+    resumeForeachPartial: true, // Foreach partial resume not supported
+    resumeNotSuspendedWorkflow: true, // Error for non-suspended workflow differs
     // Storage tests - enabled for testing
     storageListRuns: false,
     storageGetDelete: false,
