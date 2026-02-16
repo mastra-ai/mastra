@@ -1,13 +1,13 @@
 ---
 title: "Reference: NetlifyDeployer | Deployer"
-description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions."
+description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions or Edge Functions."
 packages:
   - "@mastra/deployer-netlify"
 ---
 
 # NetlifyDeployer
 
-The `NetlifyDeployer` class handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server. It extends the base [`Deployer`](/reference/deployer/) class with Netlify specific functionality. It enables you to run Mastra within Netlify functions.
+The `NetlifyDeployer` class handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server. It extends the base [`Deployer`](/reference/deployer/) class with Netlify specific functionality. It enables you to run Mastra within Netlify serverless functions or edge functions.
 
 ## Installation
 
@@ -32,9 +32,30 @@ export const mastra = new Mastra({
 });
 ```
 
+## Constructor options
+
+- `target?: 'serverless' | 'edge'` — Deploy target for Netlify. Defaults to `'serverless'`.
+  - `'serverless'` — Standard [Netlify Functions](https://docs.netlify.com/functions/overview/) (Node.js runtime, 10s default timeout).
+  - `'edge'` — [Netlify Edge Functions](https://docs.netlify.com/build/edge-functions/overview/) (Deno-based runtime, runs at the edge closest to users, no hard timeout).
+
+### Edge functions example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  deployer: new NetlifyDeployer({
+    target: "edge",
+  }),
+});
+```
+
 ## Output
 
-After running `mastra build`, the deployer generates a `.netlify` folder. The build output includes all agents, tools, and workflows of your project, alongside a special `config.json` file. The `config.json` file configures the behavior of Netlify functions.
+After running `mastra build`, the deployer generates a `.netlify` folder. The build output includes all agents, tools, and workflows of your project, alongside a `config.json` file that configures the [Netlify Frameworks API](https://docs.netlify.com/build/frameworks/frameworks-api/).
+
+### Serverless output (default)
 
 ```bash
 your-project/
@@ -65,6 +86,32 @@ The `config.json` file contains:
       "from": "/*",
       "to": "/.netlify/functions/api/:splat",
       "status": 200
+    }
+  ]
+}
+```
+
+### Edge output
+
+```bash
+your-project/
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── edge-functions/
+            ├── index.mjs
+            ├── package.json
+            └── node_modules/
+```
+
+The `config.json` file contains:
+
+```json
+{
+  "edge_functions": [
+    {
+      "function": "index",
+      "path": "/*"
     }
   ]
 }
