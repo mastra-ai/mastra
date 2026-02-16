@@ -276,6 +276,7 @@ describe('Extension API registration contract', () => {
       getStatus: async () => 'error',
       getObservations: async () => undefined,
       initSession: async () => { await brokenOm.getOrCreateRecord('x'); },
+      observeAndGetCutoff: async () => null,
     };
 
     const mock = createMockExtensionAPI();

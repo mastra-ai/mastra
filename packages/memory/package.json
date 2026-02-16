@@ -30,6 +30,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./integration": {
+      "import": {
+        "types": "./dist/integration/index.d.ts",
+        "default": "./dist/integration/index.js"
+      },
+      "require": {
+        "types": "./dist/integration/index.d.ts",
+        "default": "./dist/integration/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -59,6 +69,7 @@
     "@internal/ai-v6": "workspace:*",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.89",
+    "@mastra/libsql": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

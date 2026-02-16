@@ -72,42 +72,31 @@ export function registerExtension(api: ExtensionAPI, integration: MastraOMIntegr
 
     try {
       const mastraMessages = convertMessages(messages, sessionId);
+      const cutoff = await integration.observeAndGetCutoff(sessionId, mastraMessages, {
+        onObservationStart: () => {
+          ctx.ui.notify('Mastra: observing conversation...', 'info');
+          ctx.ui.setStatus('mastra-om', 'Observing...');
+        },
+        onObservationEnd: () => {
+          ctx.ui.notify('Mastra: observation complete', 'info');
+          ctx.ui.setStatus('mastra-om', undefined);
+        },
+        onReflectionStart: () => {
+          ctx.ui.notify('Mastra: reflecting on observations...', 'info');
+          ctx.ui.setStatus('mastra-om', 'Reflecting...');
+        },
+        onReflectionEnd: () => {
+          ctx.ui.notify('Mastra: reflection complete', 'info');
+          ctx.ui.setStatus('mastra-om', undefined);
+        },
+      });
 
-      if (mastraMessages.length > 0) {
-        await om.observe({
-          threadId: sessionId,
-          messages: mastraMessages,
-          hooks: {
-            onObservationStart: () => {
-              ctx.ui.notify('Mastra: observing conversation...', 'info');
-              ctx.ui.setStatus('mastra-om', 'Observing...');
-            },
-            onObservationEnd: () => {
-              ctx.ui.notify('Mastra: observation complete', 'info');
-              ctx.ui.setStatus('mastra-om', undefined);
-            },
-            onReflectionStart: () => {
-              ctx.ui.notify('Mastra: reflecting on observations...', 'info');
-              ctx.ui.setStatus('mastra-om', 'Reflecting...');
-            },
-            onReflectionEnd: () => {
-              ctx.ui.notify('Mastra: reflection complete', 'info');
-              ctx.ui.setStatus('mastra-om', undefined);
-            },
-          },
-        });
-      }
-
-      // Discard already-observed messages
-      const record = await om.getRecord(sessionId);
-      if (record?.lastObservedAt) {
-        const lastObservedAt = new Date(record.lastObservedAt);
+      if (cutoff) {
         const filtered = messages.filter(msg => {
           const timestamp = (msg as unknown as { timestamp?: number }).timestamp;
           if (!timestamp) return true;
-          return new Date(timestamp) > lastObservedAt;
+          return new Date(timestamp) > cutoff;
         });
-
         return { messages: filtered };
       }
     } catch (err) {
