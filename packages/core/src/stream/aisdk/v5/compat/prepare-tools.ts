@@ -131,6 +131,18 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                   // Fallback to AI SDK's asSchema for non-standard schemas
                   parameters = asSchema(sdkTool.inputSchema).jsonSchema;
                 }
+
+                // Normalize $schema field to draft-07 for consistency
+                // Some tools (created with tool() helper) use Zod v4's native generation
+                // which defaults to draft 2020-12, but we want draft-07 for LLM compatibility
+                if (
+                  parameters &&
+                  typeof parameters === 'object' &&
+                  '$schema' in parameters &&
+                  parameters.$schema !== 'http://json-schema.org/draft-07/schema#'
+                ) {
+                  parameters.$schema = 'http://json-schema.org/draft-07/schema#';
+                }
               } else {
                 // No schema provided - use empty object
                 parameters = {
