@@ -21,6 +21,7 @@ export const createSampleAgent = ({
   outputProcessors,
   memory,
   scorers,
+  requestContextSchema,
 }: Partial<StorageCreateAgentInput> = {}): StorageCreateAgentInput => ({
   id,
   name,
@@ -37,6 +38,7 @@ export const createSampleAgent = ({
   ...(outputProcessors && { outputProcessors }),
   ...(memory && { memory }),
   ...(scorers && { scorers }),
+  ...(requestContextSchema && { requestContextSchema }),
 });
 
 /**
@@ -55,20 +57,27 @@ export const createFullSampleAgent = ({
     provider: 'openai',
     name: 'gpt-4',
     temperature: 0.7,
-    maxTokens: 2000,
+    maxCompletionTokens: 2000,
   },
-  tools: ['calculator', 'webSearch'],
+  tools: { calculator: {}, webSearch: {} },
   defaultOptions: {
     maxSteps: 5,
-    temperature: 0.5,
   },
-  workflows: ['order-workflow', 'support-workflow'],
-  agents: ['helper-agent'],
-  inputProcessors: [{ type: 'sanitize', config: { stripHtml: true } }],
-  outputProcessors: [{ type: 'format', config: { style: 'markdown' } }],
-  memory: { key: 'thread-memory' },
+  workflows: { 'order-workflow': {}, 'support-workflow': {} },
+  agents: { 'helper-agent': {} },
+  inputProcessors: ['sanitize-processor'],
+  outputProcessors: ['format-processor'],
+  memory: { vector: 'default-vector' },
   scorers: {
     relevance: { sampling: { type: 'ratio', rate: 0.8 } },
+  },
+  requestContextSchema: {
+    type: 'object',
+    properties: {
+      tenantId: { type: 'string' },
+      role: { type: 'string', enum: ['admin', 'user'] },
+    },
+    required: ['tenantId'],
   },
   metadata: {
     category: 'test',

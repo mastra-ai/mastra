@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -42,6 +44,8 @@ const SNAPSHOT_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'mcpClients',
+  'requestContextSchema',
 ] as const;
 
 export class MongoDBAgentsStorage extends AgentsStorage {
@@ -117,6 +121,54 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.#migrateToolsToJsonbFormat();
+  }
+
+  /**
+   * Migrates the tools field from string[] format to object format { "tool-key": { "description": "..." } }.
+   * This handles the transition from the old format where tools were stored as an array of string keys
+   * to the new format where tools can have per-agent description overrides.
+   */
+  async #migrateToolsToJsonbFormat(): Promise<void> {
+    try {
+      const versionsCollection = await this.getCollection(TABLE_AGENT_VERSIONS);
+
+      // Find all documents where tools is an array
+      const cursor = versionsCollection.find({ tools: { $type: 'array' } });
+
+      const updates: { id: string; tools: Record<string, { description?: string }> }[] = [];
+
+      for await (const doc of cursor) {
+        if (Array.isArray(doc.tools)) {
+          const toolsObject: Record<string, { description?: string }> = {};
+
+          // Convert each tool string to an object key with empty config
+          for (const toolKey of doc.tools) {
+            if (typeof toolKey === 'string') {
+              toolsObject[toolKey] = {};
+            }
+          }
+
+          updates.push({ id: doc.id, tools: toolsObject });
+        }
+      }
+
+      // Batch update all documents
+      if (updates.length > 0) {
+        const bulkOps = updates.map(update => ({
+          updateOne: {
+            filter: { id: update.id },
+            update: { $set: { tools: update.tools } },
+          },
+        }));
+
+        await versionsCollection.bulkWrite(bulkOps);
+        this.logger?.info?.(`Migrated ${updates.length} agent version tools from array to object format`);
+      }
+    } catch (error) {
+      // Log but don't fail - this is a non-breaking migration
+      this.logger?.warn?.('Failed to migrate tools to object format:', error);
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -126,7 +178,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     await agentsCollection.deleteMany({});
   }
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getById(id: string): Promise<StorageAgentType | null> {
     try {
       const collection = await this.getCollection(TABLE_AGENTS);
       const result = await collection.findOne<any>({ id });
@@ -149,7 +201,8 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
     try {
       const collection = await this.getCollection(TABLE_AGENTS);
 
@@ -184,7 +237,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
-      const versionId = crypto.randomUUID();
+      const versionId = randomUUID();
       await this.createVersion({
         id: versionId,
         agentId: agent.id,
@@ -194,11 +247,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         changeMessage: 'Initial version',
       });
 
-      // Set the active version and mark as published
-      newAgent.activeVersionId = versionId;
-      newAgent.status = 'published';
-      await collection.updateOne({ id: agent.id }, { $set: { activeVersionId: versionId, status: 'published' } });
-
+      // Return the thin agent record (activeVersionId remains undefined, status remains 'draft')
       return newAgent;
     } catch (error) {
       if (error instanceof MastraError) {
@@ -216,7 +265,8 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
     try {
       const collection = await this.getCollection(TABLE_AGENTS);
 
@@ -235,17 +285,68 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updatedAt: new Date(),
       };
 
-      // Only handle metadata-level fields on the thin agent record
-      if (updates.authorId !== undefined) updateDoc.authorId = updates.authorId;
-      if (updates.activeVersionId !== undefined) {
-        updateDoc.activeVersionId = updates.activeVersionId;
-        updateDoc.status = 'published';
+      // Separate metadata-level fields from config fields
+      const metadataFields = {
+        authorId: updates.authorId,
+        activeVersionId: updates.activeVersionId,
+        metadata: updates.metadata,
+      };
+
+      // Extract config fields (anything that's part of StorageAgentSnapshotType)
+      const configFields: Record<string, any> = {};
+      for (const field of SNAPSHOT_FIELDS) {
+        if ((updates as any)[field] !== undefined) {
+          configFields[field] = (updates as any)[field];
+        }
       }
 
-      // Merge metadata if provided
-      if (updates.metadata !== undefined) {
+      // If we have config updates, create a new version
+      if (Object.keys(configFields).length > 0) {
+        // Get the latest version number
+        const latestVersion = await this.getLatestVersion(id);
+        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+        // If we have a latest version, start from its config, otherwise error
+        if (!latestVersion) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_AGENT', 'NO_VERSION'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Cannot update config fields for agent ${id} - no versions exist`,
+            details: { id },
+          });
+        }
+
+        // Convert null values to undefined (null means "remove this field")
+        const sanitizedConfigFields = Object.fromEntries(
+          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
+        );
+
+        // Create new version with the config updates
+        const versionInput: CreateVersionInput = {
+          id: randomUUID(),
+          agentId: id,
+          versionNumber: nextVersionNumber,
+          ...this.extractSnapshotFields(latestVersion), // Start from latest version
+          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
+          changedFields: Object.keys(configFields),
+          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
+        } as CreateVersionInput;
+
+        await this.createVersion(versionInput);
+      }
+
+      // Handle metadata-level updates (these go to the agent record)
+      if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
+      if (metadataFields.activeVersionId !== undefined) {
+        updateDoc.activeVersionId = metadataFields.activeVersionId;
+        // Do NOT automatically set status='published' when activeVersionId is updated
+      }
+
+      // Merge metadata if provided (MongoDB adapter uses merge semantics)
+      if (metadataFields.metadata !== undefined) {
         const existingMetadata = existingAgent.metadata || {};
-        updateDoc.metadata = { ...existingMetadata, ...updates.metadata };
+        updateDoc.metadata = { ...existingMetadata, ...metadataFields.metadata };
       }
 
       await collection.updateOne({ id }, { $set: updateDoc });
@@ -277,10 +378,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       // Delete all versions for this agent first
-      await this.deleteVersionsByAgentId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the agent
       const collection = await this.getCollection(TABLE_AGENTS);
@@ -299,7 +400,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     try {
       const { page = 0, perPage: perPageInput, orderBy } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -603,7 +704,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     }
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+  async deleteVersionsByParentId(agentId: string): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_AGENT_VERSIONS);
       await collection.deleteMany({ agentId });
@@ -640,6 +741,19 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   // ==========================================================================
   // Private Helper Methods
   // ==========================================================================
+
+  /**
+   * Extracts just the snapshot config fields from a version.
+   */
+  private extractSnapshotFields(version: AgentVersion): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const field of SNAPSHOT_FIELDS) {
+      if ((version as any)[field] !== undefined) {
+        result[field] = (version as any)[field];
+      }
+    }
+    return result;
+  }
 
   /**
    * Transforms a raw MongoDB version document into an AgentVersion.

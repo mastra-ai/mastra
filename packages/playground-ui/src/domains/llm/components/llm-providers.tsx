@@ -5,7 +5,7 @@ import { Info } from 'lucide-react';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { ProviderLogo } from './provider-logo';
-import { cleanProviderId } from '../utils';
+import { cleanProviderId, findProviderById } from '../utils';
 
 export interface LLMProvidersProps {
   value: string;
@@ -73,7 +73,10 @@ export const LLMProviders = ({
     );
   }
 
-  const currentModelProvider = cleanProviderId(value);
+  // Find the matching provider, handling gateway prefix fallback
+  // (e.g., value='custom' should match provider with id='acme/custom')
+  const matchedProvider = findProviderById(providers, value);
+  const currentModelProvider = matchedProvider?.id || cleanProviderId(value);
 
   return (
     <Combobox

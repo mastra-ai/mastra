@@ -2,6 +2,7 @@ import {
   // Agent route objects
   LIST_AGENTS_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
+  CLONE_AGENT_ROUTE,
   GENERATE_AGENT_ROUTE,
   GENERATE_AGENT_VNEXT_ROUTE,
   STREAM_GENERATE_ROUTE,
@@ -44,6 +45,7 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   LIST_AGENTS_ROUTE,
   GET_PROVIDERS_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
+  CLONE_AGENT_ROUTE,
 
   // ============================================================================
   // Voice Routes

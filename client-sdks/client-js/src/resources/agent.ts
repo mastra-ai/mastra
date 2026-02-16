@@ -30,6 +30,8 @@ import type {
   ReorderModelListParams,
   NetworkStreamParams,
   StreamParamsBaseWithoutMessages,
+  CloneAgentParams,
+  StoredAgentResponse,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString } from '../utils';
@@ -200,6 +202,22 @@ export class Agent extends BaseResource {
     return this.request(`/agents/${this.agentId}/instructions/enhance`, {
       method: 'POST',
       body: { instructions, comment },
+    });
+  }
+
+  /**
+   * Clones this agent to a new stored agent in the database
+   * @param params - Clone parameters including optional newId, newName, metadata, authorId, and requestContext
+   * @returns Promise containing the created stored agent
+   */
+  clone(params?: CloneAgentParams): Promise<StoredAgentResponse> {
+    const { requestContext, ...rest } = params || {};
+    return this.request(`/agents/${this.agentId}/clone`, {
+      method: 'POST',
+      body: {
+        ...rest,
+        requestContext: parseClientRequestContext(requestContext),
+      },
     });
   }
 
@@ -1270,9 +1288,9 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async network(
+  async network<OUTPUT>(
     messages: MessageListInput,
-    params: Omit<NetworkStreamParams, 'messages'>,
+    params: Omit<NetworkStreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1282,12 +1300,21 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const processedParams = {
+      ...params,
+      messages,
+      requestContext: parseClientRequestContext(params.requestContext),
+      structuredOutput: params.structuredOutput
+        ? {
+            ...params.structuredOutput,
+            schema: zodToJsonSchema(params.structuredOutput.schema),
+          }
+        : undefined,
+    };
+
     const response: Response = await this.request(`/agents/${this.agentId}/network`, {
       method: 'POST',
-      body: {
-        messages,
-        ...params,
-      },
+      body: processedParams,
       stream: true,
     });
 

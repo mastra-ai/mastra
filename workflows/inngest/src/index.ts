@@ -12,7 +12,7 @@ import type { ChunkType, OutputSchema, SchemaWithValidation } from '@mastra/core
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
-import type { Step, AgentStepOptions, StepParams, ToolStep } from '@mastra/core/workflows';
+import type { Step, AgentStepOptions, StepParams, ToolStep, StepMetadata } from '@mastra/core/workflows';
 import { Workflow } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Inngest } from 'inngest';
@@ -119,6 +119,7 @@ export function createStep<TStepId extends string, TStepOutput>(
     structuredOutput: { schema: OutputSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
   },
 ): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, InngestEngineType>;
 
@@ -146,7 +147,7 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
 ): Step<TId, unknown, TSchemaIn, TSchemaOut, TSuspend, TResume, InngestEngineType>;
 
 /**
@@ -262,6 +263,7 @@ function createStepFromParams<
     suspendSchema: params.suspendSchema,
     scorers: params.scorers,
     retries: params.retries,
+    metadata: params.metadata,
     execute: params.execute.bind(params),
   };
 }
@@ -271,13 +273,22 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<TStepId, any, any, TStepOutput, unknown, unknown, InngestEngineType> {
   const options = (agentOrToolOptions ?? {}) as
-    | (AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+    | (AgentStepOptions<TStepOutput> & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+        metadata?: StepMetadata;
+      })
     | undefined;
   // Determine output schema based on structuredOutput option
   const outputSchema = (options?.structuredOutput?.schema ??
     z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
-  const { retries, scorers, ...agentOptions } =
-    options ?? ({} as AgentStepOptions<TStepOutput> & { retries?: number; scorers?: DynamicArgument<MastraScorers> });
+  const { retries, scorers, metadata, ...agentOptions } =
+    options ??
+    ({} as AgentStepOptions<TStepOutput> & {
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    });
 
   return {
     id: params.name as TStepId,
@@ -288,6 +299,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     outputSchema,
     retries,
     scorers,
+    metadata,
     execute: async ({
       inputData,
       runId,
@@ -403,7 +415,9 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType> {
-  const toolOpts = agentOrToolOptions as { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
+  const toolOpts = agentOrToolOptions as
+    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
+    | undefined;
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');
   }
@@ -417,6 +431,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
     suspendSchema: params.suspendSchema,
     retries: toolOpts?.retries,
     scorers: toolOpts?.scorers,
+    metadata: toolOpts?.metadata,
     execute: async ({
       inputData,
       mastra,
@@ -666,6 +681,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
+                state: {},
               });
 
               if (result instanceof MessageList) {
@@ -745,6 +761,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
+                state: {},
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
@@ -867,6 +884,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
+                state: {},
               });
 
               if (result instanceof MessageList) {
@@ -941,6 +959,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 text,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
+                state: {},
               });
 
               if (result instanceof MessageList) {
@@ -1034,6 +1053,7 @@ export function init(inngest: Inngest) {
         resumeSchema: step.resumeSchema,
         suspendSchema: step.suspendSchema,
         stateSchema: step.stateSchema,
+        metadata: step.metadata,
         execute: step.execute,
         retries: step.retries,
         scorers: step.scorers,

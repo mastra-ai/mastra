@@ -1,0 +1,98 @@
+---
+title: "Deploy Mastra to Cloudflare | Deployment"
+description: "Learn how to deploy a Mastra application to Cloudflare"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Deploy Mastra to Cloudflare
+
+Use `@mastra/deployer-cloudflare` to deploy your Mastra server to Cloudflare Workers. The deployer bundles your code and generates a `wrangler.jsonc` file conforming to Cloudflare's [wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/), ready to deploy with no additional configuration.
+
+:::info
+
+If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+
+:::
+
+## Before you begin
+
+You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Cloudflare](https://cloudflare.com/) account.
+
+Cloudflare Workers use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+
+## Installation
+
+Add the `@mastra/deployer-cloudflare` package to your project:
+
+```bash npm2yarn
+npm install @mastra/deployer-cloudflare@latest
+```
+
+Import [`CloudflareDeployer`](/reference/deployer/cloudflare) and set it as the deployer in your Mastra configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+// highlight-next-line
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  // highlight-start
+  deployer: new CloudflareDeployer({
+    name: "your-project-name",
+    vars: {
+      NODE_ENV: "production",
+    },
+  }),
+  // highlight-end
+});
+```
+
+In order to test your Cloudflare Worker locally, also install the [`wrangler` CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/):
+
+```bash npm2yarn
+npm install -D wrangler
+```
+
+## Usage
+
+After setting up your project, push it to your remote Git provider of choice (e.g. GitHub).
+
+<Steps>
+<StepItem>
+
+Connect your repository to Cloudflare. On the "Workers & Pages" dashboard, select **Create application** and choose your Git provider in the next step. Continue with the setup process and select the repository you want to deploy.
+
+:::note
+
+Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
+
+:::
+
+</StepItem>
+<StepItem>
+
+Once you're ready, click the **Deploy** button and wait for the first deployment to complete.
+
+</StepItem>
+<StepItem>
+
+Try out your newly deployed function by going to `https://<your-project-name>.<slug>.workers.dev/api/agents`. You should get a JSON response listing all available agents.
+
+Since the [Mastra server](/docs/server/mastra-server) prefixes every API endpoint with `/api`, you have to add it to your URLs when making requests.
+
+</StepItem>
+<StepItem>
+
+You can now call your Mastra endpoints over HTTP.
+
+:::note
+
+Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+
+:::
+
+</StepItem>
+
+</Steps>

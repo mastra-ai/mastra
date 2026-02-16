@@ -37,6 +37,7 @@ const serializedStepSchema = z.object({
   suspendSchema: z.string().optional(),
   component: z.string().optional(),
   isWorkflow: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**

@@ -24,52 +24,12 @@
  * ```
  */
 
-import type { Lifecycle, ProviderStatus } from '../lifecycle';
+import type { WorkspaceFilesystem } from '../filesystem/filesystem';
+import type { MountResult } from '../filesystem/mount';
+import type { SandboxLifecycle } from '../lifecycle';
 
-// =============================================================================
-// Core Types
-// =============================================================================
-
-export interface ExecutionResult {
-  /** Whether execution completed successfully (exitCode === 0) */
-  success: boolean;
-  /** Exit code (0 = success) */
-  exitCode: number;
-  /** Standard output */
-  stdout: string;
-  /** Standard error */
-  stderr: string;
-  /** Execution time in milliseconds */
-  executionTimeMs: number;
-  /** Whether execution timed out */
-  timedOut?: boolean;
-  /** Whether execution was killed */
-  killed?: boolean;
-}
-
-export interface CommandResult extends ExecutionResult {
-  /** The command that was executed */
-  command?: string;
-  /** Arguments passed to the command */
-  args?: string[];
-}
-
-// =============================================================================
-// Execution Options
-// =============================================================================
-
-export interface ExecuteCommandOptions {
-  /** Timeout in milliseconds */
-  timeout?: number;
-  /** Environment variables */
-  env?: NodeJS.ProcessEnv;
-  /** Working directory */
-  cwd?: string;
-  /** Callback for stdout chunks (enables streaming) */
-  onStdout?: (data: string) => void;
-  /** Callback for stderr chunks (enables streaming) */
-  onStderr?: (data: string) => void;
-}
+import type { MountManager } from './mount-manager';
+import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 
 // =============================================================================
 // Sandbox Interface
@@ -84,15 +44,14 @@ export interface ExecuteCommandOptions {
  * Sandboxes provide isolated environments for running untrusted code.
  * They may have their own filesystem that's separate from the workspace FS.
  *
- * Lifecycle methods (from Lifecycle interface) are all optional:
- * - init(): One-time setup (provision templates, install deps)
+ * Lifecycle methods (from SandboxLifecycle interface) are all optional:
  * - start(): Begin operation (spin up instance)
  * - stop(): Pause operation (pause instance)
  * - destroy(): Clean up resources (terminate instance)
  * - isReady(): Check if ready for operations
  * - getInfo(): Get status and metadata
  */
-export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
+export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   /** Unique identifier for this sandbox instance */
   readonly id: string;
 
@@ -127,89 +86,43 @@ export interface WorkspaceSandbox extends Lifecycle<SandboxInfo> {
    * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-}
 
-// =============================================================================
-// Sandbox Info
-// =============================================================================
+  // ---------------------------------------------------------------------------
+  // Mounting Support (Optional)
+  // ---------------------------------------------------------------------------
 
-export interface SandboxInfo {
-  id: string;
-  name: string;
-  provider: string;
-  status: ProviderStatus;
-  /** When the sandbox was created */
-  createdAt: Date;
-  /** When the sandbox was last used */
-  lastUsedAt?: Date;
-  /** Time until auto-shutdown (if applicable) */
-  timeoutAt?: Date;
-  /** Resource info (if available) */
-  resources?: {
-    memoryMB?: number;
-    memoryUsedMB?: number;
-    cpuCores?: number;
-    cpuPercent?: number;
-    diskMB?: number;
-    diskUsedMB?: number;
-  };
-  /** Provider-specific metadata */
-  metadata?: Record<string, unknown>;
-}
+  /**
+   * Mount manager for tracking and processing filesystem mounts.
+   * Only available if the sandbox implements mount().
+   *
+   * @example
+   * ```typescript
+   * // Add pending mounts
+   * sandbox.mounts?.add({ '/data': s3fs });
+   *
+   * // Check mount entries
+   * const entries = sandbox.mounts?.entries;
+   * ```
+   */
+  readonly mounts?: MountManager;
 
-// =============================================================================
-// Errors
-// =============================================================================
+  /**
+   * Mount a filesystem at a path in the sandbox.
+   * Uses FUSE tools (s3fs, gcsfuse) to mount cloud storage.
+   *
+   * @param filesystem - The filesystem to mount
+   * @param mountPath - Path in the sandbox where filesystem should be mounted
+   * @returns Mount result with success status and mount path
+   * @throws {MountError} if mount fails
+   * @throws {MountNotSupportedError} if sandbox doesn't support mounting
+   * @throws {FilesystemNotMountableError} if filesystem cannot be mounted
+   */
+  mount?(filesystem: WorkspaceFilesystem, mountPath: string): Promise<MountResult>;
 
-export class SandboxError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly details?: Record<string, unknown>,
-  ) {
-    super(message);
-    this.name = 'SandboxError';
-  }
-}
-
-export class SandboxExecutionError extends SandboxError {
-  constructor(
-    message: string,
-    public readonly exitCode: number,
-    public readonly stdout: string,
-    public readonly stderr: string,
-  ) {
-    super(message, 'EXECUTION_FAILED', { exitCode, stdout, stderr });
-    this.name = 'SandboxExecutionError';
-  }
-}
-
-/** Sandbox operation types for timeout errors */
-export type SandboxOperation = 'command' | 'sync' | 'install';
-
-export class SandboxTimeoutError extends SandboxError {
-  constructor(
-    public readonly timeoutMs: number,
-    public readonly operation: SandboxOperation,
-  ) {
-    super(`Execution timed out after ${timeoutMs}ms`, 'TIMEOUT', { timeoutMs, operation });
-    this.name = 'SandboxTimeoutError';
-  }
-}
-
-export class SandboxNotReadyError extends SandboxError {
-  constructor(idOrStatus: string) {
-    super(`Sandbox is not ready: ${idOrStatus}`, 'NOT_READY', { id: idOrStatus });
-    this.name = 'SandboxNotReadyError';
-  }
-}
-
-export class IsolationUnavailableError extends SandboxError {
-  constructor(
-    public readonly backend: string,
-    public readonly reason: string,
-  ) {
-    super(`Isolation backend '${backend}' is not available: ${reason}`, 'ISOLATION_UNAVAILABLE', { backend, reason });
-    this.name = 'IsolationUnavailableError';
-  }
+  /**
+   * Unmount a filesystem from a path in the sandbox.
+   *
+   * @param mountPath - Path to unmount
+   */
+  unmount?(mountPath: string): Promise<void>;
 }

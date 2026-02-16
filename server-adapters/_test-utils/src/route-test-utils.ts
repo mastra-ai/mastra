@@ -44,6 +44,8 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
+  // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
+  if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
 
   // Version comparison query params (from/to are version IDs)
   // Both use the same known version ID - comparing a version to itself returns empty diffs,
@@ -231,6 +233,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+  if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context

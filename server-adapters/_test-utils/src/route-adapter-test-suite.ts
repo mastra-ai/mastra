@@ -75,6 +75,9 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/workspaces/:workspaceId/skills-sh/install',
       '/workspaces/:workspaceId/skills-sh/remove',
       '/workspaces/:workspaceId/skills-sh/update',
+      // observational memory routes require OM-enabled agent configuration
+      '/memory/observational-memory',
+      '/memory/observational-memory/buffer-status',
     ];
     const activeRoutes = SERVER_ROUTES.filter(
       r =>

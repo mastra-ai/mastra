@@ -1,4 +1,4 @@
-import type { StorageScorerConfig } from '@mastra/core/storage';
+import type { StorageAgentSnapshotType } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -39,6 +39,7 @@ const SNAPSHOT_CONFIG_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'requestContextSchema',
 ] as const;
 
 // ============================================================================
@@ -259,54 +260,48 @@ function isVersionNumberConflictError(error: unknown): boolean {
  * getLatestVersion returns the version with config fields top-level.
  */
 export interface AgentsStoreWithVersions<TAgent = any> {
-  getLatestVersion: (agentId: string) => Promise<{
-    id: string;
-    versionNumber: number;
-    name: string;
-    description?: string;
-    instructions: string;
-    model: Record<string, unknown>;
-    tools?: string[];
-    defaultOptions?: Record<string, unknown>;
-    workflows?: string[];
-    agents?: string[];
-    integrationTools?: string[];
-    inputProcessors?: Record<string, unknown>[];
-    outputProcessors?: Record<string, unknown>[];
-    memory?: Record<string, unknown>;
-    scorers?: Record<string, StorageScorerConfig>;
-    [key: string]: any;
-  } | null>;
-  createVersion: (params: {
-    id: string;
-    agentId: string;
-    versionNumber: number;
-    // Config fields are top-level (StorageAgentSnapshotType)
-    name: string;
-    description?: string;
-    instructions: string;
-    model: Record<string, unknown>;
-    tools?: string[];
-    defaultOptions?: Record<string, unknown>;
-    workflows?: string[];
-    agents?: string[];
-    integrationTools?: string[];
-    inputProcessors?: Record<string, unknown>[];
-    outputProcessors?: Record<string, unknown>[];
-    memory?: Record<string, unknown>;
-    scorers?: Record<string, StorageScorerConfig>;
-    changedFields?: string[];
-    changeMessage?: string;
-  }) => Promise<{ id: string; versionNumber: number }>;
-  updateAgent: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
+  getLatestVersion: (agentId: string) => Promise<
+    | (StorageAgentSnapshotType & {
+        id: string;
+        versionNumber: number;
+        [key: string]: any;
+      })
+    | null
+  >;
+  getVersion: (id: string) => Promise<
+    | (StorageAgentSnapshotType & {
+        id: string;
+        versionNumber: number;
+        [key: string]: any;
+      })
+    | null
+  >;
+  createVersion: (
+    params: StorageAgentSnapshotType & {
+      id: string;
+      agentId: string;
+      versionNumber: number;
+      changedFields?: string[];
+      changeMessage?: string;
+    },
+  ) => Promise<{ id: string; versionNumber: number }>;
+  update: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
   listVersions: (params: {
     agentId: string;
     page?: number;
     perPage?: number | false;
     orderBy?: { field?: 'versionNumber' | 'createdAt'; direction?: 'ASC' | 'DESC' };
   }) => Promise<{
-    versions: Array<{ id: string; versionNumber: number }>;
+    versions: Array<{
+      id: string;
+      agentId: string;
+      versionNumber: number;
+      [key: string]: any;
+    }>;
     total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
   }>;
   deleteVersion: (id: string) => Promise<void>;
 }
@@ -395,7 +390,7 @@ export async function createVersionWithRetry<TAgent>(
 export async function handleAutoVersioning<TAgent>(
   agentsStore: AgentsStoreWithVersions<TAgent>,
   agentId: string,
-  existingAgent: TAgent,
+  existingAgent: TAgent & { activeVersionId?: string },
   updatedAgent: TAgent,
   configFields?: Record<string, unknown>,
 ): Promise<{ agent: TAgent; versionCreated: boolean }> {
@@ -405,9 +400,17 @@ export async function handleAutoVersioning<TAgent>(
   }
 
   // Get the current active version to compare against
-  const latestVersion = await agentsStore.getLatestVersion(agentId);
-  const previousConfig = latestVersion
-    ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>)
+  // IMPORTANT: Use the version that activeVersionId points to, not the "latest" version
+  // Otherwise we compare against newly created versions that aren't active yet
+  const activeVersion = existingAgent.activeVersionId
+    ? await agentsStore.getVersion(existingAgent.activeVersionId)
+    : null;
+
+  // Fall back to latest version if no active version is set
+  const versionToCompare = activeVersion || (await agentsStore.getLatestVersion(agentId));
+
+  const previousConfig = versionToCompare
+    ? extractConfigFromVersion(versionToCompare as unknown as Record<string, unknown>)
     : null;
 
   // Calculate what config fields changed by comparing provided fields against previous version
@@ -420,9 +423,10 @@ export async function handleAutoVersioning<TAgent>(
 
   // Build the full snapshot config for the new version:
   // Start with the previous version's config and overlay the provided changes
+  // Convert null values to undefined (null means "remove this field")
   const fullConfig: Record<string, unknown> = previousConfig ? { ...previousConfig } : {};
   for (const [key, value] of Object.entries(configFields)) {
-    fullConfig[key] = value;
+    fullConfig[key] = value === null ? undefined : value;
   }
 
   // Create version with retry logic for race conditions
@@ -430,16 +434,22 @@ export async function handleAutoVersioning<TAgent>(
     changeMessage: 'Auto-saved after edit',
   });
 
-  // Update the agent's activeVersionId
-  const finalAgent = await agentsStore.updateAgent({
+  // Update the agent's activeVersionId to point to the new version
+  await agentsStore.update({
     id: agentId,
     activeVersionId: versionId,
   });
 
-  // Enforce retention limit
+  // Update the updatedAgent object with the new activeVersionId
+  const agentWithNewVersion = {
+    ...updatedAgent,
+    activeVersionId: versionId,
+  };
+
+  // Enforce retention limit with the new activeVersionId
   await enforceRetentionLimit(agentsStore, agentId, versionId);
 
-  return { agent: finalAgent, versionCreated: true };
+  return { agent: agentWithNewVersion, versionCreated: true };
 }
 
 // ============================================================================
@@ -473,7 +483,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -519,7 +529,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Get the current agent to find its active version
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -636,7 +646,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -650,10 +660,11 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
       }
 
-      // Update the agent's activeVersionId
-      await agentsStore.updateAgent({
+      // Update the agent's activeVersionId AND status to 'published'
+      await agentsStore.update({
         id: agentId,
         activeVersionId: versionId,
+        status: 'published',
       });
 
       return {
@@ -693,7 +704,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -711,7 +722,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       const restoredConfig = extractConfigFromVersion(versionToRestore as unknown as Record<string, unknown>);
 
       // Update the agent with the config from the version to restore
-      await agentsStore.updateAgent({
+      await agentsStore.update({
         id: agentId,
         ...restoredConfig,
       });
@@ -736,11 +747,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         },
       );
 
-      // Update the agent's activeVersionId to the new version
-      await agentsStore.updateAgent({
-        id: agentId,
-        activeVersionId: newVersionId,
-      });
+      // Do NOT auto-activate the restored version - user must explicitly activate it
 
       // Get the created version to return
       const newVersion = await agentsStore.getVersion(newVersionId);
@@ -749,8 +756,8 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Enforce retention limit - delete oldest versions if we exceed the max
-      // Use the new version ID as the active version
-      await enforceRetentionLimit(agentsStore, agentId, newVersionId);
+      // Use the agent's existing activeVersionId
+      await enforceRetentionLimit(agentsStore, agentId, agent.activeVersionId);
 
       return newVersion;
     } catch (error) {
@@ -785,7 +792,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }

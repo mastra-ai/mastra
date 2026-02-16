@@ -69,6 +69,29 @@ export const fileEntrySchema = z.object({
   name: z.string(),
   type: z.enum(['file', 'directory']),
   size: z.number().optional(),
+  mount: z
+    .object({
+      provider: z.string(),
+      icon: z.string().optional(),
+      displayName: z.string().optional(),
+      description: z.string().optional(),
+      status: z
+        .enum([
+          'pending',
+          'initializing',
+          'ready',
+          'starting',
+          'running',
+          'stopping',
+          'stopped',
+          'destroying',
+          'destroyed',
+          'error',
+        ])
+        .optional(),
+      error: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const fsReadResponseSchema = z.object({
@@ -178,6 +201,18 @@ export const workspaceInfoResponseSchema = z.object({
       readOnly: z.boolean(),
     })
     .optional(),
+  filesystem: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      provider: z.string(),
+      status: z.string().optional(),
+      error: z.string().optional(),
+      readOnly: z.boolean().optional(),
+      icon: z.string().optional(),
+      metadata: z.record(z.unknown()).optional(),
+    })
+    .optional(),
 });
 
 const workspaceItemSchema = z.object({
@@ -255,8 +290,19 @@ export const skillSchema = skillMetadataSchema.extend({
   assets: z.array(z.string()),
 });
 
+/**
+ * Source info for skills installed via skills.sh
+ * Stored in .meta.json when a skill is installed
+ */
+export const skillsShSourceSchema = z.object({
+  owner: z.string().describe('GitHub owner/org'),
+  repo: z.string().describe('GitHub repository'),
+});
+
 export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
   path: z.string().describe('Path to the skill directory'),
+  /** Source info for skills installed via skills.sh (from .meta.json) */
+  skillsShSource: skillsShSourceSchema.optional(),
 });
 
 export const listSkillsResponseSchema = z.object({
