@@ -47,7 +47,7 @@ export class MessageMerger {
 
     // Don't merge completion result message
     if (incomingMessage.content.metadata?.completionResult || latestMessage.content.metadata?.completionResult) {
-      console.dir({ incomingMessage, latestMessage, shouldMerge: false }, { depth: null });
+      // console.dir({ incomingMessage, latestMessage, shouldMerge: false }, { depth: null });
       return false;
     }
 

@@ -798,17 +798,17 @@ export class MessageList {
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
 
-    if (messageV2.content.metadata?.completionResult) {
-      console.dir({ messageV2 }, { depth: null });
-    }
+    // if (messageV2.content.metadata?.completionResult) {
+    //   console.dir({ messageV2 }, { depth: null });
+    // }
 
     const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
     const latestMessage = this.messages.at(-1);
 
-    if (latestMessage?.content.metadata?.completionResult) {
-      console.dir({ latestMessage }, { depth: null });
-    }
+    // if (latestMessage?.content.metadata?.completionResult) {
+    //   console.dir({ latestMessage }, { depth: null });
+    // }
 
     if (messageSource === `memory`) {
       for (const existingMessage of this.messages) {
@@ -830,10 +830,10 @@ export class MessageList {
     );
 
     if (shouldMerge && latestMessage) {
-      if (latestMessage.content.metadata?.completionResult || messageV2.content.metadata?.completionResult) {
-        console.log(`\n${'='.repeat(60)}`);
-        console.dir({ mergingMessages: { latestMessage, messageV2 } }, { depth: null });
-      }
+      // if (latestMessage.content.metadata?.completionResult || messageV2.content.metadata?.completionResult) {
+      //   console.log(`\n${'='.repeat(60)}`);
+      //   console.dir({ mergingMessages: { latestMessage, messageV2 } }, { depth: null });
+      // }
       // Delegate merge logic to MessageMerger
       MessageMerger.merge(latestMessage, messageV2);
 
@@ -848,13 +848,13 @@ export class MessageList {
       }
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
 
-      if (latestMessage?.content.metadata?.completionResult || messageV2.content.metadata?.completionResult) {
-        console.log(`\n${'='.repeat(60)}`);
-        console.dir(
-          { notMergingMessages: { latestMessage, messageV2, existingMessage, shouldReplace, exists } },
-          { depth: null },
-        );
-      }
+      // if (latestMessage?.content.metadata?.completionResult || messageV2.content.metadata?.completionResult) {
+      //   console.log(`\n${'='.repeat(60)}`);
+      //   console.dir(
+      //     { notMergingMessages: { latestMessage, messageV2, existingMessage, shouldReplace, exists } },
+      //     { depth: null },
+      //   );
+      // }
       if (shouldReplace && existingMessage) {
         // If the existing message is sealed (e.g., after observation), don't replace it.
         // Instead, generate a new ID for the incoming message and add it as a new message.
