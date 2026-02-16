@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
+import { MastraEditor } from '@mastra/editor';
 import { storage } from './storage';
 
 import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
@@ -17,6 +18,7 @@ export const mastra = new Mastra({
     level: 'error',
   }),
   storage,
+  editor: new MastraEditor(),
   mcpServers: {
     simpleMcpServer,
   },
@@ -58,6 +60,11 @@ export const mastra = new Mastra({
           const agentsStore = await storage.getStore('agents');
           if (agentsStore) {
             clearTasks.push(agentsStore.dangerouslyClearAll());
+          }
+
+          const scorerDefinitionsStore = await storage.getStore('scorerDefinitions');
+          if (scorerDefinitionsStore) {
+            clearTasks.push(scorerDefinitionsStore.dangerouslyClearAll());
           }
 
           await Promise.all(clearTasks);

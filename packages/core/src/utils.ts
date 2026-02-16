@@ -17,6 +17,7 @@ import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
 import type { OutputWriter } from './workflows/types';
+import type { Workspace } from './workspace/workspace';
 
 // Re-export Zod utilities for external use (isZodType is defined locally below)
 export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
@@ -291,6 +292,11 @@ export interface ToolOptions {
   workflowId?: string;
   state?: any;
   setState?: (state: any) => void;
+  /**
+   * Workspace available for tool execution. When provided, tools can access
+   * workspace.filesystem and workspace.sandbox for file operations and command execution.
+   */
+  workspace?: Workspace;
 }
 
 /**

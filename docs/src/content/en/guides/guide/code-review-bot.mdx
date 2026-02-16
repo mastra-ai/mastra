@@ -1,0 +1,216 @@
+---
+title: "Guide: Building a Code Review Bot"
+description: Build an automated code review bot that uses workspace skills to enforce coding standards and provide consistent PR feedback.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building a Code Review Bot
+
+In this guide, you'll build a code review bot that automatically reviews pull requests using workspace skills. The bot loads coding standards from skill files and provides structured feedback. You'll learn how to create a workspace with a skills directory, define an [Agent Skill](https://agentskills.io) with review instructions and reference files, and connect it to an agent that performs automated reviews.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+
+## Create the workspace
+
+In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspace/workspace-class) and [`LocalFilesystem`](/reference/workspace/local-filesystem) classes. On the `Workspace` instance, configure the `skills` option to point to a skills directory. The `skills` directory will live inside the filesystem's `basePath`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+// highlight-start
+import { resolve } from 'node:path';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-end
+
+// highlight-start
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: resolve(import.meta.dirname, '../../workspace'),
+  }),
+  skills: ['/skills'],
+});
+// highlight-end
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  workspace,
+});
+```
+
+At the root of your project, create a new folder called `workspace`. Inside that, create a `skills` folder. This is where you'll define the code standards skill in the next step.
+
+## Create the code standards skill
+
+Skills are structured directories containing a `SKILL.md` file with instructions for the agent. The code standards skill defines the review process and references a style guide.
+
+Inside `workspace/skills`, create a new folder called `code-standards`. Create a file called `SKILL.md` and add the review instructions.
+
+```markdown title="workspace/skills/code-standards/SKILL.md"
+---
+name: code-standards
+description: Automated code review standards and checks
+---
+
+# Code Review Standards
+
+Review code systematically using these steps:
+
+1. **Critical Issues**: Security vulnerabilities, memory leaks, logic bugs, missing error handling
+2. **Code Quality**: Functions over 50 lines, code duplication, confusing names, missing types
+3. **Style Guide**: Check references/style-guide.md for naming and organization
+4. **Linting**: Flag common issues like use of `var`, leftover `console.log` statements, and `debugger` statements
+
+Provide feedback in this format:
+
+**Summary**: One sentence overview
+
+**Critical Issues**: List with line numbers
+
+**Suggestions**: Improvements that would help
+
+**Positive Notes**: What the code does well
+```
+
+Inside `workspace/skills/code-standards`, create a `references` folder to hold reference materials for the skill. Author a style guide file that outlines the project's coding conventions with the file name `style-guide.md`.
+
+````markdown title="workspace/skills/code-standards/references/style-guide.md"
+# Style Guide
+
+## Naming
+
+- Variables/Functions: `camelCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Files: `kebab-case.ts`
+- Booleans: Start with `is`, `has`, `should`
+
+## Code Organization
+
+```typescript
+// 1. Imports
+import { foo } from 'bar';
+
+// 2. Constants
+const MAX_SIZE = 100;
+
+// 3. Types
+interface User { id: string; }
+
+// 4. Functions
+function doSomething() {}
+
+// 5. Exports
+export { doSomething };
+```
+
+## Error Handling
+
+Always handle errors explicitly - never silently catch.
+
+## Comments
+
+Write "why" not "what".
+````
+
+## Create the review agent
+
+Now it's time to create the code review bot agent that uses the code-standards skill. Create a new file at `src/mastra/agents/code-reviewer.ts` and define the agent:
+
+```typescript title="src/mastra/agents/code-reviewer.ts"
+import { Agent } from '@mastra/core/agent';
+
+export const codeReviewer = new Agent({
+  id: 'code-reviewer',
+  name: 'Code Review Bot',
+  instructions: `You are an automated code reviewer.
+
+When asked to review code:
+1. Activate the 'code-standards' skill
+2. Follow the review process from the skill
+3. Check against the style guide in skill references
+4. Be constructive and specific with line numbers`,
+  model: 'openai/gpt-4o',
+});
+```
+
+Define the agent by importing it inside `src/mastra/index.ts` and registering it with the `Mastra` instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { resolve } from 'node:path';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+// highlight-next-line
+import { codeReviewer } from './agents/code-reviewer';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: resolve(import.meta.dirname, '../../workspace'),
+  }),
+  skills: ['/skills'],
+});
+
+export const mastra = new Mastra({
+  workspace,
+  // highlight-next-line
+  agents: { codeReviewer },
+});
+```
+
+## Test the bot
+
+Start Mastra Studio and interact with the code review bot to see it in action.
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [localhost:4111](http://localhost:4111) and navigate to the code reviewer agent.
+
+Inside the chat input, provide a code snippet for review, such as:
+
+```text
+Review this code:
+
+function getData(id) {
+  var result = fetch('/api/data/' + id);
+  console.log(result);
+  return result;
+}
+```
+
+The bot should activate the `code-standards` skill and provide structured feedback. Since agent responses are non-deterministic, your output may vary, but you should see something similar to:
+
+```md
+**Summary**: Function has several issues with variable declaration,
+debugging statements, and missing error handling.
+
+**Critical Issues**:
+- Missing error handling for fetch (line 2)
+- No async/await for asynchronous operation (line 2)
+
+**Suggestions**:
+- Use const instead of var (line 2)
+- Remove console.log before committing (line 3)
+- Add TypeScript type for id parameter
+- Use template literals instead of concatenation
+
+**Positive Notes**:
+- Function name is clear and descriptive
+```
+
+## Next steps
+
+You can extend this bot to:
+
+- Add skills for different languages or frameworks
+- Create skills for security checks and performance reviews
+- Integrate with GitHub Actions for automatic PR reviews
+- Build a PR comment bot that leaves inline feedback
+
+Learn more:
+
+- [Agent Skills spec](https://agentskills.io)

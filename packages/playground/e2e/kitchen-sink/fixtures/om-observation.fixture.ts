@@ -31,20 +31,34 @@ export const omObservationSuccessFixture = [
       timestamp: new Date().toISOString(),
       modelId: 'gpt-4o-mini',
     },
-    // Progress update - 50% of threshold
+    // Status update - 50% of threshold
     {
-      type: 'data-om-progress',
+      type: 'data-om-status',
       data: {
-        pendingTokens: 5000,
-        messageTokens: 10000,
-        messageTokensPercent: 50,
-        observationTokens: 0,
-        observationTokensThreshold: 40000,
-        observationTokensPercent: 0,
-        willObserve: false,
+        windows: {
+          active: {
+            messages: { tokens: 5000, threshold: 10000 },
+            observations: { tokens: 0, threshold: 40000 },
+          },
+          buffered: {
+            observations: {
+              chunks: 0,
+              messageTokens: 0,
+              observationTokens: 0,
+              projectedMessageRemoval: 0,
+              status: 'idle' as const,
+            },
+            reflection: {
+              observationTokens: 0,
+              inputObservationTokens: 0,
+              status: 'idle' as const,
+            },
+          },
+        },
         recordId: RECORD_ID,
         threadId: THREAD_ID,
         stepNumber: 0,
+        generationCount: 0,
       },
     },
     {
@@ -60,20 +74,34 @@ export const omObservationSuccessFixture = [
     { type: 'text-delta', id: 'msg_om_test_001', delta: ' help' },
     { type: 'text-delta', id: 'msg_om_test_001', delta: ' you' },
     { type: 'text-delta', id: 'msg_om_test_001', delta: '.' },
-    // Progress update - 100% of threshold, will observe
+    // Status update - 100% of threshold, will observe
     {
-      type: 'data-om-progress',
+      type: 'data-om-status',
       data: {
-        pendingTokens: 10500,
-        messageTokens: 10000,
-        messageTokensPercent: 105,
-        observationTokens: 0,
-        observationTokensThreshold: 40000,
-        observationTokensPercent: 0,
-        willObserve: true,
+        windows: {
+          active: {
+            messages: { tokens: 10500, threshold: 10000 },
+            observations: { tokens: 0, threshold: 40000 },
+          },
+          buffered: {
+            observations: {
+              chunks: 0,
+              messageTokens: 0,
+              observationTokens: 0,
+              projectedMessageRemoval: 0,
+              status: 'idle' as const,
+            },
+            reflection: {
+              observationTokens: 0,
+              inputObservationTokens: 0,
+              status: 'idle' as const,
+            },
+          },
+        },
         recordId: RECORD_ID,
         threadId: THREAD_ID,
         stepNumber: 1,
+        generationCount: 0,
       },
     },
     // Observation starts
@@ -142,20 +170,34 @@ export const omObservationFailedFixture = [
     },
     { type: 'text-delta', id: 'msg_om_fail_001', delta: 'Processing' },
     { type: 'text-delta', id: 'msg_om_fail_001', delta: '...' },
-    // Progress update
+    // Status update
     {
-      type: 'data-om-progress',
+      type: 'data-om-status',
       data: {
-        pendingTokens: 10500,
-        messageTokens: 10000,
-        messageTokensPercent: 105,
-        observationTokens: 0,
-        observationTokensThreshold: 40000,
-        observationTokensPercent: 0,
-        willObserve: true,
+        windows: {
+          active: {
+            messages: { tokens: 10500, threshold: 10000 },
+            observations: { tokens: 0, threshold: 40000 },
+          },
+          buffered: {
+            observations: {
+              chunks: 0,
+              messageTokens: 0,
+              observationTokens: 0,
+              projectedMessageRemoval: 0,
+              status: 'idle' as const,
+            },
+            reflection: {
+              observationTokens: 0,
+              inputObservationTokens: 0,
+              status: 'idle' as const,
+            },
+          },
+        },
         recordId: RECORD_ID,
         threadId: THREAD_ID,
         stepNumber: 1,
+        generationCount: 0,
       },
     },
     // Observation starts
@@ -220,20 +262,34 @@ export const omReflectionFixture = [
     { type: 'text-delta', id: 'msg_om_reflect_001', delta: ' my' },
     { type: 'text-delta', id: 'msg_om_reflect_001', delta: ' response' },
     { type: 'text-delta', id: 'msg_om_reflect_001', delta: '.' },
-    // Progress update - observation threshold met
+    // Status update - observation threshold met
     {
-      type: 'data-om-progress',
+      type: 'data-om-status',
       data: {
-        pendingTokens: 10500,
-        messageTokens: 10000,
-        messageTokensPercent: 105,
-        observationTokens: 35000,
-        observationTokensThreshold: 40000,
-        observationTokensPercent: 87,
-        willObserve: true,
+        windows: {
+          active: {
+            messages: { tokens: 10500, threshold: 10000 },
+            observations: { tokens: 35000, threshold: 40000 },
+          },
+          buffered: {
+            observations: {
+              chunks: 0,
+              messageTokens: 0,
+              observationTokens: 0,
+              projectedMessageRemoval: 0,
+              status: 'idle' as const,
+            },
+            reflection: {
+              observationTokens: 0,
+              inputObservationTokens: 0,
+              status: 'idle' as const,
+            },
+          },
+        },
         recordId: RECORD_ID,
         threadId: THREAD_ID,
         stepNumber: 1,
+        generationCount: 0,
       },
     },
     // Observation starts
@@ -321,20 +377,34 @@ export const omSharedBudgetFixture = [
       timestamp: new Date().toISOString(),
       modelId: 'gpt-4o-mini',
     },
-    // Progress with shared token budget - observations are low, so message threshold is higher
+    // Status with shared token budget - observations are low, so message threshold is higher
     {
-      type: 'data-om-progress',
+      type: 'data-om-status',
       data: {
-        pendingTokens: 8000,
-        messageTokens: 45000, // Higher than base because observations are low
-        messageTokensPercent: 18,
-        observationTokens: 500,
-        observationTokensThreshold: 5000, // Lower because most budget goes to messages
-        observationTokensPercent: 10,
-        willObserve: false,
+        windows: {
+          active: {
+            messages: { tokens: 8000, threshold: 45000 },
+            observations: { tokens: 500, threshold: 5000 },
+          },
+          buffered: {
+            observations: {
+              chunks: 0,
+              messageTokens: 0,
+              observationTokens: 0,
+              projectedMessageRemoval: 0,
+              status: 'idle' as const,
+            },
+            reflection: {
+              observationTokens: 0,
+              inputObservationTokens: 0,
+              status: 'idle' as const,
+            },
+          },
+        },
         recordId: RECORD_ID,
         threadId: THREAD_ID,
         stepNumber: 0,
+        generationCount: 0,
       },
     },
     {

@@ -1,6 +1,6 @@
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Badge } from '@/ds/components/Badge';
-import { CopyIcon, Pencil } from 'lucide-react';
+import { CopyIcon, Pencil, CopyPlus } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -9,6 +9,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { Truncate } from '@/ds/components/Truncate';
 import { AgentSourceIcon } from './agent-source-icon';
 import { useIsCmsAvailable } from '@/domains/cms';
+import { useCloneAgent } from '../hooks/use-clone-agent';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
@@ -19,10 +20,18 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { handleCopy } = useCopyToClipboard({ text: agentId });
   const { isCmsAvailable } = useIsCmsAvailable();
   const { navigate } = useLinkComponent();
+  const { cloneAgent, isCloning } = useCloneAgent();
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
 
   const showStoredAgentBadge = isCmsAvailable && isStoredAgent;
+
+  const handleClone = async () => {
+    const clonedAgent = await cloneAgent(agentId);
+    if (clonedAgent?.id) {
+      navigate(`/agents/${clonedAgent.id}/chat`);
+    }
+  };
 
   return (
     <TooltipProvider>
@@ -57,6 +66,18 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               </button>
             </TooltipTrigger>
             <TooltipContent>Edit agent configuration</TooltipContent>
+          </Tooltip>
+        )}
+        {isCmsAvailable && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button onClick={handleClone} disabled={isCloning} className="h-badge-default shrink-0 ml-2">
+                <Badge icon={<CopyPlus />} variant="default">
+                  {isCloning ? 'Cloning...' : 'Clone'}
+                </Badge>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Clone agent to a new stored agent</TooltipContent>
           </Tooltip>
         )}
       </EntityHeader>

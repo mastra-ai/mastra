@@ -20,6 +20,7 @@ import { aliasHono } from '../plugins/hono-alias';
 import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
+import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
 import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
@@ -162,6 +163,7 @@ async function getInputPlugins(
         {} as Record<string, string>,
       ),
     ),
+    tsConfigPaths(),
     subpathExternalsResolver(externals),
     transpilePackagesMap.size
       ? esbuild({
