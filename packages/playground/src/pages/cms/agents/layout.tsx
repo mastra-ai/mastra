@@ -408,17 +408,16 @@ function EditFormContent({
   }, [initialValues, form]);
 
   // Load existing MCP client details when editing an agent
-  const mcpClientIdsKey = useMemo(() => {
+  const mcpClientIds = useMemo(() => {
     const dataSource = isViewingVersion ? versionData : agent;
     const mcpClientRecord = dataSource.mcpClients as Record<string, unknown> | undefined;
-    if (!mcpClientRecord) return '';
-    return Object.keys(mcpClientRecord).sort().join(',');
+    if (!mcpClientRecord) return [];
+    return Object.keys(mcpClientRecord);
   }, [agent, versionData, isViewingVersion]);
 
   useEffect(() => {
-    if (!mcpClientIdsKey) return;
+    if (mcpClientIds.length === 0) return;
 
-    const mcpClientIds = mcpClientIdsKey.split(',');
     let cancelled = false;
 
     Promise.all(mcpClientIds.map(id => client.getStoredMCPClient(id).details()))
@@ -439,7 +438,7 @@ function EditFormContent({
     return () => {
       cancelled = true;
     };
-  }, [mcpClientIdsKey, client, form]);
+  }, [mcpClientIds, client, form]);
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
