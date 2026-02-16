@@ -421,6 +421,191 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should execute nested else and if-branch
+  {
+    let startStepRef: any;
+    let otherStepRef: any;
+
+    mockRegistry.register('branch-nested:start', () =>
+      vi.fn().mockImplementation(async ({ inputData }: any) => {
+        const currentValue = inputData.startValue || 0;
+        const newValue = currentValue + 1;
+        return { newValue };
+      }),
+    );
+    mockRegistry.register('branch-nested:other', () =>
+      vi.fn().mockImplementation(async () => {
+        return { other: 26 };
+      }),
+    );
+    mockRegistry.register('branch-nested:final', () =>
+      vi.fn().mockImplementation(async ({ getStepResult }: any) => {
+        const startVal = getStepResult(startStepRef)?.newValue ?? 0;
+        const otherVal = getStepResult(otherStepRef)?.other ?? 0;
+        return { finalValue: startVal + otherVal };
+      }),
+    );
+    mockRegistry.register('branch-nested:first', () =>
+      vi.fn().mockImplementation(async () => {
+        return { success: true };
+      }),
+    );
+    mockRegistry.register('branch-nested:last', () =>
+      vi.fn().mockImplementation(async () => {
+        return { success: true };
+      }),
+    );
+
+    const startInputSchema = z.object({ startValue: z.number() });
+    const startOutputSchema = z.object({ newValue: z.number() });
+    const otherOutputSchema = z.object({ newValue: z.number(), other: z.number() });
+    const finalOutputSchema = z.object({ finalValue: z.number() });
+
+    startStepRef = createStep({
+      id: 'start',
+      inputSchema: startInputSchema,
+      outputSchema: startOutputSchema,
+      execute: async (ctx: any) => mockRegistry.get('branch-nested:start')(ctx),
+    });
+
+    otherStepRef = createStep({
+      id: 'other',
+      inputSchema: z.object({ newValue: z.number() }),
+      outputSchema: otherOutputSchema,
+      execute: async (ctx: any) => mockRegistry.get('branch-nested:other')(ctx),
+    });
+
+    const finalStepA = createStep({
+      id: 'final',
+      inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
+      outputSchema: finalOutputSchema,
+      execute: async (ctx: any) => mockRegistry.get('branch-nested:final')(ctx),
+    });
+
+    const finalStepB = createStep({
+      id: 'final',
+      inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
+      outputSchema: finalOutputSchema,
+      execute: async (ctx: any) => mockRegistry.get('branch-nested:final')(ctx),
+    });
+
+    const counterWorkflow = createWorkflow({
+      id: 'branch-nested-conditions',
+      inputSchema: startInputSchema,
+      outputSchema: z.object({ success: z.boolean() }),
+      options: { validateInputs: false },
+    });
+
+    const wfA = createWorkflow({
+      id: 'nested-workflow-a',
+      inputSchema: startInputSchema,
+      outputSchema: finalOutputSchema,
+      options: { validateInputs: false },
+    })
+      .then(startStepRef)
+      .then(otherStepRef)
+      .then(finalStepA as any)
+      .commit();
+
+    const wfB = createWorkflow({
+      id: 'nested-workflow-b',
+      inputSchema: startInputSchema,
+      outputSchema: finalOutputSchema,
+      options: { validateInputs: false },
+    })
+      .then(startStepRef)
+      .branch([
+        [
+          async () => true,
+          createWorkflow({
+            id: 'nested-workflow-c',
+            inputSchema: startOutputSchema,
+            outputSchema: otherOutputSchema,
+            options: { validateInputs: false },
+          })
+            .then(otherStepRef)
+            .commit() as any,
+        ],
+        [
+          async () => false,
+          createWorkflow({
+            id: 'nested-workflow-d',
+            inputSchema: startOutputSchema,
+            outputSchema: otherOutputSchema,
+            options: { validateInputs: false },
+          })
+            .then(otherStepRef)
+            .commit() as any,
+        ],
+      ])
+      .then(
+        createStep({
+          id: 'map-results',
+          inputSchema: z.object({
+            'nested-workflow-c': otherOutputSchema.optional(),
+            'nested-workflow-d': otherOutputSchema.optional(),
+          }),
+          outputSchema: otherOutputSchema,
+          execute: async ({ inputData }: any) => {
+            return {
+              newValue: inputData['nested-workflow-c']?.newValue ?? inputData['nested-workflow-d']?.newValue ?? 0,
+              other: inputData['nested-workflow-c']?.other ?? inputData['nested-workflow-d']?.other ?? 0,
+            };
+          },
+        }),
+      )
+      .then(finalStepB as any)
+      .commit();
+
+    const firstStep = createStep({
+      id: 'first-step',
+      inputSchema: startInputSchema,
+      outputSchema: startInputSchema,
+      execute: async (ctx: any) => mockRegistry.get('branch-nested:first')(ctx),
+    });
+
+    const lastStep = createStep({
+      id: 'last-step',
+      inputSchema: z.object({
+        'nested-workflow-a': finalOutputSchema.optional(),
+        'nested-workflow-b': finalOutputSchema.optional(),
+      }),
+      outputSchema: z.object({ success: z.boolean() }),
+      execute: async (ctx: any) => mockRegistry.get('branch-nested:last')(ctx),
+    });
+
+    counterWorkflow
+      .then(firstStep)
+      .branch([
+        [async () => false, wfA],
+        [async () => true, wfB],
+      ])
+      .then(lastStep)
+      .commit();
+
+    workflows['branch-nested-conditions'] = {
+      workflow: counterWorkflow,
+      mocks: {
+        get start() {
+          return mockRegistry.get('branch-nested:start');
+        },
+        get other() {
+          return mockRegistry.get('branch-nested:other');
+        },
+        get final() {
+          return mockRegistry.get('branch-nested:final');
+        },
+        get first() {
+          return mockRegistry.get('branch-nested:first');
+        },
+        get last() {
+          return mockRegistry.get('branch-nested:last');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -509,6 +694,47 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(result.steps.initial?.output).toEqual({ processedValue: 200, flag: true });
       // @ts-expect-error
       expect(result.steps.truePath?.output).toEqual({ final: 'processed: 200, flag: true' });
+    });
+
+    it.skipIf(skipTests.branchingNestedConditions)('should execute nested else and if-branch', async () => {
+      const { workflow, mocks, resetMocks } = registry!['branch-nested-conditions'];
+      resetMocks?.();
+      const result = await execute(workflow, { startValue: 1 });
+
+      expect(mocks.start).toHaveBeenCalledTimes(1);
+      expect(mocks.other).toHaveBeenCalledTimes(1);
+      expect(mocks.final).toHaveBeenCalledTimes(1);
+      expect(mocks.first).toHaveBeenCalledTimes(1);
+      expect(mocks.last).toHaveBeenCalledTimes(1);
+
+      // Top-level branch takes else path (wfB), wfB's inner branch takes if path (nested-workflow-c)
+      // @ts-expect-error - testing dynamic workflow result
+      expect(result.steps['nested-workflow-b'].output).toEqual({
+        finalValue: 1,
+      });
+
+      expect(result.steps['first-step']).toEqual({
+        output: { success: true },
+        status: 'success',
+        payload: {
+          startValue: 1,
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['last-step']).toEqual({
+        output: { success: true },
+        status: 'success',
+        payload: {
+          'nested-workflow-a': undefined,
+          'nested-workflow-b': {
+            finalValue: 1,
+          },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
 
     it('should pass correct data to selected branch - false path', async () => {

@@ -106,6 +106,14 @@ export type SkippableTest =
   | 'errorIdentity'
   // Schema validation throwing errors
   | 'schemaValidationThrows'
+  // Schema validation with .map() step
+  | 'schemaMapValidation'
+  // Schema validation in nested workflows
+  | 'schemaNestedValidation'
+  // ZodError cause preservation when validation fails
+  | 'schemaZodErrorCause'
+  // waitForEvent removed error
+  | 'schemaWaitForEvent'
   // Abort returning 'canceled' status
   | 'abortStatus'
   // Abort signal during step execution (requires 5s timeout, skipped by default)
@@ -214,12 +222,21 @@ export type SkippableTest =
   | 'timeTravelPerStep'
   | 'timeTravelConditional'
   | 'timeTravelSuspendResume'
+  | 'timeTravelPreviousRunPerStep'
+  | 'timeTravelParallelPerStep'
+  | 'timeTravelConditionalPerStep'
   // Callback property tests
   | 'callbackRunId'
   | 'callbackWorkflowId'
   | 'callbackState'
   | 'callbackResourceId'
   | 'callbackSuspended'
+  // Mastra instance in callbacks
+  | 'callbackMastraOnFinish'
+  | 'callbackMastraOnError'
+  // Error callback property tests
+  | 'callbackResourceIdOnError'
+  | 'callbackStateOnError'
   // Advanced callback tests
   | 'callbackGetInitData'
   | 'callbackLogger'
@@ -253,8 +270,49 @@ export type SkippableTest =
   | 'streamingDetailedEvents'
   // Streaming suspend/resume with streamLegacy API
   | 'streamingSuspendResumeLegacy'
+  // Auto-resume without specifying step parameter (single suspended step)
+  | 'resumeAutoNoStep'
+  // Resume with resumeSchema defaults (empty resumeData uses schema defaults)
+  | 'resumeSchemaDefaults'
+  // Consecutive parallel chains (.parallel().parallel())
+  | 'consecutiveParallel'
+  // Throw error when resuming a non-suspended workflow
+  | 'resumeNotSuspendedWorkflow'
+  // Throw error when resuming with invalid data (schema validation)
+  | 'resumeInvalidData'
   // Agent options passthrough test
-  | 'agentOptions';
+  | 'agentOptions'
+  // Foreach suspend/resume with label
+  | 'resumeForeachLabel'
+  // Foreach suspend/resume with partial concurrency
+  | 'resumeForeachPartial'
+  // Foreach suspend/resume with partial concurrency and index
+  | 'resumeForeachPartialIndex'
+  // Branching - nested else/if-branch
+  | 'branchingNestedConditions'
+  // Foreach state batch and bail tests
+  | 'foreachStateBatch'
+  | 'foreachBail'
+  // Error handling - logger and empty result tests
+  | 'errorLogger'
+  | 'errorEmptyResult'
+  // Restart - nested workflows and suspend/resume after restart
+  | 'restartNested'
+  | 'restartSuspendResume'
+  // DI - removed requestContext values in subsequent steps
+  | 'diRemovedRequestContext'
+  // DI - custom requestContext bug #4442
+  | 'diBug4442'
+  // DI - requestContext injection during resume
+  | 'diResumeRequestContext'
+  // DI - requestContext values set before suspension should persist after resume
+  | 'diRequestContextBeforeSuspension'
+  // Storage - shouldPersistSnapshot option
+  | 'storageShouldPersistSnapshot'
+  // Time travel to a non-existent step should fail
+  | 'timeTravelNonExistentStep'
+  // Resume a step that is not suspended (while another step IS suspended)
+  | 'resumeNonSuspendedStep';
 
 /**
  * Configuration for creating a workflow test suite
@@ -406,6 +464,11 @@ export interface ExecuteWorkflowOptions {
   perStep?: boolean;
   /** Close stream when workflow suspends (for streaming tests) */
   closeOnSuspend?: boolean;
+  /** Output options (e.g., includeState to return state in result) */
+  outputOptions?: {
+    includeState?: boolean;
+    includeResumeLabels?: boolean;
+  };
 }
 
 /**

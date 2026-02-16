@@ -98,6 +98,7 @@ createWorkflowTestSuite({
       initialState: options.initialState,
       perStep: options.perStep,
       requestContext: options.requestContext as any,
+      outputOptions: options.outputOptions,
     });
 
     // Consume the stream to ensure it completes

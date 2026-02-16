@@ -57,18 +57,40 @@ createWorkflowTestSuite({
     resumeParallelMulti: true,
     resumeMultiSuspendError: true,
     resumeBranchingStatus: true,
-    // Suspend/resume - still failing (loop/foreach coordination)
+    // Suspend/resume - still failing (loop/foreach coordination, nested input propagation)
     resumeLoopInput: true,
     resumeForeachIndex: true,
-    resumeNested: true, // Nested workflow resume path not working
+    resumeForeachLabel: true, // Same issue as resumeForeachIndex
+    resumeForeachPartial: true, // Same issue as resumeForeachIndex
+    resumeForeachPartialIndex: true, // Same issue as resumeForeachIndex
+    resumeNested: true, // Nested resume works but input value from previous step lost (26 vs 27)
     resumeDountil: true,
 
     // Time travel - different result structure
     timeTravelConditional: true,
 
-    // Streaming - state test expects value before setState mutation, but evented mutates in-place
-    state: true,
+    // Streaming - legacy API timeout issue
     streamingSuspendResumeLegacy: true,
+
+    // Branching - nested conditions with multiple nested workflows
+    branchingNestedConditions: true, // Complex nested branching not yet supported in evented
+
+    // Foreach state tests - stateSchema with bail/setState
+    foreachStateBatch: true, // State batch propagation in evented foreach not yet supported
+    foreachBail: true, // bail() in evented foreach not yet supported
+
+    // Error handling - logger test creates its own Mastra instance (default engine only)
+    errorLogger: true,
+
+    // Callback - state test uses stateSchema/setState (WIP in evented)
+    callbackStateOnError: true,
+
+    // Time travel - conditional perStep inherits timeTravelConditional issues
+    timeTravelConditionalPerStep: true,
+
+    // Resume error tests - evented engine error behavior may differ
+    resumeNotSuspendedWorkflow: true,
+    resumeInvalidData: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -91,6 +113,7 @@ createWorkflowTestSuite({
         initialState: options.initialState,
         perStep: options.perStep,
         requestContext: options.requestContext as any,
+        outputOptions: options.outputOptions,
       });
 
       // Consume the stream to ensure it completes

@@ -261,6 +261,7 @@
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workflow-test-utils": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.6",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.3",
     "@types/babel__core": "^7.20.5",

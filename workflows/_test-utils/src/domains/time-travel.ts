@@ -381,6 +381,82 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should timeTravel parallel steps with perStep: true
+  // This needs a workflow with a step BEFORE the parallel group (matching main branch structure)
+  {
+    mockRegistry.register('timetravel-parallel-perstep:init', () => vi.fn().mockResolvedValue({ result: 'init done' }));
+    mockRegistry.register('timetravel-parallel-perstep:p1', () => vi.fn().mockResolvedValue({ result: 'p1 done' }));
+    mockRegistry.register('timetravel-parallel-perstep:p2', () => vi.fn().mockResolvedValue({ result: 'p2 done' }));
+    mockRegistry.register('timetravel-parallel-perstep:final', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => ({
+        result: `${inputData.p1?.result || 'none'}-${inputData.p2?.result || 'none'}`,
+      })),
+    );
+
+    const initStep = createStep({
+      id: 'initStep',
+      execute: async ctx => mockRegistry.get('timetravel-parallel-perstep:init')(ctx),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const p1 = createStep({
+      id: 'p1',
+      execute: async ctx => mockRegistry.get('timetravel-parallel-perstep:p1')(ctx),
+      inputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const p2 = createStep({
+      id: 'p2',
+      execute: async ctx => mockRegistry.get('timetravel-parallel-perstep:p2')(ctx),
+      inputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      execute: async ctx => mockRegistry.get('timetravel-parallel-perstep:final')(ctx),
+      inputSchema: z.object({
+        p1: z.object({ result: z.string() }).optional(),
+        p2: z.object({ result: z.string() }).optional(),
+      }),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'timetravel-parallel-perstep-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [initStep, p1, p2, finalStep],
+    });
+
+    workflow.then(initStep).parallel([p1, p2]).then(finalStep).commit();
+
+    workflows['timetravel-parallel-perstep-workflow'] = {
+      workflow,
+      initStep,
+      p1,
+      p2,
+      finalStep,
+      mocks: {
+        get init() {
+          return mockRegistry.get('timetravel-parallel-perstep:init');
+        },
+        get p1() {
+          return mockRegistry.get('timetravel-parallel-perstep:p1');
+        },
+        get p2() {
+          return mockRegistry.get('timetravel-parallel-perstep:p2');
+        },
+        get final() {
+          return mockRegistry.get('timetravel-parallel-perstep:final');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   // Test: should timeTravel with perStep: true
   {
     mockRegistry.register('timetravel-perstep:step1', () => vi.fn().mockResolvedValue({ step1Result: 2 }));
@@ -626,7 +702,7 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       steps: [step1, suspendStep, step3],
     });
 
-    workflow.then(step1).then(suspendStep).then(step3).commit();
+    workflow.then(step1).then(suspendStep).then(step3 as any).commit();
 
     workflows['timetravel-suspend-workflow'] = {
       workflow,
@@ -835,7 +911,6 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
       // Should have slept ~50ms in the branch
       expect(endTime - startTime).toBeGreaterThanOrEqual(40);
 
-      // @ts-expect-error - dynamic step access
       expect(result.steps['sleep-branch-inner']?.output).toEqual({
         result: 'completed after sleep',
       });
@@ -1162,6 +1237,143 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
         // The final step should have been called
         expect(mocks.finalStep).toHaveBeenCalled();
         expect(result.result).toEqual({ final: 3 });
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelPreviousRunPerStep || !timeTravel)(
+      'should timeTravel previously ran workflow with perStep',
+      async () => {
+        const { workflow, step2, mocks, resetMocks } = registry!['timetravel-prevrun-workflow'];
+        resetMocks?.();
+
+        // First, run the workflow normally
+        const result1 = await ctx.execute(workflow, { value: 1 });
+        expect(result1.status).toBe('success');
+
+        // Now time travel to step2 with perStep=true
+        resetMocks?.();
+        const result2 = await timeTravel!(workflow, {
+          step: step2,
+          context: {
+            step1: {
+              payload: { value: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step1Result: 10 },
+              endedAt: Date.now(),
+            },
+          },
+          perStep: true,
+        });
+
+        // Should be paused after running one step (step2)
+        expect(result2.status).toBe('paused');
+        expect(mocks.step1).not.toHaveBeenCalled();
+        expect(mocks.step2).toHaveBeenCalled();
+        expect(mocks.step3).not.toHaveBeenCalled();
+        expect(result2.steps['step2']).toMatchObject({
+          status: 'success',
+          output: { step2Result: 11 }, // 10 + 1
+        });
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelParallelPerStep || !timeTravel)(
+      'should timeTravel parallel steps with perStep',
+      async () => {
+        const { workflow, p1, p2, mocks, resetMocks } = registry!['timetravel-parallel-perstep-workflow'];
+        resetMocks?.();
+
+        // Time travel to p1 with perStep=true
+        // Provide context for initStep and the other parallel step (p2)
+        const result = await timeTravel!(workflow, {
+          step: p1,
+          context: {
+            initStep: {
+              status: 'success' as const,
+              payload: {},
+              output: { result: 'init done' },
+              startedAt: Date.now(),
+              endedAt: Date.now(),
+            },
+            p2: {
+              status: 'success' as const,
+              payload: { result: 'init done' },
+              output: { result: 'p2 done' },
+              startedAt: Date.now(),
+              endedAt: Date.now(),
+            },
+          },
+          perStep: true,
+        });
+
+        // Should be paused after running the parallel step (perStep stops after one "step")
+        expect(result.status).toBe('paused');
+        // p1 should have been called (it's the target of time travel)
+        expect(mocks.p1).toHaveBeenCalled();
+        // Final step should not have been called (perStep stops after the parallel group)
+        expect(mocks.final).not.toHaveBeenCalled();
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelConditionalPerStep || !timeTravel)(
+      'should timeTravel conditional chains with perStep',
+      async () => {
+        const { workflow, branchA, mocks, resetMocks } = registry!['timetravel-conditional-workflow'];
+        resetMocks?.();
+
+        // Time travel to branchA with perStep=true
+        const result = await timeTravel!(workflow, {
+          step: branchA,
+          context: {
+            check: {
+              payload: {},
+              startedAt: Date.now(),
+              status: 'success',
+              output: { branch: 'A' },
+              endedAt: Date.now(),
+            },
+          },
+          perStep: true,
+        });
+
+        // Should be paused after running one step
+        expect(result.status).toBe('paused');
+        expect(mocks.check).not.toHaveBeenCalled();
+        expect(mocks.branchA).toHaveBeenCalled();
+        expect(mocks.branchB).not.toHaveBeenCalled();
+        // branchA result should be present
+        expect(result.steps['branchA']).toMatchObject({
+          status: 'success',
+          output: { result: 'from A' },
+        });
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelNonExistentStep || !timeTravel)(
+      'should throw error if trying to timetravel to a non-existent step',
+      async () => {
+        const { workflow, resetMocks } = registry!['timetravel-basic-workflow'];
+        resetMocks?.();
+
+        try {
+          const result = await timeTravel!(workflow, {
+            step: 'nonExistent',
+            context: {
+              step1: {
+                status: 'success' as const,
+                output: { step1Result: 2 },
+                startedAt: Date.now(),
+                endedAt: Date.now(),
+              },
+            },
+          });
+          // If it doesn't throw, expect failed status
+          expect(result.status).toBe('failed');
+        } catch (error: any) {
+          // Some engines throw instead
+          expect(error.message).toContain('nonExistent');
+        }
       },
     );
   });

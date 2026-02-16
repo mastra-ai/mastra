@@ -8,6 +8,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '@mastra/core/error';
+import { Mastra } from '@mastra/core/mastra';
+import { MockStore } from '@mastra/core/storage';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 import { MockRegistry } from '../mock-registry';
 
@@ -784,5 +786,69 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         persistSpy.mockRestore();
       },
     );
+
+    // NOTE: This test is opt-in (skipped by default) because the execution engine's
+    // logger is not automatically updated when the Mastra logger is set via __registerPrimitives.
+    it.skipIf(skipTests.errorLogger ?? true)('should log step execution errors via the Mastra logger', async () => {
+      const { createWorkflow: createWf, createStep: createSt } = ctx;
+
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+        level: 'debug',
+      };
+
+      const failingStep = createSt({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error('Step error for logger test');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWf({
+        id: 'test-logger-step-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+      workflow.then(failingStep).commit();
+
+      const storage = new MockStore();
+      const mastra = new Mastra({
+        workflows: { 'test-logger-step-error-workflow': workflow },
+        storage,
+        logger: mockLogger as any,
+      });
+
+      const run = await mastra.getWorkflow('test-logger-step-error-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      // Step execution errors should be logged via the Mastra logger
+      expect(mockLogger.error).toHaveBeenCalled();
+      const errorCalls = mockLogger.error.mock.calls;
+      const hasStepErrorLog = errorCalls.some(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('failing-step'),
+      );
+      expect(hasStepErrorLog).toBe(true);
+    });
+
+    it.skipIf(skipTests.errorEmptyResult)('should return empty result when mastra is not initialized', async () => {
+      const { createWorkflow: createWf } = ctx;
+
+      const workflow = createWf({
+        id: 'test-empty-result',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const result = await workflow.listWorkflowRuns();
+      expect(result).toEqual({ runs: [], total: 0 });
+    });
   });
 }

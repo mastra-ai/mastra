@@ -174,6 +174,41 @@ export function createStorageWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should use shouldPersistSnapshot option
+  {
+    const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+    const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
+    const resumeStepAction = vi.fn().mockImplementation(async ({ resumeData, suspend }: any) => {
+      if (!resumeData) {
+        return suspend({});
+      }
+      return { completed: true };
+    });
+
+    const step1 = createStep({ id: 'step1', execute: step1Action, inputSchema: z.object({}), outputSchema: z.object({}) });
+    const step2 = createStep({ id: 'step2', execute: step2Action, inputSchema: z.object({}), outputSchema: z.object({}) });
+    const resumeStep = createStep({
+      id: 'resume-step',
+      execute: resumeStepAction,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ completed: z.boolean() }),
+      resumeSchema: z.object({ resume: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'storage-shouldpersist-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ completed: z.boolean() }),
+      options: { shouldPersistSnapshot: ({ workflowStatus }: any) => workflowStatus === 'suspended' },
+    });
+    workflow.then(step1).then(step2).then(resumeStep).commit();
+
+    workflows['storage-shouldpersist-workflow'] = {
+      workflow,
+      mocks: { step1Action, step2Action, resumeStepAction },
+    };
+  }
+
   return workflows;
 }
 
@@ -307,6 +342,34 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
       expect(withoutNested?.steps).toHaveProperty('storage-nested-inner-workflow');
       expect(withoutNested?.steps).not.toHaveProperty('storage-nested-inner-workflow.inner-step');
       expect(withoutNested?.steps).toHaveProperty('outer-step');
+    });
+
+    it.skipIf(skipTests.storageShouldPersistSnapshot || !ctx.resume)('should use shouldPersistSnapshot option', async () => {
+      const { workflow } = registry!['storage-shouldpersist-workflow'];
+      const runId = `persist-test-${Date.now()}`;
+
+      // Execute - should suspend at resume-step
+      const result = await execute(workflow, {}, { runId });
+      expect(result.status).toBe('suspended');
+
+      // Only suspended state should be persisted (per shouldPersistSnapshot)
+      const { runs, total } = await (workflow as any).listWorkflowRuns();
+      expect(total).toBe(1);
+      expect(runs).toHaveLength(1);
+
+      // Resume
+      const resumeResult = await ctx.resume!(workflow, {
+        runId,
+        step: 'resume-step',
+        resumeData: { resume: 'resume' },
+      });
+      expect(resumeResult.status).toBe('success');
+
+      // After resume, snapshot should still be the suspended one (success is not persisted)
+      const { runs: afterRuns, total: afterTotal } = await (workflow as any).listWorkflowRuns();
+      expect(afterTotal).toBe(1);
+      expect(afterRuns).toHaveLength(1);
+      expect((afterRuns[0]?.snapshot as any)?.status).toBe('suspended');
     });
   });
 }

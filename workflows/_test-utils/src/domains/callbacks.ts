@@ -816,6 +816,176 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should provide mastra instance in onFinish callback
+  {
+    mockRegistry.register('callback-mastra-onfinish-workflow:receivedMastra', () => vi.fn());
+    mockRegistry.register('callback-mastra-onfinish-workflow:execute', () => vi.fn().mockResolvedValue({ result: 'success' }));
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: async (ctx: any) => mockRegistry.get('callback-mastra-onfinish-workflow:execute')(ctx),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'callback-mastra-onfinish-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [step1],
+      options: {
+        onFinish: (result: any) => {
+          mockRegistry.get('callback-mastra-onfinish-workflow:receivedMastra')(result.mastra);
+        },
+      },
+    });
+
+    workflow.then(step1).commit();
+
+    workflows['callback-mastra-onfinish-workflow'] = {
+      workflow,
+      mocks: {},
+      getReceivedMastra: () => {
+        const mock = mockRegistry.get('callback-mastra-onfinish-workflow:receivedMastra');
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should provide mastra instance in onError callback
+  {
+    mockRegistry.register('callback-mastra-onerror-workflow:receivedMastra', () => vi.fn());
+    mockRegistry.register('callback-mastra-onerror-workflow:execute', () =>
+      vi.fn().mockRejectedValue(new Error('Test error')),
+    );
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: async (ctx: any) => mockRegistry.get('callback-mastra-onerror-workflow:execute')(ctx),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'callback-mastra-onerror-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [step1],
+      options: {
+        onError: (errorInfo: any) => {
+          mockRegistry.get('callback-mastra-onerror-workflow:receivedMastra')(errorInfo.mastra);
+        },
+      },
+    });
+
+    workflow.then(step1).commit();
+
+    workflows['callback-mastra-onerror-workflow'] = {
+      workflow,
+      mocks: {},
+      getReceivedMastra: () => {
+        const mock = mockRegistry.get('callback-mastra-onerror-workflow:receivedMastra');
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should provide resourceId in onError callback when provided
+  {
+    mockRegistry.register('callback-error-resourceid-workflow:receivedResourceId', () => vi.fn());
+    mockRegistry.register('callback-error-resourceid-workflow:execute', () =>
+      vi.fn().mockRejectedValue(new Error('Test error')),
+    );
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: async (ctx: any) => mockRegistry.get('callback-error-resourceid-workflow:execute')(ctx),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'callback-error-resourceid-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      steps: [step1],
+      options: {
+        onError: (errorInfo: any) => {
+          mockRegistry.get('callback-error-resourceid-workflow:receivedResourceId')(errorInfo.resourceId);
+        },
+      },
+    });
+
+    workflow.then(step1).commit();
+
+    workflows['callback-error-resourceid-workflow'] = {
+      workflow,
+      mocks: {},
+      getReceivedResourceId: () => {
+        const mock = mockRegistry.get('callback-error-resourceid-workflow:receivedResourceId');
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should provide state in onError callback
+  {
+    mockRegistry.register('callback-error-state-workflow:receivedState', () => vi.fn());
+    mockRegistry.register('callback-error-state-workflow:step1Execute', () =>
+      vi.fn().mockImplementation(async ({ setState }: any) => {
+        await setState({ counter: 10 });
+        return { result: 'success' };
+      }),
+    );
+    mockRegistry.register('callback-error-state-workflow:failingExecute', () =>
+      vi.fn().mockRejectedValue(new Error('Test error')),
+    );
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: async (ctx: any) => mockRegistry.get('callback-error-state-workflow:step1Execute')(ctx),
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      stateSchema: z.object({ counter: z.number().optional() }),
+    });
+
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: async (ctx: any) => mockRegistry.get('callback-error-state-workflow:failingExecute')(ctx),
+      inputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({}),
+      stateSchema: z.object({ counter: z.number().optional() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'callback-error-state-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      stateSchema: z.object({ counter: z.number().optional() }),
+      steps: [step1, failingStep],
+      options: {
+        onError: (errorInfo: any) => {
+          mockRegistry.get('callback-error-state-workflow:receivedState')(errorInfo.state);
+        },
+      },
+    });
+
+    workflow.then(step1).then(failingStep).commit();
+
+    workflows['callback-error-state-workflow'] = {
+      workflow,
+      mocks: {},
+      getReceivedState: () => {
+        const mock = mockRegistry.get('callback-error-state-workflow:receivedState');
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -1032,6 +1202,51 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
       const receivedContext = getReceivedContext();
       expect(receivedContext).toBeDefined();
       expect(receivedContext.get('errorKey')).toBe('errorValue');
+    });
+
+    it.skipIf(skipTests.callbackMastraOnFinish)('should provide mastra instance in onFinish callback', async () => {
+      const { workflow, getReceivedMastra, resetMocks } = registry!['callback-mastra-onfinish-workflow'];
+      resetMocks?.();
+
+      await execute(workflow, {});
+
+      const receivedMastra = getReceivedMastra();
+      expect(receivedMastra).toBeDefined();
+      expect(typeof receivedMastra).toBe('object');
+    });
+
+    it.skipIf(skipTests.callbackMastraOnError)('should provide mastra instance in onError callback', async () => {
+      const { workflow, getReceivedMastra, resetMocks } = registry!['callback-mastra-onerror-workflow'];
+      resetMocks?.();
+
+      await execute(workflow, {});
+
+      const receivedMastra = getReceivedMastra();
+      expect(receivedMastra).toBeDefined();
+    });
+
+    it.skipIf(skipTests.callbackResourceIdOnError)(
+      'should provide resourceId in onError callback when provided',
+      async () => {
+        const { workflow, getReceivedResourceId, resetMocks } = registry!['callback-error-resourceid-workflow'];
+        resetMocks?.();
+
+        await execute(workflow, {}, { resourceId: 'error-resource-456' });
+
+        const receivedResourceId = getReceivedResourceId();
+        expect(receivedResourceId).toBe('error-resource-456');
+      },
+    );
+
+    it.skipIf(skipTests.callbackStateOnError)('should provide state in onError callback', async () => {
+      const { workflow, getReceivedState, resetMocks } = registry!['callback-error-state-workflow'];
+      resetMocks?.();
+
+      await execute(workflow, {});
+
+      const receivedState = getReceivedState();
+      expect(receivedState).toBeDefined();
+      expect(receivedState.counter).toBe(10);
     });
   });
 }

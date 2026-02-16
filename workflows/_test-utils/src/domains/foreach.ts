@@ -362,6 +362,114 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should update state after each concurrent batch in foreach step
+  {
+    const subWorkflow1 = createWorkflow({
+      id: 'foreach-state-s1',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      stateSchema: z.object({ output: z.number() }),
+    })
+      .then(
+        createStep({
+          id: 's1s',
+          inputSchema: z.number(),
+          outputSchema: z.number(),
+          stateSchema: z.object({ output: z.number() }),
+          execute: async (ctx: any) => {
+            expect(ctx.state.output).toBe(2);
+            return ctx.inputData;
+          },
+        }),
+      )
+      .commit();
+
+    const subWorkflow2 = createWorkflow({
+      id: 'foreach-state-s2',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      stateSchema: z.object({ output: z.number() }),
+    })
+      .then(
+        createStep({
+          id: 's2s',
+          inputSchema: z.number(),
+          outputSchema: z.number(),
+          stateSchema: z.object({ output: z.number() }),
+          execute: async (ctx: any) => {
+            ctx.setState({ ...ctx.state, output: 2 });
+            return ctx.inputData;
+          },
+        }),
+      )
+      .commit();
+
+    const routing = createWorkflow({
+      id: 'foreach-state-routing',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      stateSchema: z.object({ output: z.number() }),
+    })
+      .branch([
+        [async (s: any) => s.inputData === 1, subWorkflow1],
+        [async (s: any) => s.inputData === 2, subWorkflow2],
+      ])
+      .map(async ({ inputData }: any) => {
+        return ((inputData as any)['foreach-state-s1'] ?? 0) + ((inputData as any)['foreach-state-s2'] ?? 0);
+      })
+      .commit();
+
+    const stateBatchWorkflow = createWorkflow({
+      id: 'foreach-state-batch',
+      inputSchema: z.array(z.number()),
+      outputSchema: z.array(z.number()),
+      stateSchema: z.object({ output: z.number() }),
+    })
+      .foreach(routing)
+      .commit();
+
+    workflows['foreach-state-batch'] = {
+      workflow: stateBatchWorkflow,
+      mocks: {},
+      resetMocks: () => {},
+    };
+  }
+
+  // Test: should bail foreach execution when called in a concurrent batch
+  {
+    const bailResult = [15];
+
+    const bailWorkflow = createWorkflow({
+      id: 'foreach-bail',
+      inputSchema: z.array(z.number()),
+      outputSchema: z.array(z.number()),
+      stateSchema: z.object({ output: z.number() }),
+    })
+      .foreach(
+        createStep({
+          id: 'bail-step',
+          inputSchema: z.number(),
+          outputSchema: z.number(),
+          stateSchema: z.object({ output: z.number() }),
+          execute: async (ctx: any) => {
+            if (ctx.state.output > 1) {
+              return ctx.bail(bailResult);
+            }
+            await ctx.setState({ ...ctx.state, output: ctx.inputData });
+            return ctx.inputData;
+          },
+        }),
+      )
+      .commit();
+
+    workflows['foreach-bail'] = {
+      workflow: bailWorkflow,
+      mocks: {},
+      bailResult,
+      resetMocks: () => {},
+    };
+  }
+
   return workflows;
 }
 
@@ -492,6 +600,31 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
           output: { total: 12 },
         },
       });
+    });
+
+    it.skipIf(skipTests.foreachStateBatch)('should update state after each concurrent batch in foreach step', async () => {
+      const { workflow } = registry!['foreach-state-batch'];
+      const result = await execute(workflow, [2, 1], {
+        initialState: { output: 0 },
+        outputOptions: { includeState: true },
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.state).toEqual({ output: 2 });
+    });
+
+    it.skipIf(skipTests.foreachBail)('should bail foreach execution when called in a concurrent batch', async () => {
+      const { workflow, bailResult } = registry!['foreach-bail'];
+      const result = await execute(workflow, [1, 2, 3, 4], {
+        initialState: { output: 0 },
+        outputOptions: { includeState: true },
+      });
+
+      expect(result.status).toBe('success');
+      expect((result as any).state?.output).toBe(2);
+      if (result.status === 'success') {
+        expect(result.result).toEqual(bailResult);
+      }
     });
 
     it('should aggregate results correctly from foreach iterations', async () => {

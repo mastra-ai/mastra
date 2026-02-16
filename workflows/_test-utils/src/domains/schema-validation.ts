@@ -266,6 +266,96 @@ export function createSchemaValidationWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should throw error if inputData is invalid in workflow with .map()
+  {
+    const step1 = createStep({
+      id: 'step1',
+      execute: async ({ inputData }) => ({ start: inputData.start }),
+      inputSchema: z.object({ start: z.number() }),
+      outputSchema: z.object({ start: z.number() }),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      execute: vi.fn().mockResolvedValue({ result: 'success' }),
+      inputSchema: z.object({ start: z.string() }), // expects string, will get number
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'schema-map-invalid',
+      inputSchema: z.object({ start: z.number() }),
+      outputSchema: z.object({ result: z.string() }),
+      options: { validateInputs: true },
+    });
+
+    workflow
+      .then(step1)
+      .map(async ({ inputData }) => ({ start: inputData.start }))
+      .then(step2)
+      .commit();
+
+    workflows['schema-map-invalid'] = { workflow, mocks: {} };
+  }
+
+  // Test: should throw error if inputData is invalid in nested workflows
+  {
+    const innerStep = createStep({
+      id: 'inner-step',
+      execute: vi.fn().mockResolvedValue({ result: 'inner' }),
+      inputSchema: z.object({ value: z.string() }), // expects string
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const nestedWorkflow = createWorkflow({
+      id: 'schema-nested-inner',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      options: { validateInputs: true },
+    })
+      .then(innerStep)
+      .commit();
+
+    const outerStep = createStep({
+      id: 'outer-step',
+      execute: async ({ inputData }) => ({ value: inputData.num }), // passes number, not string
+      inputSchema: z.object({ num: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'schema-nested-invalid',
+      inputSchema: z.object({ num: z.number() }),
+      outputSchema: z.object({ result: z.string() }),
+      options: { validateInputs: true },
+    });
+
+    workflow.then(outerStep).then(nestedWorkflow as any).commit();
+
+    workflows['schema-nested-invalid'] = { workflow, mocks: {} };
+  }
+
+  // Test: should preserve ZodError as cause when validation fails
+  {
+    const step1 = createStep({
+      id: 'step1',
+      execute: vi.fn().mockResolvedValue({ result: 'success' }),
+      inputSchema: z.object({ requiredField: z.string(), numberField: z.number() }),
+      outputSchema: z.object({ result: z.string() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'schema-zod-cause',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: { validateInputs: true },
+    });
+
+    workflow.then(step1).commit();
+
+    workflows['schema-zod-cause'] = { workflow, mocks: {} };
+  }
+
   return workflows;
 }
 
@@ -370,6 +460,80 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
           output: { finalValue: 389 },
         },
       });
+    });
+
+    it.skipIf(skipTests.schemaMapValidation)(
+      'should throw error if inputData is invalid in workflow with .map()',
+      async () => {
+        const { workflow } = registry!['schema-map-invalid'];
+        const result = await execute(workflow, { start: 2 });
+        expect(result.status).toBe('failed');
+        if (result.status === 'failed') {
+          expect(result.error).toBeDefined();
+          expect((result.error as any).message).toContain('Step input validation failed');
+          expect((result.error as any).message).toContain('start: Expected string, received number');
+        }
+      },
+    );
+
+    it.skipIf(skipTests.schemaNestedValidation)(
+      'should throw error if inputData is invalid in nested workflows',
+      async () => {
+        const { workflow } = registry!['schema-nested-invalid'];
+        const result = await execute(workflow, { num: 42 });
+        expect(result.status).toBe('failed');
+        if (result.status === 'failed') {
+          expect(result.error).toBeDefined();
+          expect((result.error as any).message).toContain('Expected string, received number');
+        }
+      },
+    );
+
+    it.skipIf(skipTests.schemaZodErrorCause)(
+      'should preserve ZodError as cause when input validation fails',
+      async () => {
+        const { workflow } = registry!['schema-zod-cause'];
+        const result = await execute(workflow, {});
+        expect(result.status).toBe('failed');
+        if (result.status === 'failed') {
+          expect(result.error).toBeDefined();
+          expect((result.error as any).message).toContain('Step input validation failed');
+          expect((result.error as any).cause).toBeDefined();
+          expect((result.error as any).cause.issues).toBeDefined();
+          expect(Array.isArray((result.error as any).cause.issues)).toBe(true);
+          expect((result.error as any).cause.issues.length).toBeGreaterThanOrEqual(2);
+        }
+      },
+    );
+
+    it.skipIf(skipTests.schemaWaitForEvent)('should throw error if waitForEvent is used', async () => {
+      const { createWorkflow: createWf, createStep: createSt } = ctx;
+      const step1 = createSt({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createSt({
+        id: 'step2',
+        execute: vi.fn(),
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        resumeSchema: z.any(),
+      });
+      const workflow = createWf({
+        id: 'schema-waitforevent-test',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1, step2],
+      });
+      try {
+        // @ts-expect-error - waitForEvent is removed
+        workflow.then(step1).waitForEvent('hello-event', step2).commit();
+        expect.fail('Expected error to be thrown');
+      } catch (error) {
+        expect((error as any).message).toContain('waitForEvent has been removed');
+      }
     });
   });
 }
