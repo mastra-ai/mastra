@@ -1,6 +1,6 @@
-import type { AgentInstructionBlock } from '@mastra/core/storage';
+import type { AgentInstructionBlock, StorageConditionalVariant } from '@mastra/core/storage';
 
-import type { EntityConfig, InstructionBlock, AgentFormValues } from '../components/agent-edit-page/utils/form-validation';
+import type { EntityConfig, ScorerConfig, InstructionBlock, AgentFormValues } from '../components/agent-edit-page/utils/form-validation';
 import { createInstructionBlock } from '../components/agent-edit-page/utils/form-validation';
 
 // ---------------------------------------------------------------------------
@@ -16,13 +16,21 @@ export const arrayToRecord = (arr: string[]): Record<string, EntityConfig> => {
   return record;
 };
 
-/** Normalize tools from either `string[]` (legacy) or `Record` format. */
+/** Normalize tools from `string[]` (legacy), `Record`, or `ConditionalVariant[]` format. */
 export const normalizeToolsToRecord = (
-  tools: string[] | Record<string, EntityConfig> | undefined,
+  tools: string[] | Record<string, EntityConfig> | StorageConditionalVariant<Record<string, EntityConfig>>[] | undefined,
 ): Record<string, EntityConfig> => {
   if (!tools) return {};
-  if (Array.isArray(tools)) return arrayToRecord(tools);
-  return { ...tools };
+  if (!Array.isArray(tools)) return { ...tools };
+  const result: Record<string, EntityConfig> = {};
+  for (const item of tools) {
+    if (typeof item === 'string') {
+      result[item] = { description: undefined };
+    } else {
+      Object.assign(result, item.value);
+    }
+  }
+  return result;
 };
 
 /** Split `"provider/name"` into `{ provider, name }`. */
@@ -130,7 +138,7 @@ export const mapScorersToApi = (
       string,
       {
         description?: string;
-        sampling?: { type: string; rate: number };
+        sampling?: { type: 'ratio'; rate: number };
         rules?: EntityConfig['rules'];
       }
     >
@@ -153,6 +161,36 @@ export const mapScorersToApi = (
       },
     ]),
   );
+};
+
+/** Normalize API scorers (possibly wrapped in ConditionalField) to form format. */
+export const normalizeScorersFromApi = (
+  scorers:
+    | Record<string, { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }>
+    | StorageConditionalVariant<
+        Record<string, { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }>
+      >[]
+    | undefined,
+): Record<string, ScorerConfig> => {
+  if (!scorers) return {};
+  let record: Record<string, { description?: string; sampling?: { type: string; rate?: number }; rules?: EntityConfig['rules'] }>;
+  if (Array.isArray(scorers)) {
+    record = {};
+    for (const variant of scorers) {
+      Object.assign(record, variant.value);
+    }
+  } else {
+    record = scorers;
+  }
+  const result: Record<string, ScorerConfig> = {};
+  for (const [key, value] of Object.entries(record)) {
+    result[key] = {
+      description: value.description,
+      sampling: value.sampling?.type === 'ratio' ? { type: 'ratio', rate: value.sampling.rate } : undefined,
+      rules: value.rules,
+    };
+  }
+  return result;
 };
 
 // ---------------------------------------------------------------------------
