@@ -12,7 +12,8 @@
  * ```
  */
 
-import { CachingPubSub, EventEmitterPubSub, type Event } from '@mastra/core/events';
+import { CachingPubSub, EventEmitterPubSub  } from '@mastra/core/events';
+import type {Event} from '@mastra/core/events';
 import Redis from 'ioredis';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 

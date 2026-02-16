@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RedisServerCache, upstashPreset, nodeRedisPreset, type RedisClient } from './index';
+import { RedisServerCache, upstashPreset, nodeRedisPreset  } from './index';
+import type {RedisClient} from './index';
 
 // Create a mock Redis client
 function createMockClient(): RedisClient & { [key: string]: ReturnType<typeof vi.fn> } {
