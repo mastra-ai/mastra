@@ -5,28 +5,7 @@
  * All workflows are pre-registered with Mastra at setup time, then Inngest syncs once.
  * Tests execute pre-registered workflows using unique run IDs for isolation.
  *
- * CURRENT STATUS: 96 passed, 6 skipped
- *
- * REMAINING SKIPPED TESTS:
- *
- * 1. TIMING (2 tests): Inngest dev server network overhead (100-500ms per step) makes
- *    timing-based assertions unreliable (foreachConcurrentTiming, foreachPartialConcurrencyTiming).
- *
- * 2. BEHAVIOR DIFFERENCES (2 tests):
- *    - schemaValidationThrows: Inngest wraps validation errors differently
- *    - abortStatus: Inngest returns 'failed' not 'canceled' on abort
- *
- * 3. STORAGE (1 test): errorStorageRoundtrip needs factory storage setup
- *
- * FIXED ISSUES:
- *
- * - RACE CONDITION: Partially fixed by adding explicit snapshot persistence before workflow-finish
- *   event in workflow.ts finalize step. Tests that were previously skipped (state,
- *   variableResolutionErrors, callbacks) now pass. foreachSingleConcurrency remains flaky.
- *
- * - LOOPS: Now use output assertions instead of mock counts (memoization-safe).
- *
- * - FLAKINESS: Retry mechanism (--retry=2) handles intermittent failures.
+ * See skipTests below for skipped tests and reasons.
  */
 
 import { serve } from '@hono/node-server';

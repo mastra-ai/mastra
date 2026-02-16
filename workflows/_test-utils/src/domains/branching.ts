@@ -434,8 +434,8 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
       }),
     );
     mockRegistry.register('branch-nested:other', () =>
-      vi.fn().mockImplementation(async () => {
-        return { other: 26 };
+      vi.fn().mockImplementation(async ({ inputData }: any) => {
+        return { newValue: inputData.newValue ?? 0, other: 26 };
       }),
     );
     mockRegistry.register('branch-nested:final', () =>

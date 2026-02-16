@@ -106,21 +106,21 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
       id: 'step1',
       execute: step1Action,
       inputSchema: z.object({ status: z.string() }),
-      outputSchema: z.object({ status: z.string() }),
+      outputSchema: z.object({ status: z.string(), value: z.string() }),
       stateSchema: z.object({ value: z.string() }),
     });
     const step2 = createStep({
       id: 'step2',
       execute: step2Action,
       inputSchema: z.object({ status: z.string() }),
-      outputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string(), value: z.string() }),
       stateSchema: z.object({ value: z.string() }),
     });
     const step3 = createStep({
       id: 'step3',
       execute: step3Action,
       inputSchema: z.object({ status: z.string() }),
-      outputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string(), value: z.string() }),
       stateSchema: z.object({ value: z.string() }),
     });
     const step4 = createStep({
@@ -129,7 +129,7 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
         return { result: inputData.result, value: state.value };
       },
       inputSchema: z.object({ result: z.string() }),
-      outputSchema: z.object({ result: z.string() }),
+      outputSchema: z.object({ result: z.string(), value: z.string() }),
       stateSchema: z.object({ value: z.string() }),
     });
 
