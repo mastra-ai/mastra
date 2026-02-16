@@ -134,7 +134,10 @@ async function main() {
 
     if (input === '/status') {
       try {
-        const status = await om.getStatus({ sessionId: SESSION_ID, messages: convertMessages(agent.state.messages, SESSION_ID) });
+        const status = await om.getStatus({
+          sessionId: SESSION_ID,
+          messages: convertMessages(agent.state.messages, SESSION_ID),
+        });
         console.log(`\n${status}\n`);
       } catch (err) {
         console.error(`\n  Error fetching status: ${err instanceof Error ? err.message : String(err)}\n`);
@@ -174,7 +177,10 @@ async function main() {
       agent.state.systemPrompt = await om.wrapSystemPrompt({ basePrompt: SYSTEM_PROMPT, sessionId: SESSION_ID });
 
       if (SHOW_STATUS) {
-        const status = await om.getStatus({ sessionId: SESSION_ID, messages: convertMessages(agent.state.messages, SESSION_ID) });
+        const status = await om.getStatus({
+          sessionId: SESSION_ID,
+          messages: convertMessages(agent.state.messages, SESSION_ID),
+        });
         console.log(status);
       }
     } catch (err) {
