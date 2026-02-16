@@ -19,6 +19,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "build": "pnpm build:lib",
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/redis",
     "build:watch": "pnpm build:lib --watch",
