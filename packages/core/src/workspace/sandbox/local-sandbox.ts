@@ -15,12 +15,13 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
 import type { ProviderStatus } from '../lifecycle';
+import { IsolationUnavailableError } from './errors';
+import { MastraSandbox } from './mastra-sandbox';
+import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { IsolationBackend, NativeSandboxConfig } from './native-sandbox';
 import { detectIsolation, isIsolationAvailable, generateSeatbeltProfile, wrapCommand } from './native-sandbox';
-import type { WorkspaceSandbox, SandboxInfo, ExecuteCommandOptions, CommandResult } from './sandbox';
-import { IsolationUnavailableError } from './sandbox';
+import type { SandboxInfo, ExecuteCommandOptions, CommandResult } from './types';
 
 interface ExecStreamingOptions extends Omit<SpawnOptions, 'timeout' | 'stdio'> {
   /** Timeout in ms - handled manually for custom exit code 124 */
@@ -95,7 +96,7 @@ function execWithStreaming(
 /**
  * Local sandbox provider configuration.
  */
-export interface LocalSandboxOptions {
+export interface LocalSandboxOptions extends MastraSandboxOptions {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** Working directory for command execution */
@@ -156,12 +157,12 @@ export interface LocalSandboxOptions {
  * const result = await workspace.executeCommand('node', ['script.js']);
  * ```
  */
-export class LocalSandbox implements WorkspaceSandbox {
+export class LocalSandbox extends MastraSandbox {
   readonly id: string;
   readonly name = 'LocalSandbox';
   readonly provider = 'local';
 
-  status: ProviderStatus = 'stopped';
+  status: ProviderStatus = 'pending';
 
   private readonly _workingDirectory: string;
   private readonly env: NodeJS.ProcessEnv;
@@ -205,6 +206,7 @@ export class LocalSandbox implements WorkspaceSandbox {
   }
 
   constructor(options: LocalSandboxOptions = {}) {
+    super({ ...options, name: 'LocalSandbox' });
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     // Default working directory is .sandbox/ in cwd - isolated from seatbelt profiles
@@ -239,65 +241,78 @@ export class LocalSandbox implements WorkspaceSandbox {
     };
   }
 
+  /**
+   * Start the local sandbox.
+   * Creates working directory and sets up seatbelt profile if using macOS isolation.
+   * Status management is handled by the base class.
+   */
   async start(): Promise<void> {
-    this.status = 'starting';
+    this.logger.debug('Starting sandbox', { workingDirectory: this._workingDirectory, isolation: this._isolation });
 
-    try {
-      await fs.mkdir(this.workingDirectory, { recursive: true });
+    await fs.mkdir(this.workingDirectory, { recursive: true });
 
-      // Set up seatbelt profile for macOS sandboxing
-      if (this._isolation === 'seatbelt') {
-        const userProvidedPath = this._nativeSandboxConfig.seatbeltProfilePath;
+    // Set up seatbelt profile for macOS sandboxing
+    if (this._isolation === 'seatbelt') {
+      const userProvidedPath = this._nativeSandboxConfig.seatbeltProfilePath;
 
-        if (userProvidedPath) {
-          // User provided a custom path
-          this._seatbeltProfilePath = userProvidedPath;
-          this._userProvidedProfilePath = true;
+      if (userProvidedPath) {
+        // User provided a custom path
+        this._seatbeltProfilePath = userProvidedPath;
+        this._userProvidedProfilePath = true;
 
-          // Check if file exists at user's path
-          try {
-            this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
-          } catch {
-            // File doesn't exist, generate default and write to user's path
-            this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
-            // Ensure parent directory exists
-            await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
-            await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
+        // Check if file exists at user's path
+        try {
+          this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
+        } catch (err: unknown) {
+          if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw err;
           }
-        } else {
-          // No custom path, use default location
+          // File doesn't exist, generate default and write to user's path
           this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
-
-          // Generate a deterministic hash from workspace path and config
-          // This allows identical sandboxes to share profiles while preventing collisions
-          const configHash = crypto
-            .createHash('sha256')
-            .update(this.workingDirectory)
-            .update(JSON.stringify(this._nativeSandboxConfig))
-            .digest('hex')
-            .slice(0, 8);
-
-          // Write profile to .sandbox-profiles/ in cwd (outside working directory)
-          // This prevents sandboxed processes from reading/modifying their own security profile
-          this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
-          await fs.mkdir(this._sandboxFolderPath, { recursive: true });
-          this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `seatbelt-${configHash}.sb`);
-          await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
+          // Ensure parent directory exists
+          await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
+          await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
         }
+      } else {
+        // No custom path, use default location
+        this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+
+        // Generate a deterministic hash from workspace path and config
+        // This allows identical sandboxes to share profiles while preventing collisions
+        const configHash = crypto
+          .createHash('sha256')
+          .update(this.workingDirectory)
+          .update(JSON.stringify(this._nativeSandboxConfig))
+          .digest('hex')
+          .slice(0, 8);
+
+        // Write profile to .sandbox-profiles/ in cwd (outside working directory)
+        // This prevents sandboxed processes from reading/modifying their own security profile
+        this._sandboxFolderPath = path.join(process.cwd(), '.sandbox-profiles');
+        await fs.mkdir(this._sandboxFolderPath, { recursive: true });
+        this._seatbeltProfilePath = path.join(this._sandboxFolderPath, `seatbelt-${configHash}.sb`);
+        await fs.writeFile(this._seatbeltProfilePath, this._seatbeltProfile, 'utf-8');
       }
-
-      this.status = 'running';
-    } catch (error) {
-      this.status = 'error';
-      throw error;
     }
+
+    this.logger.debug('Sandbox started', { workingDirectory: this._workingDirectory });
   }
 
+  /**
+   * Stop the local sandbox.
+   * Status management is handled by the base class.
+   */
   async stop(): Promise<void> {
-    this.status = 'stopped';
+    this.logger.debug('Stopping sandbox', { workingDirectory: this._workingDirectory });
   }
 
+  /**
+   * Destroy the local sandbox and clean up resources.
+   * Cleans up seatbelt profile if auto-generated.
+   * Status management is handled by the base class.
+   */
   async destroy(): Promise<void> {
+    this.logger.debug('Destroying sandbox', { workingDirectory: this._workingDirectory });
     // Clean up seatbelt profile only if it was auto-generated (not user-provided)
     if (this._seatbeltProfilePath && !this._userProvidedProfilePath) {
       try {
@@ -319,8 +334,6 @@ export class LocalSandbox implements WorkspaceSandbox {
       }
       this._sandboxFolderPath = undefined;
     }
-
-    await this.stop();
   }
 
   async isReady(): Promise<boolean> {
@@ -383,10 +396,10 @@ export class LocalSandbox implements WorkspaceSandbox {
     args: string[] = [],
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
+    this.logger.debug('Executing command', { command, args, cwd: options.cwd ?? this.workingDirectory });
+
     // Auto-start if not running (lazy initialization)
-    if (this.status !== 'running') {
-      await this.start();
-    }
+    await this.ensureRunning();
 
     const startTime = Date.now();
 
@@ -398,26 +411,36 @@ export class LocalSandbox implements WorkspaceSandbox {
     try {
       const result = await execWithStreaming(wrapped.command, wrapped.args, {
         cwd: options.cwd ?? this.workingDirectory,
-        timeout: this.timeout ?? options.timeout ?? 30000,
+        timeout: options.timeout ?? this.timeout ?? 30000,
         env: this.buildEnv(options.env),
         onStdout: options.onStdout,
         onStderr: options.onStderr,
       });
 
-      return {
+      const commandResult: CommandResult = {
         success: result.exitCode === 0,
         stdout: result.stdout,
         stderr: result.stderr,
         exitCode: result.exitCode,
         executionTimeMs: Date.now() - startTime,
       };
+
+      this.logger.info('Command completed', {
+        command,
+        exitCode: commandResult.exitCode,
+        executionTimeMs: commandResult.executionTimeMs,
+      });
+
+      return commandResult;
     } catch (error: unknown) {
+      const executionTimeMs = Date.now() - startTime;
+      this.logger.error('Command failed', { command, error, executionTimeMs });
       return {
         success: false,
         stdout: '',
         stderr: error instanceof Error ? error.message : String(error),
         exitCode: 1,
-        executionTimeMs: Date.now() - startTime,
+        executionTimeMs,
       };
     }
   }

@@ -101,7 +101,7 @@ export function createWorkspaceTools(workspace: Workspace) {
       tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE] = createTool({
         id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
         description:
-          'Read the contents of a file from the workspace filesystem. Supports reading specific line ranges using offset/limit parameters.',
+          'Read the contents of a file from the workspace filesystem. Use offset/limit parameters to read specific line ranges for large files.',
         requireApproval: readFileConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().describe('The path to the file to read (e.g., "/data/config.json")'),
@@ -253,8 +253,13 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (!isReadOnly && editFileConfig.enabled) {
       tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE] = createTool({
         id: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
-        description:
-          'Edit a file by replacing specific text. The old_string must match exactly and be unique in the file (unless using replace_all). You should read the file first to ensure you have the exact text to replace.',
+        description: `Edit a file by replacing specific text. The old_string must match exactly and be unique in the file.
+
+Usage:
+- Read the file first to get the exact text to replace.
+- By default, ${WORKSPACE_TOOLS.FILESYSTEM.READ_FILE} output includes line number prefixes (e.g., "     1→"). Ensure you preserve the exact indentation as it appears AFTER the arrow. Never include any part of the line number prefix in old_string or new_string.
+- Include enough surrounding context (multiple lines) to make old_string unique. If it still isn't unique, include more lines.
+- Use replace_all only when intentionally replacing all occurrences.`,
         requireApproval: editFileConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().describe('The path to the file to edit'),
@@ -352,7 +357,10 @@ Examples:
 - List root: { path: "/" }
 - Deep listing: { path: "/src", maxDepth: 5 }
 - Directories only: { path: "/", dirsOnly: true }
-- Exclude node_modules: { path: "/", exclude: "node_modules" }`,
+- Exclude node_modules: { path: "/", exclude: "node_modules" }
+- Find TypeScript files: { path: "/src", pattern: "**/*.ts" }
+- Find config files: { path: "/", pattern: "*.config.{js,ts}" }
+- Multiple patterns: { path: "/", pattern: ["**/*.ts", "**/*.tsx"] }`,
         requireApproval: listFilesConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().default('/').describe('Directory path to list'),
@@ -376,6 +384,12 @@ Examples:
             .optional()
             .describe('Pattern to exclude (e.g., "node_modules"). Similar to tree -I flag.'),
           extension: z.string().optional().describe('Filter by file extension (e.g., ".ts"). Similar to tree -P flag.'),
+          pattern: z
+            .union([z.string(), z.array(z.string())])
+            .optional()
+            .describe(
+              'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
+            ),
         }),
         outputSchema: z.object({
           tree: z.string().describe('Tree-style directory listing'),
@@ -399,13 +413,14 @@ Examples:
             .optional()
             .describe('Metadata about the workspace and filesystem'),
         }),
-        execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension }) => {
+        execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }) => {
           const result = await formatAsTree(workspace.filesystem!, path, {
             maxDepth,
             showHidden,
             dirsOnly,
             exclude: exclude || undefined,
             extension: extension || undefined,
+            pattern: pattern || undefined,
           });
 
           // Include workspace/filesystem metadata for UI display
@@ -623,7 +638,13 @@ Examples:
     if (workspace.sandbox.executeCommand && executeCommandConfig.enabled) {
       tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND] = createTool({
         id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-        description: `Execute a shell command in the workspace sandbox. The output (stdout/stderr) is displayed to the user automatically in the tool result. ${pathInfo}`,
+        description: `Execute a shell command in the workspace sandbox.${pathInfo}
+
+Usage:
+- Verify parent directories exist before running commands that create files or directories.
+- Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
+- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
+- Use cwd to set the working directory, or commands run from the sandbox default.`,
         requireApproval: executeCommandConfig.requireApproval,
         inputSchema: z.object({
           command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
@@ -631,10 +652,7 @@ Examples:
           timeout: z
             .number()
             .nullish()
-            .default(30000)
-            .describe(
-              'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
-            ),
+            .describe('Maximum execution time in milliseconds. Example: 60000 for 1 minute.'),
           cwd: z.string().nullish().describe('Working directory for the command'),
         }),
         outputSchema: z.object({
@@ -661,7 +679,7 @@ Examples:
           const startedAt = Date.now();
           try {
             const result = await workspace.sandbox!.executeCommand!(command, args ?? [], {
-              timeout: timeout ?? 30000,
+              timeout: timeout ?? undefined,
               cwd: cwd ?? undefined,
               // Stream stdout/stderr as tool-output chunks for proper UI integration
               onStdout: async (data: string) => {

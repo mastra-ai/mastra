@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
@@ -8,7 +8,7 @@ import type { Unstable_RawConfig } from 'wrangler'; // Unstable_RawConfig is uns
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
-/** @deprecated TODO remove deprecated fields in next major version */
+/** @deprecated */
 interface D1DatabaseBinding {
   binding: string;
   database_name: string;
@@ -16,26 +16,26 @@ interface D1DatabaseBinding {
   preview_database_id?: string;
 }
 
-/** @deprecated TODO remove deprecated fields in next major version */
+/** @deprecated */
 interface KVNamespaceBinding {
   binding: string;
   id: string;
 }
 
 export class CloudflareDeployer extends Deployer {
-  readonly userConfig: Omit<Unstable_RawConfig, 'main'>;
+  readonly userConfig: Omit<Unstable_RawConfig, 'main' | '$schema'>;
 
   constructor(
-    userConfig: Omit<Unstable_RawConfig, 'main'> &
-      // TODO remove deprecated fields in next major version
+    userConfig: Omit<Unstable_RawConfig, 'main' | '$schema'> &
+      // TODO: Remove deprecated fields in next major version, and update type to just Omit<Unstable_RawConfig, 'main' | '$schema'>.
       {
-        /** @deprecated `name` instead. */
+        /** @deprecated Use `name` instead. */
         projectName?: string;
-        /** @deprecated this parameter is not used internally. */
+        /** @deprecated This parameter is not used internally. */
         workerNamespace?: string;
-        /** @deprecated use `d1_databases` instead. */
+        /** @deprecated Use `d1_databases` instead. */
         d1Databases?: D1DatabaseBinding[];
-        /** @deprecated use `kv_namespaces` instead. */
+        /** @deprecated Use `kv_namespaces` instead. */
         kvNamespaces?: KVNamespaceBinding[];
       },
   ) {
@@ -112,7 +112,30 @@ export const sys = {
       },
     };
 
-    await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
+    // TODO: Remove writing this file in the next major version, it should only be written to the root of the project
+    await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig, null, 2));
+
+    const projectRoot = join(outputDirectory, '../');
+    const jsoncFilePath = join(projectRoot, 'wrangler.jsonc');
+    const mainFilePath = join(outputDirectory, this.outputDir, 'index.mjs');
+    const tsStubFilePath = join(outputDirectory, this.outputDir, typescriptStubPath);
+
+    const wranglerJsoncConfig: Unstable_RawConfig & { placeholder: string } = {
+      placeholder: 'PLACEHOLDER',
+      $schema: './node_modules/wrangler/config-schema.json',
+      ...wranglerConfig,
+      main: `./${relative(projectRoot, mainFilePath)}`,
+      alias: {
+        ...wranglerConfig.alias,
+        typescript: `./${relative(projectRoot, tsStubFilePath)}`,
+      },
+    };
+
+    const jsonc = JSON.stringify(wranglerJsoncConfig, null, 2).replace(
+      /"placeholder": "PLACEHOLDER",/,
+      '/* This file was auto-generated through Mastra. Edit the CloudflareDeployer() instance directly. */',
+    );
+    await writeFile(jsoncFilePath, jsonc);
   }
 
   private getEntry(): string {
@@ -188,6 +211,11 @@ process.versions.node = '${process.versions.node}';
     this.logger?.info('Deploying to Cloudflare failed. Please use the Cloudflare dashboard to deploy.');
   }
 
+  /**
+   * TODO: Remove this method in the next major version
+   *
+   * @deprecated
+   */
   async tagWorker(): Promise<void> {
     throw new Error('tagWorker method is no longer supported. Use the Cloudflare dashboard or API directly.');
   }

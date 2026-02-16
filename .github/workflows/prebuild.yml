@@ -1,0 +1,43 @@
+name: Prebuild
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, 0.x]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  prebuild:
+    name: Build
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:rw
+      NODE_OPTIONS: --max-old-space-size=4096
+    permissions:
+      pull-requests: read
+      statuses: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup custom action
+        uses: ./.github/workflows/shared-actions/set-pr-status
+        with:
+          status: 'pending'
+          context: 'Full Test Suite'
+          description: 'Waiting for build to complete'
+          sha: ${{ github.event.pull_request.head.sha }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build

@@ -37,14 +37,15 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   // Agent CRUD Methods
   // ==========================================================================
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
-    this.logger.debug(`InMemoryAgentsStorage: getAgentById called for ${id}`);
+  async getById(id: string): Promise<StorageAgentType | null> {
+    this.logger.debug(`InMemoryAgentsStorage: getById called for ${id}`);
     const agent = this.db.agents.get(id);
     return agent ? this.deepCopyAgent(agent) : null;
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
-    this.logger.debug(`InMemoryAgentsStorage: createAgent called for ${agent.id}`);
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
+    this.logger.debug(`InMemoryAgentsStorage: create called for ${agent.id}`);
 
     if (this.db.agents.has(agent.id)) {
       throw new Error(`Agent with id ${agent.id} already exists`);
@@ -77,54 +78,131 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       changeMessage: 'Initial version',
     });
 
-    // Set the active version
-    newAgent.activeVersionId = versionId;
-    newAgent.status = 'published';
-    this.db.agents.set(agent.id, newAgent);
-
-    return { ...newAgent };
+    // Return the thin agent record (activeVersionId remains null)
+    return this.deepCopyAgent(newAgent);
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
-    this.logger.debug(`InMemoryAgentsStorage: updateAgent called for ${id}`);
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
+    this.logger.debug(`InMemoryAgentsStorage: update called for ${id}`);
 
     const existingAgent = this.db.agents.get(id);
     if (!existingAgent) {
       throw new Error(`Agent with id ${id} not found`);
     }
 
+    // Separate metadata fields from config fields
+    const { authorId, activeVersionId, metadata, ...configFields } = updates;
+
+    // Extract just the config field names from StorageAgentSnapshotType
+    const configFieldNames = [
+      'name',
+      'description',
+      'instructions',
+      'model',
+      'tools',
+      'defaultOptions',
+      'workflows',
+      'agents',
+      'integrationTools',
+      'inputProcessors',
+      'outputProcessors',
+      'memory',
+      'scorers',
+      'mcpClients',
+      'requestContextSchema',
+    ];
+
+    // Check if any config fields are present in the update
+    const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+
+    // Update metadata fields on the agent record
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
-      ...(updates.authorId !== undefined && { authorId: updates.authorId }),
-      ...(updates.activeVersionId !== undefined && { activeVersionId: updates.activeVersionId }),
-      ...(updates.metadata !== undefined && {
-        metadata: { ...existingAgent.metadata, ...updates.metadata },
+      ...(authorId !== undefined && { authorId }),
+      ...(activeVersionId !== undefined && { activeVersionId }),
+      ...(metadata !== undefined && {
+        metadata: { ...existingAgent.metadata, ...metadata },
       }),
       updatedAt: new Date(),
     };
 
     // If activeVersionId is set, mark as published
-    if (updates.activeVersionId !== undefined) {
+    if (activeVersionId !== undefined) {
       updatedAgent.status = 'published';
     }
 
+    // If config fields are being updated, create a new version
+    if (hasConfigUpdate) {
+      // Get the latest version to use as base
+      const latestVersion = await this.getLatestVersion(id);
+      if (!latestVersion) {
+        throw new Error(`No versions found for agent ${id}`);
+      }
+
+      // Extract config from latest version
+      const {
+        id: _versionId,
+        agentId: _agentId,
+        versionNumber: _versionNumber,
+        changedFields: _changedFields,
+        changeMessage: _changeMessage,
+        createdAt: _createdAt,
+        ...latestConfig
+      } = latestVersion;
+
+      // Merge updates into latest config
+      // Convert null values to undefined (null means "remove this field")
+      const sanitizedConfigFields = Object.fromEntries(
+        Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
+      );
+      const newConfig = {
+        ...latestConfig,
+        ...sanitizedConfigFields,
+      };
+
+      // Identify which fields changed
+      const changedFields = configFieldNames.filter(
+        field =>
+          field in configFields &&
+          JSON.stringify(configFields[field as keyof typeof configFields]) !==
+            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+      );
+
+      // Only create a new version if something actually changed
+      if (changedFields.length > 0) {
+        const newVersionId = crypto.randomUUID();
+        const newVersionNumber = latestVersion.versionNumber + 1;
+
+        await this.createVersion({
+          id: newVersionId,
+          agentId: id,
+          versionNumber: newVersionNumber,
+          ...newConfig,
+          changedFields,
+          changeMessage: `Updated ${changedFields.join(', ')}`,
+        });
+      }
+    }
+
+    // Save the updated agent record
     this.db.agents.set(id, updatedAgent);
-    return { ...updatedAgent };
+    return this.deepCopyAgent(updatedAgent);
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteAgent called for ${id}`);
+  async delete(id: string): Promise<void> {
+    this.logger.debug(`InMemoryAgentsStorage: delete called for ${id}`);
     // Idempotent delete - no-op if agent doesn't exist
     this.db.agents.delete(id);
     // Also delete all versions for this agent
-    await this.deleteVersionsByAgentId(id);
+    await this.deleteVersionsByParentId(id);
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
-    this.logger.debug(`InMemoryAgentsStorage: listAgents called`);
+    this.logger.debug(`InMemoryAgentsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -279,12 +357,12 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     this.db.agentVersions.delete(id);
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
-    this.logger.debug(`InMemoryAgentsStorage: deleteVersionsByAgentId called for agent ${agentId}`);
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
+    this.logger.debug(`InMemoryAgentsStorage: deleteVersionsByParentId called for agent ${entityId}`);
 
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.agentVersions.entries()) {
-      if (version.agentId === agentId) {
+      if (version.agentId === entityId) {
         idsToDelete.push(id);
       }
     }
@@ -324,22 +402,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
    * Deep copy a version to prevent external mutation of stored data
    */
   private deepCopyVersion(version: AgentVersion): AgentVersion {
-    return {
-      ...version,
-      model: { ...version.model },
-      tools: version.tools ? [...version.tools] : version.tools,
-      defaultOptions: version.defaultOptions ? { ...version.defaultOptions } : version.defaultOptions,
-      workflows: version.workflows ? [...version.workflows] : version.workflows,
-      agents: version.agents ? [...version.agents] : version.agents,
-      integrationTools: version.integrationTools ? [...version.integrationTools] : version.integrationTools,
-      inputProcessors: version.inputProcessors ? version.inputProcessors.map(p => ({ ...p })) : version.inputProcessors,
-      outputProcessors: version.outputProcessors
-        ? version.outputProcessors.map(p => ({ ...p }))
-        : version.outputProcessors,
-      memory: version.memory ? { ...version.memory } : version.memory,
-      scorers: version.scorers ? { ...version.scorers } : version.scorers,
-      changedFields: version.changedFields ? [...version.changedFields] : version.changedFields,
-    };
+    return structuredClone(version);
   }
 
   private sortAgents(

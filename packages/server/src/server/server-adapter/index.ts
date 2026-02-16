@@ -3,6 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
+import { Hono } from 'hono';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { defaultAuthConfig } from '../auth/defaults';
@@ -85,6 +86,8 @@ export interface ParsedRequestParams {
 /**
  * Normalizes query parameters from various HTTP framework formats to a consistent structure.
  * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
+ * Reconstructs bracket-notation keys (e.g., `orderBy[field]=createdAt`) into JSON strings
+ * so that z.preprocess JSON.parse can handle them.
  * Filters out non-string values that some frameworks may include.
  *
  * @param rawQuery - Raw query parameters from the HTTP framework (may contain strings, arrays, or nested objects)
@@ -92,8 +95,26 @@ export interface ParsedRequestParams {
  */
 export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<string, QueryParamValue> {
   const queryParams: Record<string, QueryParamValue> = {};
+  // Collect bracket-notation keys: e.g., "orderBy[field]" → parent "orderBy", child "field"
+  const bracketGroups: Record<string, Record<string, string>> = {};
+
   for (const [key, value] of Object.entries(rawQuery)) {
-    if (typeof value === 'string') {
+    const bracketMatch = key.match(/^([^[]+)\[([^\]]+)\]$/);
+    if (bracketMatch) {
+      const parent = bracketMatch[1]!;
+      const child = bracketMatch[2]!;
+      const strValue = Array.isArray(value)
+        ? value.filter((v): v is string => typeof v === 'string')[0]
+        : typeof value === 'string'
+          ? value
+          : undefined;
+      if (strValue !== undefined) {
+        if (!bracketGroups[parent]) {
+          bracketGroups[parent] = {};
+        }
+        bracketGroups[parent]![child] = strValue;
+      }
+    } else if (typeof value === 'string') {
       queryParams[key] = value;
     } else if (Array.isArray(value)) {
       // Filter to only string values (some frameworks include nested objects)
@@ -102,6 +123,14 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
       queryParams[key] = stringValues.length === 1 ? stringValues[0]! : stringValues;
     }
   }
+
+  // Merge bracket groups as JSON strings (only if the parent key wasn't already set directly)
+  for (const [parent, children] of Object.entries(bracketGroups)) {
+    if (!(parent in queryParams)) {
+      queryParams[parent] = JSON.stringify(children);
+    }
+  }
+
   return queryParams;
 }
 
@@ -130,6 +159,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected streamOptions: StreamOptions;
   protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
+  private customRouteHandler:
+    | ((request: Request, env?: { requestContext?: RequestContext }) => Promise<Response>)
+    | null = null;
 
   constructor({
     app,
@@ -269,7 +301,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
       context.requestContext.set('user', user);
     } catch (err) {
-      console.error(err);
+      this.mastra.getLogger()?.error('Authentication error', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       return { status: 401, error: 'Invalid or expired token' };
     }
 
@@ -284,7 +318,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }
         return null; // Authorization passed
       } catch (err) {
-        console.error(err);
+        this.mastra.getLogger()?.error('Authorization error in authorizeUser', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        });
         return { status: 500, error: 'Authorization error' };
       }
     }
@@ -298,7 +334,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }
         return null; // Authorization passed
       } catch (err) {
-        console.error(err);
+        this.mastra.getLogger()?.error('Authorization error in authorize', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          path: context.path,
+          method: context.method,
+        });
         return { status: 500, error: 'Authorization error' };
       }
     }
@@ -333,7 +373,153 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   async init() {
     this.registerContextMiddleware();
     this.registerAuthMiddleware();
+    await this.registerCustomApiRoutes();
     await this.registerRoutes();
+  }
+
+  /**
+   * Override in adapters to register custom API routes defined via registerApiRoute().
+   * Called by init() between registerAuthMiddleware() and registerRoutes().
+   */
+  async registerCustomApiRoutes(): Promise<void> {
+    // Default no-op. Adapters override this to register custom routes
+    // using their framework-specific middleware.
+  }
+
+  /**
+   * Creates an internal Hono sub-app with all custom API routes registered.
+   * Stores the handler on this instance for use by handleCustomRouteRequest().
+   * Returns true if custom routes were found and registered.
+   */
+  protected async buildCustomRouteHandler(): Promise<boolean> {
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (!routes || routes.length === 0) return false;
+
+    const NOT_FOUND_HEADER = 'x-mastra-custom-route-not-found';
+    const mastra = this.mastra;
+
+    const app = new Hono<{
+      Bindings: { requestContext?: RequestContext };
+      Variables: { mastra: Mastra; requestContext: RequestContext };
+    }>();
+
+    // Internal context middleware — sets variables that custom route handlers expect
+    app.use('*', async (c, next) => {
+      c.set('mastra', mastra);
+      c.set('requestContext', c.env?.requestContext ?? new RequestContext());
+      await next();
+    });
+
+    // Register each custom route
+    for (const route of routes) {
+      const handler =
+        'handler' in route && route.handler
+          ? route.handler
+          : 'createHandler' in route
+            ? await route.createHandler({ mastra })
+            : undefined;
+      if (!handler) continue;
+
+      const middlewares: any[] = [];
+      if (route.middleware) {
+        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
+      }
+
+      const allHandlers = [...middlewares, handler];
+      if (route.method === 'ALL') {
+        app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
+      } else {
+        app.on(route.method, route.path, allHandlers[0]!, ...allHandlers.slice(1));
+      }
+    }
+
+    // Mark unmatched requests so the adapter bridge can fall through to next()
+    app.notFound(() => new Response(null, { status: 404, headers: { [NOT_FOUND_HEADER]: 'true' } }));
+
+    this.customRouteHandler = async (request, env) => app.fetch(request, env);
+    return true;
+  }
+
+  /**
+   * Forwards a request to the internal custom route handler.
+   * Returns the Response if a custom route matched, or null to fall through.
+   * Used by non-Hono adapter bridges.
+   */
+  protected async handleCustomRouteRequest(
+    url: string,
+    method: string,
+    headers: Record<string, string | string[] | undefined>,
+    body: unknown,
+    requestContext?: RequestContext,
+  ): Promise<Response | null> {
+    if (!this.customRouteHandler) return null;
+
+    const fetchHeaders = new Headers();
+    for (const [key, value] of Object.entries(headers)) {
+      if (typeof value === 'string') fetchHeaders.set(key, value);
+      else if (Array.isArray(value))
+        value.forEach(v => {
+          fetchHeaders.append(key, v);
+        });
+    }
+
+    const init: RequestInit = { method, headers: fetchHeaders };
+    if (['POST', 'PUT', 'PATCH'].includes(method) && body !== undefined) {
+      const contentType = (typeof headers['content-type'] === 'string' ? headers['content-type'] : '') || '';
+      if (contentType.includes('application/json')) {
+        init.body = JSON.stringify(body);
+      } else if (typeof body === 'string') {
+        init.body = body;
+      } else if (body instanceof ArrayBuffer || body instanceof Uint8Array || body instanceof ReadableStream) {
+        init.body = body as any;
+      }
+    }
+
+    const request = new globalThis.Request(url, init);
+    const response = await this.customRouteHandler(request, { requestContext });
+
+    if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
+    return response;
+  }
+
+  /**
+   * Pipes a custom route Response to a Node.js ServerResponse (http.ServerResponse).
+   * Works with Koa (ctx.res), Express (res), and Fastify (reply.raw).
+   */
+  protected async writeCustomRouteResponse(
+    response: Response,
+    nodeRes: {
+      writeHead(status: number, headers: Record<string, string | string[]>): void;
+      write(chunk: unknown): void;
+      end(data?: string): void;
+    },
+  ): Promise<void> {
+    const headers: Record<string, string | string[]> = {};
+    response.headers.forEach((value, key) => {
+      if (key.toLowerCase() !== 'set-cookie') {
+        headers[key] = value;
+      }
+    });
+    const setCookies = response.headers.getSetCookie?.();
+    if (setCookies && setCookies.length > 0) {
+      headers['set-cookie'] = setCookies;
+    }
+    nodeRes.writeHead(response.status, headers);
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          nodeRes.write(value);
+        }
+      } finally {
+        nodeRes.end();
+      }
+    } else {
+      nodeRes.end(await response.text());
+    }
   }
 
   async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
@@ -349,6 +535,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       version,
       description,
     });
+
+    // Set the servers field so Swagger UI knows routes are served under the prefix
+    if (prefix) {
+      openApiSpec.servers = [{ url: prefix }];
+    }
 
     // Merge custom API routes into the OpenAPI spec
     if (this.customApiRoutes && this.customApiRoutes.length > 0) {

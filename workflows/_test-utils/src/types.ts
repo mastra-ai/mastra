@@ -312,7 +312,11 @@ export type SkippableTest =
   // Time travel to a non-existent step should fail
   | 'timeTravelNonExistentStep'
   // Resume a step that is not suspended (while another step IS suspended)
-  | 'resumeNonSuspendedStep';
+  | 'resumeNonSuspendedStep'
+  // Foreach streaming progress events
+  | 'foreachProgressStreaming'
+  | 'foreachProgressConcurrentStreaming'
+  | 'foreachProgressFailStreaming';
 
 /**
  * Configuration for creating a workflow test suite

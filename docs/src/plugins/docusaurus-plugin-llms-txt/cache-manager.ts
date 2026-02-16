@@ -15,6 +15,7 @@ interface CacheEntry {
 
 interface CacheData {
   version: string
+  pluginHash?: string
   entries: Record<string, CacheEntry>
 }
 
@@ -25,13 +26,15 @@ export class CacheManager {
   private cacheDir: string
   private cachePath: string
   private enabled: boolean
+  private pluginHash: string
   private data: CacheData
 
-  constructor(cacheDir: string, enabled: boolean = true) {
+  constructor(cacheDir: string, enabled: boolean = true, pluginHash: string = '') {
     this.cacheDir = cacheDir
     this.cachePath = path.join(cacheDir, CACHE_FILENAME)
     this.enabled = enabled
-    this.data = { version: CACHE_VERSION, entries: {} }
+    this.pluginHash = pluginHash
+    this.data = { version: CACHE_VERSION, pluginHash, entries: {} }
   }
 
   async load(): Promise<void> {
@@ -44,13 +47,15 @@ export class CacheManager {
       const raw = await fs.readFile(this.cachePath, 'utf-8')
       const parsed = JSON.parse(raw) as CacheData
 
-      // Version check - invalidate if version mismatch
-      if (parsed.version === CACHE_VERSION) {
+      // Version check - invalidate if version or plugin hash mismatch
+      if (parsed.version === CACHE_VERSION && parsed.pluginHash === this.pluginHash) {
         this.data = parsed
+      } else {
+        console.log('[llms-txt] Cache invalidated due to plugin changes')
       }
     } catch {
       // Cache doesn't exist or is invalid, start fresh
-      this.data = { version: CACHE_VERSION, entries: {} }
+      this.data = { version: CACHE_VERSION, pluginHash: this.pluginHash, entries: {} }
     }
   }
 

@@ -470,6 +470,152 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should emit per-iteration progress events during foreach streaming
+  {
+    mockRegistry.register('foreach-progress:map', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return { value: inputData.value + 11 };
+      }),
+    );
+
+    const mapStep = createStep({
+      id: 'map',
+      description: 'Maps (+11) on the current value',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ctx => mockRegistry.get('foreach-progress:map')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ finalValue: z.number() }),
+      execute: async ({ inputData }) => {
+        return { finalValue: inputData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0) };
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'foreach-progress',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ finalValue: z.number() }),
+      options: { validateInputs: false },
+    });
+
+    workflow.foreach(mapStep).then(finalStep).commit();
+
+    workflows['foreach-progress'] = {
+      workflow,
+      mocks: {
+        get map() {
+          return mockRegistry.get('foreach-progress:map');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should emit per-iteration progress events with concurrency during foreach streaming
+  {
+    mockRegistry.register('foreach-progress-concurrent:map', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return { value: inputData.value + 11 };
+      }),
+    );
+
+    const mapStep = createStep({
+      id: 'map',
+      description: 'Maps (+11) on the current value',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ctx => mockRegistry.get('foreach-progress-concurrent:map')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ finalValue: z.number() }),
+      execute: async ({ inputData }) => {
+        return { finalValue: inputData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0) };
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'foreach-progress-concurrent',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ finalValue: z.number() }),
+      options: { validateInputs: false },
+    });
+
+    workflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
+
+    workflows['foreach-progress-concurrent'] = {
+      workflow,
+      mocks: {
+        get map() {
+          return mockRegistry.get('foreach-progress-concurrent:map');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should emit progress event with failed iterationStatus when a foreach iteration fails
+  {
+    mockRegistry.register('foreach-progress-fail:map', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => {
+        if (inputData.value === 22) {
+          throw new Error('Iteration failed for value 22');
+        }
+        return { value: inputData.value + 11 };
+      }),
+    );
+
+    const mapStep = createStep({
+      id: 'map',
+      description: 'Maps (+11) on the current value',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ctx => mockRegistry.get('foreach-progress-fail:map')(ctx),
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      description: 'Final step',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ finalValue: z.number() }),
+      execute: async ({ inputData }) => {
+        return { finalValue: inputData.reduce((acc: number, curr: { value: number }) => acc + curr.value, 0) };
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [mapStep, finalStep],
+      id: 'foreach-progress-fail',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.object({ finalValue: z.number() }),
+      options: { validateInputs: false },
+    });
+
+    workflow.foreach(mapStep).then(finalStep).commit();
+
+    workflows['foreach-progress-fail'] = {
+      workflow,
+      mocks: {
+        get map() {
+          return mockRegistry.get('foreach-progress-fail:map');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -655,5 +801,143 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
         },
       });
     });
+
+    it.skipIf(skipTests.foreachProgressStreaming)(
+      'should emit per-iteration progress events during foreach streaming',
+      async () => {
+        const { workflow } = registry!['foreach-progress'];
+        const { stream } = ctx;
+
+        if (!stream) {
+          return;
+        }
+
+        const { events, result } = await stream(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
+
+        // Filter for progress events on the foreach step
+        const progressEvents = events.filter(
+          (event: any) => event.type === 'workflow-step-progress' && event.payload?.id === 'map',
+        );
+
+        // Should have 3 progress events (one per iteration)
+        expect(progressEvents.length).toBe(3);
+
+        // Each progress event should include iteration tracking info
+        expect(progressEvents[0]).toMatchObject({
+          type: 'workflow-step-progress',
+          payload: {
+            id: 'map',
+            completedCount: 1,
+            totalCount: 3,
+            currentIndex: 0,
+            iterationStatus: 'success',
+          },
+        });
+
+        expect(progressEvents[1]).toMatchObject({
+          type: 'workflow-step-progress',
+          payload: {
+            id: 'map',
+            completedCount: 2,
+            totalCount: 3,
+            currentIndex: 1,
+            iterationStatus: 'success',
+          },
+        });
+
+        expect(progressEvents[2]).toMatchObject({
+          type: 'workflow-step-progress',
+          payload: {
+            id: 'map',
+            completedCount: 3,
+            totalCount: 3,
+            currentIndex: 2,
+            iterationStatus: 'success',
+          },
+        });
+
+        // Final result should still be correct
+        expect(result.steps?.map).toMatchObject({
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+        });
+      },
+    );
+
+    it.skipIf(skipTests.foreachProgressConcurrentStreaming)(
+      'should emit per-iteration progress events with concurrency during foreach streaming',
+      async () => {
+        const { workflow } = registry!['foreach-progress-concurrent'];
+        const { stream } = ctx;
+
+        if (!stream) {
+          return;
+        }
+
+        const { events } = await stream(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
+
+        const progressEvents = events.filter(
+          (event: any) => event.type === 'workflow-step-progress' && event.payload?.id === 'map',
+        );
+
+        // Should have 3 progress events even with concurrency
+        expect(progressEvents.length).toBe(3);
+
+        // All progress events should have totalCount: 3
+        for (const event of progressEvents) {
+          expect((event as any).payload.totalCount).toBe(3);
+          expect((event as any).payload.iterationStatus).toBe('success');
+        }
+
+        // The last progress event should show all completed
+        const lastProgress = progressEvents[progressEvents.length - 1] as any;
+        expect(lastProgress.payload.completedCount).toBe(3);
+      },
+    );
+
+    it.skipIf(skipTests.foreachProgressFailStreaming)(
+      'should emit progress event with failed iterationStatus when a foreach iteration fails',
+      async () => {
+        const { workflow } = registry!['foreach-progress-fail'];
+        const { stream } = ctx;
+
+        if (!stream) {
+          return;
+        }
+
+        const { events } = await stream(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
+
+        const progressEvents = events.filter(
+          (event: any) => event.type === 'workflow-step-progress' && event.payload?.id === 'map',
+        );
+
+        // First iteration succeeds, second fails — foreach should stop at failure
+        expect(progressEvents.length).toBeGreaterThanOrEqual(1);
+
+        // The first progress event should show success for index 0
+        expect(progressEvents[0]).toMatchObject({
+          type: 'workflow-step-progress',
+          payload: {
+            id: 'map',
+            completedCount: 1,
+            totalCount: 3,
+            currentIndex: 0,
+            iterationStatus: 'success',
+          },
+        });
+
+        // There should be a progress event showing the failure
+        const failedProgress = progressEvents.find((e: any) => e.payload.iterationStatus === 'failed');
+        expect(failedProgress).toBeDefined();
+        expect(failedProgress).toMatchObject({
+          type: 'workflow-step-progress',
+          payload: {
+            id: 'map',
+            currentIndex: 1,
+            iterationStatus: 'failed',
+          },
+        });
+      },
+    );
   });
 }

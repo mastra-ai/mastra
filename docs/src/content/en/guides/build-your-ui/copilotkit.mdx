@@ -87,7 +87,7 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 Create a chat route for the CopilotKit frontend by using the `registerCopilotKit()` helper from `@ag-ui/mastra`. Add it to your Mastra project (and its peer dependencies):
 
 ```bash npm2yarn
-npm install @ag-ui/mastra @copilotkit/runtime @ag-ui/core @ag-ui/client @ag-ui/encoder @ag-ui/langgraph @ag-ui/proto
+npm install @ag-ui/mastra @mastra/client-js @mastra/core @ag-ui/core @ag-ui/client @copilotkit/runtime
 ```
 
 In your `src/mastra/index.ts` file, register the chat route:
@@ -123,7 +123,7 @@ This will make the `weatherAgent` available at `/chat` in a CopilotKit-compatibl
 
 Run the Mastra server using the following command:
 
-```bash
+```bash npm2yarn
 npm run dev
 ```
 
@@ -141,7 +141,7 @@ cd ..
 
 Create a new Next.js project with the name `my-copilot-app`:
 
-```bash
+```bash npm2yarn
 npx create-next-app@latest my-copilot-app
 ```
 
@@ -157,7 +157,7 @@ cd my-copilot-app
 
 Install the CopilotKit UI packages which you'll use to display a chat interface:
 
-```bash
+```bash npm2yarn
 npm install @copilotkit/react-ui @copilotkit/react-core
 ```
 
@@ -191,7 +191,7 @@ export default function Home() {
 
 You're ready to connect the pieces! Make sure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
 
-```bash
+```bash npm2yarn
 npm run dev
 ```
 
@@ -220,6 +220,5 @@ export const mastra = new Mastra({
   bundler: {
     externals: ['@copilotkit/runtime'],
   },
- // Rest of the configuration...
 });
 ```

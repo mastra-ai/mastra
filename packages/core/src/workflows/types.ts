@@ -469,7 +469,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   Step<any, any, any, any, any, any, TEngineType>,
-  'id' | 'description'
+  'id' | 'description' | 'metadata'
 > & {
   component?: string;
   serializedStepFlow?: SerializedStepFlowEntry[];
@@ -556,6 +556,7 @@ export type StepParams<
   requestContextSchema?: TRequestContextSchema;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
+  metadata?: StepMetadata;
   execute: ExecuteFunction<
     TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
     z.infer<TInputSchema>,

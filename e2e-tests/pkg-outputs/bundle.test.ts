@@ -1,7 +1,6 @@
 import { globby } from 'globby';
 import { it, describe, expect } from 'vitest';
 import * as customResolve from 'resolve.exports';
-import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { join, relative, dirname, extname } from 'node:path/posix';
 import { stat } from 'node:fs/promises';
@@ -14,6 +13,7 @@ const globalIgnore = [
   '@mastra/dane',
   '@mastra/mcp-docs-server',
   '@mastra/mcp-registry-registry',
+  'mastra-docs',
 ];
 
 describe.for(
@@ -86,6 +86,7 @@ describe.for(
     pkgJson.name === 'mastra' ||
       pkgJson.name === 'create-mastra' ||
       pkgJson.name === '@mastra/client-js' ||
+      pkgJson.name === '@mastra/opencode' ||
       !pkgJson.name.startsWith('@mastra/'),
   )('should have @mastra/core as a peer dependency if used', async () => {
     const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];

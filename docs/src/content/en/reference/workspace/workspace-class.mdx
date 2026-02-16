@@ -7,6 +7,8 @@ packages:
 
 # Workspace Class
 
+**Added in:** `@mastra/core@1.1.0`
+
 The `Workspace` class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities. It also supports BM25 and vector search for indexed content.
 
 ## Usage Example
@@ -225,7 +227,7 @@ await workspace.init();
 
 Calling `init()` is optional in most cases:
 - **Sandbox**: Auto-starts on first `executeCommand()` call. Use `init()` to avoid first-command latency.
-- **Filesystem**: Only needed if the base directory doesn't exist yet.
+- **Filesystem**: Creates the base directory and runs any provider-specific setup. Some providers auto-create the directory on first operation.
 - **Search**: Required only if using `autoIndexPaths` for auto-indexing.
 
 Initialization performs:

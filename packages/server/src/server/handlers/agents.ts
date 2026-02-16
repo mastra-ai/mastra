@@ -41,10 +41,13 @@ import {
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
 } from '../schemas/agents';
+import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema } from '../schemas/workspace';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+
+import { toSlug } from '../utils';
 
 import { handleError } from './error';
 import {
@@ -58,13 +61,33 @@ import {
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
- * @param providerId - The provider identifier (may include a suffix like ".chat")
+ * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
+ * @param providerId - The provider identifier (may include a suffix like ".chat" or be from a custom gateway)
  * @returns true if all required environment variables are set, false otherwise
  */
-function isProviderConnected(providerId: string): boolean {
+export function isProviderConnected(providerId: string): boolean {
   // Clean provider ID (e.g., "openai.chat" -> "openai")
   const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
-  const provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+
+  // First, try direct lookup
+  let provider = PROVIDER_REGISTRY[cleanId as keyof typeof PROVIDER_REGISTRY];
+
+  // If not found and doesn't contain a slash, check if it exists with a gateway prefix
+  // This handles custom gateway providers stored as "gateway/provider" in the registry
+  if (!provider && !cleanId.includes('/')) {
+    // Search for a provider ID that matches the pattern "*/cleanId"
+    const registryKeys = Object.keys(PROVIDER_REGISTRY);
+    const matchingKey = registryKeys.find(key => {
+      // Check if the key matches the pattern "gateway/providerId"
+      const parts = key.split('/');
+      return parts.length === 2 && parts[1] === cleanId;
+    });
+
+    if (matchingKey) {
+      provider = PROVIDER_REGISTRY[matchingKey as keyof typeof PROVIDER_REGISTRY];
+    }
+  }
+
   if (!provider) return false;
 
   const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
@@ -451,6 +474,16 @@ async function formatAgentList({
     },
   }));
 
+  // Serialize requestContextSchema if present
+  let serializedRequestContextSchema: string | undefined;
+  if (agent.requestContextSchema) {
+    try {
+      serializedRequestContextSchema = stringify(zodToJsonSchema(agent.requestContextSchema));
+    } catch (error) {
+      logger.error('Error serializing requestContextSchema for agent', { agentName: agent.name, error });
+    }
+  }
+
   return {
     id: agent.id || id,
     name: agent.name,
@@ -471,6 +504,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
   };
 }
@@ -513,7 +547,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   if (!agent) {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
     try {
-      agent = await mastra.getStoredAgentById(agentId);
+      agent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
     } catch (error) {
       logger.debug('Error getting stored agent', error);
     }
@@ -715,11 +749,23 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       // Also fetch and include stored agents
       try {
-        const storedAgentsResult = await mastra.listStoredAgents();
+        const editor = mastra.getEditor();
+
+        let storedAgentsResult;
+        try {
+          storedAgentsResult = await editor?.agent.list();
+        } catch (error) {
+          console.error('Error listing stored agents:', error);
+          storedAgentsResult = null;
+        }
+
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
-          for (const agent of storedAgentsResult.agents) {
+          for (const storedAgentConfig of storedAgentsResult.agents) {
             try {
+              const agent = await editor?.agent.getById(storedAgentConfig.id);
+              if (!agent) continue;
+
               const serialized = await formatAgentList({
                 id: agent.id,
                 mastra,
@@ -727,6 +773,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
                 requestContext,
                 partial: isPartial,
               });
+
               // Don't overwrite code-defined agents with same ID
               if (!serializedAgents[serialized.id]) {
                 serializedAgents[serialized.id] = serialized;
@@ -734,7 +781,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
             } catch (agentError) {
               // Log but continue with other agents
               const logger = mastra.getLogger();
-              logger.warn('Failed to serialize stored agent', { agentId: agent.id, error: agentError });
+              logger.warn('Failed to serialize stored agent', { agentId: storedAgentConfig.id, error: agentError });
             }
           }
         }
@@ -774,6 +821,51 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error getting agent');
+    }
+  },
+});
+
+/**
+ * POST /agents/:agentId/clone - Clone an agent to a stored agent
+ */
+export const CLONE_AGENT_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/clone',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: z.object({
+    newId: z.string().optional().describe('ID for the cloned agent. If not provided, derived from agent ID.'),
+    newName: z.string().optional().describe('Name for the cloned agent. Defaults to "{name} (Clone)".'),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    authorId: z.string().optional(),
+  }),
+  responseSchema: createStoredAgentResponseSchema,
+  summary: 'Clone agent',
+  description: 'Clones a code-defined or stored agent to a new stored agent in the database',
+  tags: ['Agents'],
+  requiresAuth: true,
+  handler: async ({ agentId, mastra, newId, newName, metadata, authorId, requestContext }) => {
+    try {
+      const editor = mastra.getEditor();
+      if (!editor) {
+        return handleError(new Error('Editor is not configured on the Mastra instance'), 'Error cloning agent');
+      }
+
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      const cloneId = toSlug(newId || `${agentId}-clone`);
+
+      const result = await editor.agent.clone(agent, {
+        newId: cloneId,
+        newName,
+        metadata,
+        authorId,
+        requestContext,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error cloning agent');
     }
   },
 });
@@ -1549,11 +1641,9 @@ Ensure the prompt is:
 - Ethically sound
 
 4. OUTPUT FORMAT
-Return a structured response with:
-- Enhanced system prompt
-- Analysis of key components
-- Identified goals and constraints
-- Core domain concepts
+Return your response as JSON with exactly these two fields:
+- explanation: A brief explanation of the changes you made and why
+- new_prompt: The complete enhanced system prompt as a single string
 
 Remember: A good system prompt should be specific enough to guide behavior but flexible enough to handle edge cases. Focus on creating prompts that are clear, actionable, and aligned with the intended use case.`;
 

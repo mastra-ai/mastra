@@ -1,10 +1,13 @@
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
-import type { TABLE_NAMES } from '../../constants';
+import type { TABLE_NAMES, TABLE_OBSERVATIONAL_MEMORY } from '../../constants';
 import type { StorageColumn } from '../../types';
 import { StoreOperations } from './base';
 
+// InMemory storage supports all tables including observational memory
+type InMemoryTableNames = TABLE_NAMES | typeof TABLE_OBSERVATIONAL_MEMORY;
+
 export class StoreOperationsInMemory extends StoreOperations {
-  data: Record<TABLE_NAMES, Map<string, Record<string, any>>>;
+  data: Record<InMemoryTableNames, Map<string, Record<string, any>>>;
 
   constructor() {
     super();
@@ -18,6 +21,18 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_ai_spans: new Map(),
       mastra_agents: new Map(),
       mastra_agent_versions: new Map(),
+      mastra_observational_memory: new Map(),
+      mastra_prompt_blocks: new Map(),
+      mastra_prompt_block_versions: new Map(),
+      mastra_scorer_definitions: new Map(),
+      mastra_scorer_definition_versions: new Map(),
+      mastra_mcp_clients: new Map(),
+      mastra_mcp_client_versions: new Map(),
+      mastra_datasets: new Map(),
+      mastra_dataset_items: new Map(),
+      mastra_dataset_versions: new Map(),
+      mastra_experiments: new Map(),
+      mastra_experiment_results: new Map(),
     };
   }
 

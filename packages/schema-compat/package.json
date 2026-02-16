@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -18,6 +18,16 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./schema": {
+      "import": {
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.js"
+      },
+      "require": {
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.cjs"
       }
     },
     "./zod-to-json": {
@@ -68,17 +78,23 @@
   },
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@standard-schema/spec": "^1.1.0",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "ajv": "^8.17.1",
+    "arktype": "^2.1.29",
     "eslint": "^9.37.0",
+    "json-schema-traverse": "^1.0.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-v4": "npm:zod@^4.0.0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

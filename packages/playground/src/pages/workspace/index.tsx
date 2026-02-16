@@ -47,9 +47,10 @@ export default function Workspace() {
   const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
   const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
   const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
+  // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
+  const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
 
   // Get state from URL query params (path, file, tab are still query params)
-  const pathFromUrl = searchParams.get('path') || '/';
   const fileFromUrl = searchParams.get('file');
   const tabFromUrl = searchParams.get('tab') as TabType | null;
 
@@ -66,6 +67,12 @@ export default function Workspace() {
     isLoading: isLoadingInfo,
     error: workspaceInfoError,
   } = useWorkspaceInfo(effectiveWorkspaceId);
+
+  // For uncontained local filesystems, default to basePath instead of / (which would show the real root)
+  const fsMetadata = workspaceInfo?.filesystem?.metadata;
+  const defaultPath =
+    fsMetadata?.contained === false && typeof fsMetadata?.basePath === 'string' ? fsMetadata.basePath : '/';
+  const pathFromUrl = searchParams.get('path') || defaultPath;
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
@@ -91,6 +98,7 @@ export default function Workspace() {
 
   // Navigate to a different workspace (changes path, resets query params)
   const setSelectedWorkspaceId = (id: string) => {
+    setHasUndiscoveredInstall(false); // Reset warning when switching workspaces
     navigate(`/workspaces/${id}`);
   };
 
@@ -163,11 +171,30 @@ export default function Workspace() {
       installSkill.mutate(
         { ...params, workspaceId: effectiveWorkspaceId },
         {
-          onSuccess: result => {
+          onSuccess: async result => {
             if (result.success) {
-              toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
               setShowAddSkillDialog(false);
-              refetchSkills();
+
+              // Refetch skills and check if the installed skill appears in the list
+              const { data: refreshedData, error } = await refetchSkills();
+
+              // If refetch failed, just show success (can't verify discovery)
+              if (error || !refreshedData) {
+                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+                return;
+              }
+
+              const installedSkillFound = refreshedData.skills.some(s => s.name === result.skillName);
+
+              if (installedSkillFound) {
+                toast.success(`Skill "${result.skillName}" installed successfully (${result.filesWritten} files)`);
+              } else {
+                // Skill was installed but not discovered - likely missing path config
+                setHasUndiscoveredInstall(true);
+                toast.warning(
+                  `Skill "${result.skillName}" installed to .agents/skills but not discovered. Add .agents/skills to your workspace skills paths.`,
+                );
+              }
             } else {
               toast.error('Failed to install skill');
             }
@@ -578,6 +605,7 @@ export default function Workspace() {
                 skills={skills}
                 isLoading={isLoadingSkills}
                 isSkillsConfigured={isSkillsConfigured}
+                hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
                 basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
                 onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
                 onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
@@ -605,7 +633,12 @@ export default function Workspace() {
           workspaceId={effectiveWorkspaceId}
           onInstall={handleInstallSkill}
           isInstalling={installSkill.isPending}
-          installedSkillNames={skills.map(s => s.name)}
+          // Pass precise IDs for skills with source info (format: owner/repo/name)
+          installedSkillIds={skills
+            .filter(s => s.skillsShSource)
+            .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`)}
+          // Fallback to names for skills without source info
+          installedSkillNames={skills.filter(s => !s.skillsShSource).map(s => s.name)}
         />
       )}
     </MainContentLayout>

@@ -15,6 +15,7 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
   CreateIndexOptions,
+  AgentInstructionBlock,
 } from '@mastra/core/storage';
 import type {
   AgentVersion,
@@ -22,7 +23,7 @@ import type {
   ListVersionsInput,
   ListVersionsOutput,
 } from '@mastra/core/storage/domains/agents';
-import { PgDB, resolvePgConfig } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -43,6 +44,28 @@ export class AgentsPG extends AgentsStorage {
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (AgentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns all DDL statements for this domain: tables.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+
+    // Tables
+    for (const tableName of AgentsPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    return statements;
   }
 
   /**
@@ -77,6 +100,10 @@ export class AgentsPG extends AgentsStorage {
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
       ifNotExists: ['status', 'authorId'],
     });
+
+    // Migrate tools field from string[] to JSONB format
+    await this.#migrateToolsToJsonbFormat();
+
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
 
@@ -154,7 +181,7 @@ export class AgentsPG extends AgentsStorage {
           1,
           row.name ?? agentId,
           row.description ?? null,
-          row.instructions ?? '',
+          this.serializeInstructions(row.instructions ?? ''),
           row.model ? JSON.stringify(row.model) : '{}',
           row.tools ? JSON.stringify(row.tools) : null,
           row.defaultOptions ? JSON.stringify(row.defaultOptions) : null,
@@ -202,6 +229,57 @@ export class AgentsPG extends AgentsStorage {
   }
 
   /**
+   * Migrates the tools field from string[] format to JSONB format { "tool-key": { "description": "..." } }.
+   * This handles the transition from the old format where tools were stored as an array of string keys
+   * to the new format where tools can have per-agent description overrides.
+   */
+  async #migrateToolsToJsonbFormat(): Promise<void> {
+    const fullVersionsTableName = getTableName({
+      indexName: TABLE_AGENT_VERSIONS,
+      schemaName: getSchemaName(this.#schema),
+    });
+
+    try {
+      // Check if any records have tools stored as a JSON array
+      const recordsWithArrayTools = await this.#db.client.any(
+        `SELECT id, tools FROM ${fullVersionsTableName} 
+         WHERE tools IS NOT NULL 
+         AND jsonb_typeof(tools) = 'array'`,
+      );
+
+      if (recordsWithArrayTools.length === 0) {
+        return; // No migration needed
+      }
+
+      // Convert each record's tools from array to object format
+      for (const record of recordsWithArrayTools) {
+        const toolsArray = record.tools as string[];
+        const toolsObject: Record<string, { description?: string }> = {};
+
+        // Convert each tool string to an object key with empty config
+        for (const toolKey of toolsArray) {
+          toolsObject[toolKey] = {};
+        }
+
+        // Update the record with the new format
+        await this.#db.client.none(
+          `UPDATE ${fullVersionsTableName} 
+           SET tools = $1::jsonb 
+           WHERE id = $2`,
+          [JSON.stringify(toolsObject), record.id],
+        );
+      }
+
+      this.logger?.info?.(
+        `Migrated ${recordsWithArrayTools.length} agent version(s) tools from array to object format`,
+      );
+    } catch (error) {
+      // Log but don't fail - this is a non-breaking migration
+      this.logger?.warn?.('Failed to migrate tools to JSONB format:', error);
+    }
+  }
+
+  /**
    * Removes stale draft agent records that have no activeVersionId.
    * These are left behind when createAgent partially fails (inserts thin record
    * but fails to create the version due to schema mismatch).
@@ -209,7 +287,7 @@ export class AgentsPG extends AgentsStorage {
   async #cleanupStaleDrafts(): Promise<void> {
     try {
       const fullTableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND "activeVersionId" IS NULL`);
+      await this.#db.client.none(`DELETE FROM ${fullTableName} WHERE status = 'draft' AND \"activeVersionId\" IS NULL`);
     } catch {
       // Non-critical cleanup, ignore errors
     }
@@ -245,6 +323,7 @@ export class AgentsPG extends AgentsStorage {
     try {
       return JSON.parse(value);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       const details: Record<string, string> = {
         value: value.length > 100 ? value.substring(0, 100) + '...' : value,
       };
@@ -268,7 +347,7 @@ export class AgentsPG extends AgentsStorage {
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
-      status: row.status as string,
+      status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
@@ -277,7 +356,7 @@ export class AgentsPG extends AgentsStorage {
     };
   }
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getById(id: string): Promise<StorageAgentType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
@@ -289,6 +368,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_AGENT_BY_ID', 'FAILED'),
@@ -301,13 +381,14 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
     try {
       const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
       const nowIso = now.toISOString();
 
-      // 1. Create the thin agent record with status='draft'
+      // 1. Create the thin agent record with status='draft' and activeVersionId=null
       await this.#db.client.none(
         `INSERT INTO ${agentsTable} (
           id, status, "authorId", metadata,
@@ -341,22 +422,29 @@ export class AgentsPG extends AgentsStorage {
         changeMessage: 'Initial version',
       });
 
-      // 3. Set the activeVersionId and status='published'
-      await this.#db.client.none(
-        `UPDATE ${agentsTable} SET "activeVersionId" = $1, status = $2, "updatedAt" = $3, "updatedAtZ" = $4 WHERE id = $5`,
-        [versionId, 'published', nowIso, nowIso, agent.id],
-      );
-
+      // 3. Return the thin agent record (activeVersionId remains null)
       return {
         id: agent.id,
-        status: 'published',
-        activeVersionId: versionId,
+        status: 'draft',
+        activeVersionId: undefined,
         authorId: agent.authorId,
         metadata: agent.metadata,
         createdAt: now,
         updatedAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
+      // Best-effort cleanup to prevent orphaned draft records
+      try {
+        const agentsTable = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+        await this.#db.client.none(
+          `DELETE FROM ${agentsTable} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+          [agent.id],
+        );
+      } catch {
+        // Ignore cleanup errors
+      }
+
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_AGENT', 'FAILED'),
@@ -369,12 +457,13 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // First, get the existing agent
-      const existingAgent = await this.getAgentById({ id });
+      const existingAgent = await this.getById(id);
       if (!existingAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND'),
@@ -385,29 +474,110 @@ export class AgentsPG extends AgentsStorage {
         });
       }
 
+      // Separate metadata fields from config fields
+      const { authorId, activeVersionId, metadata, ...configFields } = updates;
+
+      // Extract just the config field names from StorageAgentSnapshotType
+      const configFieldNames = [
+        'name',
+        'description',
+        'instructions',
+        'model',
+        'tools',
+        'defaultOptions',
+        'workflows',
+        'agents',
+        'integrationTools',
+        'inputProcessors',
+        'outputProcessors',
+        'memory',
+        'scorers',
+        'mcpClients',
+        'requestContextSchema',
+      ];
+
+      // Check if any config fields are present in the update
+      const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+
+      // Handle config updates by creating a new version
+      if (hasConfigUpdate) {
+        // Get the latest version to use as base
+        const latestVersion = await this.getLatestVersion(id);
+        if (!latestVersion) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NO_VERSIONS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: `No versions found for agent ${id}`,
+            details: { agentId: id },
+          });
+        }
+
+        // Extract config from latest version
+        const {
+          id: _versionId,
+          agentId: _agentId,
+          versionNumber: _versionNumber,
+          changedFields: _changedFields,
+          changeMessage: _changeMessage,
+          createdAt: _createdAt,
+          ...latestConfig
+        } = latestVersion;
+
+        // Merge updates into latest config
+        // Convert null values to undefined (null means "remove this field")
+        const sanitizedConfigFields = Object.fromEntries(
+          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
+        );
+        const newConfig = {
+          ...latestConfig,
+          ...sanitizedConfigFields,
+        };
+
+        // Identify which fields changed
+        const changedFields = configFieldNames.filter(
+          field =>
+            field in configFields &&
+            JSON.stringify(configFields[field as keyof typeof configFields]) !==
+              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+        );
+
+        // Create new version only if fields changed
+        if (changedFields.length > 0) {
+          const newVersionId = crypto.randomUUID();
+          const newVersionNumber = latestVersion.versionNumber + 1;
+
+          await this.createVersion({
+            id: newVersionId,
+            agentId: id,
+            versionNumber: newVersionNumber,
+            ...newConfig,
+            changedFields,
+            changeMessage: `Updated ${changedFields.join(', ')}`,
+          });
+        }
+      }
+
+      // Update metadata fields on the agent record
       const setClauses: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;
 
-      if (updates.authorId !== undefined) {
+      if (authorId !== undefined) {
         setClauses.push(`"authorId" = $${paramIndex++}`);
-        values.push(updates.authorId);
+        values.push(authorId);
       }
 
-      if (updates.activeVersionId !== undefined) {
+      if (activeVersionId !== undefined) {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
-        values.push(updates.activeVersionId);
-
-        // If activeVersionId is set, mark as published
-        setClauses.push(`status = $${paramIndex++}`);
-        values.push('published');
+        values.push(activeVersionId);
+        // Do NOT automatically set status='published' when activeVersionId is updated
       }
 
-      if (updates.metadata !== undefined) {
-        // Merge metadata
-        const mergedMetadata = { ...existingAgent.metadata, ...updates.metadata };
+      if (metadata !== undefined) {
+        // REPLACE metadata (not merge) - this is standard DB behavior
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(JSON.stringify(metadata));
       }
 
       // Always update the updatedAt timestamp
@@ -429,7 +599,7 @@ export class AgentsPG extends AgentsStorage {
       }
 
       // Return the updated agent
-      const updatedAgent = await this.getAgentById({ id });
+      const updatedAgent = await this.getById(id);
       if (!updatedAgent) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
@@ -457,16 +627,17 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
       // Delete all versions for this agent first
-      await this.deleteVersionsByAgentId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the agent
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_AGENT', 'FAILED'),
@@ -479,7 +650,7 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     const { page = 0, perPage: perPageInput, orderBy } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
@@ -532,6 +703,7 @@ export class AgentsPG extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_AGENTS', 'FAILED'),
@@ -559,16 +731,16 @@ export class AgentsPG extends AgentsStorage {
           name, description, instructions, model, tools,
           "defaultOptions", workflows, agents, "integrationTools",
           "inputProcessors", "outputProcessors", memory, scorers,
-          "changedFields", "changeMessage",
+          "mcpClients", "requestContextSchema", "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
         [
           input.id,
           input.agentId,
           input.versionNumber,
           input.name,
           input.description ?? null,
-          input.instructions,
+          this.serializeInstructions(input.instructions),
           JSON.stringify(input.model),
           input.tools ? JSON.stringify(input.tools) : null,
           input.defaultOptions ? JSON.stringify(input.defaultOptions) : null,
@@ -579,6 +751,8 @@ export class AgentsPG extends AgentsStorage {
           input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
           input.memory ? JSON.stringify(input.memory) : null,
           input.scorers ? JSON.stringify(input.scorers) : null,
+          input.mcpClients ? JSON.stringify(input.mcpClients) : null,
+          input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
@@ -591,6 +765,7 @@ export class AgentsPG extends AgentsStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'CREATE_VERSION', 'FAILED'),
@@ -614,6 +789,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_VERSION', 'FAILED'),
@@ -640,6 +816,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_VERSION_BY_NUMBER', 'FAILED'),
@@ -666,6 +843,7 @@ export class AgentsPG extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_LATEST_VERSION', 'FAILED'),
@@ -733,6 +911,7 @@ export class AgentsPG extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'LIST_VERSIONS', 'FAILED'),
@@ -750,6 +929,7 @@ export class AgentsPG extends AgentsStorage {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_VERSION', 'FAILED'),
@@ -762,17 +942,18 @@ export class AgentsPG extends AgentsStorage {
     }
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [agentId]);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [entityId]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { agentId },
+          details: { agentId: entityId },
         },
         error,
       );
@@ -787,6 +968,7 @@ export class AgentsPG extends AgentsStorage {
       ]);
       return parseInt(result.count, 10);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'COUNT_VERSIONS', 'FAILED'),
@@ -803,6 +985,22 @@ export class AgentsPG extends AgentsStorage {
   // Private Helper Methods
   // ==========================================================================
 
+  private serializeInstructions(instructions: string | AgentInstructionBlock[] | undefined | null): string | undefined {
+    if (instructions == null) return undefined;
+    return Array.isArray(instructions) ? JSON.stringify(instructions) : instructions;
+  }
+
+  private deserializeInstructions(raw: string | null | undefined): string | AgentInstructionBlock[] {
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as AgentInstructionBlock[];
+    } catch {
+      // Not JSON — plain string
+    }
+    return raw;
+  }
+
   private parseVersionRow(row: any): AgentVersion {
     return {
       id: row.id as string,
@@ -810,7 +1008,7 @@ export class AgentsPG extends AgentsStorage {
       versionNumber: row.versionNumber as number,
       name: row.name as string,
       description: row.description as string | undefined,
-      instructions: row.instructions as string,
+      instructions: this.deserializeInstructions(row.instructions as string),
       model: this.parseJson(row.model, 'model'),
       tools: this.parseJson(row.tools, 'tools'),
       defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
@@ -821,6 +1019,8 @@ export class AgentsPG extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: row.createdAtZ || row.createdAt,
