@@ -332,8 +332,6 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
 export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
   const { execute, skipTests } = ctx;
 
-  const useRegistry = registry !== undefined;
-
   describe('Simple Conditions', () => {
     it('should follow conditional chains', async () => {
       const { workflow, mocks } = registry!['cond-follow-chains'];

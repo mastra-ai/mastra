@@ -265,6 +265,9 @@ export class InngestRun<
                 workflowName: this.workflowId,
                 runId: this.runId,
               });
+              if (snapshot?.context) {
+                snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+              }
               handleResult(
                 { output: { result: { steps: snapshot?.context, status: 'canceled' } } },
                 'polling-cancelled',
