@@ -72,11 +72,7 @@ export function createWorkspaceTests(context: DurableAgentTestContext) {
 
       // Create a model that calls the tool, then outputs text
       // Use same pattern as the passing test
-      const mockModel = createToolCallThenTextModel(
-        'workspaceTestTool',
-        { value: 'test' },
-        'Done processing',
-      );
+      const mockModel = createToolCallThenTextModel('workspaceTestTool', { value: 'test' }, 'Done processing');
 
       const agent = new Agent({
         id: 'workspace-tool-agent',
@@ -143,11 +139,7 @@ export function createWorkspaceTests(context: DurableAgentTestContext) {
       });
 
       // Create a model that calls the tool, then outputs text
-      const mockModel = createToolCallThenTextModel(
-        'workspaceCheckTool',
-        { value: 'test' },
-        'Done',
-      );
+      const mockModel = createToolCallThenTextModel('workspaceCheckTool', { value: 'test' }, 'Done');
 
       const agent = new Agent({
         id: 'no-workspace-tool-agent',

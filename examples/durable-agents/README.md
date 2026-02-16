@@ -4,30 +4,34 @@ This example demonstrates three patterns for durable agent execution, all with R
 
 ## Agent Patterns
 
-| Agent | Factory | Resumable Streams | Durable Execution |
-|-------|---------|-------------------|-------------------|
-| `durableResearchAgent` | `createDurableAgent` | Redis | - |
-| `eventedResearchAgent` | `createEventedAgent` | Redis | Workflow engine |
-| `inngestResearchAgent` | `createInngestAgent` | Redis | Inngest |
+| Agent                  | Factory              | Resumable Streams | Durable Execution |
+| ---------------------- | -------------------- | ----------------- | ----------------- |
+| `durableResearchAgent` | `createDurableAgent` | Redis             | -                 |
+| `eventedResearchAgent` | `createEventedAgent` | Redis             | Workflow engine   |
+| `inngestResearchAgent` | `createInngestAgent` | Redis             | Inngest           |
 
 ## Setup
 
 1. Start Redis:
+
 ```bash
 docker run -d -p 6379:6379 redis
 ```
 
 2. Install dependencies:
+
 ```bash
 pnpm install
 ```
 
 3. Start the dev server:
+
 ```bash
 pnpm dev
 ```
 
 4. For Inngest agent, start the Inngest dev server:
+
 ```bash
 npx inngest-cli@latest dev
 ```
@@ -70,9 +74,9 @@ export const mastra = new Mastra({
   cache,
   pubsub,
   agents: {
-    durableResearchAgent,   // Inherits cache/pubsub
-    eventedResearchAgent,   // Inherits cache/pubsub
-    inngestResearchAgent,   // Inherits cache/pubsub
+    durableResearchAgent, // Inherits cache/pubsub
+    eventedResearchAgent, // Inherits cache/pubsub
+    inngestResearchAgent, // Inherits cache/pubsub
   },
 });
 ```

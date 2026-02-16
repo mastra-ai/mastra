@@ -149,7 +149,12 @@ export interface RedisServerCacheOptions {
    *   client.scan(cursor, { match: pattern, count: count })
    * ```
    */
-  scanKeys?: (client: RedisClient, cursor: string | number, pattern: string, count: number) => Promise<[string | number, string[]]>;
+  scanKeys?: (
+    client: RedisClient,
+    cursor: string | number,
+    pattern: string,
+    count: number,
+  ) => Promise<[string | number, string[]]>;
 }
 
 /**
@@ -242,7 +247,12 @@ export class RedisServerCache extends MastraServerCache {
   private keyPrefix: string;
   private ttlSeconds: number;
   private setWithExpiry: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<unknown>;
-  private scanKeys: (client: RedisClient, cursor: string | number, pattern: string, count: number) => Promise<[string | number, string[]]>;
+  private scanKeys: (
+    client: RedisClient,
+    cursor: string | number,
+    pattern: string,
+    count: number,
+  ) => Promise<[string | number, string[]]>;
 
   constructor(config: { client: RedisClient }, options: RedisServerCacheOptions = {}) {
     super({ name: 'RedisServerCache' });
@@ -386,7 +396,8 @@ export class RedisServerCache extends MastraServerCache {
  */
 export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys'> = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { ex: seconds } as any),
-  scanKeys: (client, cursor, pattern, count) => client.scan(cursor, { match: pattern, count } as any) as Promise<[string | number, string[]]>,
+  scanKeys: (client, cursor, pattern, count) =>
+    client.scan(cursor, { match: pattern, count } as any) as Promise<[string | number, string[]]>,
 };
 
 /**
@@ -394,5 +405,6 @@ export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'sca
  */
 export const nodeRedisPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys'> = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { EX: seconds } as any),
-  scanKeys: (client, cursor, pattern, count) => client.scan(cursor, { MATCH: pattern, COUNT: count } as any) as Promise<[string | number, string[]]>,
+  scanKeys: (client, cursor, pattern, count) =>
+    client.scan(cursor, { MATCH: pattern, COUNT: count } as any) as Promise<[string | number, string[]]>,
 };

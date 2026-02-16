@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RedisServerCache, upstashPreset, nodeRedisPreset  } from './index';
-import type {RedisClient} from './index';
+import { RedisServerCache, upstashPreset, nodeRedisPreset } from './index';
+import type { RedisClient } from './index';
 
 // Create a mock Redis client
 function createMockClient(): RedisClient & { [key: string]: ReturnType<typeof vi.fn> } {
@@ -170,9 +170,7 @@ describe('RedisServerCache', () => {
     });
 
     it('should handle numeric cursor (for ioredis compatibility)', async () => {
-      mockClient.scan
-        .mockResolvedValueOnce([5, ['mastra:cache:key1']])
-        .mockResolvedValueOnce([0, []]);
+      mockClient.scan.mockResolvedValueOnce([5, ['mastra:cache:key1']]).mockResolvedValueOnce([0, []]);
       mockClient.del.mockResolvedValue(1);
 
       await cache.clear();
