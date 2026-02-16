@@ -27,6 +27,14 @@ export function MCPClientList() {
 
   const handleRemove = (index: number) => {
     const current = form.getValues('mcpClients') ?? [];
+    const removed = current[index];
+
+    // Track persisted clients for deletion on save
+    if (removed?.id) {
+      const toDelete = form.getValues('mcpClientsToDelete') ?? [];
+      form.setValue('mcpClientsToDelete', [...toDelete, removed.id]);
+    }
+
     form.setValue(
       'mcpClients',
       current.filter((_, i) => i !== index),

@@ -126,8 +126,7 @@ function CreateLayoutWrapper() {
         }
       }
 
-      const mcpClientsParam =
-        mcpClientIds.length > 0 ? Object.fromEntries(mcpClientIds.map(id => [id, {}])) : undefined;
+      const mcpClientsParam = Object.fromEntries(mcpClientIds.map(id => [id, {}]));
 
       const formScorers = values.scorers ? Object.entries(values.scorers) : undefined;
       const scorers = formScorers
@@ -415,29 +414,26 @@ function EditFormContent({
     return Object.keys(mcpClientRecord);
   }, [agent, versionData, isViewingVersion]);
 
+  console.log('loool', mcpClientIds);
+
   useEffect(() => {
     if (mcpClientIds.length === 0) return;
 
-    let cancelled = false;
-
     Promise.all(mcpClientIds.map(id => client.getStoredMCPClient(id).details()))
       .then(results => {
-        if (cancelled) return;
-        const resolvedClients = results.map(r => ({
-          id: r.id,
-          name: r.name,
-          description: r.description,
-          servers: r.servers,
-        }));
-        form.setValue('mcpClients', resolvedClients);
+        form.setValue(
+          'mcpClients',
+          results.map(r => ({
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            servers: r.servers,
+          })),
+        );
       })
       .catch(() => {
         // Silently ignore — clients may have been deleted
       });
-
-    return () => {
-      cancelled = true;
-    };
   }, [mcpClientIds, client, form]);
 
   const handlePublish = useCallback(async () => {
@@ -451,6 +447,10 @@ function EditFormContent({
     setIsSubmitting(true);
 
     try {
+      // Delete MCP clients marked for removal
+      const mcpClientsToDelete = values.mcpClientsToDelete ?? [];
+      await Promise.all(mcpClientsToDelete.map(id => client.getStoredMCPClient(id).delete()));
+
       // Create pending MCP clients and collect surviving IDs
       const formMCPClients = values.mcpClients ?? [];
       const mcpClientIds: string[] = [];
@@ -468,15 +468,7 @@ function EditFormContent({
         }
       }
 
-      // Delete persisted MCP clients that were removed from the form
-      const originalMCPClientIds = Object.keys((agent.mcpClients as Record<string, unknown>) ?? {});
-      const survivingIds = new Set(mcpClientIds);
-      const removedIds = originalMCPClientIds.filter(id => !survivingIds.has(id));
-
-      await Promise.all(removedIds.map(id => client.getStoredMCPClient(id).delete()));
-
-      const mcpClientsParam =
-        mcpClientIds.length > 0 ? Object.fromEntries(mcpClientIds.map(id => [id, {}])) : undefined;
+      const mcpClientsParam = Object.fromEntries(mcpClientIds.map(id => [id, {}]));
 
       await updateStoredAgent.mutateAsync({
         name: values.name,
@@ -564,7 +556,7 @@ function EditFormContent({
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, updateStoredAgent, client, navigate, paths, agentId, agent]);
+  }, [form, updateStoredAgent, client, navigate, paths, agentId]);
 
   const basePath = `/cms/agents/${agentId}/edit`;
 
