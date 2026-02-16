@@ -76,6 +76,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
 export interface DurableAgentStreamResult<OUTPUT = undefined> {
   /** The streaming output */
   output: MastraModelOutput<OUTPUT>;
+  /** The full stream - delegates to output.fullStream for server compatibility */
+  readonly fullStream: ReadableStream<any>;
   /** The unique run ID for this execution */
   runId: string;
   /** Thread ID if using memory */
@@ -507,6 +509,9 @@ export class DurableAgent<
 
     return {
       output,
+      get fullStream() {
+        return output.fullStream as ReadableStream<any>;
+      },
       runId,
       threadId,
       resourceId,
@@ -606,6 +611,9 @@ export class DurableAgent<
 
     return {
       output,
+      get fullStream() {
+        return output.fullStream as ReadableStream<any>;
+      },
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
@@ -688,6 +696,9 @@ export class DurableAgent<
 
     return {
       output,
+      get fullStream() {
+        return output.fullStream as ReadableStream<any>;
+      },
       runId,
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
