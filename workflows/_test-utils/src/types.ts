@@ -28,7 +28,7 @@ export interface StreamWorkflowResult {
  * Result of workflow execution - matches the core WorkflowResult type
  */
 export interface WorkflowResult {
-  status: 'success' | 'failed' | 'paused' | 'canceled';
+  status: 'success' | 'failed' | 'paused' | 'canceled' | 'suspended' | 'tripwire';
   result?: unknown;
   error?: Error | unknown;
   steps: Record<string, StepResult>;
@@ -36,7 +36,7 @@ export interface WorkflowResult {
 }
 
 export interface StepResult {
-  status: 'success' | 'failed' | 'paused' | 'skipped';
+  status: 'success' | 'failed' | 'paused' | 'skipped' | 'suspended';
   output?: unknown;
   payload?: unknown;
   error?: unknown;

@@ -161,9 +161,11 @@ export class InngestRun<
       };
 
       // Start realtime subscription for workflow-finish event
+      let realtimeStreamPromise: ReturnType<typeof subscribe> | null = null;
+
       const startRealtimeSubscription = async () => {
         try {
-          const streamPromise = subscribe(
+          realtimeStreamPromise = subscribe(
             {
               channel: `workflow:${this.workflowId}:${this.runId}`,
               topics: ['watch'],
@@ -202,10 +204,12 @@ export class InngestRun<
             },
           );
 
-          const stream = await streamPromise;
+          // Set unsubscribe immediately so cleanup can cancel even before await resolves
           unsubscribe = () => {
-            stream.cancel().catch(() => {});
+            realtimeStreamPromise?.then(stream => stream.cancel().catch(() => {})).catch(() => {});
           };
+
+          await realtimeStreamPromise;
         } catch {
           // Realtime subscription failed - polling will still work as fallback
         }
