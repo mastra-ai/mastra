@@ -32,7 +32,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/provider-utils": "^3.0.20",
+    "@ai-sdk/provider-utils": "^3.0.21",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.55.2",
