@@ -12,7 +12,7 @@ This template shows how Mastra's workflow primitives and agent orchestration com
 
 https://github.com/user-attachments/assets/dfea59c3-8038-461c-a4b4-504f8fc01575
 
-This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra client SDK](https://mastra.ai/docs/client-sdk) or agentic UI libraries like [AI SDK UI](https://sdk.vercel.ai/docs/ai-sdk-ui/overview), [CopilotKit](https://copilotkit.ai), or [Assistant UI](https://assistant-ui.com).
+This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
 ## Quick start
 
@@ -56,6 +56,6 @@ When it's satisfied, you get a sourced answer.
 
 ## About Mastra templates
 
-[Mastra templates](https://mastra.ai/docs/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
 Want to contribute? See [CONTRIBUTING.md](./CONTRIBUTING.md).
