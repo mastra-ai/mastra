@@ -84,7 +84,21 @@ export type DurableAgentTestDomain =
   // Observe domain (resumable streams)
   | 'observe'
   // Workspace domain
-  | 'workspace';
+  | 'workspace'
+  // Additional domains (from agent test suite)
+  | 'scorers'
+  | 'streamId'
+  | 'dynamicMemory'
+  | 'memoryReadonly'
+  | 'memoryRequestContextInheritance'
+  | 'reasoningMemory'
+  | 'v3Features'
+  | 'workingMemoryContext'
+  | 'inputProcessors'
+  | 'skillsWithCustomProcessors'
+  | 'titleGeneration'
+  | 'saveAndErrors'
+  | 'memoryMetadata';
 
 /**
  * Configuration for creating a DurableAgent test suite

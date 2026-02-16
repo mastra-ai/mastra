@@ -200,6 +200,33 @@ export function createFailingChunkModel(errorMessage: string = 'Model execution 
 }
 
 /**
+ * Create a mock model that streams reasoning content followed by text
+ * Simulates a reasoning-capable model (e.g., o1, deepseek-r1)
+ */
+export function createReasoningStreamModel(reasoningText: string, responseText: string): LanguageModelV2 {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-reasoning-model', timestamp: new Date(0) },
+        { type: 'reasoning-start', id: 'reasoning-1' },
+        { type: 'reasoning-delta', id: 'reasoning-1', delta: reasoningText },
+        { type: 'reasoning-end', id: 'reasoning-1' },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: responseText },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+        },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  }) as LanguageModelV2;
+}
+
+/**
  * Create a flaky mock model that fails N times then succeeds
  * Useful for testing retry logic before fallback
  */

@@ -36,3 +36,18 @@ export { createObserveTests } from './observe';
 
 // Workspace tests
 export { createWorkspaceTests } from './workspace';
+
+// Additional domain tests (from agent test suite)
+export { createScorersTests } from './scorers';
+export { createStreamIdTests } from './stream-id';
+export { createDynamicMemoryTests } from './dynamic-memory';
+export { createMemoryReadonlyTests } from './memory-readonly';
+export { createMemoryRequestContextInheritanceTests } from './memory-requestcontext-inheritance';
+export { createReasoningMemoryTests } from './reasoning-memory';
+export { createV3FeaturesTests } from './v3-features';
+export { createWorkingMemoryContextTests } from './working-memory-context';
+export { createInputProcessorsTests } from './input-processors';
+export { createSkillsWithCustomProcessorsTests } from './skills-with-custom-processors';
+export { createTitleGenerationTests } from './title-generation';
+export { createSaveAndErrorsTests } from './save-and-errors';
+export { createMemoryMetadataTests } from './memory-metadata';

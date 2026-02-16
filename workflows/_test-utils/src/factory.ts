@@ -41,6 +41,20 @@ import {
   createObserveTests,
   // Workspace test creators
   createWorkspaceTests,
+  // Additional domain test creators
+  createScorersTests,
+  createStreamIdTests,
+  createDynamicMemoryTests,
+  createMemoryReadonlyTests,
+  createMemoryRequestContextInheritanceTests,
+  createReasoningMemoryTests,
+  createV3FeaturesTests,
+  createWorkingMemoryContextTests,
+  createInputProcessorsTests,
+  createSkillsWithCustomProcessorsTests,
+  createTitleGenerationTests,
+  createSaveAndErrorsTests,
+  createMemoryMetadataTests,
 } from './domains';
 
 const DEFAULT_EVENT_PROPAGATION_DELAY = 100;
@@ -223,6 +237,59 @@ export function createDurableAgentTestSuite(config: DurableAgentTestConfig) {
     // Workspace tests
     if (!skip.workspace) {
       createWorkspaceTests(context);
+    }
+
+    // Additional domain tests
+    if (!skip.scorers) {
+      createScorersTests(context);
+    }
+
+    if (!skip.streamId) {
+      createStreamIdTests(context);
+    }
+
+    if (!skip.dynamicMemory) {
+      createDynamicMemoryTests(context);
+    }
+
+    if (!skip.memoryReadonly) {
+      createMemoryReadonlyTests(context);
+    }
+
+    if (!skip.memoryRequestContextInheritance) {
+      createMemoryRequestContextInheritanceTests(context);
+    }
+
+    if (!skip.reasoningMemory) {
+      createReasoningMemoryTests(context);
+    }
+
+    if (!skip.v3Features) {
+      createV3FeaturesTests(context);
+    }
+
+    if (!skip.workingMemoryContext) {
+      createWorkingMemoryContextTests(context);
+    }
+
+    if (!skip.inputProcessors) {
+      createInputProcessorsTests(context);
+    }
+
+    if (!skip.skillsWithCustomProcessors) {
+      createSkillsWithCustomProcessorsTests(context);
+    }
+
+    if (!skip.titleGeneration) {
+      createTitleGenerationTests(context);
+    }
+
+    if (!skip.saveAndErrors) {
+      createSaveAndErrorsTests(context);
+    }
+
+    if (!skip.memoryMetadata) {
+      createMemoryMetadataTests(context);
     }
   });
 }

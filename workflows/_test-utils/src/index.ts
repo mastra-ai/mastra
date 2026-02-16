@@ -50,6 +50,7 @@ export {
   createToolCallThenTextModel,
   createErrorModel,
   createSimpleMockModel,
+  createReasoningStreamModel,
 } from './mock-models';
 
 // Domain test creators (for advanced customization)
@@ -75,4 +76,18 @@ export {
   createUsageTests,
   // Workspace tests
   createWorkspaceTests,
+  // Additional domain tests
+  createScorersTests,
+  createStreamIdTests,
+  createDynamicMemoryTests,
+  createMemoryReadonlyTests,
+  createMemoryRequestContextInheritanceTests,
+  createReasoningMemoryTests,
+  createV3FeaturesTests,
+  createWorkingMemoryContextTests,
+  createInputProcessorsTests,
+  createSkillsWithCustomProcessorsTests,
+  createTitleGenerationTests,
+  createSaveAndErrorsTests,
+  createMemoryMetadataTests,
 } from './domains';
