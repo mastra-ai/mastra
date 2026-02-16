@@ -502,7 +502,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             (chunk.payload.output?.from === 'USER' &&
               chunk.payload.output?.payload?.output?.type?.startsWith('workflow-'))
           ) {
-            return toUIMessageFromAgent(chunk.payload.output, conversation, metadata);
+            return toUIMessageFromAgent(chunk.payload.output, conversation, metadata, toolCallId, toolName);
           } else {
             // Handle regular tool output
             const currentOutput = ((toolPart as any).output as any) || [];
@@ -747,6 +747,8 @@ const toUIMessageFromAgent = (
   chunk: AgentChunkType,
   conversation: MastraUIMessage[],
   metadata: MastraUIMessageMetadata,
+  parentToolCallId?: string,
+  parentToolName?: string,
 ): MastraUIMessage[] => {
   const lastMessage = conversation[conversation.length - 1];
   if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
@@ -755,7 +757,13 @@ const toUIMessageFromAgent = (
 
   if (chunk.type === 'text-delta') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];
@@ -779,7 +787,13 @@ const toUIMessageFromAgent = (
     } as any;
   } else if (chunk.type === 'tool-call') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];
@@ -802,7 +816,13 @@ const toUIMessageFromAgent = (
     } as any;
   } else if (chunk.type === 'tool-output') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];
@@ -832,7 +852,13 @@ const toUIMessageFromAgent = (
     }
   } else if (chunk.type === 'tool-result') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];
