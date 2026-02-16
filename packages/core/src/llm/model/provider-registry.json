@@ -195,7 +195,8 @@
         "qwen/qwen3-next-80b-a3b-instruct",
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwq-32b",
-        "z-ai/glm4.7"
+        "z-ai/glm4.7",
+        "z-ai/glm5"
       ],
       "docUrl": "https://docs.api.nvidia.com/nim/",
       "gateway": "models.dev"
@@ -1156,6 +1157,15 @@
       "docUrl": "https://fireworks.ai/docs/",
       "gateway": "models.dev"
     },
+    "stepfun": {
+      "url": "https://api.stepfun.com/v1",
+      "apiKeyEnvVar": "STEPFUN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "StepFun",
+      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
+      "docUrl": "https://platform.stepfun.com/docs/zh/overview/concept",
+      "gateway": "models.dev"
+    },
     "siliconflow": {
       "url": "https://api.siliconflow.com/v1",
       "apiKeyEnvVar": "SILICONFLOW_API_KEY",
@@ -1240,6 +1250,7 @@
       "apiKeyEnvVar": "TOGETHER_API_KEY",
       "name": "Together AI",
       "models": [
+        "MiniMaxAI/MiniMax-M2.5",
         "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
         "Qwen/Qwen3-Coder-Next-FP8",
@@ -1453,6 +1464,7 @@
         "openai/gpt-oss-20b:free",
         "openai/gpt-oss-safeguard-20b",
         "openai/o4-mini",
+        "openrouter/aurora-alpha",
         "openrouter/sherlock-dash-alpha",
         "openrouter/sherlock-think-alpha",
         "qwen/qwen-2.5-coder-32b-instruct",
@@ -1720,8 +1732,11 @@
       "apiKeyHeader": "Authorization",
       "name": "Vivgrid",
       "models": [
+        "deepseek-v3.2",
         "gemini-3-flash-preview",
         "gemini-3-pro-preview",
+        "glm-5",
+        "gpt-5-mini",
         "gpt-5.1-codex",
         "gpt-5.1-codex-max",
         "gpt-5.2-codex"
@@ -1804,7 +1819,6 @@
         "claude-opus-4-5",
         "claude-opus-4-6",
         "claude-sonnet-4-5",
-        "deepseek-r1",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
         "gemini-3-flash-preview",
@@ -1815,11 +1829,7 @@
         "gpt-5-nano",
         "gpt-5.2",
         "gpt-oss-120b",
-        "gpt-oss-20b",
-        "kimi-k2-thinking",
-        "kimi-k2.5",
-        "zai-glm-4.7",
-        "zai-glm-4.7-flash"
+        "gpt-oss-20b"
       ],
       "docUrl": "https://docs.firmware.ai",
       "gateway": "models.dev"
@@ -2728,6 +2738,7 @@
       "name": "Chutes",
       "models": [
         "MiniMaxAI/MiniMax-M2.1-TEE",
+        "MiniMaxAI/MiniMax-M2.5-TEE",
         "NousResearch/DeepHermes-3-Mistral-24B-Preview",
         "NousResearch/Hermes-4-14B",
         "NousResearch/Hermes-4-405B-FP8-TEE",
@@ -2790,7 +2801,8 @@
         "zai-org/GLM-4.6V",
         "zai-org/GLM-4.7-FP8",
         "zai-org/GLM-4.7-Flash",
-        "zai-org/GLM-4.7-TEE"
+        "zai-org/GLM-4.7-TEE",
+        "zai-org/GLM-5-TEE"
       ],
       "docUrl": "https://llm.chutes.ai/v1/models",
       "gateway": "models.dev"
@@ -3023,7 +3035,8 @@
       "qwen/qwen3-next-80b-a3b-instruct",
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwq-32b",
-      "z-ai/glm4.7"
+      "z-ai/glm4.7",
+      "z-ai/glm5"
     ],
     "fastrouter": [
       "anthropic/claude-opus-4.1",
@@ -3730,6 +3743,7 @@
       "accounts/fireworks/models/qwen3-235b-a22b",
       "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
     ],
+    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
     "siliconflow": [
       "ByteDance-Seed/Seed-OSS-36B-Instruct",
       "MiniMaxAI/MiniMax-M2.1",
@@ -3803,6 +3817,7 @@
       "zai-org/GLM-5"
     ],
     "togetherai": [
+      "MiniMaxAI/MiniMax-M2.5",
       "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
       "Qwen/Qwen3-Coder-Next-FP8",
@@ -3969,6 +3984,7 @@
       "openai/gpt-oss-20b:free",
       "openai/gpt-oss-safeguard-20b",
       "openai/o4-mini",
+      "openrouter/aurora-alpha",
       "openrouter/sherlock-dash-alpha",
       "openrouter/sherlock-think-alpha",
       "qwen/qwen-2.5-coder-32b-instruct",
@@ -4187,8 +4203,11 @@
       "gemini-live-2.5-flash-preview-native-audio"
     ],
     "vivgrid": [
+      "deepseek-v3.2",
       "gemini-3-flash-preview",
       "gemini-3-pro-preview",
+      "glm-5",
+      "gpt-5-mini",
       "gpt-5.1-codex",
       "gpt-5.1-codex-max",
       "gpt-5.2-codex"
@@ -4229,7 +4248,6 @@
       "claude-opus-4-5",
       "claude-opus-4-6",
       "claude-sonnet-4-5",
-      "deepseek-r1",
       "gemini-2.5-flash",
       "gemini-2.5-pro",
       "gemini-3-flash-preview",
@@ -4240,11 +4258,7 @@
       "gpt-5-nano",
       "gpt-5.2",
       "gpt-oss-120b",
-      "gpt-oss-20b",
-      "kimi-k2-thinking",
-      "kimi-k2.5",
-      "zai-glm-4.7",
-      "zai-glm-4.7-flash"
+      "gpt-oss-20b"
     ],
     "ovhcloud": [
       "deepseek-r1-distill-llama-70b",
@@ -4973,6 +4987,7 @@
     ],
     "chutes": [
       "MiniMaxAI/MiniMax-M2.1-TEE",
+      "MiniMaxAI/MiniMax-M2.5-TEE",
       "NousResearch/DeepHermes-3-Mistral-24B-Preview",
       "NousResearch/Hermes-4-14B",
       "NousResearch/Hermes-4-405B-FP8-TEE",
@@ -5035,7 +5050,8 @@
       "zai-org/GLM-4.6V",
       "zai-org/GLM-4.7-FP8",
       "zai-org/GLM-4.7-Flash",
-      "zai-org/GLM-4.7-TEE"
+      "zai-org/GLM-4.7-TEE",
+      "zai-org/GLM-5-TEE"
     ],
     "netlify": [
       "anthropic/claude-3-5-haiku-20241022",

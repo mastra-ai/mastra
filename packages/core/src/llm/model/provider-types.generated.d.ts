@@ -174,6 +174,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwq-32b',
     'z-ai/glm4.7',
+    'z-ai/glm5',
   ];
   readonly fastrouter: readonly [
     'anthropic/claude-opus-4.1',
@@ -880,6 +881,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
   ];
+  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash'];
   readonly siliconflow: readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
     'MiniMaxAI/MiniMax-M2.1',
@@ -953,6 +955,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5',
   ];
   readonly togetherai: readonly [
+    'MiniMaxAI/MiniMax-M2.5',
     'Qwen/Qwen3-235B-A22B-Instruct-2507-tput',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
     'Qwen/Qwen3-Coder-Next-FP8',
@@ -1119,6 +1122,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b:free',
     'openai/gpt-oss-safeguard-20b',
     'openai/o4-mini',
+    'openrouter/aurora-alpha',
     'openrouter/sherlock-dash-alpha',
     'openrouter/sherlock-think-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
@@ -1343,8 +1347,11 @@ export type ProviderModelsMap = {
     'gemini-live-2.5-flash-preview-native-audio',
   ];
   readonly vivgrid: readonly [
+    'deepseek-v3.2',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
+    'glm-5',
+    'gpt-5-mini',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
     'gpt-5.2-codex',
@@ -1385,7 +1392,6 @@ export type ProviderModelsMap = {
     'claude-opus-4-5',
     'claude-opus-4-6',
     'claude-sonnet-4-5',
-    'deepseek-r1',
     'gemini-2.5-flash',
     'gemini-2.5-pro',
     'gemini-3-flash-preview',
@@ -1397,10 +1403,6 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-oss-120b',
     'gpt-oss-20b',
-    'kimi-k2-thinking',
-    'kimi-k2.5',
-    'zai-glm-4.7',
-    'zai-glm-4.7-flash',
   ];
   readonly ovhcloud: readonly [
     'deepseek-r1-distill-llama-70b',
@@ -2129,6 +2131,7 @@ export type ProviderModelsMap = {
   ];
   readonly chutes: readonly [
     'MiniMaxAI/MiniMax-M2.1-TEE',
+    'MiniMaxAI/MiniMax-M2.5-TEE',
     'NousResearch/DeepHermes-3-Mistral-24B-Preview',
     'NousResearch/Hermes-4-14B',
     'NousResearch/Hermes-4-405B-FP8-TEE',
@@ -2192,6 +2195,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7-FP8',
     'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-4.7-TEE',
+    'zai-org/GLM-5-TEE',
   ];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
