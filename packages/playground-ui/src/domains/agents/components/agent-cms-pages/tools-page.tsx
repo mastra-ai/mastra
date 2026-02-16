@@ -8,6 +8,7 @@ import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
+import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
 import type { RuleGroup } from '@/lib/rule-engine';
 import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
@@ -103,6 +104,8 @@ export function ToolsPage() {
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6 p-4">
+        <MCPClientList />
+
         <SectionHeader
           title="Tools"
           subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
