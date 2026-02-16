@@ -1,5 +1,4 @@
 import { useMastraClient } from '@mastra/react';
-import type { McpToolInfo } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 
 export const useMCPServerToolsById = (serverId: string | null) => {
@@ -9,12 +8,7 @@ export const useMCPServerToolsById = (serverId: string | null) => {
     queryKey: ['mcpserver-tools', serverId],
     queryFn: async () => {
       const response = await client.getMcpServerTools(serverId!);
-      const fetchedToolsArray: McpToolInfo[] = response.tools;
-      const transformedTools: Record<string, McpToolInfo> = {};
-      fetchedToolsArray.forEach((sdkToolInfo: McpToolInfo) => {
-        transformedTools[sdkToolInfo.id] = sdkToolInfo;
-      });
-      return transformedTools;
+      return Object.fromEntries(response.tools.map(tool => [tool.id, tool]));
     },
     enabled: Boolean(serverId),
     retry: false,

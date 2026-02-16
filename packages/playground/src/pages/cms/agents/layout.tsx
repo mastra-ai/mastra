@@ -87,6 +87,24 @@ const normalizeIntegrationToolsToRecord = (
   return result;
 };
 
+// Collect MCP client IDs, creating new clients in parallel where needed
+async function collectMCPClientIds(
+  mcpClients: Array<{ id?: string; name: string; description?: string; servers: Record<string, unknown> }>,
+  client: ReturnType<typeof useMastraClient>,
+): Promise<string[]> {
+  const existingIds = mcpClients.filter(c => c.id).map(c => c.id!);
+  const newIds = await Promise.all(
+    mcpClients
+      .filter(c => !c.id)
+      .map(c =>
+        client
+          .createStoredMCPClient({ name: c.name, description: c.description, servers: c.servers })
+          .then(r => r.id),
+      ),
+  );
+  return [...existingIds, ...newIds];
+}
+
 // Type for the agent data (inferred from useStoredAgent)
 type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
 
@@ -109,23 +127,8 @@ function CreateLayoutWrapper() {
     setIsSubmitting(true);
 
     try {
-      // Create pending MCP clients
-      const pendingMCPClients = values.mcpClients ?? [];
-      const mcpClientIds: string[] = [];
-
-      for (const mcpClient of pendingMCPClients) {
-        if (mcpClient.id) {
-          mcpClientIds.push(mcpClient.id);
-        } else {
-          const created = await client.createStoredMCPClient({
-            name: mcpClient.name,
-            description: mcpClient.description,
-            servers: mcpClient.servers,
-          });
-          mcpClientIds.push(created.id);
-        }
-      }
-
+      // Create pending MCP clients in parallel
+      const mcpClientIds = await collectMCPClientIds(values.mcpClients ?? [], client);
       const mcpClientsParam = Object.fromEntries(mcpClientIds.map(id => [id, {}]));
 
       const formScorers = values.scorers ? Object.entries(values.scorers) : undefined;
@@ -443,23 +446,8 @@ function EditFormContent({
       const mcpClientsToDelete = values.mcpClientsToDelete ?? [];
       await Promise.all(mcpClientsToDelete.map(id => client.getStoredMCPClient(id).delete()));
 
-      // Create pending MCP clients and collect surviving IDs
-      const formMCPClients = values.mcpClients ?? [];
-      const mcpClientIds: string[] = [];
-
-      for (const mcpClient of formMCPClients) {
-        if (mcpClient.id) {
-          mcpClientIds.push(mcpClient.id);
-        } else {
-          const created = await client.createStoredMCPClient({
-            name: mcpClient.name,
-            description: mcpClient.description,
-            servers: mcpClient.servers,
-          });
-          mcpClientIds.push(created.id);
-        }
-      }
-
+      // Create pending MCP clients in parallel and collect surviving IDs
+      const mcpClientIds = await collectMCPClientIds(values.mcpClients ?? [], client);
       const mcpClientsParam = Object.fromEntries(mcpClientIds.map(id => [id, {}]));
 
       await updateStoredAgent.mutateAsync({

@@ -25,14 +25,8 @@ export function MCPClientCreateContent({ onAdd }: MCPClientCreateContentProps) {
   const handlePreFillFromServer = (serverId: string) => {
     const host = window.MASTRA_SERVER_HOST;
     const port = window.MASTRA_SERVER_PORT;
-
-    let baseUrl = null;
-    if (host && port) {
-      baseUrl = `http://${host}:${port}`;
-    }
-
-    const effectiveBaseUrl = baseUrl || 'http://localhost:4111';
-    const serverUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/mcp`;
+    const baseUrl = host && port ? `http://${host}:${port}` : 'http://localhost:4111';
+    const serverUrl = `${baseUrl}/api/mcp/${serverId}/mcp`;
 
     form.setValue('serverType', 'http');
     form.setValue('url', serverUrl);
