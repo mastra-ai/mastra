@@ -36,9 +36,7 @@ function mcpClientToFormValues(mcpClient: {
     timeout: httpConfig.timeout ?? 30000,
     command: stdioConfig.command ?? '',
     args: Array.isArray(stdioConfig.args) ? stdioConfig.args.join('\n') : '',
-    env: stdioConfig.env
-      ? Object.entries(stdioConfig.env).map(([key, value]) => ({ key, value }))
-      : [],
+    env: stdioConfig.env ? Object.entries(stdioConfig.env).map(([key, value]) => ({ key, value })) : [],
   };
 }
 
@@ -50,18 +48,23 @@ export function MCPClientList() {
 
   const viewingClient = viewIndex !== null ? mcpClients[viewIndex] : null;
   const isViewingPersisted = Boolean(viewingClient?.id);
-  const viewFormValues = useMemo(
-    () => (viewingClient ? mcpClientToFormValues(viewingClient) : null),
-    [viewingClient],
-  );
+  const viewFormValues = useMemo(() => (viewingClient ? mcpClientToFormValues(viewingClient) : null), [viewingClient]);
 
-  const handleAdd = (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => {
+  const handleAdd = (config: {
+    name: string;
+    description?: string;
+    servers: Record<string, StoredMCPServerConfig>;
+  }) => {
     const current = form.getValues('mcpClients') ?? [];
     form.setValue('mcpClients', [...current, config]);
     setIsCreateOpen(false);
   };
 
-  const handleUpdate = (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => {
+  const handleUpdate = (config: {
+    name: string;
+    description?: string;
+    servers: Record<string, StoredMCPServerConfig>;
+  }) => {
     if (viewIndex === null) return;
     const current = form.getValues('mcpClients') ?? [];
     const updated = [...current];
@@ -128,15 +131,16 @@ export function MCPClientList() {
                     </EntityDescription>
                   </EntityContent>
                   {!readOnly && (
-                    <div onClickCapture={e => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemove(index)}
-                      >
-                        <XIcon className="h-3 w-3" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                        e.stopPropagation();
+                        handleRemove(index);
+                      }}
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </Button>
                   )}
                 </Entity>
               );
