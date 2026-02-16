@@ -42,8 +42,8 @@ describe('UpstashServerCache', () => {
 
       await cache.set('test-key', 'value');
 
-      // Upstash uses { ex: seconds } style
-      expect(mockRedis.set).toHaveBeenCalledWith('mastra:cache:test-key', 'value', { ex: 300 });
+      // Upstash uses { ex: seconds } style, values are JSON-serialized
+      expect(mockRedis.set).toHaveBeenCalledWith('mastra:cache:test-key', '"value"', { ex: 300 });
     });
 
     it('should use upstash-style scan', async () => {
@@ -72,7 +72,7 @@ describe('UpstashServerCache', () => {
 
       await customCache.set('test-key', 'value');
 
-      expect(mockRedis.set).toHaveBeenCalledWith('mastra:cache:test-key', 'value', { ex: 600 });
+      expect(mockRedis.set).toHaveBeenCalledWith('mastra:cache:test-key', '"value"', { ex: 600 });
     });
 
     it('should disable TTL when set to 0', async () => {
@@ -81,7 +81,7 @@ describe('UpstashServerCache', () => {
 
       await noTtlCache.set('test-key', 'value');
 
-      expect(mockRedis.set).toHaveBeenCalledWith('mastra:cache:test-key', 'value');
+      expect(mockRedis.set).toHaveBeenCalledWith('mastra:cache:test-key', '"value"');
     });
   });
 
@@ -92,7 +92,7 @@ describe('UpstashServerCache', () => {
 
       await cache.listPush('my-list', { event: 'test' });
 
-      expect(mockRedis.rpush).toHaveBeenCalledWith('mastra:cache:my-list', { event: 'test' });
+      expect(mockRedis.rpush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
       expect(mockRedis.expire).toHaveBeenCalledWith('mastra:cache:my-list', 300);
     });
 

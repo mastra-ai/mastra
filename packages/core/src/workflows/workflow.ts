@@ -2188,10 +2188,9 @@ export class Workflow<
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps.length > 0);
 
-    // Pass pubsub to share the event bus for streaming (PUBSUB_SYMBOL), but don't pass runId
-    // for non-resume cases. This gives nested workflows their own unique runId, which prevents
-    // the nested-watch event loop (nested-watch filters by runId, so different runIds don't conflict).
-    const run = isResume ? await this.createRun({ runId: resume.runId, pubsub }) : await this.createRun({ pubsub });
+    // Each nested workflow gets its own pubsub to avoid feedback loops. Pubsub sharing
+    // is only used at the top-level createRun() for durable execution streaming.
+    const run = isResume ? await this.createRun({ runId: resume.runId }) : await this.createRun({ runId: _runId });
     const nestedAbortCb = () => {
       abort();
     };
@@ -3427,12 +3426,6 @@ export class Run<
           event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
           workflowId: string;
         };
-
-        // Skip events from this workflow itself (prevents infinite loop when pubsub is shared)
-        // nestedWatchCb should only process events from CHILD workflows, not from itself
-        if (workflowId === this.workflowId) {
-          return;
-        }
 
         // Data chunks from writer.custom() should bubble up directly without modification
         // These are events with type starting with 'data-' and have a 'data' property
