@@ -2,11 +2,15 @@
 
 # Deep Search
 
-An AI research assistant that evaluates its own work. It searches, checks if the results actually answer your question, identifies what's missing, and keeps going until it gets there. Inspired by OpenAI's deep research and Perplexity. Built with [Mastra](https://mastra.ai).
+An AI research assistant that evaluates its own work. It searches, checks if the results actually answer your question, identifies what's missing, and keeps going until it gets there. Uses [Exa](https://exa.ai) for web search and page scraping. Inspired by OpenAI's deep research and Perplexity. Built with [Mastra](https://mastra.ai).
 
 ## Why we built this
 
 This template shows how Mastra's workflow primitives and agent orchestration come together: nested workflows, suspend/resume for human input, and multiple specialized agents coordinating on a single task.
+
+## Demo
+
+<video src="assets/demo.mp4" controls></video>
 
 ## Quick start
 
