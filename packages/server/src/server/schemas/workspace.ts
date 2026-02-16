@@ -210,7 +210,7 @@ export const workspaceInfoResponseSchema = z.object({
       error: z.string().optional(),
       readOnly: z.boolean().optional(),
       icon: z.string().optional(),
-      metadata: z.record(z.unknown()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
 });
