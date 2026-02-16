@@ -133,6 +133,17 @@ const RootLayout = () => {
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
 
+const agentCmsChildRoutes = [
+  { index: true, element: <CmsAgentInformationPage /> },
+  { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
+  { path: 'tools', element: <CmsAgentToolsPage /> },
+  { path: 'agents', element: <CmsAgentAgentsPage /> },
+  { path: 'scorers', element: <CmsAgentScorersPage /> },
+  { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
+  { path: 'memory', element: <CmsAgentMemoryPage /> },
+  { path: 'variables', element: <CmsAgentVariablesPage /> },
+];
+
 const routes = [
   {
     element: <RootLayout />,
@@ -153,30 +164,12 @@ const routes = [
       {
         path: '/cms/agents/create',
         element: <CreateLayoutWrapper />,
-        children: [
-          { index: true, element: <CmsAgentInformationPage /> },
-          { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
-          { path: 'tools', element: <CmsAgentToolsPage /> },
-          { path: 'agents', element: <CmsAgentAgentsPage /> },
-          { path: 'scorers', element: <CmsAgentScorersPage /> },
-          { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
-          { path: 'memory', element: <CmsAgentMemoryPage /> },
-          { path: 'variables', element: <CmsAgentVariablesPage /> },
-        ],
+        children: agentCmsChildRoutes,
       },
       {
         path: '/cms/agents/:agentId/edit',
         element: <EditLayoutWrapper />,
-        children: [
-          { index: true, element: <CmsAgentInformationPage /> },
-          { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
-          { path: 'tools', element: <CmsAgentToolsPage /> },
-          { path: 'agents', element: <CmsAgentAgentsPage /> },
-          { path: 'scorers', element: <CmsAgentScorersPage /> },
-          { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
-          { path: 'memory', element: <CmsAgentMemoryPage /> },
-          { path: 'variables', element: <CmsAgentVariablesPage /> },
-        ],
+        children: agentCmsChildRoutes,
       },
       { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
       { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },

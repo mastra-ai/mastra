@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback } from 'react';
 import { Outlet, useLocation, useParams, useSearchParams } from 'react-router';
-import type { AgentVersionResponse } from '@mastra/client-js';
 
 import {
-  toast,
   useLinkComponent,
   useStoredAgent,
-  useStoredAgentMutations,
-  useAgentEditForm,
   useAgentVersion,
-  AgentsCmsLayout,
-  AgentEditFormProvider,
+  useAgentCmsForm,
+  AgentCmsFormShell,
+  AgentVersionCombobox,
   Header,
   HeaderTitle,
   HeaderAction,
@@ -22,22 +19,8 @@ import {
   Alert,
   Button,
   AlertTitle,
-  AgentVersionCombobox,
-  normalizeToolsToRecord,
-  normalizeIntegrationToolsToRecord,
-  normalizeScorersFromApi,
-  transformIntegrationToolsForApi,
-  mapInstructionBlocksToApi,
-  mapInstructionBlocksFromApi,
-  mapScorersToApi,
-  buildObservationalMemoryForApi,
-  parseObservationalMemoryFromApi,
-  type AgentFormValues,
-  type EntityConfig,
+  type StoredAgent,
 } from '@mastra/playground-ui';
-import { useMastraClient } from '@mastra/react';
-
-import { collectMCPClientIds, type StoredAgent } from './utils';
 
 function EditFormContent({
   agent,
@@ -49,196 +32,48 @@ function EditFormContent({
   agent: StoredAgent;
   agentId: string;
   selectedVersionId: string | null;
-  versionData?: AgentVersionResponse;
+  versionData?: ReturnType<typeof useAgentVersion>['data'];
   readOnly?: boolean;
 }) {
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredAgent } = useStoredAgentMutations(agentId);
-  const client = useMastraClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [, setSearchParams] = useSearchParams();
   const location = useLocation();
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
+  const dataSource = isViewingVersion ? versionData : agent;
 
-  const initialValues: Partial<AgentFormValues> = useMemo(() => {
-    const dataSource = isViewingVersion ? versionData : agent;
+  const { form, handlePublish, isSubmitting } = useAgentCmsForm({
+    mode: 'edit',
+    agentId,
+    dataSource,
+    onSuccess: id => navigate(`${paths.agentLink(id)}/chat`),
+  });
 
-    const toolsRecord = normalizeToolsToRecord(dataSource.tools);
-
-    const memoryData = dataSource.memory as
-      | {
-          vector?: string;
-          embedder?: string;
-          options?: { lastMessages?: number | false; semanticRecall?: boolean; readOnly?: boolean };
-          observationalMemory?:
-            | boolean
-            | {
-                model?: string;
-                scope?: 'resource' | 'thread';
-                shareTokenBudget?: boolean;
-                observation?: {
-                  model?: string;
-                  messageTokens?: number;
-                  maxTokensPerBatch?: number;
-                  bufferTokens?: number | false;
-                  bufferActivation?: number;
-                  blockAfter?: number;
-                };
-                reflection?: {
-                  model?: string;
-                  observationTokens?: number;
-                  blockAfter?: number;
-                  bufferActivation?: number;
-                };
-              };
-        }
-      | undefined;
-
-    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(dataSource.instructions);
-
-    return {
-      name: dataSource.name || '',
-      description: dataSource.description || '',
-      instructions: instructionsString,
-      model: {
-        provider: (dataSource.model as { provider?: string; name?: string })?.provider || '',
-        name: (dataSource.model as { provider?: string; name?: string })?.name || '',
-      },
-      tools: toolsRecord,
-      integrationTools: normalizeIntegrationToolsToRecord(
-        dataSource.integrationTools as Record<string, { tools?: Record<string, EntityConfig> }> | undefined,
-      ),
-      workflows: normalizeToolsToRecord(dataSource.workflows as Record<string, EntityConfig> | undefined),
-      agents: normalizeToolsToRecord(dataSource.agents as Record<string, EntityConfig> | undefined),
-      scorers: normalizeScorersFromApi(dataSource.scorers),
-      memory: memoryData?.options
-        ? {
-            enabled: true,
-            lastMessages: memoryData.options.lastMessages,
-            semanticRecall: memoryData.options.semanticRecall,
-            readOnly: memoryData.options.readOnly,
-            vector: memoryData.vector,
-            embedder: memoryData.embedder,
-            observationalMemory: parseObservationalMemoryFromApi(memoryData.observationalMemory),
-          }
-        : undefined,
-      instructionBlocks,
-      variables: dataSource.requestContextSchema as AgentFormValues['variables'],
-    };
-  }, [agent, versionData, isViewingVersion]);
-
-  const { form } = useAgentEditForm({ initialValues });
-
-  useEffect(() => {
-    if (!initialValues) return;
-
-    form.reset(initialValues);
-
-    // Resolve MCP client IDs to full details
-    const dataSource = isViewingVersion ? versionData : agent;
-    const mcpClientRecord = dataSource.mcpClients as Record<string, unknown> | undefined;
-    const ids = Object.keys(mcpClientRecord ?? {});
-    if (ids.length === 0) return;
-
-    Promise.all(ids.map(id => client.getStoredMCPClient(id).details()))
-      .then(results => {
-        form.setValue(
-          'mcpClients',
-          results.map(r => ({
-            id: r.id,
-            name: r.name,
-            description: r.description,
-            servers: r.servers,
-          })),
-        );
-      })
-      .catch(() => {
-        // Silently ignore — clients may have been deleted
-      });
-  }, [initialValues, form, agent, versionData, isViewingVersion, client]);
-
-  const handlePublish = useCallback(async () => {
-    const isValid = await form.trigger();
-    if (!isValid) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    const values = form.getValues();
-    setIsSubmitting(true);
-
-    try {
-      // Delete MCP clients marked for removal
-      const mcpClientsToDelete = values.mcpClientsToDelete ?? [];
-      await Promise.all(mcpClientsToDelete.map(id => client.getStoredMCPClient(id).delete()));
-
-      // Create pending MCP clients in parallel and collect surviving IDs
-      const mcpClientIds = await collectMCPClientIds(values.mcpClients ?? [], client);
-      const mcpClientsParam = Object.fromEntries(mcpClientIds.map(id => [id, {}]));
-
-      await updateStoredAgent.mutateAsync({
-        name: values.name,
-        description: values.description,
-        instructions: mapInstructionBlocksToApi(values.instructionBlocks),
-        model: values.model,
-        tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
-        integrationTools: transformIntegrationToolsForApi(values.integrationTools),
-        workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
-        agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
-        mcpClients: mcpClientsParam,
-        scorers: mapScorersToApi(values.scorers),
-        memory: values.memory?.enabled
-          ? {
-              vector: values.memory.vector,
-              embedder: values.memory.embedder,
-              options: {
-                lastMessages: values.memory.lastMessages,
-                semanticRecall: values.memory.semanticRecall,
-                readOnly: values.memory.readOnly,
-              },
-              observationalMemory: buildObservationalMemoryForApi(values.memory.observationalMemory),
-            }
-          : undefined,
-        requestContextSchema: values.variables
-          ? Object.fromEntries(Object.entries(values.variables))
-          : undefined,
-      });
-
-      toast.success('Agent updated successfully');
-      navigate(`${paths.agentLink(agentId)}/chat`);
-    } catch (error) {
-      toast.error(`Failed to update agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [form, updateStoredAgent, client, navigate, paths, agentId]);
-
-  const basePath = `/cms/agents/${agentId}/edit`;
+  const banner = isViewingVersion ? (
+    <Alert variant="info" className="mb-4 mx-4">
+      <AlertTitle>You are seeing a specific version of the agent.</AlertTitle>
+      <div className="pt-2">
+        <Button type="button" variant="light" onClick={() => setSearchParams({})}>
+          View latest version
+        </Button>
+      </div>
+    </Alert>
+  ) : undefined;
 
   return (
-    <AgentEditFormProvider
+    <AgentCmsFormShell
       form={form}
       mode="edit"
       agentId={agentId}
       isSubmitting={isSubmitting}
       handlePublish={handlePublish}
       readOnly={readOnly || isViewingVersion}
+      basePath={`/cms/agents/${agentId}/edit`}
+      currentPath={location.pathname}
+      banner={banner}
     >
-      <AgentsCmsLayout basePath={basePath} currentPath={location.pathname}>
-        {isViewingVersion && (
-          <Alert variant="info" className="mb-4 mx-4">
-            <AlertTitle>You are seeing a specific version of the agent.</AlertTitle>
-            <div className="pt-2">
-              <Button type="button" variant="light" onClick={() => setSearchParams({})}>
-                View latest version
-              </Button>
-            </div>
-          </Alert>
-        )}
-        <Outlet />
-      </AgentsCmsLayout>
-    </AgentEditFormProvider>
+      <Outlet />
+    </AgentCmsFormShell>
   );
 }
 
