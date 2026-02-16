@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vites
 import { DaytonaSandbox } from './index';
 
 // Use vi.hoisted to define mocks before vi.mock is hoisted
-const { mockSandbox, mockDaytona, resetMockDefaults } = vi.hoisted(() => {
+const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError } = vi.hoisted(() => {
   const mockSandbox = {
     id: 'mock-sandbox-id',
     state: 'started',
@@ -57,7 +57,14 @@ const { mockSandbox, mockDaytona, resetMockDefaults } = vi.hoisted(() => {
     mockSandbox.delete.mockResolvedValue(undefined);
   };
 
-  return { mockSandbox, mockDaytona, resetMockDefaults };
+  class DaytonaNotFoundError extends Error {
+    constructor(message?: string) {
+      super(message ?? 'Not found');
+      this.name = 'DaytonaNotFoundError';
+    }
+  }
+
+  return { mockSandbox, mockDaytona, resetMockDefaults, DaytonaNotFoundError };
 });
 
 // Mock the Daytona SDK — must use `function` (not arrow) so `new Daytona()` works
@@ -65,6 +72,7 @@ vi.mock('@daytonaio/sdk', () => ({
   Daytona: vi.fn().mockImplementation(function () {
     return mockDaytona;
   }),
+  DaytonaNotFoundError,
 }));
 
 describe('DaytonaSandbox', () => {
@@ -158,15 +166,12 @@ describe('DaytonaSandbox', () => {
   });
 
   describe('Start - Race Condition Prevention', () => {
-    it('concurrent start() calls return same promise', async () => {
+    it('concurrent start() calls only create one sandbox', async () => {
       const sandbox = new DaytonaSandbox();
 
-      const promise1 = sandbox._start();
-      const promise2 = sandbox._start();
+      // Fire two concurrent starts — only one should create a sandbox
+      await Promise.all([sandbox._start(), sandbox._start()]);
 
-      const [result1, result2] = await Promise.all([promise1, promise2]);
-
-      expect(result1).toBe(result2);
       expect(mockDaytona.create).toHaveBeenCalledTimes(1);
     });
 
@@ -297,10 +302,10 @@ describe('DaytonaSandbox', () => {
       await sandbox.executeCommand('echo', ['test'], { env: { OVERRIDE: 'new', EXTRA: 'added' } });
 
       expect(mockSandbox.process.executeCommand).toHaveBeenCalledWith(
-        "echo test",
+        'echo test',
         undefined,
         { BASE: 'value', OVERRIDE: 'new', EXTRA: 'added' },
-        undefined,
+        300, // default 300_000ms -> 300s
       );
     });
 
@@ -316,7 +321,7 @@ describe('DaytonaSandbox', () => {
         'echo',
         undefined,
         { KEY: 'command-value' },
-        undefined,
+        300, // default 300_000ms -> 300s
       );
     });
 
@@ -537,7 +542,7 @@ describe('DaytonaSandbox', () => {
         'ls',
         '/tmp',
         expect.any(Object),
-        undefined,
+        300, // default 300_000ms -> 300s
       );
     });
 
@@ -622,10 +627,15 @@ describe('DaytonaSandbox', () => {
     it('isSandboxDeadError detects known patterns', () => {
       const sandbox = new DaytonaSandbox();
 
+      // SDK error class (preferred detection)
+      expect((sandbox as any).isSandboxDeadError(new DaytonaNotFoundError('gone'))).toBe(true);
+      // String-based fallbacks
       expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
-      expect((sandbox as any).isSandboxDeadError(new Error('not running'))).toBe(true);
+      expect((sandbox as any).isSandboxDeadError(new Error('sandbox is not running'))).toBe(true);
+      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not running'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('sandbox has been deleted'))).toBe(true);
+      // Non-dead errors
       expect((sandbox as any).isSandboxDeadError(new Error('timeout'))).toBe(false);
       expect((sandbox as any).isSandboxDeadError(null)).toBe(false);
     });
@@ -662,7 +672,7 @@ describe('DaytonaSandbox', () => {
         supportsEnvVars: true,
         supportsWorkingDirectory: true,
         supportsTimeout: true,
-        defaultCommandTimeout: 5000,
+        defaultCommandTimeout: 300000,
         supportsStreaming: false,
       },
       testTimeout: 30000,

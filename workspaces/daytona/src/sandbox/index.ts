@@ -8,8 +8,8 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona } from '@daytonaio/sdk';
-import type { Sandbox } from '@daytonaio/sdk';
+import { Daytona, DaytonaNotFoundError } from '@daytonaio/sdk';
+import type { CreateSandboxFromSnapshotParams, Sandbox } from '@daytonaio/sdk';
 import type {
   SandboxInfo,
   ExecuteCommandOptions,
@@ -23,6 +23,15 @@ import { shellQuote } from '../utils/shell-quote';
 import type { DaytonaResources } from './types';
 
 const LOG_PREFIX = '[@mastra/daytona]';
+
+/** String patterns indicating the sandbox is dead/gone (@daytonaio/sdk@0.143.0). */
+const SANDBOX_DEAD_PATTERNS = [
+  'sandbox was not found',
+  'Sandbox not found',
+  'sandbox is not running',
+  'Sandbox not running',
+  'sandbox has been deleted',
+];
 
 // =============================================================================
 // Daytona Sandbox Options
@@ -127,7 +136,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private _isRetrying = false;
 
   private readonly timeout: number;
-  private readonly language: string;
+  private readonly language: 'typescript' | 'javascript' | 'python';
   private readonly resources?: DaytonaResources;
   private readonly env: Record<string, string>;
   private readonly labels: Record<string, string>;
@@ -154,9 +163,9 @@ export class DaytonaSandbox extends MastraSandbox {
     this.volumeConfigs = options.volumes ?? [];
 
     this.connectionOpts = {
-      ...(options.apiKey && { apiKey: options.apiKey }),
-      ...(options.apiUrl && { apiUrl: options.apiUrl }),
-      ...(options.target && { target: options.target }),
+      ...(options.apiKey !== undefined && { apiKey: options.apiKey }),
+      ...(options.apiUrl !== undefined && { apiUrl: options.apiUrl }),
+      ...(options.target !== undefined && { target: options.target }),
     };
   }
 
@@ -205,8 +214,8 @@ export class DaytonaSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Creating sandbox for: ${this.id}`);
 
-    // Build creation params
-    const createParams: Record<string, unknown> = {
+    // Build creation params with SDK type for compile-time safety
+    const createParams: CreateSandboxFromSnapshotParams = {
       language: this.language,
       envVars: this.env,
       labels: {
@@ -215,26 +224,14 @@ export class DaytonaSandbox extends MastraSandbox {
       },
       ephemeral: this.ephemeral,
       autoStopInterval: this.autoStopInterval,
+      ...(this.autoArchiveInterval !== undefined && { autoArchiveInterval: this.autoArchiveInterval }),
+      ...(this.snapshotId && { snapshot: this.snapshotId }),
+      ...(this.volumeConfigs.length > 0 && { volumes: this.volumeConfigs }),
+      ...(this.resources && { resources: this.resources }),
     };
 
-    if (this.autoArchiveInterval !== undefined) {
-      createParams.autoArchiveInterval = this.autoArchiveInterval;
-    }
-
-    if (this.snapshotId) {
-      createParams.snapshot = this.snapshotId;
-    }
-
-    if (this.volumeConfigs.length > 0) {
-      createParams.volumes = this.volumeConfigs;
-    }
-
-    if (this.resources) {
-      createParams.resources = this.resources;
-    }
-
     // Create sandbox
-    this._sandbox = await this._daytona.create(createParams as Parameters<Daytona['create']>[0]);
+    this._sandbox = await this._daytona.create(createParams);
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
@@ -253,6 +250,7 @@ export class DaytonaSandbox extends MastraSandbox {
       }
     }
     this._sandbox = null;
+    this.status = 'stopped';
   }
 
   /**
@@ -271,6 +269,7 @@ export class DaytonaSandbox extends MastraSandbox {
     this._sandbox = null;
     this._daytona = null;
     this.mounts?.clear();
+    this.status = 'destroyed';
   }
 
   /**
@@ -332,16 +331,17 @@ export class DaytonaSandbox extends MastraSandbox {
 
   /**
    * Check if an error indicates the sandbox is dead/gone.
+   * Uses DaytonaNotFoundError from the SDK when available,
+   * with string fallback for edge cases.
+   *
+   * String patterns observed in @daytonaio/sdk@0.143.0 error messages.
+   * Update if SDK error messages change in future versions.
    */
   private isSandboxDeadError(error: unknown): boolean {
     if (!error) return false;
+    if (error instanceof DaytonaNotFoundError) return true;
     const errorStr = String(error);
-    return (
-      errorStr.includes('sandbox was not found') ||
-      errorStr.includes('Sandbox not found') ||
-      errorStr.includes('not running') ||
-      errorStr.includes('sandbox has been deleted')
-    );
+    return SANDBOX_DEAD_PATTERNS.some(pattern => errorStr.includes(pattern));
   }
 
   /**
@@ -391,14 +391,17 @@ export class DaytonaSandbox extends MastraSandbox {
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );
 
-      // Convert timeout from ms to seconds for Daytona SDK
-      const timeoutSecs = options.timeout ? Math.ceil(options.timeout / 1000) : undefined;
+      // Convert timeout from ms to seconds for Daytona SDK (fall back to instance default)
+      const effectiveTimeout = options.timeout ?? this.timeout;
+      const timeoutSecs = Math.ceil(effectiveTimeout / 1000);
 
       const response = await sandbox.process.executeCommand(fullCommand, options.cwd, envs, timeoutSecs);
 
       const executionTimeMs = Date.now() - startTime;
 
-      // Daytona ExecuteResponse has exitCode and result (stdout)
+      // Daytona ExecuteResponse has exitCode and result (stdout).
+      // The SDK does not provide a separate stderr stream — stderr is
+      // interleaved into result. We set stderr to '' for interface compliance.
       const stdout = response.result ?? '';
       const stderr = '';
 

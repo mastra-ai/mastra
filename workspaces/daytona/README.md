@@ -2,7 +2,7 @@
 
 Daytona cloud sandbox provider for [Mastra](https://mastra.ai) workspaces.
 
-Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) for secure, isolated AI code execution with support for multiple runtimes, resource configuration, volumes, and snapshots.
+Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, and snapshots.
 
 ## Install
 
@@ -32,26 +32,26 @@ await workspace.destroy();
 
 ## Configuration
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `id` | `string` | auto-generated | Sandbox identifier |
-| `apiKey` | `string` | `DAYTONA_API_KEY` env | API key |
-| `apiUrl` | `string` | `DAYTONA_API_URL` env | API endpoint |
-| `target` | `string` | `DAYTONA_TARGET` env | Runner region |
-| `timeout` | `number` | `300000` | Default execution timeout (ms) |
-| `language` | `string` | `'typescript'` | Runtime language |
-| `resources` | `object` | SDK defaults | `{ cpu, memory, disk, gpu }` |
-| `env` | `object` | `{}` | Environment variables |
-| `labels` | `object` | `{}` | Custom metadata labels |
-| `snapshot` | `string` | — | Pre-built snapshot ID |
-| `ephemeral` | `boolean` | `false` | Auto-delete on stop |
-| `autoStopInterval` | `number` | `15` | Minutes before auto-stop |
-| `autoArchiveInterval` | `number` | — | Minutes before archiving |
-| `volumes` | `array` | — | `[{ volumeId, mountPath }]` |
+| Option                | Type      | Default               | Description                    |
+| --------------------- | --------- | --------------------- | ------------------------------ |
+| `id`                  | `string`  | auto-generated        | Sandbox identifier             |
+| `apiKey`              | `string`  | `DAYTONA_API_KEY` env | API key                        |
+| `apiUrl`              | `string`  | `DAYTONA_API_URL` env | API endpoint                   |
+| `target`              | `string`  | `DAYTONA_TARGET` env  | Runner region                  |
+| `timeout`             | `number`  | `300000`              | Default execution timeout (ms) |
+| `language`            | `string`  | `'typescript'`        | Runtime language               |
+| `resources`           | `object`  | SDK defaults          | `{ cpu, memory, disk, gpu }`   |
+| `env`                 | `object`  | `{}`                  | Environment variables          |
+| `labels`              | `object`  | `{}`                  | Custom metadata labels         |
+| `snapshot`            | `string`  | —                     | Pre-built snapshot ID          |
+| `ephemeral`           | `boolean` | `false`               | Auto-delete on stop            |
+| `autoStopInterval`    | `number`  | `15`                  | Minutes before auto-stop       |
+| `autoArchiveInterval` | `number`  | —                     | Minutes before archiving       |
+| `volumes`             | `array`   | —                     | `[{ volumeId, mountPath }]`    |
 
 ## Direct SDK Access
 
-Access the underlying Daytona `Sandbox` instance for advanced operations:
+Access the underlying Daytona `Sandbox` instance for filesystem, git, and LSP operations not exposed through WorkspaceSandbox:
 
 ```typescript
 const daytonaSandbox = sandbox.instance;

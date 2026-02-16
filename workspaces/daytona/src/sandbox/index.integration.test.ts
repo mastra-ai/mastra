@@ -54,7 +54,7 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Integration', () =
 
     try {
       await envSandbox._start();
-      const result = await envSandbox.executeCommand('echo', ['$TEST_VAR']);
+      const result = await envSandbox.executeCommand('printenv', ['TEST_VAR']);
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toContain('hello-from-env');
@@ -122,6 +122,6 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
       supportsTimeout: true,
       supportsStreaming: false,
     },
-    testTimeout: 60000,
+    testTimeout: 120000,
   });
 });
