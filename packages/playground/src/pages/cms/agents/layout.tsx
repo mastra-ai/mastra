@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useParams, useSearchParams } from 'react-router';
 import type { AgentVersionResponse } from '@mastra/client-js';
-import type { AgentInstructionBlock } from '@mastra/core/storage';
 
 import {
   toast,
@@ -24,68 +23,19 @@ import {
   Button,
   AlertTitle,
   AgentVersionCombobox,
-  createInstructionBlock,
+  normalizeToolsToRecord,
+  normalizeIntegrationToolsToRecord,
+  transformIntegrationToolsForApi,
+  mapInstructionBlocksToApi,
+  mapInstructionBlocksFromApi,
+  mapScorersToApi,
+  buildObservationalMemoryForApi,
+  parseObservationalMemoryFromApi,
   type AgentFormValues,
   type EntityConfig,
 } from '@mastra/playground-ui';
 import { CreateStoredAgentParams } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
-
-// Helper function to convert array to record format expected by form sections
-const arrayToRecord = (arr: string[]): Record<string, EntityConfig> => {
-  const record: Record<string, EntityConfig> = {};
-  for (const id of arr) {
-    record[id] = { description: undefined };
-  }
-  return record;
-};
-
-// Helper to normalize tools from either string[] (legacy) or Record format
-const normalizeToolsToRecord = (
-  tools: string[] | Record<string, EntityConfig> | undefined,
-): Record<string, EntityConfig> => {
-  if (!tools) return {};
-  if (Array.isArray(tools)) return arrayToRecord(tools);
-  return { ...tools };
-};
-
-// Transform flat integration tools form data ("providerId:toolSlug") to nested API format
-const transformIntegrationToolsForApi = (
-  integrationTools: Record<string, EntityConfig> | undefined,
-): Record<string, { tools?: Record<string, EntityConfig> }> | undefined => {
-  if (!integrationTools || Object.keys(integrationTools).length === 0) return undefined;
-
-  const result: Record<string, { tools?: Record<string, EntityConfig> }> = {};
-  for (const [compositeKey, config] of Object.entries(integrationTools)) {
-    const separatorIndex = compositeKey.indexOf(':');
-    if (separatorIndex === -1) continue;
-    const providerId = compositeKey.slice(0, separatorIndex);
-    const toolSlug = compositeKey.slice(separatorIndex + 1);
-
-    if (!result[providerId]) {
-      result[providerId] = { tools: {} };
-    }
-    result[providerId].tools![toolSlug] = { description: config.description, rules: config.rules };
-  }
-  return result;
-};
-
-// Transform nested API integration tools to flat form format
-const normalizeIntegrationToolsToRecord = (
-  integrationTools: Record<string, { tools?: Record<string, EntityConfig> }> | undefined,
-): Record<string, EntityConfig> => {
-  if (!integrationTools) return {};
-
-  const result: Record<string, EntityConfig> = {};
-  for (const [providerId, providerConfig] of Object.entries(integrationTools)) {
-    if (providerConfig.tools) {
-      for (const [toolSlug, toolConfig] of Object.entries(providerConfig.tools)) {
-        result[`${providerId}:${toolSlug}`] = { description: toolConfig.description, rules: toolConfig.rules };
-      }
-    }
-  }
-  return result;
-};
 
 // Collect MCP client IDs, creating new clients in parallel where needed
 async function collectMCPClientIds(
@@ -97,9 +47,7 @@ async function collectMCPClientIds(
     mcpClients
       .filter(c => !c.id)
       .map(c =>
-        client
-          .createStoredMCPClient({ name: c.name, description: c.description, servers: c.servers })
-          .then(r => r.id),
+        client.createStoredMCPClient({ name: c.name, description: c.description, servers: c.servers }).then(r => r.id),
       ),
   );
   return [...existingIds, ...newIds];
@@ -131,40 +79,17 @@ function CreateLayoutWrapper() {
       const mcpClientIds = await collectMCPClientIds(values.mcpClients ?? [], client);
       const mcpClientsParam = Object.fromEntries(mcpClientIds.map(id => [id, {}]));
 
-      const formScorers = values.scorers ? Object.entries(values.scorers) : undefined;
-      const scorers = formScorers
-        ? Object.fromEntries(
-            formScorers.map(([key, value]) => [
-              key,
-              {
-                description: value.description,
-                sampling: value.sampling
-                  ? {
-                      type: value.sampling.type,
-                      rate: value.sampling.rate || 0,
-                    }
-                  : undefined,
-                rules: value.rules,
-              },
-            ]),
-          )
-        : undefined;
-
       const createParams: CreateStoredAgentParams = {
         name: values.name,
         description: values.description || undefined,
-        instructions: (values.instructionBlocks ?? []).map(block => ({
-          type: block.type,
-          content: block.content,
-          rules: block.rules,
-        })),
+        instructions: mapInstructionBlocksToApi(values.instructionBlocks),
         model: values.model,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         mcpClients: mcpClientsParam,
-        scorers,
+        scorers: mapScorersToApi(values.scorers),
         memory: values.memory?.enabled
           ? {
               options: {
@@ -172,61 +97,7 @@ function CreateLayoutWrapper() {
                 semanticRecall: values.memory.semanticRecall,
                 readOnly: values.memory.readOnly,
               },
-              observationalMemory: values.memory.observationalMemory?.enabled
-                ? (() => {
-                    const om = values.memory.observationalMemory;
-                    const modelId =
-                      om.model?.provider && om.model?.name ? `${om.model.provider}/${om.model.name}` : undefined;
-
-                    const obsModelId =
-                      om.observation?.model?.provider && om.observation?.model?.name
-                        ? `${om.observation.model.provider}/${om.observation.model.name}`
-                        : undefined;
-                    const observation =
-                      obsModelId ||
-                      om.observation?.messageTokens ||
-                      om.observation?.maxTokensPerBatch ||
-                      om.observation?.bufferTokens !== undefined ||
-                      om.observation?.bufferActivation !== undefined ||
-                      om.observation?.blockAfter !== undefined
-                        ? {
-                            model: obsModelId,
-                            messageTokens: om.observation?.messageTokens,
-                            maxTokensPerBatch: om.observation?.maxTokensPerBatch,
-                            bufferTokens: om.observation?.bufferTokens,
-                            bufferActivation: om.observation?.bufferActivation,
-                            blockAfter: om.observation?.blockAfter,
-                          }
-                        : undefined;
-
-                    const refModelId =
-                      om.reflection?.model?.provider && om.reflection?.model?.name
-                        ? `${om.reflection.model.provider}/${om.reflection.model.name}`
-                        : undefined;
-                    const reflection =
-                      refModelId ||
-                      om.reflection?.observationTokens ||
-                      om.reflection?.blockAfter !== undefined ||
-                      om.reflection?.bufferActivation !== undefined
-                        ? {
-                            model: refModelId,
-                            observationTokens: om.reflection?.observationTokens,
-                            blockAfter: om.reflection?.blockAfter,
-                            bufferActivation: om.reflection?.bufferActivation,
-                          }
-                        : undefined;
-
-                    return modelId || om.scope || om.shareTokenBudget || observation || reflection
-                      ? {
-                          model: modelId,
-                          scope: om.scope,
-                          shareTokenBudget: om.shareTokenBudget,
-                          observation,
-                          reflection,
-                        }
-                      : true;
-                  })()
-                : undefined,
+              observationalMemory: buildObservationalMemoryForApi(values.memory.observationalMemory),
             }
           : undefined,
         requestContextSchema: values.variables as Record<string, unknown> | undefined,
@@ -319,22 +190,7 @@ function EditFormContent({
         }
       | undefined;
 
-    const instructionsRaw = dataSource.instructions;
-    const instructionsString = Array.isArray(instructionsRaw)
-      ? instructionsRaw
-          .map((b: AgentInstructionBlock) => (b.type === 'prompt_block' ? b.content : ''))
-          .filter(Boolean)
-          .join('\n\n')
-      : instructionsRaw || '';
-
-    const instructionBlocks = Array.isArray(instructionsRaw)
-      ? instructionsRaw
-          .filter(
-            (b: AgentInstructionBlock): b is Extract<AgentInstructionBlock, { type: 'prompt_block' }> =>
-              b.type === 'prompt_block',
-          )
-          .map(b => createInstructionBlock(b.content, b.rules))
-      : [createInstructionBlock(instructionsRaw || '')];
+    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(dataSource.instructions);
 
     return {
       name: dataSource.name || '',
@@ -359,41 +215,7 @@ function EditFormContent({
             readOnly: memoryData.options.readOnly,
             vector: memoryData.vector,
             embedder: memoryData.embedder,
-            observationalMemory: memoryData.observationalMemory
-              ? (() => {
-                  const om = typeof memoryData.observationalMemory === 'object' ? memoryData.observationalMemory : {};
-                  const splitModel = (id?: string) => {
-                    if (!id) return undefined;
-                    const [p, ...rest] = id.split('/');
-                    const n = rest.join('/');
-                    return p && n ? { provider: p, name: n } : undefined;
-                  };
-                  return {
-                    enabled: true as const,
-                    model: splitModel(om.model),
-                    scope: om.scope,
-                    shareTokenBudget: om.shareTokenBudget,
-                    observation: om.observation
-                      ? {
-                          model: splitModel(om.observation.model),
-                          messageTokens: om.observation.messageTokens,
-                          maxTokensPerBatch: om.observation.maxTokensPerBatch,
-                          bufferTokens: om.observation.bufferTokens,
-                          bufferActivation: om.observation.bufferActivation,
-                          blockAfter: om.observation.blockAfter,
-                        }
-                      : undefined,
-                    reflection: om.reflection
-                      ? {
-                          model: splitModel(om.reflection.model),
-                          observationTokens: om.reflection.observationTokens,
-                          blockAfter: om.reflection.blockAfter,
-                          bufferActivation: om.reflection.bufferActivation,
-                        }
-                      : undefined,
-                  };
-                })()
-              : undefined,
+            observationalMemory: parseObservationalMemoryFromApi(memoryData.observationalMemory),
           }
         : undefined,
       instructionBlocks,
@@ -453,11 +275,7 @@ function EditFormContent({
       await updateStoredAgent.mutateAsync({
         name: values.name,
         description: values.description,
-        instructions: (values.instructionBlocks ?? []).map(block => ({
-          type: block.type,
-          content: block.content,
-          rules: block.rules,
-        })),
+        instructions: mapInstructionBlocksToApi(values.instructionBlocks),
         model: values.model,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
@@ -474,56 +292,7 @@ function EditFormContent({
                 semanticRecall: values.memory.semanticRecall,
                 readOnly: values.memory.readOnly,
               },
-              observationalMemory: values.memory.observationalMemory?.enabled
-                ? (() => {
-                    const om = values.memory.observationalMemory;
-                    const joinModel = (m?: { provider?: string; name?: string }) =>
-                      m?.provider && m?.name ? `${m.provider}/${m.name}` : undefined;
-                    const modelId = joinModel(om.model);
-
-                    const obsModelId = joinModel(om.observation?.model);
-                    const observation =
-                      obsModelId ||
-                      om.observation?.messageTokens ||
-                      om.observation?.maxTokensPerBatch ||
-                      om.observation?.bufferTokens !== undefined ||
-                      om.observation?.bufferActivation !== undefined ||
-                      om.observation?.blockAfter !== undefined
-                        ? {
-                            model: obsModelId,
-                            messageTokens: om.observation?.messageTokens,
-                            maxTokensPerBatch: om.observation?.maxTokensPerBatch,
-                            bufferTokens: om.observation?.bufferTokens,
-                            bufferActivation: om.observation?.bufferActivation,
-                            blockAfter: om.observation?.blockAfter,
-                          }
-                        : undefined;
-
-                    const refModelId = joinModel(om.reflection?.model);
-                    const reflection =
-                      refModelId ||
-                      om.reflection?.observationTokens ||
-                      om.reflection?.blockAfter !== undefined ||
-                      om.reflection?.bufferActivation !== undefined
-                        ? {
-                            model: refModelId,
-                            observationTokens: om.reflection?.observationTokens,
-                            blockAfter: om.reflection?.blockAfter,
-                            bufferActivation: om.reflection?.bufferActivation,
-                          }
-                        : undefined;
-
-                    return modelId || om.scope || om.shareTokenBudget || observation || reflection
-                      ? {
-                          model: modelId,
-                          scope: om.scope,
-                          shareTokenBudget: om.shareTokenBudget,
-                          observation,
-                          reflection,
-                        }
-                      : true;
-                  })()
-                : undefined,
+              observationalMemory: buildObservationalMemoryForApi(values.memory.observationalMemory),
             }
           : undefined,
         requestContextSchema: values.variables as Record<string, unknown> | undefined,
