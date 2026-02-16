@@ -74,118 +74,26 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
+  async updateWorkflowResults(_args: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    try {
-      // Note: LanceDB doesn't support atomic read-modify-write operations.
-      // The mergeInsert is atomic at the record level, but concurrent updates
-      // may still overwrite each other's changes in high-concurrency scenarios.
-
-      // Load existing snapshot
-      let snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
-
-      if (!snapshot) {
-        // Create new snapshot if none exists
-        snapshot = {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          serializedStepGraph: [],
-          status: 'pending',
-          value: {},
-          waitingPaths: {},
-          runId: runId,
-          requestContext: {},
-        } as WorkflowRunState;
-      }
-
-      // Merge the new step result and request context
-      snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-      // Persist updated snapshot
-      await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
-
-      return snapshot.context;
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LANCE', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            workflowName,
-            runId,
-            stepId,
-          },
-        },
-        error,
-      );
-    }
+    throw new Error(
+      'updateWorkflowResults is not implemented for LanceDB storage. LanceDB does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
+  async updateWorkflowState(_args: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    try {
-      // Note: LanceDB doesn't support atomic read-modify-write operations.
-      // The mergeInsert is atomic at the record level, but concurrent updates
-      // may still overwrite each other's changes in high-concurrency scenarios.
-
-      // Load existing snapshot
-      const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
-
-      if (!snapshot) {
-        return undefined;
-      }
-
-      if (!snapshot.context) {
-        throw new Error(`Snapshot not found for runId ${runId}`);
-      }
-
-      // Merge the new options with the existing snapshot
-      const updatedSnapshot = { ...snapshot, ...opts };
-
-      // Persist updated snapshot
-      await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
-
-      return updatedSnapshot;
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LANCE', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            workflowName,
-            runId,
-          },
-        },
-        error,
-      );
-    }
+    throw new Error(
+      'updateWorkflowState is not implemented for LanceDB storage. LanceDB does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot({

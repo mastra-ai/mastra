@@ -45,141 +45,26 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     }
   }
 
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
+  async updateWorkflowResults(_args: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    try {
-      const now = new Date();
-      const key = this.#db.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
-
-      // Load existing snapshot
-      const existing = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
-
-      let snapshot: WorkflowRunState;
-      if (!existing) {
-        // Create new snapshot if none exists
-        snapshot = {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          serializedStepGraph: [],
-          status: 'pending',
-          value: {},
-          waitingPaths: {},
-          runId: runId,
-          requestContext: {},
-        } as WorkflowRunState;
-      } else {
-        // Parse existing snapshot
-        const existingSnapshot = existing.snapshot;
-        snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
-      }
-
-      // Merge the new step result and request context
-      snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-      // Upsert the snapshot
-      await this.#db.putKV({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        key,
-        value: {
-          workflow_name: workflowName,
-          run_id: runId,
-          snapshot: JSON.stringify(snapshot),
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
-        },
-      });
-
-      return snapshot.context;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to update workflow results for workflow ${workflowName}, run ${runId}`,
-          details: {
-            workflowName,
-            runId,
-            stepId,
-          },
-        },
-        error,
-      );
-    }
+    throw new Error(
+      'updateWorkflowResults is not implemented for Cloudflare KV storage. Cloudflare KV is eventually-consistent and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
+
+  async updateWorkflowState(_args: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    try {
-      const key = this.#db.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
-
-      // Load existing snapshot
-      const existing = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
-
-      if (!existing) {
-        return undefined;
-      }
-
-      // Parse existing snapshot
-      const existingSnapshot = existing.snapshot;
-      const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
-
-      if (!snapshot || !snapshot?.context) {
-        throw new Error(`Snapshot not found for runId ${runId}`);
-      }
-
-      // Merge the new options with the existing snapshot
-      const updatedSnapshot = { ...snapshot, ...opts };
-
-      // Update the snapshot
-      await this.#db.putKV({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        key,
-        value: {
-          ...existing,
-          snapshot: JSON.stringify(updatedSnapshot),
-          updatedAt: new Date(),
-        },
-      });
-
-      return updatedSnapshot;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLOUDFLARE', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to update workflow state for workflow ${workflowName}, run ${runId}`,
-          details: {
-            workflowName,
-            runId,
-          },
-        },
-        error,
-      );
-    }
+    throw new Error(
+      'updateWorkflowState is not implemented for Cloudflare KV storage. Cloudflare KV is eventually-consistent and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot(params: {
