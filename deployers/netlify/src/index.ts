@@ -4,24 +4,47 @@ import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';
 
+export interface NetlifyDeployerOptions {
+  /**
+   * Deploy target for Netlify.
+   *
+   * - `'serverless'` — Standard Netlify Functions (Node.js runtime, 10s default timeout).
+   * - `'edge'` — Netlify Edge Functions (Deno-based runtime, no hard timeout, runs at the edge).
+   *
+   * @default 'serverless'
+   */
+  target?: 'serverless' | 'edge';
+}
+
 export class NetlifyDeployer extends Deployer {
-  constructor() {
+  readonly target: 'serverless' | 'edge';
+
+  constructor(options: NetlifyDeployerOptions = {}) {
     super({ name: 'NETLIFY' });
-    this.outputDir = join('.netlify', 'v1', 'functions', 'api');
+
+    this.target = options.target ?? 'serverless';
+
+    this.outputDir =
+      this.target === 'edge' ? join('.netlify', 'v1', 'edge-functions') : join('.netlify', 'v1', 'functions', 'api');
   }
 
   protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
-    await deps.install({
-      dir: join(outputDirectory, this.outputDir),
-      architecture: {
-        os: ['linux'],
-        cpu: ['x64'],
-        libc: ['gnu'],
-      },
-    });
+    if (this.target === 'edge') {
+      // Edge functions run on Deno — no platform-specific architecture constraints
+      await deps.install({ dir: join(outputDirectory, this.outputDir) });
+    } else {
+      await deps.install({
+        dir: join(outputDirectory, this.outputDir),
+        architecture: {
+          os: ['linux'],
+          cpu: ['x64'],
+          libc: ['gnu'],
+        },
+      });
+    }
   }
 
   async deploy(): Promise<void> {
@@ -47,21 +70,32 @@ export class NetlifyDeployer extends Deployer {
 
     // Use Netlify Frameworks API config.json
     // https://docs.netlify.com/build/frameworks/frameworks-api/
-    await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
-      functions: {
-        directory: '.netlify/v1/functions',
-        node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
-        included_files: ['.netlify/v1/functions/**'],
-      },
-      redirects: [
-        {
-          force: true,
-          from: '/*',
-          to: '/.netlify/functions/api/:splat',
-          status: 200,
+    if (this.target === 'edge') {
+      await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+        edge_functions: [
+          {
+            function: 'index',
+            path: '/*',
+          },
+        ],
+      });
+    } else {
+      await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+        functions: {
+          directory: '.netlify/v1/functions',
+          node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
+          included_files: ['.netlify/v1/functions/**'],
         },
-      ],
-    });
+        redirects: [
+          {
+            force: true,
+            from: '/*',
+            to: '/.netlify/functions/api/:splat',
+            status: 200,
+          },
+        ],
+      });
+    }
 
     await move(join(outputDirectory, '.netlify', 'v1'), join(process.cwd(), '.netlify', 'v1'), {
       overwrite: true,
@@ -91,13 +125,13 @@ export class NetlifyDeployer extends Deployer {
   async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
-    // Check for LibSQL dependency which is not supported in Netlify Functions
+    // LibSQL uses native Node.js bindings — incompatible with both serverless and edge environments
     const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;
 
     if (hasLibsql) {
       this.logger?.error(
         `Netlify Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency.
-        LibSQL with file URLs uses native Node.js bindings that cannot run in serverless environments. Use other Mastra Storage options instead.`,
+        LibSQL with file URLs uses native Node.js bindings that cannot run in ${this.target === 'edge' ? 'edge' : 'serverless'} environments. Use other Mastra Storage options instead.`,
       );
       process.exit(1);
     }
