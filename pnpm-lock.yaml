@@ -3736,7 +3736,7 @@ importers:
         specifier: workspace:*
         version: link:../_types-builder
       '@standard-schema/spec':
-        specifier: ^1.0.0
+        specifier: ^1.1.0
         version: 1.1.0
       '@types/json-schema':
         specifier: ^7.0.15
