@@ -9,4 +9,8 @@ describe('MASTRA_USER_AGENT', () => {
   it('should contain "mastra"', () => {
     expect(MASTRA_USER_AGENT).toContain('mastra');
   });
+
+  it('should match the expected format', () => {
+    expect(MASTRA_USER_AGENT).toMatch(/^mastra\/\d+\.\d+/);
+  });
 });
