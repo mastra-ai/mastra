@@ -7,11 +7,12 @@ import {
   instructionsSchema,
   conditionalFieldSchema,
   modelConfigSchema,
+  toolConfigSchema,
   toolsConfigSchema,
 } from './stored-agents';
 
 const mcpClientToolsConfigSchema = z.object({
-  tools: z.record(z.string(), z.object({ description: z.string().optional() })).optional(),
+  tools: z.record(z.string(), toolConfigSchema).optional(),
 });
 
 // ============================================================================
@@ -98,12 +99,12 @@ export const agentVersionSchema = z.object({
   defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
     .optional()
     .describe('Default options for generate/stream calls — static or conditional'),
-  workflows: conditionalFieldSchema(z.array(z.string()))
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of workflow keys — static or conditional'),
-  agents: conditionalFieldSchema(z.array(z.string()))
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of agent keys — static or conditional'),
+    .describe('Agent keys with optional per-agent config — static or conditional'),
   integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of tool provider IDs to their tool configurations — static or conditional'),

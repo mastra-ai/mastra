@@ -74,13 +74,6 @@ const agent = new Agent({
       isOptional: true,
     },
     {
-      name: "runtimes",
-      type: "SandboxRuntime[]",
-      description: "Supported runtimes",
-      isOptional: true,
-      defaultValue: "['node', 'python', 'bash']",
-    },
-    {
       name: "id",
       type: "string",
       description: "Unique identifier for this sandbox instance",
@@ -251,15 +244,6 @@ Unmount a previously mounted filesystem.
 
 ```typescript
 await sandbox.unmount('/mnt/data');
-```
-
-### `getMounts()`
-
-Get a list of currently mounted filesystems.
-
-```typescript
-const mounts = await sandbox.getMounts();
-// [{ path: '/mnt/data', filesystem: 's3' }]
 ```
 
 ### `getInfo()`

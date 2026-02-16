@@ -2408,6 +2408,12 @@ export class Agent<
               }
             }
 
+            // Save the parent agent's MastraMemory before the sub-agent runs.
+            // The sub-agent's prepare-memory-step will overwrite this key with
+            // its own thread/resource identity. We restore it after the sub-agent
+            // returns so the parent's processors (OM, working memory, etc.) still
+            // see the correct context on subsequent steps.
+            const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
@@ -2448,14 +2454,6 @@ export class Agent<
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
-
-                // const x = agent.generate(' yo', [
-                //   structuredOutput: {
-                //     schema: z.object({
-                //       text: z.string(),
-                //     }),
-                //   },
-                // ]);
 
                 const generateResult = resumeData
                   ? await agent.resumeGenerate(resumeData, {
@@ -2649,6 +2647,10 @@ export class Agent<
                   this.logger.error(`[Agent:${this.name}] - onDelegationComplete hook error: ${hookError}`);
                 }
               }
+              // Restore the parent agent's MastraMemory after sub-agent execution
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
 
               return result;
             } catch (err) {
@@ -2681,6 +2683,12 @@ export class Agent<
               }
 
               // Wrap error in MastraError
+              // Restore even on error so the parent's retry/fallback logic
+              // sees the correct memory context
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
