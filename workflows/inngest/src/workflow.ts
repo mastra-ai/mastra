@@ -377,10 +377,11 @@ export class InngestWorkflow<
                 | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
                 | undefined;
               if (result.status === 'suspended') {
-                existingSnapshot = await workflowsStore.loadWorkflowSnapshot({
-                  workflowName: this.id,
-                  runId,
-                });
+                existingSnapshot =
+                  (await workflowsStore.loadWorkflowSnapshot({
+                    workflowName: this.id,
+                    runId,
+                  })) ?? undefined;
               }
 
               await workflowsStore.persistWorkflowSnapshot({
