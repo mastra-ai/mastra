@@ -609,8 +609,8 @@ importers:
         specifier: 3.0.2
         version: 3.0.2(rollup@4.55.3)
       cloudflare:
-        specifier: ^4.5.0
-        version: 4.5.0(encoding@0.1.13)
+        specifier: ^5.2.0
+        version: 5.2.0(encoding@0.1.13)
       rollup:
         specifier: ~4.55.1
         version: 4.55.3
@@ -4329,8 +4329,8 @@ importers:
   stores/cloudflare:
     dependencies:
       cloudflare:
-        specifier: ^4.5.0
-        version: 4.5.0(encoding@0.1.13)
+        specifier: ^5.2.0
+        version: 5.2.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20251111.0
@@ -4378,8 +4378,8 @@ importers:
   stores/cloudflare-d1:
     dependencies:
       cloudflare:
-        specifier: ^4.5.0
-        version: 4.5.0(encoding@0.1.13)
+        specifier: ^5.2.0
+        version: 5.2.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20251111.0
@@ -4725,8 +4725,8 @@ importers:
         specifier: ^4.0.7
         version: 4.0.7(socks@2.8.7)
       cloudflare:
-        specifier: ^4.5.0
-        version: 4.5.0(encoding@0.1.13)
+        specifier: ^5.2.0
+        version: 5.2.0(encoding@0.1.13)
       mongodb:
         specifier: ^7.0.0
         version: 7.0.0(socks@2.8.7)
@@ -5121,8 +5121,8 @@ importers:
   stores/vectorize:
     dependencies:
       cloudflare:
-        specifier: ^4.5.0
-        version: 4.5.0(encoding@0.1.13)
+        specifier: ^5.2.0
+        version: 5.2.0(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -5198,8 +5198,8 @@ importers:
   voice/cloudflare:
     dependencies:
       cloudflare:
-        specifier: ^4.5.0
-        version: 4.5.0(encoding@0.1.13)
+        specifier: ^5.2.0
+        version: 5.2.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20251111.0
@@ -15051,8 +15051,8 @@ packages:
   clone-response@1.0.3:
     resolution: {integrity: sha512-ROoL94jJH2dUVML2Y/5PEDNaSHgeOdSDicUyS7izcF63G6sTc/FTjLub4b8Il9S8S0beOfYt0TaA5qvFK+w0wA==}
 
-  cloudflare@4.5.0:
-    resolution: {integrity: sha512-fPcbPKx4zF45jBvQ0z7PCdgejVAPBBCZxwqk1k7krQNfpM07Cfj97/Q6wBzvYqlWXx/zt1S9+m8vnfCe06umbQ==}
+  cloudflare@5.2.0:
+    resolution: {integrity: sha512-dVzqDpPFYR9ApEC9e+JJshFJZXcw4HzM8W+3DHzO5oy9+8rLC53G7x6fEf9A7/gSuSCxuvndzui5qJKftfIM9A==}
 
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
@@ -34666,7 +34666,7 @@ snapshots:
     dependencies:
       mimic-response: 1.0.1
 
-  cloudflare@4.5.0(encoding@0.1.13):
+  cloudflare@5.2.0(encoding@0.1.13):
     dependencies:
       '@types/node': 22.19.7
       '@types/node-fetch': 2.6.13
