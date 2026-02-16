@@ -23,9 +23,7 @@ export function createWorkflowRunsWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should track workflow run status
   {
     // Register mock factory
-    mockRegistry.register('run-status-workflow:step1Action', () =>
-      vi.fn().mockResolvedValue({ result: 'success' }),
-    );
+    mockRegistry.register('run-status-workflow:step1Action', () => vi.fn().mockResolvedValue({ result: 'success' }));
 
     const step1 = createStep({
       id: 'step1',
@@ -56,15 +54,9 @@ export function createWorkflowRunsWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should track workflow run with multiple steps
   {
     // Register mock factories
-    mockRegistry.register('multi-step-run-workflow:step1Action', () =>
-      vi.fn().mockResolvedValue({ value: 'step1' }),
-    );
-    mockRegistry.register('multi-step-run-workflow:step2Action', () =>
-      vi.fn().mockResolvedValue({ value: 'step2' }),
-    );
-    mockRegistry.register('multi-step-run-workflow:step3Action', () =>
-      vi.fn().mockResolvedValue({ result: 'done' }),
-    );
+    mockRegistry.register('multi-step-run-workflow:step1Action', () => vi.fn().mockResolvedValue({ value: 'step1' }));
+    mockRegistry.register('multi-step-run-workflow:step2Action', () => vi.fn().mockResolvedValue({ value: 'step2' }));
+    mockRegistry.register('multi-step-run-workflow:step3Action', () => vi.fn().mockResolvedValue({ result: 'done' }));
 
     const step1 = createStep({
       id: 'step1',
@@ -154,9 +146,7 @@ export function createWorkflowRunsWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should return the correct runId
   {
-    mockRegistry.register('runid-workflow:step1', () =>
-      vi.fn().mockResolvedValue({ result: 'done' }),
-    );
+    mockRegistry.register('runid-workflow:step1', () => vi.fn().mockResolvedValue({ result: 'done' }));
 
     const step1 = createStep({
       id: 'step1',

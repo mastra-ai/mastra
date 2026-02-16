@@ -274,15 +274,11 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
         return { category: inputData.value };
       }),
     );
-    mockRegistry.register('branch-threeway:low', () =>
-      vi.fn().mockImplementation(async () => ({ result: 'low' })),
-    );
+    mockRegistry.register('branch-threeway:low', () => vi.fn().mockImplementation(async () => ({ result: 'low' })));
     mockRegistry.register('branch-threeway:medium', () =>
       vi.fn().mockImplementation(async () => ({ result: 'medium' })),
     );
-    mockRegistry.register('branch-threeway:high', () =>
-      vi.fn().mockImplementation(async () => ({ result: 'high' })),
-    );
+    mockRegistry.register('branch-threeway:high', () => vi.fn().mockImplementation(async () => ({ result: 'high' })));
 
     const checkStep = createStep({
       id: 'check',

@@ -330,7 +330,10 @@ export function createSchemaValidationWorkflows(ctx: WorkflowCreatorContext) {
       options: { validateInputs: true },
     });
 
-    workflow.then(outerStep).then(nestedWorkflow as any).commit();
+    workflow
+      .then(outerStep)
+      .then(nestedWorkflow as any)
+      .commit();
 
     workflows['schema-nested-invalid'] = { workflow, mocks: {} };
   }

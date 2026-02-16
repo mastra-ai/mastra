@@ -1780,16 +1780,18 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       return { value: inputData.value };
     });
 
-    const incrementStepAction = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend, requestContext }) => {
-      const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
-      expect(shouldNotExist).toBeUndefined();
-      if (!(resumeData as any)?.amountToIncrementBy) {
-        return suspend({ optionsToIncrementBy: [1, 2, 3] });
-      }
+    const incrementStepAction = vi
+      .fn()
+      .mockImplementation(async ({ inputData, resumeData, suspend, requestContext }) => {
+        const shouldNotExist = requestContext?.get('__mastraWorflowInputData');
+        expect(shouldNotExist).toBeUndefined();
+        if (!(resumeData as any)?.amountToIncrementBy) {
+          return suspend({ optionsToIncrementBy: [1, 2, 3] });
+        }
 
-      const result = inputData.value + (resumeData as any).amountToIncrementBy;
-      return { value: result };
-    });
+        const result = inputData.value + (resumeData as any).amountToIncrementBy;
+        return { value: result };
+      });
 
     const resumeStep = createStep({
       id: 'resume',
@@ -1837,12 +1839,9 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       inputSchema: z.object({ value: z.number() }),
       outputSchema: z.object({ value: z.number() }),
     })
-      .dountil(
-        nestedWorkflow,
-        async ({ inputData }) => {
-          return inputData.value >= 10;
-        },
-      )
+      .dountil(nestedWorkflow, async ({ inputData }) => {
+        return inputData.value >= 10;
+      })
       .then(finalStep)
       .commit();
 
@@ -2463,10 +2462,14 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const runId = `state-resume-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
         // Start workflow with initial state
-        const startResult = await execute(workflow, {}, {
-          runId,
-          initialState: { count: 0, items: [] },
-        });
+        const startResult = await execute(
+          workflow,
+          {},
+          {
+            runId,
+            initialState: { count: 0, items: [] },
+          },
+        );
 
         expect(startResult.status).toBe('suspended');
         expect(stateValuesObserved).toHaveLength(1);
@@ -2818,54 +2821,47 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
       },
     );
 
-    it.skipIf(ctx.skipTests.resumeForeach || !ctx.resume)(
-      'should suspend and resume in foreach loop',
-      async () => {
-        const { workflow, mocks, resetMocks } = registry!['foreach-suspend-workflow'];
-        resetMocks?.();
+    it.skipIf(ctx.skipTests.resumeForeach || !ctx.resume)('should suspend and resume in foreach loop', async () => {
+      const { workflow, mocks, resetMocks } = registry!['foreach-suspend-workflow'];
+      resetMocks?.();
 
-        const runId = `foreach-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const runId = `foreach-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-        // Start workflow with 3 items - should suspend on first item
-        const startResult = await execute(
-          workflow,
-          [{ value: 1 }, { value: 22 }, { value: 333 }],
-          { runId },
-        );
-        expect(startResult.status).toBe('suspended');
+      // Start workflow with 3 items - should suspend on first item
+      const startResult = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }], { runId });
+      expect(startResult.status).toBe('suspended');
 
-        // Resume first item
-        const resume1 = await ctx.resume!(workflow, {
-          runId,
-          resumeData: { resumeValue: 0 },
-        });
-        expect(resume1.status).toBe('suspended');
+      // Resume first item
+      const resume1 = await ctx.resume!(workflow, {
+        runId,
+        resumeData: { resumeValue: 0 },
+      });
+      expect(resume1.status).toBe('suspended');
 
-        // Resume second item
-        const resume2 = await ctx.resume!(workflow, {
-          runId,
-          resumeData: { resumeValue: 5 },
-        });
-        expect(resume2.status).toBe('suspended');
+      // Resume second item
+      const resume2 = await ctx.resume!(workflow, {
+        runId,
+        resumeData: { resumeValue: 5 },
+      });
+      expect(resume2.status).toBe('suspended');
 
-        // Resume third item - workflow should complete
-        const resume3 = await ctx.resume!(workflow, {
-          runId,
-          resumeData: { resumeValue: 0 },
-        });
-        expect(resume3.status).toBe('success');
+      // Resume third item - workflow should complete
+      const resume3 = await ctx.resume!(workflow, {
+        runId,
+        resumeData: { resumeValue: 0 },
+      });
+      expect(resume3.status).toBe('success');
 
-        // Verify final result
-        expect(resume3.steps.map).toMatchObject({
-          status: 'success',
-          output: [{ value: 12 }, { value: 38 }, { value: 344 }], // 1+11+0, 22+11+5, 333+11+0
-        });
-        expect(resume3.steps.final).toMatchObject({
-          status: 'success',
-          output: { finalValue: 12 + 38 + 344 }, // 394
-        });
-      },
-    );
+      // Verify final result
+      expect(resume3.steps.map).toMatchObject({
+        status: 'success',
+        output: [{ value: 12 }, { value: 38 }, { value: 344 }], // 1+11+0, 22+11+5, 333+11+0
+      });
+      expect(resume3.steps.final).toMatchObject({
+        status: 'success',
+        output: { finalValue: 12 + 38 + 344 }, // 394
+      });
+    });
 
     it.skipIf(ctx.skipTests.resumeForeachConcurrent || !ctx.resume)(
       'should suspend and resume when running concurrent foreach',
@@ -2876,11 +2872,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const runId = `foreach-concurrent-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
         // Start workflow with 3 items - value=1 completes, value=22 and value=333 suspend
-        const startResult = await execute(
-          workflow,
-          [{ value: 22 }, { value: 1 }, { value: 333 }],
-          { runId },
-        );
+        const startResult = await execute(workflow, [{ value: 22 }, { value: 1 }, { value: 333 }], { runId });
         expect(startResult.status).toBe('suspended');
 
         // Resume all suspended items at once (concurrent mode)
@@ -2911,11 +2903,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const runId = `foreach-index-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
         // Start workflow with 3 items - all suspend (concurrent mode)
-        const startResult = await execute(
-          workflow,
-          [{ value: 1 }, { value: 22 }, { value: 333 }],
-          { runId },
-        );
+        const startResult = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }], { runId });
         expect(startResult.status).toBe('suspended');
 
         // Resume only index 0 with different value
@@ -2963,11 +2951,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const runId = `foreach-label-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
         // Start workflow with 3 items - all suspend with labels (concurrent mode)
-        const startResult = await execute(
-          workflow,
-          [{ value: 1 }, { value: 22 }, { value: 333 }],
-          { runId },
-        );
+        const startResult = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }], { runId });
         expect(startResult.status).toBe('suspended');
 
         // Resume by label 2 (third item, index 2)
@@ -3249,32 +3233,29 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     );
 
     // Bug regression test #4442 - requestContext should work during suspend/resume
-    it.skipIf(ctx.skipTests.resumeWithState || !ctx.resume)(
-      'should work with requestContext - bug #4442',
-      async () => {
-        const { workflow, mocks, resetMocks } = registry!['requestcontext-bug-4442-workflow'];
-        resetMocks?.();
+    it.skipIf(ctx.skipTests.resumeWithState || !ctx.resume)('should work with requestContext - bug #4442', async () => {
+      const { workflow, mocks, resetMocks } = registry!['requestcontext-bug-4442-workflow'];
+      resetMocks?.();
 
-        const runId = `requestcontext-4442-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      const runId = `requestcontext-4442-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-        // Start workflow - should suspend at promptAgent step
-        const initialResult = await execute(workflow, { input: 'test' }, { runId });
-        expect(initialResult.steps.promptAgent.status).toBe('suspended');
-        expect(mocks.promptAgentAction).toHaveBeenCalledTimes(1);
+      // Start workflow - should suspend at promptAgent step
+      const initialResult = await execute(workflow, { input: 'test' }, { runId });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(mocks.promptAgentAction).toHaveBeenCalledTimes(1);
 
-        // Resume with user input
-        const resumeResult = await ctx.resume!(workflow, {
-          runId,
-          step: 'promptAgent',
-          resumeData: { userInput: 'test input for resumption' },
-        });
+      // Resume with user input
+      const resumeResult = await ctx.resume!(workflow, {
+        runId,
+        step: 'promptAgent',
+        resumeData: { userInput: 'test input for resumption' },
+      });
 
-        expect(mocks.promptAgentAction).toHaveBeenCalledTimes(2);
-        expect(resumeResult.steps.requestContextAction.status).toBe('success');
-        // @ts-expect-error - testing dynamic workflow result
-        expect(resumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
-      },
-    );
+      expect(mocks.promptAgentAction).toHaveBeenCalledTimes(2);
+      expect(resumeResult.steps.requestContextAction.status).toBe('success');
+      // @ts-expect-error - testing dynamic workflow result
+      expect(resumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
+    });
 
     // Bug regression test #6419 - branching workflow step status after resume
     it.skipIf(ctx.skipTests.resumeBranchingStatus || !ctx.resume)(
@@ -3471,12 +3452,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         expect((result.steps['step2']?.output as any)?.result2).toBe('transformed-test');
 
         // Verify second parallel group received merged outputs from first group
-        expect((result.steps['step3']?.output as any)?.result3).toBe(
-          'combined-processed-test-transformed-test',
-        );
-        expect((result.steps['step4']?.output as any)?.result4).toBe(
-          'final-processed-test-transformed-test',
-        );
+        expect((result.steps['step3']?.output as any)?.result3).toBe('combined-processed-test-transformed-test');
+        expect((result.steps['step4']?.output as any)?.result4).toBe('final-processed-test-transformed-test');
       },
     );
 

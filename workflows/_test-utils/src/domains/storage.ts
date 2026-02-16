@@ -185,8 +185,18 @@ export function createStorageWorkflows(ctx: WorkflowCreatorContext) {
       return { completed: true };
     });
 
-    const step1 = createStep({ id: 'step1', execute: step1Action, inputSchema: z.object({}), outputSchema: z.object({}) });
-    const step2 = createStep({ id: 'step2', execute: step2Action, inputSchema: z.object({}), outputSchema: z.object({}) });
+    const step1 = createStep({
+      id: 'step1',
+      execute: step1Action,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+    const step2 = createStep({
+      id: 'step2',
+      execute: step2Action,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
     const resumeStep = createStep({
       id: 'resume-step',
       execute: resumeStepAction,
@@ -288,88 +298,97 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
       expect(runById?.resourceId).toBe(resourceId);
     });
 
-    it.skipIf(skipTests.storageFieldsFilter)('should return only requested fields when fields option is specified', async () => {
-      const { workflow } = registry!['storage-fields-filter-workflow'];
+    it.skipIf(skipTests.storageFieldsFilter)(
+      'should return only requested fields when fields option is specified',
+      async () => {
+        const { workflow } = registry!['storage-fields-filter-workflow'];
 
-      const runId = `storage-fields-filter-test-${Date.now()}`;
+        const runId = `storage-fields-filter-test-${Date.now()}`;
 
-      // Execute workflow
-      await execute(workflow, {}, { runId });
+        // Execute workflow
+        await execute(workflow, {}, { runId });
 
-      // Request only status field
-      const statusOnly = await (workflow as any).getWorkflowRunById(runId, { fields: ['status'] });
-      expect(statusOnly?.status).toBe('success');
-      expect(statusOnly?.steps).toBeUndefined(); // steps not requested
-      expect(statusOnly?.result).toBeUndefined();
+        // Request only status field
+        const statusOnly = await (workflow as any).getWorkflowRunById(runId, { fields: ['status'] });
+        expect(statusOnly?.status).toBe('success');
+        expect(statusOnly?.steps).toBeUndefined(); // steps not requested
+        expect(statusOnly?.result).toBeUndefined();
 
-      // Request status and steps
-      const withSteps = await (workflow as any).getWorkflowRunById(runId, { fields: ['status', 'steps'] });
-      expect(withSteps?.status).toBe('success');
-      expect(withSteps?.steps).toMatchObject({
-        step1: { status: 'success', output: { value: 'result1' } },
-      });
-      expect(withSteps?.result).toBeUndefined();
+        // Request status and steps
+        const withSteps = await (workflow as any).getWorkflowRunById(runId, { fields: ['status', 'steps'] });
+        expect(withSteps?.status).toBe('success');
+        expect(withSteps?.steps).toMatchObject({
+          step1: { status: 'success', output: { value: 'result1' } },
+        });
+        expect(withSteps?.result).toBeUndefined();
 
-      // Request all fields (no fields option)
-      const allFields = await (workflow as any).getWorkflowRunById(runId);
-      expect(allFields?.status).toBe('success');
-      expect(allFields?.steps).toBeDefined();
-      expect(allFields?.result).toBeDefined();
-      expect(allFields?.runId).toBe(runId);
-      expect(allFields?.workflowName).toBe('storage-fields-filter-workflow');
-    });
+        // Request all fields (no fields option)
+        const allFields = await (workflow as any).getWorkflowRunById(runId);
+        expect(allFields?.status).toBe('success');
+        expect(allFields?.steps).toBeDefined();
+        expect(allFields?.result).toBeDefined();
+        expect(allFields?.runId).toBe(runId);
+        expect(allFields?.workflowName).toBe('storage-fields-filter-workflow');
+      },
+    );
 
-    it.skipIf(skipTests.storageWithNestedWorkflows)('should exclude nested workflow steps when withNestedWorkflows is false', async () => {
-      const { workflow } = registry!['storage-nested-parent-workflow'];
+    it.skipIf(skipTests.storageWithNestedWorkflows)(
+      'should exclude nested workflow steps when withNestedWorkflows is false',
+      async () => {
+        const { workflow } = registry!['storage-nested-parent-workflow'];
 
-      const runId = `storage-nested-test-${Date.now()}`;
+        const runId = `storage-nested-test-${Date.now()}`;
 
-      // Execute workflow
-      await execute(workflow, { value: 1 }, { runId });
+        // Execute workflow
+        await execute(workflow, { value: 1 }, { runId });
 
-      // With nested workflows (default) - should include nested step keys
-      const withNested = await (workflow as any).getWorkflowRunById(runId);
-      expect(withNested?.status).toBe('success');
-      expect(withNested?.steps).toHaveProperty('storage-nested-inner-workflow');
-      expect(withNested?.steps).toHaveProperty('storage-nested-inner-workflow.inner-step');
-      expect(withNested?.steps).toHaveProperty('outer-step');
+        // With nested workflows (default) - should include nested step keys
+        const withNested = await (workflow as any).getWorkflowRunById(runId);
+        expect(withNested?.status).toBe('success');
+        expect(withNested?.steps).toHaveProperty('storage-nested-inner-workflow');
+        expect(withNested?.steps).toHaveProperty('storage-nested-inner-workflow.inner-step');
+        expect(withNested?.steps).toHaveProperty('outer-step');
 
-      // Without nested workflows - should only include top-level steps
-      const withoutNested = await (workflow as any).getWorkflowRunById(runId, {
-        withNestedWorkflows: false,
-      });
-      expect(withoutNested?.status).toBe('success');
-      expect(withoutNested?.steps).toHaveProperty('storage-nested-inner-workflow');
-      expect(withoutNested?.steps).not.toHaveProperty('storage-nested-inner-workflow.inner-step');
-      expect(withoutNested?.steps).toHaveProperty('outer-step');
-    });
+        // Without nested workflows - should only include top-level steps
+        const withoutNested = await (workflow as any).getWorkflowRunById(runId, {
+          withNestedWorkflows: false,
+        });
+        expect(withoutNested?.status).toBe('success');
+        expect(withoutNested?.steps).toHaveProperty('storage-nested-inner-workflow');
+        expect(withoutNested?.steps).not.toHaveProperty('storage-nested-inner-workflow.inner-step');
+        expect(withoutNested?.steps).toHaveProperty('outer-step');
+      },
+    );
 
-    it.skipIf(skipTests.storageShouldPersistSnapshot || !ctx.resume)('should use shouldPersistSnapshot option', async () => {
-      const { workflow } = registry!['storage-shouldpersist-workflow'];
-      const runId = `persist-test-${Date.now()}`;
+    it.skipIf(skipTests.storageShouldPersistSnapshot || !ctx.resume)(
+      'should use shouldPersistSnapshot option',
+      async () => {
+        const { workflow } = registry!['storage-shouldpersist-workflow'];
+        const runId = `persist-test-${Date.now()}`;
 
-      // Execute - should suspend at resume-step
-      const result = await execute(workflow, {}, { runId });
-      expect(result.status).toBe('suspended');
+        // Execute - should suspend at resume-step
+        const result = await execute(workflow, {}, { runId });
+        expect(result.status).toBe('suspended');
 
-      // Only suspended state should be persisted (per shouldPersistSnapshot)
-      const { runs, total } = await (workflow as any).listWorkflowRuns();
-      expect(total).toBe(1);
-      expect(runs).toHaveLength(1);
+        // Only suspended state should be persisted (per shouldPersistSnapshot)
+        const { runs, total } = await (workflow as any).listWorkflowRuns();
+        expect(total).toBe(1);
+        expect(runs).toHaveLength(1);
 
-      // Resume
-      const resumeResult = await ctx.resume!(workflow, {
-        runId,
-        step: 'resume-step',
-        resumeData: { resume: 'resume' },
-      });
-      expect(resumeResult.status).toBe('success');
+        // Resume
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'resume-step',
+          resumeData: { resume: 'resume' },
+        });
+        expect(resumeResult.status).toBe('success');
 
-      // After resume, snapshot should still be the suspended one (success is not persisted)
-      const { runs: afterRuns, total: afterTotal } = await (workflow as any).listWorkflowRuns();
-      expect(afterTotal).toBe(1);
-      expect(afterRuns).toHaveLength(1);
-      expect((afterRuns[0]?.snapshot as any)?.status).toBe('suspended');
-    });
+        // After resume, snapshot should still be the suspended one (success is not persisted)
+        const { runs: afterRuns, total: afterTotal } = await (workflow as any).listWorkflowRuns();
+        expect(afterTotal).toBe(1);
+        expect(afterRuns).toHaveLength(1);
+        expect((afterRuns[0]?.snapshot as any)?.status).toBe('suspended');
+      },
+    );
   });
 }

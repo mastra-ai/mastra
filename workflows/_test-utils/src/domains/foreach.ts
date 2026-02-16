@@ -628,35 +628,38 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
   describe('foreach', () => {
     // Note: Single concurrency test is skipped for Inngest due to snapshot race condition
     // (steps show "running" instead of "success" when result is returned)
-    it.skipIf(skipTests.foreachSingleConcurrency)('should run a single item concurrency (default) for loop', async () => {
-      const startTime = Date.now();
-      const { workflow } = registry!['foreach-single-concurrency'];
-      const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
+    it.skipIf(skipTests.foreachSingleConcurrency)(
+      'should run a single item concurrency (default) for loop',
+      async () => {
+        const startTime = Date.now();
+        const { workflow } = registry!['foreach-single-concurrency'];
+        const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
 
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      // Sequential execution: 3 items × 1s each = ~3s minimum
-      expect(duration).toBeGreaterThan(3e3 - 200);
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        // Sequential execution: 3 items × 1s each = ~3s minimum
+        expect(duration).toBeGreaterThan(3e3 - 200);
 
-      // Verify output (not mock counts - unreliable with memoization)
-      expect(result.steps).toMatchObject({
-        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
-        map: {
-          status: 'success',
-          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
-          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        final: {
-          status: 'success',
-          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
-          payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-      });
-    });
+        // Verify output (not mock counts - unreliable with memoization)
+        expect(result.steps).toMatchObject({
+          input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          map: {
+            status: 'success',
+            output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+            payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          final: {
+            status: 'success',
+            output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+            payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        });
+      },
+    );
 
     // Note: Timing test skipped for Inngest - network overhead makes timing assertions unreliable
     it.skipIf(skipTests.foreachConcurrentTiming)('should run a concurrent for loop', async () => {
@@ -748,16 +751,19 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
       });
     });
 
-    it.skipIf(skipTests.foreachStateBatch)('should update state after each concurrent batch in foreach step', async () => {
-      const { workflow } = registry!['foreach-state-batch'];
-      const result = await execute(workflow, [2, 1], {
-        initialState: { output: 0 },
-        outputOptions: { includeState: true },
-      });
+    it.skipIf(skipTests.foreachStateBatch)(
+      'should update state after each concurrent batch in foreach step',
+      async () => {
+        const { workflow } = registry!['foreach-state-batch'];
+        const result = await execute(workflow, [2, 1], {
+          initialState: { output: 0 },
+          outputOptions: { includeState: true },
+        });
 
-      expect(result.status).toBe('success');
-      expect(result.state).toEqual({ output: 2 });
-    });
+        expect(result.status).toBe('success');
+        expect(result.state).toEqual({ output: 2 });
+      },
+    );
 
     it.skipIf(skipTests.foreachBail)('should bail foreach execution when called in a concurrent batch', async () => {
       const { workflow, bailResult } = registry!['foreach-bail'];

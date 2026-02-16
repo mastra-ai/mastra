@@ -454,16 +454,19 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
       });
     });
 
-    it.skipIf(skipTests.state)('should execute nested workflow with state being set by the nested workflow', async () => {
-      const { workflow, nestedWorkflowId } = registry!['nested-setstate'];
+    it.skipIf(skipTests.state)(
+      'should execute nested workflow with state being set by the nested workflow',
+      async () => {
+        const { workflow, nestedWorkflowId } = registry!['nested-setstate'];
 
-      const result = await execute(workflow, {}, { initialState: { value: 'test-state', otherValue: 'other' } });
+        const result = await execute(workflow, {}, { initialState: { value: 'test-state', otherValue: 'other' } });
 
-      expect(result.status).toBe('success');
-      expect(result.steps[nestedWorkflowId]).toMatchObject({
-        status: 'success',
-        output: { result: 'success', value: 'test-state!!!' },
-      });
-    });
+        expect(result.status).toBe('success');
+        expect(result.steps[nestedWorkflowId]).toMatchObject({
+          status: 'success',
+          output: { result: 'success', value: 'test-state!!!' },
+        });
+      },
+    );
   });
 }

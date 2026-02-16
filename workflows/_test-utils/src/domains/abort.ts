@@ -315,19 +315,22 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
 
     // This test has a 5s timeout in step2 waiting for abort signal
     // Skip by default since it times out without actual abort trigger
-    it.skipIf(skipTests.abortDuringStep)('should provide abort signal that can be listened to during step execution', async () => {
-      const { workflow, mocks, resetMocks } = registry!['abort-during-step-workflow'];
-      resetMocks?.();
+    it.skipIf(skipTests.abortDuringStep)(
+      'should provide abort signal that can be listened to during step execution',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['abort-during-step-workflow'];
+        resetMocks?.();
 
-      // This test validates that abortSignal is available to steps
-      // The workflow will complete since we don't actually trigger abort here
-      // Actual abort during step requires run.cancel() which is tested in engine-specific tests
-      const result = await execute(workflow, {});
+        // This test validates that abortSignal is available to steps
+        // The workflow will complete since we don't actually trigger abort here
+        // Actual abort during step requires run.cancel() which is tested in engine-specific tests
+        const result = await execute(workflow, {});
 
-      // When not aborted, step2 should eventually complete (or timeout in test framework)
-      // For shared tests, we verify the structure is correct
-      expect(mocks.step1Action).toHaveBeenCalledTimes(1);
-    });
+        // When not aborted, step2 should eventually complete (or timeout in test framework)
+        // For shared tests, we verify the structure is correct
+        expect(mocks.step1Action).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it('should suspend workflow that can be canceled', async () => {
       const { workflow, mocks, resetMocks } = registry!['cancel-suspended-workflow'];

@@ -596,7 +596,10 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
       temperature: 0.7,
     });
 
-    agentOptionsWorkflow.map({ prompt: { value: 'test', schema: z.string() } }).then(agentStep).commit();
+    agentOptionsWorkflow
+      .map({ prompt: { value: 'test', schema: z.string() } })
+      .then(agentStep)
+      .commit();
 
     workflows['streaming-agent-options-workflow'] = {
       workflow: agentOptionsWorkflow,
@@ -747,95 +750,98 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         expect(stepResultEvents[0]?.payload?.status).toBe('success');
       });
 
-      it.skipIf(skipTests.streamingDetailedEvents)('should generate stream with detailed event structure (streamLegacy)', async () => {
-        const { workflow } = registry!['streaming-test-workflow'];
-        const { stream } = ctx;
+      it.skipIf(skipTests.streamingDetailedEvents)(
+        'should generate stream with detailed event structure (streamLegacy)',
+        async () => {
+          const { workflow } = registry!['streaming-test-workflow'];
+          const { stream } = ctx;
 
-        if (!stream) {
-          return;
-        }
+          if (!stream) {
+            return;
+          }
 
-        const { events, result } = await stream(workflow, {}, { runId: 'test-run-id' }, 'streamLegacy');
+          const { events, result } = await stream(workflow, {}, { runId: 'test-run-id' }, 'streamLegacy');
 
-        expect(result.status).toBe('success');
+          expect(result.status).toBe('success');
 
-        // Detailed event structure verification (8 events total)
-        expect(events.length).toBe(8);
-        expect(events).toMatchObject([
-          {
-            payload: { runId: 'test-run-id' },
-            type: 'start',
-          },
-          {
-            payload: {
-              id: 'step1',
-              payload: {},
-              startedAt: expect.any(Number),
+          // Detailed event structure verification (8 events total)
+          expect(events.length).toBe(8);
+          expect(events).toMatchObject([
+            {
+              payload: { runId: 'test-run-id' },
+              type: 'start',
             },
-            type: 'step-start',
-          },
-          {
-            payload: {
-              id: 'step1',
-              output: { result: 'success1' },
-              endedAt: expect.any(Number),
-              status: 'success',
+            {
+              payload: {
+                id: 'step1',
+                payload: {},
+                startedAt: expect.any(Number),
+              },
+              type: 'step-start',
             },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: 'step1',
-              metadata: {},
+            {
+              payload: {
+                id: 'step1',
+                output: { result: 'success1' },
+                endedAt: expect.any(Number),
+                status: 'success',
+              },
+              type: 'step-result',
             },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              id: 'step2',
-              payload: { result: 'success1' },
-              startedAt: expect.any(Number),
+            {
+              payload: {
+                id: 'step1',
+                metadata: {},
+              },
+              type: 'step-finish',
             },
-            type: 'step-start',
-          },
-          {
-            payload: {
-              id: 'step2',
-              output: { result: 'success2' },
-              endedAt: expect.any(Number),
-              status: 'success',
+            {
+              payload: {
+                id: 'step2',
+                payload: { result: 'success1' },
+                startedAt: expect.any(Number),
+              },
+              type: 'step-start',
             },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: 'step2',
-              metadata: {},
+            {
+              payload: {
+                id: 'step2',
+                output: { result: 'success2' },
+                endedAt: expect.any(Number),
+                status: 'success',
+              },
+              type: 'step-result',
             },
-            type: 'step-finish',
-          },
-          {
-            payload: { runId: 'test-run-id' },
-            type: 'finish',
-          },
-        ]);
+            {
+              payload: {
+                id: 'step2',
+                metadata: {},
+              },
+              type: 'step-finish',
+            },
+            {
+              payload: { runId: 'test-run-id' },
+              type: 'finish',
+            },
+          ]);
 
-        // Verify execution result
-        expect(result.steps.step1).toEqual({
-          status: 'success',
-          output: { result: 'success1' },
-          payload: {},
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-        expect(result.steps.step2).toEqual({
-          status: 'success',
-          output: { result: 'success2' },
-          payload: { result: 'success1' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-      });
+          // Verify execution result
+          expect(result.steps.step1).toEqual({
+            status: 'success',
+            output: { result: 'success1' },
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          });
+          expect(result.steps.step2).toEqual({
+            status: 'success',
+            output: { result: 'success2' },
+            payload: { result: 'success1' },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          });
+        },
+      );
 
       it('should produce correct stream() events', async () => {
         const { workflow } = registry!['streaming-test-workflow'];
@@ -1009,31 +1015,34 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         expect(resumeResult.status).toBe('success');
       });
 
-      it.skipIf(skipTests.streamingErrorPreservation)('should preserve error details in streaming workflow', async () => {
-        const { workflow, resetMocks } = registry!['error-preserve-workflow'];
-        const { stream } = ctx;
-        resetMocks?.();
+      it.skipIf(skipTests.streamingErrorPreservation)(
+        'should preserve error details in streaming workflow',
+        async () => {
+          const { workflow, resetMocks } = registry!['error-preserve-workflow'];
+          const { stream } = ctx;
+          resetMocks?.();
 
-        if (!stream) {
-          return;
-        }
+          if (!stream) {
+            return;
+          }
 
-        const { result } = await stream(workflow, {}, {}, 'stream');
+          const { result } = await stream(workflow, {}, {}, 'stream');
 
-        expect(result.status).toBe('failed');
+          expect(result.status).toBe('failed');
 
-        if (result.status === 'failed') {
-          expect(result.error).toBeDefined();
-          // Error message should be preserved
-          expect((result.error as any).message).toBe('Rate limit exceeded');
-          // Custom error properties should be preserved
-          expect((result.error as any).statusCode).toBe(429);
-          expect((result.error as any).responseHeaders).toEqual({
-            'x-ratelimit-reset': '1234567890',
-            'retry-after': '30',
-          });
-        }
-      });
+          if (result.status === 'failed') {
+            expect(result.error).toBeDefined();
+            // Error message should be preserved
+            expect((result.error as any).message).toBe('Rate limit exceeded');
+            // Custom error properties should be preserved
+            expect((result.error as any).statusCode).toBe(429);
+            expect((result.error as any).responseHeaders).toEqual({
+              'x-ratelimit-reset': '1234567890',
+              'retry-after': '30',
+            });
+          }
+        },
+      );
 
       it('should be able to use an agent as a step with detailed events (streamLegacy)', async () => {
         const { createWorkflow, createStep, Agent } = ctx;
@@ -1501,7 +1510,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           temperature: 0.7,
         });
 
-        workflow.map({ prompt: { value: 'test', schema: z.string() } }).then(agentStep).commit();
+        workflow
+          .map({ prompt: { value: 'test', schema: z.string() } })
+          .then(agentStep)
+          .commit();
 
         const run = await workflow.createRun({ runId: 'test-run-id-options' });
         const result = await run.start({ inputData: { prompt: 'Test prompt' } });

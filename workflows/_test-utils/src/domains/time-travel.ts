@@ -702,7 +702,11 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       steps: [step1, suspendStep, step3],
     });
 
-    workflow.then(step1).then(suspendStep).then(step3 as any).commit();
+    workflow
+      .then(step1)
+      .then(suspendStep)
+      .then(step3 as any)
+      .commit();
 
     workflows['timetravel-suspend-workflow'] = {
       workflow,
@@ -727,12 +731,8 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should timeTravel to step in conditional chains
   {
     mockRegistry.register('timetravel-conditional:check', () => vi.fn().mockResolvedValue({ branch: 'A' }));
-    mockRegistry.register('timetravel-conditional:branchA', () =>
-      vi.fn().mockResolvedValue({ result: 'from A' }),
-    );
-    mockRegistry.register('timetravel-conditional:branchB', () =>
-      vi.fn().mockResolvedValue({ result: 'from B' }),
-    );
+    mockRegistry.register('timetravel-conditional:branchA', () => vi.fn().mockResolvedValue({ result: 'from A' }));
+    mockRegistry.register('timetravel-conditional:branchB', () => vi.fn().mockResolvedValue({ result: 'from B' }));
 
     const check = createStep({
       id: 'check',

@@ -24,9 +24,7 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
   // Test: should execute a single step workflow successfully
   {
     // Register mock factory
-    mockRegistry.register('basic-single-step:executeAction', () =>
-      vi.fn().mockResolvedValue({ result: 'success' }),
-    );
+    mockRegistry.register('basic-single-step:executeAction', () => vi.fn().mockResolvedValue({ result: 'success' }));
 
     const step1 = createStep({
       id: 'step1',
@@ -564,37 +562,36 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
       });
 
       // Don't add any execution flow (.then, .branch, etc.)
-      await expect(workflow.createRun()).rejects.toThrowError(
-        /Execution flow of workflow is not defined/,
-      );
+      await expect(workflow.createRun()).rejects.toThrowError(/Execution flow of workflow is not defined/);
     });
 
-    it.skipIf(skipTests.executionGraphNotCommitted)('should throw error when execution graph is not committed', async () => {
-      const { createWorkflow, createStep } = ctx;
+    it.skipIf(skipTests.executionGraphNotCommitted)(
+      'should throw error when execution graph is not committed',
+      async () => {
+        const { createWorkflow, createStep } = ctx;
 
-      const step1 = createStep({
-        id: 'step1',
-        execute: async () => ({ result: 'success' }),
-        inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
-      });
+        const step1 = createStep({
+          id: 'step1',
+          execute: async () => ({ result: 'success' }),
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+        });
 
-      const workflow = createWorkflow({
-        id: 'uncommitted-graph',
-        inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
-        steps: [step1],
-      });
+        const workflow = createWorkflow({
+          id: 'uncommitted-graph',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ result: z.string() }),
+          steps: [step1],
+        });
 
-      workflow.then(step1);
-      // Don't call .commit()
+        workflow.then(step1);
+        // Don't call .commit()
 
-      expect(workflow.committed).toBe(false);
+        expect(workflow.committed).toBe(false);
 
-      await expect(workflow.createRun()).rejects.toThrowError(
-        /Uncommitted step flow changes detected/,
-      );
-    });
+        await expect(workflow.createRun()).rejects.toThrowError(/Uncommitted step flow changes detected/);
+      },
+    );
 
     it.skipIf(skipTests.missingSuspendData)('should handle missing suspendData gracefully', async () => {
       const { workflow } = registry['basic-missing-suspend-data'];

@@ -330,33 +330,39 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
       expect(getReceivedContext()).toBeDefined();
     });
 
-    it.skipIf(skipTests.requestContextPropagation)('should propagate requestContext values through workflow steps', async () => {
-      const { workflow, getContextValues } = registry!['di-propagation-workflow'];
+    it.skipIf(skipTests.requestContextPropagation)(
+      'should propagate requestContext values through workflow steps',
+      async () => {
+        const { workflow, getContextValues } = registry!['di-propagation-workflow'];
 
-      const result = await execute(workflow, {});
+        const result = await execute(workflow, {});
 
-      expect(result.status).toBe('success');
-      const contextValues = getContextValues();
-      expect(contextValues.length).toBe(2);
-      // Both steps should have access to the value
-      expect(contextValues[0]).toBe('test-value');
-      expect(contextValues[1]).toBe('test-value');
-    });
+        expect(result.status).toBe('success');
+        const contextValues = getContextValues();
+        expect(contextValues.length).toBe(2);
+        // Both steps should have access to the value
+        expect(contextValues[0]).toBe('test-value');
+        expect(contextValues[1]).toBe('test-value');
+      },
+    );
 
-    it.skipIf(skipTests.diRemovedRequestContext || !ctx.resume)('should not show removed requestContext values in subsequent steps', async () => {
-      const { workflow, mocks, resetMocks, getFinalContextValue } = registry!['di-removed-requestcontext-workflow'];
-      resetMocks?.();
-      const runId = `di-removed-${Date.now()}`;
-      const result = await execute(workflow, { value: 0 }, { runId });
-      expect(result.status).toBe('suspended');
-      const resumeResult = await ctx.resume!(workflow, {
-        runId,
-        step: 'resume',
-        resumeData: { value: 21 },
-      });
-      expect(resumeResult.status).toBe('success');
-      expect(getFinalContextValue()).toBeUndefined();
-    });
+    it.skipIf(skipTests.diRemovedRequestContext || !ctx.resume)(
+      'should not show removed requestContext values in subsequent steps',
+      async () => {
+        const { workflow, mocks, resetMocks, getFinalContextValue } = registry!['di-removed-requestcontext-workflow'];
+        resetMocks?.();
+        const runId = `di-removed-${Date.now()}`;
+        const result = await execute(workflow, { value: 0 }, { runId });
+        expect(result.status).toBe('suspended');
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'resume',
+          resumeData: { value: 21 },
+        });
+        expect(resumeResult.status).toBe('success');
+        expect(getFinalContextValue()).toBeUndefined();
+      },
+    );
 
     it.skipIf(skipTests.diBug4442 || !ctx.resume)('should work with custom requestContext - bug #4442', async () => {
       const { workflow, mocks, resetMocks } = registry!['di-bug-4442-workflow'];
@@ -376,21 +382,24 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
       expect((resumeResult.steps.requestContextAction as any).output).toEqual(['first message', 'promptAgentAction']);
     });
 
-    it.skipIf(skipTests.diResumeRequestContext || !ctx.resume)('should inject requestContext into steps during resume', async () => {
-      const { workflow, resetMocks, getCapturedValue } = registry!['di-resume-requestcontext-workflow'];
-      resetMocks?.();
-      const runId = `di-resume-ctx-${Date.now()}`;
-      const requestContext = new Map([['injectedKey', 'injected-value']]) as any;
-      const result = await execute(workflow, {}, { runId, requestContext });
-      expect(result.status).toBe('suspended');
-      const resumeResult = await ctx.resume!(workflow, {
-        runId,
-        step: 'suspend-resume',
-        resumeData: { data: 'test' },
-      });
-      expect(resumeResult.status).toBe('success');
-      expect(getCapturedValue()).toBe('injected-value');
-    });
+    it.skipIf(skipTests.diResumeRequestContext || !ctx.resume)(
+      'should inject requestContext into steps during resume',
+      async () => {
+        const { workflow, resetMocks, getCapturedValue } = registry!['di-resume-requestcontext-workflow'];
+        resetMocks?.();
+        const runId = `di-resume-ctx-${Date.now()}`;
+        const requestContext = new Map([['injectedKey', 'injected-value']]) as any;
+        const result = await execute(workflow, {}, { runId, requestContext });
+        expect(result.status).toBe('suspended');
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'suspend-resume',
+          resumeData: { data: 'test' },
+        });
+        expect(resumeResult.status).toBe('success');
+        expect(getCapturedValue()).toBe('injected-value');
+      },
+    );
 
     it.skipIf(skipTests.diRequestContextBeforeSuspension || !ctx.resume)(
       'should preserve requestContext values set before suspension through resume',

@@ -98,9 +98,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
   {
     // Register mock factories
     mockRegistry.register('result-callback-workflow:receivedResult', () => vi.fn());
-    mockRegistry.register('result-callback-workflow:execute', () =>
-      vi.fn().mockResolvedValue({ value: 'test-value' }),
-    );
+    mockRegistry.register('result-callback-workflow:execute', () => vi.fn().mockResolvedValue({ value: 'test-value' }));
 
     const step1 = createStep({
       id: 'step1',
@@ -351,7 +349,9 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should provide workflowId in onFinish callback
   {
     mockRegistry.register('callback-workflowid-workflow:receivedWorkflowId', () => vi.fn());
-    mockRegistry.register('callback-workflowid-workflow:execute', () => vi.fn().mockResolvedValue({ result: 'success' }));
+    mockRegistry.register('callback-workflowid-workflow:execute', () =>
+      vi.fn().mockResolvedValue({ result: 'success' }),
+    );
 
     const step1 = createStep({
       id: 'step1',
@@ -432,7 +432,9 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should provide resourceId in onFinish callback when provided
   {
     mockRegistry.register('callback-resourceid-workflow:receivedResourceId', () => vi.fn());
-    mockRegistry.register('callback-resourceid-workflow:execute', () => vi.fn().mockResolvedValue({ result: 'success' }));
+    mockRegistry.register('callback-resourceid-workflow:execute', () =>
+      vi.fn().mockResolvedValue({ result: 'success' }),
+    );
 
     const step1 = createStep({
       id: 'step1',
@@ -589,7 +591,9 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should provide getInitData function in onFinish callback
   {
     mockRegistry.register('callback-getinitdata-workflow:receivedInitData', () => vi.fn());
-    mockRegistry.register('callback-getinitdata-workflow:execute', () => vi.fn().mockResolvedValue({ result: 'success' }));
+    mockRegistry.register('callback-getinitdata-workflow:execute', () =>
+      vi.fn().mockResolvedValue({ result: 'success' }),
+    );
 
     const step1 = createStep({
       id: 'step1',
@@ -743,7 +747,9 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should provide requestContext in onFinish callback
   {
     mockRegistry.register('callback-requestcontext-workflow:receivedContext', () => vi.fn());
-    mockRegistry.register('callback-requestcontext-workflow:execute', () => vi.fn().mockResolvedValue({ result: 'success' }));
+    mockRegistry.register('callback-requestcontext-workflow:execute', () =>
+      vi.fn().mockResolvedValue({ result: 'success' }),
+    );
 
     const step1 = createStep({
       id: 'step1',
@@ -819,7 +825,9 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should provide mastra instance in onFinish callback
   {
     mockRegistry.register('callback-mastra-onfinish-workflow:receivedMastra', () => vi.fn());
-    mockRegistry.register('callback-mastra-onfinish-workflow:execute', () => vi.fn().mockResolvedValue({ result: 'success' }));
+    mockRegistry.register('callback-mastra-onfinish-workflow:execute', () =>
+      vi.fn().mockResolvedValue({ result: 'success' }),
+    );
 
     const step1 = createStep({
       id: 'step1',
@@ -1021,14 +1029,17 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(receivedResult.status).toBe('success');
     });
 
-    it.skipIf(skipTests.callbackOnErrorNotCalled)('should not call onError callback when workflow succeeds', async () => {
-      const { workflow, mocks } = registry!['no-error-callback-workflow'];
+    it.skipIf(skipTests.callbackOnErrorNotCalled)(
+      'should not call onError callback when workflow succeeds',
+      async () => {
+        const { workflow, mocks } = registry!['no-error-callback-workflow'];
 
-      const result = await execute(workflow, {});
+        const result = await execute(workflow, {});
 
-      expect(result.status).toBe('success');
-      expect(mocks.onErrorCallback).not.toHaveBeenCalled();
-    });
+        expect(result.status).toBe('success');
+        expect(mocks.onErrorCallback).not.toHaveBeenCalled();
+      },
+    );
 
     it.skipIf(skipTests.callbackBothOnFailure)(
       'should call both onFinish and onError when workflow fails',
@@ -1093,16 +1104,19 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(receivedState.counter).toBe(1);
     });
 
-    it.skipIf(skipTests.callbackResourceId)('should provide resourceId in onFinish callback when provided', async () => {
-      const { workflow, getReceivedResourceId, resetMocks } = registry!['callback-resourceid-workflow'];
-      resetMocks?.();
+    it.skipIf(skipTests.callbackResourceId)(
+      'should provide resourceId in onFinish callback when provided',
+      async () => {
+        const { workflow, getReceivedResourceId, resetMocks } = registry!['callback-resourceid-workflow'];
+        resetMocks?.();
 
-      const testResourceId = `resource-${Date.now()}`;
-      await execute(workflow, {}, { resourceId: testResourceId });
+        const testResourceId = `resource-${Date.now()}`;
+        await execute(workflow, {}, { resourceId: testResourceId });
 
-      const receivedResourceId = getReceivedResourceId();
-      expect(receivedResourceId).toBe(testResourceId);
-    });
+        const receivedResourceId = getReceivedResourceId();
+        expect(receivedResourceId).toBe(testResourceId);
+      },
+    );
 
     it.skipIf(skipTests.callbackRunId)('should provide runId in onError callback', async () => {
       const { workflow, getReceivedRunId, resetMocks } = registry!['callback-error-runid-workflow'];
@@ -1125,15 +1139,18 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(receivedWorkflowId).toBe('callback-error-workflowid-workflow');
     });
 
-    it.skipIf(skipTests.callbackSuspended)('should call onFinish with suspended status when workflow suspends', async () => {
-      const { workflow, getReceivedStatus, resetMocks } = registry!['callback-suspended-workflow'];
-      resetMocks?.();
+    it.skipIf(skipTests.callbackSuspended)(
+      'should call onFinish with suspended status when workflow suspends',
+      async () => {
+        const { workflow, getReceivedStatus, resetMocks } = registry!['callback-suspended-workflow'];
+        resetMocks?.();
 
-      await execute(workflow, {});
+        await execute(workflow, {});
 
-      const receivedStatus = getReceivedStatus();
-      expect(receivedStatus).toBe('suspended');
-    });
+        const receivedStatus = getReceivedStatus();
+        expect(receivedStatus).toBe('suspended');
+      },
+    );
 
     it.skipIf(skipTests.callbackGetInitData)('should provide getInitData function in onFinish callback', async () => {
       const { workflow, getReceivedInitData, resetMocks } = registry!['callback-getinitdata-workflow'];

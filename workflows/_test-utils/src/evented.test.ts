@@ -9,7 +9,13 @@ import type { Workflow } from '@mastra/core/workflows';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { EventEmitterPubSub } from '@mastra/core/events';
-import type { WorkflowResult, ResumeWorkflowOptions, TimeTravelWorkflowOptions, StreamWorkflowResult, StreamEvent } from './types';
+import type {
+  WorkflowResult,
+  ResumeWorkflowOptions,
+  TimeTravelWorkflowOptions,
+  StreamWorkflowResult,
+  StreamEvent,
+} from './types';
 import { vi } from 'vitest';
 
 // Shared storage instance

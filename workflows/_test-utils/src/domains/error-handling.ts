@@ -530,27 +530,30 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
       });
     });
 
-    it.skipIf(skipTests.parallelBranchErrors)('should handle step execution errors within parallel branches', async () => {
-      const { workflow } = registry!['error-parallel-branches'];
-      const result = await execute(workflow, {});
+    it.skipIf(skipTests.parallelBranchErrors)(
+      'should handle step execution errors within parallel branches',
+      async () => {
+        const { workflow } = registry!['error-parallel-branches'];
+        const result = await execute(workflow, {});
 
-      expect(result.steps).toMatchObject({
-        step1: {
-          status: 'success',
-          payload: {},
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        step2: {
-          status: 'failed',
-          payload: {},
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-      });
-      expect((result.steps?.step2 as any)?.error).toBeInstanceOf(Error);
-      expect(((result.steps?.step2 as any)?.error as Error).message).toMatch(/Step execution failed/);
-    });
+        expect(result.steps).toMatchObject({
+          step1: {
+            status: 'success',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'failed',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        });
+        expect((result.steps?.step2 as any)?.error).toBeInstanceOf(Error);
+        expect(((result.steps?.step2 as any)?.error as Error).message).toMatch(/Step execution failed/);
+      },
+    );
 
     it.skipIf(skipTests.errorIdentity)(
       'should preserve custom error properties when step throws error with extra fields',
@@ -588,23 +591,26 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
       }
     });
 
-    it.skipIf(skipTests.nestedWorkflowErrors)('should handle step execution errors within nested workflows', async () => {
-      const { workflow } = registry!['error-nested-main-workflow'];
-      const result = await execute(workflow, {});
+    it.skipIf(skipTests.nestedWorkflowErrors)(
+      'should handle step execution errors within nested workflows',
+      async () => {
+        const { workflow } = registry!['error-nested-main-workflow'];
+        const result = await execute(workflow, {});
 
-      expect(result.steps).toMatchObject({
-        'error-nested-inner-workflow': {
-          status: 'failed',
-          payload: {},
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-      });
-      expect((result.steps?.['error-nested-inner-workflow'] as any)?.error).toBeInstanceOf(Error);
-      expect(((result.steps?.['error-nested-inner-workflow'] as any)?.error as Error).message).toMatch(
-        /Step execution failed/,
-      );
-    });
+        expect(result.steps).toMatchObject({
+          'error-nested-inner-workflow': {
+            status: 'failed',
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        });
+        expect((result.steps?.['error-nested-inner-workflow'] as any)?.error).toBeInstanceOf(Error);
+        expect(((result.steps?.['error-nested-inner-workflow'] as any)?.error as Error).message).toMatch(
+          /Step execution failed/,
+        );
+      },
+    );
 
     it.skipIf(skipTests.errorCauseChain)('should preserve error.cause chain in result.error', async () => {
       const entry = registry!['error-cause-chain-workflow'];

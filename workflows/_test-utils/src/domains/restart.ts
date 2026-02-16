@@ -25,9 +25,7 @@ export function createRestartWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should throw error when restarting workflow that was not active
   {
-    mockRegistry.register('restart-not-active:step1', () =>
-      vi.fn().mockResolvedValue({ result: 'step1 done' }),
-    );
+    mockRegistry.register('restart-not-active:step1', () => vi.fn().mockResolvedValue({ result: 'step1 done' }));
 
     const step1 = createStep({
       id: 'step1',
@@ -248,12 +246,8 @@ export function createRestartWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should restart a workflow execution that was previously active and has nested workflows
   {
-    mockRegistry.register('restart-nested:step1', () =>
-      vi.fn().mockResolvedValue({ step1Result: 2 }),
-    );
-    mockRegistry.register('restart-nested:step2', () =>
-      vi.fn().mockResolvedValue({ step2Result: 3 }),
-    );
+    mockRegistry.register('restart-nested:step1', () => vi.fn().mockResolvedValue({ step1Result: 2 }));
+    mockRegistry.register('restart-nested:step2', () => vi.fn().mockResolvedValue({ step2Result: 3 }));
 
     const step1 = createStep({
       id: 'step1',
@@ -324,9 +318,7 @@ export function createRestartWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should successfully suspend and resume a restarted workflow execution
   {
-    mockRegistry.register('restart-suspend:getUserInput', () =>
-      vi.fn().mockResolvedValue({ userInput: 'test input' }),
-    );
+    mockRegistry.register('restart-suspend:getUserInput', () => vi.fn().mockResolvedValue({ userInput: 'test input' }));
     mockRegistry.register('restart-suspend:promptAgent', () =>
       vi
         .fn()
@@ -451,15 +443,18 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
   const { skipTests } = ctx;
 
   describe('restart', () => {
-    it.skipIf(skipTests.restartNotActive)('should throw error when restarting workflow that was never started', async () => {
-      const { workflow } = registry!['restart-not-active'];
+    it.skipIf(skipTests.restartNotActive)(
+      'should throw error when restarting workflow that was never started',
+      async () => {
+        const { workflow } = registry!['restart-not-active'];
 
-      // Create a run but don't start it
-      const run = await workflow.createRun();
+        // Create a run but don't start it
+        const run = await workflow.createRun();
 
-      // Attempting to restart a never-started workflow should throw
-      await expect(run.restart()).rejects.toThrow();
-    });
+        // Attempting to restart a never-started workflow should throw
+        await expect(run.restart()).rejects.toThrow();
+      },
+    );
 
     it.skipIf(skipTests.restartCompleted)('should restart a completed workflow execution', async () => {
       const { workflow, mocks, getExecutionCount, resetMocks } = registry!['restart-completed'];
