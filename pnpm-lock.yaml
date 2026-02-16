@@ -4559,8 +4559,8 @@ importers:
         specifier: ^3.902.0
         version: 3.913.0(@aws-sdk/client-dynamodb@3.913.0)
       electrodb:
-        specifier: ^3.5.0
-        version: 3.5.0(@aws-sdk/client-dynamodb@3.913.0)
+        specifier: ^3.5.3
+        version: 3.5.3(@aws-sdk/client-dynamodb@3.913.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -15862,8 +15862,8 @@ packages:
     resolution: {integrity: sha512-/RInbCy1d4P6Zdfa+TMVsf/ufZVotat5hCw3QXmWtjU+3pFEOvOQ7ibo3aIxyCJw2leIeAMjmPj+1SLJiCpdrQ==}
     engines: {node: '>=12.0.0'}
 
-  electrodb@3.5.0:
-    resolution: {integrity: sha512-msJyMTQmx6AC/otRKSre0rktE3E0RUw7ez9u2F25ZU4iXEqzxeu/OyRJcR53hh+jv4Fefi/3F9R+JopgIUZJHQ==}
+  electrodb@3.5.3:
+    resolution: {integrity: sha512-cDrp4zVHiFCHF2e0B3xLrIwSKCGXmHlF6OKyw+BUb0+CRP3zHHYiikJ42c/j+3krkHLAoQ1IlNlAfLmLdcAYRQ==}
 
   electron-to-chromium@1.5.283:
     resolution: {integrity: sha512-3vifjt1HgrGW/h76UEeny+adYApveS9dH2h3p57JYzBSXJIKUJAvtmIytDKjcSCt9xHfrNCFJ7gts6vkhuq++w==}
@@ -35495,7 +35495,7 @@ snapshots:
 
   efrt@2.7.0: {}
 
-  electrodb@3.5.0(@aws-sdk/client-dynamodb@3.913.0):
+  electrodb@3.5.3(@aws-sdk/client-dynamodb@3.913.0):
     dependencies:
       '@aws-sdk/lib-dynamodb': 3.913.0(@aws-sdk/client-dynamodb@3.913.0)
       '@aws-sdk/util-dynamodb': 3.913.0(@aws-sdk/client-dynamodb@3.913.0)
