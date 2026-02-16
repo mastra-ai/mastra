@@ -28,7 +28,7 @@ overrides:
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
-  client-js-e2e-tests-zod-v4>zod: ^4.3.5
+  client-js-e2e-tests-zod-v4>zod: ^4.3.6
   better-auth: ^1.4.18
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
@@ -981,7 +981,7 @@ importers:
   e2e-tests/client-js/zod-v4:
     dependencies:
       zod:
-        specifier: ^4.3.5
+        specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
       '@internal/client-js-test-utils':
