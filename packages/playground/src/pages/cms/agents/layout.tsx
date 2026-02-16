@@ -29,6 +29,7 @@ import {
   type EntityConfig,
 } from '@mastra/playground-ui';
 import { CreateStoredAgentParams } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
 
 // Helper function to convert array to record format expected by form sections
 const arrayToRecord = (arr: string[]): Record<string, EntityConfig> => {
@@ -92,6 +93,7 @@ type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
 function CreateLayoutWrapper() {
   const { navigate, paths } = useLinkComponent();
   const { createStoredAgent } = useStoredAgentMutations();
+  const client = useMastraClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { form } = useAgentEditForm();
   const location = useLocation();
@@ -107,6 +109,26 @@ function CreateLayoutWrapper() {
     setIsSubmitting(true);
 
     try {
+      // Create pending MCP clients
+      const pendingMCPClients = values.mcpClients ?? [];
+      const mcpClientIds: string[] = [];
+
+      for (const mcpClient of pendingMCPClients) {
+        if (mcpClient.id) {
+          mcpClientIds.push(mcpClient.id);
+        } else {
+          const created = await client.createStoredMCPClient({
+            name: mcpClient.name,
+            description: mcpClient.description,
+            servers: mcpClient.servers,
+          });
+          mcpClientIds.push(created.id);
+        }
+      }
+
+      const mcpClientsParam =
+        mcpClientIds.length > 0 ? Object.fromEntries(mcpClientIds.map(id => [id, {}])) : undefined;
+
       const formScorers = values.scorers ? Object.entries(values.scorers) : undefined;
       const scorers = formScorers
         ? Object.fromEntries(
@@ -139,6 +161,7 @@ function CreateLayoutWrapper() {
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
+        mcpClients: mcpClientsParam,
         scorers,
         memory: values.memory?.enabled
           ? {
@@ -215,7 +238,7 @@ function CreateLayoutWrapper() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, createStoredAgent, navigate, paths]);
+  }, [form, createStoredAgent, client, navigate, paths]);
 
   const basePath = '/cms/agents/create';
 
@@ -253,6 +276,7 @@ function EditFormContent({
 }) {
   const { navigate, paths } = useLinkComponent();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const client = useMastraClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -383,6 +407,40 @@ function EditFormContent({
     }
   }, [initialValues, form]);
 
+  // Load existing MCP client details when editing an agent
+  const mcpClientIdsKey = useMemo(() => {
+    const dataSource = isViewingVersion ? versionData : agent;
+    const mcpClientRecord = dataSource.mcpClients as Record<string, unknown> | undefined;
+    if (!mcpClientRecord) return '';
+    return Object.keys(mcpClientRecord).sort().join(',');
+  }, [agent, versionData, isViewingVersion]);
+
+  useEffect(() => {
+    if (!mcpClientIdsKey) return;
+
+    const mcpClientIds = mcpClientIdsKey.split(',');
+    let cancelled = false;
+
+    Promise.all(mcpClientIds.map(id => client.getStoredMCPClient(id).details()))
+      .then(results => {
+        if (cancelled) return;
+        const resolvedClients = results.map(r => ({
+          id: r.id,
+          name: r.name,
+          description: r.description,
+          servers: r.servers,
+        }));
+        form.setValue('mcpClients', resolvedClients);
+      })
+      .catch(() => {
+        // Silently ignore — clients may have been deleted
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mcpClientIdsKey, client, form]);
+
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
     if (!isValid) {
@@ -394,6 +452,33 @@ function EditFormContent({
     setIsSubmitting(true);
 
     try {
+      // Create pending MCP clients and collect surviving IDs
+      const formMCPClients = values.mcpClients ?? [];
+      const mcpClientIds: string[] = [];
+
+      for (const mcpClient of formMCPClients) {
+        if (mcpClient.id) {
+          mcpClientIds.push(mcpClient.id);
+        } else {
+          const created = await client.createStoredMCPClient({
+            name: mcpClient.name,
+            description: mcpClient.description,
+            servers: mcpClient.servers,
+          });
+          mcpClientIds.push(created.id);
+        }
+      }
+
+      // Delete persisted MCP clients that were removed from the form
+      const originalMCPClientIds = Object.keys((agent.mcpClients as Record<string, unknown>) ?? {});
+      const survivingIds = new Set(mcpClientIds);
+      const removedIds = originalMCPClientIds.filter(id => !survivingIds.has(id));
+
+      await Promise.all(removedIds.map(id => client.getStoredMCPClient(id).delete()));
+
+      const mcpClientsParam =
+        mcpClientIds.length > 0 ? Object.fromEntries(mcpClientIds.map(id => [id, {}])) : undefined;
+
       await updateStoredAgent.mutateAsync({
         name: values.name,
         description: values.description,
@@ -407,6 +492,7 @@ function EditFormContent({
         integrationTools: transformIntegrationToolsForApi(values.integrationTools),
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
+        mcpClients: mcpClientsParam,
         scorers: values.scorers,
         memory: values.memory?.enabled
           ? {
@@ -479,7 +565,7 @@ function EditFormContent({
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, updateStoredAgent, navigate, paths, agentId]);
+  }, [form, updateStoredAgent, client, navigate, paths, agentId, agent]);
 
   const basePath = `/cms/agents/${agentId}/edit`;
 

@@ -1,22 +1,20 @@
 import { useRef, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import type { CreateStoredMCPClientParams } from '@mastra/client-js';
+import type { StoredMCPServerConfig } from '@mastra/client-js';
 
 import { toast } from '@/lib/toast';
 
-import { useStoredMCPClientMutations } from '../../hooks/use-stored-mcp-clients';
 import { useMCPClientForm } from './use-mcp-client-form';
 import { MCPClientEditLayout } from './mcp-client-edit-layout';
 import { MCPClientFormSidebar } from './mcp-client-form-sidebar';
 import { MCPClientToolPreview } from './mcp-client-tool-preview';
 
 interface MCPClientCreateContentProps {
-  onSuccess?: () => void;
+  onAdd: (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => void;
 }
 
-export function MCPClientCreateContent({ onSuccess }: MCPClientCreateContentProps) {
-  const { createStoredMCPClient } = useStoredMCPClientMutations();
+export function MCPClientCreateContent({ onAdd }: MCPClientCreateContentProps) {
   const { form } = useMCPClientForm();
   const containerRef = useRef<HTMLDivElement>(null);
   const [preFilledServerId, setPreFilledServerId] = useState<string | null>(null);
@@ -51,46 +49,38 @@ export function MCPClientCreateContent({ onSuccess }: MCPClientCreateContentProp
 
     const values = form.getValues();
 
-    try {
-      const serverConfig: CreateStoredMCPClientParams['servers'] = {
-        [values.serverName]: {
-          type: values.serverType,
-          ...(values.serverType === 'http'
-            ? {
-                url: values.url,
-                timeout: values.timeout,
-              }
-            : {
-                command: values.command,
-                args: values.args
-                  .split('\n')
-                  .map(a => a.trim())
-                  .filter(Boolean),
-                env: values.env.reduce(
-                  (acc, { key, value }) => {
-                    if (key.trim()) {
-                      acc[key.trim()] = value;
-                    }
-                    return acc;
-                  },
-                  {} as Record<string, string>,
-                ),
-              }),
-        },
-      };
+    const serverConfig: Record<string, StoredMCPServerConfig> = {
+      [values.serverName]: {
+        type: values.serverType,
+        ...(values.serverType === 'http'
+          ? {
+              url: values.url,
+              timeout: values.timeout,
+            }
+          : {
+              command: values.command,
+              args: values.args
+                .split('\n')
+                .map(a => a.trim())
+                .filter(Boolean),
+              env: values.env.reduce(
+                (acc, { key, value }) => {
+                  if (key.trim()) {
+                    acc[key.trim()] = value;
+                  }
+                  return acc;
+                },
+                {} as Record<string, string>,
+              ),
+            }),
+      },
+    };
 
-      const createParams: CreateStoredMCPClientParams = {
-        name: values.name,
-        description: values.description || undefined,
-        servers: serverConfig,
-      };
-
-      await createStoredMCPClient.mutateAsync(createParams);
-      toast.success('MCP client created successfully');
-      onSuccess?.();
-    } catch (error) {
-      toast.error(`Failed to create MCP client: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    onAdd({
+      name: values.name,
+      description: values.description || undefined,
+      servers: serverConfig,
+    });
   };
 
   return (
@@ -100,7 +90,7 @@ export function MCPClientCreateContent({ onSuccess }: MCPClientCreateContentProp
           <MCPClientFormSidebar
             form={form}
             onPublish={handlePublish}
-            isSubmitting={createStoredMCPClient.isPending}
+            isSubmitting={false}
             onPreFillFromServer={handlePreFillFromServer}
             containerRef={containerRef}
           />

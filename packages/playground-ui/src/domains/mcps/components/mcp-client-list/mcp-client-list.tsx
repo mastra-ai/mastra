@@ -1,33 +1,37 @@
 import { useState } from 'react';
+import { useWatch } from 'react-hook-form';
 import { PlusIcon, XIcon } from 'lucide-react';
+
+import type { StoredMCPServerConfig } from '@mastra/client-js';
 
 import { Icon, McpServerIcon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 import { Button } from '@/ds/components/Button';
 import { Badge } from '@/ds/components/Badge';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { Entity, EntityContent, EntityDescription, EntityName, EntityIcon } from '@/ds/components/Entity';
 import { SideDialog } from '@/ds/components/SideDialog';
-import { toast } from '@/lib/toast';
 
-import { useStoredMCPClients, useStoredMCPClientMutations } from '../../hooks/use-stored-mcp-clients';
+import { useAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
 import { MCPClientCreateContent } from '../mcp-client-create';
 
 export function MCPClientList() {
-  const { data, isLoading } = useStoredMCPClients();
-  const { deleteStoredMCPClient } = useStoredMCPClientMutations();
+  const { form, readOnly } = useAgentEditFormContext();
+  const mcpClients = useWatch({ control: form.control, name: 'mcpClients' }) ?? [];
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteStoredMCPClient.mutateAsync(id);
-      toast.success('MCP client removed');
-    } catch (error) {
-      toast.error(`Failed to remove MCP client: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  const handleAdd = (config: { name: string; description?: string; servers: Record<string, StoredMCPServerConfig> }) => {
+    const current = form.getValues('mcpClients') ?? [];
+    form.setValue('mcpClients', [...current, config]);
+    setIsCreateOpen(false);
   };
 
-  const clients = data?.mcpClients ?? [];
+  const handleRemove = (index: number) => {
+    const current = form.getValues('mcpClients') ?? [];
+    form.setValue(
+      'mcpClients',
+      current.filter((_, i) => i !== index),
+    );
+  };
 
   return (
     <div className="flex flex-col gap-4 pb-6">
@@ -39,50 +43,42 @@ export function MCPClientList() {
           <Txt variant="header-md" as="h2" className="font-medium text-neutral6">
             MCP Clients
           </Txt>
-          {!isLoading && <Badge>{clients.length}</Badge>}
+          <Badge>{mcpClients.length}</Badge>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)}>
-          <PlusIcon className="h-3 w-3 mr-1" />
-          Add MCP Client
-        </Button>
+        {!readOnly && (
+          <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)}>
+            <PlusIcon className="h-3 w-3 mr-1" />
+            Add MCP Client
+          </Button>
+        )}
       </div>
 
-      {isLoading && (
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-16 w-full rounded-lg" />
-          <Skeleton className="h-16 w-full rounded-lg" />
-        </div>
-      )}
-
-      {!isLoading && clients.length === 0 && (
+      {mcpClients.length === 0 && (
         <div className="rounded-lg border border-border1 bg-surface3 py-8 text-center">
           <Txt className="text-neutral3">No MCP clients configured yet. Add one to get started.</Txt>
         </div>
       )}
 
-      {!isLoading && clients.length > 0 && (
+      {mcpClients.length > 0 && (
         <div className="flex flex-col gap-2">
-          {clients.map(client => {
-            const serverCount = Object.keys(client.servers ?? {}).length;
+          {mcpClients.map((mcpClient, index) => {
+            const serverCount = Object.keys(mcpClient.servers ?? {}).length;
             return (
-              <Entity key={client.id}>
+              <Entity key={mcpClient.id ?? `pending-${index}`}>
                 <EntityIcon>
                   <McpServerIcon className="group-hover/entity:text-accent6" />
                 </EntityIcon>
                 <EntityContent className="flex-1">
-                  <EntityName>{client.name}</EntityName>
+                  <EntityName>{mcpClient.name}</EntityName>
                   <EntityDescription>
-                    {client.description || `${serverCount} server${serverCount !== 1 ? 's' : ''} configured`}
+                    {mcpClient.description || `${serverCount} server${serverCount !== 1 ? 's' : ''} configured`}
                   </EntityDescription>
                 </EntityContent>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(client.id)}
-                  disabled={deleteStoredMCPClient.isPending}
-                >
-                  <XIcon className="h-3 w-3" />
-                </Button>
+                {!readOnly && (
+                  <Button variant="ghost" size="sm" onClick={() => handleRemove(index)}>
+                    <XIcon className="h-3 w-3" />
+                  </Button>
+                )}
               </Entity>
             );
           })}
@@ -98,7 +94,7 @@ export function MCPClientList() {
         <SideDialog.Top>
           <SideDialog.Heading>Create a new MCP Client</SideDialog.Heading>
         </SideDialog.Top>
-        <MCPClientCreateContent onSuccess={() => setIsCreateOpen(false)} />
+        <MCPClientCreateContent onAdd={handleAdd} />
       </SideDialog>
     </div>
   );
