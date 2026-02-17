@@ -297,7 +297,6 @@ export const analysisAgent = new Agent({
  * 4. Context Filtering - Limits context passed to sub-agents
  */
 
-let supervisorScorerCount = 0;
 export const supervisorAgent = new Agent({
   id: 'supervisor-agent',
   name: 'Research Supervisor',
@@ -397,18 +396,12 @@ export const supervisorAgent = new Agent({
             const hasAnalysis = text.includes('analysis') || text.includes('insight');
             const hasRecommendations = text.includes('recommendation');
             return (hasResearch && hasAnalysis) || hasRecommendations ? 1 : 0.5;
-            // supervisorScorerCount++;
-            // return supervisorScorerCount > 2 ? 1 : 0.7;
-            // return 1;
           })
           .generateReason(async context => {
             const text = (context.run.output || '').toString()?.toLowerCase();
             const hasResearch = text.includes('research') || text.includes('findings');
             const hasAnalysis = text.includes('analysis') || text.includes('insight');
             const hasRecommendations = text.includes('recommendation');
-            // return supervisorScorerCount > 2
-            //   ? 'Research is complete'
-            //   : 'Research is not complete, please provide more details, ensure words like research/findings analysis/insight are added and add recommendations based on the research analysis';
             return (hasResearch && hasAnalysis) || hasRecommendations
               ? 'Research is complete'
               : 'Research is not complete, please provide more details, ensure words like research/findings analysis/insight are added and add recommendations based on the research analysis';
@@ -425,9 +418,6 @@ export const supervisorAgent = new Agent({
             console.dir({ 'response-quality-Scorer': text }, { depth: null });
             const wordCount = text.split(/\s+/).length;
             return wordCount >= 200 ? 1 : wordCount / 200;
-            // supervisorScorerCount++;
-            // return supervisorScorerCount > 2 ? 1 : 0.7;
-            // return 1;
           })
           .generateReason(async context => {
             const text = (context.run.output || '').toString();
@@ -435,9 +425,6 @@ export const supervisorAgent = new Agent({
             return wordCount >= 200
               ? 'Response is sufficient'
               : 'Response is not sufficient, please provide more details, at least 200 words';
-            // return supervisorScorerCount > 2
-            //   ? 'Response is sufficient'
-            //   : 'Response is not sufficient, please provide more details, at least 200 words';
           }),
       ],
       strategy: 'all', // All scorers must pass
@@ -445,35 +432,34 @@ export const supervisorAgent = new Agent({
         console.log('✨ Completion check:', result.complete ? 'PASSED ✅' : 'FAILED ❌');
         console.log('📊 Scores:', result.scorers.map(s => `${s.scorerName}: ${s.score.toFixed(2)}`).join(', '));
       },
-      // suppressFeedback: true,
     },
 
-    // Iteration Hooks - Monitor progress after each iteration
-    // onIterationComplete: async context => {
-    //   console.log(`\n${'='.repeat(60)}`);
-    //   console.log(`🔄 Iteration ${context.iteration}${context.maxIterations ? `/${context.maxIterations}` : ''}`);
-    //   console.log(`📊 Status: ${context.isFinal ? 'FINAL ✅' : 'CONTINUING ⏳'}`);
-    //   console.log(`🏁 Finish Reason: ${context.finishReason}`);
-    //   console.log(`🔧 Tool Calls: ${context.toolCalls.map(tc => tc.name).join(', ') || 'None'}`);
-    //   console.log(`📝 Response Length: ${context.text.length} chars`);
-    //   console.log(`${'='.repeat(60)}\n`);
+    //Iteration Hooks - Monitor progress after each iteration
+    onIterationComplete: async context => {
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`🔄 Iteration ${context.iteration}${context.maxIterations ? `/${context.maxIterations}` : ''}`);
+      console.log(`📊 Status: ${context.isFinal ? 'FINAL ✅' : 'CONTINUING ⏳'}`);
+      console.log(`🏁 Finish Reason: ${context.finishReason}`);
+      console.log(`🔧 Tool Calls: ${context.toolCalls.map(tc => tc.name).join(', ') || 'None'}`);
+      console.log(`📝 Response Length: ${context.text.length} chars`);
+      console.log(`${'='.repeat(60)}\n`);
 
-    //   // Provide feedback to guide the agent
-    //   if (context.iteration === 3 && !context.text.includes('recommendation')) {
-    //     return {
-    //       continue: true,
-    //       feedback: 'Good progress! Please include specific recommendations in your response.',
-    //     };
-    //   }
+      // Provide feedback to guide the agent
+      if (context.iteration === 3 && !context.text.includes('recommendation')) {
+        return {
+          continue: true,
+          feedback: 'Good progress! Please include specific recommendations in your response.',
+        };
+      }
 
-    //   // Stop early if we have a comprehensive response
-    //   if (context.text.length > 500 && context.text.includes('recommendation')) {
-    //     console.log('✅ Response is comprehensive, stopping early');
-    //     return { continue: false };
-    //   }
+      // Stop early if we have a comprehensive response
+      if (context.text.length > 500 && context.text.includes('recommendation')) {
+        console.log('✅ Response is comprehensive, stopping early');
+        return { continue: false };
+      }
 
-    //   return { continue: true };
-    // },
+      return { continue: true };
+    },
 
     // Delegation Hooks - Control sub-agent execution
     delegation: {
