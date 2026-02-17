@@ -70,7 +70,6 @@ export function AgentsPage() {
     });
   };
 
-
   const filteredOptions = useMemo(() => {
     return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
   }, [options, search]);
@@ -146,7 +145,6 @@ export function AgentsPage() {
           )}
         </SubSectionRoot>
       </div>
-
     </ScrollArea>
   );
 }

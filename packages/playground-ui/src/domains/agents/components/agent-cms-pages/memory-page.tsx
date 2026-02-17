@@ -33,9 +33,7 @@ export function MemoryPage() {
             <Controller
               name="memory.enabled"
               control={control}
-              render={({ field }) => (
-                <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
-              )}
+              render={({ field }) => <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />}
             />
           )}
         </div>
@@ -191,9 +189,7 @@ function SemanticRecallEntity() {
         <Controller
           name="memory.semanticRecall"
           control={control}
-          render={({ field }) => (
-            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
-          )}
+          render={({ field }) => <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />}
         />
       )}
     </Entity>
@@ -227,9 +223,7 @@ function ReadOnlyEntity() {
         <Controller
           name="memory.readOnly"
           control={control}
-          render={({ field }) => (
-            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
-          )}
+          render={({ field }) => <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />}
         />
       )}
     </Entity>
@@ -271,9 +265,7 @@ function ObservationalMemoryEntity() {
         <Controller
           name="memory.observationalMemory.enabled"
           control={control}
-          render={({ field }) => (
-            <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
-          )}
+          render={({ field }) => <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />}
         />
       )}
     </Entity>
@@ -285,8 +277,7 @@ function ObservationalMemoryFields() {
   const { control, setValue } = form;
   const omProvider = useWatch({ control, name: 'memory.observationalMemory.model.provider' }) ?? '';
   const observerProvider = useWatch({ control, name: 'memory.observationalMemory.observation.model.provider' }) ?? '';
-  const reflectorProvider =
-    useWatch({ control, name: 'memory.observationalMemory.reflection.model.provider' }) ?? '';
+  const reflectorProvider = useWatch({ control, name: 'memory.observationalMemory.reflection.model.provider' }) ?? '';
 
   return (
     <div className="flex flex-col gap-4">
@@ -319,12 +310,7 @@ function ObservationalMemoryFields() {
           control={control}
           render={({ field }) => (
             <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-              <LLMModels
-                value={field.value ?? ''}
-                onValueChange={field.onChange}
-                llmId={omProvider}
-                variant="light"
-              />
+              <LLMModels value={field.value ?? ''} onValueChange={field.onChange} llmId={omProvider} variant="light" />
             </div>
           )}
         />
@@ -363,9 +349,7 @@ function ObservationalMemoryFields() {
               <Label htmlFor="memory-om-share-budget" className="text-sm text-icon5">
                 Share Token Budget
               </Label>
-              <span className="text-xs text-icon3">
-                Share token budget between observation and reflection
-              </span>
+              <span className="text-xs text-icon3">Share token budget between observation and reflection</span>
             </div>
             <Switch
               id="memory-om-share-budget"
@@ -498,8 +482,8 @@ function ObserverFields({ observerProvider }: { observerProvider: string }) {
                 Buffer Tokens
               </Label>
               <span className="text-xs text-icon3">
-                Token interval for async buffering (fraction of messageTokens or absolute count, empty to
-                use default 0.2, set 0 to disable)
+                Token interval for async buffering (fraction of messageTokens or absolute count, empty to use default
+                0.2, set 0 to disable)
               </span>
               <Input
                 id="memory-om-obs-buffer"
@@ -597,9 +581,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
       <div className="ml-2 pl-3 border-l-2 border-border1 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs text-icon4">Provider Override</Label>
-          <span className="text-xs text-icon3">
-            Override the default model provider for the reflector
-          </span>
+          <span className="text-xs text-icon3">Override the default model provider for the reflector</span>
           <Controller
             name="memory.observationalMemory.reflection.model.provider"
             control={control}
@@ -703,9 +685,7 @@ function ReflectorFields({ reflectorProvider }: { reflectorProvider: string }) {
               <Label htmlFor="memory-om-ref-buf-act" className="text-xs text-icon4">
                 Buffer Activation
               </Label>
-              <span className="text-xs text-icon3">
-                Ratio (0-1) controlling when async reflection buffering starts
-              </span>
+              <span className="text-xs text-icon3">Ratio (0-1) controlling when async reflection buffering starts</span>
               <Input
                 id="memory-om-ref-buf-act"
                 type="number"

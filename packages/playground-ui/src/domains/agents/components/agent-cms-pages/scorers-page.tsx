@@ -85,7 +85,6 @@ export function ScorersPage() {
     });
   };
 
-
   const filteredOptions = useMemo(() => {
     return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
   }, [options, search]);
@@ -173,7 +172,6 @@ export function ScorersPage() {
           )}
         </SubSectionRoot>
       </div>
-
     </ScrollArea>
   );
 }

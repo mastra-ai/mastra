@@ -17,12 +17,7 @@ interface AgentsSectionProps {
   readOnly?: boolean;
 }
 
-export function AgentsSection({
-  control,
-  error,
-  currentAgentId,
-  readOnly = false,
-}: AgentsSectionProps) {
+export function AgentsSection({ control, error, currentAgentId, readOnly = false }: AgentsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { data: agents, isLoading } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
@@ -94,7 +89,6 @@ export function AgentsSection({
                       Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
-
                 </div>
 
                 <CollapsibleContent>

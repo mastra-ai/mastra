@@ -90,7 +90,6 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                       Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
-
                 </div>
 
                 <CollapsibleContent>

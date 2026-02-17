@@ -12,8 +12,7 @@ export function useSidebarDescriptions(control: Control<AgentFormValues>) {
   const values = useWatch({ control });
 
   return useMemo(() => {
-    const identity =
-      !values.name || !values.model?.provider || !values.model?.name ? 'Required' : values.name;
+    const identity = !values.name || !values.model?.provider || !values.model?.name ? 'Required' : values.name;
 
     const blockCount = (values.instructionBlocks ?? []).filter(b => b.content?.trim()).length;
     const instructions = blockCount === 0 ? 'Required' : pluralize(blockCount, 'block');
