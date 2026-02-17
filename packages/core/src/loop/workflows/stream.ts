@@ -64,7 +64,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           };
           messageList.add(message, 'response');
         }
-        void controller.enqueue(chunk);
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
       };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
@@ -110,7 +112,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         },
       };
 
-      if (!resumeContext) {
+      if (!resumeContext && isControllerOpen(controller)) {
         controller.enqueue({
           type: 'start',
           runId,
@@ -150,12 +152,14 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             fallbackMessage: 'Unknown error in agent workflow stream',
           });
 
-          controller.enqueue({
-            type: 'error',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: { error },
-          });
+          if (isControllerOpen(controller)) {
+            controller.enqueue({
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { error },
+            });
+          }
 
           if (rest.options?.onError) {
             await rest.options?.onError?.({ error });
@@ -166,7 +170,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           await agenticLoopWorkflow.deleteWorkflowRunById(runId);
         }
 
-        controller.close();
+        if (isControllerOpen(controller)) {
+          controller.close();
+        }
         return;
       }
 
@@ -175,21 +181,25 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Always emit finish chunk, even for abort (tripwire) cases
       // This ensures the stream properly completes and all promises are resolved
       // The tripwire/abort status is communicated through the stepResult.reason
-      controller.enqueue({
-        type: 'finish',
-        runId,
-        from: ChunkFrom.AGENT,
-        payload: {
-          ...executionResult.result,
-          stepResult: {
-            ...executionResult.result.stepResult,
-            // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
-            reason: executionResult.result.stepResult.reason,
+      if (isControllerOpen(controller)) {
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            ...executionResult.result,
+            stepResult: {
+              ...executionResult.result.stepResult,
+              // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
+              reason: executionResult.result.stepResult.reason,
+            },
           },
-        },
-      });
+        });
+      }
 
-      controller.close();
+      if (isControllerOpen(controller)) {
+        controller.close();
+      }
     },
   });
 }

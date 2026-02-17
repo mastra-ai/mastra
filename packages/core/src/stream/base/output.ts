@@ -1407,13 +1407,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
         // Listen for new chunks and stream finish
         const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
-          controller.enqueue(chunk);
+          if (controller.desiredSize !== 0 && controller.desiredSize !== null) {
+            controller.enqueue(chunk);
+          }
         };
 
         const finishHandler = () => {
           self.#emitter.off('chunk', chunkHandler);
           self.#emitter.off('finish', finishHandler);
-          controller.close();
+          if (controller.desiredSize !== 0 && controller.desiredSize !== null) {
+            controller.close();
+          }
         };
 
         self.#emitter.on('chunk', chunkHandler);

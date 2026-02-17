@@ -2,6 +2,15 @@ import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MastraBase } from '../../base';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
+/**
+ * Check if a ReadableStreamDefaultController is open and can accept data.
+ * After controller.close() or stream cancellation, desiredSize becomes 0 or null.
+ * We treat both as closed states to prevent "Controller is already closed" errors.
+ */
+export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
+  return controller.desiredSize !== 0 && controller.desiredSize !== null;
+}
+
 export abstract class MastraModelInput extends MastraBase {
   abstract transform({
     runId,
@@ -33,9 +42,13 @@ export abstract class MastraModelInput extends MastraBase {
             controller,
           });
 
-          controller.close();
+          if (isControllerOpen(controller)) {
+            controller.close();
+          }
         } catch (error) {
-          controller.error(error);
+          if (isControllerOpen(controller)) {
+            controller.error(error);
+          }
         }
       },
     });

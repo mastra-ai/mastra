@@ -339,7 +339,9 @@ async function processOutputStream<OUTPUT = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          controller.enqueue(chunk);
+          if (isControllerOpen(controller)) {
+            controller.enqueue(chunk);
+          }
         }
         break;
 
@@ -366,7 +368,9 @@ async function processOutputStream<OUTPUT = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          controller.enqueue(chunk);
+          if (isControllerOpen(controller)) {
+            controller.enqueue(chunk);
+          }
         }
         break;
 
@@ -405,7 +409,9 @@ async function processOutputStream<OUTPUT = undefined>({
         const error = getErrorFromUnknown(chunk.payload.error, {
           fallbackMessage: 'Unknown error in agent stream',
         });
-        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        if (isControllerOpen(controller)) {
+          controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        }
         await options?.onError?.({ error });
         break;
 
