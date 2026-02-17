@@ -5406,7 +5406,7 @@ importers:
         specifier: latest
         version: 1.41.0
       google-auth-library:
-        specifier: ^10.2.1
+        specifier: ^10.5.0
         version: 10.5.0
       ws:
         specifier: ^8.19.0
