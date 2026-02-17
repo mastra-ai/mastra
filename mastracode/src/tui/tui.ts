@@ -12,7 +12,8 @@ import { AskQuestionInlineComponent } from "./components/inline/ask-question-inl
 import { PlanApprovalInlineComponent } from "./components/inline/plan-approval-inline"
 import { AssistantMessageComponent } from "./components/message/assistant"
 import { UserMessageComponent } from "./components/message/user"
-import { OMMarkerComponent } from "./components/om/marker"
+import { OMMarkerComponent, type OMMarkerData } from "./components/om/marker"
+import { OMOutputComponent } from "./components/om/output"
 import {
     defaultOMProgressState,
     formatObservationStatus,
@@ -23,8 +24,9 @@ import {
 import { ErrorDisplayComponent } from "./components/output/error-display"
 import { ShellOutputComponent } from "./components/output/shell-output"
 import { SlashCommandComponent } from "./components/output/slash-command"
+import { SubagentExecutionComponent } from "./components/output/subagent-execution"
 import { SystemReminderComponent } from "./components/output/system-reminder"
-import { TodoProgressComponent } from "./components/progress/todo-progress"
+import { TodoProgressComponent, type TodoItem } from "./components/progress/todo-progress"
 import { CustomEditor } from "./components/shared/custom-editor"
 import {
     applyGradientSweep,
@@ -88,11 +90,16 @@ export class MastraTUI {
     private toolComponents = new Map<string, ToolExecutionComponentEnhanced>()
     private allToolComponents: ToolExecutionComponentEnhanced[] = []
     private allSlashCommandComponents: SlashCommandComponent[] = []
+    private allOMOutputComponents: OMOutputComponent[] = []
     private pendingToolApproval: { toolName: string } | null = null
     private streamingComponent?: AssistantMessageComponent
     private streamingMessage?: HarnessMessage
+    private activeOMMarker?: OMMarkerComponent
+    private activeBufferingMarker?: OMMarkerComponent
     private activeInlineQuestion?: AskQuestionInlineComponent
     private activeInlinePlanApproval?: PlanApprovalInlineComponent
+    private pendingQuestionId?: string
+    private pendingPlanId?: string
     private unsubscribe?: () => void
 
     private shouldExit = false
@@ -239,6 +246,9 @@ ${instructions}`,
             for (const slash of this.allSlashCommandComponents) {
                 slash.setExpanded(this.toolOutputExpanded)
             }
+            for (const omOutput of this.allOMOutputComponents) {
+                omOutput.setExpanded(this.toolOutputExpanded)
+            }
             this.ui.requestRender()
         })
     }
@@ -272,8 +282,10 @@ ${instructions}`,
     }
 
     private updateProjectInfo(): void {
-        const state = this.harness.state.get() as { cwd?: string } | undefined
-        this.projectRootPath = state?.cwd || process.cwd()
+        const state = this.harness.state.get() as
+            | { cwd?: string; projectPath?: string; gitBranch?: string }
+            | undefined
+        this.projectRootPath = state?.projectPath || state?.cwd || process.cwd()
 
         const homedir = process.env.HOME || process.env.USERPROFILE || ""
         let displayPath = this.projectRootPath
@@ -281,7 +293,7 @@ ${instructions}`,
             displayPath = `~${displayPath.slice(homedir.length)}`
         }
 
-        const branch = this.getGitBranch(this.projectRootPath)
+        const branch = state?.gitBranch || this.getGitBranch(this.projectRootPath)
         this.projectDisplayPath = branch ? `${displayPath} (${branch})` : displayPath
     }
 
@@ -297,6 +309,21 @@ ${instructions}`,
         } catch {
             return undefined
         }
+    }
+
+    private compactPathForStatus(path: string): string {
+        const maxLen = 44
+        if (path.length <= maxLen) return path
+        const branchMatch = path.match(/\s\([^)]+\)$/)
+        const branch = branchMatch?.[0] ?? ""
+        const base = branch ? path.slice(0, -branch.length) : path
+        const segments = base.split("/").filter(Boolean)
+        const tail = segments.slice(-2).join("/")
+        const compact = `~/${tail}`
+        const candidate = `${compact}${branch}`
+        if (candidate.length <= maxLen) return candidate
+        const keep = Math.max(12, maxLen - branch.length - 1)
+        return `${compact.slice(0, keep)}…${branch}`
     }
 
     private async promptForThreadSelection(): Promise<void> {
@@ -393,6 +420,7 @@ ${instructions}`,
             .replace(/^(\w+)-(\d+)-(\d{1,2})$/, "$1 $2.$3")
 
         const displayPath = this.projectDisplayPath
+        const compactDisplayPath = this.compactPathForStatus(displayPath)
         const styleModelId = (id: string): string => {
             if (!this.modelAuthStatus.hasAuth) {
                 const envVar = this.modelAuthStatus.apiKeyEnvVar
@@ -440,6 +468,7 @@ ${instructions}`,
             modelId: string
             memCompact?: "percentOnly" | "noBuffer" | "full"
             showDir: boolean
+            showMemory?: boolean
             badge?: "full" | "short"
         }): string | null => {
             const parts: Array<{ plain: string; styled: string }> = []
@@ -469,16 +498,27 @@ ${instructions}`,
                         )
                     : undefined
 
-            const obs = formatObservationStatus(this.omProgress, opts.memCompact, msgLabelStyler)
-            const ref = formatReflectionStatus(this.omProgress, opts.memCompact, obsLabelStyler)
-            if (obs) parts.push({ plain: obs, styled: obs })
-            if (ref) parts.push({ plain: ref, styled: ref })
-
-            const tokens = `tokens:${this.tokenUsage.totalTokens}`
-            parts.push({ plain: tokens, styled: fg("muted", tokens) })
+            if (opts.showMemory !== false) {
+                const obs = formatObservationStatus(
+                    this.omProgress,
+                    opts.memCompact,
+                    msgLabelStyler,
+                )
+                const ref = formatReflectionStatus(
+                    this.omProgress,
+                    opts.memCompact,
+                    obsLabelStyler,
+                )
+                if (obs) parts.push({ plain: obs, styled: obs })
+                if (ref) parts.push({ plain: ref, styled: ref })
+            }
 
             if (opts.showDir) {
-                parts.push({ plain: displayPath, styled: fg("dim", displayPath) })
+                const pathValue =
+                    opts.modelId === modelId && opts.memCompact === "full"
+                        ? displayPath
+                        : compactDisplayPath
+                parts.push({ plain: pathValue, styled: fg("dim", pathValue) })
             }
 
             const useBadge = opts.badge === "short" ? shortModeBadge : modeBadge
@@ -526,6 +566,32 @@ ${instructions}`,
 
         const styledLine1 =
             buildLine({ modelId, memCompact: "full", showDir: true }) ??
+            buildLine({ modelId: tinyModelId, memCompact: "full", showDir: true }) ??
+            buildLine({ modelId: tinyModelId, showDir: true, badge: "short" }) ??
+            buildLine({
+                modelId: tinyModelId,
+                memCompact: "noBuffer",
+                showDir: true,
+                badge: "short",
+            }) ??
+            buildLine({
+                modelId: tinyModelId,
+                memCompact: "percentOnly",
+                showDir: true,
+                badge: "short",
+            }) ??
+            buildLine({
+                modelId: tinyModelId,
+                showDir: true,
+                showMemory: false,
+                badge: "short",
+            }) ??
+            buildLine({
+                modelId: shortModelId,
+                showDir: true,
+                showMemory: false,
+                badge: "short",
+            }) ??
             buildLine({ modelId, memCompact: "full", showDir: false }) ??
             buildLine({ modelId: tinyModelId, memCompact: "full", showDir: false }) ??
             buildLine({ modelId: tinyModelId, showDir: false }) ??
@@ -567,6 +633,38 @@ ${instructions}`,
     private async onSubmit(raw: string): Promise<void> {
         const line = raw.trim()
         if (!line) return
+
+        if (this.activeInlinePlanApproval) {
+            const normalized = line.toLowerCase()
+            if (normalized === "y" || normalized === "yes") {
+                this.chatContainer.addChild(new SystemReminderComponent("plan approved"))
+                this.activeInlinePlanApproval.onDecision(true)
+                this.activeInlinePlanApproval = undefined
+                this.pendingPlanId = undefined
+            } else if (normalized === "n" || normalized === "no") {
+                this.chatContainer.addChild(new SystemReminderComponent("plan rejected"))
+                this.activeInlinePlanApproval.onDecision(false)
+                this.activeInlinePlanApproval = undefined
+                this.pendingPlanId = undefined
+            } else {
+                this.showInfo("please enter y or n")
+                this.editor.setText("")
+                this.ui.requestRender()
+                return
+            }
+            this.editor.setText("")
+            this.ui.requestRender()
+            return
+        }
+
+        if (this.activeInlineQuestion) {
+            this.activeInlineQuestion.onSubmit([line])
+            this.activeInlineQuestion = undefined
+            this.pendingQuestionId = undefined
+            this.editor.setText("")
+            this.ui.requestRender()
+            return
+        }
 
         if (this.pendingToolApproval) {
             const normalized = line.toLowerCase()
@@ -707,6 +805,176 @@ ${instructions}`,
     }
 
     private async handleEvent(event: HarnessEvent): Promise<void> {
+        const eventType = (event as { type: string }).type
+
+        if (eventType === "model_changed") {
+            this.updateStatusLine()
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "om_model_changed" || eventType === "subagent_model_changed") {
+            this.updateStatusLine()
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "follow_up_queued") {
+            const e = event as { count: number }
+            this.showInfo(`Follow-up queued (${e.count} pending)`)
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "todo_updated") {
+            const e = event as { todos?: TodoItem[] }
+            this.todoProgress?.updateTodos(e.todos ?? [])
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "workspace_error") {
+            const e = event as { error: Error }
+            this.showError(`Workspace: ${e.error.message}`)
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "workspace_status_changed") {
+            const e = event as { status: string; error?: Error }
+            if (e.status === "error" && e.error) {
+                this.showError(`Workspace: ${e.error.message}`)
+                this.ui.requestRender()
+            }
+            return
+        }
+        if (eventType === "subagent_start") {
+            const e = event as { agentType?: string; task?: string; modelId?: string }
+            const label = [e.agentType, e.modelId].filter(Boolean).join(" · ") || "subagent"
+            const status = e.task ? `start: ${e.task}` : "started"
+            this.addOMComponentBeforeStreaming(new SubagentExecutionComponent(label, status))
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "subagent_tool_start") {
+            const e = event as { subToolName?: string }
+            this.addOMComponentBeforeStreaming(
+                new SubagentExecutionComponent("subagent", `tool start: ${e.subToolName ?? "unknown"}`),
+            )
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "subagent_tool_end") {
+            const e = event as { subToolName?: string; isError?: boolean }
+            this.addOMComponentBeforeStreaming(
+                new SubagentExecutionComponent(
+                    "subagent",
+                    `${e.isError ? "tool failed" : "tool done"}: ${e.subToolName ?? "unknown"}`,
+                ),
+            )
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "subagent_end") {
+            const e = event as { isError?: boolean; durationMs?: number }
+            this.addOMComponentBeforeStreaming(
+                new SubagentExecutionComponent(
+                    "subagent",
+                    `${e.isError ? "failed" : "done"}${typeof e.durationMs === "number" ? ` (${e.durationMs}ms)` : ""}`,
+                ),
+            )
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "subagent_text_delta" || eventType === "workspace_ready") {
+            return
+        }
+        if (eventType === "ask_question") {
+            const e = event as {
+                questionId: string
+                question: string
+                options?: Array<{ label: string; description?: string }>
+            }
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`[ask] ${e.question}`),
+            )
+            if (e.options?.length) {
+                this.chatContainer.addChild(
+                    new SystemReminderComponent(
+                        e.options.map((o, i) => `${i + 1}. ${o.label}`).join("  "),
+                    ),
+                )
+            }
+            this.activeInlineQuestion = new AskQuestionInlineComponent(
+                {
+                    id: e.questionId,
+                    prompt: e.question,
+                    options:
+                        e.options?.map((o, i) => ({
+                            id: String(i + 1),
+                            label: o.label,
+                        })) ?? [],
+                    allowMultiple: false,
+                },
+                (answers) => {
+                    this.harness.respondToQuestion(e.questionId, answers[0] ?? "")
+                },
+            )
+            this.pendingQuestionId = e.questionId
+            this.chatContainer.addChild(this.activeInlineQuestion)
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "sandbox_access_request") {
+            const e = event as { questionId: string; path: string; reason: string }
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`[sandbox] ${e.reason}`),
+            )
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`Path: ${e.path} (y/n)`),
+            )
+            this.activeInlineQuestion = new AskQuestionInlineComponent(
+                {
+                    id: e.questionId,
+                    prompt: `Grant sandbox access to ${e.path}?`,
+                    options: [
+                        { id: "y", label: "Yes" },
+                        { id: "n", label: "No" },
+                    ],
+                    allowMultiple: false,
+                },
+                (answers) => {
+                    const a = (answers[0] ?? "").toLowerCase()
+                    this.harness.respondToQuestion(
+                        e.questionId,
+                        a === "y" || a === "yes" ? "yes" : "no",
+                    )
+                },
+            )
+            this.pendingQuestionId = e.questionId
+            this.chatContainer.addChild(this.activeInlineQuestion)
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "plan_approval_required") {
+            const e = event as { planId: string; title: string; plan: string }
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`[plan] ${e.title}`),
+            )
+            this.chatContainer.addChild(new SlashCommandComponent("/plan", e.plan))
+            this.activeInlinePlanApproval = new PlanApprovalInlineComponent((approved) => {
+                void this.harness.respondToPlanApproval(e.planId, {
+                    action: approved ? "approved" : "rejected",
+                })
+            })
+            this.pendingPlanId = e.planId
+            this.chatContainer.addChild(this.activeInlinePlanApproval)
+            this.ui.requestRender()
+            return
+        }
+        if (eventType === "plan_approved") {
+            this.chatContainer.addChild(new SystemReminderComponent("plan approved"))
+            this.activeInlinePlanApproval = undefined
+            this.pendingPlanId = undefined
+            this.ui.requestRender()
+            return
+        }
+
         switch (event.type) {
             case "agent_start":
                 this.isAgentActive = true
@@ -729,19 +997,24 @@ ${instructions}`,
                 this.ui.requestRender()
                 break
             case "mode_changed":
-                this.showInfo(`mode changed: ${event.previousModeId} -> ${event.modeId}`)
                 this.updateStatusLine()
                 this.ui.requestRender()
                 break
             case "thread_created":
                 this.showInfo(`thread created: ${event.thread.title ?? event.thread.id}`)
+                this.updateProjectInfo()
                 this.updateStatusLine()
                 this.ui.requestRender()
                 break
             case "thread_changed":
                 this.showInfo(`thread switched: ${event.threadId}`)
                 await this.renderExistingMessages()
+                this.updateProjectInfo()
                 this.tokenUsage = this.harness.usage.get()
+                {
+                    const state = this.harness.state.get() as { todos?: TodoItem[] }
+                    this.todoProgress?.updateTodos(state?.todos ?? [])
+                }
                 this.updateStatusLine()
                 this.ui.requestRender()
                 break
@@ -771,10 +1044,14 @@ ${instructions}`,
                 this.ui.requestRender()
                 break
             case "tool_start": {
+                if (this.toolComponents.has(event.toolCallId)) {
+                    break
+                }
                 const tool = new ToolExecutionComponentEnhanced(event.toolName, event.args)
+                tool.setExpanded(this.toolOutputExpanded)
                 this.toolComponents.set(event.toolCallId, tool)
                 this.allToolComponents.push(tool)
-                this.chatContainer.addChild(tool)
+                this.addOMComponentBeforeStreaming(tool)
                 this.ui.requestRender()
                 break
             }
@@ -793,9 +1070,10 @@ ${instructions}`,
                 break
             }
             case "tool_end": {
-                const tool =
-                    this.toolComponents.get(event.toolCallId) ??
-                    new ToolExecutionComponentEnhanced("unknown_tool", {})
+                const tool = this.toolComponents.get(event.toolCallId)
+                if (!tool) {
+                    break
+                }
                 const result: ToolResult = {
                     content: this.toText(event.result),
                     isError: event.isError,
@@ -817,12 +1095,19 @@ ${instructions}`,
                 }
                 break
             case "shell_output":
-                this.chatContainer.addChild(
-                    new ShellOutputComponent(
-                        `${event.stream} (${event.toolCallId})`,
-                        event.output,
-                    ),
-                )
+                {
+                    const tool = this.toolComponents.get(event.toolCallId)
+                    if (tool?.appendStreamingOutput) {
+                        tool.appendStreamingOutput(event.output)
+                    } else {
+                        this.addOMComponentBeforeStreaming(
+                            new ShellOutputComponent(
+                                `${event.stream} (${event.toolCallId})`,
+                                event.output,
+                            ),
+                        )
+                    }
+                }
                 this.ui.requestRender()
                 break
             case "usage_update":
@@ -881,16 +1166,51 @@ ${instructions}`,
                     startTime: Date.now(),
                 }
                 this.omProgressComponent?.update(this.omProgress)
-                this.chatContainer.addChild(
-                    new OMMarkerComponent({
-                        label: `observation start (${event.tokensToObserve} tokens)`,
-                        active: true,
-                    }),
-                )
+                this.removeMarker(this.activeOMMarker)
+                this.activeOMMarker = new OMMarkerComponent({
+                    type: "om_observation_start",
+                    tokensToObserve: event.tokensToObserve,
+                    operationType: event.operationType,
+                })
+                this.addOMComponentBeforeStreaming(this.activeOMMarker)
                 this.updateStatusLine()
                 this.ui.requestRender()
                 break
             case "om_observation_end":
+                this.omProgress = {
+                    ...this.omProgress,
+                    status: "idle",
+                    observing: false,
+                    cycleId: undefined,
+                    startTime: undefined,
+                }
+                if (this.activeOMMarker) {
+                    this.activeOMMarker.update({
+                        type: "om_observation_end",
+                        tokensObserved: event.tokensObserved,
+                        observationTokens: event.observationTokens,
+                        durationMs: event.durationMs,
+                    })
+                    this.activeOMMarker = undefined
+                }
+                if (event.observations) {
+                    const output = new OMOutputComponent({
+                        type: "observation",
+                        observations: event.observations,
+                        currentTask: event.currentTask,
+                        suggestedResponse: event.suggestedResponse,
+                        durationMs: event.durationMs,
+                        tokensObserved: event.tokensObserved,
+                        observationTokens: event.observationTokens,
+                    })
+                    output.setExpanded(this.toolOutputExpanded)
+                    this.allOMOutputComponents.push(output)
+                    this.addOMComponentBeforeStreaming(output)
+                }
+                this.omProgressComponent?.update(this.omProgress)
+                this.updateStatusLine()
+                this.ui.requestRender()
+                break
             case "om_observation_failed":
                 this.omProgress = {
                     ...this.omProgress,
@@ -898,6 +1218,14 @@ ${instructions}`,
                     observing: false,
                     cycleId: undefined,
                     startTime: undefined,
+                }
+                if (this.activeOMMarker) {
+                    this.activeOMMarker.update({
+                        type: "om_observation_failed",
+                        operationType: "observation",
+                        error: event.error,
+                    })
+                    this.activeOMMarker = undefined
                 }
                 this.omProgressComponent?.update(this.omProgress)
                 this.updateStatusLine()
@@ -912,11 +1240,53 @@ ${instructions}`,
                     cycleId: event.cycleId,
                     startTime: Date.now(),
                 }
+                this.removeMarker(this.activeOMMarker)
+                this.activeOMMarker = new OMMarkerComponent({
+                    type: "om_observation_start",
+                    tokensToObserve: event.tokensToReflect,
+                    operationType: "reflection",
+                })
+                this.addOMComponentBeforeStreaming(this.activeOMMarker)
                 this.omProgressComponent?.update(this.omProgress)
                 this.updateStatusLine()
                 this.ui.requestRender()
                 break
-            case "om_reflection_end":
+            case "om_reflection_end": {
+                const preCompressionTokens = this.omProgress.observationTokens
+                this.omProgress = {
+                    ...this.omProgress,
+                    status: "idle",
+                    reflecting: false,
+                    cycleId: undefined,
+                    startTime: undefined,
+                }
+                if (this.activeOMMarker) {
+                    this.activeOMMarker.update({
+                        type: "om_observation_end",
+                        tokensObserved: preCompressionTokens,
+                        observationTokens: event.compressedTokens,
+                        durationMs: event.durationMs,
+                        operationType: "reflection",
+                    })
+                    this.activeOMMarker = undefined
+                }
+                if (event.observations) {
+                    const output = new OMOutputComponent({
+                        type: "reflection",
+                        observations: event.observations,
+                        durationMs: event.durationMs,
+                        compressedTokens: event.compressedTokens,
+                        tokensObserved: preCompressionTokens,
+                    })
+                    output.setExpanded(this.toolOutputExpanded)
+                    this.allOMOutputComponents.push(output)
+                    this.addOMComponentBeforeStreaming(output)
+                }
+                this.omProgressComponent?.update(this.omProgress)
+                this.updateStatusLine()
+                this.ui.requestRender()
+                break
+            }
             case "om_reflection_failed":
                 this.omProgress = {
                     ...this.omProgress,
@@ -924,6 +1294,14 @@ ${instructions}`,
                     reflecting: false,
                     cycleId: undefined,
                     startTime: undefined,
+                }
+                if (this.activeOMMarker) {
+                    this.activeOMMarker.update({
+                        type: "om_observation_failed",
+                        operationType: "reflection",
+                        error: event.error,
+                    })
+                    this.activeOMMarker = undefined
                 }
                 this.omProgressComponent?.update(this.omProgress)
                 this.updateStatusLine()
@@ -941,11 +1319,43 @@ ${instructions}`,
                             ? true
                             : this.omProgress.bufferingObservations,
                 }
+                this.removeMarker(this.activeBufferingMarker)
+                this.activeBufferingMarker = new OMMarkerComponent({
+                    type: "om_buffering_start",
+                    operationType: event.operationType,
+                    tokensToBuffer: event.tokensToBuffer,
+                })
+                this.addOMComponentBeforeStreaming(this.activeBufferingMarker)
                 this.omProgressComponent?.update(this.omProgress)
                 this.updateStatusLine()
                 this.ui.requestRender()
                 break
             case "om_buffering_end":
+                this.omProgress = {
+                    ...this.omProgress,
+                    bufferingMessages:
+                        event.operationType === "observation"
+                            ? false
+                            : this.omProgress.bufferingMessages,
+                    bufferingObservations:
+                        event.operationType === "reflection"
+                            ? false
+                            : this.omProgress.bufferingObservations,
+                }
+                if (this.activeBufferingMarker) {
+                    this.activeBufferingMarker.update({
+                        type: "om_buffering_end",
+                        operationType: event.operationType,
+                        tokensBuffered: event.tokensBuffered,
+                        bufferedTokens: event.bufferedTokens,
+                        observations: event.observations,
+                    })
+                    this.activeBufferingMarker = undefined
+                }
+                this.omProgressComponent?.update(this.omProgress)
+                this.updateStatusLine()
+                this.ui.requestRender()
+                break
             case "om_buffering_failed":
                 this.omProgress = {
                     ...this.omProgress,
@@ -958,10 +1368,44 @@ ${instructions}`,
                             ? false
                             : this.omProgress.bufferingObservations,
                 }
+                if (this.activeBufferingMarker) {
+                    this.activeBufferingMarker.update({
+                        type: "om_buffering_failed",
+                        operationType: event.operationType,
+                        error: event.error,
+                    })
+                    this.activeBufferingMarker = undefined
+                }
                 this.omProgressComponent?.update(this.omProgress)
                 this.updateStatusLine()
                 this.ui.requestRender()
                 break
+            case "om_activation": {
+                this.omProgress = {
+                    ...this.omProgress,
+                    bufferingMessages:
+                        event.operationType === "observation"
+                            ? false
+                            : this.omProgress.bufferingMessages,
+                    bufferingObservations:
+                        event.operationType === "reflection"
+                            ? false
+                            : this.omProgress.bufferingObservations,
+                }
+                const markerData: OMMarkerData = {
+                    type: "om_activation",
+                    operationType: event.operationType,
+                    tokensActivated: event.tokensActivated,
+                    observationTokens: event.observationTokens,
+                }
+                const marker = new OMMarkerComponent(markerData)
+                this.addOMComponentBeforeStreaming(marker)
+                this.activeBufferingMarker = undefined
+                this.omProgressComponent?.update(this.omProgress)
+                this.updateStatusLine()
+                this.ui.requestRender()
+                break
+            }
             case "info":
                 this.showInfo(event.message)
                 this.ui.requestRender()
@@ -986,6 +1430,27 @@ ${instructions}`,
     private showError(message: string): void {
         this.chatContainer.addChild(new ErrorDisplayComponent(message))
         this.updateStatusLine()
+    }
+
+    private addOMComponentBeforeStreaming(component: Container): void {
+        if (this.streamingComponent) {
+            const idx = this.chatContainer.children.indexOf(this.streamingComponent)
+            if (idx >= 0) {
+                this.chatContainer.children.splice(idx, 0, component)
+                this.chatContainer.invalidate()
+                return
+            }
+        }
+        this.chatContainer.addChild(component)
+    }
+
+    private removeMarker(marker?: OMMarkerComponent): void {
+        if (!marker) return
+        const idx = this.chatContainer.children.indexOf(marker)
+        if (idx >= 0) {
+            this.chatContainer.children.splice(idx, 1)
+            this.chatContainer.invalidate()
+        }
     }
 
     private resolveModelId(

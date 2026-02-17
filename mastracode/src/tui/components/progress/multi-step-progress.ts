@@ -18,6 +18,9 @@ export class MultiStepProgressComponent extends Container {
 
     setItems(items: MultiStepProgressItem[]): void {
         this.content.clear()
+        if (items.length === 0) {
+            return
+        }
         this.content.addChild(new Spacer(1))
         this.content.addChild(new Text("Progress", 0, 0))
         for (const item of items) {

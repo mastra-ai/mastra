@@ -5,19 +5,11 @@
  * separate mastracode repo, but keeps missing subsystems as placeholders
  * for now (TUI/hooks/MCP/providers).
  */
-import * as path from "node:path"
-
 import { z } from "zod"
 
 import { createMastraCodeHarness } from "./harness"
 import { MastraTUI, mastra } from "./tui"
-
-type ProjectInfo = {
-    rootPath: string
-    name: string
-    resourceId: string
-    gitBranch?: string
-}
+import { detectProject } from "./utils"
 
 type ThreadRecord = {
     id: string
@@ -37,20 +29,6 @@ type MessageRecord = {
     content: {
         format: 2
         parts: Array<Record<string, unknown>>
-    }
-}
-
-/**
- * Placeholder project detection. Mirrors old structure for now.
- * TODO: Replace with robust git/project detection from mastracode utilities.
- */
-function detectProject(cwd: string): ProjectInfo {
-    const rootPath = path.resolve(cwd)
-    return {
-        rootPath,
-        name: path.basename(rootPath),
-        resourceId: rootPath,
-        gitBranch: undefined,
     }
 }
 
@@ -185,13 +163,6 @@ async function main() {
     const project = detectProject(process.cwd())
     const storage = createPlaceholderStore()
     const agent = createPlaceholderAgent()
-
-    console.log(`Project: ${project.name}`)
-    console.log(`Resource ID: ${project.resourceId}`)
-    if (project.gitBranch) {
-        console.log(`Branch: ${project.gitBranch}`)
-    }
-    console.log()
 
     const harness = createMastraCodeHarness({
         id: "mastra-code",

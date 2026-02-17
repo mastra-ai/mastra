@@ -6,21 +6,29 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "typecheck": "tsc --noEmit",
+    "build": "tsup",
+    "typecheck": "NODE_OPTIONS='--max-old-space-size=8192' tsc --noEmit",
     "test": "vitest"
   },
   "dependencies": {
-    "ai": "^6.0.50",
     "@ai-sdk/anthropic": "^3.0.23",
     "@ai-sdk/openai": "^3.0.21",
     "@mariozechner/pi-tui": "^0.52.12",
     "@mastra/core": "workspace:*",
+    "ai": "^6.0.50",
     "chalk": "^5.6.2",
     "cli-highlight": "^2.1.11",
+    "execa": "^9.6.1",
+    "fastest-levenshtein": "^1.0.16",
+    "js-tiktoken": "^1.0.21",
+    "strip-ansi": "^7.1.2",
+    "tree-kill": "^1.2.2",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "22.19.3",
+    "@types/strip-ansi": "^5.2.1",
+    "tsup": "^8.5.1",
     "tsx": "^4.19.2",
     "typescript": "catalog:",
     "vitest": "catalog:"
