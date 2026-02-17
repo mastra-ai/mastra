@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.3.1",
   "type": "module",
   "homepage": "https://mastra.ai",
   "files": [
@@ -31,11 +31,12 @@
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
     "@mastra/client-js": "workspace:*",
+    "date-fns": "^4.1.0",
     "@mastra/core": "workspace:*",
     "@mastra/playground-ui": "workspace:^",
     "@mastra/react": "workspace:*",
     "@posthog/react": "^1.5.2",
-    "@tanstack/react-query": "^5.90.9",
+    "@tanstack/react-query": "^5.90.21",
     "lucide-react": "^0.522.0",
     "posthog-js": "^1.281.0",
     "react": "^19.2.3",
@@ -48,7 +49,7 @@
     "@tailwindcss/container-queries": "^0.1.1",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
-    "@vitejs/plugin-react": "^5.1.2",
+    "@vitejs/plugin-react": "^5.1.4",
     "autoprefixer": "^10.4.24",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

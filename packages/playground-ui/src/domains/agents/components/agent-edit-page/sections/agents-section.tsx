@@ -10,12 +10,8 @@ import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
 import { useAgents } from '../../../hooks/use-agents';
 import { AgentCreateContent } from '../../agent-create-content';
-import type { AgentFormValues } from '../utils/form-validation';
+import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-
-interface EntityConfig {
-  description?: string;
-}
 
 interface AgentsSectionProps {
   control: Control<AgentFormValues>;

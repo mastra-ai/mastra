@@ -1,3 +1,4 @@
+import { coreFeatures } from '@mastra/core/features';
 import { v4 as uuid } from '@lukeed/uuid';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
 
@@ -14,7 +15,6 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
-    MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
   }
 }
@@ -56,7 +56,8 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
-import { CreateLayoutWrapper, EditLayoutWrapper } from './pages/cms/agents/layout';
+import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
+import { EditLayoutWrapper } from './pages/cms/agents/edit-layout';
 import CmsAgentInformationPage from './pages/cms/agents/information';
 import CmsAgentToolsPage from './pages/cms/agents/tools';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
@@ -67,6 +68,14 @@ import CmsAgentVariablesPage from './pages/cms/agents/variables';
 import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import Datasets from './pages/datasets';
+import DatasetPage from './pages/datasets/dataset';
+import DatasetItemPage from './pages/datasets/dataset/item';
+import DatasetExperiment from './pages/datasets/dataset/experiment';
+import DatasetCompare from './pages/datasets/dataset/compare';
+import DatasetCompareItems from './pages/datasets/dataset/item/compare';
+import DatasetCompareVersions from './pages/datasets/dataset/item/versions';
+import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -101,6 +110,10 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
+  datasetExperimentLink: (datasetId: string, experimentId: string) =>
+    `/datasets/${datasetId}/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -118,6 +131,18 @@ const RootLayout = () => {
 
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
+const isExperimentalFeatures = coreFeatures.has('datasets');
+
+const agentCmsChildRoutes = [
+  { index: true, element: <CmsAgentInformationPage /> },
+  { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
+  { path: 'tools', element: <CmsAgentToolsPage /> },
+  { path: 'agents', element: <CmsAgentAgentsPage /> },
+  { path: 'scorers', element: <CmsAgentScorersPage /> },
+  { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
+  { path: 'memory', element: <CmsAgentMemoryPage /> },
+  { path: 'variables', element: <CmsAgentVariablesPage /> },
+];
 
 const routes = [
   {
@@ -139,30 +164,12 @@ const routes = [
       {
         path: '/cms/agents/create',
         element: <CreateLayoutWrapper />,
-        children: [
-          { index: true, element: <CmsAgentInformationPage /> },
-          { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
-          { path: 'tools', element: <CmsAgentToolsPage /> },
-          { path: 'agents', element: <CmsAgentAgentsPage /> },
-          { path: 'scorers', element: <CmsAgentScorersPage /> },
-          { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
-          { path: 'memory', element: <CmsAgentMemoryPage /> },
-          { path: 'variables', element: <CmsAgentVariablesPage /> },
-        ],
+        children: agentCmsChildRoutes,
       },
       {
         path: '/cms/agents/:agentId/edit',
         element: <EditLayoutWrapper />,
-        children: [
-          { index: true, element: <CmsAgentInformationPage /> },
-          { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
-          { path: 'tools', element: <CmsAgentToolsPage /> },
-          { path: 'agents', element: <CmsAgentAgentsPage /> },
-          { path: 'scorers', element: <CmsAgentScorersPage /> },
-          { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
-          { path: 'memory', element: <CmsAgentMemoryPage /> },
-          { path: 'variables', element: <CmsAgentVariablesPage /> },
-        ],
+        children: agentCmsChildRoutes,
       },
       { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
       { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
@@ -216,6 +223,19 @@ const routes = [
           { path: 'graph/:runId', element: <Workflow /> },
         ],
       },
+
+      ...(isExperimentalFeatures
+        ? [
+            { path: '/datasets', element: <Datasets /> },
+            { path: '/datasets/:datasetId', element: <DatasetPage /> },
+            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetCompareVersions /> },
+            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/datasets/:datasetId/compare', element: <DatasetCompare /> },
+            { path: '/datasets/:datasetId/items', element: <DatasetCompareItems /> },
+            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+          ]
+        : []),
 
       { index: true, loader: () => redirect('/agents') },
       { path: '/request-context', element: <RequestContext /> },
