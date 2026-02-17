@@ -23,6 +23,8 @@ export const useStoredAgent = (agentId?: string) => {
   });
 };
 
+export type StoredAgent = NonNullable<ReturnType<typeof useStoredAgent>['data']>;
+
 export const useStoredAgentMutations = (agentId?: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();
