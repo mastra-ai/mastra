@@ -544,7 +544,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -623,6 +623,7 @@
         "qwen/qwen3-vl-30b-a3b-instruct",
         "qwen/qwen3-vl-30b-a3b-thinking",
         "qwen/qwen3-vl-8b-instruct",
+        "qwen/qwen3.5-397b-a17b",
         "sao10k/L3-8B-Stheno-v3.2",
         "sao10k/l3-70b-euryale-v2.1",
         "sao10k/l3-8b-lunaris",
@@ -809,7 +810,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1014,7 +1015,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -2361,7 +2362,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -3267,7 +3268,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "novita-ai": [
       "baichuan/baichuan-m2-32b",
       "baidu/ernie-4.5-21B-a3b",
@@ -3337,6 +3338,7 @@
       "qwen/qwen3-vl-30b-a3b-instruct",
       "qwen/qwen3-vl-30b-a3b-thinking",
       "qwen/qwen3-vl-8b-instruct",
+      "qwen/qwen3.5-397b-a17b",
       "sao10k/L3-8B-Stheno-v3.2",
       "sao10k/l3-70b-euryale-v2.1",
       "sao10k/l3-8b-lunaris",
@@ -3499,7 +3501,7 @@
       "xai/grok-4.1-fast-reasoning",
       "xai/grok-code-fast-1"
     ],
-    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "bailing": ["Ling-1T", "Ring-1T"],
     "alibaba": [
       "qvq-max",
@@ -3647,7 +3649,7 @@
       "qwen3-coder-480b-a35b-instruct",
       "qwen3-max-2026-01-23"
     ],
-    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "mistral": [
       "codestral-latest",
@@ -4721,7 +4723,7 @@
     ],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
-    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "vultr": [
       "deepseek-r1-distill-llama-70b",
       "deepseek-r1-distill-qwen-32b",
