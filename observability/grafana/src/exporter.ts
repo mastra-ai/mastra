@@ -29,6 +29,38 @@ import type { GrafanaAuth, GrafanaExporterConfig } from './types.js';
 import { DEFAULTS } from './types.js';
 
 /**
+ * Known API path suffixes for each backend.
+ * Used to detect if the user already included the path in their endpoint URL.
+ */
+const TEMPO_PATH = '/v1/traces';
+const MIMIR_PATH = '/v1/metrics';
+const LOKI_PATH = '/loki/api/v1/push';
+
+/**
+ * Normalize an endpoint URL:
+ * - Strip trailing slashes
+ * - Ensure https:// prefix if no protocol is present
+ */
+function normalizeEndpoint(endpoint: string): string {
+  let url = endpoint.replace(/\/+$/, '');
+  if (url && !/^https?:\/\//i.test(url)) {
+    url = `https://${url}`;
+  }
+  return url;
+}
+
+/**
+ * Build the full URL for a backend, avoiding double-pathing.
+ * If the endpoint already ends with the expected path suffix, use it as-is.
+ */
+function buildUrl(endpoint: string, pathSuffix: string): string {
+  if (endpoint.endsWith(pathSuffix)) {
+    return endpoint;
+  }
+  return `${endpoint}${pathSuffix}`;
+}
+
+/**
  * Build HTTP headers from GrafanaAuth configuration.
  */
 function buildAuthHeaders(auth: GrafanaAuth): Record<string, string> {
@@ -129,9 +161,9 @@ export class GrafanaExporter extends BaseExporter {
       return;
     }
 
-    this.tempoEndpoint = tempoEndpoint ?? '';
-    this.mimirEndpoint = mimirEndpoint ?? '';
-    this.lokiEndpoint = lokiEndpoint ?? '';
+    this.tempoEndpoint = tempoEndpoint ? normalizeEndpoint(tempoEndpoint) : '';
+    this.mimirEndpoint = mimirEndpoint ? normalizeEndpoint(mimirEndpoint) : '';
+    this.lokiEndpoint = lokiEndpoint ? normalizeEndpoint(lokiEndpoint) : '';
 
     // Resolve per-service tenant IDs, falling back to the shared tenantId
     this.tempoTenantId = config.tempoTenantId ?? config.tenantId;
@@ -319,7 +351,7 @@ export class GrafanaExporter extends BaseExporter {
    * Send OTLP trace data to Grafana Tempo.
    */
   private async sendToTempo(body: unknown): Promise<void> {
-    const url = `${this.tempoEndpoint}/v1/traces`;
+    const url = buildUrl(this.tempoEndpoint, TEMPO_PATH);
     await this.sendRequest(url, body, this.tempoAuthHeaders, this.tempoTenantId);
   }
 
@@ -327,7 +359,7 @@ export class GrafanaExporter extends BaseExporter {
    * Send OTLP metric data to Grafana Mimir.
    */
   private async sendToMimir(body: unknown): Promise<void> {
-    const url = `${this.mimirEndpoint}/v1/metrics`;
+    const url = buildUrl(this.mimirEndpoint, MIMIR_PATH);
     await this.sendRequest(url, body, this.mimirAuthHeaders, this.mimirTenantId);
   }
 
@@ -335,7 +367,7 @@ export class GrafanaExporter extends BaseExporter {
    * Send log data to Grafana Loki.
    */
   private async sendToLoki(body: unknown): Promise<void> {
-    const url = `${this.lokiEndpoint}/loki/api/v1/push`;
+    const url = buildUrl(this.lokiEndpoint, LOKI_PATH);
     await this.sendRequest(url, body, this.lokiAuthHeaders, this.lokiTenantId);
   }
 

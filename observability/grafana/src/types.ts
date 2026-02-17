@@ -35,8 +35,10 @@ export type GrafanaAuth =
 export interface GrafanaExporterConfig extends BaseExporterConfig {
   /**
    * Tempo endpoint for traces (OTLP/HTTP JSON).
-   * Exporter appends `/v1/traces`.
+   * Exporter appends `/v1/traces` unless the URL already includes it.
+   * URLs are normalized (https:// added if missing, trailing slashes stripped).
    * - Cloud default: `https://otlp-gateway-{zone}.grafana.net/otlp`
+   * - Cloud direct: `https://tempo-prod-XX-{zone}.grafana.net:443`
    * - Self-hosted example: `http://localhost:4318`
    * Falls back to `GRAFANA_TEMPO_ENDPOINT` env var.
    */
@@ -44,7 +46,10 @@ export interface GrafanaExporterConfig extends BaseExporterConfig {
 
   /**
    * Mimir endpoint for metrics (OTLP/HTTP JSON).
-   * Exporter appends `/v1/metrics`.
+   * Exporter appends `/v1/metrics` unless the URL already includes it.
+   * URLs are normalized (https:// added if missing, trailing slashes stripped).
+   * NOTE: This must be an OTLP-compatible endpoint, not the Prometheus
+   * remote write endpoint (`/api/prom/push`).
    * - Cloud default: `https://otlp-gateway-{zone}.grafana.net/otlp`
    * - Self-hosted example: `http://localhost:9090/otlp`
    * Falls back to `GRAFANA_MIMIR_ENDPOINT` env var.
@@ -53,6 +58,9 @@ export interface GrafanaExporterConfig extends BaseExporterConfig {
 
   /**
    * Loki endpoint for logs (JSON push API).
+   * Exporter appends `/loki/api/v1/push` unless the URL already includes it.
+   * URLs are normalized (https:// added if missing, trailing slashes stripped).
+   * - Cloud direct: `https://logs-prod-XXX.grafana.net`
    * - Cloud default: `https://logs-{zone}.grafana.net`
    * - Self-hosted example: `http://localhost:3100`
    * Falls back to `GRAFANA_LOKI_ENDPOINT` env var.

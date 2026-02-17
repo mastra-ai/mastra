@@ -18,10 +18,28 @@ import { DEFAULTS } from './types.js';
  * Grafana Cloud assigns a unique instance ID per service (Tempo, Mimir, Loki).
  * You can provide per-service instance IDs, or use a single `instanceId` as fallback.
  *
- * Grafana Cloud uses a unified OTLP gateway for traces and metrics:
- * - Traces: `https://otlp-gateway-{zone}.grafana.net/otlp/v1/traces`
- * - Metrics: `https://otlp-gateway-{zone}.grafana.net/otlp/v1/metrics`
- * - Logs: `https://logs-{zone}.grafana.net/loki/api/v1/push`
+ * By default, traces and metrics use the OTLP gateway, and logs use the Loki push API.
+ * Each endpoint can be overridden with a direct URL from your Grafana Cloud settings.
+ *
+ * Endpoint resolution order (per service):
+ * 1. Explicit endpoint in config (e.g., `tempoEndpoint`)
+ * 2. Environment variable (e.g., `GRAFANA_CLOUD_TEMPO_ENDPOINT`)
+ * 3. Zone-based default
+ *
+ * The exporter automatically normalizes URLs (adds `https://` if missing,
+ * strips trailing slashes, and avoids double-pathing if the URL already
+ * includes the API path).
+ *
+ * @example Using direct endpoints from Grafana Cloud settings
+ * ```typescript
+ * new GrafanaExporter(grafanaCloud({
+ *   tempoEndpoint: 'https://tempo-prod-30-prod-us-east-3.grafana.net:443',
+ *   mimirEndpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
+ *   lokiEndpoint: 'https://logs-prod-042.grafana.net',
+ *   instanceId: '123456',
+ *   apiKey: 'glc_...',
+ * }))
+ * ```
  *
  * @example Zero-config (env vars only)
  * ```bash
@@ -33,7 +51,7 @@ import { DEFAULTS } from './types.js';
  * new GrafanaExporter(grafanaCloud())
  * ```
  *
- * @example Per-service instance IDs (recommended for Grafana Cloud)
+ * @example Per-service instance IDs
  * ```typescript
  * new GrafanaExporter(grafanaCloud({
  *   tempoInstanceId: '111111',
@@ -41,14 +59,6 @@ import { DEFAULTS } from './types.js';
  *   lokiInstanceId: '333333',
  *   apiKey: 'glc_...',
  *   zone: 'prod-eu-west-0',
- * }))
- * ```
- *
- * @example Single instance ID (fallback for all services)
- * ```typescript
- * new GrafanaExporter(grafanaCloud({
- *   instanceId: '123456',
- *   apiKey: 'glc_...',
  * }))
  * ```
  */
@@ -65,8 +75,10 @@ export function grafanaCloud(config: GrafanaCloudConfig = {}): GrafanaExporterCo
   const lokiInstanceId =
     config.lokiInstanceId ?? process.env['GRAFANA_CLOUD_LOKI_INSTANCE_ID'] ?? defaultInstanceId;
 
-  // Grafana Cloud uses a unified OTLP gateway for traces and metrics,
-  // and the standard Loki endpoint for logs.
+  // Grafana Cloud uses a unified OTLP gateway for traces and metrics.
+  // Logs use the Loki push API directly.
+  // These are zone-based defaults — override with explicit endpoints if your
+  // Grafana Cloud hostnames differ (e.g., logs-prod-042.grafana.net).
   const otlpGateway = `https://otlp-gateway-${zone}.grafana.net/otlp`;
 
   const result: GrafanaExporterConfig = {

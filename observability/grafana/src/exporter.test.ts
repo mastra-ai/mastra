@@ -408,6 +408,104 @@ describe('GrafanaExporter', () => {
   });
 
   // ============================================================================
+  // URL Construction
+  // ============================================================================
+
+  describe('URL construction', () => {
+    it('should normalize endpoints without protocol by adding https://', async () => {
+      const exporter = new GrafanaExporter({
+        tempoEndpoint: 'tempo-prod-30.grafana.net:443',
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onTracingEvent(makeTracingEvent());
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toBe('https://tempo-prod-30.grafana.net:443/v1/traces');
+    });
+
+    it('should strip trailing slashes from endpoints', async () => {
+      const exporter = new GrafanaExporter({
+        tempoEndpoint: 'https://tempo.example.com/',
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onTracingEvent(makeTracingEvent());
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toBe('https://tempo.example.com/v1/traces');
+    });
+
+    it('should not double-append /v1/traces if endpoint already includes it', async () => {
+      const exporter = new GrafanaExporter({
+        tempoEndpoint: 'https://tempo.example.com/v1/traces',
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onTracingEvent(makeTracingEvent());
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toBe('https://tempo.example.com/v1/traces');
+    });
+
+    it('should not double-append /v1/metrics if endpoint already includes it', async () => {
+      const exporter = new GrafanaExporter({
+        mimirEndpoint: 'https://mimir.example.com/otlp/v1/metrics',
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onMetricEvent(makeMetricEvent());
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toBe('https://mimir.example.com/otlp/v1/metrics');
+    });
+
+    it('should not double-append /loki/api/v1/push if endpoint already includes it', async () => {
+      const exporter = new GrafanaExporter({
+        lokiEndpoint: 'https://logs-prod-042.grafana.net/loki/api/v1/push',
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onLogEvent(makeLogEvent());
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toBe('https://logs-prod-042.grafana.net/loki/api/v1/push');
+    });
+
+    it('should handle real Grafana Cloud direct endpoints correctly', async () => {
+      const exporter = new GrafanaExporter({
+        tempoEndpoint: 'tempo-prod-30-prod-us-east-3.grafana.net:443',
+        lokiEndpoint: 'logs-prod-042.grafana.net',
+        mimirEndpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
+        auth: { type: 'basic', username: '123', password: 'key' },
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onTracingEvent(makeTracingEvent());
+      await exporter.onLogEvent(makeLogEvent());
+      await exporter.onMetricEvent(makeMetricEvent());
+
+      const urls = mockFetch.mock.calls.map((c: unknown[]) => c[0] as string);
+
+      expect(urls).toContain('https://tempo-prod-30-prod-us-east-3.grafana.net:443/v1/traces');
+      expect(urls).toContain('https://logs-prod-042.grafana.net/loki/api/v1/push');
+      expect(urls).toContain('https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/metrics');
+    });
+  });
+
+  // ============================================================================
   // Tracing
   // ============================================================================
 
