@@ -361,8 +361,8 @@ export interface RegistryModelListEntry {
 export interface RunRegistryEntry {
   /** Resolved tools with execute functions */
   tools: Record<string, CoreTool>;
-  /** SaveQueueManager for message persistence */
-  saveQueueManager: SaveQueueManager;
+  /** SaveQueueManager for message persistence (undefined when memory is not configured) */
+  saveQueueManager?: SaveQueueManager;
   /** The language model instance (non-serializable, has doStream method) */
   model: MastraLanguageModel;
   /** Model list for fallback support (stores actual model instances) */

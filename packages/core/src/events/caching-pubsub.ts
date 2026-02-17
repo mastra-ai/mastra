@@ -47,6 +47,8 @@ export interface CachingPubSubOptions {
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
   private readonly logger?: IMastraLogger;
+  /** Maps original callbacks to their wrapped versions for proper unsubscribe */
+  private callbackMap = new Map<EventCallback, EventCallback>();
 
   constructor(
     private readonly inner: PubSub,
@@ -148,6 +150,7 @@ export class CachingPubSub extends PubSub {
     };
 
     // 1. Subscribe to live events FIRST to avoid race condition
+    this.callbackMap.set(cb, wrappedCb);
     await this.inner.subscribe(topic, wrappedCb);
 
     // 2. Fetch and replay cached history
@@ -158,6 +161,9 @@ export class CachingPubSub extends PubSub {
         cb(event);
       }
     }
+
+    // Deduplication only needed during replay/live overlap — clear to free memory
+    seen.clear();
   }
 
   /**
@@ -181,6 +187,7 @@ export class CachingPubSub extends PubSub {
     };
 
     // 1. Subscribe to live events FIRST to avoid race condition
+    this.callbackMap.set(cb, wrappedCb);
     await this.inner.subscribe(topic, wrappedCb);
 
     // 2. Fetch and replay cached history FROM the specified index
@@ -191,13 +198,18 @@ export class CachingPubSub extends PubSub {
         cb(event);
       }
     }
+
+    // Deduplication only needed during replay/live overlap — clear to free memory
+    seen.clear();
   }
 
   /**
    * Unsubscribe from a topic.
    */
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
-    await this.inner.unsubscribe(topic, cb);
+    const wrappedCb = this.callbackMap.get(cb) ?? cb;
+    this.callbackMap.delete(cb);
+    await this.inner.unsubscribe(topic, wrappedCb);
   }
 
   /**

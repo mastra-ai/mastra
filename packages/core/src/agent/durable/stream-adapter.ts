@@ -334,7 +334,7 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
       error: {
         name: error.name,
         message: error.message,
-        stack: error.stack,
+        // stack intentionally omitted — avoid leaking internals through external pubsub
       },
     },
   });

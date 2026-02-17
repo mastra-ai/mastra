@@ -11,6 +11,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
 import type { ToolsInput } from '../types';
 
+import { AGENT_STREAM_TOPIC } from './constants';
 import { localExecutor } from './executors';
 import type { WorkflowExecutor } from './executors';
 import { prepareForDurableExecution } from './preparation';
@@ -451,6 +452,7 @@ export class DurableAgent<
         if (!cleanedUp) {
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
+          this.#clearPubsubTopic(runId);
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -503,6 +505,7 @@ export class DurableAgent<
         streamCleanup();
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
         cleanedUp = true;
       }
     };
@@ -550,6 +553,7 @@ export class DurableAgent<
         if (!cleanedUp) {
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
+          this.#clearPubsubTopic(runId);
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -605,6 +609,7 @@ export class DurableAgent<
         streamCleanup();
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
         cleanedUp = true;
       }
     };
@@ -646,6 +651,9 @@ export class DurableAgent<
       if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
       autoCleanupTimer = setTimeout(() => {
         if (!cleanedUp) {
+          this.#runRegistry.cleanup(runId);
+          globalRunRegistry.delete(runId);
+          this.#clearPubsubTopic(runId);
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -690,6 +698,9 @@ export class DurableAgent<
       }
       if (!cleanedUp) {
         streamCleanup();
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
         cleanedUp = true;
       }
     };
@@ -704,6 +715,17 @@ export class DurableAgent<
       resourceId: memoryInfo?.resourceId,
       cleanup,
     };
+  }
+
+  /**
+   * Clear cached pubsub events for a run's topic.
+   * Only effective when pubsub supports clearTopic (e.g. CachingPubSub).
+   */
+  #clearPubsubTopic(runId: string): void {
+    const pubsub = this.pubsub;
+    if ('clearTopic' in pubsub && typeof (pubsub as any).clearTopic === 'function') {
+      void (pubsub as any).clearTopic(AGENT_STREAM_TOPIC(runId));
+    }
   }
 
   /**

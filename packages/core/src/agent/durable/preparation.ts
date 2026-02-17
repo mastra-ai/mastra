@@ -241,7 +241,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 9. Create registry entry for non-serializable state
   const registryEntry: RunRegistryEntry = {
     tools,
-    saveQueueManager: saveQueueManager!,
+    saveQueueManager,
     model,
     // Store model list instances for fallback support (enables testing with mock models)
     modelList: modelList

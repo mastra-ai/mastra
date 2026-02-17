@@ -565,7 +565,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async observe(runId, observeOptions) {
       // Create the stream subscription with fromIndex support
-      const { output, cleanup: streamCleanup } = createDurableAgentStream<TOutput>({
+      const {
+        output,
+        cleanup: streamCleanup,
+        ready,
+      } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
@@ -581,6 +585,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onError: observeOptions?.onError,
         onSuspended: observeOptions?.onSuspended,
       });
+
+      await ready;
 
       return {
         output,
