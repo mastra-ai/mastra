@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Vercel AI Gateway now correctly supports file parts (PDF, audio) in addition to images. No changes required to existing code.
+Add file part support (PDF, audio) to Vercel AI Gateway. Fixes #13098.
