@@ -103,7 +103,12 @@ export class InngestPubSub extends PubSub {
         data: dataToSend,
       });
     } catch (err: any) {
-      // Log but don't throw - publishing failures shouldn't break workflow execution
+      // For agent stream terminal events, rethrow — losing a finish/error event
+      // causes the client stream to hang indefinitely
+      if (topicType === 'agent' && (event.type === 'finish' || event.type === 'error')) {
+        throw err;
+      }
+      // Non-terminal events: log but don't throw
       console.error('InngestPubSub publish error:', err?.message ?? err);
     }
   }

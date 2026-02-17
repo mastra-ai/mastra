@@ -634,11 +634,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 // =============================================================================
 
 /**
- * Symbol to identify InngestAgent instances
- */
-export const INNGEST_AGENT_SYMBOL = Symbol.for('mastra.inngestAgent');
-
-/**
  * Check if an object is an InngestAgent
  */
 export function isInngestAgent(obj: any): obj is InngestAgent {

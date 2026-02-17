@@ -1243,16 +1243,19 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       const stream = new ReadableStream({
         start(controller) {
           handleEvent = (event: any) => {
+            const isTerminal = event.type === 'finish' || event.type === 'error';
             try {
               controller.enqueue(event);
-              // Close stream on terminal events to avoid hanging clients
-              if (event.type === 'finish' || event.type === 'error') {
+              if (isTerminal) {
                 controller.close();
-                void pubsub.unsubscribe(topic, handleEvent!);
-                handleEvent = null;
               }
             } catch {
               // Stream may be closed
+            }
+            // Unsubscribe outside try so cleanup runs even if enqueue/close throws
+            if (isTerminal && handleEvent) {
+              void pubsub.unsubscribe(topic, handleEvent);
+              handleEvent = null;
             }
           };
 
