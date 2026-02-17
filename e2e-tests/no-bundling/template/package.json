@@ -12,7 +12,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.18.2",
+  "packageManager": "pnpm@10.29.3",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
@@ -24,11 +24,11 @@
     "@mastra/loggers": "no-bundling-test",
     "@mastra/memory": "no-bundling-test",
     "@mastra/observability": "no-bundling-test",
-    "ai": "^5.0.101",
+    "ai": "^5.0.124",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "mastra": "no-bundling-test",
     "typescript": "^5.9.3"
   }

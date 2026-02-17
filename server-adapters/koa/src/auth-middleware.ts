@@ -21,7 +21,7 @@ export const authenticationMiddleware: Middleware = async (ctx: Context, next: N
   const method = String(ctx.method || 'GET');
   const getHeader = (name: string) => ctx.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authentication for dev playground requests
     return next();
   }
@@ -75,7 +75,9 @@ export const authenticationMiddleware: Middleware = async (ctx: Context, next: N
 
     return next();
   } catch (err) {
-    console.error(err);
+    mastra.getLogger()?.error('Authentication error', {
+      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    });
     ctx.status = 401;
     ctx.body = { error: 'Invalid or expired token' };
     return;
@@ -96,7 +98,7 @@ export const authorizationMiddleware: Middleware = async (ctx: Context, next: Ne
   const method = String(ctx.method || 'GET');
   const getHeader = (name: string) => ctx.headers[name.toLowerCase()] as string | undefined;
 
-  if (isDevPlaygroundRequest(path, method, getHeader, authConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     // Skip authorization for dev playground requests
     return next();
   }
@@ -124,7 +126,9 @@ export const authorizationMiddleware: Middleware = async (ctx: Context, next: Ne
       ctx.body = { error: 'Access denied' };
       return;
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorizeUser', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       ctx.status = 500;
       ctx.body = { error: 'Authorization error' };
       return;
@@ -158,7 +162,11 @@ export const authorizationMiddleware: Middleware = async (ctx: Context, next: Ne
       ctx.body = { error: 'Access denied' };
       return;
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorize', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        path,
+        method,
+      });
       ctx.status = 500;
       ctx.body = { error: 'Authorization error' };
       return;

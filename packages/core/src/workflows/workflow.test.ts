@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { z as zv4 } from 'zod/v4';
@@ -6131,7 +6132,7 @@ describe('Workflow', () => {
       });
 
       try {
-        // @ts-expect-error - we expect this to throw an error
+        // @ts-expect-error - testing dynamic workflow result - we expect this to throw an error
         workflow.then(step1).waitForEvent('hello-event', step2).commit();
       } catch (error) {
         expect(error).toBeInstanceOf(MastraError);
@@ -7523,9 +7524,9 @@ describe('Workflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.increment.output).toEqual({ value: 12 });
     });
 
@@ -7596,9 +7597,9 @@ describe('Workflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.increment.output).toEqual({ value: 12 });
     });
   });
@@ -8515,9 +8516,9 @@ describe('Workflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(0);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.start.output).toEqual({ newValue: 2 });
     });
 
@@ -8629,9 +8630,9 @@ describe('Workflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['else-branch'].output).toEqual({ finalValue: 26 + 6 + 1 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.start.output).toEqual({ newValue: 7 });
     });
   });
@@ -8721,7 +8722,7 @@ describe('Workflow', () => {
         await run.start({
           inputData: {
             required: 'test',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             nested: { value: 'not-a-number' },
           },
         });
@@ -8737,7 +8738,7 @@ describe('Workflow', () => {
         await run.start({
           inputData: {
             required: 'test',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             nested: { value: 'not-a-number' },
           },
         });
@@ -8796,7 +8797,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
     });
 
@@ -9470,14 +9471,14 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].error.message).toContain(
         'Step input validation failed: \n- newValue: Required',
       );
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -9760,7 +9761,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
@@ -9773,7 +9774,7 @@ describe('Workflow', () => {
         }),
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       const step2 = createStep({
         id: 'step2',
         execute: vi.fn().mockResolvedValue({ result: 'step2 success' }),
@@ -9790,7 +9791,7 @@ describe('Workflow', () => {
 
       const step3 = createStep({
         id: 'step3',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: vi.fn().mockResolvedValue({ result: 'step3 success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
@@ -9805,9 +9806,9 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: triggerSchema,
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9817,14 +9818,14 @@ describe('Workflow', () => {
 
       const parallelWorkflow = createWorkflow({
         id: 'parallel-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({
           required: zv4.string(),
           nested: zv4.object({
             value: zv4.number(),
           }),
         }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -9856,7 +9857,7 @@ describe('Workflow', () => {
         await run.start({
           inputData: {
             required: 'test',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             nested: { value: 'not-a-number' },
           },
         });
@@ -9882,7 +9883,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: async ({ inputData }) => {
           return inputData;
         },
@@ -9892,9 +9893,9 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: triggerSchema,
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: triggerSchema,
         steps: [step1],
         options: { validateInputs: true },
@@ -9918,7 +9919,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
     });
 
@@ -9929,7 +9930,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -9941,7 +9942,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -9953,11 +9954,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({
           start: zv4.string(),
         }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -10022,7 +10023,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: async () => {
           return {};
         },
@@ -10036,7 +10037,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string().optional().default('test'),
@@ -10048,11 +10049,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({
           start: zv4.string(),
         }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -10062,7 +10063,7 @@ describe('Workflow', () => {
       workflow
         .then(step1)
         .map({
-          // @ts-expect-error
+          // @ts-expect-error - testing dynamic workflow result
           start: mapVariable({
             step: step1,
             path: 'start',
@@ -10109,7 +10110,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: async ({ inputData }) => {
           return { start: inputData.start };
         },
@@ -10123,7 +10124,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         execute: successAction,
         inputSchema: zv4.object({
           start: zv4.string(),
@@ -10135,11 +10136,11 @@ describe('Workflow', () => {
 
       const workflow = createWorkflow({
         id: 'test-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({
           start: zv4.number(),
         }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           result: zv4.string(),
         }),
@@ -10208,13 +10209,13 @@ describe('Workflow', () => {
     it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
       const resumeStep = createStep({
         id: 'resume',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         resumeSchema: zv4.object({ value: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         suspendSchema: zv4.object({ message: zv4.string() }),
         execute: async ({ inputData, resumeData, suspend }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
@@ -10229,11 +10230,11 @@ describe('Workflow', () => {
 
       const incrementStep = createStep({
         id: 'increment',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({
           value: zv4.number(),
         }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           value: zv4.number(),
         }),
@@ -10246,9 +10247,9 @@ describe('Workflow', () => {
 
       const incrementWorkflow = createWorkflow({
         id: 'increment-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ value: zv4.number() }),
         options: { validateInputs: true },
       })
@@ -10257,9 +10258,9 @@ describe('Workflow', () => {
         .then(
           createStep({
             id: 'final',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             inputSchema: zv4.object({ value: zv4.number() }),
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             outputSchema: zv4.object({ value: zv4.number() }),
             execute: async ({ inputData }) => ({ value: inputData.value }),
           }),
@@ -10300,13 +10301,13 @@ describe('Workflow', () => {
     it('should use default value from resumeSchema when resuming a workflow', async () => {
       const resumeStep = createStep({
         id: 'resume',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         resumeSchema: zv4.object({ value: zv4.number().optional().default(21) }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         suspendSchema: zv4.object({ message: zv4.string() }),
         execute: async ({ inputData, resumeData, suspend }) => {
           const finalValue = (resumeData?.value ?? 0) + inputData.value;
@@ -10321,11 +10322,11 @@ describe('Workflow', () => {
 
       const incrementStep = createStep({
         id: 'increment',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({
           value: zv4.number(),
         }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           value: zv4.number(),
         }),
@@ -10338,9 +10339,9 @@ describe('Workflow', () => {
 
       const incrementWorkflow = createWorkflow({
         id: 'increment-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({ value: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ value: zv4.number() }),
         options: { validateInputs: true },
       })
@@ -10349,9 +10350,9 @@ describe('Workflow', () => {
         .then(
           createStep({
             id: 'final',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             inputSchema: zv4.object({ value: zv4.number() }),
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             outputSchema: zv4.object({ value: zv4.number() }),
             execute: async ({ inputData }) => ({ value: inputData.value }),
           }),
@@ -10400,9 +10401,9 @@ describe('Workflow', () => {
       });
       const startStep = createStep({
         id: 'start',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({ startValue: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           newValue: zv4.number(),
         }),
@@ -10414,9 +10415,9 @@ describe('Workflow', () => {
       });
       const otherStep = createStep({
         id: 'other',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({ newValue: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
         execute: other,
       });
@@ -10431,20 +10432,20 @@ describe('Workflow', () => {
       });
       const finalStep = createStep({
         id: 'final',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({ newValue: zv4.number(), other: zv4.number() }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ success: zv4.boolean() }),
         execute: final,
       });
 
       const counterWorkflow = createWorkflow({
         id: 'counter-workflow',
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         inputSchema: zv4.object({
           startValue: zv4.number(),
         }),
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({
           success: zv4.boolean(),
         }),
@@ -10454,7 +10455,7 @@ describe('Workflow', () => {
       const wfA = createWorkflow({
         id: 'nested-workflow-a',
         inputSchema: counterWorkflow.inputSchema,
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ finalValue: zv4.number() }),
       })
         .then(startStep)
@@ -10464,17 +10465,17 @@ describe('Workflow', () => {
       const wfB = createWorkflow({
         id: 'nested-workflow-b',
         inputSchema: counterWorkflow.inputSchema,
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         outputSchema: zv4.object({ finalValue: zv4.number() }),
       })
         .then(startStep)
         .map({
-          // @ts-expect-error
+          // @ts-expect-error - testing dynamic workflow result
           other: mapVariable({
             step: startStep,
             path: 'newValue',
           }),
-          // @ts-expect-error
+          // @ts-expect-error - testing dynamic workflow result
           newValue: mapVariable({
             step: startStep,
             path: 'newValue',
@@ -10485,10 +10486,10 @@ describe('Workflow', () => {
       counterWorkflow
         .parallel([wfA, wfB])
         .then(
-          // @ts-expect-error
+          // @ts-expect-error - testing dynamic workflow result
           createStep({
             id: 'last-step',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             execute: last,
             inputSchema: zv4.object({
               'nested-workflow-a': zv4.object({ finalValue: zv4.number() }),
@@ -10508,14 +10509,14 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].error.message).toContain(
         'Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -10807,7 +10808,7 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       const toolAction = vi.fn().mockImplementation(async (input, _context) => {
         return { name: input.name };
       });
@@ -10835,7 +10836,7 @@ describe('Workflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.step1).toEqual({
         status: 'success',
         output: { name: 'step1' },
@@ -10843,7 +10844,7 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['random-tool']).toEqual({
         status: 'success',
         output: { name: 'step1' },
@@ -11720,7 +11721,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
@@ -11791,7 +11792,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, requestContext });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.requestContextAction.status).toBe('success');
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(firstResumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
@@ -11962,9 +11963,9 @@ describe('Workflow', () => {
       // Check that suspend event was emitted
       expect(customEvents).toHaveLength(1);
       expect(customEvents[0].type).toBe('suspend-event');
-      // @ts-expect-error data.message exists on this custom event
+      // @ts-expect-error - testing dynamic workflow result data.message exists on this custom event
       expect(customEvents[0].data.message).toBe('About to suspend');
-      // @ts-expect-error data.value exists on this custom event
+      // @ts-expect-error - testing dynamic workflow result data.value exists on this custom event
       expect(customEvents[0].data.value).toBe(42);
 
       // Reset events for resume test
@@ -11977,7 +11978,7 @@ describe('Workflow', () => {
 
       // Collect events from resume stream
       for await (const event of streamResult.fullStream) {
-        // @ts-expect-error `resume-event` is custom
+        // @ts-expect-error - testing dynamic workflow result `resume-event` is custom
         if (event.type === 'resume-event') {
           customEvents.push(event);
         }
@@ -11985,17 +11986,17 @@ describe('Workflow', () => {
 
       const resumeResult = await streamResult.result;
       expect(resumeResult.status).toBe('success');
-      // @ts-expect-error output exists on success result
+      // @ts-expect-error - testing dynamic workflow result output exists on success result
       expect(resumeResult.result).toEqual({ value: 99, success: true });
 
       // Check that resume event was emitted (this proves writer.custom works during resume)
       expect(customEvents).toHaveLength(1);
       expect(customEvents[0].type).toBe('resume-event');
-      // @ts-expect-error data.message exists on this custom event
+      // @ts-expect-error - testing dynamic workflow result data.message exists on this custom event
       expect(customEvents[0].data.message).toBe('Successfully resumed');
-      // @ts-expect-error data.originalValue exists on this custom event
+      // @ts-expect-error - testing dynamic workflow result data.originalValue exists on this custom event
       expect(customEvents[0].data.originalValue).toBe(42);
-      // @ts-expect-error data.resumeValue exists on this custom event
+      // @ts-expect-error - testing dynamic workflow result data.resumeValue exists on this custom event
       expect(customEvents[0].data.resumeValue).toBe(99);
     });
 
@@ -17476,12 +17477,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17604,12 +17605,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a-clone'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17702,7 +17703,7 @@ describe('Workflow', () => {
         .then(startStep)
         .branch([
           [async () => false, otherStep],
-          // @ts-expect-error
+          // @ts-expect-error - testing dynamic workflow result
           [async () => true, finalStep],
         ])
         .map({
@@ -17734,12 +17735,12 @@ describe('Workflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].output).toEqual({
         finalValue: 26 + 1,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toEqual({
         finalValue: 1,
       });
@@ -17880,7 +17881,7 @@ describe('Workflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18025,7 +18026,7 @@ describe('Workflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -18206,7 +18207,7 @@ describe('Workflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-b'].output).toEqual({
           finalValue: 1,
         });
@@ -18348,12 +18349,12 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['last-step']).toEqual(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18475,12 +18476,12 @@ describe('Workflow', () => {
           status: 'suspended',
         });
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['last-step']).toEqual(undefined);
 
         const resumedResults = await run.resume({ step: 'nested-workflow-a', resumeData: { newValue: 0 } });
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
           finalValue: 26 + 1,
         });
@@ -18813,7 +18814,7 @@ describe('Workflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(results['nested-workflow-a']).toMatchObject({
           status: 'success',
           output: {
@@ -18979,7 +18980,7 @@ describe('Workflow', () => {
         },
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['last-step']).toEqual(undefined);
 
       if (result.status !== 'suspended') {
@@ -18988,7 +18989,7 @@ describe('Workflow', () => {
       expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
       const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(resumedResults.steps['nested-workflow-c'].output).toEqual({
         finalValue: 26 + 1,
       });
@@ -19161,7 +19162,6 @@ describe('Workflow', () => {
         step: resumedResult.suspended[0],
         resumeData: new Date('2024-12-31'),
       });
-
       expect(finalResult.status).toBe('success');
       expect(secondItemDateAction).toHaveBeenCalledTimes(2);
 
@@ -19185,6 +19185,114 @@ describe('Workflow', () => {
         processed: 'second',
         date: new Date('2024-12-31'),
       });
+    });
+
+    it('should pass correct inputData to branch condition when resuming after map', async () => {
+      const localTestStorage = new MockStore();
+
+      const conditionSpy = vi.fn();
+
+      // Helper to build the workflow (simulates reconstruction after server restart)
+      const buildWorkflow = () => {
+        const suspendingStep = createStep({
+          id: 'suspending-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async ({ inputData, suspend, resumeData }) => {
+            if (!resumeData) {
+              await suspend({ prompt: 'Please provide an answer' });
+              return { result: '' };
+            }
+            return { result: `processed: ${inputData.mappedValue}, answer: ${resumeData.answer}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-wf-with-suspend',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .then(suspendingStep)
+          .commit();
+
+        const fallbackStep = createStep({
+          id: 'fallback-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData }) => {
+            return { result: `fallback: ${inputData.mappedValue}` };
+          },
+        });
+
+        const mainWorkflow = createWorkflow({
+          id: 'map-branch-suspend-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .map(async ({ inputData }) => {
+            return { mappedValue: inputData.value * 2 };
+          })
+          .branch([
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue > 10;
+              },
+              nestedWorkflow,
+            ],
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue <= 10;
+              },
+              fallbackStep,
+            ],
+          ])
+          .commit();
+
+        return { mainWorkflow, nestedWorkflow };
+      };
+
+      // First construction: start the workflow
+      const { mainWorkflow: wf1, nestedWorkflow: nwf1 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf1, 'nested-wf-with-suspend': nwf1 },
+      });
+
+      const run1 = await wf1.createRun();
+      const initialResult = await run1.start({ inputData: { value: 10 } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(conditionSpy).toHaveBeenCalledWith({ mappedValue: 20 });
+      conditionSpy.mockClear();
+
+      // Second construction: simulate server restart (new workflow objects, new map step UUIDs)
+      const { mainWorkflow: wf2, nestedWorkflow: nwf2 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf2, 'nested-wf-with-suspend': nwf2 },
+      });
+
+      // Resume using the NEW workflow instance (simulating server restart)
+      const run2 = await wf2.createRun({ runId: run1.runId });
+      const resumedResult = await run2.resume({
+        step: initialResult.suspended[0],
+        resumeData: { answer: 'hello' },
+      });
+
+      // Branch conditions should NOT be re-evaluated during resume.
+      // The resume path from suspendedPaths already identifies the correct branch.
+      // Re-evaluating conditions was the cause of issue #12982: the map step output
+      // uses a non-deterministic UUID as key, so after workflow reconstruction the
+      // condition would receive undefined inputData.
+      expect(conditionSpy).not.toHaveBeenCalled();
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.steps['nested-wf-with-suspend'].status).toBe('success');
     });
 
     it('should maintain correct step status after resuming in branching workflows - #6419', async () => {
@@ -19547,7 +19655,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun();
       const result = await run.start({ requestContext });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -19601,7 +19709,7 @@ describe('Workflow', () => {
         requestContext: resumerequestContext,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 
@@ -21568,6 +21676,235 @@ describe('Workflow', () => {
 
       expect(receivedState).toBeDefined();
       expect(receivedState?.counter).toBe(10);
+    });
+
+    it('should log step execution errors via the Mastra logger', async () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+        level: 'debug',
+      };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error('Step error for logger test');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-step-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-logger-step-error-workflow': workflow },
+        storage: testStorage,
+        logger: mockLogger as any,
+      });
+
+      const run = await mastra.getWorkflow('test-logger-step-error-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      // Step execution errors should be logged via the Mastra logger
+      expect(mockLogger.error).toHaveBeenCalled();
+      const errorCalls = mockLogger.error.mock.calls;
+      const hasStepErrorLog = errorCalls.some(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('failing-step'),
+      );
+      expect(hasStepErrorLog).toBe(true);
+    });
+  });
+
+  describe('Workflow as agent tool', () => {
+    function createWorkflowToolMockModel({
+      toolName,
+      provider,
+      modelId,
+    }: {
+      toolName: string;
+      provider?: string;
+      modelId?: string;
+    }) {
+      return new MockLanguageModelV2({
+        ...(provider ? { provider: provider as any } : {}),
+        ...(modelId ? { modelId: modelId as any } : {}),
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call-1',
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: modelId ?? 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolCallType: 'function',
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+    }
+
+    async function streamAndCollectToolResults(agent: Agent) {
+      const stream = await agent.stream('Fetch task test-task-123');
+      for await (const _chunk of stream.fullStream) {
+        // consume stream to drive execution
+      }
+    }
+
+    it('should pass workflow input to the first step when called as agent tool via stream', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      const taskWorkflow = createWorkflow({
+        id: 'task-workflow',
+        description: 'A workflow that fetches a task',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
+    });
+
+    it('should pass workflow input to step when workflow has no inputSchema', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      // No inputSchema on the workflow - previously this caused a TypeError because
+      // z.object({ inputData: undefined }) was created
+      const taskWorkflow = createWorkflow({
+        id: 'task-workflow',
+        description: 'A workflow that fetches a task',
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
+    });
+
+    it('should pass workflow input to step when using OpenAI-compatible model', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      const taskWorkflow = createWorkflow({
+        id: 'wait-task-workflow',
+        description: 'A workflow that fetches a task',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({
+        toolName: 'workflow-waitTaskWorkflow',
+        provider: 'openai.chat',
+        modelId: 'gpt-4o',
+      });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { waitTaskWorkflow: taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
     });
   });
 });

@@ -1685,7 +1685,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       try {
-        // @ts-expect-error - we expect this to throw an error
+        // @ts-expect-error - testing dynamic workflow result - we expect this to throw an error
         workflow.then(step1).waitForEvent('hello-event', step2).commit();
       } catch (error) {
         expect(error).toBeInstanceOf(MastraError);
@@ -3650,9 +3650,9 @@ describe('MastraInngestWorkflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toMatchObject({ finalValue: 12 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
       expect(totalCount).toBe(12);
 
@@ -3757,9 +3757,9 @@ describe('MastraInngestWorkflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toMatchObject({ finalValue: 12 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
       expect(totalCount).toBe(12);
       srv.close();
@@ -4127,9 +4127,9 @@ describe('MastraInngestWorkflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(0);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.finalIf.output).toMatchObject({ finalValue: 2 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.start.output).toMatchObject({ newValue: 2 });
 
       srv.close();
@@ -4281,9 +4281,9 @@ describe('MastraInngestWorkflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['else-branch'].output).toMatchObject({ finalValue: 26 + 6 + 1 });
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.start.output).toMatchObject({ newValue: 7 });
     });
   });
@@ -4332,7 +4332,7 @@ describe('MastraInngestWorkflow', () => {
         workflow.execute({
           inputData: {
             required: 'test',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             nested: { value: 'not-a-number' },
           },
         }),
@@ -4702,7 +4702,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       const toolAction = vi.fn().mockImplementation(async ({ name }) => {
         return { name };
       });
@@ -9084,12 +9084,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -9179,7 +9179,7 @@ describe('MastraInngestWorkflow', () => {
         .then(startStep)
         .branch([
           [async () => false, otherStep],
-          // @ts-expect-error
+          // @ts-expect-error - testing dynamic workflow result
           [async () => true, finalStep],
         ])
         .map({
@@ -9240,12 +9240,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -9405,7 +9405,7 @@ describe('MastraInngestWorkflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
@@ -9570,7 +9570,7 @@ describe('MastraInngestWorkflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
@@ -9772,7 +9772,7 @@ describe('MastraInngestWorkflow', () => {
         // expect(first).toHaveBeenCalledTimes(1);
         // expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
@@ -9930,12 +9930,12 @@ describe('MastraInngestWorkflow', () => {
           status: 'suspended',
         });
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['last-step']).toMatchObject(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(resumedResults.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
@@ -10083,7 +10083,7 @@ describe('MastraInngestWorkflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-expect-error
+        // @ts-expect-error - testing dynamic workflow result
         expect(results['nested-workflow-a']).toMatchObject({
           status: 'success',
           output: {
@@ -10274,7 +10274,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['last-step']).toMatchObject(undefined);
 
       if (result.status !== 'suspended') {
@@ -10290,7 +10290,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(resumedResults.steps['nested-workflow-c'].output).toMatchObject({
         finalValue: 26 + 1,
       });
@@ -10436,12 +10436,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a-clone'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -10516,7 +10516,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -10579,7 +10579,7 @@ describe('MastraInngestWorkflow', () => {
         requestContext: resumerequestContext,
       });
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 
@@ -10859,7 +10859,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(result?.steps.step1.output.hasEngine).toBe(true);
     });
   });
@@ -13135,7 +13135,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-expect-error
+      // @ts-expect-error - testing dynamic workflow result
       expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
         'start',
         'step-start',
@@ -13404,6 +13404,96 @@ describe('MastraInngestWorkflow', () => {
         expect(result.summary.totalItems).toBe(2);
       });
     });
+  });
+
+  describe.sequential('Long Running Steps', () => {
+    it('should handle long-running steps with eventual consistency', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const childWorkflowStep = createStep({
+        id: 'child-workflow-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'child-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(childWorkflowStep)
+        .commit();
+
+      // Create a step that takes 30 seconds to complete
+      const longRunningStep = createStep({
+        id: 'long-running-step',
+        execute: async () => {
+          // Simulate a long-running operation (30 seconds)
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          return { result: 'completed after 30 seconds' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'long-running-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [childWorkflow, longRunningStep],
+      });
+      workflow.then(childWorkflow).then(longRunningStep).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'long-running-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      srv.close();
+
+      // Verify the workflow completed successfully with the correct output
+      expect(result.status).toBe('success');
+      expect(result.steps['long-running-step']).toEqual({
+        status: 'success',
+        output: { result: 'completed after 30 seconds' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    }, 120000); // 2 minute timeout for the test
   });
 
   describe.sequential('Flow Control Configuration', () => {

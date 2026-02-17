@@ -3,15 +3,13 @@ title: "Quickstart"
 description: Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import { VideoPlayer } from "@site/src/components/video-player";
 
 # Mastra Quickstart
 
-The `create mastra` CLI command is the quickest way to get started. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt
+The `create mastra` CLI command is the quickest way to get started. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt.
 
 If you need more control over the setup, see the [manual installation guide](/docs/getting-started/manual-install). You can also use [`mastra init`](/reference/cli/mastra#mastra-init) for existing projects.
 
@@ -25,53 +23,19 @@ You can run `create mastra` anywhere on your machine.
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npm create mastra@latest
 ```
 
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create mastra@latest
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn create mastra@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create mastra@latest
-```
-
-:::warning
-
-Due to a [known issue with Bun](https://github.com/oven-sh/bun/issues/25314) you'll need to run these steps after creating the project:
-
-- `bun add @mastra/server@latest`
-- Delete your `node_modules` folder
-- Delete your `bun.lock` file
-- Run `bun install` to reinstall your packages
-
-:::
-
-</TabItem>
-</Tabs>
-
 This creates a new directory for your project with a `src/mastra` folder containing an example weather agent and the following files:
 
-- `index.ts` - Mastra config, including memory
-- `tools/weather-tool.ts` - a tool to fetch weather for a given location
-- `agents/weather-agent.ts` - a weather agent with a prompt that uses the tool
+- `index.ts`: Entry point for all Mastra-related code and configuration
+- `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool
+- `tools/weather-tool.ts`: A tool to fetch weather for a given location
+- `workflows/weather-workflow.ts`: A workflow that runs the weather agent
+- `scorers/weather-scorer.ts`: A scorer to evaluate the weather agent's responses
+
+Depending on your choices, you'll also end up with [Mastra Skills](/docs/build-with-ai/skills) or the [MCP Docs Server](/docs/build-with-ai/mcp-docs-server) installed.
 
 :::tip
 
@@ -93,5 +57,6 @@ Try asking about the weather. If your API key is set up correctly, you'll get a 
 
 - Integrate Mastra with your frontend framework: [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro)
 - Read more about [Mastra's features](/docs#why-mastra)
+- Learn how you can [build Mastra with AI](/docs/getting-started/build-with-ai)
 - Build an agent from scratch following one of our [guides](/guides)
 - Watch conceptual guides on our [YouTube channel](https://www.youtube.com/@mastra-ai) and [subscribe](https://www.youtube.com/@mastra-ai?sub_confirmation=1)

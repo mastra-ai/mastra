@@ -28,28 +28,9 @@ Use Mastra and AI SDK UI together by installing the `@mastra/ai-sdk` package. `@
 
 Install the required packages to get started:
 
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm install @mastra/ai-sdk@latest @ai-sdk/react ai
-    ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm add @mastra/ai-sdk@latest @ai-sdk/react ai
-    ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn add @mastra/ai-sdk@latest @ai-sdk/react ai
-    ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy
-    bun add @mastra/ai-sdk@latest @ai-sdk/react ai
-    ```
-  </TabItem>
-</Tabs>
+```bash npm2yarn
+npm install @mastra/ai-sdk@latest @ai-sdk/react ai
+```
 
 You're now ready to follow the integration guides and recipes below!
 
@@ -1574,8 +1555,8 @@ See the [branching-workflow.ts](https://github.com/mastra-ai/ui-dojo/blob/main/s
 
 ### Progress indicators in agent networks
 
-When using agent networks, you can emit custom progress events from tools used by sub-agents to show which agent is currently active.
+When using agent networks, you can emit custom progress events from tools used by subagents to show which agent is currently active.
 
-The UI Dojo example includes a `stage` field in the event data to identify which sub-agent is running (e.g., `"report-generation"`, `"report-review"`). The frontend groups events by this field and displays the latest status for each.
+The UI Dojo example includes a `stage` field in the event data to identify which subagent is running (e.g., `"report-generation"`, `"report-review"`). The frontend groups events by this field and displays the latest status for each.
 
 See the [report-generation-tool.ts](https://github.com/mastra-ai/ui-dojo/blob/main/src/mastra/tools/report-generation-tool.ts) (backend) and [agent-network-custom-events.tsx](https://github.com/mastra-ai/ui-dojo/blob/main/src/pages/ai-sdk/agent-network-custom-events.tsx) (frontend) in UI Dojo.

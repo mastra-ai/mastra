@@ -2,11 +2,8 @@
 title: "Reference: create-mastra | CLI"
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
 packages:
-  - "@mastra/create-mastra"
+  - "create-mastra"
 ---
-
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
 
 # create-mastra
 
@@ -14,69 +11,15 @@ The `create-mastra` command **creates** a new standalone Mastra project. Use thi
 
 ## Usage
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx create-mastra@latest
 ```
 
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx create-mastra@latest
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create mastra@latest
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create mastra@latest
-```
-
-</TabItem>
-</Tabs>
-
 `create-mastra` automatically runs in _interactive_ mode, but you can also specify your project name and template with command line arguments.
 
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
+```bash npm2yarn
 npx create-mastra@latest my-mastra-project -- --template coding-agent
 ```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn dlx create-mastra@latest --template coding-agent
-```
-
-</TabItem>
-<TabItem value="pnpm" label="pnpm">
-
-```bash
-pnpm create mastra@latest --template coding-agent
-```
-
-</TabItem>
-<TabItem value="bun" label="bun">
-
-```bash
-bun create mastra@latest --template coding-agent
-```
-
-</TabItem>
-</Tabs>
 
 Check out the [full list](https://mastra.ai/api/templates.json) of templates and use the `slug` as input to the `--template` CLI flag.
 
@@ -84,6 +27,12 @@ You can also use any GitHub repo as a template (it has to be a valid Mastra proj
 
 ```bash
 npx create-mastra@latest my-mastra-project -- --template mastra-ai/template-coding-agent
+```
+
+You can install Mastra skills for specific agents during project creation:
+
+```bash npm2yarn
+npx create-mastra@latest my-project -- --default --skills claude-code,cursor
 ```
 
 ## CLI flags
@@ -168,6 +117,13 @@ Instead of an interactive prompt you can also define these CLI flags.
       type: "string",
       description:
         "MCP Server for code editor (cursor, cursor-global, windsurf, vscode)",
+      isOptional: true,
+    },
+    {
+      name: "--skills",
+      type: "string",
+      description:
+        "Comma-separated list of agents to install Mastra skills for (e.g., claude-code,cursor,windsurf)",
       isOptional: true,
     },
     {

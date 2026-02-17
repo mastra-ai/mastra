@@ -1,16 +1,27 @@
 import { ToolCallMessagePartProps } from '@assistant-ui/react';
+import { useEffect } from 'react';
+import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 
 import { ToolBadge } from './badges/tool-badge';
+import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
+import { FileTreeBadge } from './badges/file-tree-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { ObservationMarkerBadge } from './badges/observation-marker-badge';
+import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
   metadata?: MastraUIMessage['metadata'];
 }
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
+  // Handle OM observation markers - they don't need WorkflowRunProvider
+  if (toolName === 'mastra-memory-om-observation') {
+    return <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />;
+  }
+
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
       <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
@@ -19,6 +30,20 @@ export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackP
 };
 
 const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
+  // Handle OM observation markers first - render as ObservationMarkerBadge
+  if (toolName === 'mastra-memory-om-observation') {
+    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+  }
+
+  const { activateSkill } = useActivatedSkills();
+
+  // Detect skill activation tool calls
+  useEffect(() => {
+    if (toolName === 'skill-activate' && result?.success && args?.name) {
+      activateSkill(args.name);
+    }
+  }, [toolName, result, args, activateSkill]);
+
   // We need to handle the stream data even if the workflow is not resolved yet
   // The response from the fetch request resolving the workflow might theoretically
   // be resolved after we receive the first stream event
@@ -79,6 +104,47 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolName={toolName}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
+      />
+    );
+  }
+
+  // Use custom tree UI for list_files tool
+  const isListFiles = toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
+
+  if (isListFiles) {
+    return (
+      <FileTreeBadge
+        toolName={toolName}
+        args={args}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        isNetwork={isNetwork ?? false}
+        toolCalled={toolCalled}
+      />
+    );
+  }
+
+  // Use custom terminal UI for sandbox execution tools
+  const isSandboxExecution = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+
+  if (isSandboxExecution) {
+    // During streaming, result might be an array of output chunks
+    // After completion, it's the final tool result object
+    const streamingOutput = Array.isArray(result) ? result : result?.output || result?.toolOutput || [];
+    return (
+      <SandboxExecutionBadge
+        toolName={toolName}
+        args={args}
+        result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+        toolOutput={streamingOutput}
       />
     );
   }

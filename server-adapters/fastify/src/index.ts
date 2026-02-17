@@ -94,12 +94,28 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   async stream(route: ServerRoute, reply: FastifyReply, result: { fullStream: ReadableStream }): Promise<void> {
+    // Capture headers set by plugins (e.g., @fastify/cors) BEFORE hijacking
+    // reply.hijack() bypasses Fastify's response handling, so we need to preserve
+    // any headers that were set by hooks/plugins and manually include them
+    const rawHeaders = reply.getHeaders();
+    // Filter out undefined values and conflicting headers (content-length, transfer-encoding)
+    // Having both Content-Length and Transfer-Encoding: chunked violates RFC 7230
+    const existingHeaders: Record<string, string | number | string[]> = {};
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (value === undefined) continue;
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === 'content-length' || lowerKey === 'transfer-encoding') continue;
+      existingHeaders[key] = value;
+    }
+
     // Hijack the reply to take control of the response
     // This is required when writing directly to reply.raw
     reply.hijack();
 
-    // Write headers directly to the raw response
+    // Write headers directly to the raw response, merging existing headers (like CORS)
+    // with our stream-specific headers
     reply.raw.writeHead(200, {
+      ...existingHeaders,
       'Content-Type': 'text/plain',
       'Transfer-Encoding': 'chunked',
     });
@@ -130,7 +146,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
     } catch (error) {
-      console.error(error);
+      this.mastra.getLogger()?.error('Error in stream processing', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
     } finally {
       reply.raw.end();
     }
@@ -141,8 +159,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // Fastify's request.query can contain string | string[] for repeated params
     const queryParams = normalizeQueryParams((request.query || {}) as Record<string, unknown>);
     let body: unknown;
+    let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -150,18 +169,23 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
           body = await this.parseMultipartFormData(request, maxFileSize);
         } catch (error) {
-          console.error('Failed to parse multipart form data:', error);
+          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Re-throw size limit errors, let others fall through to validation
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
           }
+          bodyParseError = {
+            message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
+          };
         }
       } else {
         body = request.body;
       }
     }
 
-    return { urlParams, queryParams, body };
+    return { urlParams, queryParams, body, bodyParseError };
   }
 
   /**
@@ -229,7 +253,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     reply: FastifyReply,
     result: unknown,
     request?: FastifyRequest,
+    prefix?: string,
   ): Promise<void> {
+    const resolvedPrefix = prefix ?? this.prefix ?? '';
+
     if (route.responseType === 'json') {
       await reply.send(result);
     } else if (route.responseType === 'stream') {
@@ -260,7 +287,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         return;
       }
 
-      const { server, httpPath } = result as MCPHttpTransportResult;
+      const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
 
       try {
         // Hijack the response to bypass Fastify's response handling
@@ -274,11 +301,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           rawReq.body = request.body;
         }
 
+        // Merge class-level mcpOptions with route-specific options (route takes precedence)
+        const options = { ...this.mcpOptions, ...routeMcpOptions };
+
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
-          httpPath,
+          httpPath: `${resolvedPrefix}${httpPath}`,
           req: rawReq,
           res: reply.raw,
+          options: Object.keys(options).length > 0 ? options : undefined,
         });
         // Response handled by startHTTP
       } catch {
@@ -316,8 +347,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
-          ssePath,
-          messagePath,
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
           req: rawReq,
           res: reply.raw,
         });
@@ -333,7 +364,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     }
   }
 
-  async registerRoute(app: FastifyInstance, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: FastifyInstance,
+    route: ServerRoute,
+    { prefix: prefixParam }: { prefix?: string } = {},
+  ): Promise<void> {
+    // Default prefix to this.prefix if not provided, or empty string
+    const prefix = prefixParam ?? this.prefix ?? '';
+
     const fullPath = `${prefix}${route.path}`;
 
     // Convert Express-style :param to Fastify-style :param (they're the same, but ensure consistency)
@@ -341,13 +379,36 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
     // Define the route handler
     const handler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+      // Check route-level authentication/authorization
+      const authError = await this.checkRouteAuth(route, {
+        path: String(request.url.split('?')[0] || '/'),
+        method: String(request.method || 'GET'),
+        getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
+        getQuery: name => (request.query as Record<string, string>)[name],
+        requestContext: request.requestContext,
+      });
+
+      if (authError) {
+        return reply.status(authError.status).send({ error: authError.error });
+      }
+
       const params = await this.getParams(route, request);
+
+      // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
+      if (params.bodyParseError) {
+        return reply.status(400).send({
+          error: 'Invalid request body',
+          issues: [{ field: 'body', message: params.bodyParseError.message }],
+        });
+      }
 
       if (params.queryParams) {
         try {
           params.queryParams = await this.parseQueryParams(route, params.queryParams);
         } catch (error) {
-          console.error('Error parsing query params', error);
+          this.mastra.getLogger()?.error('Error parsing query params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
             return reply.status(400).send(formatZodError(error, 'query parameters'));
@@ -363,7 +424,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         try {
           params.body = await this.parseBody(route, params.body);
         } catch (error) {
-          console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
+          this.mastra.getLogger()?.error('Error parsing body', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
             return reply.status(400).send(formatZodError(error, 'request body'));
@@ -384,13 +447,18 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         tools: request.tools,
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
+        routePrefix: prefix,
       };
 
       try {
         const result = await route.handler(handlerParams);
-        await this.sendResponse(route, reply, result, request);
+        await this.sendResponse(route, reply, result, request, prefix);
       } catch (error) {
-        console.error('Error calling handler', error);
+        this.mastra.getLogger()?.error('Error calling handler', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          path: route.path,
+          method: route.method,
+        });
         // Check if it's an HTTPException or MastraError with a status code
         let status = 500;
         if (error && typeof error === 'object') {
@@ -447,6 +515,43 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         handler,
         config,
       });
+    }
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+
+    for (const route of routes) {
+      const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+        const response = await this.handleCustomRouteRequest(
+          `http://${request.headers.host}${request.url}`,
+          request.method,
+          request.headers as Record<string, string | string[] | undefined>,
+          request.body,
+          request.requestContext,
+        );
+        if (!response) {
+          reply.status(404).send({ error: 'Not Found' });
+          return;
+        }
+        reply.hijack();
+        await this.writeCustomRouteResponse(response, reply.raw);
+      };
+
+      if (route.method === 'ALL') {
+        const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
+        for (const method of methods) {
+          this.app.route({ method, url: route.path, handler: fastifyHandler });
+        }
+      } else {
+        this.app.route({
+          method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+          url: route.path,
+          handler: fastifyHandler,
+        });
+      }
     }
   }
 

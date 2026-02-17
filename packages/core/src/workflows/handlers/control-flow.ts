@@ -93,6 +93,7 @@ export async function executeParallel(
         branchCount: entry.steps.length,
         parallelSteps: entry.steps.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -289,6 +290,7 @@ export async function executeConditional(
       attributes: {
         conditionCount: entry.conditions.length,
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -307,6 +309,7 @@ export async function executeConditional(
             attributes: {
               conditionIndex: index,
             },
+            tracingPolicy: engine.options?.tracingPolicy,
           },
           executionContext,
         });
@@ -419,7 +422,7 @@ export async function executeConditional(
   });
 
   const results: StepResult<any, any, any, any>[] = await Promise.all(
-    stepsToRun.map(async (step, index) => {
+    stepsToRun.map(async step => {
       const currStepResult = stepResults[step.step.id];
       const isRestartStep = restart ? !!restart.activeStepsPath[step.step.id] : undefined;
 
@@ -447,7 +450,7 @@ export async function executeConditional(
         executionContext: {
           workflowId,
           runId,
-          executionPath: [...executionContext.executionPath, index],
+          executionPath: [...executionContext.executionPath, entry.steps.indexOf(step)],
           activeStepsPath: executionContext.activeStepsPath,
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
@@ -591,6 +594,7 @@ export async function executeLoop(
       attributes: {
         loopType: entry.loopType,
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -666,6 +670,7 @@ export async function executeLoop(
         attributes: {
           conditionIndex: iteration,
         },
+        tracingPolicy: engine.options?.tracingPolicy,
       },
       executionContext,
     });
@@ -819,6 +824,7 @@ export async function executeForeach(
         loopType: 'foreach',
         concurrency,
       },
+      tracingPolicy: engine.options?.tracingPolicy,
     },
     executionContext,
   });
@@ -849,6 +855,9 @@ export async function executeForeach(
   >[];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, step.id);
+
+  const totalCount = prevOutput.length;
+  let completedCount = 0;
 
   for (let i = 0; i < prevOutput.length; i += concurrency) {
     const items = prevOutput.slice(i, i + concurrency);
@@ -908,7 +917,39 @@ export async function executeForeach(
 
         if (execResults.status === 'suspended') {
           foreachIndexObj[i + resultIndex] = execResults;
+
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-progress',
+              payload: {
+                id: step.id,
+                completedCount,
+                totalCount,
+                currentIndex: i + resultIndex,
+                iterationStatus: 'suspended' as const,
+              },
+            },
+          });
         } else {
+          completedCount++;
+
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-progress',
+              payload: {
+                id: step.id,
+                completedCount,
+                totalCount,
+                currentIndex: i + resultIndex,
+                iterationStatus: 'failed' as const,
+              },
+            },
+          });
+
           await pubsub.publish(`workflow.events.v2.${runId}`, {
             type: 'watch',
             runId,
@@ -936,6 +977,24 @@ export async function executeForeach(
           return result;
         }
       } else {
+        completedCount++;
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-progress',
+            payload: {
+              id: step.id,
+              completedCount,
+              totalCount,
+              currentIndex: i + resultIndex,
+              iterationStatus: 'success' as const,
+              iterationOutput: result?.output,
+            },
+          },
+        });
+
         const indexResumeLabel = Object.keys(resumeLabels).find(
           key => resumeLabels[key]?.foreachIndex === i + resultIndex,
         )!;

@@ -2,7 +2,7 @@ name: Validate Docs Frontmatter
 
 on:
   pull_request:
-    branches: [main, 0.x]
+    branches: [main]
     paths:
       - 'docs/**/*.mdx'
       - 'docs/scripts/validate-frontmatter.ts'
@@ -24,9 +24,7 @@ jobs:
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
-        with:
-          install-dependencies: false
 
       - name: Validate frontmatter
         working-directory: ./docs
-        run: npx tsx scripts/validate-frontmatter.ts
+        run: pnpm dlx tsx scripts/validate-frontmatter.ts

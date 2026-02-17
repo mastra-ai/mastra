@@ -19,13 +19,12 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
-  HeaderGroup,
   ScorerCombobox,
   toast,
   Spinner,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
-import { GaugeIcon } from 'lucide-react';
+import { GaugeIcon, PencilIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ClientScoreRowData } from '@mastra/client-js';
@@ -162,21 +161,26 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`} isCurrent>
+            <Crumb as={Link} to={`/scorers`}>
               <Icon>
                 <GaugeIcon />
               </Icon>
               Scorers
             </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              <ScorerCombobox value={scorerId} variant="ghost" />
+            </Crumb>
           </Breadcrumb>
 
-          <HeaderGroup>
-            <div className="w-48">
-              <ScorerCombobox value={scorerId} />
-            </div>
-          </HeaderGroup>
-
           <HeaderAction>
+            {scorer?.scorer?.source === 'stored' && (
+              <Button variant="light" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
+                <Icon>
+                  <PencilIcon />
+                </Icon>
+                Edit
+              </Button>
+            )}
             <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
               <Icon>
                 <DocsIcon />

@@ -1,15 +1,16 @@
 packages:
+  - docs
   - packages/_vendored/*
   - packages/*
   - deployers/*
   - stores/*
   - voice/*
   - workflows/*
+  - workspaces/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
   - integrations/*
-  - examples/dane
   - auth/*
   - observability/*
   - explorations/longmemeval
@@ -17,12 +18,15 @@ packages:
   - e2e-tests/client-js/_test-utils
   - e2e-tests/client-js/zod-v3
   - e2e-tests/client-js/zod-v4
+  - e2e-tests/workspace-compat
 
 catalog:
+  '@microsoft/api-extractor': '^7.56.3'
   '@vitest/coverage-v8': 4.0.12
   '@vitest/ui': 4.0.12
   vitest: 4.0.16
   typescript: ^5.9.3
+  zod: ^4.3.6
 
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch

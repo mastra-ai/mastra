@@ -15,6 +15,7 @@ import {
 import animate from 'tailwindcss-animate';
 import assistantUi from '@assistant-ui/react-ui/tailwindcss';
 import containerQueries from '@tailwindcss/container-queries';
+import typography from '@tailwindcss/typography';
 
 export default {
   darkMode: ['class'],
@@ -30,7 +31,7 @@ export default {
     spacing: Spacings,
     extend: {
       screens: {
-        '3xl': '1900px',
+        '3xl': '1700px',
         '4xl': '2000px',
       },
       fontSize: {
@@ -92,5 +93,5 @@ export default {
       },
     },
   },
-  plugins: [animate, assistantUi, containerQueries],
+  plugins: [animate, assistantUi, containerQueries, typography],
 } satisfies Config;

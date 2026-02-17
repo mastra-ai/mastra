@@ -7,6 +7,7 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
+import { DATASETS_ROUTES } from './datasets';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -15,11 +16,15 @@ import { OBSERVABILITY_ROUTES } from './observability';
 import { PROCESSORS_ROUTES } from './processors';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
+import { STORED_MCP_CLIENTS_ROUTES } from './stored-mcp-clients';
+import { STORED_SCORERS_ROUTES } from './stored-scorers';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
+import { TOOL_PROVIDER_ROUTES } from './tool-providers';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
+import { WORKSPACE_ROUTES } from './workspace';
 
 /**
  * Server context fields that are available to route handlers.
@@ -29,9 +34,11 @@ import { WORKFLOWS_ROUTES } from './workflows';
 export type ServerContext = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools?: ToolsInput;
+  registeredTools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
+  /** The route prefix configured for the server (e.g., '/api') */
+  routePrefix?: string;
 };
 
 /**
@@ -99,10 +106,15 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
+  ...WORKSPACE_ROUTES,
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...STORED_MCP_CLIENTS_ROUTES,
+  ...STORED_SCORERS_ROUTES,
+  ...TOOL_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
+  ...DATASETS_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities
