@@ -41,6 +41,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
   const [duration, setDuration] = useState(0)
   const lastSaveRef = useRef(0)
   const autoCompletedRef = useRef(false)
+  const startSecondsRef = useRef(startSeconds)
   const onTimeUpdateRef = useRef(onTimeUpdate)
   const onAutoCompleteRef = useRef(onAutoComplete)
 
@@ -78,8 +79,8 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
             playerRef.current = player
             setIsReady(true)
             setDuration(player!.getDuration())
-            if (startSeconds > 0) {
-              player!.seekTo(startSeconds, true)
+            if (startSecondsRef.current > 0) {
+              player!.seekTo(startSecondsRef.current, true)
             }
           },
           onStateChange: (event: YT.OnStateChangeEvent) => {
@@ -136,7 +137,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
       }
       playerRef.current = null
     }
-  }, [videoId, startSeconds])
+  }, [videoId])
 
   const seekTo = useCallback((seconds: number) => {
     playerRef.current?.seekTo(seconds, true)

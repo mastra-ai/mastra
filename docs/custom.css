@@ -1349,7 +1349,9 @@ article p {
   display: none !important;
 }
 
-/* Learn section — override Infima link and list styles */
+/* ==================== LEARN SECTION ==================== */
+
+/* Override Infima link and list styles */
 .learn-link,
 .learn-link:hover {
   text-decoration: none !important;
@@ -1365,4 +1367,93 @@ article p {
   margin: 0 !important;
   padding: 0 !important;
   list-style: none !important;
+}
+
+/* Coming soon icon: dashed border circle */
+.learn-sidebar-icon-coming-soon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 1.5px dashed var(--mastra-text-muted);
+  opacity: 0.5;
+}
+
+/* Learn layout — unlayered to beat Tailwind @layer utilities (CSS Cascade Layers) */
+.learn-layout-flex {
+  display: flex;
+  min-height: calc(100vh - var(--ifm-navbar-height));
+}
+
+.learn-main {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow-x: hidden;
+}
+
+.learn-article {
+  padding-inline: 1rem;
+}
+
+/* Sidebar: mobile-first (hidden off-screen), desktop overrides below */
+.learn-sidebar-container {
+  position: fixed;
+  top: var(--ifm-navbar-height);
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  width: var(--doc-sidebar-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--sidebar-border);
+  background: var(--ifm-background-color);
+  transition: transform 0.2s ease;
+  transform: translateX(-100%);
+}
+
+.learn-sidebar-container.is-open {
+  transform: translateX(0);
+}
+
+/* Mobile toggle: visible by default */
+.learn-mobile-toggle {
+  position: sticky;
+  top: var(--ifm-navbar-height);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--ifm-background-color);
+  padding: 0.5rem 1rem;
+}
+
+/* Mobile overlay */
+.learn-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgb(0 0 0 / 0.5);
+}
+
+/* Desktop overrides */
+@media (min-width: 62.25rem) {
+  .learn-sidebar-container {
+    position: sticky;
+    height: calc(100vh - var(--ifm-navbar-height));
+    transform: translateX(0);
+  }
+
+  .learn-mobile-toggle {
+    display: none;
+  }
+
+  .learn-article {
+    max-width: 62.5rem;
+    margin-inline: auto;
+  }
+
+  .learn-mobile-overlay {
+    display: none;
+  }
 }
