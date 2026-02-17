@@ -1,7 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { Observability, SensitiveDataFilter } from '@mastra/observability';
 import { intentClarifierAgent } from './agents/intent-clarifier-agent';
 import { researchPlannerAgent } from './agents/research-planner-agent';
 import { searchResultEvaluatorAgent } from './agents/search-result-evaluator-agent';
@@ -24,16 +23,5 @@ export const mastra = new Mastra({
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
-        ],
-      },
-    },
   }),
 });

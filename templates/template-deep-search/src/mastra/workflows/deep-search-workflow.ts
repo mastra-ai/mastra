@@ -254,11 +254,6 @@ Based on the following search results, answer the user's question:
 ${JSON.stringify(state.searchResults, null, 2)}`,
     );
 
-    for await (const chunk of stream.textStream) {
-      process.stdout.write(chunk);
-    }
-
-    log.info('finalizeAnswer answer ready', { step: 'finalizeAnswer' });
     const answer = await stream.text;
     log.info('finalizeAnswer output', { step: 'finalizeAnswer', answer });
 
