@@ -116,20 +116,24 @@ test.describe('Learn section', () => {
     await expect(page.getByText('Subscribe')).toBeVisible()
   })
 
-  test('mobile toggle opens sidebar on small screens', async ({ page }) => {
+  test('mobile hamburger opens sidebar with learn lessons', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/learn')
-    // Mobile toggle should be visible
-    const toggle = page.getByRole('button', { name: 'Toggle course sidebar' })
+    // Docusaurus hamburger toggle should be visible
+    const toggle = page.getByRole('button', { name: 'Toggle navigation bar' })
     await expect(toggle).toBeVisible()
-    // Sidebar should be off-screen initially
-    const sidebar = page.locator('aside.learn-sidebar-container')
-    await expect(sidebar).not.toHaveClass(/is-open/)
-    // Click toggle to open sidebar
+    // Click hamburger to open mobile sidebar
     await toggle.click()
-    await expect(sidebar).toHaveClass(/is-open/)
+    // The navbar-sidebar should appear with learn lesson links
+    const mobileSidebar = page.locator('.navbar-sidebar')
+    await expect(mobileSidebar).toBeVisible()
+    // Navigate to secondary menu (learn sidebar content)
+    const backButton = mobileSidebar.getByText('← Back to main menu')
+    // If secondary menu auto-shows, we should see lesson links
+    const lessonLink = mobileSidebar.locator('a[href="/learn/01-what-is-an-agent"]')
+    await expect(lessonLink).toBeVisible({ timeout: 5000 })
     // Click a lesson to close sidebar and navigate
-    await page.locator('aside a[href="/learn/01-what-is-an-agent"]').click()
+    await lessonLink.click()
     await expect(page).toHaveURL(/\/learn\/01-what-is-an-agent/)
   })
 })

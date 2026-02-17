@@ -1405,68 +1405,27 @@ article p {
   padding-inline: 1rem;
 }
 
-/* Sidebar: mobile-first (hidden off-screen), desktop overrides below */
+/* Sidebar: hidden on mobile, shown on desktop */
 .learn-sidebar-container {
-  position: fixed;
-  top: var(--ifm-navbar-height);
-  bottom: 0;
-  left: 0;
-  z-index: 40;
-  width: var(--doc-sidebar-width);
-  flex-shrink: 0;
-  border-right: 1px solid var(--sidebar-border);
-  background: var(--ifm-background-color);
-  transition: transform 0.2s ease;
-  transform: translateX(-100%);
-}
-
-.learn-sidebar-container.is-open {
-  transform: translateX(0);
-}
-
-/* Mobile toggle: visible by default */
-.learn-mobile-toggle {
-  position: sticky;
-  top: var(--ifm-navbar-height);
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  background: var(--ifm-background-color);
-  padding: 0.5rem 1rem;
-}
-
-/* Mobile overlay */
-.learn-mobile-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 39;
-  background: rgb(0 0 0 / 0.5);
+  display: none;
 }
 
 /* Desktop overrides */
 @media (min-width: 62.25rem) {
   .learn-sidebar-container {
+    display: block;
     position: sticky;
+    top: var(--ifm-navbar-height);
     height: calc(100vh - var(--ifm-navbar-height));
-    transform: translateX(0);
-  }
-
-  .learn-mobile-toggle {
-    display: none;
-  }
-
-  .learn-article {
-    /* width handled by Docusaurus row/col grid */
+    width: var(--doc-sidebar-width);
+    flex-shrink: 0;
+    border-right: 1px solid var(--sidebar-border);
+    background: var(--ifm-background-color);
   }
 
   .learn-lesson-nav {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-  }
-
-  .learn-mobile-overlay {
-    display: none;
   }
 }
