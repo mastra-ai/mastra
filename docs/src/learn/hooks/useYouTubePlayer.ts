@@ -113,12 +113,6 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
             lastSaveRef.current = time
             onTimeUpdateRef.current?.(time)
           }
-
-          // Auto-complete when within last 15s
-          if (dur > 0 && dur - time <= 15 && !autoCompletedRef.current) {
-            autoCompletedRef.current = true
-            onAutoCompleteRef.current?.()
-          }
         } catch {
           // Player might not be ready yet
         }
