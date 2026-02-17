@@ -340,9 +340,13 @@ function createStepFromParams<
   return {
     id: params.id,
     description: params.description,
-    inputSchema: toStandardSchema(params.inputSchema),
+    inputSchema: params.inputSchema
+      ? toStandardSchema(params.inputSchema)
+      : (undefined as unknown as StandardSchemaWithJSON<any>),
     stateSchema: params.stateSchema ? toStandardSchema(params.stateSchema) : undefined,
-    outputSchema: toStandardSchema(params.outputSchema),
+    outputSchema: params.outputSchema
+      ? toStandardSchema(params.outputSchema)
+      : (undefined as unknown as StandardSchemaWithJSON<any>),
     resumeSchema: params.resumeSchema ? toStandardSchema(params.resumeSchema) : undefined,
     suspendSchema: params.suspendSchema ? toStandardSchema(params.suspendSchema) : undefined,
     requestContextSchema: params.requestContextSchema ? toStandardSchema(params.requestContextSchema) : undefined,
@@ -1354,8 +1358,12 @@ export class Workflow<
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
-    this.inputSchema = toStandardSchema(inputSchema);
-    this.outputSchema = toStandardSchema(outputSchema);
+    this.inputSchema = inputSchema
+      ? toStandardSchema(inputSchema)
+      : (undefined as unknown as StandardSchemaWithJSON<TInput>);
+    this.outputSchema = outputSchema
+      ? toStandardSchema(outputSchema)
+      : (undefined as unknown as StandardSchemaWithJSON<TOutput>);
     this.stateSchema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.requestContextSchema = requestContextSchema ? toStandardSchema(requestContextSchema) : undefined;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
@@ -2818,7 +2826,7 @@ export class Run<
       return inputData;
     }
 
-    return this.#validateSchema(step.inputSchema, inputData, 'input data');
+    return this.#validateSchema(step.inputSchema, inputData, 'inputData');
   }
 
   protected async _start({

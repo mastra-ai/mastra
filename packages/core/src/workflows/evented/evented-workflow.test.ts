@@ -6787,7 +6787,7 @@ describe('Workflow', () => {
         expect.fail('Expected error to be thrown');
       } catch (error) {
         expect((error as any)?.stack).toContain(
-          'Error: Invalid input data: \n- nested.value: Expected number, received string',
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
         );
       }
 
@@ -6804,7 +6804,7 @@ describe('Workflow', () => {
         expect.fail('Expected error to be thrown');
       } catch (error) {
         expect((error as any)?.stack).toContain(
-          'Error: Invalid input data: \n- nested.value: Expected number, received string',
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
         );
       }
 
@@ -6931,7 +6931,7 @@ describe('Workflow', () => {
         expect(result.error).toBeDefined();
         expect(result.error).toBeInstanceOf(Error);
         expect((result.error as any).message).toContain('Step input validation failed');
-        expect((result.error as any).message).toContain('start: Required');
+        expect((result.error as any).message).toContain('start: Invalid input: expected string, received undefined');
       } else {
         throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
       }
@@ -6956,7 +6956,9 @@ describe('Workflow', () => {
         error: expect.any(Error),
       });
       expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
-      expect(((step2Result as any)?.error as Error).message).toContain('start: Required');
+      expect(((step2Result as any)?.error as Error).message).toContain(
+        'start: Invalid input: expected string, received undefined',
+      );
 
       await mastra.stopEventEngine();
     });
@@ -7178,7 +7180,7 @@ describe('Workflow', () => {
         expect(result.error).toBeDefined();
         expect(result.error).toBeInstanceOf(Error);
         expect((result.error as any).message).toContain('Step input validation failed');
-        expect((result.error as any).message).toContain('start: Expected string, received number');
+        expect((result.error as any).message).toContain('start: Invalid input: expected string, received number');
       } else {
         throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
       }
@@ -7203,7 +7205,9 @@ describe('Workflow', () => {
         error: expect.any(Error),
       });
       expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
-      expect(((step2Result as any)?.error as Error).message).toContain('start: Expected string, received number');
+      expect(((step2Result as any)?.error as Error).message).toContain(
+        'start: Invalid input: expected string, received number',
+      );
 
       await mastra.stopEventEngine();
     });
@@ -7588,7 +7592,7 @@ describe('Workflow', () => {
       expect(result.steps['nested-workflow-a-evented'].error).toBeInstanceOf(Error);
       // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a-evented'].error.message).toContain(
-        'Step input validation failed: \n- newValue: Required',
+        'Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
       // @ts-expect-error - testing dynamic workflow result
@@ -9414,7 +9418,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun();
 
       await expect(run.timeTravel({ step: 'step2', inputData: { invalidPayload: 2 } })).rejects.toThrow(
-        'Invalid inputData: \n- step1Result: Required',
+        'Invalid inputData: \n- step1Result: Invalid input: expected number, received undefined',
       );
 
       await mastra.stopEventEngine();
