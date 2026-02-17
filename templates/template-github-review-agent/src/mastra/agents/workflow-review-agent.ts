@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent'
+import { Agent } from '@mastra/core/agent';
 
 /**
  * Lightweight reviewer used exclusively by the PR review workflow.
@@ -31,5 +31,5 @@ Apply ALL of the following review lenses to every file:
 - When the review depth says "HIGH-LEVEL", skip minor style issues entirely.`,
   defaultOptions: {
     maxSteps: 50,
-  }
-})
+  },
+});
