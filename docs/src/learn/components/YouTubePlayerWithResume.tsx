@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { cn } from '@site/src/lib/utils'
 import { useYouTubePlayer } from '../hooks/useYouTubePlayer'
-import { formatSeconds } from '../utils'
-import { Button } from '@site/src/components/ui/button'
 
 type YouTubePlayerWithResumeProps = {
   videoId: string
@@ -51,32 +49,18 @@ function ActivePlayer({
   onTimeUpdate: (seconds: number) => void
   onAutoComplete: () => void
 }) {
-  const { containerRef, isReady, seekTo, playVideo } = useYouTubePlayer({
+  const { containerRef } = useYouTubePlayer({
     videoId,
     startSeconds: savedSeconds,
     onTimeUpdate,
     onAutoComplete,
   })
 
-  const handleResume = () => {
-    seekTo(savedSeconds)
-    playVideo()
-  }
-
   return (
-    <>
-      <div
-        ref={containerRef}
-        className="relative aspect-video w-full overflow-hidden rounded-lg bg-(--mastra-surface-2) [&_iframe]:!h-full [&_iframe]:!w-full [&>div]:!h-full [&>div]:!w-full"
-      />
-      {isReady && savedSeconds > 10 && (
-        <div className="mt-2">
-          <Button variant="secondary" size="sm" onClick={handleResume}>
-            Resume at {formatSeconds(savedSeconds)}
-          </Button>
-        </div>
-      )}
-    </>
+    <div
+      ref={containerRef}
+      className="relative aspect-video w-full overflow-hidden rounded-lg bg-(--mastra-surface-2) [&_iframe]:!h-full [&_iframe]:!w-full [&>div]:!h-full [&>div]:!w-full"
+    />
   )
 }
 
@@ -99,12 +83,7 @@ export function YouTubePlayerWithResume({
           onAutoComplete={onAutoComplete}
         />
       ) : (
-        <>
-          <YouTubePoster videoId={videoId} onClick={() => setActivated(true)} />
-          {savedSeconds > 10 && (
-            <p className="mt-2 text-sm text-(--mastra-text-tertiary)">You left off at {formatSeconds(savedSeconds)}</p>
-          )}
-        </>
+        <YouTubePoster videoId={videoId} onClick={() => setActivated(true)} />
       )}
     </div>
   )
