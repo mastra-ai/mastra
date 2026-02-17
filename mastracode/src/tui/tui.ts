@@ -207,8 +207,8 @@ ${instructions}`,
     }
 
     private resetInput(): void {
-        this.editor.onSubmit = () => {
-            void this.onSubmit(this.editor.getText())
+        this.editor.onSubmit = (text: string) => {
+            void this.onSubmit(text)
         }
         this.ui.setFocus(this.editor)
     }

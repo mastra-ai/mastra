@@ -1157,6 +1157,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@mastra/libsql':
+        specifier: ^1.4.0
+        version: 1.4.0(@mastra/core@packages+core)
       ai:
         specifier: ^6.0.50
         version: 6.0.69(zod@4.3.6)
@@ -9999,6 +10002,12 @@ packages:
   '@mariozechner/pi-tui@0.52.12':
     resolution: {integrity: sha512-QQ4LUlAYKN2BvT3EMU63+kYLlIkyr706+rUFBGWvkiT8ZyMy5if3oaVJpO5qAndsMB+MaUnttIBPh3iHiaJ01g==}
     engines: {node: '>=20.0.0'}
+
+  '@mastra/libsql@1.4.0':
+    resolution: {integrity: sha512-7Ea6goCQpFxubKUp1+49reiEbbakP8WM7JHO3TZ4aQJBZKvf0wqTEoAKF0mMkDTcqN5C8QnrufThaYBbGHSHrA==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@mastra/core': '>=1.4.0-0 <2.0.0-0'
 
   '@mastra/mcp@1.0.0':
     resolution: {integrity: sha512-g+N3L61Sq4dQGLjMlQmVAnAPVOi1fJHmSe+gJxamxTGJ/r8Tdl6Za0gOj4faSeDUAn2sim0dCz2FEDjXDvoDsQ==}
@@ -28461,6 +28470,14 @@ snapshots:
       get-east-asian-width: 1.4.0
       marked: 15.0.12
       mime-types: 3.0.1
+
+  '@mastra/libsql@1.4.0(@mastra/core@packages+core)':
+    dependencies:
+      '@libsql/client': 0.15.15
+      '@mastra/core': link:packages/core
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@mastra/mcp@1.0.0(@mastra/core@packages+core)(@types/json-schema@7.0.15)(zod@3.25.76)':
     dependencies:

@@ -8,6 +8,7 @@
 import { z } from "zod"
 
 import { createMastraCodeHarness } from "./harness"
+import { createStorage } from "./storage"
 import { MastraTUI, mastra } from "./tui"
 import { detectProject } from "./utils"
 
@@ -161,7 +162,7 @@ const stateSchema = z.object({
 
 async function main() {
     const project = detectProject(process.cwd())
-    const storage = createPlaceholderStore()
+    const storage = createStorage(project)
     const agent = createPlaceholderAgent()
 
     const harness = createMastraCodeHarness({
