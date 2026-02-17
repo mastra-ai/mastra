@@ -20,34 +20,31 @@ import {
   Button,
   AlertTitle,
   type StoredAgent,
+  type AgentDataSource,
 } from '@mastra/playground-ui';
+import { Check } from 'lucide-react';
 
 function EditFormContent({
-  agent,
   agentId,
   selectedVersionId,
   versionData,
   readOnly = false,
+  form,
+  handlePublish,
+  isSubmitting,
 }: {
-  agent: StoredAgent;
   agentId: string;
   selectedVersionId: string | null;
   versionData?: ReturnType<typeof useAgentVersion>['data'];
   readOnly?: boolean;
+  form: ReturnType<typeof useAgentCmsForm>['form'];
+  handlePublish: ReturnType<typeof useAgentCmsForm>['handlePublish'];
+  isSubmitting: boolean;
 }) {
-  const { navigate, paths } = useLinkComponent();
   const [, setSearchParams] = useSearchParams();
   const location = useLocation();
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
-  const dataSource = isViewingVersion ? versionData : agent;
-
-  const { form, handlePublish, isSubmitting } = useAgentCmsForm({
-    mode: 'edit',
-    agentId,
-    dataSource,
-    onSuccess: id => navigate(`${paths.agentLink(id)}/chat`),
-  });
 
   const banner = isViewingVersion ? (
     <Alert variant="info" className="mb-4 mx-4">
@@ -79,6 +76,7 @@ function EditFormContent({
 
 function EditLayoutWrapper() {
   const { agentId } = useParams<{ agentId: string }>();
+  const { navigate, paths } = useLinkComponent();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
@@ -86,6 +84,16 @@ function EditLayoutWrapper() {
   const { data: versionData, isLoading: isLoadingVersion } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
+  });
+
+  const isViewingVersion = !!selectedVersionId && !!versionData;
+  const dataSource = (isViewingVersion ? versionData : agent) ?? ({} as AgentDataSource);
+
+  const { form, handlePublish, isSubmitting } = useAgentCmsForm({
+    mode: 'edit',
+    agentId: agentId ?? '',
+    dataSource,
+    onSuccess: id => navigate(`${paths.agentLink(id)}/chat`),
   });
 
   const handleVersionSelect = useCallback(
@@ -143,6 +151,23 @@ function EditLayoutWrapper() {
           Edit agent: {agent.name}
         </HeaderTitle>
         <HeaderAction>
+          {!isViewingVersion && (
+            <Button variant="primary" onClick={handlePublish} disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Icon>
+                    <Check />
+                  </Icon>
+                  Update agent
+                </>
+              )}
+            </Button>
+          )}
           <AgentVersionCombobox
             agentId={agentId}
             value={selectedVersionId ?? ''}
@@ -153,11 +178,13 @@ function EditLayoutWrapper() {
       </Header>
 
       <EditFormContent
-        agent={agent}
         agentId={agentId}
         selectedVersionId={selectedVersionId}
         versionData={versionData}
         readOnly={isLoadingVersion}
+        form={form}
+        handlePublish={handlePublish}
+        isSubmitting={isSubmitting}
       />
     </MainContentLayout>
   );
