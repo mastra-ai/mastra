@@ -161,7 +161,7 @@ const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, descri
             {name}
           </Txt>
 
-          <Txt variant="ui-sm" className="text-neutral3">
+          <Txt variant="ui-xs" className="text-neutral2">
             {description}
           </Txt>
         </div>
