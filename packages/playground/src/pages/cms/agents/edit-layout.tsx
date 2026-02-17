@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useParams, useSearchParams } from 'react-router';
 
 import {
@@ -19,7 +19,6 @@ import {
   Alert,
   Button,
   AlertTitle,
-  type StoredAgent,
   type AgentDataSource,
 } from '@mastra/playground-ui';
 import { Check } from 'lucide-react';
@@ -87,7 +86,11 @@ function EditLayoutWrapper() {
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
-  const dataSource = (isViewingVersion ? versionData : agent) ?? ({} as AgentDataSource);
+  const dataSource = useMemo<AgentDataSource>(() => {
+    if (isViewingVersion && versionData) return versionData;
+    if (agent) return agent;
+    return {} as AgentDataSource;
+  }, [isViewingVersion, versionData, agent]);
 
   const { form, handlePublish, isSubmitting } = useAgentCmsForm({
     mode: 'edit',
@@ -107,39 +110,8 @@ function EditLayoutWrapper() {
     [setSearchParams],
   );
 
-  if (isLoadingAgent) {
-    return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <AgentIcon />
-            </Icon>
-            <Skeleton className="h-6 w-[200px]" />
-          </HeaderTitle>
-        </Header>
-        <div className="flex items-center justify-center h-full">
-          <Spinner className="h-8 w-8" />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
-  if (!agent || !agentId) {
-    return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <AgentIcon />
-            </Icon>
-            Agent not found
-          </HeaderTitle>
-        </Header>
-        <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
-      </MainContentLayout>
-    );
-  }
+  const isNotFound = !isLoadingAgent && (!agent || !agentId);
+  const isReady = !isLoadingAgent && !!agent && !!agentId;
 
   return (
     <MainContentLayout>
@@ -148,44 +120,65 @@ function EditLayoutWrapper() {
           <Icon>
             <AgentIcon />
           </Icon>
-          Edit agent: {agent.name}
+          {isLoadingAgent && <Skeleton className="h-6 w-[200px]" />}
+          {isNotFound && 'Agent not found'}
+          {isReady && `Edit agent: ${agent.name}`}
         </HeaderTitle>
-        <HeaderAction>
-          {!isViewingVersion && (
-            <Button variant="primary" onClick={handlePublish} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Updating...
-                </>
-              ) : (
-                <>
-                  <Icon>
-                    <Check />
-                  </Icon>
-                  Update agent
-                </>
-              )}
-            </Button>
-          )}
-          <AgentVersionCombobox
-            agentId={agentId}
-            value={selectedVersionId ?? ''}
-            onValueChange={handleVersionSelect}
-            variant="outline"
-          />
-        </HeaderAction>
+        {isReady && (
+          <HeaderAction>
+            {!isViewingVersion && (
+              <Button variant="primary" onClick={handlePublish} disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Spinner className="h-4 w-4" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <Icon>
+                      <Check />
+                    </Icon>
+                    Update agent
+                  </>
+                )}
+              </Button>
+            )}
+            <AgentVersionCombobox
+              agentId={agentId}
+              value={selectedVersionId ?? ''}
+              onValueChange={handleVersionSelect}
+              variant="outline"
+            />
+          </HeaderAction>
+        )}
       </Header>
 
-      <EditFormContent
-        agentId={agentId}
-        selectedVersionId={selectedVersionId}
-        versionData={versionData}
-        readOnly={isLoadingVersion}
-        form={form}
-        handlePublish={handlePublish}
-        isSubmitting={isSubmitting}
-      />
+      {isNotFound ? (
+        <>
+          <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
+          <div className="hidden">
+            <EditFormContent
+              agentId={agentId ?? ''}
+              selectedVersionId={selectedVersionId}
+              versionData={versionData}
+              readOnly
+              form={form}
+              handlePublish={handlePublish}
+              isSubmitting={isSubmitting}
+            />
+          </div>
+        </>
+      ) : (
+        <EditFormContent
+          agentId={agentId ?? ''}
+          selectedVersionId={selectedVersionId}
+          versionData={versionData}
+          readOnly={isLoadingAgent || isLoadingVersion}
+          form={form}
+          handlePublish={handlePublish}
+          isSubmitting={isSubmitting}
+        />
+      )}
     </MainContentLayout>
   );
 }
