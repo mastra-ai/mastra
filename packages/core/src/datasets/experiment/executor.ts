@@ -184,8 +184,23 @@ async function executeAgent(
     | { input: ScorerRunInputForAgent; output: ScorerRunOutputForAgent }
     | undefined;
 
+  // Only persist fields relevant to experiment evaluation — drop provider metadata,
+  // duplicate messages, steps trace, and other debugging internals
+  const trimmedOutput = {
+    text: (result as any)?.text,
+    object: (result as any)?.object,
+    toolCalls: (result as any)?.toolCalls,
+    toolResults: (result as any)?.toolResults,
+    sources: (result as any)?.sources,
+    files: (result as any)?.files,
+    usage: (result as any)?.usage,
+    reasoningText: (result as any)?.reasoningText,
+    traceId,
+    error: (result as any)?.error ?? null,
+  };
+
   return {
-    output: result,
+    output: trimmedOutput,
     error: null,
     traceId,
     scorerInput: scoringData?.input,

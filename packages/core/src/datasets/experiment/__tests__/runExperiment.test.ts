@@ -179,7 +179,7 @@ describe('runExperiment', () => {
       const successItem = result.results.find(r => r.error === null);
 
       expect(failedItem?.error).toEqual(expect.objectContaining({ message: 'First call fails' }));
-      expect(successItem?.output).toEqual({ text: 'Success' });
+      expect(successItem?.output).toEqual(expect.objectContaining({ text: 'Success' }));
     });
 
     it('marks run as failed when all items fail', async () => {
