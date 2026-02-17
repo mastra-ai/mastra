@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { SectionHeader } from '@/domains/cms';
+import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { WorkflowIcon, Icon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Section } from '@/ds/components/Section';
@@ -13,6 +13,7 @@ import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import type { RuleGroup } from '@/lib/rule-engine';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
@@ -21,6 +22,7 @@ export function WorkflowsPage() {
   const { control } = form;
   const { data: workflows } = useWorkflows();
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
+  const variables = useWatch({ control, name: 'variables' });
   const [search, setSearch] = useState('');
 
   const options = useMemo(() => {
@@ -58,6 +60,13 @@ export function WorkflowsPage() {
     form.setValue('workflows', {
       ...selectedWorkflows,
       [workflowId]: { ...selectedWorkflows?.[workflowId], description },
+    });
+  };
+
+  const handleRulesChange = (workflowId: string, rules: RuleGroup | undefined) => {
+    form.setValue('workflows', {
+      ...selectedWorkflows,
+      [workflowId]: { ...selectedWorkflows?.[workflowId], rules },
     });
   };
 
@@ -120,6 +129,15 @@ export function WorkflowsPage() {
                         />
                       </EntityDescription>
                     </EntityContent>
+
+                    {isSelected && !readOnly && (
+                      <DisplayConditionsDialog
+                        entityName={workflow.label}
+                        schema={variables}
+                        rules={selectedWorkflows?.[workflow.value]?.rules}
+                        onRulesChange={rules => handleRulesChange(workflow.value, rules)}
+                      />
+                    )}
 
                     {!readOnly && (
                       <Switch

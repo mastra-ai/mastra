@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { SectionHeader } from '@/domains/cms';
+import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { Icon, ToolsIcon } from '@/ds/icons';
 import { Section } from '@/ds/components/Section';
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -168,6 +168,15 @@ export function ToolsPage() {
                         />
                       </EntityDescription>
                     </EntityContent>
+
+                    {isSelected && !readOnly && (
+                      <DisplayConditionsDialog
+                        entityName={tool.label}
+                        schema={variables}
+                        rules={selectedTools?.[tool.value]?.rules}
+                        onRulesChange={rules => handleRulesChange(tool.value, rules)}
+                      />
+                    )}
 
                     {!readOnly && (
                       <Switch

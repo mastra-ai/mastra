@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { SectionHeader } from '@/domains/cms';
+import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { AgentIcon, Icon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Section } from '@/ds/components/Section';
@@ -13,6 +13,7 @@ import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
 import { useAgents } from '../../hooks/use-agents';
+import type { RuleGroup } from '@/lib/rule-engine';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
@@ -21,6 +22,7 @@ export function AgentsPage() {
   const { control } = form;
   const { data: agents } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
+  const variables = useWatch({ control, name: 'variables' });
   const [search, setSearch] = useState('');
 
   const options = useMemo(() => {
@@ -67,6 +69,13 @@ export function AgentsPage() {
     form.setValue('agents', {
       ...selectedAgents,
       [agentId]: { ...selectedAgents?.[agentId], description },
+    });
+  };
+
+  const handleRulesChange = (agentId: string, rules: RuleGroup | undefined) => {
+    form.setValue('agents', {
+      ...selectedAgents,
+      [agentId]: { ...selectedAgents?.[agentId], rules },
     });
   };
 
@@ -131,6 +140,15 @@ export function AgentsPage() {
                         />
                       </EntityDescription>
                     </EntityContent>
+
+                    {isSelected && !readOnly && (
+                      <DisplayConditionsDialog
+                        entityName={agent.label}
+                        schema={variables}
+                        rules={selectedAgents?.[agent.value]?.rules}
+                        onRulesChange={rules => handleRulesChange(agent.value, rules)}
+                      />
+                    )}
 
                     {!readOnly && (
                       <Switch

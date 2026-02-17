@@ -1,14 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
-import { ChevronRight, Ruler } from 'lucide-react';
 
-import { SectionHeader } from '@/domains/cms';
+import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { JudgeIcon, Icon } from '@/ds/icons';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
-import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
@@ -19,8 +16,7 @@ import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
-import { RuleBuilder, countLeafRules } from '@/lib/rule-engine';
+import type { RuleGroup } from '@/lib/rule-engine';
 import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -152,14 +148,20 @@ export function ScorersPage() {
                                 samplingConfig={selectedScorers?.[scorer.value]?.sampling}
                                 onSamplingChange={config => handleSamplingChange(scorer.value, config)}
                                 readOnly={readOnly}
-                                schema={variables}
-                                rules={selectedScorers?.[scorer.value]?.rules || undefined}
-                                onRulesChange={readOnly ? undefined : rules => handleRulesChange(scorer.value, rules)}
                               />
                             </div>
                           )}
                         </EntityDescription>
                       </EntityContent>
+
+                      {isSelected && !readOnly && (
+                        <DisplayConditionsDialog
+                          entityName={scorer.label}
+                          schema={variables}
+                          rules={selectedScorers?.[scorer.value]?.rules}
+                          onRulesChange={rules => handleRulesChange(scorer.value, rules)}
+                        />
+                      )}
 
                       {!readOnly && (
                         <Switch checked={isSelected} onCheckedChange={() => handleValueChange(scorer.value)} />
@@ -181,9 +183,6 @@ interface ScorerConfigPanelProps {
   samplingConfig?: ScorerConfig['sampling'];
   onSamplingChange: (config: ScorerConfig['sampling'] | undefined) => void;
   readOnly?: boolean;
-  schema?: JsonSchema;
-  rules?: RuleGroup;
-  onRulesChange?: (rules: RuleGroup | undefined) => void;
 }
 
 function ScorerConfigPanel({
@@ -191,16 +190,8 @@ function ScorerConfigPanel({
   samplingConfig,
   onSamplingChange,
   readOnly = false,
-  schema,
-  rules,
-  onRulesChange,
 }: ScorerConfigPanelProps) {
   const samplingType = samplingConfig?.type || 'none';
-  const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
-  const showRulesSection = schema && hasVariablesSet && !readOnly;
-  const ruleCount = countLeafRules(rules);
-
-  const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
   const handleTypeChange = (type: string) => {
     if (type === 'none') {
@@ -262,32 +253,6 @@ function ScorerConfigPanel({
           </div>
         )}
       </div>
-
-      {showRulesSection && (
-        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border1 pt-2">
-          <CollapsibleTrigger className="flex items-center gap-2 w-full">
-            <Icon>
-              <ChevronRight
-                className={cn('text-icon3 transition-transform', {
-                  'rotate-90': isRulesOpen,
-                })}
-              />
-            </Icon>
-            <Icon>
-              <Ruler className="text-accent6" />
-            </Icon>
-            <span className="text-neutral5 text-ui-sm">Display Conditions</span>
-            {ruleCount > 0 && (
-              <span className="text-neutral3 text-ui-sm">
-                ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
-              </span>
-            )}
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            {onRulesChange && <RuleBuilder schema={schema} ruleGroup={rules} onChange={onRulesChange} />}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
     </div>
   );
 }
