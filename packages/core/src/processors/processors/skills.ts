@@ -589,14 +589,27 @@ ${skillInstructions}`;
     const skillTools: Record<string, unknown> = {};
 
     if (hasSkills) {
-      skillTools['skill-activate'] = this.createSkillActivateTool();
-      skillTools['skill-search'] = this.createSkillSearchTool();
+      const activateTool = this.createSkillActivateTool();
+      (activateTool as any).needsApprovalFn = () => false;
+      skillTools['skill-activate'] = activateTool;
+
+      const searchTool = this.createSkillSearchTool();
+      (searchTool as any).needsApprovalFn = () => false;
+      skillTools['skill-search'] = searchTool;
     }
 
     if (this._activatedSkills.size > 0) {
-      skillTools['skill-read-reference'] = this.createSkillReadReferenceTool();
-      skillTools['skill-read-script'] = this.createSkillReadScriptTool();
-      skillTools['skill-read-asset'] = this.createSkillReadAssetTool();
+      const refTool = this.createSkillReadReferenceTool();
+      (refTool as any).needsApprovalFn = () => false;
+      skillTools['skill-read-reference'] = refTool;
+
+      const scriptTool = this.createSkillReadScriptTool();
+      (scriptTool as any).needsApprovalFn = () => false;
+      skillTools['skill-read-script'] = scriptTool;
+
+      const assetTool = this.createSkillReadAssetTool();
+      (assetTool as any).needsApprovalFn = () => false;
+      skillTools['skill-read-asset'] = assetTool;
     }
 
     return {
