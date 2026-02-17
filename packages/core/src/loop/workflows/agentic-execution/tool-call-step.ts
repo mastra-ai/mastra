@@ -217,7 +217,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       if (inputData.providerExecuted) {
         return {
           ...inputData,
-          result: inputData.output,
+          result: inputData.output ?? { providerExecuted: true, toolName: inputData.toolName },
         };
       }
 

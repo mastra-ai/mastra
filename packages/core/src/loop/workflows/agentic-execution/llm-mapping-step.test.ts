@@ -362,6 +362,52 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(false);
   });
 
+  it('should continue when provider-executed tools are mixed with regular tools', async () => {
+    // Arrange: One regular tool with result + one provider-executed tool with fallback result
+    // This is the scenario from #13125 — after the fix in tool-call-step, provider-executed
+    // tools get a non-undefined result, so they should not trigger the bail path
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'get_company_info',
+        args: { name: 'test' },
+        result: { company: 'Acme' },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    // Act
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should NOT bail — both tools have results
+    expect(bail).not.toHaveBeenCalled();
+    // Should emit tool-result for both tools
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          result: { company: 'Acme' },
+        }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-2',
+          result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        }),
+      }),
+    );
+  });
+
   it('should bail when errors are a mix of tool-not-found and other errors', async () => {
     // Arrange: One tool-not-found error and one execution error
     const { ToolNotFoundError } = await import('../errors');
