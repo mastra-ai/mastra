@@ -3199,7 +3199,10 @@ export class Agent<
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
     const threadFromArgs = threadIdFromContext
-      ? { id: threadIdFromContext }
+      ? {
+          ...(typeof options.memory?.thread === 'object' ? options.memory.thread : {}),
+          id: threadIdFromContext,
+        }
       : resolveThreadIdFromArgs({
           memory: {
             ...options.memory,

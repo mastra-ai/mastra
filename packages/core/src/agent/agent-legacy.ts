@@ -694,7 +694,10 @@ export class AgentLegacyHandler {
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
     const threadFromArgs = threadIdFromContext
-      ? { id: threadIdFromContext }
+      ? {
+          ...(typeof (args.memory as any)?.thread === 'object' ? (args.memory as any).thread : {}),
+          id: threadIdFromContext,
+        }
       : resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
     const resourceId = resourceIdFromContext || (args.memory as any)?.resource || resourceIdFromArgs;
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
