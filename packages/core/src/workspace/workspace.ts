@@ -31,6 +31,7 @@
  */
 
 import type { IMastraLogger } from '../logger';
+import type { RequestContext } from '../request-context';
 import type { Tool } from '../tools/tool';
 import type { MastraVector } from '../vector';
 
@@ -272,7 +273,10 @@ export interface WorkspaceConfig<
   tools?:
     | WorkspaceToolsConfig
     | Record<string, Tool<any, any, any, any>>
-    | ((context: { workspace: Workspace<TFilesystem, TSandbox, TMounts> }) => Record<string, Tool<any, any, any, any>>);
+    | ((context: {
+        workspace: Workspace<TFilesystem, TSandbox, TMounts>;
+        requestContext?: RequestContext;
+      }) => Record<string, Tool<any, any, any, any>>);
 
   // ---------------------------------------------------------------------------
   // Lifecycle Options
@@ -499,37 +503,68 @@ export class Workspace<
   }
 
   /**
-   * Get the per-tool configuration for this workspace.
-   * Returns undefined if no tools config was provided or if tool overrides are set.
+   * Get the raw tools config/overrides as provided by the user.
+   * @internal Prefer `getTools()` for resolved tools.
    */
-  getToolsConfig(): WorkspaceToolsConfig | undefined {
-    if (!this._config.tools || this.getToolOverrides()) {
-      return undefined;
-    }
-    return this._config.tools as WorkspaceToolsConfig;
+  getToolsConfig():
+    | WorkspaceToolsConfig
+    | Record<string, Tool<any, any, any, any>>
+    | ((context: {
+        workspace: Workspace<TFilesystem, TSandbox, TMounts>;
+        requestContext?: RequestContext;
+      }) => Record<string, Tool<any, any, any, any>>)
+    | undefined {
+    return this._config.tools;
   }
 
   /**
-   * Get tool overrides if provided.
-   * Returns the Record<string, Tool> if tools were set as overrides, undefined otherwise.
-   * If tools is a function, it is called with this workspace to resolve the tools.
+   * Get the resolved workspace tools.
+   *
+   * Handles all three config forms:
+   * - **Function**: called with `{ workspace, requestContext }` to produce tools dynamically
+   * - **Record<string, Tool>**: returned as-is (e.g. from `@mastra/workspace-tools`)
+   * - **WorkspaceToolsConfig** (or undefined): delegates to the built-in tool factory
+   *   registered by the tools module
+   *
+   * @example
+   * ```typescript
+   * // In agent execution:
+   * const tools = workspace.getTools({ requestContext });
+   * ```
    */
-  getToolOverrides(): Record<string, Tool<any, any, any, any>> | undefined {
-    const tools = this._config.tools;
-    if (!tools) return undefined;
+  getTools(options?: { requestContext?: RequestContext }): Record<string, Tool<any, any, any, any>> {
+    const rawConfig = this._config.tools;
 
-    // If tools is a function, call it with context to resolve
-    if (typeof tools === 'function') {
-      return tools({ workspace: this as any });
+    // Function config: call with workspace + requestContext
+    if (typeof rawConfig === 'function') {
+      return rawConfig({ workspace: this, requestContext: options?.requestContext });
     }
 
-    // Detect tool overrides: if any value has an `execute` function, it's a Tool record
-    const firstValue = Object.values(tools)[0];
-    if (firstValue && typeof (firstValue as any).execute === 'function') {
-      return tools as Record<string, Tool<any, any, any, any>>;
+    // Direct tool overrides (Record<string, Tool>): return as-is
+    if (rawConfig && typeof rawConfig === 'object') {
+      const values = Object.values(rawConfig);
+      if (values.length > 0 && values.some(v => typeof (v as any).execute === 'function')) {
+        return rawConfig as Record<string, Tool<any, any, any, any>>;
+      }
     }
-    return undefined;
+
+    // WorkspaceToolsConfig or undefined: use registered built-in factory
+    if (Workspace.__builtinToolFactory) {
+      return Workspace.__builtinToolFactory(this, rawConfig as WorkspaceToolsConfig | undefined);
+    }
+
+    return {};
   }
+
+  /**
+   * Built-in tool factory, registered by the tools module.
+   * This avoids a circular import between workspace.ts and tools.ts.
+   * @internal
+   */
+  static __builtinToolFactory?: (
+    workspace: Workspace<any, any, any>, // TODO: replace this with AnyWorkspace
+    config?: WorkspaceToolsConfig,
+  ) => Record<string, Tool<any, any, any, any>>;
 
   /**
    * Access skills stored in this workspace.

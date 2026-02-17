@@ -26,22 +26,6 @@ export {
 
 // Tools
 export { createWorkspaceTools, resolveToolConfig, type WorkspaceToolConfig, type WorkspaceToolsConfig } from './tools';
-export { formatAsTree } from './tools';
-
-// Line Utilities
-export {
-  extractLines,
-  extractLinesWithLimit,
-  formatWithLineNumbers,
-  charIndexToLineNumber,
-  charRangeToLineRange,
-  countOccurrences,
-  replaceString,
-  StringNotFoundError,
-  StringNotUniqueError,
-  type LineRange,
-} from './line-utils';
-
 // Lifecycle
 export * from './lifecycle';
 

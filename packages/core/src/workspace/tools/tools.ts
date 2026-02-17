@@ -19,7 +19,7 @@ import {
   StringNotFoundError,
   StringNotUniqueError,
 } from '../line-utils';
-import type { Workspace } from '../workspace';
+import { Workspace } from '../workspace';
 import { formatAsTree } from './tree-formatter';
 import type { WorkspaceToolsConfig } from './types';
 
@@ -74,22 +74,26 @@ export function resolveToolConfig(
 /**
  * Creates workspace tools that will be auto-injected into agents.
  *
- * If the workspace has tool overrides (e.g. from `@mastra/workspace-tools`),
- * those are returned directly. Otherwise, the built-in closure-based tools
- * are created using the workspace's tool configuration.
+ * Delegates to `workspace.getTools()` which handles all config forms:
+ * - Function overrides (called with workspace context)
+ * - Direct tool overrides (returned as-is)
+ * - WorkspaceToolsConfig (built-in tools created via registered factory)
  *
  * @param workspace - The workspace instance to bind tools to
  * @returns Record of workspace tools
  */
 export function createWorkspaceTools(workspace: Workspace) {
-  // If tool overrides are provided, return them directly
-  const toolOverrides = workspace.getToolOverrides();
-  if (toolOverrides) {
-    return toolOverrides;
-  }
+  return workspace.getTools();
+}
 
+/**
+ * Creates the built-in closure-based workspace tools.
+ * Registered as `Workspace.__builtinToolFactory` to avoid circular imports.
+ *
+ * @internal
+ */
+function createBuiltinWorkspaceTools(workspace: Workspace, toolsConfig?: WorkspaceToolsConfig) {
   const tools: Record<string, any> = {};
-  const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;
 
   // Create a shared file read tracker for requireReadBeforeWrite enforcement
@@ -742,3 +746,9 @@ Usage:
 
   return tools;
 }
+
+// Register built-in tool factory on Workspace class.
+// This runs when the tools module is loaded, which happens before any
+// workspace.getTools() call since consumers import from @mastra/core/workspace
+// which re-exports both workspace.ts and tools/.
+Workspace.__builtinToolFactory = createBuiltinWorkspaceTools;

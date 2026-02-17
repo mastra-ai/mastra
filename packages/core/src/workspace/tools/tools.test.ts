@@ -858,7 +858,7 @@ describe('createWorkspaceTools', () => {
       expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
     });
 
-    it('getToolOverrides returns undefined for config objects', () => {
+    it('getToolsConfig returns config for config objects', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
@@ -867,11 +867,10 @@ describe('createWorkspaceTools', () => {
         },
       });
 
-      expect(workspace.getToolOverrides()).toBeUndefined();
       expect(workspace.getToolsConfig()).toEqual({ enabled: true, requireApproval: false });
     });
 
-    it('getToolOverrides returns tools for tool override objects', () => {
+    it('getToolsConfig returns tool overrides as-is', () => {
       const customTool = {
         id: 'my_tool',
         description: 'My tool',
@@ -883,8 +882,8 @@ describe('createWorkspaceTools', () => {
         tools: { my_tool: customTool } as any,
       });
 
-      expect(workspace.getToolOverrides()).toBeDefined();
-      expect(workspace.getToolsConfig()).toBeUndefined();
+      // getToolsConfig returns the raw value — createWorkspaceTools handles detection
+      expect(workspace.getToolsConfig()).toBeDefined();
     });
 
     it('should resolve function-based tool overrides with workspace context', () => {

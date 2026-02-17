@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '@mastra/core/tools';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { WorkspaceReadOnlyError } from '@mastra/core/workspace';
-import { replaceString, StringNotFoundError, StringNotUniqueError } from '@mastra/core/workspace';
+import { replaceString, StringNotFoundError, StringNotUniqueError } from './line-utils';
 import { requireFilesystem } from './helpers';
 
 export const editFileTool = createTool({

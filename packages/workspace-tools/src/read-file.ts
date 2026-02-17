@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createTool } from '@mastra/core/tools';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
-import { extractLinesWithLimit, formatWithLineNumbers } from '@mastra/core/workspace';
+import { extractLinesWithLimit, formatWithLineNumbers } from './line-utils';
 import { requireFilesystem } from './helpers';
 
 export const readFileTool = createTool({

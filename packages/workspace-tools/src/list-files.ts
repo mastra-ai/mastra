@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '@mastra/core/tools';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { requireFilesystem } from './helpers';
-import { formatAsTree } from '@mastra/core/workspace';
+import { formatAsTree } from './tree-formatter';
 
 export const listFilesTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
