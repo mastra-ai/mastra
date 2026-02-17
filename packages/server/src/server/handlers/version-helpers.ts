@@ -125,21 +125,21 @@ export function computeVersionDiffs(
  * Generic store interface for version management operations.
  * Works with any versioned storage domain.
  */
-export interface VersionedStoreInterface<TEntity = any> {
+export interface VersionedStoreInterface<TEntity = unknown> {
   getLatestVersion: (parentId: string) => Promise<{
     id: string;
     versionNumber: number;
-    [key: string]: any;
+    [key: string]: unknown;
   } | null>;
   getVersion: (id: string) => Promise<{
     id: string;
     versionNumber: number;
-    [key: string]: any;
+    [key: string]: unknown;
   } | null>;
-  createVersion: (params: any) => Promise<any>;
-  update: (params: any) => Promise<TEntity>;
-  listVersions: (params: any) => Promise<{
-    versions: Array<{ id: string; versionNumber: number; [key: string]: any }>;
+  createVersion: (params: Record<string, unknown>) => Promise<unknown>;
+  update: (params: Record<string, unknown>) => Promise<TEntity>;
+  listVersions: (params: Record<string, unknown>) => Promise<{
+    versions: Array<{ id: string; versionNumber: number; [key: string]: unknown }>;
     total: number;
     page: number;
     perPage: number | false;
