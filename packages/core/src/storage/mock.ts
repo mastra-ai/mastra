@@ -8,7 +8,9 @@ import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
 import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
+import { InMemorySkillsStorage } from './domains/skills/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
+import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
  * In-memory storage implementation for testing and development.
  *
@@ -56,6 +58,8 @@ export class InMemoryStore extends MastraCompositeStore {
       promptBlocks: new InMemoryPromptBlocksStorage({ db: this.#db }),
       scorerDefinitions: new InMemoryScorerDefinitionsStorage({ db: this.#db }),
       mcpClients: new InMemoryMCPClientsStorage({ db: this.#db }),
+      workspaces: new InMemoryWorkspacesStorage({ db: this.#db }),
+      skills: new InMemorySkillsStorage({ db: this.#db }),
     };
   }
 

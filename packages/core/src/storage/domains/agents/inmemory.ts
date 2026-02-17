@@ -111,6 +111,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       'scorers',
       'mcpClients',
       'requestContextSchema',
+      'workspace',
+      'skills',
+      'skillsFormat',
     ];
 
     // Check if any config fields are present in the update

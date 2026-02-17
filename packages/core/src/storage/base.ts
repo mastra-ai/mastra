@@ -5,10 +5,13 @@ import type {
   PromptBlocksStorage,
   ScorerDefinitionsStorage,
   MCPClientsStorage,
+  WorkspacesStorage,
+  SkillsStorage,
   ScoresStorage,
   WorkflowsStorage,
   MemoryStorage,
   ObservabilityStorage,
+  BlobStore,
 } from './domains';
 
 export type StorageDomains = {
@@ -20,6 +23,9 @@ export type StorageDomains = {
   promptBlocks?: PromptBlocksStorage;
   scorerDefinitions?: ScorerDefinitionsStorage;
   mcpClients?: MCPClientsStorage;
+  workspaces?: WorkspacesStorage;
+  skills?: SkillsStorage;
+  blobs?: BlobStore;
 };
 
 /**
@@ -213,6 +219,8 @@ export class MastraCompositeStore extends MastraBase {
         promptBlocks: domainOverrides.promptBlocks ?? defaultStores?.promptBlocks,
         scorerDefinitions: domainOverrides.scorerDefinitions ?? defaultStores?.scorerDefinitions,
         mcpClients: domainOverrides.mcpClients ?? defaultStores?.mcpClients,
+        workspaces: domainOverrides.workspaces ?? defaultStores?.workspaces,
+        skills: domainOverrides.skills ?? defaultStores?.skills,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -279,6 +287,18 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.mcpClients) {
       initTasks.push(this.stores.mcpClients.init());
+    }
+
+    if (this.stores?.workspaces) {
+      initTasks.push(this.stores.workspaces.init());
+    }
+
+    if (this.stores?.skills) {
+      initTasks.push(this.stores.skills.init());
+    }
+
+    if (this.stores?.blobs) {
+      initTasks.push(this.stores.blobs.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);
