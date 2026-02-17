@@ -269,6 +269,12 @@ export interface WorkspaceConfig<
 // Re-export WorkspaceStatus from types
 export type { WorkspaceStatus } from './types';
 
+/**
+ * A Workspace with any combination of filesystem, sandbox, and mounts.
+ * Use this when you need to accept any Workspace regardless of its generic parameters.
+ */
+export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, any>;
+
 // =============================================================================
 // Path Context Types
 // =============================================================================
