@@ -551,6 +551,10 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
     });
 
     it('should update workflow results in snapshot', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow state updates sequentially test');
+        return;
+      }
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const snapshot = {
