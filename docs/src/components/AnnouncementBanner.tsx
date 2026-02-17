@@ -6,6 +6,7 @@ export function AnnouncementBanner() {
         <a
           href="https://mastra.ai/blog/announcing-mastra-1"
           target="_blank"
+          rel="noopener noreferrer"
           className="ml-4 text-green-700! underline! hover:no-underline! dark:text-green-400!"
         >
           Read announcement

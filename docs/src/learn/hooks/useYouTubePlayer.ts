@@ -56,6 +56,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
     if (!containerRef.current) return
 
     let player: YT.Player | null = null
+    let playerDiv: HTMLDivElement | null = null
     let pollInterval: ReturnType<typeof setInterval> | null = null
     let destroyed = false
 
@@ -67,7 +68,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
       }
       if (destroyed || !containerRef.current || !window.YT) return
 
-      const playerDiv = document.createElement('div')
+      playerDiv = document.createElement('div')
       containerRef.current.appendChild(playerDiv)
 
       player = new window.YT.Player(playerDiv, {
@@ -95,8 +96,14 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
           onStateChange: (event: YT.OnStateChangeEvent) => {
             if (destroyed) return
             const time = player!.getCurrentTime()
+            if (event.data === window.YT!.PlayerState.PLAYING) {
+              // Trigger in-progress detection immediately on first play
+              onTimeUpdateRef.current?.(time || 0.1)
+              lastSaveRef.current = Date.now()
+            }
             if (event.data === window.YT!.PlayerState.PAUSED) {
               onTimeUpdateRef.current?.(time)
+              lastSaveRef.current = Date.now()
             }
             if (event.data === window.YT!.PlayerState.ENDED) {
               onTimeUpdateRef.current?.(time)
@@ -117,9 +124,9 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
           setCurrentTime(time)
           if (dur > 0) setDuration(dur)
 
-          // Throttle save to every 5s
-          if (time - lastSaveRef.current >= 5) {
-            lastSaveRef.current = time
+          // Throttle save to every 5s using wall-clock time
+          if (Date.now() - lastSaveRef.current >= 5000) {
+            lastSaveRef.current = Date.now()
             onTimeUpdateRef.current?.(time)
           }
         } catch {
@@ -137,6 +144,13 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
         player?.destroy()
       } catch {
         // ignore
+      }
+      if (playerDiv && containerRef.current) {
+        try {
+          containerRef.current.removeChild(playerDiv)
+        } catch {
+          // ignore if already removed
+        }
       }
       playerRef.current = null
     }

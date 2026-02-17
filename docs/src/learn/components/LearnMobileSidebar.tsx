@@ -14,15 +14,31 @@ type LearnMobileSidebarProps = {
 }
 
 function ProgressIcon({ storage, slug, status }: { storage: LearnStorageV1; slug: string; status: LessonStatus }) {
+  const watched = storage.lessons[slug]?.watched ?? false
+  const prevWatchedRef = React.useRef(watched)
+  const [animating, setAnimating] = React.useState(false)
+
+  if (watched && !prevWatchedRef.current) {
+    setAnimating(true)
+  }
+  prevWatchedRef.current = watched
+
   if (status === 'comingSoon') {
     return <span className="learn-sidebar-icon-coming-soon" />
   }
   const p = storage.lessons[slug]
   if (p?.watched) {
-    return <span className="learn-watched-icon is-watched">✓</span>
+    return (
+      <span
+        className={`learn-watched-icon is-watched${animating ? 'is-animate' : ''}`}
+        onAnimationEnd={() => setAnimating(false)}
+      >
+        ✓
+      </span>
+    )
   }
   if (p && p.seconds > 0) {
-    return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-yellow-500" />
+    return <span className="learn-sidebar-icon-in-progress" />
   }
   return <span className="learn-sidebar-icon-unwatched" />
 }

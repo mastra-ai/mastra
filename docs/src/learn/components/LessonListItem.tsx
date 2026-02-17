@@ -24,7 +24,7 @@ function ProgressDot({ status }: { status: LessonProgressStatus }) {
     return <span className="learn-watched-icon is-watched">✓</span>
   }
   if (status === 'in-progress') {
-    return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-yellow-500" />
+    return <span className="learn-sidebar-icon-in-progress" />
   }
   return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-(--border)" />
 }
