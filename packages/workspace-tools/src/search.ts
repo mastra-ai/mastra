@@ -16,24 +16,6 @@ export const searchTool = createTool({
       .describe('Search mode: bm25 for keyword search, vector for semantic search, hybrid for both combined'),
     minScore: z.number().optional().describe('Minimum score threshold (0-1 for normalized scores)'),
   }),
-  outputSchema: z.object({
-    results: z.array(
-      z.object({
-        id: z.string().describe('Document/file path'),
-        content: z.string().describe('The matching content'),
-        score: z.number().describe('Relevance score'),
-        lineRange: z
-          .object({
-            start: z.number(),
-            end: z.number(),
-          })
-          .optional()
-          .describe('Line range where query terms were found'),
-      }),
-    ),
-    count: z.number().describe('Number of results returned'),
-    mode: z.string().describe('The search mode that was used'),
-  }),
   execute: async ({ query, topK, mode, minScore }, context) => {
     const workspace = requireWorkspace(context);
 
@@ -43,15 +25,27 @@ export const searchTool = createTool({
       minScore,
     });
 
-    return {
-      results: results.map(r => ({
-        id: r.id,
-        content: r.content,
-        score: r.score,
-        lineRange: r.lineRange,
-      })),
-      count: results.length,
-      mode: mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25'),
-    };
+    const effectiveMode = mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25');
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.SEARCH.SEARCH,
+        count: results.length,
+        mode: effectiveMode,
+        workspace: { id: workspace.id, name: workspace.name },
+      },
+    });
+
+    // Format as grep-like output
+    const lines = results.map(r => {
+      const lineInfo = r.lineRange ? `:${r.lineRange.start}-${r.lineRange.end}` : '';
+      return `${r.id}${lineInfo}: ${r.content}`;
+    });
+
+    lines.push('---');
+    lines.push(`${results.length} result${results.length !== 1 ? 's' : ''} (${effectiveMode} search)`);
+
+    return lines.join('\n');
   },
 });

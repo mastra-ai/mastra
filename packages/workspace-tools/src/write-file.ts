@@ -12,13 +12,8 @@ export const writeFileTool = createTool({
     content: z.string().describe('The content to write to the file'),
     overwrite: z.boolean().optional().default(true).describe('Whether to overwrite the file if it already exists'),
   }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    path: z.string().describe('The path where the file was written'),
-    size: z.number().describe('The size of the written content in bytes'),
-  }),
   execute: async ({ path, content, overwrite }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     if (filesystem.readOnly) {
       throw new WorkspaceReadOnlyError('write_file');
@@ -26,10 +21,19 @@ export const writeFileTool = createTool({
 
     await filesystem.writeFile(path, content, { overwrite });
 
-    return {
-      success: true,
-      path,
-      size: Buffer.byteLength(content, 'utf-8'),
-    };
+    const size = Buffer.byteLength(content, 'utf-8');
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+        path,
+        size,
+        workspace: { id: workspace.id, name: workspace.name },
+        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+      },
+    });
+
+    return `Wrote ${size} bytes to ${path}`;
   },
 });

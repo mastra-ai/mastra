@@ -112,6 +112,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isListFiles = toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
 
   if (isListFiles) {
+    const listFilesOutput = Array.isArray(result) ? result : result?.output || result?.toolOutput || [];
     return (
       <FileTreeBadge
         toolName={toolName}
@@ -121,6 +122,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
         isNetwork={isNetwork ?? false}
+        toolOutput={listFilesOutput}
         toolCalled={toolCalled}
       />
     );

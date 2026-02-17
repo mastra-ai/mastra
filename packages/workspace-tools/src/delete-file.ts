@@ -15,12 +15,8 @@ export const deleteFileTool = createTool({
       .default(false)
       .describe('If true, delete directories and their contents recursively. Required for non-empty directories.'),
   }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    path: z.string(),
-  }),
   execute: async ({ path, recursive }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     if (filesystem.readOnly) {
       throw new WorkspaceReadOnlyError('delete');
@@ -32,6 +28,18 @@ export const deleteFileTool = createTool({
     } else {
       await filesystem.deleteFile(path);
     }
-    return { success: true, path };
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.DELETE,
+        path,
+        type: stat.type,
+        workspace: { id: workspace.id, name: workspace.name },
+        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+      },
+    });
+
+    return `Deleted ${path}`;
   },
 });

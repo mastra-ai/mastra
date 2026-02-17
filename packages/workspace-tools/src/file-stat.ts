@@ -11,26 +11,45 @@ export const fileStatTool = createTool({
   inputSchema: z.object({
     path: z.string().describe('The path to check'),
   }),
-  outputSchema: z.object({
-    exists: z.boolean().describe('Whether the path exists'),
-    type: z.enum(['file', 'directory', 'none']).describe('The type of the path if it exists'),
-    size: z.number().optional().describe('Size in bytes (for files)'),
-    modifiedAt: z.string().optional().describe('Last modification time (ISO string)'),
-  }),
   execute: async ({ path }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     try {
       const stat = await filesystem.stat(path);
-      return {
-        exists: true,
-        type: stat.type,
-        size: stat.size,
-        modifiedAt: stat.modifiedAt.toISOString(),
-      };
+      const modifiedAt = stat.modifiedAt.toISOString();
+
+      await context?.writer?.custom({
+        type: 'data-workspace-metadata',
+        data: {
+          toolName: WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT,
+          path,
+          exists: true,
+          type: stat.type,
+          size: stat.size,
+          modifiedAt,
+          workspace: { id: workspace.id, name: workspace.name },
+          filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+        },
+      });
+
+      const parts = [`${path}`, `Type: ${stat.type}`];
+      if (stat.size !== undefined) parts.push(`Size: ${stat.size} bytes`);
+      parts.push(`Modified: ${modifiedAt}`);
+      return parts.join(' ');
     } catch (error) {
       if (error instanceof FileNotFoundError) {
-        return { exists: false, type: 'none' as const };
+        await context?.writer?.custom({
+          type: 'data-workspace-metadata',
+          data: {
+            toolName: WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT,
+            path,
+            exists: false,
+            workspace: { id: workspace.id, name: workspace.name },
+            filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+          },
+        });
+
+        return `${path}: not found`;
       }
       throw error;
     }

@@ -45,28 +45,6 @@ Examples:
         'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
       ),
   }),
-  outputSchema: z.object({
-    tree: z.string().describe('Tree-style directory listing'),
-    summary: z.string().describe('Summary of directories and files (e.g., "3 directories, 12 files")'),
-    metadata: z
-      .object({
-        workspace: z
-          .object({
-            id: z.string().optional(),
-            name: z.string().optional(),
-          })
-          .optional(),
-        filesystem: z
-          .object({
-            id: z.string().optional(),
-            name: z.string().optional(),
-            provider: z.string().optional(),
-          })
-          .optional(),
-      })
-      .optional()
-      .describe('Metadata about the workspace and filesystem'),
-  }),
   execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
     const { workspace, filesystem } = requireFilesystem(context);
 
@@ -79,22 +57,17 @@ Examples:
       pattern: pattern || undefined,
     });
 
-    const metadata = {
-      workspace: {
-        id: workspace.id,
-        name: workspace.name,
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
+        path,
+        summary: result.summary,
+        workspace: { id: workspace.id, name: workspace.name },
+        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
       },
-      filesystem: {
-        id: filesystem.id,
-        name: filesystem.name,
-        provider: filesystem.provider,
-      },
-    };
+    });
 
-    return {
-      tree: result.tree,
-      summary: result.summary,
-      metadata,
-    };
+    return `${result.tree}\n\n${result.summary}`;
   },
 });

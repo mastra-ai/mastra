@@ -40,6 +40,7 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   args: Record<string, unknown> | string;
   result: any;
   metadata?: MastraUIMessage['metadata'];
+  toolOutput?: Array<{ type: string; data?: Record<string, unknown> }>;
   toolCalled?: boolean;
 }
 
@@ -50,6 +51,7 @@ export const FileTreeBadge = ({
   toolCallId,
   toolApprovalMetadata,
   isNetwork,
+  toolOutput,
   toolCalled: toolCalledProp,
 }: FileTreeBadgeProps) => {
   // Expand by default when approval is required (so buttons are visible)
@@ -90,12 +92,28 @@ export const FileTreeBadge = ({
     argsDisplay.push(`ext: ${extension}`);
   }
 
-  // Get tree output from result
-  const treeOutput = result?.tree || '';
-  const summary = result?.summary || '';
+  // Get tree output from result — handle both string (workspace-tools) and object (core built-in) formats
+  let treeOutput = '';
+  let summary = '';
+  if (typeof result === 'string') {
+    // workspace-tools format: "tree\n\nsummary"
+    const lastDoubleNewline = result.lastIndexOf('\n\n');
+    if (lastDoubleNewline !== -1) {
+      treeOutput = result.slice(0, lastDoubleNewline);
+      summary = result.slice(lastDoubleNewline + 2);
+    } else {
+      treeOutput = result;
+    }
+  } else if (result && typeof result === 'object') {
+    treeOutput = result.tree || '';
+    summary = result.summary || '';
+  }
+
   // Check for error - could be result.error (tool error) or result itself being an Error-like object
   const rawError =
-    result?.error?.message ?? result?.error ?? (result?.message && !result?.tree ? result.message : null);
+    typeof result === 'string'
+      ? null
+      : (result?.error?.message ?? result?.error ?? (result?.message && !result?.tree ? result.message : null));
   const errorMessage = rawError != null ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)) : null;
   const hasError = !!errorMessage;
   const hasResult = !!treeOutput || hasError;
@@ -108,8 +126,21 @@ export const FileTreeBadge = ({
     }
   }, [hasError]);
 
-  // Extract filesystem metadata from result (if provided by the tool)
-  const fsMeta: FilesystemMetadata | undefined = result?.metadata;
+  // Extract filesystem metadata — from result object (core built-in) or data-workspace-metadata chunks (workspace-tools)
+  let fsMeta: FilesystemMetadata | undefined = typeof result === 'object' ? result?.metadata : undefined;
+  if (!fsMeta && toolOutput) {
+    const metaChunk = toolOutput.find(c => c.type === 'data-workspace-metadata');
+    if (metaChunk?.data) {
+      fsMeta = {
+        workspace: metaChunk.data.workspace as WorkspaceInfo | undefined,
+        filesystem: metaChunk.data.filesystem as FilesystemInfo | undefined,
+      };
+      // Prefer summary from data chunk over string parsing
+      if (typeof metaChunk.data.summary === 'string') {
+        summary = metaChunk.data.summary;
+      }
+    }
+  }
 
   const onCopy = () => {
     if (!treeOutput || isCopied) return;

@@ -19,13 +19,6 @@ Usage:
     timeout: z.number().nullish().describe('Maximum execution time in milliseconds. Example: 60000 for 1 minute.'),
     cwd: z.string().nullish().describe('Working directory for the command'),
   }),
-  outputSchema: z.object({
-    success: z.boolean().describe('Whether the command executed successfully (exit code 0)'),
-    stdout: z.string().describe('Standard output from the command'),
-    stderr: z.string().describe('Standard error output'),
-    exitCode: z.number().describe('Exit code (0 = success)'),
-    executionTimeMs: z.number().describe('How long the execution took in milliseconds'),
-  }),
   execute: async ({ command, args, timeout, cwd }, context) => {
     const { workspace, sandbox } = requireSandbox(context);
 
@@ -77,13 +70,25 @@ Usage:
         metadata: getExecutionMetadata(),
       });
 
-      return {
-        success: result.success,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-        executionTimeMs: result.executionTimeMs,
-      };
+      await context?.writer?.custom({
+        type: 'data-workspace-metadata',
+        data: {
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          command,
+          exitCode: result.exitCode,
+          executionTimeMs: result.executionTimeMs,
+          ...getExecutionMetadata(),
+        },
+      });
+
+      // Return CLI-style text output
+      if (!result.success) {
+        const parts = [result.stdout, result.stderr].filter(Boolean);
+        parts.push(`Exit code: ${result.exitCode}`);
+        return parts.join('\n');
+      }
+
+      return result.stdout || '(no output)';
     } catch (error) {
       await context?.writer?.write({
         type: 'sandbox-exit',

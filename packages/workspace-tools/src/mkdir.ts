@@ -15,18 +15,25 @@ export const mkdirTool = createTool({
       .default(true)
       .describe('Whether to create parent directories if they do not exist'),
   }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    path: z.string(),
-  }),
   execute: async ({ path, recursive }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     if (filesystem.readOnly) {
       throw new WorkspaceReadOnlyError('mkdir');
     }
 
     await filesystem.mkdir(path, { recursive });
-    return { success: true, path };
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
+        path,
+        workspace: { id: workspace.id, name: workspace.name },
+        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+      },
+    });
+
+    return `Created directory ${path}`;
   },
 });

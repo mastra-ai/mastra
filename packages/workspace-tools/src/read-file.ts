@@ -25,21 +25,8 @@ export const readFileTool = createTool({
       .default(true)
       .describe('Whether to prefix each line with its line number (default: true)'),
   }),
-  outputSchema: z.object({
-    content: z.string().describe('The file contents (with optional line number prefixes)'),
-    size: z.number().describe('The file size in bytes'),
-    path: z.string().describe('The full path to the file'),
-    lines: z
-      .object({
-        start: z.number().describe('First line number returned'),
-        end: z.number().describe('Last line number returned'),
-      })
-      .optional()
-      .describe('Line range information (when offset/limit used)'),
-    totalLines: z.number().optional().describe('Total number of lines in the file'),
-  }),
   execute: async ({ path, encoding, offset, limit, showLineNumbers }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     const effectiveEncoding = (encoding as BufferEncoding) ?? 'utf-8';
     const fullContent = await filesystem.readFile(path, { encoding: effectiveEncoding });
@@ -47,20 +34,36 @@ export const readFileTool = createTool({
 
     const isTextEncoding = !encoding || encoding === 'utf-8' || encoding === 'utf8';
 
+    // Non-text encoding: return raw data with header
     if (!isTextEncoding) {
-      return {
-        content: fullContent,
-        size: stat.size,
-        path: stat.path,
-      };
+      await context?.writer?.custom({
+        type: 'data-workspace-metadata',
+        data: {
+          toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+          path: stat.path,
+          size: stat.size,
+          encoding: effectiveEncoding,
+          workspace: { id: workspace.id, name: workspace.name },
+          filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+        },
+      });
+      return `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`;
     }
 
+    // Buffer content (shouldn't happen with encoding): return as base64
     if (typeof fullContent !== 'string') {
-      return {
-        content: fullContent.toString('base64'),
-        size: stat.size,
-        path: stat.path,
-      };
+      await context?.writer?.custom({
+        type: 'data-workspace-metadata',
+        data: {
+          toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+          path: stat.path,
+          size: stat.size,
+          encoding: 'base64',
+          workspace: { id: workspace.id, name: workspace.name },
+          filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+        },
+      });
+      return `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`;
     }
 
     const hasLineRange = offset !== undefined || limit !== undefined;
@@ -71,14 +74,26 @@ export const readFileTool = createTool({
       ? formatWithLineNumbers(result.content, result.lines.start)
       : result.content;
 
-    return {
-      content: formattedContent,
-      size: stat.size,
-      path: stat.path,
-      ...(hasLineRange && {
-        lines: result.lines,
-        totalLines: result.totalLines,
-      }),
-    };
+    // Build header line
+    let header: string;
+    if (hasLineRange) {
+      header = `${stat.path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines}, ${stat.size} bytes)`;
+    } else {
+      header = `${stat.path} (${stat.size} bytes)`;
+    }
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+        path: stat.path,
+        size: stat.size,
+        ...(hasLineRange && { lines: result.lines, totalLines: result.totalLines }),
+        workspace: { id: workspace.id, name: workspace.name },
+        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+      },
+    });
+
+    return `${header}\n${formattedContent}`;
   },
 });

@@ -11,14 +11,20 @@ export const indexContentTool = createTool({
     content: z.string().describe('The text content to index'),
     metadata: z.record(z.unknown()).optional().describe('Optional metadata to store with the document'),
   }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    path: z.string().describe('The indexed document ID'),
-  }),
   execute: async ({ path, content, metadata }, context) => {
     const workspace = requireWorkspace(context);
 
     await workspace.index(path, content, { metadata });
-    return { success: true, path };
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.SEARCH.INDEX,
+        path,
+        workspace: { id: workspace.id, name: workspace.name },
+      },
+    });
+
+    return `Indexed ${path}`;
   },
 });

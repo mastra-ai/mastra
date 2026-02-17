@@ -218,11 +218,13 @@ export const SandboxExecutionBadge = ({
     | { type: 'sandbox-exit'; exitCode: number; success: boolean; executionTimeMs: number }
     | undefined;
 
-  // Check if result is the final execution result (object with exitCode) vs streaming array
-  const hasFinalResult = result && !Array.isArray(result) && typeof result.exitCode === 'number';
+  // Check if result is the final execution result — handle both string and object formats
+  const isStringResult = typeof result === 'string';
+  const hasFinalResult =
+    isStringResult || (result && !Array.isArray(result) && typeof result.exitCode === 'number');
   const finalResult = hasFinalResult ? result : null;
 
-  const errorMessage = extractErrorMessage(result);
+  const errorMessage = isStringResult ? null : extractErrorMessage(result);
   const hasError = !!errorMessage;
 
   // Streaming is complete if we have exit chunk, final result, or error
@@ -242,6 +244,8 @@ export const SandboxExecutionBadge = ({
   if (errorMessage) {
     const extra = [finalResult?.stdout, finalResult?.stderr].filter(Boolean).join('\n');
     outputContent = `Error: ${errorMessage}${extra ? '\n\n' + extra : ''}`;
+  } else if (isStringResult) {
+    outputContent = result;
   } else if (finalResult) {
     outputContent = [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n');
   } else if (hasStreamingOutput) {
@@ -249,9 +253,10 @@ export const SandboxExecutionBadge = ({
   }
 
   // Get exit info - treat errors as failures
-  const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode ?? (hasError ? 1 : undefined);
-  const exitSuccess = hasError ? false : (exitChunk?.success ?? finalResult?.success);
-  const executionTime = exitChunk?.executionTimeMs ?? finalResult?.executionTimeMs;
+  // For string results, check the exit chunk (streaming) since the result itself is just text
+  const exitCode = exitChunk?.exitCode ?? (isStringResult ? undefined : finalResult?.exitCode) ?? (hasError ? 1 : undefined);
+  const exitSuccess = hasError ? false : (exitChunk?.success ?? (isStringResult ? undefined : finalResult?.success));
+  const executionTime = exitChunk?.executionTimeMs ?? (isStringResult ? undefined : finalResult?.executionTimeMs);
 
   const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
 

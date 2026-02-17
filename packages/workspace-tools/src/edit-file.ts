@@ -24,14 +24,8 @@ Usage:
       .default(false)
       .describe('If true, replace all occurrences. If false (default), old_string must be unique.'),
   }),
-  outputSchema: z.object({
-    success: z.boolean(),
-    path: z.string().describe('The path to the edited file'),
-    replacements: z.number().describe('Number of replacements made'),
-    error: z.string().optional().describe('Error message if the edit failed'),
-  }),
   execute: async ({ path, old_string, new_string, replace_all }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     if (filesystem.readOnly) {
       throw new WorkspaceReadOnlyError('edit_file');
@@ -41,38 +35,30 @@ Usage:
       const content = await filesystem.readFile(path, { encoding: 'utf-8' });
 
       if (typeof content !== 'string') {
-        return {
-          success: false,
-          path,
-          replacements: 0,
-          error: 'Cannot edit binary files. Use workspace_write_file instead.',
-        };
+        return 'Cannot edit binary files. Use workspace_write_file instead.';
       }
 
       const result = replaceString(content, old_string, new_string, replace_all);
       await filesystem.writeFile(path, result.content, { overwrite: true });
 
-      return {
-        success: true,
-        path,
-        replacements: result.replacements,
-      };
+      await context?.writer?.custom({
+        type: 'data-workspace-metadata',
+        data: {
+          toolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
+          path,
+          replacements: result.replacements,
+          workspace: { id: workspace.id, name: workspace.name },
+          filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+        },
+      });
+
+      return `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
     } catch (error) {
       if (error instanceof StringNotFoundError) {
-        return {
-          success: false,
-          path,
-          replacements: 0,
-          error: error.message,
-        };
+        return error.message;
       }
       if (error instanceof StringNotUniqueError) {
-        return {
-          success: false,
-          path,
-          replacements: 0,
-          error: error.message,
-        };
+        return error.message;
       }
       throw error;
     }
