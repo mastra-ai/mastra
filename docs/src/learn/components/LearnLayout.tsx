@@ -2,6 +2,7 @@ import { type ReactNode, useState, useCallback } from 'react'
 import Layout from '@theme/Layout'
 import { cn } from '@site/src/lib/utils'
 import { AnnouncementBanner } from '@site/src/components/AnnouncementBanner'
+import ChatbotSidebar from '@site/src/theme/DocRoot/Layout/ChatbotSidebar'
 import { course } from '../course'
 import { LearnStorageProvider, useSharedLearnStorage } from '../hooks/LearnStorageContext'
 import { LearnSidebar } from './LearnSidebar'
@@ -66,9 +67,13 @@ function LearnLayoutInner({ children, title, description, className }: LearnLayo
           <MobileToggle onToggle={toggleMobile} />
           <AnnouncementBanner />
           <div className="padding-top--md padding-bottom--lg container">
-            <article className="learn-article">{children}</article>
+            <div className="row" id="doc-item-container">
+              <article className="col">{children}</article>
+              <div className="col col--3" />
+            </div>
           </div>
         </main>
+        <ChatbotSidebar />
       </div>
     </Layout>
   )

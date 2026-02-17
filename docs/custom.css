@@ -1379,6 +1379,14 @@ article p {
   opacity: 0.5;
 }
 
+/* Lesson prev/next nav: stacked on mobile, side-by-side on desktop */
+.learn-lesson-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-block: 1.5rem;
+}
+
 /* Learn layout — unlayered to beat Tailwind @layer utilities (CSS Cascade Layers) */
 .learn-layout-flex {
   display: flex;
@@ -1449,8 +1457,13 @@ article p {
   }
 
   .learn-article {
-    max-width: 62.5rem;
-    margin-inline: auto;
+    /* width handled by Docusaurus row/col grid */
+  }
+
+  .learn-lesson-nav {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
   }
 
   .learn-mobile-overlay {

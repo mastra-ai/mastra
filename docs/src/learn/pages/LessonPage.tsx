@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense, useMemo } from 'react'
+import { useEffect, lazy, Suspense, useMemo } from 'react'
 import { useLocation } from '@docusaurus/router'
 import Head from '@docusaurus/Head'
 import { course } from '../course'
@@ -8,7 +8,6 @@ import { LearnLayout } from '../components/LearnLayout'
 import { LessonHeader } from '../components/LessonHeader'
 import { LessonNav } from '../components/LessonNav'
 import { YouTubePlayerWithResume } from '../components/YouTubePlayerWithResume'
-import { WatchedCheckbox } from '../components/WatchedCheckbox'
 import { CourseSignupCTA } from '../components/CourseSignupCTA'
 import { getLessonIndex } from '../utils'
 
@@ -48,7 +47,15 @@ function ComingSoonContent({ lesson }: { lesson: (typeof course.lessons)[number]
   )
 }
 
-function PublishedContent({ lesson }: { lesson: (typeof course.lessons)[number] }) {
+function PublishedContent({
+  lesson,
+  lessonNumber,
+  totalLessons,
+}: {
+  lesson: (typeof course.lessons)[number]
+  lessonNumber: number
+  totalLessons: number
+}) {
   const { watched, seconds, setWatched, setSeconds, setLastVisited } = useLessonProgress(lesson.slug)
 
   useEffect(() => {
@@ -63,6 +70,13 @@ function PublishedContent({ lesson }: { lesson: (typeof course.lessons)[number] 
 
   return (
     <>
+      <LessonHeader
+        lesson={lesson}
+        lessonNumber={lessonNumber}
+        totalLessons={totalLessons}
+        watched={watched}
+        onWatchedChange={setWatched}
+      />
       {lesson.youtubeId && (
         <YouTubePlayerWithResume
           videoId={lesson.youtubeId}
@@ -71,7 +85,6 @@ function PublishedContent({ lesson }: { lesson: (typeof course.lessons)[number] 
           onAutoComplete={() => setWatched(true)}
         />
       )}
-      <WatchedCheckbox checked={watched} onChange={setWatched} />
       {MdxContent && (
         <div className="learn-mdx-content mt-6">
           <Suspense fallback={<div className="py-4 text-(--mastra-text-tertiary)">Loading content...</div>}>
@@ -107,9 +120,14 @@ export default function LessonPage() {
         <meta property="og:description" content={seoDescription} />
       </Head>
 
-      <LessonHeader lesson={lesson} lessonNumber={lessonIndex + 1} totalLessons={course.lessons.length} />
-
-      {lesson.status === 'published' ? <PublishedContent lesson={lesson} /> : <ComingSoonContent lesson={lesson} />}
+      {lesson.status === 'published' ? (
+        <PublishedContent lesson={lesson} lessonNumber={lessonIndex + 1} totalLessons={course.lessons.length} />
+      ) : (
+        <>
+          <LessonHeader lesson={lesson} lessonNumber={lessonIndex + 1} totalLessons={course.lessons.length} />
+          <ComingSoonContent lesson={lesson} />
+        </>
+      )}
 
       <LessonNav prev={prev} next={next} className="mt-8 border-t border-t-(--border)" />
     </LearnLayout>
