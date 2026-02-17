@@ -8,7 +8,7 @@ import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentCMSBlocks } from '../agent-cms-blocks';
 
 export function InstructionBlocksPage() {
-  const { form, readOnly } = useAgentEditFormContext();
+  const { form } = useAgentEditFormContext();
 
   const schema = form.watch('variables');
 

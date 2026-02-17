@@ -6,6 +6,10 @@ import { Entity, EntityIcon, EntityContent, EntityName, EntityDescription } from
 
 import { useToolProviders } from '../hooks/use-tool-providers';
 import { ToolProviderDialog } from './tool-provider-dialog';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { stringToColor } from '@/lib/colors';
+import { Badge } from '@/ds/components/Badge';
 
 interface Provider {
   id: string;
@@ -29,28 +33,39 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
 
   return (
     <>
-      <Section>
+      <SubSectionRoot>
         <Section.Header>
-          <Section.Heading>
-            <Plug />
-            Integration Tools
-          </Section.Heading>
+          <SubSectionHeader title="Integration Tools" icon={<Plug />} />
         </Section.Header>
 
-        <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {providers.map(provider => (
-            <Entity key={provider.id} onClick={() => setSelectedProvider(provider)}>
-              <EntityIcon>
-                <Plug />
-              </EntityIcon>
-              <EntityContent>
-                <EntityName>{provider.name}</EntityName>
-                {provider.description && <EntityDescription>{provider.description}</EntityDescription>}
-              </EntityContent>
-            </Entity>
-          ))}
+        <div className="flex flex-col gap-1">
+          {providers.map(provider => {
+            const firstLetter = provider.name.charAt(0).toUpperCase();
+            const bg = stringToColor(firstLetter);
+            const text = stringToColor(firstLetter, 25);
+
+            return (
+              <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-surface2">
+                <div
+                  className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
+                  style={{ backgroundColor: bg, color: text }}
+                >
+                  {firstLetter}
+                </div>
+
+                <EntityContent>
+                  <EntityName>{provider.name}</EntityName>
+                  {provider.description && <EntityDescription>{provider.description}</EntityDescription>}
+                </EntityContent>
+
+                <div className="flex items-center">
+                  <Badge variant="success">Available</Badge>
+                </div>
+              </Entity>
+            );
+          })}
         </div>
-      </Section>
+      </SubSectionRoot>
 
       <ToolProviderDialog
         provider={selectedProvider}

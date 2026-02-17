@@ -6,6 +6,7 @@ export interface EntityProps {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export const Entity = ({ children, className, onClick }: EntityProps) => {
@@ -31,9 +32,9 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
   );
 };
 
-export const EntityIcon = ({ children, className }: EntityProps) => {
+export const EntityIcon = ({ children, className, style }: EntityProps) => {
   return (
-    <Icon size="lg" className={cn('text-neutral3 mt-1', className)}>
+    <Icon size="lg" className={cn('text-neutral3 mt-1 shrink-0', className)} style={style}>
       {children}
     </Icon>
   );
@@ -56,5 +57,5 @@ export const EntityDescription = ({ children, className }: EntityProps) => {
 };
 
 export const EntityContent = ({ children, className }: EntityProps) => {
-  return <div className={className}>{children}</div>;
+  return <div className={cn('flex-1 w-full', className)}>{children}</div>;
 };
