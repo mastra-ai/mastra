@@ -1408,6 +1408,9 @@ article p {
   background-color: var(--mastra-green-accent-3);
   border-color: var(--mastra-green-accent-3);
   color: white;
+}
+
+.learn-watched-icon.is-animate {
   animation: learn-watched-pop 0.3s ease;
 }
 [data-theme='dark'] .learn-watched-icon.is-watched {
@@ -1434,9 +1437,20 @@ article p {
   flex-shrink: 0;
   border-radius: 9999px;
   border: 2px solid var(--border);
+  transition: border-color 0.3s ease;
 }
 [data-theme='dark'] .learn-sidebar-icon-unwatched {
   border-color: #666;
+}
+
+/* In-progress icon: yellow border circle */
+.learn-sidebar-icon-in-progress {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 2px solid #eab308;
+  transition: border-color 0.3s ease;
 }
 
 /* Coming soon icon: dashed border circle */
