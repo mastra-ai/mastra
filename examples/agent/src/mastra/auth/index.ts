@@ -37,11 +37,12 @@ async function initAuth(): Promise<AuthResult> {
       const { initComposite } = await import('./composite');
       return initComposite();
     }
-    default: {
-      console.warn(`[Auth] Unknown provider "${AUTH_PROVIDER}", falling back to SimpleAuth`);
+    case 'simple': {
       const { initSimpleAuth } = await import('./simple');
       return initSimpleAuth();
     }
+    default:
+      return {};
   }
 }
 
