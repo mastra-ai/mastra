@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/ds/components/Button';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
-import { Icon, AgentIcon, ToolsIcon, JudgeIcon, WorkflowIcon, MemoryIcon, VariablesIcon } from '@/ds/icons';
+import { Icon } from '@/ds/icons';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { Txt } from '@/ds/components/Txt';
@@ -40,7 +40,6 @@ function isActive(basePath: string, currentPath: string, pathSuffix: string): bo
 }
 
 export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps) {
-  const { Link } = useLinkComponent();
   const { handlePublish, isSubmitting, mode, readOnly } = useAgentEditFormContext();
 
   return (
@@ -51,27 +50,16 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
             {navItems.map((item, index) => {
               const active = isActive(basePath, currentPath, item.pathSuffix);
               const isLast = index === navItems.length - 1;
+
               return (
-                <li key={item.name} className="flex flex-col gap-0">
-                  <Link
-                    href={basePath + item.pathSuffix}
-                    className={cn(
-                      'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors',
-                      active ? 'bg-surface2 text-neutral5' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
-                    )}
-                  >
-                    <Txt
-                      className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono"
-                      variant="ui-sm"
-                    >
-                      {index + 1}
-                    </Txt>
-
-                    {item.name}
-                  </Link>
-
-                  {!isLast && <div className="bg-surface3 w-0.5 h-2 inline-block ml-6" />}
-                </li>
+                <SidebarLink
+                  index={index}
+                  name={item.name}
+                  pathSuffix={item.pathSuffix}
+                  isLast={isLast}
+                  basePath={basePath}
+                  active={active}
+                />
               );
             })}
           </ul>
@@ -100,3 +88,39 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
     </div>
   );
 }
+
+interface SidebarLinkProps {
+  index: number;
+  name: string;
+  pathSuffix: string;
+  isLast: boolean;
+  basePath: string;
+  active: boolean;
+}
+
+const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active }: SidebarLinkProps) => {
+  const { Link } = useLinkComponent();
+
+  return (
+    <li className="flex flex-col gap-0">
+      <Link
+        href={basePath + pathSuffix}
+        className={cn(
+          'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors',
+          active ? 'bg-surface2 text-neutral5' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
+        )}
+      >
+        <Txt
+          className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono"
+          variant="ui-sm"
+        >
+          {index + 1}
+        </Txt>
+
+        {name}
+      </Link>
+
+      {!isLast && <div className="bg-surface3 w-0.5 h-2 inline-block ml-6" />}
+    </li>
+  );
+};
