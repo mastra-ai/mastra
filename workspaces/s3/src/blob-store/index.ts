@@ -167,7 +167,7 @@ export class S3BlobStore extends BlobStore {
       return {
         hash,
         content: body,
-        size: Number(metadata.size) ?? Buffer.byteLength(body, 'utf-8'),
+        size: metadata.size != null ? Number(metadata.size) : Buffer.byteLength(body, 'utf-8'),
         mimeType: metadata.mimetype || response.ContentType || undefined,
         createdAt: metadata.createdat ? new Date(metadata.createdat) : new Date(),
       };

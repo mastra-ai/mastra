@@ -34,7 +34,7 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
       StorageResolvedPromptBlockType
     >
   > {
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('promptBlocks');
     if (!store) throw new Error('Prompt blocks storage domain is not available');
@@ -51,7 +51,7 @@ export class EditorPromptNamespace extends CrudEditorNamespace<
 
   async preview(blocks: AgentInstructionBlock[], context: Record<string, unknown>): Promise<string> {
     this.ensureRegistered();
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('promptBlocks');
     if (!store) throw new Error('Prompt blocks storage domain is not available');

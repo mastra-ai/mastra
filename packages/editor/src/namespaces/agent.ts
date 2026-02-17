@@ -59,7 +59,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       StorageResolvedAgentType
     >
   > {
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('agents');
     if (!store) throw new Error('Agents storage domain is not available');

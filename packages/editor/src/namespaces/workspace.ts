@@ -184,7 +184,7 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
       StorageResolvedWorkspaceType
     >
   > {
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('workspaces');
     if (!store) throw new Error('Workspaces storage domain is not available');

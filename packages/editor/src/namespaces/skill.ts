@@ -34,7 +34,7 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
       StorageResolvedSkillType
     >
   > {
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
     const store = await storage.getStore('skills');
     if (!store) throw new Error('Skills storage domain is not available');
@@ -57,7 +57,7 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
   async publish(skillId: string, source: SkillSource, skillPath: string): Promise<StorageResolvedSkillType> {
     this.ensureRegistered();
 
-    const storage = this.mastra!.getStorage();
+    const storage = this.mastra?.getStorage();
     if (!storage) throw new Error('Storage is not configured');
 
     const skillStore = await storage.getStore('skills');
