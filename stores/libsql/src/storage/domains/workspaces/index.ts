@@ -161,7 +161,13 @@ export class WorkspacesLibSQL extends WorkspacesStorage {
     try {
       const existing = await this.getById(id);
       if (!existing) {
-        throw new Error(`Workspace with id ${id} not found`);
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_WORKSPACE', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Workspace ${id} not found`,
+          details: { workspaceId: id },
+        });
       }
 
       const { authorId, activeVersionId, metadata, status, ...configFields } = updates;

@@ -160,7 +160,13 @@ export class SkillsLibSQL extends SkillsStorage {
     try {
       const existing = await this.getById(id);
       if (!existing) {
-        throw new Error(`Skill with id ${id} not found`);
+        throw new MastraError({
+          id: createStorageErrorId('LIBSQL', 'UPDATE_SKILL', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Skill ${id} not found`,
+          details: { skillId: id },
+        });
       }
 
       const { authorId, activeVersionId, status, ...configFields } = updates;
@@ -192,7 +198,13 @@ export class SkillsLibSQL extends SkillsStorage {
       if (hasConfigUpdate) {
         const latestVersion = await this.getLatestVersion(id);
         if (!latestVersion) {
-          throw new Error(`No versions found for skill ${id}`);
+          throw new MastraError({
+            id: createStorageErrorId('LIBSQL', 'UPDATE_SKILL', 'NO_VERSIONS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `No versions found for skill ${id}`,
+            details: { skillId: id },
+          });
         }
 
         const {
