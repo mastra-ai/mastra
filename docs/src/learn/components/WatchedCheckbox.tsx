@@ -16,7 +16,6 @@ export function WatchedCheckbox({ checked, onChange, className }: WatchedCheckbo
         className="h-4 w-4 rounded border-gray-400 text-green-500 accent-green-500"
       />
       <span className="text-sm text-(--mastra-text-secondary)">Mark as watched</span>
-      <span className="text-xs text-(--mastra-text-tertiary)">(auto-marks in the last 15 seconds)</span>
     </label>
   )
 }
