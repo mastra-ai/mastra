@@ -5,7 +5,7 @@ This repository is auto-generated from the [Mastra monorepo](https://github.com/
 To contribute:
 
 1. Fork the [Mastra monorepo](https://github.com/mastra-ai/mastra)
-2. Find this template in `templates/deep-search`
+2. Find this template in `templates/template-deep-search`
 3. Make your changes
 4. Open a pull request against the monorepo
 

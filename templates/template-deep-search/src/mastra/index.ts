@@ -1,8 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
-import { BraintrustExporter } from '@mastra/braintrust';
+import { Observability, SensitiveDataFilter } from '@mastra/observability';
 import { intentClarifierAgent } from './agents/intent-clarifier-agent';
 import { researchPlannerAgent } from './agents/research-planner-agent';
 import { searchResultEvaluatorAgent } from './agents/search-result-evaluator-agent';
@@ -30,11 +29,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [
-          new BraintrustExporter({
-            projectName: 'deep search template',
-          }),
-        ],
+        exporters: [],
         spanOutputProcessors: [
           new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
         ],
