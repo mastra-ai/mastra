@@ -1,19 +1,24 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import Link from '@docusaurus/Link'
 import { useLocation } from '@docusaurus/router'
 import { cn } from '@site/src/lib/utils'
 import { ThemeSwitcher } from '@site/src/components/theme-switcher'
-import type { Lesson, LearnStorageV1 } from '../types'
+import type { Lesson, LearnStorageV1, LessonStatus } from '../types'
 import { LearnProgressBar } from './LearnProgressBar'
 import { getPublishedCount } from '../utils'
 
 type LearnSidebarProps = {
   lessons: Lesson[]
   storage: LearnStorageV1
+  mobileOpen: boolean
+  onMobileToggle: () => void
   className?: string
 }
 
-function ProgressIcon({ storage, slug }: { storage: LearnStorageV1; slug: string }) {
+function ProgressIcon({ storage, slug, status }: { storage: LearnStorageV1; slug: string; status: LessonStatus }) {
+  if (status === 'comingSoon') {
+    return <span className="learn-sidebar-icon-coming-soon" />
+  }
   const p = storage.lessons[slug]
   if (p?.watched) {
     return (
@@ -28,9 +33,8 @@ function ProgressIcon({ storage, slug }: { storage: LearnStorageV1; slug: string
   return <span className="h-4 w-4 shrink-0 rounded-full border-2 border-(--border)" />
 }
 
-export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps) {
+export function LearnSidebar({ lessons, storage, mobileOpen, onMobileToggle, className }: LearnSidebarProps) {
   const location = useLocation()
-  const [mobileOpen, setMobileOpen] = useState(false)
 
   const modules = useMemo(() => {
     const map = new Map<string, Lesson[]>()
@@ -65,26 +69,27 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
       <div className="flex-1">
         {modules.map(([moduleName, moduleLessons]) => (
           <div key={moduleName} className="mb-3">
-            <h4 className="px-4 py-1 text-xs font-semibold tracking-wide text-(--mastra-text-tertiary) uppercase">
-              {moduleName}
-            </h4>
+            <h4 className="px-4 py-1 text-xs font-semibold text-(--mastra-text-tertiary)">{moduleName}</h4>
             <ul>
               {moduleLessons.map(lesson => {
                 const isActive =
                   location.pathname === `/learn/${lesson.slug}` || location.pathname === `/learn/${lesson.slug}/`
+                const isComingSoon = lesson.status === 'comingSoon'
                 return (
                   <li key={lesson.slug}>
                     <Link
                       to={`/learn/${lesson.slug}`}
-                      onClick={() => setMobileOpen(false)}
+                      onClick={() => mobileOpen && onMobileToggle()}
                       className={cn(
                         'learn-sidebar-item relative flex items-center gap-2 px-4 py-1 text-sm transition-colors',
                         isActive
                           ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
-                          : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
+                          : isComingSoon
+                            ? 'text-(--mastra-text-muted) hover:text-(--mastra-text-tertiary)'
+                            : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
                       )}
                     >
-                      <ProgressIcon storage={storage} slug={lesson.slug} />
+                      <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />
                       <span className="truncate">{lesson.title}</span>
                     </Link>
                   </li>
@@ -104,28 +109,11 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
 
   return (
     <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="fixed right-4 bottom-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-(--border) bg-(--ifm-background-color) text-(--mastra-text-primary) shadow-lg lg:hidden"
-        aria-label="Toggle course sidebar"
-      >
-        ☰
-      </button>
-
       {/* Mobile overlay */}
-      {mobileOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} />}
+      {mobileOpen && <div className="learn-mobile-overlay" onClick={onMobileToggle} />}
 
       {/* Sidebar */}
-      <aside
-        className={cn(
-          'fixed top-[var(--ifm-navbar-height)] bottom-0 left-0 z-40 w-[var(--doc-sidebar-width)] shrink-0 border-r border-r-(--sidebar-border) bg-(--ifm-background-color) transition-transform lg:sticky lg:h-[calc(100vh-var(--ifm-navbar-height))] lg:translate-x-0',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full',
-          className,
-        )}
-      >
-        {sidebar}
-      </aside>
+      <aside className={cn('learn-sidebar-container', mobileOpen && 'is-open', className)}>{sidebar}</aside>
     </>
   )
 }
