@@ -1,21 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { isV5PlusModel, agentGenerate as baseAgentGenerate, setupDummyApiKeys } from '@internal/test-utils';
+import type { MastraModelConfig as TestUtilsModelConfig } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import type { MastraDBMessage } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
-import {
-  useLLMRecording,
-  getLLMTestMode,
-  getModelRecordingName,
-  isV5PlusModel,
-  agentGenerate as baseAgentGenerate,
-  setupDummyApiKeys,
-  type MastraModelConfig as TestUtilsModelConfig,
-} from '@internal/test-utils';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -107,23 +101,20 @@ function getErrorDetails(error: any): string | undefined {
   return JSON.stringify(error);
 }
 
-
 export function getWorkingMemoryTests(model: MastraModelConfig) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || (model as any).id || 'sdk-model';
-  const recordingName = `working-memory-${getModelRecordingName(model)}`;
 
   describe(`Working Memory Tests (${modelName})`, () => {
-    // Set up LLM recording/replay for fast, deterministic CI tests
-    useLLMRecording(recordingName);
     let memory: Memory;
     let thread: any;
     let storage: LibSQLStore;
     let vector: LibSQLVector;
 
     describe('Working Memory Test with Template', () => {
+      let dbPath: string;
       beforeEach(async () => {
         // Create a new unique database file in the temp directory for each test
-        const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
+        dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
 
         storage = new LibSQLStore({
           id: 'working-memory-template-storage',
@@ -170,6 +161,10 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         await storage.client.close();
         // @ts-expect-error - accessing client for cleanup
         await vector.turso.close();
+
+        try {
+          await rm(dirname(dbPath), { force: true, recursive: true });
+        } catch {}
       });
 
       it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {

@@ -1,18 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { UUID } from 'node:crypto';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { isV5PlusModel, setupDummyApiKeys, agentGenerate, agentStream } from '@internal/test-utils';
 import { toAISdkStream } from '@mastra/ai-sdk';
 import { Agent } from '@mastra/core/agent';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
-import {
-  useLLMRecording,
-  getLLMTestMode,
-  getModelRecordingName,
-  isV5PlusModel,
-  setupDummyApiKeys,
-} from '@internal/test-utils';
 import { describe, expect, it } from 'vitest';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
@@ -26,11 +21,7 @@ export async function setupStreamingMemoryTest({
   model: MastraModelConfig;
   tools: any;
 }) {
-  const recordingName = `streaming-memory-${getModelRecordingName(model)}`;
-
   describe('Memory Streaming Tests', () => {
-    // Set up LLM recording/replay for fast, deterministic CI tests
-    useLLMRecording(recordingName);
     it('should handle multiple tool calls in memory thread history', async () => {
       // Create agent with memory and tools
       const agent = new Agent({
@@ -48,9 +39,7 @@ export async function setupStreamingMemoryTest({
       const isV5Plus = isV5PlusModel(model);
 
       // First weather check
-      const stream1 = isV5Plus
-        ? await agent.stream('what is the weather in LA?', { memory: { thread: threadId, resource: resourceId } })
-        : await agent.streamLegacy('what is the weather in LA?', { threadId, resourceId });
+      const stream1 = (await agentStream(agent, 'what is the weather in LA?', { threadId, resourceId }, model)) as any;
 
       if (isV5Plus) {
         // Collect first stream
@@ -79,9 +68,12 @@ export async function setupStreamingMemoryTest({
       }
 
       // Second weather check
-      const stream2Raw = isV5Plus
-        ? await agent.stream('what is the weather in Seattle?', { memory: { thread: threadId, resource: resourceId } })
-        : await agent.streamLegacy('what is the weather in Seattle?', { threadId, resourceId });
+      const stream2Raw = (await agentStream(
+        agent,
+        'what is the weather in Seattle?',
+        { threadId, resourceId },
+        model,
+      )) as any;
 
       if (isV5Plus) {
         const stream2 = toAISdkStream(stream2Raw as any, { from: 'agent' });
@@ -137,17 +129,7 @@ export async function setupStreamingMemoryTest({
         },
       });
 
-      const isV5Plus = isV5PlusModel(model);
-      if (isV5Plus) {
-        await agent.generate('Hello, world!', {
-          memory: { thread: threadId, resource: resourceId },
-        });
-      } else {
-        await agent.generateLegacy('Hello, world!', {
-          threadId,
-          resourceId,
-        });
-      }
+      await agentGenerate(agent, 'Hello, world!', { threadId, resourceId }, model);
 
       const agentMemory = (await agent.getMemory())!;
       const { messages } = await agentMemory.recall({ threadId });

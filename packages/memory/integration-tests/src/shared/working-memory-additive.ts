@@ -6,18 +6,13 @@
  * preserving existing data when new data is added across multiple conversation turns.
  */
 import { randomUUID } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { agentGenerate, setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import {
-  useLLMRecording,
-  getLLMTestMode,
-  getModelRecordingName,
-  agentGenerate,
-  setupDummyApiKeys,
-} from '@internal/test-utils';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
@@ -38,11 +33,8 @@ const createTestThread = (title: string, metadata = {}) => ({
 
 export function getWorkingMemoryAdditiveTests(model: MastraModelConfig) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || 'unknown';
-  const recordingName = `working-memory-additive-${getModelRecordingName(model)}`;
 
   describe(`Working Memory Additive Updates (${modelName})`, () => {
-    // Set up LLM recording/replay for fast, deterministic CI tests
-    useLLMRecording(recordingName);
     let memory: Memory;
     let storage: LibSQLStore;
     let agent: Agent;
@@ -161,8 +153,9 @@ You only need to include the fields that have new information - existing data is
           .describe('Work-related information'),
       });
 
+      let dbPath: string;
       beforeEach(async () => {
-        const dbPath = join(await mkdtemp(join(tmpdir(), `wm-complex-test-${Date.now()}`)), 'test.db');
+        dbPath = join(await mkdtemp(join(tmpdir(), `wm-complex-test-${Date.now()}`)), 'test.db');
 
         storage = new LibSQLStore({
           id: 'complex-test-storage',
@@ -199,6 +192,8 @@ You only need to include fields that have changed - existing data is automatical
       afterEach(async () => {
         // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
+
+        await rm(dirname(dbPath), { force: true, recursive: true });
       });
 
       it('should preserve about info when adding work info', async () => {
@@ -323,8 +318,9 @@ You only need to include fields that have changed - existing data is automatical
         extra: z.record(z.string(), z.unknown()).optional(),
       });
 
+      let dbPath: string;
       beforeEach(async () => {
-        const dbPath = join(await mkdtemp(join(tmpdir(), `wm-large-schema-test-${Date.now()}`)), 'test.db');
+        dbPath = join(await mkdtemp(join(tmpdir(), `wm-large-schema-test-${Date.now()}`)), 'test.db');
 
         storage = new LibSQLStore({
           id: 'large-schema-test-storage',
@@ -367,6 +363,8 @@ Schema structure reminder:
       afterEach(async () => {
         // @ts-expect-error - accessing client for cleanup
         await storage.client.close();
+
+        await rm(dirname(dbPath), { force: true, recursive: true });
       });
 
       it('should build up a comprehensive user profile across many turns', async () => {

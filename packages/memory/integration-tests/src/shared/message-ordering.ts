@@ -15,16 +15,12 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { createTool } from '@mastra/core/tools';
-import {
-  useLLMRecording,
-  getLLMTestMode,
-  getModelRecordingName,
-  setupDummyApiKeys,
-} from '@internal/test-utils';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
@@ -200,11 +196,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
 
   // Run tests for each model configuration
   for (const modelConfig of models) {
-    const recordingName = `message-ordering-${version}-${getModelRecordingName(modelConfig.model)}`;
-
     describe(`Message Ordering with ${modelConfig.name} (${version}) (Issue #9909)`, () => {
-      // Set up LLM recording/replay for fast, deterministic CI tests
-      useLLMRecording(recordingName);
       const dbFile = `file:ordering-test-${version}.db`;
 
       const createMemory = () =>
