@@ -144,7 +144,7 @@ export function ToolsPage() {
                       className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
                       style={{ backgroundColor: bg, color: text }}
                     >
-                      <Icon>
+                      <Icon size="lg">
                         <ToolsIcon />
                       </Icon>
                     </div>

@@ -1,16 +1,21 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Controller, useWatch } from 'react-hook-form';
+import { useWatch } from 'react-hook-form';
 import { PlusIcon } from 'lucide-react';
 
-import { EntityAccordionItem, SectionHeader } from '@/domains/cms';
-import { AgentIcon } from '@/ds/icons';
-import { MultiCombobox } from '@/ds/components/Combobox';
+import { SectionHeader } from '@/domains/cms';
+import { AgentIcon, Icon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
+import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { stringToColor } from '@/lib/colors';
+import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/lib/utils';
+import { Searchbar } from '@/ds/components/Searchbar';
 import { useAgents } from '../../hooks/use-agents';
-import type { RuleGroup } from '@/lib/rule-engine';
-import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentCreateContent } from '../agent-create-content';
@@ -18,10 +23,9 @@ import { AgentCreateContent } from '../agent-create-content';
 export function AgentsPage() {
   const { form, readOnly, agentId: currentAgentId } = useAgentEditFormContext();
   const { control } = form;
-  const { data: agents, isLoading } = useAgents();
+  const { data: agents } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
-  const variables = useWatch({ control, name: 'variables' });
-  const count = Object.keys(selectedAgents || {}).length;
+  const [search, setSearch] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const options = useMemo(() => {
@@ -42,9 +46,33 @@ export function AgentsPage() {
       }));
   }, [agents, currentAgentId]);
 
+  const selectedAgentIds = Object.keys(selectedAgents || {});
+  const count = selectedAgentIds.length;
+
   const getOriginalDescription = (id: string): string => {
     const option = options.find(opt => opt.value === id);
     return option?.description || '';
+  };
+
+  const handleValueChange = (agentId: string) => {
+    const isSet = selectedAgents?.[agentId] !== undefined;
+    if (isSet) {
+      const next = { ...selectedAgents };
+      delete next[agentId];
+      form.setValue('agents', next);
+    } else {
+      form.setValue('agents', {
+        ...selectedAgents,
+        [agentId]: { ...selectedAgents?.[agentId], description: getOriginalDescription(agentId) },
+      });
+    }
+  };
+
+  const handleDescriptionChange = (agentId: string, description: string) => {
+    form.setValue('agents', {
+      ...selectedAgents,
+      [agentId]: { ...selectedAgents?.[agentId], description },
+    });
   };
 
   const handleAgentCreated = useCallback(
@@ -55,6 +83,10 @@ export function AgentsPage() {
     },
     [form],
   );
+
+  const filteredOptions = useMemo(() => {
+    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
 
   return (
     <ScrollArea className="h-full">
@@ -73,77 +105,65 @@ export function AgentsPage() {
           )}
         </div>
 
-        <Controller
-          name="agents"
-          control={control}
-          render={({ field }) => {
-            const selectedIds = Object.keys(field.value || {});
-            const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+        <SubSectionRoot>
+          <Section.Header>
+            <SubSectionHeader title="Available Agents" icon={<AgentIcon />} />
+          </Section.Header>
 
-            const handleValueChange = (newIds: string[]) => {
-              const newValue: Record<string, EntityConfig> = {};
-              for (const id of newIds) {
-                newValue[id] = field.value?.[id] || {
-                  description: getOriginalDescription(id),
-                };
-              }
-              field.onChange(newValue);
-            };
+          <Searchbar onSearch={setSearch} label="Search agents" placeholder="Search agents" />
 
-            const handleDescriptionChange = (agentIdVal: string, description: string) => {
-              field.onChange({
-                ...field.value,
-                [agentIdVal]: { ...field.value?.[agentIdVal], description },
-              });
-            };
+          {filteredOptions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {filteredOptions.map(agent => {
+                const bg = stringToColor(agent.value);
+                const text = stringToColor(agent.value, 25);
+                const isSelected = selectedAgentIds.includes(agent.value);
 
-            const handleRemove = (agentIdVal: string) => {
-              const newValue = { ...field.value };
-              delete newValue[agentIdVal];
-              field.onChange(newValue);
-            };
+                const isDisabled = readOnly || !isSelected;
 
-            const handleRulesChange = (agentIdVal: string, rules: RuleGroup | undefined) => {
-              field.onChange({
-                ...field.value,
-                [agentIdVal]: { ...field.value?.[agentIdVal], rules },
-              });
-            };
+                return (
+                  <Entity key={agent.value} className="bg-surface2">
+                    <div
+                      className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
+                      style={{ backgroundColor: bg, color: text }}
+                    >
+                      <Icon size="lg">
+                        <AgentIcon />
+                      </Icon>
+                    </div>
 
-            return (
-              <div className="flex flex-col gap-2">
-                <MultiCombobox
-                  options={options}
-                  value={selectedIds}
-                  onValueChange={handleValueChange}
-                  placeholder="Select sub-agents..."
-                  searchPlaceholder="Search agents..."
-                  emptyText="No agents available"
-                  disabled={isLoading || readOnly}
-                  variant="light"
-                />
-                {selectedOptions.length > 0 && (
-                  <div className="flex flex-col gap-3 mt-2">
-                    {selectedOptions.map(agent => (
-                      <EntityAccordionItem
-                        key={agent.value}
-                        id={agent.value}
-                        name={agent.label}
-                        icon={<AgentIcon className="text-accent1" />}
-                        description={field.value?.[agent.value]?.description || ''}
-                        onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(agent.value, desc)}
-                        onRemove={readOnly ? undefined : () => handleRemove(agent.value)}
-                        schema={variables}
-                        rules={field.value?.[agent.value]?.rules || undefined}
-                        onRulesChange={readOnly ? undefined : rules => handleRulesChange(agent.value, rules)}
+                    <EntityContent>
+                      <EntityName>{agent.label}</EntityName>
+                      <EntityDescription>
+                        <input
+                          type="text"
+                          disabled={isDisabled}
+                          className={cn(
+                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                            !isDisabled && 'border-border1 border-dashed ',
+                          )}
+                          value={
+                            isSelected
+                              ? (selectedAgents?.[agent.value]?.description ?? agent.description)
+                              : agent.description
+                          }
+                          onChange={e => handleDescriptionChange(agent.value, e.target.value)}
+                        />
+                      </EntityDescription>
+                    </EntityContent>
+
+                    {!readOnly && (
+                      <Switch
+                        checked={selectedAgentIds.includes(agent.value)}
+                        onCheckedChange={() => handleValueChange(agent.value)}
                       />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }}
-        />
+                    )}
+                  </Entity>
+                );
+              })}
+            </div>
+          )}
+        </SubSectionRoot>
       </div>
 
       <SideDialog
