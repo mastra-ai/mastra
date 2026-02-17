@@ -28,3 +28,8 @@ export * from './components/agent-create-content';
 export * from './components/agent-cms-sidebar';
 export * from './components/agent-cms-layout';
 export * from './components/agent-cms-pages';
+export * from './utils/agent-form-mappers';
+export * from './utils/collect-mcp-client-ids';
+export * from './utils/compute-agent-initial-values';
+export * from './hooks/use-agent-cms-form';
+export * from './components/agent-cms-form-shell';
