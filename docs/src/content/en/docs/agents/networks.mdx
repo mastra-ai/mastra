@@ -451,9 +451,8 @@ for await (const chunk of stream.textStream) {
 - Need to filter context passed to sub-agents
 - Prefer type-safe hooks and callbacks
 
-**Keep using `.network()` if you:**
-- Have existing code that works and doesn't need the new features
-- Don't need the additional control and monitoring capabilities
+**Migrate as soon as possible:**
+`.network()` is deprecated and will be removed in a future release. Existing code will continue to work until then, but no new features will be added to it.
 
 ### Migration Checklist
 
