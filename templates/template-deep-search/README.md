@@ -16,19 +16,13 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 
 ## Features
 
-✅ Self-evaluating research loops that identify gaps and keep searching
+- ✅ Self-evaluating research loops that identify gaps and keep searching
+- ✅ Human-in-the-loop with suspend/resume for clarifying questions
+- ✅ Multiple specialized agents coordinating on a single task
+- ✅ Web search and page scraping via Exa
+- ✅ Sourced answers with citations
 
-✅ Human-in-the-loop with suspend/resume for clarifying questions
-
-✅ Multiple specialized agents coordinating on a single task
-
-✅ Web search and page scraping via Exa
-
-✅ Sourced answers with citations
-
-## Before you begin
-
-You'll need:
+## Prerequisites
 
 - [OpenAI API key](https://platform.openai.com/api-keys) — used by default, but you can swap in any model
 - [Exa API key](https://dashboard.exa.ai/api-keys) — for web search and page scraping
