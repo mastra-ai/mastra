@@ -8,20 +8,12 @@ import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { Txt } from '@/ds/components/Txt';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
+import { AGENT_CMS_SECTIONS } from './agent-cms-sections';
+import { isActive } from './agent-cms-is-active';
 
 interface AgentCmsSidebarProps {
   basePath: string;
   currentPath: string;
-}
-
-function isActive(basePath: string, currentPath: string, pathSuffix: string): boolean {
-  const fullPath = basePath + pathSuffix;
-
-  if (pathSuffix === '') {
-    return currentPath === basePath || currentPath === basePath + '/';
-  }
-
-  return currentPath.startsWith(fullPath);
 }
 
 export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps) {
@@ -33,86 +25,19 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
       <ScrollArea className="flex-1 min-h-0">
         <nav className="py-4">
           <ul className="flex flex-col gap-0">
-            <SidebarLink
-              index={0}
-              name="Identity"
-              pathSuffix=""
-              isLast={false}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '')}
-              description={descriptions.identity.description}
-              done={descriptions.identity.done}
-            />
-            <SidebarLink
-              index={1}
-              name="Instructions"
-              pathSuffix="/instruction-blocks"
-              isLast={false}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '/instruction-blocks')}
-              description={descriptions.instructions.description}
-              done={descriptions.instructions.done}
-            />
-            <SidebarLink
-              index={2}
-              name="Tools"
-              pathSuffix="/tools"
-              isLast={false}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '/tools')}
-              description={descriptions.tools.description}
-              done={descriptions.tools.done}
-            />
-            <SidebarLink
-              index={3}
-              name="Agents"
-              pathSuffix="/agents"
-              isLast={false}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '/agents')}
-              description={descriptions.agents.description}
-              done={descriptions.agents.done}
-            />
-            <SidebarLink
-              index={4}
-              name="Scorers"
-              pathSuffix="/scorers"
-              isLast={false}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '/scorers')}
-              description={descriptions.scorers.description}
-              done={descriptions.scorers.done}
-            />
-            <SidebarLink
-              index={5}
-              name="Workflows"
-              pathSuffix="/workflows"
-              isLast={false}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '/workflows')}
-              description={descriptions.workflows.description}
-              done={descriptions.workflows.done}
-            />
-            <SidebarLink
-              index={6}
-              name="Memory"
-              pathSuffix="/memory"
-              isLast={false}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '/memory')}
-              description={descriptions.memory.description}
-              done={descriptions.memory.done}
-            />
-            <SidebarLink
-              index={7}
-              name="Variables"
-              pathSuffix="/variables"
-              isLast={true}
-              basePath={basePath}
-              active={isActive(basePath, currentPath, '/variables')}
-              description={descriptions.variables.description}
-              done={descriptions.variables.done}
-            />
+            {AGENT_CMS_SECTIONS.map((section, index) => (
+              <SidebarLink
+                key={section.descriptionKey}
+                index={index}
+                name={section.name}
+                pathSuffix={section.pathSuffix}
+                isLast={index === AGENT_CMS_SECTIONS.length - 1}
+                basePath={basePath}
+                active={isActive(basePath, currentPath, section.pathSuffix)}
+                description={descriptions[section.descriptionKey].description}
+                done={descriptions[section.descriptionKey].done}
+              />
+            ))}
           </ul>
         </nav>
       </ScrollArea>

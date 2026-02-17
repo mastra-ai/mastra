@@ -173,12 +173,7 @@ interface ScorerConfigPanelProps {
   readOnly?: boolean;
 }
 
-function ScorerConfigPanel({
-  scorerId,
-  samplingConfig,
-  onSamplingChange,
-  readOnly = false,
-}: ScorerConfigPanelProps) {
+function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnly = false }: ScorerConfigPanelProps) {
   const samplingType = samplingConfig?.type || 'none';
 
   const handleTypeChange = (type: string) => {
