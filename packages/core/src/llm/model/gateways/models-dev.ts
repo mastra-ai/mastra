@@ -240,6 +240,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
         return createAnthropic({ apiKey, baseURL })(modelId);
       }
+      case 'vercel': {
+        // Vercel AI Gateway speaks the full OpenAI API, so use createOpenAI
+        // instead of createOpenAICompatible to support file parts (audio, PDF)
+        if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+        return createOpenAI({ apiKey, baseURL, headers }).chat(modelId);
+      }
       default: {
         // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
         const config = this.providerConfigs[providerId];
