@@ -59,6 +59,7 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
                   isLast={isLast}
                   basePath={basePath}
                   active={active}
+                  description="hello"
                 />
               );
             })}
@@ -96,9 +97,10 @@ interface SidebarLinkProps {
   isLast: boolean;
   basePath: string;
   active: boolean;
+  description: string;
 }
 
-const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active }: SidebarLinkProps) => {
+const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, description }: SidebarLinkProps) => {
   const { Link } = useLinkComponent();
 
   return (
@@ -117,7 +119,15 @@ const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active }: Side
           {index + 1}
         </Txt>
 
-        {name}
+        <div>
+          <Txt variant="ui-sm" className="text-neutral5">
+            {name}
+          </Txt>
+
+          <Txt variant="ui-sm" className="text-neutral3">
+            {description}
+          </Txt>
+        </div>
       </Link>
 
       {!isLast && <div className="bg-surface3 w-0.5 h-2 inline-block ml-6" />}
