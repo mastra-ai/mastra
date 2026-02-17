@@ -195,6 +195,9 @@ export class S3BlobStore extends BlobStore {
   }
 
   async delete(hash: string): Promise<boolean> {
+    // Pre-check is intentional: S3 DeleteObject returns 204 regardless of
+    // whether the object existed, so we check first for an accurate return.
+    // The TOCTOU gap is acceptable for content-addressable blobs.
     const existed = await this.has(hash);
     if (!existed) return false;
 
@@ -248,7 +251,7 @@ export class S3BlobStore extends BlobStore {
           new DeleteObjectsCommand({
             Bucket: this.bucket,
             Delete: {
-              Objects: objects.map(obj => ({ Key: obj.Key })),
+              Objects: objects.filter(obj => obj.Key != null).map(obj => ({ Key: obj.Key! })),
               Quiet: true,
             },
           }),
