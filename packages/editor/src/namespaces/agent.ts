@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core';
@@ -1113,8 +1115,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     }
 
     if (workspaceRef.type === 'inline') {
-      // Hydrate the inline workspace config directly
-      return workspaceNs.hydrateSnapshotToWorkspace(`inline-${Date.now()}`, workspaceRef.config, hydrateOptions);
+      // Use a deterministic ID based on config content to avoid leaking
+      // duplicate workspace instances on repeated calls.
+      const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
+      return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
     }
 
     return undefined;
