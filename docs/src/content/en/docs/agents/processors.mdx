@@ -344,7 +344,7 @@ export class CustomOutputProcessor implements Processor {
 
 Output processors receive a `writer` object that lets you emit custom data chunks back to the client during streaming. This is useful for use cases like streaming moderation results or sending UI update signals without blocking the original stream.
 
-```typescript title="src/mastra/processors/moderation-processor.ts"
+```typescript title="src/mastra/processors/moderation-processor.ts" {6,18-25}
 import type { Processor, ChunkType, MastraDBMessage } from "@mastra/core";
 
 export class ModerationProcessor implements Processor {
