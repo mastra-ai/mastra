@@ -668,6 +668,8 @@ export type ProviderModelsMap = {
     'qwen3-vl-235b-a22b',
     'qwen3-vl-30b-a3b',
     'qwen3-vl-plus',
+    'qwen3.5-397b-a17b',
+    'qwen3.5-plus',
     'qwq-plus',
   ];
   readonly 'cloudflare-workers-ai': readonly [
@@ -1150,6 +1152,8 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-instruct',
     'qwen/qwen3-next-80b-a3b-instruct:free',
     'qwen/qwen3-next-80b-a3b-thinking',
+    'qwen/qwen3.5-397b-a17b',
+    'qwen/qwen3.5-plus-02-15',
     'qwen/qwq-32b:free',
     'rekaai/reka-flash-3',
     'sarvamai/sarvam-m:free',
@@ -2129,6 +2133,8 @@ export type ProviderModelsMap = {
     'qwen3-vl-235b-a22b',
     'qwen3-vl-30b-a3b',
     'qwen3-vl-plus',
+    'qwen3.5-397b-a17b',
+    'qwen3.5-plus',
     'qwq-32b',
     'qwq-plus',
     'tongyi-intent-detect-v3',
