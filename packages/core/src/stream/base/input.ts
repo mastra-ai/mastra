@@ -3,12 +3,46 @@ import { MastraBase } from '../../base';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
 /**
- * Check if a ReadableStreamDefaultController is open and can accept data.
- * After controller.close() or stream cancellation, desiredSize becomes 0 or null.
- * We treat both as closed states to prevent "Controller is already closed" errors.
+ * Safely enqueue a chunk into a ReadableStreamDefaultController.
+ * Returns true if the enqueue succeeded, false if the controller was already closed/errored.
+ *
+ * Prefer this over checking desiredSize before enqueue, because desiredSize === 0
+ * indicates backpressure (queue full, stream still open) — not closure.
+ * Guarding on desiredSize would silently drop chunks under normal backpressure.
  */
-export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
-  return controller.desiredSize !== 0 && controller.desiredSize !== null;
+export function safeEnqueue<T>(controller: ReadableStreamDefaultController<T>, chunk: T): boolean {
+  try {
+    controller.enqueue(chunk);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Safely close a ReadableStreamDefaultController.
+ * Returns true if the close succeeded, false if the controller was already closed/errored.
+ */
+export function safeClose(controller: ReadableStreamDefaultController<any>): boolean {
+  try {
+    controller.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Safely signal an error on a ReadableStreamDefaultController.
+ * Returns true if the error succeeded, false if the controller was already closed/errored.
+ */
+export function safeError(controller: ReadableStreamDefaultController<any>, error: unknown): boolean {
+  try {
+    controller.error(error);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export abstract class MastraModelInput extends MastraBase {
@@ -42,13 +76,9 @@ export abstract class MastraModelInput extends MastraBase {
             controller,
           });
 
-          if (isControllerOpen(controller)) {
-            controller.close();
-          }
+          safeClose(controller);
         } catch (error) {
-          if (isControllerOpen(controller)) {
-            controller.error(error);
-          }
+          safeError(controller, error);
         }
       },
     });

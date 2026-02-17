@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { ChunkType, CreateStream, OnResult } from '../types';
-import { isControllerOpen, MastraModelInput } from './input';
+import { safeEnqueue, MastraModelInput } from './input';
 
 // Test data representing a custom input format
 interface CustomInputFormat {
@@ -326,18 +326,16 @@ describe('MastraModelInput', () => {
             await pausePromise;
 
             // After resume, the controller has been closed by the consumer's cancel.
-            // Without the isControllerOpen guard, this enqueue throws
+            // Without the safeEnqueue guard, this enqueue throws
             // "TypeError [ERR_INVALID_STATE]: Invalid state: Controller is already closed"
             const { value: second, done: secondDone } = await reader.read();
             if (!secondDone && second) {
-              if (isControllerOpen(controller)) {
-                controller.enqueue({
-                  type: 'text-delta',
-                  runId,
-                  from: 'test',
-                  payload: { text: second.content },
-                });
-              }
+              safeEnqueue(controller, {
+                type: 'text-delta',
+                runId,
+                from: 'test',
+                payload: { text: second.content },
+              });
             }
           } catch (e: any) {
             transformError = e;
@@ -386,7 +384,7 @@ describe('MastraModelInput', () => {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       // Without the fix, transformError is a TypeError: "Controller is already closed"
-      // With the fix (isControllerOpen guard before enqueue), no error occurs
+      // With the fix (safeEnqueue guard), no error occurs
       expect(transformError).toBeNull();
     });
   });

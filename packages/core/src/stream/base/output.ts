@@ -20,6 +20,7 @@ import type {
   MastraOnFinishCallbackArgs,
   StepTripwireData,
 } from '../types';
+import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 
@@ -1407,17 +1408,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
         // Listen for new chunks and stream finish
         const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
-          if (controller.desiredSize !== 0 && controller.desiredSize !== null) {
-            controller.enqueue(chunk);
-          }
+          safeEnqueue(controller, chunk);
         };
 
         const finishHandler = () => {
           self.#emitter.off('chunk', chunkHandler);
           self.#emitter.off('finish', finishHandler);
-          if (controller.desiredSize !== 0 && controller.desiredSize !== null) {
-            controller.close();
-          }
+          safeClose(controller);
         };
 
         self.#emitter.on('chunk', chunkHandler);
