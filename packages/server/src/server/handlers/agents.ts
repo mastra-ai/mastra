@@ -296,60 +296,39 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
       return [];
     }
 
+    // Use workspace.getTools() if available (core >= 1.5), otherwise fall back
+    // to the config-based approach for older core versions
+    if (typeof workspace.getTools === 'function') {
+      const resolvedTools = workspace.getTools({ requestContext });
+      return Object.keys(resolvedTools);
+    }
+
+    // Fallback for older @mastra/core without getTools()
     const tools: string[] = [];
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
-    const toolsConfig = workspace.getToolsConfig();
+    const toolsConfig = workspace.getToolsConfig() as Parameters<typeof resolveToolConfig>[0];
 
-    // Helper to check if a tool is enabled
     const isEnabled = (toolName: WorkspaceToolName) => {
       return resolveToolConfig(toolsConfig, toolName).enabled;
     };
 
-    // Filesystem tools
     if (workspace.filesystem) {
-      // Read tools
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) {
-        tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
-      }
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) {
-        tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
-      }
-      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) {
-        tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
-      }
-
-      // Write tools only if not readonly
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE)) tools.push(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES)) tools.push(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT)) tools.push(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
       if (!isReadOnly) {
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) {
-          tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
-        }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) {
-          tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
-        }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) {
-          tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
-        }
-        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) {
-          tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
-        }
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE)) tools.push(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE)) tools.push(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.DELETE)) tools.push(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+        if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.MKDIR)) tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
       }
     }
-
-    // Search tools (available if BM25 or vector search is enabled)
     if (workspace.canBM25 || workspace.canVector) {
-      if (isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) {
-        tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
-      }
-      if (!isReadOnly && isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX)) {
-        tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
-      }
+      if (isEnabled(WORKSPACE_TOOLS.SEARCH.SEARCH)) tools.push(WORKSPACE_TOOLS.SEARCH.SEARCH);
+      if (!isReadOnly && isEnabled(WORKSPACE_TOOLS.SEARCH.INDEX)) tools.push(WORKSPACE_TOOLS.SEARCH.INDEX);
     }
-
-    // Sandbox tools
-    if (workspace.sandbox) {
-      if (workspace.sandbox.executeCommand && isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
-        tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
-      }
+    if (workspace.sandbox?.executeCommand && isEnabled(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND)) {
+      tools.push(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
     }
 
     return tools;

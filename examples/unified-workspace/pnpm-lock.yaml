@@ -14,6 +14,7 @@ overrides:
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/observability': link:../../observability/mastra
   '@mastra/fastembed': link:../../packages/fastembed
+  '@mastra/workspace-tools': link:../../packages/workspace-tools
   mastra: link:../../packages/cli
 
 importers:
@@ -50,6 +51,9 @@ importers:
       '@mastra/s3':
         specifier: link:../../workspaces/s3
         version: link:../../workspaces/s3
+      '@mastra/workspace-tools':
+        specifier: link:../../packages/workspace-tools
+        version: link:../../packages/workspace-tools
       ai:
         specifier: ^6.0.1
         version: 6.0.38(zod@3.25.76)

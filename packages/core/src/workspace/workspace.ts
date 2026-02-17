@@ -274,7 +274,7 @@ export interface WorkspaceConfig<
     | WorkspaceToolsConfig
     | Record<string, Tool<any, any, any, any>>
     | ((context: {
-        workspace: Workspace<TFilesystem, TSandbox, TMounts>;
+        workspace: Workspace;
         requestContext?: RequestContext;
       }) => Record<string, Tool<any, any, any, any>>);
 
@@ -509,10 +509,7 @@ export class Workspace<
   getToolsConfig():
     | WorkspaceToolsConfig
     | Record<string, Tool<any, any, any, any>>
-    | ((context: {
-        workspace: Workspace<TFilesystem, TSandbox, TMounts>;
-        requestContext?: RequestContext;
-      }) => Record<string, Tool<any, any, any, any>>)
+    | ((context: { workspace: Workspace; requestContext?: RequestContext }) => Record<string, Tool<any, any, any, any>>)
     | undefined {
     return this._config.tools;
   }
@@ -537,7 +534,7 @@ export class Workspace<
 
     // Function config: call with workspace + requestContext
     if (typeof rawConfig === 'function') {
-      return rawConfig({ workspace: this, requestContext: options?.requestContext });
+      return rawConfig({ workspace: this as unknown as Workspace, requestContext: options?.requestContext });
     }
 
     // Direct tool overrides (Record<string, Tool>): return as-is

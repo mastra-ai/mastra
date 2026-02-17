@@ -12,6 +12,7 @@
     "@mastra/gcs": "latest",
     "@mastra/s3": "latest",
     "@mastra/fastembed": "^1.0.0",
+    "@mastra/workspace-tools": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
@@ -31,6 +32,7 @@
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/observability": "link:../../observability/mastra",
       "@mastra/fastembed": "link:../../packages/fastembed",
+      "@mastra/workspace-tools": "link:../../packages/workspace-tools",
       "mastra": "link:../../packages/cli"
     }
   },

@@ -2,10 +2,11 @@ import { Agent } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { E2BSandbox } from '@mastra/e2b';
 import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
+import { createWorkspaceTools } from '@mastra/workspace-tools';
 
 /**
  * Developer agent - inherits globalWorkspace from Mastra instance.
@@ -69,11 +70,6 @@ export const developerAgent = new Agent({
       id: 'developer-e2b-sandbox',
     }),
     skills: ['/.agents/skills', '/local/skills', '/r2/skills'],
-    tools: {
-      [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
-        enabled: true,
-        requireApproval: true,
-      },
-    },
+    tools: createWorkspaceTools,
   }),
 });
