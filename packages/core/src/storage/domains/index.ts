@@ -1,6 +1,9 @@
 export * from './base';
+export * from './versioned';
 export * from './agents';
 export * from './prompt-blocks';
+export * from './scorer-definitions';
+export * from './mcp-clients';
 export * from './scores';
 export * from './observability';
 export * from './operations';
@@ -8,3 +11,5 @@ export * from './workflows';
 export * from './memory';
 export * from './inmemory-db';
 export * from './shared';
+export * from './datasets';
+export * from './experiments';

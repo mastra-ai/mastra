@@ -39,6 +39,7 @@ const SNAPSHOT_CONFIG_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'requestContextSchema',
 ] as const;
 
 // ============================================================================
@@ -284,7 +285,7 @@ export interface AgentsStoreWithVersions<TAgent = any> {
       changeMessage?: string;
     },
   ) => Promise<{ id: string; versionNumber: number }>;
-  updateAgent: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
+  update: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
   listVersions: (params: {
     agentId: string;
     page?: number;
@@ -434,7 +435,7 @@ export async function handleAutoVersioning<TAgent>(
   });
 
   // Update the agent's activeVersionId to point to the new version
-  await agentsStore.updateAgent({
+  await agentsStore.update({
     id: agentId,
     activeVersionId: versionId,
   });
@@ -482,7 +483,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -528,7 +529,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Get the current agent to find its active version
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -645,7 +646,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -660,7 +661,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Update the agent's activeVersionId AND status to 'published'
-      await agentsStore.updateAgent({
+      await agentsStore.update({
         id: agentId,
         activeVersionId: versionId,
         status: 'published',
@@ -703,7 +704,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -721,7 +722,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       const restoredConfig = extractConfigFromVersion(versionToRestore as unknown as Record<string, unknown>);
 
       // Update the agent with the config from the version to restore
-      await agentsStore.updateAgent({
+      await agentsStore.update({
         id: agentId,
         ...restoredConfig,
       });
@@ -791,7 +792,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }

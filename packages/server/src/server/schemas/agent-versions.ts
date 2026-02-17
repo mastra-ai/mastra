@@ -2,7 +2,18 @@ import z from 'zod';
 import { paginationInfoSchema, createPagePaginationSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
-import { scorerConfigSchema, instructionsSchema } from './stored-agents';
+import {
+  scorerConfigSchema,
+  instructionsSchema,
+  conditionalFieldSchema,
+  modelConfigSchema,
+  toolConfigSchema,
+  toolsConfigSchema,
+} from './stored-agents';
+
+const mcpClientToolsConfigSchema = z.object({
+  tools: z.record(z.string(), toolConfigSchema).optional(),
+});
 
 // ============================================================================
 // Path Parameter Schemas
@@ -79,19 +90,43 @@ export const agentVersionSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: instructionsSchema,
-  model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
-  workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
-  agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
-  integrationTools: z
-    .array(z.string())
+  model: conditionalFieldSchema(modelConfigSchema).describe(
+    'Model configuration — static value or array of conditional variants',
+  ),
+  tools: conditionalFieldSchema(toolsConfigSchema)
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
-  scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
+    .describe('Tool keys mapped to per-tool config — static or conditional'),
+  defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
+    .optional()
+    .describe('Default options for generate/stream calls — static or conditional'),
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Agent keys with optional per-agent config — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
+  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+    .optional()
+    .describe('Memory configuration — static or conditional'),
+  scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
+    .optional()
+    .describe('Scorer keys with optional sampling config — static or conditional'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining valid request context variables'),
   // Version metadata fields
   changedFields: z.array(z.string()).optional().describe('Array of field names that changed from the previous version'),
   changeMessage: z.string().optional().describe('Optional message describing the changes'),

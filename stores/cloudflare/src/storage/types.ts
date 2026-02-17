@@ -13,14 +13,27 @@ import type {
   TABLE_SPANS,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_DATASETS,
+  TABLE_DATASET_ITEMS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
   TABLE_PROMPT_BLOCKS,
   TABLE_PROMPT_BLOCK_VERSIONS,
+  TABLE_SCORER_DEFINITIONS,
+  TABLE_SCORER_DEFINITION_VERSIONS,
+  TABLE_MCP_CLIENTS,
+  TABLE_MCP_CLIENT_VERSIONS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
+  StorageScorerDefinitionType,
+  StorageMCPClientType,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
+import type { MCPClientVersion } from '@mastra/core/storage/domains/mcp-clients';
 import type { PromptBlockVersion } from '@mastra/core/storage/domains/prompt-blocks';
+import type { ScorerDefinitionVersion } from '@mastra/core/storage/domains/scorer-definitions';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type Cloudflare from 'cloudflare';
 
@@ -116,8 +129,17 @@ export type RecordTypes = {
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
   [TABLE_AGENT_VERSIONS]: AgentVersion;
+  [TABLE_DATASETS]: Record<string, any>;
+  [TABLE_DATASET_ITEMS]: Record<string, any>;
+  [TABLE_DATASET_VERSIONS]: Record<string, any>;
+  [TABLE_EXPERIMENTS]: Record<string, any>;
+  [TABLE_EXPERIMENT_RESULTS]: Record<string, any>;
   [TABLE_PROMPT_BLOCKS]: StoragePromptBlockType;
   [TABLE_PROMPT_BLOCK_VERSIONS]: PromptBlockVersion;
+  [TABLE_SCORER_DEFINITIONS]: StorageScorerDefinitionType;
+  [TABLE_SCORER_DEFINITION_VERSIONS]: ScorerDefinitionVersion;
+  [TABLE_MCP_CLIENTS]: StorageMCPClientType;
+  [TABLE_MCP_CLIENT_VERSIONS]: MCPClientVersion;
 };
 
 export type ListOptions = {

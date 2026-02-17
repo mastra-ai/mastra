@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@inngest/realtime": "^0.4.5",
+    "@inngest/realtime": "^0.4.6",
     "@opentelemetry/api": "^1.9.0",
     "inngest": "^3.44.3"
   },
@@ -41,7 +41,7 @@
     "@hono/node-server": "^1.19.9",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@koa/router": "^13.0.0",
+    "@koa/router": "^13.1.1",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
@@ -54,11 +54,11 @@
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
     "eslint": "^9.37.0",
-    "execa": "^9.6.0",
+    "execa": "^9.6.1",
     "express": "^5.1.0",
     "fastify": "^5.6.2",
     "get-port": "7.1.0",
-    "hono": "^4.11.3",
+    "hono": "^4.11.9",
     "inngest-cli": "^1.12.1",
     "koa": "^3.1.0",
     "koa-bodyparser": "^4.4.1",

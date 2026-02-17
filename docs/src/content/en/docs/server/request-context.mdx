@@ -482,6 +482,23 @@ requestContextSchema: z.object({
 
 **Handle tool validation errors**: Since tools return error objects instead of throwing, check for errors in your agent or workflow logic when tool execution is critical.
 
+## Testing with Studio presets
+
+When developing locally, you can define named presets in a JSON file and load them into Studio with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
+
+```bash
+mastra dev --request-context-presets ./presets.json
+```
+
+```json title="presets.json"
+{
+  "development": { "userId": "dev-user", "env": "development" },
+  "production": { "userId": "prod-user", "env": "production" }
+}
+```
+
+When you select a preset from the dropdown, the JSON editor populates with that preset's values. Editing the JSON manually switches the dropdown back to "Custom".
+
 ## Related
 
 - [Agent Request Context](/docs/agents/overview#using-requestcontext)

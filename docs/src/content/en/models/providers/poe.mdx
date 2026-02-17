@@ -1,5 +1,5 @@
 ---
-title: "Poe | Models | Mastra"
+title: "Poe | Models"
 description: "Use Poe models with Mastra. 113 models available."
 ---
 
@@ -89,21 +89,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 192512,
-    "maxOutput": 32768,
+    "maxOutput": 28672,
     "inputCost": 13,
     "outputCost": 64
-  },
-  {
-    "model": "poe/anthropic/claude-opus-4-6",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 983040,
-    "maxOutput": 128000,
-    "inputCost": 4.3,
-    "outputCost": 21
   },
   {
     "model": "poe/anthropic/claude-opus-4.1",
@@ -126,6 +114,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 196608,
     "maxOutput": 64000,
+    "inputCost": 4.3,
+    "outputCost": 21
+  },
+  {
+    "model": "poe/anthropic/claude-opus-4.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 983040,
+    "maxOutput": 128000,
     "inputCost": 4.3,
     "outputCost": 21
   },
@@ -161,7 +161,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 196608,
-    "maxOutput": 32768,
+    "maxOutput": 128000,
     "inputCost": 2.6,
     "outputCost": 13
   },
@@ -173,7 +173,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 983040,
-    "maxOutput": 32768,
+    "maxOutput": 64000,
     "inputCost": 2.6,
     "outputCost": 13
   },
@@ -365,7 +365,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 64000,
+    "maxOutput": 65536,
     "inputCost": 1.6,
     "outputCost": 9.6
   },
@@ -1011,7 +1011,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 16384,
     "inputCost": 1.1,

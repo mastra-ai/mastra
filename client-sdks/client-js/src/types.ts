@@ -24,10 +24,15 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
+  AgentInstructionBlock,
   PaginationInfo,
   WorkflowRuns,
   StorageListMessagesInput,
   ObservationalMemoryRecord,
+  Rule,
+  RuleGroup,
+  StorageConditionalVariant,
+  StorageConditionalField,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -82,10 +87,10 @@ type WithoutMethods<T> = {
         : K]: T[K];
 };
 
-export type NetworkStreamParams = {
+export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions;
+} & MultiPrimitiveExecutionOptions<OUTPUT>;
 
 export interface GetAgentResponse {
   id: string;
@@ -639,6 +644,37 @@ export type TitleGenerationConfig =
  *
  * Note: When semanticRecall is enabled, both `vector` (string, not false) and `embedder` must be configured.
  */
+/** Serializable observation step config for observational memory */
+export interface SerializedObservationConfig {
+  model?: string;
+  messageTokens?: number;
+  modelSettings?: Record<string, unknown>;
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  maxTokensPerBatch?: number;
+  bufferTokens?: number | false;
+  bufferActivation?: number;
+  blockAfter?: number;
+}
+
+/** Serializable reflection step config for observational memory */
+export interface SerializedReflectionConfig {
+  model?: string;
+  observationTokens?: number;
+  modelSettings?: Record<string, unknown>;
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  blockAfter?: number;
+  bufferActivation?: number;
+}
+
+/** Serializable observational memory configuration */
+export interface SerializedObservationalMemoryConfig {
+  model?: string;
+  scope?: 'resource' | 'thread';
+  shareTokenBudget?: boolean;
+  observation?: SerializedObservationConfig;
+  reflection?: SerializedReflectionConfig;
+}
+
 export interface SerializedMemoryConfig {
   /**
    * Vector database identifier. Required when semanticRecall is enabled.
@@ -665,6 +701,11 @@ export interface SerializedMemoryConfig {
    * Options to pass to the embedder
    */
   embedderOptions?: Record<string, unknown>;
+  /**
+   * Serialized observational memory configuration.
+   * `true` to enable with defaults, or a config object for customization.
+   */
+  observationalMemory?: boolean | SerializedObservationalMemoryConfig;
 }
 
 /**
@@ -703,11 +744,41 @@ export interface DefaultOptions {
 }
 
 /**
+ * Per-tool config for stored agents (e.g., description overrides)
+ */
+export interface StoredAgentToolConfig {
+  description?: string;
+  rules?: RuleGroup;
+}
+
+/**
+ * Per-MCP-client/integration tool configuration stored in agent snapshots.
+ * Specifies which tools from an MCP client or integration provider are enabled and their overrides.
+ * When `tools` is omitted, all tools from the source are included.
+ */
+export interface StoredMCPClientToolsConfig {
+  /** When omitted, all tools from the source are included. */
+  tools?: Record<string, StoredAgentToolConfig>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
+  description?: string;
   sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
+  rules?: RuleGroup;
 }
+
+// ============================================================================
+// Conditional Field Types (for rule-based dynamic agent configuration)
+// Re-exported from @mastra/core/storage for convenience
+// ============================================================================
+
+export type StoredAgentRule = Rule;
+export type StoredAgentRuleGroup = RuleGroup;
+export type ConditionalVariant<T> = StorageConditionalVariant<T>;
+export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
  * Stored agent data returned from API
@@ -724,21 +795,23 @@ export interface StoredAgentResponse {
   // Version snapshot config fields (resolved from active version)
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -793,21 +866,23 @@ export interface CreateStoredAgentParams {
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
@@ -818,27 +893,251 @@ export interface UpdateStoredAgentParams {
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
-  instructions?: string;
-  model?: {
+  instructions?: string | AgentInstructionBlock[];
+  model?: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
 }
 
 /**
  * Response for deleting a stored agent
  */
 export interface DeleteStoredAgentResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Stored Scorer Definition Types
+// ============================================================================
+
+/**
+ * Sampling configuration for scorers
+ */
+export type ScorerSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+
+/**
+ * Scorer type discriminator
+ */
+export type StoredScorerType =
+  | 'llm-judge'
+  | 'answer-relevancy'
+  | 'answer-similarity'
+  | 'bias'
+  | 'context-precision'
+  | 'context-relevance'
+  | 'faithfulness'
+  | 'hallucination'
+  | 'noise-sensitivity'
+  | 'prompt-alignment'
+  | 'tool-call-accuracy'
+  | 'toxicity';
+
+/**
+ * Stored scorer definition data returned from API
+ */
+export interface StoredScorerResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for listing stored scorer definitions
+ */
+export interface ListStoredScorersParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored scorer definitions
+ */
+export interface ListStoredScorersResponse {
+  scorerDefinitions: StoredScorerResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored scorer definition
+ */
+export interface CreateStoredScorerParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  type: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Parameters for updating a stored scorer definition
+ */
+export interface UpdateStoredScorerParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  type?: StoredScorerType;
+  model?: {
+    provider: string;
+    name: string;
+    [key: string]: unknown;
+  };
+  instructions?: string;
+  scoreRange?: {
+    min?: number;
+    max?: number;
+  };
+  presetConfig?: Record<string, unknown>;
+  defaultSampling?: ScorerSamplingConfig;
+}
+
+/**
+ * Response for deleting a stored scorer definition
+ */
+export interface DeleteStoredScorerResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
+// Stored MCP Client Types
+// ============================================================================
+
+/**
+ * MCP server transport configuration
+ */
+export interface StoredMCPServerConfig {
+  type: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  timeout?: number;
+}
+
+/**
+ * Stored MCP client data returned from API
+ */
+export interface StoredMCPClientResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored MCP clients
+ */
+export interface ListStoredMCPClientsResponse {
+  mcpClients: StoredMCPClientResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored MCP client
+ */
+export interface CreateStoredMCPClientParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  servers: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Parameters for updating a stored MCP client
+ */
+export interface UpdateStoredMCPClientParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  servers?: Record<string, StoredMCPServerConfig>;
+}
+
+/**
+ * Response for deleting a stored MCP client
+ */
+export interface DeleteStoredMCPClientResponse {
   success: boolean;
   message: string;
 }
@@ -853,21 +1152,23 @@ export interface AgentVersionResponse {
   versionNumber: number;
   name: string;
   description?: string;
-  instructions: string;
-  model: {
+  instructions: string | AgentInstructionBlock[];
+  model: ConditionalField<{
     provider: string;
     name: string;
     [key: string]: unknown;
-  };
-  tools?: string[];
-  defaultOptions?: DefaultOptions;
-  workflows?: string[];
-  agents?: string[];
-  integrationTools?: string[];
-  inputProcessors?: string[];
-  outputProcessors?: string[];
-  memory?: SerializedMemoryConfig;
-  scorers?: Record<string, StoredAgentScorerConfig>;
+  }>;
+  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  defaultOptions?: ConditionalField<DefaultOptions>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  inputProcessors?: ConditionalField<string[]>;
+  outputProcessors?: ConditionalField<string[]>;
+  memory?: ConditionalField<SerializedMemoryConfig>;
+  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
+  requestContextSchema?: Record<string, unknown>;
   changedFields?: string[];
   changeMessage?: string;
   createdAt: string;
@@ -1323,6 +1624,23 @@ export interface GetObservationalMemoryResponse {
 }
 
 /**
+ * Parameters for awaiting buffer status
+ */
+export interface AwaitBufferStatusParams {
+  agentId: string;
+  resourceId?: string;
+  threadId?: string;
+  requestContext?: RequestContext;
+}
+
+/**
+ * Response for buffer status endpoint
+ */
+export interface AwaitBufferStatusResponse {
+  record: ObservationalMemoryRecord | null;
+}
+
+/**
  * Extended memory status response with OM info
  */
 export interface GetMemoryStatusResponse {
@@ -1385,6 +1703,60 @@ export interface ListEmbeddersResponse {
 }
 
 // ============================================================================
+// Tool Provider Types
+// ============================================================================
+
+export interface ToolProviderInfo {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ToolProviderToolkit {
+  slug: string;
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface ToolProviderToolInfo {
+  slug: string;
+  name: string;
+  description?: string;
+  toolkit?: string;
+}
+
+export interface ToolProviderPagination {
+  total?: number;
+  page?: number;
+  perPage?: number;
+  hasMore: boolean;
+}
+
+export interface ListToolProvidersResponse {
+  providers: ToolProviderInfo[];
+}
+
+export interface ListToolProviderToolkitsResponse {
+  data: ToolProviderToolkit[];
+  pagination?: ToolProviderPagination;
+}
+
+export interface ListToolProviderToolsParams {
+  toolkit?: string;
+  search?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListToolProviderToolsResponse {
+  data: ToolProviderToolInfo[];
+  pagination?: ToolProviderPagination;
+}
+
+export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
+
+// ============================================================================
 // Error Types
 // ============================================================================
 
@@ -1423,4 +1795,174 @@ export class MastraClientError extends Error {
     this.statusText = statusText;
     this.body = body;
   }
+}
+
+// ============================================
+// Dataset Types
+// ============================================
+
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: unknown;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+  version: number;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetExperiment {
+  id: string;
+  datasetId: string | null;
+  datasetVersion: number | null;
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
+  targetId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  startedAt: string | Date | null;
+  completedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetExperimentResult {
+  id: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: string | null;
+  startedAt: string | Date;
+  completedAt: string | Date;
+  retryCount: number;
+  traceId: string | null;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+  createdAt: string | Date;
+}
+
+export interface CreateDatasetParams {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+}
+
+export interface UpdateDatasetParams {
+  datasetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+}
+
+export interface AddDatasetItemParams {
+  datasetId: string;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateDatasetItemParams {
+  datasetId: string;
+  itemId: string;
+  input?: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BatchInsertDatasetItemsParams {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface BatchDeleteDatasetItemsParams {
+  datasetId: string;
+  itemIds: string[];
+}
+
+export interface TriggerDatasetExperimentParams {
+  datasetId: string;
+  targetType: 'agent' | 'workflow' | 'scorer';
+  targetId: string;
+  scorerIds?: string[];
+  version?: number;
+  maxConcurrency?: number;
+}
+
+export interface CompareExperimentsParams {
+  datasetId: string;
+  experimentIdA: string;
+  experimentIdB: string;
+  thresholds?: Record<
+    string,
+    {
+      value: number;
+      direction?: 'higher-is-better' | 'lower-is-better';
+    }
+  >;
+}
+
+export interface DatasetItemVersionResponse {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  validTo: number | null;
+  isDeleted: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetVersionResponse {
+  id: string;
+  datasetId: string;
+  version: number;
+  createdAt: string | Date;
+}
+
+export interface CompareExperimentsResponse {
+  baselineId: string;
+  items: Array<{
+    itemId: string;
+    input: unknown;
+    groundTruth: unknown;
+    results: Record<
+      string,
+      {
+        output: unknown;
+        scores: Record<string, number | null>;
+      } | null
+    >;
+  }>;
 }

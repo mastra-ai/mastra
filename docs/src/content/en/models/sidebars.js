@@ -248,6 +248,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kuae-cloud-coding-plan',
+          label: 'KUAE Cloud Coding Plan',
+        },
+        {
+          type: 'doc',
           id: 'providers/llama',
           label: 'Llama',
         },
@@ -385,6 +390,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/siliconflow-cn',
           label: 'SiliconFlow (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stackit',
+          label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun',
+          label: 'StepFun',
         },
         {
           type: 'doc',

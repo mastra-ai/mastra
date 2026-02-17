@@ -121,7 +121,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       }
     } catch (error) {
-      console.error(error);
+      this.mastra.getLogger()?.error('Error in stream processing', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
     } finally {
       res.end();
     }
@@ -134,7 +136,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -142,7 +144,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
           body = await this.parseMultipartFormData(request, maxFileSize);
         } catch (error) {
-          console.error('Failed to parse multipart form data:', error);
+          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Re-throw size limit errors, let others fall through to validation
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
@@ -373,7 +377,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           try {
             params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
-            console.error('Error parsing query params', error);
+            this.mastra.getLogger()?.error('Error parsing query params', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
             // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
               return res.status(400).json(formatZodError(error, 'query parameters'));
@@ -389,7 +395,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
-            console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
+            this.mastra.getLogger()?.error('Error parsing body', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            });
             // Zod validation errors should return 400 Bad Request with structured issues
             if (error instanceof ZodError) {
               return res.status(400).json(formatZodError(error, 'request body'));
@@ -417,7 +425,11 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           const result = await route.handler(handlerParams);
           await this.sendResponse(route, res, result, req, prefix);
         } catch (error) {
-          console.error('Error calling handler', error);
+          this.mastra.getLogger()?.error('Error calling handler', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            path: route.path,
+            method: route.method,
+          });
           // Check if it's an HTTPException or MastraError with a status code
           let status = 500;
           if (error && typeof error === 'object') {
@@ -439,6 +451,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
       },
     );
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    this.app.use(async (req: Request, res: Response, next: NextFunction) => {
+      const response = await this.handleCustomRouteRequest(
+        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        req.method,
+        req.headers as Record<string, string | string[] | undefined>,
+        req.body,
+        res.locals.requestContext,
+      );
+      if (!response) return next();
+      await this.writeCustomRouteResponse(response, res);
+    });
   }
 
   registerContextMiddleware(): void {

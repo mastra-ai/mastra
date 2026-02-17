@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:integration": "vitest run tool-args-integration.test.ts",
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@google/genai": "latest",
-    "google-auth-library": "^10.2.1",
+    "google-auth-library": "^10.5.0",
     "ws": "^8.19.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.2.1-alpha.0",
+  "version": "1.4.0",
   "description": "",
   "type": "module",
   "files": [
@@ -76,7 +76,7 @@
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
@@ -91,7 +91,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.42",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.89",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -120,6 +120,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "hono": "^4.11.3"
+    "hono": "^4.11.9"
   }
 }
