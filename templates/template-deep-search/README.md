@@ -8,21 +8,27 @@ An AI research assistant that evaluates its own work. It searches, checks if the
 
 This template shows how Mastra's workflow primitives and agent orchestration come together: nested workflows, suspend/resume for human input, and multiple specialized agents coordinating on a single task.
 
-## Features
-
-✅ Self-evaluating research loops that identify gaps and keep searching
-✅ Human-in-the-loop with suspend/resume for clarifying questions
-✅ Multiple specialized agents coordinating on a single task
-✅ Web search and page scraping via Exa
-✅ Sourced answers with citations
-
 ## Demo
 
 https://github.com/user-attachments/assets/dfea59c3-8038-461c-a4b4-504f8fc01575
 
 This demo runs in Mastra Studio, but you can connect this workflow to your React, Next.js, or Vue app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client) or agentic UI libraries like [AI SDK UI](https://mastra.ai/guides/build-your-ui/ai-sdk-ui), [CopilotKit](https://mastra.ai/guides/build-your-ui/copilotkit), or [Assistant UI](https://mastra.ai/guides/build-your-ui/assistant-ui).
 
+## Features
+
+✅ Self-evaluating research loops that identify gaps and keep searching
+
+✅ Human-in-the-loop with suspend/resume for clarifying questions
+
+✅ Multiple specialized agents coordinating on a single task
+
+✅ Web search and page scraping via Exa
+
+✅ Sourced answers with citations
+
 ## Before you begin
+
+You'll need:
 
 - [OpenAI API key](https://platform.openai.com/api-keys) — used by default, but you can swap in any model
 - [Exa API key](https://dashboard.exa.ai/api-keys) — for web search and page scraping
