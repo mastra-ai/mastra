@@ -5,6 +5,7 @@
  * Integration tests with real S3/MinIO are in index.integration.test.ts.
  */
 
+import type { StorageBlobEntry } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // In-memory store to simulate S3 bucket contents
@@ -13,7 +14,7 @@ let mockSendFn: ReturnType<typeof vi.fn>;
 
 vi.mock('@aws-sdk/client-s3', () => {
   function MockS3Client() {
-    // @ts-ignore
+    // @ts-expect-error - Mocking S3Client
     this.send = (...args: any[]) => mockSendFn(...args);
   }
 
@@ -36,7 +37,6 @@ vi.mock('@aws-sdk/client-s3', () => {
 });
 
 import { S3BlobStore } from './index';
-import type { StorageBlobEntry } from '@mastra/core/storage';
 
 function createEntry(hash: string, content: string, mimeType?: string): StorageBlobEntry {
   return {

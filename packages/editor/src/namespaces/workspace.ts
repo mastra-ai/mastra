@@ -41,7 +41,13 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
     id: string,
     snapshot: StorageWorkspaceSnapshotType,
     options?: { skillSource?: SkillSource },
-  ): Promise<Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, Record<string, WorkspaceFilesystem> | undefined>> {
+  ): Promise<
+    Workspace<
+      WorkspaceFilesystem | undefined,
+      WorkspaceSandbox | undefined,
+      Record<string, WorkspaceFilesystem> | undefined
+    >
+  > {
     const config: WorkspaceConfig<
       WorkspaceFilesystem | undefined,
       WorkspaceSandbox | undefined,

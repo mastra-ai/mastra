@@ -12,7 +12,6 @@
  */
 import type { SandboxProvider } from '@mastra/core/editor';
 import { E2BSandbox } from './sandbox';
-import type { SandboxRuntime } from './sandbox';
 
 /**
  * Serializable subset of E2BSandboxOptions for editor storage.
@@ -23,7 +22,6 @@ interface E2BProviderConfig {
   timeout?: number;
   env?: Record<string, string>;
   metadata?: Record<string, unknown>;
-  runtimes?: SandboxRuntime[];
   domain?: string;
   apiUrl?: string;
   apiKey?: string;
@@ -48,15 +46,6 @@ export const e2bSandboxProvider: SandboxProvider<E2BProviderConfig> = {
         type: 'object',
         description: 'Custom metadata',
         additionalProperties: true,
-      },
-      runtimes: {
-        type: 'array',
-        description: 'Supported runtimes',
-        items: {
-          type: 'string',
-          enum: ['node', 'python', 'bash', 'ruby', 'go', 'rust', 'java', 'cpp', 'r'],
-        },
-        default: ['node', 'python', 'bash'],
       },
       domain: { type: 'string', description: 'Domain for self-hosted E2B' },
       apiUrl: { type: 'string', description: 'API URL for self-hosted E2B' },
