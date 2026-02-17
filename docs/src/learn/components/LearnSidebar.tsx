@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import Link from '@docusaurus/Link'
 import { useLocation } from '@docusaurus/router'
 import { cn } from '@site/src/lib/utils'
+import { ThemeSwitcher } from '@site/src/components/theme-switcher'
 import type { Lesson, LearnStorageV1 } from '../types'
 import { LearnProgressBar } from './LearnProgressBar'
 import { getPublishedCount } from '../utils'
@@ -16,15 +17,15 @@ function ProgressIcon({ storage, slug }: { storage: LearnStorageV1; slug: string
   const p = storage.lessons[slug]
   if (p?.watched) {
     return (
-      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-[10px] text-white">
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-green-500 text-[10px] text-white">
         ✓
       </span>
     )
   }
   if (p && p.seconds > 0) {
-    return <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+    return <span className="h-4 w-4 shrink-0 rounded-full border-2 border-yellow-500" />
   }
-  return <span className="h-2.5 w-2.5 rounded-full border border-(--border)" />
+  return <span className="h-4 w-4 shrink-0 rounded-full border-2 border-(--border)" />
 }
 
 export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps) {
@@ -49,33 +50,38 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
       <div className="px-4 pb-4">
         <Link
           to="/learn"
-          className="text-base font-semibold text-(--mastra-text-primary) no-underline hover:text-(--mastra-green-accent-2)"
+          className="text-sm font-semibold text-(--mastra-text-primary) no-underline hover:text-(--mastra-green-accent-2)"
         >
-          Mastra 101
+          Mastra Learn
         </Link>
-        <LearnProgressBar completed={watchedCount} total={publishedTotal} className="mt-3" />
+        <LearnProgressBar
+          completed={watchedCount}
+          total={publishedTotal}
+          totalLessons={lessons.length}
+          className="mt-3"
+        />
       </div>
 
       <div className="flex-1">
         {modules.map(([moduleName, moduleLessons]) => (
-          <div key={moduleName} className="mb-4">
-            <h4 className="px-4 py-1.5 text-xs font-semibold tracking-wide text-(--mastra-text-tertiary) uppercase">
+          <div key={moduleName} className="mb-3">
+            <h4 className="px-4 py-1 text-xs font-semibold tracking-wide text-(--mastra-text-tertiary) uppercase">
               {moduleName}
             </h4>
-            <ul className="m-0 list-none p-0">
+            <ul className="m-0 p-0" style={{ listStyle: 'none' }}>
               {moduleLessons.map(lesson => {
                 const isActive =
                   location.pathname === `/learn/${lesson.slug}` || location.pathname === `/learn/${lesson.slug}/`
                 return (
-                  <li key={lesson.slug}>
+                  <li key={lesson.slug} className="m-0 p-0">
                     <Link
                       to={`/learn/${lesson.slug}`}
                       onClick={() => setMobileOpen(false)}
                       className={cn(
-                        'flex items-center gap-2.5 px-4 py-1.5 text-sm no-underline transition-colors',
+                        'relative flex items-center gap-2 px-4 py-1 text-sm no-underline transition-colors',
                         isActive
-                          ? 'border-l-2 border-l-green-500 bg-green-500/5 font-medium text-(--mastra-text-primary)'
-                          : 'border-l-2 border-l-transparent text-(--mastra-text-secondary) hover:text-(--mastra-text-primary)',
+                          ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
+                          : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
                       )}
                     >
                       <ProgressIcon storage={storage} slug={lesson.slug} />
@@ -88,6 +94,11 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
           </div>
         ))}
       </div>
+
+      {/* Color mode toggle */}
+      <footer className="mr-4 flex justify-end border-t-[0.5px] border-(--border) py-2 pr-0.5">
+        <ThemeSwitcher />
+      </footer>
     </nav>
   )
 
@@ -108,7 +119,7 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-[var(--ifm-navbar-height)] bottom-0 left-0 z-40 w-[var(--doc-sidebar-width)] shrink-0 border-r border-r-(--sidebar-border) bg-(--ifm-background-color) transition-transform lg:static lg:translate-x-0',
+          'fixed top-[var(--ifm-navbar-height)] bottom-0 left-0 z-40 w-[var(--doc-sidebar-width)] shrink-0 border-r border-r-(--sidebar-border) bg-(--ifm-background-color) transition-transform lg:sticky lg:h-[calc(100vh-var(--ifm-navbar-height))] lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           className,
         )}

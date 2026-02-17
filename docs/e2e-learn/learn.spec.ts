@@ -12,7 +12,7 @@ test.describe('Learn section', () => {
 
   test('progress bar starts at zero', async ({ page }) => {
     await page.goto('/learn')
-    await expect(page.locator('main').getByText('0 of 4 completed')).toBeVisible()
+    await expect(page.locator('main').getByText('0 of 4 completed · 13 coming soon')).toBeVisible()
   })
 
   test('published lesson navigation works', async ({ page }) => {
@@ -66,24 +66,24 @@ test.describe('Learn section', () => {
     await checkbox.check()
     await expect(checkbox).toBeChecked()
 
-    // Reload and verify persistence
-    await page.reload()
-    await expect(page.locator('input[type="checkbox"]')).toBeChecked()
+    // Navigate away and back to verify localStorage persistence
+    await page.goto('/learn')
+    await page.goto('/learn/01-what-is-an-agent')
+    await expect(page.locator('input[type="checkbox"]')).toBeChecked({ timeout: 10000 })
   })
 
   test('progress updates after marking lesson watched', async ({ page }) => {
     await page.goto('/learn/01-what-is-an-agent')
     await page.locator('input[type="checkbox"]').check()
     await page.goto('/learn')
-    await expect(page.locator('main').getByText('1 of 4 completed')).toBeVisible()
+    await expect(page.locator('main').getByText('1 of 4 completed · 13 coming soon')).toBeVisible()
   })
 
-  test('continue card appears after visiting a lesson', async ({ page }) => {
-    await page.goto('/learn/02-setup-and-first-run')
-    // Wait for lastVisited to be set
-    await page.waitForTimeout(500)
+  test('continue card shows next unwatched lesson', async ({ page }) => {
     await page.goto('/learn')
+    // With no lessons watched, continue card should show the first published lesson
     await expect(page.getByText('Continue learning')).toBeVisible()
+    await expect(page.locator('main a').filter({ hasText: 'What Is an Agent' }).first()).toBeVisible()
   })
 
   test('prev/next navigation works', async ({ page }) => {

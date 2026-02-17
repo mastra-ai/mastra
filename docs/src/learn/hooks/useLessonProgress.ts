@@ -1,10 +1,10 @@
 import { useCallback, useMemo } from 'react'
-import { useLearnStorage } from './useLearnStorage'
+import { useSharedLearnStorage } from './LearnStorageContext'
 
 export type LessonProgressStatus = 'completed' | 'in-progress' | 'not-started'
 
 export function useLessonProgress(slug: string) {
-  const { storage, updateLesson, setLastVisited } = useLearnStorage()
+  const { storage, updateLesson, setLastVisited } = useSharedLearnStorage()
 
   const progress = storage.lessons[slug]
   const watched = progress?.watched ?? false

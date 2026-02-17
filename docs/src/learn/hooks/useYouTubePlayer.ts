@@ -70,6 +70,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
         playerVars: {
           rel: 0,
           modestbranding: 1,
+          autoplay: 1,
         },
         events: {
           onReady: () => {

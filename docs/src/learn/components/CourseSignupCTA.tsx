@@ -7,11 +7,10 @@ import { Input } from '@site/src/components/ui/input'
 const SUBSCRIBED_KEY = 'mastraLearn:subscribed'
 
 type CourseSignupCTAProps = {
-  variant?: 'full' | 'compact'
   className?: string
 }
 
-export function CourseSignupCTA({ variant = 'full', className }: CourseSignupCTAProps) {
+export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
   const { siteConfig } = useDocusaurusContext()
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -58,16 +57,6 @@ export function CourseSignupCTA({ variant = 'full', className }: CourseSignupCTA
     }
   }
 
-  if (submitted && variant === 'compact') {
-    return (
-      <div className={cn('rounded-lg border border-(--border) p-4 text-center', className)}>
-        <p className="text-sm text-(--mastra-text-tertiary)">
-          You're subscribed — we'll notify you when new lessons drop.
-        </p>
-      </div>
-    )
-  }
-
   if (submitted) {
     return (
       <div className={cn('rounded-lg border border-green-500/20 bg-green-500/5 p-6 text-center', className)}>
@@ -78,19 +67,12 @@ export function CourseSignupCTA({ variant = 'full', className }: CourseSignupCTA
   }
 
   return (
-    <div className={cn('rounded-lg border border-(--border) p-6', variant === 'full' && 'text-center', className)}>
-      {variant === 'full' && (
-        <>
-          <h3 className="text-lg font-semibold text-(--mastra-text-primary)">Get notified when new lessons drop</h3>
-          <p className="mt-1 mb-4 text-sm text-(--mastra-text-tertiary)">
-            Join the Mastra learning community — no spam, just new lesson notifications.
-          </p>
-        </>
-      )}
-      {variant === 'compact' && (
-        <p className="mb-3 text-sm text-(--mastra-text-secondary)">Get notified when new lessons are published:</p>
-      )}
-      <form onSubmit={handleSubmit} className={cn('flex gap-2', variant === 'full' && 'mx-auto max-w-md')}>
+    <div className={cn('rounded-lg border border-(--border) p-6 text-center', className)}>
+      <h3 className="text-lg font-semibold text-(--mastra-text-primary)">Get notified when new lessons drop</h3>
+      <p className="mt-1 mb-4 text-sm text-(--mastra-text-tertiary)">
+        Join the Mastra learning community — no spam, just new lesson notifications.
+      </p>
+      <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-2">
         <Input
           type="email"
           placeholder="you@example.com"
