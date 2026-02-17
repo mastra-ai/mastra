@@ -544,7 +544,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimaxi.com/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -623,6 +623,7 @@
         "qwen/qwen3-vl-30b-a3b-instruct",
         "qwen/qwen3-vl-30b-a3b-thinking",
         "qwen/qwen3-vl-8b-instruct",
+        "qwen/qwen3.5-397b-a17b",
         "sao10k/L3-8B-Stheno-v3.2",
         "sao10k/l3-70b-euryale-v2.1",
         "sao10k/l3-8b-lunaris",
@@ -661,6 +662,7 @@
         "glm-4.6",
         "glm-4.7",
         "glm-5",
+        "glm-5-free",
         "gpt-5",
         "gpt-5-codex",
         "gpt-5-nano",
@@ -809,7 +811,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimaxi.com)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimaxi.com/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -867,6 +869,8 @@
         "qwen3-vl-235b-a22b",
         "qwen3-vl-30b-a3b",
         "qwen3-vl-plus",
+        "qwen3.5-397b-a17b",
+        "qwen3.5-plus",
         "qwq-plus"
       ],
       "docUrl": "https://www.alibabacloud.com/help/en/model-studio/models",
@@ -1012,7 +1016,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax Coding Plan (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimax.io/docs/coding-plan/intro",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -1157,6 +1161,15 @@
       "docUrl": "https://fireworks.ai/docs/",
       "gateway": "models.dev"
     },
+    "stepfun": {
+      "url": "https://api.stepfun.com/v1",
+      "apiKeyEnvVar": "STEPFUN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "StepFun",
+      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
+      "docUrl": "https://platform.stepfun.com/docs/zh/overview/concept",
+      "gateway": "models.dev"
+    },
     "siliconflow": {
       "url": "https://api.siliconflow.com/v1",
       "apiKeyEnvVar": "SILICONFLOW_API_KEY",
@@ -1241,6 +1254,7 @@
       "apiKeyEnvVar": "TOGETHER_API_KEY",
       "name": "Together AI",
       "models": [
+        "MiniMaxAI/MiniMax-M2.5",
         "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
         "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
         "Qwen/Qwen3-Coder-Next-FP8",
@@ -1482,6 +1496,8 @@
         "qwen/qwen3-next-80b-a3b-instruct",
         "qwen/qwen3-next-80b-a3b-instruct:free",
         "qwen/qwen3-next-80b-a3b-thinking",
+        "qwen/qwen3.5-397b-a17b",
+        "qwen/qwen3.5-plus-02-15",
         "qwen/qwq-32b:free",
         "rekaai/reka-flash-3",
         "sarvamai/sarvam-m:free",
@@ -1722,8 +1738,11 @@
       "apiKeyHeader": "Authorization",
       "name": "Vivgrid",
       "models": [
+        "deepseek-v3.2",
         "gemini-3-flash-preview",
         "gemini-3-pro-preview",
+        "glm-5",
+        "gpt-5-mini",
         "gpt-5.1-codex",
         "gpt-5.1-codex-max",
         "gpt-5.2-codex"
@@ -1806,7 +1825,6 @@
         "claude-opus-4-5",
         "claude-opus-4-6",
         "claude-sonnet-4-5",
-        "deepseek-r1",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
         "gemini-3-flash-preview",
@@ -1817,11 +1835,7 @@
         "gpt-5-nano",
         "gpt-5.2",
         "gpt-oss-120b",
-        "gpt-oss-20b",
-        "kimi-k2-thinking",
-        "kimi-k2.5",
-        "zai-glm-4.7",
-        "zai-glm-4.7-flash"
+        "gpt-oss-20b"
       ],
       "docUrl": "https://docs.firmware.ai",
       "gateway": "models.dev"
@@ -2349,7 +2363,7 @@
       "apiKeyEnvVar": "MINIMAX_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "MiniMax (minimax.io)",
-      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+      "models": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
       "docUrl": "https://platform.minimax.io/docs/guides/quickstart",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -2566,6 +2580,10 @@
         "openai/gpt-oss-120b",
         "qwen/qwen3-235b-a22b-thinking-2507",
         "qwen/qwen3-coder",
+        "qwen/qwen3.5-397b-a17b",
+        "qwen/qwen3.5-397b-a17b-thinking",
+        "qwen/qwen3.5-plus",
+        "qwen/qwen3.5-plus-thinking",
         "zai-org/glm-4.5-air",
         "zai-org/glm-4.5-air:thinking",
         "zai-org/glm-4.6",
@@ -2716,6 +2734,8 @@
         "qwen3-vl-235b-a22b",
         "qwen3-vl-30b-a3b",
         "qwen3-vl-plus",
+        "qwen3.5-397b-a17b",
+        "qwen3.5-plus",
         "qwq-32b",
         "qwq-plus",
         "tongyi-intent-detect-v3"
@@ -2730,6 +2750,7 @@
       "name": "Chutes",
       "models": [
         "MiniMaxAI/MiniMax-M2.1-TEE",
+        "MiniMaxAI/MiniMax-M2.5-TEE",
         "NousResearch/DeepHermes-3-Mistral-24B-Preview",
         "NousResearch/Hermes-4-14B",
         "NousResearch/Hermes-4-405B-FP8-TEE",
@@ -2792,7 +2813,8 @@
         "zai-org/GLM-4.6V",
         "zai-org/GLM-4.7-FP8",
         "zai-org/GLM-4.7-Flash",
-        "zai-org/GLM-4.7-TEE"
+        "zai-org/GLM-4.7-TEE",
+        "zai-org/GLM-5-TEE"
       ],
       "docUrl": "https://llm.chutes.ai/v1/models",
       "gateway": "models.dev"
@@ -3247,7 +3269,7 @@
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5-FP8"
     ],
-    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax-cn-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "novita-ai": [
       "baichuan/baichuan-m2-32b",
       "baidu/ernie-4.5-21B-a3b",
@@ -3317,6 +3339,7 @@
       "qwen/qwen3-vl-30b-a3b-instruct",
       "qwen/qwen3-vl-30b-a3b-thinking",
       "qwen/qwen3-vl-8b-instruct",
+      "qwen/qwen3.5-397b-a17b",
       "sao10k/L3-8B-Stheno-v3.2",
       "sao10k/l3-70b-euryale-v2.1",
       "sao10k/l3-8b-lunaris",
@@ -3347,6 +3370,7 @@
       "glm-4.6",
       "glm-4.7",
       "glm-5",
+      "glm-5-free",
       "gpt-5",
       "gpt-5-codex",
       "gpt-5-nano",
@@ -3479,7 +3503,7 @@
       "xai/grok-4.1-fast-reasoning",
       "xai/grok-code-fast-1"
     ],
-    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "bailing": ["Ling-1T", "Ring-1T"],
     "alibaba": [
       "qvq-max",
@@ -3520,6 +3544,8 @@
       "qwen3-vl-235b-a22b",
       "qwen3-vl-30b-a3b",
       "qwen3-vl-plus",
+      "qwen3.5-397b-a17b",
+      "qwen3.5-plus",
       "qwq-plus"
     ],
     "cloudflare-workers-ai": [
@@ -3625,7 +3651,7 @@
       "qwen3-coder-480b-a35b-instruct",
       "qwen3-max-2026-01-23"
     ],
-    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax-coding-plan": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "kimi-for-coding": ["k2p5", "kimi-k2-thinking"],
     "mistral": [
       "codestral-latest",
@@ -3733,6 +3759,7 @@
       "accounts/fireworks/models/qwen3-235b-a22b",
       "accounts/fireworks/models/qwen3-coder-480b-a35b-instruct"
     ],
+    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash"],
     "siliconflow": [
       "ByteDance-Seed/Seed-OSS-36B-Instruct",
       "MiniMaxAI/MiniMax-M2.1",
@@ -3806,6 +3833,7 @@
       "zai-org/GLM-5"
     ],
     "togetherai": [
+      "MiniMaxAI/MiniMax-M2.5",
       "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
       "Qwen/Qwen3-Coder-Next-FP8",
@@ -4000,6 +4028,8 @@
       "qwen/qwen3-next-80b-a3b-instruct",
       "qwen/qwen3-next-80b-a3b-instruct:free",
       "qwen/qwen3-next-80b-a3b-thinking",
+      "qwen/qwen3.5-397b-a17b",
+      "qwen/qwen3.5-plus-02-15",
       "qwen/qwq-32b:free",
       "rekaai/reka-flash-3",
       "sarvamai/sarvam-m:free",
@@ -4191,8 +4221,11 @@
       "gemini-live-2.5-flash-preview-native-audio"
     ],
     "vivgrid": [
+      "deepseek-v3.2",
       "gemini-3-flash-preview",
       "gemini-3-pro-preview",
+      "glm-5",
+      "gpt-5-mini",
       "gpt-5.1-codex",
       "gpt-5.1-codex-max",
       "gpt-5.2-codex"
@@ -4233,7 +4266,6 @@
       "claude-opus-4-5",
       "claude-opus-4-6",
       "claude-sonnet-4-5",
-      "deepseek-r1",
       "gemini-2.5-flash",
       "gemini-2.5-pro",
       "gemini-3-flash-preview",
@@ -4244,11 +4276,7 @@
       "gpt-5-nano",
       "gpt-5.2",
       "gpt-oss-120b",
-      "gpt-oss-20b",
-      "kimi-k2-thinking",
-      "kimi-k2.5",
-      "zai-glm-4.7",
-      "zai-glm-4.7-flash"
+      "gpt-oss-20b"
     ],
     "ovhcloud": [
       "deepseek-r1-distill-llama-70b",
@@ -4697,7 +4725,7 @@
     ],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
-    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5"],
+    "minimax": ["MiniMax-M2", "MiniMax-M2.1", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"],
     "vultr": [
       "deepseek-r1-distill-llama-70b",
       "deepseek-r1-distill-qwen-32b",
@@ -4851,6 +4879,10 @@
       "openai/gpt-oss-120b",
       "qwen/qwen3-235b-a22b-thinking-2507",
       "qwen/qwen3-coder",
+      "qwen/qwen3.5-397b-a17b",
+      "qwen/qwen3.5-397b-a17b-thinking",
+      "qwen/qwen3.5-plus",
+      "qwen/qwen3.5-plus-thinking",
       "zai-org/glm-4.5-air",
       "zai-org/glm-4.5-air:thinking",
       "zai-org/glm-4.6",
@@ -4971,12 +5003,15 @@
       "qwen3-vl-235b-a22b",
       "qwen3-vl-30b-a3b",
       "qwen3-vl-plus",
+      "qwen3.5-397b-a17b",
+      "qwen3.5-plus",
       "qwq-32b",
       "qwq-plus",
       "tongyi-intent-detect-v3"
     ],
     "chutes": [
       "MiniMaxAI/MiniMax-M2.1-TEE",
+      "MiniMaxAI/MiniMax-M2.5-TEE",
       "NousResearch/DeepHermes-3-Mistral-24B-Preview",
       "NousResearch/Hermes-4-14B",
       "NousResearch/Hermes-4-405B-FP8-TEE",
@@ -5039,7 +5074,8 @@
       "zai-org/GLM-4.6V",
       "zai-org/GLM-4.7-FP8",
       "zai-org/GLM-4.7-Flash",
-      "zai-org/GLM-4.7-TEE"
+      "zai-org/GLM-4.7-TEE",
+      "zai-org/GLM-5-TEE"
     ],
     "netlify": [
       "anthropic/claude-3-5-haiku-20241022",
