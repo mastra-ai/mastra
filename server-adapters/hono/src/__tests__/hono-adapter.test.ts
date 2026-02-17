@@ -1,6 +1,11 @@
 import type { Server } from 'node:http';
 import { serve } from '@hono/node-server';
-import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -8,9 +13,11 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
@@ -18,7 +25,7 @@ describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
 
-    setupAdapter: async (context: AdapterTestContext) => {
+    setupAdapter: async (context: AdapterTestContext, options?: AdapterSetupOptions) => {
       const app = new Hono();
 
       // Create Hono adapter
@@ -28,6 +35,7 @@ describe('Hono Server Adapter', () => {
         tools: context.tools,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
+        prefix: options?.prefix,
       });
 
       await adapter.init();
@@ -454,5 +462,94 @@ describe('Hono Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.use('*', middleware);
     },
+  });
+
+  describe('Custom API Routes (registerApiRoute)', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should register and respond to custom API routes added via registerApiRoute', async () => {
+      const customRoutes = [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ message: 'Hello from custom route!' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+
+    it('should register custom API routes with POST method', async () => {
+      const customRoutes = [
+        registerApiRoute('/echo', {
+          method: 'POST',
+          handler: async c => {
+            const body = await c.req.json();
+            return c.json({ echo: body });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/echo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ echo: { test: 'data' } });
+    });
   });
 });

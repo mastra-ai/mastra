@@ -7,7 +7,9 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  FolderIcon,
   Cpu,
+  DatabaseIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -25,6 +27,7 @@ import {
   MastraVersionFooter,
   useMastraPlatform,
   NavLink,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -48,6 +51,7 @@ const mainNavigation: NavSection[] = [
         name: 'Processors',
         url: '/processors',
         icon: <Cpu />,
+        isOnMastraPlatform: false,
       },
       {
         name: 'MCP Servers',
@@ -67,7 +71,11 @@ const mainNavigation: NavSection[] = [
         icon: <GaugeIcon />,
         isOnMastraPlatform: true,
       },
-
+      {
+        name: 'Workspaces',
+        url: '/workspaces',
+        icon: <FolderIcon />,
+      },
       {
         name: 'Request Context',
         url: '/request-context',
@@ -85,6 +93,13 @@ const mainNavigation: NavSection[] = [
         url: '/observability',
         icon: <EyeIcon />,
         isOnMastraPlatform: true,
+      },
+      {
+        name: 'Datasets',
+        url: '/datasets',
+        icon: <DatabaseIcon />,
+        isOnMastraPlatform: false,
+        isExperimental: true,
       },
     ],
   },
@@ -160,8 +175,12 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   const filterPlatformLink = (link: NavLink) => {
+    if (link.name === 'Datasets' && !experimentalFeaturesEnabled) {
+      return false;
+    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }

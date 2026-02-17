@@ -48,11 +48,11 @@
     "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai-v4": "npm:ai@4.3.19",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"

@@ -81,9 +81,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     modelOutput?.deserializeState(state);
   };
 
-  // Create processor states map that will be shared across all LLM execution steps
-  const processorStates =
-    outputProcessors && outputProcessors.length > 0 ? new Map<string, ProcessorState<OUTPUT>>() : undefined;
+  // Use the passed-in processorStates map if available, otherwise create a new one.
+  // This map persists across loop iterations and is shared by all processor methods.
+  const processorStates = rest.processorStates ?? new Map<string, ProcessorState>();
 
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
@@ -146,6 +146,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       returnScorerData,
       tracingContext: rest.modelSpanTracker?.getTracingContext(),
       requestContext: rest.requestContext,
+      processorStates,
     },
     initialState: initialStreamState,
   });

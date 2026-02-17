@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { type SidebarState } from './main-sidebar-context';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { CircleAlertIcon } from 'lucide-react';
 
 export type NavLink = {
   name: string;
@@ -13,6 +14,7 @@ export type NavLink = {
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
   isOnMastraPlatform: boolean;
+  isExperimental?: boolean;
 };
 
 export type MainSidebarNavLinkProps = {
@@ -32,7 +34,8 @@ export function MainSidebarNavLink({
   const { Link } = useLinkComponent();
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
-  const linkParams = link?.url?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {};
+  const isExternal = link?.url?.startsWith('http');
+  const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
 
   return (
     <li
@@ -72,7 +75,7 @@ export function MainSidebarNavLink({
                   {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
                 </Link>
               </TooltipTrigger>
-              <TooltipContent side="right" align="center" className="bg-border1 text-neutral6 ml-4">
+              <TooltipContent side="right" align="center" className="ml-4">
                 {link.tooltipMsg ? (
                   <>
                     {isCollapsed && `${link.name} | `} {link.tooltipMsg}
@@ -86,6 +89,16 @@ export function MainSidebarNavLink({
             <Link href={link.url} {...linkParams}>
               {link.icon && link.icon}
               {isCollapsed ? <VisuallyHidden>{link.name}</VisuallyHidden> : link.name} {children}
+              {link.isExperimental && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <CircleAlertIcon className="ml-auto stroke-accent5" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center" className="ml-4">
+                    Experimental Feature
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </Link>
           )}
         </>

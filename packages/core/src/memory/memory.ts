@@ -3,7 +3,7 @@ import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
-import type { EmbeddingModelId } from '../llm/model';
+import type { EmbeddingModelId, ModelRouterModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type {
   InputProcessor,
@@ -36,7 +36,24 @@ import type {
   WorkingMemoryTemplate,
   MessageDeleteInput,
   MemoryRequestContext,
+  SerializedMemoryConfig,
+  SerializedObservationalMemoryConfig,
+  ObservationalMemoryOptions,
 } from './types';
+import { isObservationalMemoryEnabled } from './types';
+
+/**
+ * Extract a string model ID from an AgentConfig['model'] value.
+ * Returns undefined for non-serializable values (functions, LanguageModel instances).
+ */
+function extractModelIdString(model: unknown): string | undefined {
+  if (typeof model === 'string') return model;
+  if (typeof model === 'function') return undefined;
+  if (model && typeof model === 'object' && 'id' in model && typeof (model as { id: unknown }).id === 'string') {
+    return (model as { id: string }).id;
+  }
+  return undefined;
+}
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -241,8 +258,40 @@ https://mastra.ai/en/docs/memory/overview`,
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any>> {
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any, any, any>> {
     return {};
+  }
+
+  /**
+   * Cached promise for the embedding dimension probe.
+   * Stored as a promise to deduplicate concurrent calls.
+   */
+  private _embeddingDimensionPromise?: Promise<number | undefined>;
+
+  /**
+   * Probe the embedder to determine its actual output dimension.
+   * The result is cached so subsequent calls are free.
+   */
+  protected async getEmbeddingDimension(): Promise<number | undefined> {
+    if (!this.embedder) return undefined;
+    if (!this._embeddingDimensionPromise) {
+      this._embeddingDimensionPromise = (async () => {
+        try {
+          const result = await this.embedder!.doEmbed({
+            values: ['a'],
+            ...(this.embedderOptions || {}),
+          } as any);
+          return result.embeddings[0]?.length;
+        } catch (e) {
+          console.warn(
+            `[Mastra Memory] Failed to probe embedder for dimension, falling back to default. ` +
+              `This may cause index name mismatches if the embedder uses non-default dimensions. Error: ${e}`,
+          );
+          return undefined;
+        }
+      })();
+    }
+    return this._embeddingDimensionPromise;
   }
 
   /**
@@ -380,7 +429,7 @@ https://mastra.ai/en/docs/memory/overview`,
   abstract saveMessages(args: {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-  }): Promise<{ messages: MastraDBMessage[] }>;
+  }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
    * Retrieves messages for a specific thread with optional semantic recall
@@ -395,7 +444,7 @@ https://mastra.ai/en/docs/memory/overview`,
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
     },
-  ): Promise<{ messages: MastraDBMessage[] }>;
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
   /**
    * Helper method to create a new thread
@@ -607,7 +656,13 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
-      if (!hasMessageHistory) {
+      // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
+      const hasObservationalMemory =
+        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+
+      // Skip MessageHistory input processor if ObservationalMemory handles message loading
+      if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
           new MessageHistory({
             storage: memoryStore,
@@ -649,8 +704,10 @@ https://mastra.ai/en/docs/memory/overview`,
       if (!hasSemanticRecall) {
         const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
 
-        // Use the Memory class's index name for consistency with memory.recall()
-        const indexName = this.getEmbeddingIndexName();
+        // Probe the embedder for its actual dimension to generate the correct index name.
+        // This ensures the processor uses the same dimension-aware index name as recall().
+        const embeddingDimension = await this.getEmbeddingDimension();
+        const indexName = this.getEmbeddingIndexName(embeddingDimension);
 
         processors.push(
           new SemanticRecall({
@@ -727,8 +784,10 @@ https://mastra.ai/en/docs/memory/overview`,
         const semanticRecallConfig =
           typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
 
-        // Use the Memory class's index name for consistency with memory.recall()
-        const indexName = this.getEmbeddingIndexName();
+        // Probe the embedder for its actual dimension to generate the correct index name.
+        // This ensures the processor uses the same dimension-aware index name as recall().
+        const embeddingDimension = await this.getEmbeddingDimension();
+        const indexName = this.getEmbeddingIndexName(embeddingDimension);
 
         processors.push(
           new SemanticRecall({
@@ -756,7 +815,13 @@ https://mastra.ai/en/docs/memory/overview`,
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
-      if (!hasMessageHistory) {
+      // Check if ObservationalMemory is present (via processor or config) - it handles its own message saving
+      const hasObservationalMemory =
+        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+
+      // Skip MessageHistory output processor if ObservationalMemory handles message saving
+      if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
           new MessageHistory({
             storage: memoryStore,
@@ -779,4 +844,128 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Get serializable configuration for this memory instance
+   * @returns Serializable memory configuration
+   */
+  getConfig(): SerializedMemoryConfig {
+    const { generateTitle, workingMemory, threads, observationalMemory, ...restConfig } = this.threadConfig;
+
+    const config: SerializedMemoryConfig = {
+      vector: this.vector?.id,
+      options: {
+        ...restConfig,
+      },
+    };
+
+    // Serialize generateTitle configuration
+    if (generateTitle !== undefined && config.options) {
+      if (typeof generateTitle === 'boolean') {
+        config.options.generateTitle = generateTitle;
+      } else if (typeof generateTitle === 'object' && generateTitle.model) {
+        const model = generateTitle.model;
+        // Extract ModelRouterModelId from various model configurations
+        let modelId: string | undefined;
+
+        if (typeof model === 'string') {
+          modelId = model;
+        } else if (typeof model === 'function') {
+          // Cannot serialize dynamic functions - skip
+          modelId = undefined;
+        } else if (model && typeof model === 'object') {
+          // Handle config objects with id field
+          if ('id' in model && typeof model.id === 'string') {
+            modelId = model.id;
+          }
+        }
+
+        if (modelId && config.options) {
+          config.options.generateTitle = {
+            model: modelId as ModelRouterModelId,
+            instructions: typeof generateTitle.instructions === 'string' ? generateTitle.instructions : undefined,
+          };
+        }
+      }
+    }
+
+    if (this.embedder) {
+      config.embedder = this.embedder as unknown as EmbeddingModelId;
+    }
+
+    if (this.embedderOptions) {
+      const { telemetry, ...rest } = this.embedderOptions;
+      config.embedderOptions = rest;
+    }
+
+    // Serialize observationalMemory configuration
+    if (observationalMemory !== undefined) {
+      config.observationalMemory = this.serializeObservationalMemory(observationalMemory);
+    }
+
+    return config;
+  }
+
+  /**
+   * Serialize observational memory config to a JSON-safe representation.
+   * Model references that aren't string IDs are dropped (non-serializable).
+   */
+  private serializeObservationalMemory(
+    om: boolean | ObservationalMemoryOptions,
+  ): SerializedMemoryConfig['observationalMemory'] {
+    if (typeof om === 'boolean') {
+      return om;
+    }
+
+    if (om.enabled === false) {
+      return false;
+    }
+
+    const result: SerializedObservationalMemoryConfig = {
+      scope: om.scope,
+      shareTokenBudget: om.shareTokenBudget,
+    };
+
+    // Extract model ID string from the top-level model
+    const topModelId = extractModelIdString(om.model);
+    if (topModelId) {
+      result.model = topModelId;
+    }
+
+    // Serialize observation config
+    if (om.observation) {
+      const obs = om.observation;
+      result.observation = {
+        messageTokens: obs.messageTokens,
+        modelSettings: obs.modelSettings as Record<string, unknown>,
+        providerOptions: obs.providerOptions,
+        maxTokensPerBatch: obs.maxTokensPerBatch,
+        bufferTokens: obs.bufferTokens,
+        bufferActivation: obs.bufferActivation,
+        blockAfter: obs.blockAfter,
+      };
+      const obsModelId = extractModelIdString(obs.model);
+      if (obsModelId) {
+        result.observation.model = obsModelId;
+      }
+    }
+
+    // Serialize reflection config
+    if (om.reflection) {
+      const ref = om.reflection;
+      result.reflection = {
+        observationTokens: ref.observationTokens,
+        modelSettings: ref.modelSettings as Record<string, unknown>,
+        providerOptions: ref.providerOptions,
+        blockAfter: ref.blockAfter,
+        bufferActivation: ref.bufferActivation,
+      };
+      const refModelId = extractModelIdString(ref.model);
+      if (refModelId) {
+        result.reflection.model = refModelId;
+      }
+    }
+
+    return result;
+  }
 }

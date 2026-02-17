@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-docs-server",
-  "version": "1.0.1",
+  "version": "1.1.2",
   "description": "MCP server for accessing Mastra.ai documentation, changelogs, and news.",
   "type": "module",
   "main": "dist/index.js",
@@ -22,8 +22,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "prepare-docs": "cross-env PREPARE=true node dist/prepare-docs/prepare.js",
-    "build:cli": "tsup src/stdio.ts src/prepare-docs/prepare.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
+    "prepare-docs": "tsx ./scripts/prepare-docs.ts",
+    "build:cli": "tsup --silent --config tsup.config.ts",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",
     "lint": "eslint ."
@@ -40,19 +40,20 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.6",
+    "@hono/node-server": "^1.19.9",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/jsdom": "^21.1.7",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",
-    "hono": "^4.11.3",
-    "tsup": "^8.5.0",
-    "tsx": "^4.19.4",
+    "hono": "^4.11.9",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

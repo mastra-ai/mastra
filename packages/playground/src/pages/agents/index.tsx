@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import {
   Header,
   HeaderTitle,
@@ -9,14 +10,19 @@ import {
   useLinkComponent,
   DocsIcon,
   useAgents,
+  AgentsTable,
+  AgentIcon,
+  useIsCmsAvailable,
 } from '@mastra/playground-ui';
 
-import { AgentsTable } from '@mastra/playground-ui';
-import { AgentIcon } from '@mastra/playground-ui';
-
 function Agents() {
-  const { Link } = useLinkComponent();
+  const { Link, navigate } = useLinkComponent();
   const { data: agents = {}, isLoading } = useAgents();
+  const { isCmsAvailable } = useIsCmsAvailable();
+
+  const handleCreateClick = () => {
+    navigate('/cms/agents/create');
+  };
 
   return (
     <MainContentLayout>
@@ -29,7 +35,15 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+          {isCmsAvailable && (
+            <Button variant="light" as={Link} to="/cms/agents/create">
+              <Icon>
+                <Plus />
+              </Icon>
+              Create an agent
+            </Button>
+          )}
+          <Button variant="outline" as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
             <Icon>
               <DocsIcon />
             </Icon>
@@ -39,10 +53,16 @@ function Agents() {
       </Header>
 
       <MainContentContent isCentered={!isLoading && Object.keys(agents || {}).length === 0}>
-        <AgentsTable agents={agents} isLoading={isLoading} />
+        <AgentsTable
+          agents={agents}
+          isLoading={isLoading}
+          onCreateClick={isCmsAvailable ? handleCreateClick : undefined}
+        />
       </MainContentContent>
     </MainContentLayout>
   );
 }
+
+export { Agents };
 
 export default Agents;

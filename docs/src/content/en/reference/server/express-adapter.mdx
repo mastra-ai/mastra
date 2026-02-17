@@ -23,7 +23,7 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 Install the Express adapter and Express framework:
 
-```bash
+```bash npm2yarn
 npm install @mastra/express@latest express
 ```
 
@@ -110,6 +110,13 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
       name: "taskStore",
       type: "InMemoryTaskStore",
       description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "mcpOptions",
+      type: "MCPOptions",
+      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+      description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
       isOptional: true,
     },
   ]}

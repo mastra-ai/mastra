@@ -8,7 +8,7 @@ import { MainSidebarNavList } from './main-sidebar-nav-list';
 import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 
 export { MainSidebarProvider, type SidebarState } from './main-sidebar-context';
-export { useMainSidebar } from './main-sidebar-context';
+export { useMainSidebar, useMaybeSidebar } from './main-sidebar-context';
 export { type NavLink } from './main-sidebar-nav-link';
 export { type NavSection } from './main-sidebar-nav-section';
 

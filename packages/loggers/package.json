@@ -1,6 +1,6 @@
 {
   "name": "@mastra/loggers",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "type": "module",
   "files": [
@@ -63,7 +63,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/loggers",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
@@ -79,11 +79,11 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

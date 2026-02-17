@@ -5,12 +5,27 @@ import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
+import type { DataChunkType } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
+
+/**
+ * Writer interface for processors to emit custom data chunks to the stream.
+ * This enables real-time streaming of processor-specific data (e.g., observation markers).
+ */
+export interface ProcessorStreamWriter {
+  /**
+   * Emit a custom data chunk to the stream.
+   * The chunk type must start with 'data-' prefix.
+   * @param data - The data chunk to emit
+   */
+  custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T): Promise<void>;
+}
 
 /**
  * Base context shared by all processor methods
@@ -31,6 +46,18 @@ export interface ProcessorContext<TTripwireMetadata = unknown> {
    * Use this to implement retry limits within your processor.
    */
   retryCount: number;
+  /**
+   * Optional stream writer for emitting custom data chunks.
+   * Available when the agent is streaming and outputWriter is provided.
+   * Use writer.custom() to emit data-* chunks that will be streamed to the client.
+   */
+  writer?: ProcessorStreamWriter;
+  /**
+   * Optional abort signal from the parent agent execution.
+   * Processors should pass this to any long-running operations (e.g., LLM calls)
+   * so they can be canceled when the parent agent is aborted.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -69,6 +96,8 @@ export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputR
 export interface ProcessInputArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
 }
 
 /**
@@ -76,7 +105,10 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
  */
 export interface ProcessOutputResultArgs<
   TTripwireMetadata = unknown,
-> extends ProcessorMessageContext<TTripwireMetadata> {}
+> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+}
 
 /**
  * Arguments for processInputStep method
@@ -92,6 +124,8 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
 
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
 
   /**
    * Current model for this step.
@@ -117,7 +151,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
-export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort'>;
+export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort' | 'state'>;
 
 /**
  * Result from processInputStep method
@@ -192,6 +226,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */
   steps: Array<StepResult<any>>;
+  /** Mutable state object that persists across steps */
+  state: Record<string, unknown>;
 }
 
 /**
@@ -267,6 +303,53 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    *  - MastraDBMessage[]: Transformed messages array (for simple transformations)
    */
   processOutputStep?(args: ProcessOutputStepArgs<TTripwireMetadata>): ProcessorMessageResult;
+
+  /**
+   * Internal method called when the processor is registered with a Mastra instance.
+   * This allows processors to access Mastra services like knowledge, storage, etc.
+   * @internal
+   */
+  __registerMastra?(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void;
+}
+
+/**
+ * Base class for processors that need access to Mastra services.
+ * Extend this class to automatically get access to the Mastra instance
+ * when the processor is registered with an agent.
+ *
+ * @example
+ * ```typescript
+ * class MyProcessor extends BaseProcessor<'my-processor'> {
+ *   readonly id = 'my-processor';
+ *
+ *   async processInput(args: ProcessInputArgs) {
+ *     // Access Mastra services via this.mastra
+ *     const knowledge = this.mastra?.getKnowledge();
+ *     // ...
+ *   }
+ * }
+ * ```
+ */
+export abstract class BaseProcessor<TId extends string = string, TTripwireMetadata = unknown> implements Processor<
+  TId,
+  TTripwireMetadata
+> {
+  abstract readonly id: TId;
+  readonly name?: string;
+
+  /**
+   * The Mastra instance this processor is registered with.
+   * Available after the processor is registered via __registerMastra.
+   */
+  protected mastra?: Mastra<any, any, any, any, any, any, any, any, any, any>;
+
+  /**
+   * Called when the processor is registered with a Mastra instance.
+   * @internal
+   */
+  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    this.mastra = mastra;
+  }
 }
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };

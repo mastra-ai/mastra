@@ -20,6 +20,10 @@ export function useMainSidebar() {
   return context;
 }
 
+export function useMaybeSidebar(): MainSidebarContext | null {
+  return React.useContext(MainSidebarContext);
+}
+
 const setLocalStorage = (value: SidebarState) => {
   window.localStorage.setItem(SIDEBAR_COOKIE_NAME, value.toString());
 };

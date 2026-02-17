@@ -1,22 +1,34 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
+import { MastraEditor } from '@mastra/editor';
 import { storage } from './storage';
 
-import { weatherAgent } from './agents';
+import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
 import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { simpleMcpServer } from './mcps';
 import { registerApiRoute } from '@mastra/core/server';
+import { responseQualityScorer, responseTimeScorer } from './scorers';
+import { loggingProcessor, contentFilterProcessor } from './processors';
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow },
-  agents: { weatherAgent },
+  agents: { weatherAgent, omAgent, omAdaptiveAgent },
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'error',
   }),
   storage,
+  editor: new MastraEditor(),
   mcpServers: {
     simpleMcpServer,
+  },
+  scorers: {
+    responseQualityScorer,
+    responseTimeScorer,
+  },
+  processors: {
+    loggingProcessor,
+    contentFilterProcessor,
   },
   server: {
     apiRoutes: [
@@ -48,6 +60,11 @@ export const mastra = new Mastra({
           const agentsStore = await storage.getStore('agents');
           if (agentsStore) {
             clearTasks.push(agentsStore.dangerouslyClearAll());
+          }
+
+          const scorerDefinitionsStore = await storage.getStore('scorerDefinitions');
+          if (scorerDefinitionsStore) {
+            clearTasks.push(scorerDefinitionsStore.dangerouslyClearAll());
           }
 
           await Promise.all(clearTasks);

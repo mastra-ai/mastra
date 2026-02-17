@@ -5,12 +5,14 @@ import {
   ObservabilityStorage,
   TABLE_SCHEMAS,
   TABLE_SPANS,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TracingStorageStrategy,
   ListTracesArgs,
+  ListTracesResponse,
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
@@ -22,10 +24,10 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
-  ListTracesResponse,
   CreateIndexOptions,
 } from '@mastra/core/storage';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
@@ -56,9 +58,9 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   /**
    * Returns default index definitions for the observability domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
    */
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
@@ -119,6 +121,44 @@ export class ObservabilityPG extends ObservabilityStorage {
         method: 'gin',
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: table, constraints, timestamp trigger, and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    // Table
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SPANS,
+        schema: TABLE_SCHEMAS[TABLE_SPANS],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
+    // Timestamp trigger
+    statements.push(generateTimestampTriggerSQL(TABLE_SPANS, schemaName));
+
+    // Indexes
+    for (const idx of ObservabilityPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  /**
+   * Returns default index definitions for this instance's schema.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return ObservabilityPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
@@ -627,11 +667,13 @@ export class ObservabilityPG extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: spans.map(span =>
-          transformFromSqlRow<SpanRecord>({
-            tableName: TABLE_SPANS,
-            sqlRow: span,
-          }),
+        spans: toTraceSpans(
+          spans.map(span =>
+            transformFromSqlRow<SpanRecord>({
+              tableName: TABLE_SPANS,
+              sqlRow: span,
+            }),
+          ),
         ),
       };
     } catch (error) {

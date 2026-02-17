@@ -23,7 +23,7 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 Install the Hono adapter and Hono framework:
 
-```bash
+```bash npm2yarn
 npm install @mastra/hono@latest hono
 ```
 
@@ -101,6 +101,13 @@ export default app;
       name: "taskStore",
       type: "InMemoryTaskStore",
       description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "mcpOptions",
+      type: "MCPOptions",
+      typeDescription: "{ serverless?: boolean, sessionIdGenerator?: () => string }",
+      description: "MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.",
       isOptional: true,
     },
   ]}

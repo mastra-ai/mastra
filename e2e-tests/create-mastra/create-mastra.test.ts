@@ -130,6 +130,8 @@ describe('create mastra', () => {
               "name": "Weather Agent",
               "outputProcessors": [],
               "provider": "openai",
+              "skills": [],
+              "source": "code",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
@@ -140,6 +142,7 @@ describe('create mastra', () => {
                 },
               },
               "workflows": {},
+              "workspaceTools": [],
             },
           }
         `);

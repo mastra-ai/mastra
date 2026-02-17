@@ -1,6 +1,36 @@
 import { RequestContext } from '@mastra/core/request-context';
 
 /**
+ * Normalizes a route path to ensure consistent formatting.
+ * - Removes leading/trailing whitespace
+ * - Validates no path traversal (..), query strings (?), or fragments (#)
+ * - Collapses multiple consecutive slashes
+ * - Removes trailing slashes
+ * - Ensures leading slash (unless empty)
+ *
+ * @param path - The route path to normalize
+ * @returns The normalized path (empty string for root paths)
+ * @throws Error if path contains invalid characters
+ */
+export function normalizeRoutePath(path: string): string {
+  let normalized = path.trim();
+  if (normalized.includes('..') || normalized.includes('?') || normalized.includes('#')) {
+    throw new Error(`Invalid route path: "${path}". Path cannot contain '..', '?', or '#'`);
+  }
+  normalized = normalized.replace(/\/+/g, '/');
+  if (normalized === '/' || normalized === '') {
+    return '';
+  }
+  if (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  return normalized;
+}
+
+/**
  * Checks if a value is a "complex" type that needs JSON serialization for query params.
  * Complex types: objects (excluding Date), arrays
  * Primitive types: string, number, boolean, null, undefined, Date
@@ -96,7 +126,11 @@ export function parseClientRequestContext(requestContext?: RequestContext | Reco
 
 export function base64RequestContext(requestContext?: Record<string, any>): string | undefined {
   if (requestContext) {
-    return btoa(JSON.stringify(requestContext));
+    // Encode as UTF-8 bytes first so non-Latin1 characters (e.g. CJK, em-dashes)
+    // don't cause btoa() to throw InvalidCharacterError.
+    // Server-side decode already uses Buffer.from(str, 'base64').toString('utf-8').
+    const bytes = new TextEncoder().encode(JSON.stringify(requestContext));
+    return btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
   }
   return undefined;
 }
