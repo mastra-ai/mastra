@@ -22,21 +22,23 @@ export function LessonHeader({
   return (
     <div className={cn('mb-6', className)}>
       <div className="mb-2 flex items-center gap-3">
-        <span className="text-sm text-(--mastra-text-tertiary)">
+        <span className="learn-meta-text text-sm">
           Lesson {lessonNumber} of {totalLessons}
         </span>
-        <span className="text-(--mastra-text-tertiary)">·</span>
-        <span className="text-sm text-(--mastra-text-tertiary)">{lesson.durationMin} min</span>
+        <span className="learn-meta-text">·</span>
+        <span className="learn-meta-text text-sm">{lesson.durationMin} min</span>
+        <span className="learn-meta-text">·</span>
         <LessonStatusChip status={lesson.status} />
         {onWatchedChange != null && (
-          <label className="ml-auto flex items-center gap-2">
+          <label className="ml-auto flex cursor-pointer items-center gap-2 select-none">
             <input
               type="checkbox"
               checked={watched ?? false}
               onChange={e => onWatchedChange(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-400 text-green-500 accent-green-500"
+              className="sr-only"
             />
-            <span className="text-sm text-(--mastra-text-tertiary)">Mark as watched</span>
+            <span className="learn-meta-text text-sm">{watched ? 'Watched' : 'Mark as watched'}</span>
+            <span className={cn('learn-watched-icon', watched && 'is-watched')}>{watched && '✓'}</span>
           </label>
         )}
       </div>
