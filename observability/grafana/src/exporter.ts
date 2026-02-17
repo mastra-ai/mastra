@@ -312,7 +312,7 @@ export class GrafanaExporter extends BaseExporter {
    * Send OTLP metric data to Grafana Mimir.
    */
   private async sendToMimir(body: unknown): Promise<void> {
-    const url = `${this.mimirEndpoint}/otlp/v1/metrics`;
+    const url = `${this.mimirEndpoint}/v1/metrics`;
     await this.sendRequest(url, body);
   }
 

@@ -5,7 +5,7 @@ Grafana observability exporter for Mastra. Exports traces, metrics, and logs to 
 | Signal  | Backend        | Protocol          | Endpoint              |
 | ------- | -------------- | ----------------- | --------------------- |
 | Traces  | Grafana Tempo  | OTLP/HTTP JSON    | `/v1/traces`          |
-| Metrics | Grafana Mimir  | OTLP/HTTP JSON    | `/otlp/v1/metrics`    |
+| Metrics | Grafana Mimir  | OTLP/HTTP JSON    | `/v1/metrics`         |
 | Logs    | Grafana Loki   | JSON push API     | `/loki/api/v1/push`   |
 
 ## Installation
@@ -70,7 +70,7 @@ import { GrafanaExporter, grafana } from '@mastra/grafana';
 
 const exporter = new GrafanaExporter(grafana({
   tempoEndpoint: 'http://localhost:4318',
-  mimirEndpoint: 'http://localhost:9090',
+  mimirEndpoint: 'http://localhost:9090/otlp',
   lokiEndpoint: 'http://localhost:3100',
 }));
 ```
@@ -79,7 +79,7 @@ const exporter = new GrafanaExporter(grafana({
 
 ```bash
 GRAFANA_TEMPO_ENDPOINT=http://tempo:4318
-GRAFANA_MIMIR_ENDPOINT=http://mimir:9090
+GRAFANA_MIMIR_ENDPOINT=http://mimir:9090/otlp
 GRAFANA_LOKI_ENDPOINT=http://loki:3100
 ```
 
@@ -94,7 +94,7 @@ import { GrafanaExporter, grafana } from '@mastra/grafana';
 
 const exporter = new GrafanaExporter(grafana({
   tempoEndpoint: 'https://tempo.internal.example.com',
-  mimirEndpoint: 'https://mimir.internal.example.com',
+  mimirEndpoint: 'https://mimir.internal.example.com/otlp',
   lokiEndpoint: 'https://loki.internal.example.com',
   auth: { type: 'bearer', token: process.env.GRAFANA_TOKEN },
   tenantId: 'my-org',
@@ -121,8 +121,8 @@ const exporter = new GrafanaExporter(grafana({
 | `instanceId`    | `string` | Grafana Cloud instance ID                        | `GRAFANA_CLOUD_INSTANCE_ID` env var   |
 | `apiKey`        | `string` | Grafana Cloud API key / service account token    | `GRAFANA_CLOUD_API_KEY` env var       |
 | `zone`          | `string` | Cloud zone (e.g., `prod-eu-west-0`)              | `GRAFANA_CLOUD_ZONE` or `prod-us-central-0` |
-| `tempoEndpoint` | `string` | Override default Tempo endpoint                  | `https://tempo-{zone}.grafana.net`    |
-| `mimirEndpoint` | `string` | Override default Mimir endpoint                  | `https://mimir-{zone}.grafana.net`    |
+| `tempoEndpoint` | `string` | Override default Tempo endpoint                  | `https://otlp-gateway-{zone}.grafana.net/otlp` |
+| `mimirEndpoint` | `string` | Override default Mimir endpoint                  | `https://otlp-gateway-{zone}.grafana.net/otlp` |
 | `lokiEndpoint`  | `string` | Override default Loki endpoint                   | `https://logs-{zone}.grafana.net`     |
 
 ### `grafana()` Options

@@ -35,7 +35,8 @@ export type GrafanaAuth =
 export interface GrafanaExporterConfig extends BaseExporterConfig {
   /**
    * Tempo endpoint for traces (OTLP/HTTP JSON).
-   * - Cloud default: `https://tempo-{zone}.grafana.net`
+   * Exporter appends `/v1/traces`.
+   * - Cloud default: `https://otlp-gateway-{zone}.grafana.net/otlp`
    * - Self-hosted example: `http://localhost:4318`
    * Falls back to `GRAFANA_TEMPO_ENDPOINT` env var.
    */
@@ -43,8 +44,9 @@ export interface GrafanaExporterConfig extends BaseExporterConfig {
 
   /**
    * Mimir endpoint for metrics (OTLP/HTTP JSON).
-   * - Cloud default: `https://mimir-{zone}.grafana.net`
-   * - Self-hosted example: `http://localhost:9090`
+   * Exporter appends `/v1/metrics`.
+   * - Cloud default: `https://otlp-gateway-{zone}.grafana.net/otlp`
+   * - Self-hosted example: `http://localhost:9090/otlp`
    * Falls back to `GRAFANA_MIMIR_ENDPOINT` env var.
    */
   mimirEndpoint?: string;
@@ -140,7 +142,7 @@ export interface GrafanaSelfHostedConfig {
   /**
    * Mimir endpoint for metrics (OTLP/HTTP JSON).
    * Falls back to `GRAFANA_MIMIR_ENDPOINT` env var.
-   * @example 'http://localhost:9090'
+   * @example 'http://localhost:9090/otlp'
    */
   mimirEndpoint?: string;
 

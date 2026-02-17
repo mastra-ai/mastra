@@ -143,8 +143,8 @@ describe('GrafanaExporter', () => {
         zone: 'prod-eu-west-0',
       });
 
-      expect(config.tempoEndpoint).toBe('https://tempo-prod-eu-west-0.grafana.net');
-      expect(config.mimirEndpoint).toBe('https://mimir-prod-eu-west-0.grafana.net');
+      expect(config.tempoEndpoint).toBe('https://otlp-gateway-prod-eu-west-0.grafana.net/otlp');
+      expect(config.mimirEndpoint).toBe('https://otlp-gateway-prod-eu-west-0.grafana.net/otlp');
       expect(config.lokiEndpoint).toBe('https://logs-prod-eu-west-0.grafana.net');
     });
 
@@ -461,7 +461,7 @@ describe('GrafanaExporter', () => {
       await exporter.onMetricEvent(makeMetricEvent());
 
       const url = mockFetch.mock.calls[0]![0] as string;
-      expect(url).toContain('/otlp/v1/metrics');
+      expect(url).toContain('/v1/metrics');
     });
 
     it('should send valid OTLP metrics JSON body', async () => {
