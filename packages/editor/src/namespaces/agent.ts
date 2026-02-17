@@ -1088,7 +1088,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   private async resolveStoredWorkspace(
     workspaceRef: StorageWorkspaceRef | undefined,
     skillSource?: SkillSource,
-  ): Promise<Workspace | undefined> {
+  ): Promise<Workspace<any, any, any> | undefined> {
     if (!workspaceRef) return undefined;
 
     const workspaceNs = this.editor.workspace;

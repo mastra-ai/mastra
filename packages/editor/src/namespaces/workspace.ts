@@ -1,5 +1,5 @@
 import { Workspace } from '@mastra/core/workspace';
-import type { WorkspaceFilesystem, SkillSource } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource } from '@mastra/core/workspace';
 import type { WorkspaceConfig } from '@mastra/core/workspace';
 import type {
   StorageCreateWorkspaceInput,
@@ -41,8 +41,12 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
     id: string,
     snapshot: StorageWorkspaceSnapshotType,
     options?: { skillSource?: SkillSource },
-  ): Promise<Workspace> {
-    const config: WorkspaceConfig = {
+  ): Promise<Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, Record<string, WorkspaceFilesystem> | undefined>> {
+    const config: WorkspaceConfig<
+      WorkspaceFilesystem | undefined,
+      WorkspaceSandbox | undefined,
+      Record<string, WorkspaceFilesystem> | undefined
+    > = {
       id,
       name: snapshot.name,
     };

@@ -24,6 +24,11 @@ import type {
   TABLE_SCORER_DEFINITION_VERSIONS,
   TABLE_MCP_CLIENTS,
   TABLE_MCP_CLIENT_VERSIONS,
+  TABLE_WORKSPACES,
+  TABLE_WORKSPACE_VERSIONS,
+  TABLE_SKILLS,
+  TABLE_SKILL_VERSIONS,
+  TABLE_SKILL_BLOBS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -140,6 +145,11 @@ export type RecordTypes = {
   [TABLE_SCORER_DEFINITION_VERSIONS]: ScorerDefinitionVersion;
   [TABLE_MCP_CLIENTS]: StorageMCPClientType;
   [TABLE_MCP_CLIENT_VERSIONS]: MCPClientVersion;
+  [TABLE_WORKSPACES]: Record<string, any>;
+  [TABLE_WORKSPACE_VERSIONS]: Record<string, any>;
+  [TABLE_SKILLS]: Record<string, any>;
+  [TABLE_SKILL_VERSIONS]: Record<string, any>;
+  [TABLE_SKILL_BLOBS]: Record<string, any>;
 };
 
 export type ListOptions = {
