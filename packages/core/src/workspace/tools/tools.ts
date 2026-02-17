@@ -74,10 +74,20 @@ export function resolveToolConfig(
 /**
  * Creates workspace tools that will be auto-injected into agents.
  *
+ * If the workspace has tool overrides (e.g. from `@mastra/workspace-tools`),
+ * those are returned directly. Otherwise, the built-in closure-based tools
+ * are created using the workspace's tool configuration.
+ *
  * @param workspace - The workspace instance to bind tools to
  * @returns Record of workspace tools
  */
 export function createWorkspaceTools(workspace: Workspace) {
+  // If tool overrides are provided, return them directly
+  const toolOverrides = workspace.getToolOverrides();
+  if (toolOverrides) {
+    return toolOverrides;
+  }
+
   const tools: Record<string, any> = {};
   const toolsConfig = workspace.getToolsConfig();
   const isReadOnly = workspace.filesystem?.readOnly ?? false;

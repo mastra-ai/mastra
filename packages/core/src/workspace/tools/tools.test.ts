@@ -806,4 +806,111 @@ describe('createWorkspaceTools', () => {
       expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
     });
   });
+
+  // ===========================================================================
+  // Tool Overrides
+  // ===========================================================================
+  describe('tool overrides', () => {
+    it('should return tool overrides when provided instead of creating built-in tools', () => {
+      const customTool = {
+        id: 'custom_read',
+        description: 'Custom read tool',
+        execute: async () => ({ content: 'custom' }),
+      };
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          custom_read: customTool,
+        } as any,
+      });
+
+      const tools = createWorkspaceTools(workspace);
+
+      // Should return the overrides, not built-in tools
+      expect(tools).toHaveProperty('custom_read');
+      expect(tools.custom_read).toBe(customTool);
+      // Should NOT have built-in tools
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    });
+
+    it('should return built-in tools when config object is provided', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          enabled: true,
+        },
+      });
+
+      const tools = createWorkspaceTools(workspace);
+
+      // Should have built-in tools
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    });
+
+    it('should return built-in tools when no tools config is provided', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    });
+
+    it('getToolOverrides returns undefined for config objects', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          enabled: true,
+          requireApproval: false,
+        },
+      });
+
+      expect(workspace.getToolOverrides()).toBeUndefined();
+      expect(workspace.getToolsConfig()).toEqual({ enabled: true, requireApproval: false });
+    });
+
+    it('getToolOverrides returns tools for tool override objects', () => {
+      const customTool = {
+        id: 'my_tool',
+        description: 'My tool',
+        execute: async () => ({}),
+      };
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: { my_tool: customTool } as any,
+      });
+
+      expect(workspace.getToolOverrides()).toBeDefined();
+      expect(workspace.getToolsConfig()).toBeUndefined();
+    });
+
+    it('should resolve function-based tool overrides with workspace context', () => {
+      const customTool = {
+        id: 'dynamic_tool',
+        description: 'Dynamic tool',
+        execute: async () => ({}),
+      };
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: ({ workspace: ws }) => {
+          // Dynamically include tools based on workspace capabilities
+          const tools: Record<string, any> = { dynamic_tool: customTool };
+          if (ws.filesystem) {
+            tools.fs_aware = customTool;
+          }
+          return tools;
+        },
+      });
+
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('dynamic_tool');
+      expect(tools).toHaveProperty('fs_aware');
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    });
+  });
 });

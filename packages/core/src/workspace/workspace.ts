@@ -31,6 +31,7 @@
  */
 
 import type { IMastraLogger } from '../logger';
+import type { Tool } from '../tools/tool';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
@@ -228,32 +229,50 @@ export interface WorkspaceConfig<
   // ---------------------------------------------------------------------------
 
   /**
-   * Per-tool configuration for workspace tools.
-   * Controls which tools are enabled and their safety settings.
+   * Workspace tools configuration or tool overrides.
    *
-   * This replaces the provider-level `requireApproval` and `requireReadBeforeWrite`
-   * settings, allowing more granular control per tool.
+   * Accepts either:
+   * - A `WorkspaceToolsConfig` to configure the built-in tools (enable/disable, approval, etc.)
+   * - A `Record<string, Tool>` to completely override the built-in tools with custom ones
+   *   (e.g. from `@mastra/workspace-tools`)
+   * - A function `(workspace) => Record<string, Tool>` for dynamic tool selection based on
+   *   workspace capabilities (filesystem, sandbox, etc.)
    *
-   * @example
+   * @example Configuration-based (built-in tools)
    * ```typescript
    * tools: {
-   *   mastra_workspace_read_file: {
-   *     enabled: true,
-   *     requireApproval: false,
-   *   },
    *   mastra_workspace_write_file: {
-   *     enabled: true,
    *     requireApproval: true,
    *     requireReadBeforeWrite: true,
    *   },
    *   mastra_workspace_execute_command: {
-   *     enabled: true,
    *     requireApproval: true,
    *   },
    * }
    * ```
+   *
+   * @example Static tool overrides
+   * ```typescript
+   * import { createWorkspaceTools } from '@mastra/workspace-tools';
+   *
+   * tools: createWorkspaceTools({
+   *   exclude: ['mastra_workspace_execute_command'],
+   * })
+   * ```
+   *
+   * @example Dynamic tool overrides
+   * ```typescript
+   * import { createWorkspaceTools } from '@mastra/workspace-tools';
+   *
+   * tools: ({ workspace }) => createWorkspaceTools({
+   *   exclude: workspace.sandbox ? [] : ['mastra_workspace_execute_command'],
+   * })
+   * ```
    */
-  tools?: WorkspaceToolsConfig;
+  tools?:
+    | WorkspaceToolsConfig
+    | Record<string, Tool<any, any, any, any>>
+    | ((context: { workspace: Workspace<TFilesystem, TSandbox, TMounts> }) => Record<string, Tool<any, any, any, any>>);
 
   // ---------------------------------------------------------------------------
   // Lifecycle Options
@@ -481,10 +500,35 @@ export class Workspace<
 
   /**
    * Get the per-tool configuration for this workspace.
-   * Returns undefined if no tools config was provided.
+   * Returns undefined if no tools config was provided or if tool overrides are set.
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
-    return this._config.tools;
+    if (!this._config.tools || this.getToolOverrides()) {
+      return undefined;
+    }
+    return this._config.tools as WorkspaceToolsConfig;
+  }
+
+  /**
+   * Get tool overrides if provided.
+   * Returns the Record<string, Tool> if tools were set as overrides, undefined otherwise.
+   * If tools is a function, it is called with this workspace to resolve the tools.
+   */
+  getToolOverrides(): Record<string, Tool<any, any, any, any>> | undefined {
+    const tools = this._config.tools;
+    if (!tools) return undefined;
+
+    // If tools is a function, call it with context to resolve
+    if (typeof tools === 'function') {
+      return tools({ workspace: this as any });
+    }
+
+    // Detect tool overrides: if any value has an `execute` function, it's a Tool record
+    const firstValue = Object.values(tools)[0];
+    if (firstValue && typeof (firstValue as any).execute === 'function') {
+      return tools as Record<string, Tool<any, any, any, any>>;
+    }
+    return undefined;
   }
 
   /**
