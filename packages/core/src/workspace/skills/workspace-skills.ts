@@ -32,6 +32,7 @@ import type {
  */
 interface SkillSearchEngine {
   index(doc: IndexDocument): Promise<void>;
+  remove?(id: string): Promise<void>;
   search(
     query: string,
     options?: { topK?: number; minScore?: number; mode?: 'bm25' | 'vector' | 'hybrid' },
@@ -95,6 +96,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   #globDirCache: Map<string, string[]> = new Map();
   #globResolveTimes: Map<string, number> = new Map();
   static readonly GLOB_RESOLVE_INTERVAL = 5_000; // Re-walk glob dirs every 5s
+  static readonly STALENESS_CHECK_COOLDOWN = 2_000; // Skip staleness check for 2s after discovery
 
   constructor(config: WorkspaceSkillsImplConfig) {
     this.#source = config.source;
@@ -163,6 +165,55 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (isStale) {
       await this.refresh();
     }
+  }
+
+  async addSkill(skillPath: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    // Determine SKILL.md path and dirName
+    let skillFilePath: string;
+    let dirName: string;
+    if (skillPath.endsWith('/SKILL.md') || skillPath === 'SKILL.md') {
+      skillFilePath = skillPath;
+      dirName = this.#getParentPath(skillPath).split('/').pop() || 'unknown';
+    } else {
+      skillFilePath = this.#joinPath(skillPath, 'SKILL.md');
+      dirName = skillPath.split('/').pop() || 'unknown';
+    }
+
+    // Determine source from existing resolved paths
+    const source = this.#inferSource(skillPath);
+
+    // Parse and add to cache
+    const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
+
+    // Remove old index entries if skill already exists (for update case)
+    const existing = this.#skills.get(skill.name);
+    if (existing) {
+      await this.#removeSkillFromIndex(existing);
+    }
+
+    this.#skills.set(skill.name, skill);
+    await this.#indexSkill(skill);
+
+    // Update discovery time so maybeRefresh() doesn't trigger full scan
+    this.#lastDiscoveryTime = Date.now();
+  }
+
+  async removeSkill(skillName: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skills.get(skillName);
+    if (!skill) return;
+
+    // Remove from search index
+    await this.#removeSkillFromIndex(skill);
+
+    // Remove from cache
+    this.#skills.delete(skillName);
+
+    // Update discovery time so maybeRefresh() doesn't trigger full scan
+    this.#lastDiscoveryTime = Date.now();
   }
 
   /**
@@ -393,8 +444,12 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
           await this.#discoverSkillsInPath(dir, source);
         }
       } else {
-        // Plain path: existing behavior
-        await this.#discoverSkillsInPath(skillsPath, source);
+        // Check if the path is a direct skill reference (directory with SKILL.md or SKILL.md file)
+        const isDirect = await this.#discoverDirectSkill(skillsPath, source);
+        if (!isDirect) {
+          // Plain path: scan subdirectories for skills
+          await this.#discoverSkillsInPath(skillsPath, source);
+        }
       }
     }
     // Track when discovery completed for staleness check
@@ -455,7 +510,16 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Discover skills in a single path
    */
   async #discoverSkillsInPath(skillsPath: string, source: ContentSource): Promise<void> {
-    if (!(await this.#source.exists(skillsPath))) {
+    try {
+      if (!(await this.#source.exists(skillsPath))) {
+        return;
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${error.message}`);
+      } else {
+        console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${String(error)}`);
+      }
       return;
     }
 
@@ -492,6 +556,64 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   }
 
   /**
+   * Attempt to discover a skill from a direct path reference.
+   *
+   * Handles two cases:
+   * - Path ends with `/SKILL.md` → parse directly, extract dirName from parent
+   * - Path is a directory containing `SKILL.md` → parse it as a single skill
+   *
+   * Returns `true` if the path was a direct skill reference (skip subdirectory scan),
+   * `false` to fall through to the normal subdirectory scan.
+   */
+  async #discoverDirectSkill(skillsPath: string, source: ContentSource): Promise<boolean> {
+    try {
+      // Case 1: Path points directly to a SKILL.md file
+      if (skillsPath.endsWith('/SKILL.md') || skillsPath === 'SKILL.md') {
+        if (!(await this.#source.exists(skillsPath))) {
+          return true; // It was a direct reference, just doesn't exist — skip subdirectory scan
+        }
+
+        const skillDir = this.#getParentPath(skillsPath);
+        const dirName = skillDir.split('/').pop() || skillDir;
+
+        try {
+          const skill = await this.#parseSkillFile(skillsPath, dirName, source);
+          this.#skills.set(skill.name, skill);
+          await this.#indexSkill(skill);
+        } catch (error) {
+          if (error instanceof Error) {
+            console.error(`[WorkspaceSkills] Failed to load skill from ${skillsPath}:`, error.message);
+          }
+        }
+        return true;
+      }
+
+      // Case 2: Path is a directory that directly contains SKILL.md
+      if (await this.#source.exists(skillsPath)) {
+        const skillFilePath = this.#joinPath(skillsPath, 'SKILL.md');
+        if (await this.#source.exists(skillFilePath)) {
+          const dirName = skillsPath.split('/').pop() || skillsPath;
+
+          try {
+            const skill = await this.#parseSkillFile(skillFilePath, dirName, source);
+            this.#skills.set(skill.name, skill);
+            await this.#indexSkill(skill);
+          } catch (error) {
+            if (error instanceof Error) {
+              console.error(`[WorkspaceSkills] Failed to load skill from ${skillFilePath}:`, error.message);
+            }
+          }
+          return true;
+        }
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Check if any skills path directory has been modified since last discovery.
    * Compares directory mtime to lastDiscoveryTime.
    * For glob patterns, checks the walk root and expanded directories.
@@ -500,6 +622,15 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     if (this.#lastDiscoveryTime === 0) {
       // Never discovered, consider stale
       return true;
+    }
+
+    // Skip the expensive stat calls if discovery happened very recently
+    // (e.g., right after a surgical addSkill/removeSkill). This avoids
+    // a timing race where the filesystem write updates directory mtime
+    // to the same second as #lastDiscoveryTime, and also avoids slow
+    // stat calls to external mounts immediately after a known-good update.
+    if (Date.now() - this.#lastDiscoveryTime < WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN) {
+      return false;
     }
 
     for (const skillsPath of this.#resolvedPaths) {
@@ -526,6 +657,11 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
           if (mtime > this.#lastDiscoveryTime) {
             return true;
+          }
+
+          // Skip subdirectory scan for non-directory paths (direct skill references)
+          if (stat.type !== 'directory') {
+            continue;
           }
 
           // Also check subdirectories (skill directories) for changes
@@ -694,6 +830,34 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
 
     return parts.join('\n\n');
+  }
+
+  /**
+   * Remove a skill's entries from the search index.
+   */
+  async #removeSkillFromIndex(skill: InternalSkill): Promise<void> {
+    if (!this.#searchEngine?.remove) return;
+
+    const ids = [`skill:${skill.name}:SKILL.md`, ...skill.references.map(r => `skill:${skill.name}:${r}`)];
+    for (const id of ids) {
+      try {
+        await this.#searchEngine.remove(id);
+      } catch {
+        // Best-effort removal; entry may already be gone
+      }
+    }
+  }
+
+  /**
+   * Infer the ContentSource for a skill path by matching against resolved paths.
+   */
+  #inferSource(skillPath: string): ContentSource {
+    for (const rp of this.#resolvedPaths) {
+      if (skillPath === rp || skillPath.startsWith(rp + '/')) {
+        return this.#determineSource(rp);
+      }
+    }
+    return this.#determineSource(skillPath);
   }
 
   /**

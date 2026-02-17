@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { Search, Download, ExternalLink, Loader2, Package, Github, Check } from 'lucide-react';
+import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import {
   Dialog,
@@ -18,11 +18,19 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
 import type { SkillsShSkill } from '../types';
 
+export interface WritableMount {
+  path: string;
+  displayName?: string;
+  icon?: string;
+  provider?: string;
+  name?: string;
+}
+
 export interface AddSkillDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaceId: string;
-  onInstall: (params: { repository: string; skillName: string }) => void;
+  onInstall: (params: { repository: string; skillName: string; mount?: string }) => void;
   isInstalling?: boolean;
   /**
    * Unique IDs of skills installed via skills.sh (format: "owner/repo/skillName").
@@ -34,6 +42,16 @@ export interface AddSkillDialogProps {
    * Skills matching by name only will show as installed regardless of source.
    */
   installedSkillNames?: string[];
+  /**
+   * Writable mounts available for skill installation (for CompositeFilesystem).
+   * When more than one is provided, a dropdown is shown to pick the mount.
+   */
+  writableMounts?: WritableMount[];
+  /**
+   * Map of skill name to its installed path (for showing mount location on "Installed" badge).
+   * Only needed when multiple mounts exist.
+   */
+  installedSkillPaths?: Record<string, string>;
 }
 
 /**
@@ -62,9 +80,14 @@ export function AddSkillDialog({
   isInstalling,
   installedSkillIds = [],
   installedSkillNames = [],
+  writableMounts,
+  installedSkillPaths,
 }: AddSkillDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillsShSkill | null>(null);
+  const [selectedMount, setSelectedMount] = useState<string | undefined>(
+    writableMounts && writableMounts.length > 0 ? writableMounts[0]?.path : undefined,
+  );
 
   // Fetch popular skills (via server proxy)
   const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh(workspaceId);
@@ -148,8 +171,9 @@ export function AddSkillDialog({
     onInstall({
       repository: `${parsedSource.owner}/${parsedSource.repo}`,
       skillName: selectedSkill.name,
+      mount: writableMounts && writableMounts.length > 1 ? selectedMount : undefined,
     });
-  }, [selectedSkill, parsedSource, onInstall]);
+  }, [selectedSkill, parsedSource, onInstall, writableMounts, selectedMount]);
 
   // Reset state when dialog closes
   const handleOpenChange = useCallback(
@@ -157,10 +181,11 @@ export function AddSkillDialog({
       if (!newOpen) {
         setSearchQuery('');
         setSelectedSkill(null);
+        setSelectedMount(writableMounts?.[0]?.path);
       }
       onOpenChange(newOpen);
     },
-    [onOpenChange],
+    [onOpenChange, writableMounts],
   );
 
   return (
@@ -324,33 +349,69 @@ export function AddSkillDialog({
 
           {/* Install Actions */}
           {selectedSkill && (
-            <div className="flex items-center justify-end gap-2 pt-4 border-t border-border1">
-              <Button variant="light" onClick={() => handleOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleInstall}
-                disabled={!parsedSource || isInstalling || isSelectedSkillInstalled}
-                data-testid="install-skill-button"
-              >
-                {isInstalling ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Installing...
-                  </>
-                ) : isSelectedSkillInstalled ? (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    Already Installed
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 mr-2" />
-                    Install
-                  </>
-                )}
-              </Button>
+            <div className="flex flex-col gap-3 pt-4 border-t border-border1">
+              {/* Mount picker - only shown when multiple writable mounts exist */}
+              {writableMounts && writableMounts.length > 1 && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-surface3 border border-border1">
+                  <Folder className="h-4 w-4 text-icon4 shrink-0" />
+                  <label htmlFor="mount-select" className="text-sm text-icon5 whitespace-nowrap font-medium">
+                    Install to
+                  </label>
+                  <select
+                    id="mount-select"
+                    value={selectedMount ?? ''}
+                    onChange={e => setSelectedMount(e.target.value)}
+                    className="flex-1 text-sm px-3 py-1.5 rounded-md border border-border1 bg-surface2 text-icon6"
+                  >
+                    {writableMounts.map(m => {
+                      const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
+                      return (
+                        <option key={m.path} value={m.path}>
+                          {name} ({m.path})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-2">
+                {isSelectedSkillInstalled &&
+                  writableMounts &&
+                  writableMounts.length > 1 &&
+                  selectedSkill &&
+                  installedSkillPaths?.[selectedSkill.name] &&
+                  (() => {
+                    const skillPath = installedSkillPaths[selectedSkill.name]!;
+                    const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
+                    return mount ? <span className="text-xs text-icon4">Installed at {mount.path}</span> : null;
+                  })()}
+                <Button variant="light" onClick={() => handleOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleInstall}
+                  disabled={!parsedSource || isInstalling || isSelectedSkillInstalled}
+                  data-testid="install-skill-button"
+                >
+                  {isInstalling ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Installing...
+                    </>
+                  ) : isSelectedSkillInstalled ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Already Installed
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Install
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </DialogBody>
