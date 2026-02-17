@@ -47,10 +47,7 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
     <aside className={cn('learn-sidebar-container', className)}>
       <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
         <div className="px-4 pb-4">
-          <Link
-            to="/learn"
-            className="learn-link text-sm font-semibold text-(--mastra-text-primary) hover:text-(--mastra-green-accent-2)"
-          >
+          <Link to="/learn" className="learn-link text-sm font-semibold text-(--mastra-text-primary)">
             Mastra Learn
           </Link>
           <LearnProgressBar

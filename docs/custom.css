@@ -1395,10 +1395,14 @@ article p {
 }
 
 .learn-watched-icon.is-watched {
-  background-color: #22c55e;
-  border-color: #22c55e;
+  background-color: var(--mastra-green-accent-2);
+  border-color: var(--mastra-green-accent-2);
   color: white;
   animation: learn-watched-pop 0.3s ease;
+}
+[data-theme='dark'] .learn-watched-icon.is-watched {
+  background-color: var(--mastra-green-accent);
+  border-color: var(--mastra-green-accent);
 }
 
 @keyframes learn-watched-pop {
@@ -1421,6 +1425,59 @@ article p {
   border-radius: 9999px;
   border: 1.5px dashed var(--mastra-text-muted);
   opacity: 0.5;
+}
+
+/* Status chip colors using design system greens */
+.learn-status-published {
+  background-color: color-mix(in srgb, var(--mastra-green-accent-3) 10%, transparent);
+  color: var(--mastra-green-accent-3);
+}
+[data-theme='dark'] .learn-status-published {
+  background-color: color-mix(in srgb, var(--mastra-green-accent) 15%, transparent);
+  color: var(--mastra-green-accent);
+}
+
+.learn-status-coming-soon {
+  background-color: color-mix(in srgb, #eab308 10%, transparent);
+  color: #a16207;
+}
+[data-theme='dark'] .learn-status-coming-soon {
+  background-color: color-mix(in srgb, #eab308 15%, transparent);
+  color: #facc15;
+}
+
+/* Progress bar completed segment */
+.learn-progress-completed {
+  background-color: var(--mastra-green-accent-3);
+}
+[data-theme='dark'] .learn-progress-completed {
+  background-color: var(--mastra-green-accent);
+}
+
+/* Subscribed CTA box */
+.learn-subscribed {
+  border-color: color-mix(in srgb, var(--mastra-green-accent-3) 20%, transparent);
+  background-color: color-mix(in srgb, var(--mastra-green-accent-3) 5%, transparent);
+}
+[data-theme='dark'] .learn-subscribed {
+  border-color: color-mix(in srgb, var(--mastra-green-accent) 20%, transparent);
+  background-color: color-mix(in srgb, var(--mastra-green-accent) 5%, transparent);
+}
+
+/* Bullet point in coming soon preview */
+.learn-bullet {
+  color: var(--mastra-green-accent-3);
+}
+[data-theme='dark'] .learn-bullet {
+  color: var(--mastra-green-accent);
+}
+
+/* Sidebar link hover — unlayered to beat Infima's a:hover */
+.learn-link:hover {
+  color: var(--mastra-green-accent-3) !important;
+}
+[data-theme='dark'] .learn-link:hover {
+  color: var(--mastra-green-accent) !important;
 }
 
 /* Lesson prev/next nav: stacked on mobile, side-by-side on desktop */

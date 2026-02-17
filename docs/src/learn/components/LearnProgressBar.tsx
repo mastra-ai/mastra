@@ -17,7 +17,10 @@ export function LearnProgressBar({ completed, total, totalLessons, className }: 
         {/* Available (published) segment */}
         <div className="absolute inset-y-0 left-0 rounded-full bg-(--border)" style={{ width: `${publishedPct}%` }} />
         {/* Completed segment */}
-        <div className="absolute inset-y-0 left-0 rounded-full bg-green-500" style={{ width: `${completedPct}%` }} />
+        <div
+          className="learn-progress-completed absolute inset-y-0 left-0 rounded-full"
+          style={{ width: `${completedPct}%` }}
+        />
       </div>
       <span className="text-xs whitespace-nowrap text-(--mastra-text-tertiary)">
         {completed} of {total} completed · {totalLessons - total} coming soon
