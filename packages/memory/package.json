@@ -30,6 +30,16 @@
         "default": "./dist/processors/index.cjs"
       }
     },
+    "./integration": {
+      "import": {
+        "types": "./dist/integration/index.d.ts",
+        "default": "./dist/integration/index.js"
+      },
+      "require": {
+        "types": "./dist/integration/index.d.ts",
+        "default": "./dist/integration/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

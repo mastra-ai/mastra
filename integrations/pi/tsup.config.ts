@@ -2,7 +2,7 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/processors/index.ts', 'src/integration/index.ts'],
+  entry: ['src/index.ts', 'src/extension.ts'],
   format: ['esm', 'cjs'],
   clean: true,
   dts: false,
@@ -12,6 +12,6 @@ export default defineConfig({
   },
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5']));
+    await generateTypes(process.cwd());
   },
 });

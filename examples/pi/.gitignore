@@ -1,0 +1,4 @@
+.env
+node_modules
+.pi-demo
+.pi/memory
