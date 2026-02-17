@@ -10,7 +10,7 @@
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^1.3.0",
+    "@ai-sdk/openai": "^1.3.24",
     "@mastra/agent-builder": "*",
     "dotenv": "^17.2.3",
     "vite": "^7.3.0",

@@ -47,7 +47,7 @@
     "fastify": "^5.6.2",
     "@fastify/swagger": "^9.6.1",
     "@fastify/swagger-ui": "^5.2.5",
-    "@ai-sdk/openai": "^2.0.62",
+    "@ai-sdk/openai": "^2.0.90",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

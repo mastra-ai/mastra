@@ -48,7 +48,7 @@
     "@types/koa": "^2.15.0",
     "koa-bodyparser": "^4.4.1",
     "@types/koa-bodyparser": "^4.3.13",
-    "@ai-sdk/openai": "^2.0.62",
+    "@ai-sdk/openai": "^2.0.90",
     "zod": "^3.25.0"
   },
   "peerDependencies": {
