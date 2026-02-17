@@ -126,7 +126,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         runId,
       });
 
-      const requestContext = new RequestContext();
+      const requestContext = rest.requestContext ?? new RequestContext();
 
       if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);
