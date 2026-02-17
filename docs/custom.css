@@ -1390,11 +1390,13 @@ article p {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   border-radius: 9999px;
   border: 2px solid var(--border);
   color: transparent;
+  font-size: 0.75rem;
+  flex-shrink: 0;
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
@@ -1403,14 +1405,14 @@ article p {
 }
 
 .learn-watched-icon.is-watched {
-  background-color: var(--mastra-green-accent-2);
-  border-color: var(--mastra-green-accent-2);
+  background-color: var(--mastra-green-accent-3);
+  border-color: var(--mastra-green-accent-3);
   color: white;
   animation: learn-watched-pop 0.3s ease;
 }
 [data-theme='dark'] .learn-watched-icon.is-watched {
-  background-color: var(--mastra-green-accent);
-  border-color: var(--mastra-green-accent);
+  background-color: var(--mastra-green-accent-2);
+  border-color: var(--mastra-green-accent-2);
 }
 
 @keyframes learn-watched-pop {
@@ -1425,14 +1427,30 @@ article p {
   }
 }
 
+/* Unwatched icon: empty circle */
+.learn-sidebar-icon-unwatched {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 2px solid var(--border);
+}
+[data-theme='dark'] .learn-sidebar-icon-unwatched {
+  border-color: #666;
+}
+
 /* Coming soon icon: dashed border circle */
 .learn-sidebar-icon-coming-soon {
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   flex-shrink: 0;
   border-radius: 9999px;
   border: 1.5px dashed var(--mastra-text-muted);
   opacity: 0.5;
+}
+[data-theme='dark'] .learn-sidebar-icon-coming-soon {
+  border-color: #666;
+  opacity: 0.7;
 }
 
 /* Status chip colors using design system greens */
@@ -1457,9 +1475,10 @@ article p {
 /* Progress bar completed segment */
 .learn-progress-completed {
   background-color: var(--mastra-green-accent-3);
+  transition: width 0.5s ease-in-out;
 }
 [data-theme='dark'] .learn-progress-completed {
-  background-color: var(--mastra-green-accent);
+  background-color: var(--mastra-green-accent-2);
 }
 
 /* Subscribed CTA box */
