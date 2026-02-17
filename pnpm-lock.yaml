@@ -545,7 +545,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/loggers
       execa:
-        specifier: ^9.6.0
+        specifier: ^9.6.1
         version: 9.6.1
       fs-extra:
         specifier: ^11.3.3
@@ -1733,7 +1733,7 @@ importers:
         specifier: ^17.2.3
         version: 17.2.3
       execa:
-        specifier: ^9.6.0
+        specifier: ^9.6.1
         version: 9.6.1
       mri:
         specifier: ^1.2.0
@@ -5764,7 +5764,7 @@ importers:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
       execa:
-        specifier: ^9.6.0
+        specifier: ^9.6.1
         version: 9.6.1
       express:
         specifier: ^5.1.0
