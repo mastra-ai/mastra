@@ -12,7 +12,7 @@ test.describe('Learn section', () => {
 
   test('progress bar starts at zero', async ({ page }) => {
     await page.goto('/learn')
-    await expect(page.locator('main').getByText('0 of 4 completed · 13 coming soon')).toBeVisible()
+    await expect(page.locator('aside').getByText('0 of 4 completed · 13 coming soon')).toBeVisible()
   })
 
   test('published lesson navigation works', async ({ page }) => {
@@ -76,7 +76,7 @@ test.describe('Learn section', () => {
     await page.goto('/learn/01-what-is-an-agent')
     await page.locator('input[type="checkbox"]').check()
     await page.goto('/learn')
-    await expect(page.locator('main').getByText('1 of 4 completed · 13 coming soon')).toBeVisible()
+    await expect(page.locator('aside').getByText('1 of 4 completed · 13 coming soon')).toBeVisible()
   })
 
   test('continue card shows next unwatched lesson', async ({ page }) => {
@@ -114,5 +114,22 @@ test.describe('Learn section', () => {
     await page.goto('/learn/06-mcp-docs-server')
     await expect(page.getByPlaceholder('you@example.com')).toBeVisible()
     await expect(page.getByText('Subscribe')).toBeVisible()
+  })
+
+  test('mobile toggle opens sidebar on small screens', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/learn')
+    // Mobile toggle should be visible
+    const toggle = page.getByRole('button', { name: 'Toggle course sidebar' })
+    await expect(toggle).toBeVisible()
+    // Sidebar should be off-screen initially
+    const sidebar = page.locator('aside.learn-sidebar-container')
+    await expect(sidebar).not.toHaveClass(/is-open/)
+    // Click toggle to open sidebar
+    await toggle.click()
+    await expect(sidebar).toHaveClass(/is-open/)
+    // Click a lesson to close sidebar and navigate
+    await page.locator('aside a[href="/learn/01-what-is-an-agent"]').click()
+    await expect(page).toHaveURL(/\/learn\/01-what-is-an-agent/)
   })
 })
