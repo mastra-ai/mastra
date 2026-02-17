@@ -352,9 +352,19 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
 
+      // Validate skillPath to prevent path traversal
+      const path = await import('node:path');
+      const resolvedPath = path.default.resolve(skillPath);
+      const allowedBase = path.default.resolve(process.env.SKILLS_BASE_DIR || process.cwd());
+      if (!resolvedPath.startsWith(allowedBase + path.default.sep) && resolvedPath !== allowedBase) {
+        throw new HTTPException(400, {
+          message: `skillPath must be within the allowed directory: ${allowedBase}`,
+        });
+      }
+
       // Use LocalSkillSource to read from the server filesystem
       const source = new LocalSkillSource();
-      const { snapshot, tree } = await publishSkillFromSource(source, skillPath, blobStore);
+      const { snapshot, tree } = await publishSkillFromSource(source, resolvedPath, blobStore);
 
       // Update the skill with new version data + tree
       await skillStore.update({
@@ -363,6 +373,15 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         tree,
         status: 'published',
       });
+
+      // Point activeVersionId to the newly created version
+      const latestVersion = await skillStore.getLatestVersion(storedSkillId);
+      if (latestVersion) {
+        await skillStore.update({
+          id: storedSkillId,
+          activeVersionId: latestVersion.id,
+        });
+      }
 
       const resolved = await skillStore.getByIdResolved(storedSkillId);
       if (!resolved) {
