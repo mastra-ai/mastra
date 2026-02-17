@@ -26,6 +26,7 @@ import type {
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -447,6 +448,7 @@ function executeStreamWithFallbackModels<T>(
     let finalResult: T | undefined;
 
     let done = false;
+    let lastError: unknown;
     for (const modelConfig of models) {
       index++;
       const maxRetries = modelConfig.maxRetries || 0;
@@ -470,6 +472,7 @@ function executeStreamWithFallbackModels<T>(
             throw err;
           }
 
+          lastError = err;
           attempt++;
 
           logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
@@ -487,8 +490,10 @@ function executeStreamWithFallbackModels<T>(
       }
     }
     if (typeof finalResult === 'undefined') {
-      logger?.error('Exhausted all fallback models and reached the maximum number of retries.');
-      throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
+      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
+      const errorMessage = `Exhausted all fallback models and reached the maximum number of retries. Last error: ${lastErrMsg}`;
+      logger?.error(errorMessage);
+      throw new Error(errorMessage, { cause: lastError });
     }
     return finalResult;
   };
@@ -522,6 +527,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
+  workspace,
   outputWriter,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
@@ -539,11 +545,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let request: any;
       let rawResponse: any;
 
-      const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
+      const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
+        stepWorkspace?: Workspace;
       }>(
         models,
         logger,
@@ -571,6 +578,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
+          workspace?: Workspace;
         } = {
           model,
           tools,
@@ -579,6 +587,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           providerOptions,
           modelSettings,
           structuredOutput,
+          workspace,
         };
 
         const inputStepProcessors = [
@@ -913,13 +922,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
-        return { outputStream, callBail: false, runState, stepTools: currentStep.tools };
+        return {
+          outputStream,
+          callBail: false,
+          runState,
+          stepTools: currentStep.tools,
+          stepWorkspace: currentStep.workspace,
+        };
       });
 
-      // Store modified tools in _internal so toolCallStep can access them
+      // Store modified tools and workspace in _internal so toolCallStep can access them
       // without going through workflow serialization (which would lose execute functions)
       if (_internal) {
         _internal.stepTools = stepTools;
+        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
       }
 
       if (callBail) {
@@ -1123,6 +1139,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           tripwire: stepTripwireData,
         }),
       );
+
+      // Remove rejected response messages from the messageList before the next iteration.
+      // Without this, the LLM sees the rejected assistant response in its prompt on retry,
+      // which confuses models and often causes empty text responses.
+      if (shouldRetry) {
+        messageList.removeByIds([messageId]);
+      }
 
       // Build retry feedback text if retrying
       // This will be passed through workflow state to survive the system message reset

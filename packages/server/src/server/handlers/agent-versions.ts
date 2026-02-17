@@ -39,6 +39,7 @@ const SNAPSHOT_CONFIG_FIELDS = [
   'outputProcessors',
   'memory',
   'scorers',
+  'requestContextSchema',
 ] as const;
 
 // ============================================================================
@@ -267,6 +268,14 @@ export interface AgentsStoreWithVersions<TAgent = any> {
       })
     | null
   >;
+  getVersion: (id: string) => Promise<
+    | (StorageAgentSnapshotType & {
+        id: string;
+        versionNumber: number;
+        [key: string]: any;
+      })
+    | null
+  >;
   createVersion: (
     params: StorageAgentSnapshotType & {
       id: string;
@@ -276,7 +285,7 @@ export interface AgentsStoreWithVersions<TAgent = any> {
       changeMessage?: string;
     },
   ) => Promise<{ id: string; versionNumber: number }>;
-  updateAgent: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
+  update: (params: { id: string; activeVersionId?: string; [key: string]: any }) => Promise<TAgent>;
   listVersions: (params: {
     agentId: string;
     page?: number;
@@ -391,9 +400,17 @@ export async function handleAutoVersioning<TAgent>(
   }
 
   // Get the current active version to compare against
-  const latestVersion = await agentsStore.getLatestVersion(agentId);
-  const previousConfig = latestVersion
-    ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>)
+  // IMPORTANT: Use the version that activeVersionId points to, not the "latest" version
+  // Otherwise we compare against newly created versions that aren't active yet
+  const activeVersion = existingAgent.activeVersionId
+    ? await agentsStore.getVersion(existingAgent.activeVersionId)
+    : null;
+
+  // Fall back to latest version if no active version is set
+  const versionToCompare = activeVersion || (await agentsStore.getLatestVersion(agentId));
+
+  const previousConfig = versionToCompare
+    ? extractConfigFromVersion(versionToCompare as unknown as Record<string, unknown>)
     : null;
 
   // Calculate what config fields changed by comparing provided fields against previous version
@@ -406,21 +423,33 @@ export async function handleAutoVersioning<TAgent>(
 
   // Build the full snapshot config for the new version:
   // Start with the previous version's config and overlay the provided changes
+  // Convert null values to undefined (null means "remove this field")
   const fullConfig: Record<string, unknown> = previousConfig ? { ...previousConfig } : {};
   for (const [key, value] of Object.entries(configFields)) {
-    fullConfig[key] = value;
+    fullConfig[key] = value === null ? undefined : value;
   }
 
   // Create version with retry logic for race conditions
-  await createVersionWithRetry(agentsStore, agentId, fullConfig, changedFields, {
+  const { versionId } = await createVersionWithRetry(agentsStore, agentId, fullConfig, changedFields, {
     changeMessage: 'Auto-saved after edit',
   });
 
-  // Enforce retention limit (use existing activeVersionId from existingAgent)
-  const activeVersionId = existingAgent.activeVersionId;
-  await enforceRetentionLimit(agentsStore, agentId, activeVersionId);
+  // Update the agent's activeVersionId to point to the new version
+  await agentsStore.update({
+    id: agentId,
+    activeVersionId: versionId,
+  });
 
-  return { agent: updatedAgent, versionCreated: true };
+  // Update the updatedAgent object with the new activeVersionId
+  const agentWithNewVersion = {
+    ...updatedAgent,
+    activeVersionId: versionId,
+  };
+
+  // Enforce retention limit with the new activeVersionId
+  await enforceRetentionLimit(agentsStore, agentId, versionId);
+
+  return { agent: agentWithNewVersion, versionCreated: true };
 }
 
 // ============================================================================
@@ -454,7 +483,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -500,7 +529,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Get the current agent to find its active version
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -617,7 +646,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -632,7 +661,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Update the agent's activeVersionId AND status to 'published'
-      await agentsStore.updateAgent({
+      await agentsStore.update({
         id: agentId,
         activeVersionId: versionId,
         status: 'published',
@@ -675,7 +704,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }
@@ -693,7 +722,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       const restoredConfig = extractConfigFromVersion(versionToRestore as unknown as Record<string, unknown>);
 
       // Update the agent with the config from the version to restore
-      await agentsStore.updateAgent({
+      await agentsStore.update({
         id: agentId,
         ...restoredConfig,
       });
@@ -763,7 +792,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       }
 
       // Verify agent exists
-      const agent = await agentsStore.getAgentById({ id: agentId });
+      const agent = await agentsStore.getById(agentId);
       if (!agent) {
         throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
       }

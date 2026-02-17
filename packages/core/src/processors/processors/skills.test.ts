@@ -274,6 +274,20 @@ describe('SkillsProcessor', () => {
       expect(result.tools).toHaveProperty('my-tool');
       expect(result.tools).toHaveProperty('skill-activate');
     });
+
+    it('should load skills based on request context', async () => {
+      const requestContext = { userId: 'test-user', sessionId: '123' };
+
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+        stepNumber: 0,
+        requestContext,
+      } as any);
+
+      expect(mockSkills.maybeRefresh).toHaveBeenCalledTimes(1);
+      expect(mockSkills.maybeRefresh).toHaveBeenCalledWith({ requestContext });
+    });
   });
 
   describe('skill-activate tool', () => {
@@ -628,6 +642,46 @@ describe('SkillsProcessor', () => {
       // Should preserve existing tools and not add skill tools
       expect(result.tools).toHaveProperty('existingTool');
       expect(result.tools).not.toHaveProperty('skill-activate');
+    });
+  });
+
+  describe('model calls skill name directly as tool (issue #12654)', () => {
+    it('should NOT expose skill names as callable tools', async () => {
+      // This test verifies that skill names are NOT available as tools
+      // The model should only be able to call 'skill-activate', not the skill name directly
+      const result = await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      // skill-activate should be available
+      expect(result.tools).toHaveProperty('skill-activate');
+
+      // Skill names should NOT be available as tools
+      expect(result.tools).not.toHaveProperty('code-review');
+      expect(result.tools).not.toHaveProperty('testing');
+    });
+
+    it('should provide clear instructions about how to use skills', async () => {
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      });
+
+      // The system message should clearly explain that:
+      // 1. Skills are NOT tools themselves
+      // 2. Must use skill-activate to activate a skill
+      // 3. The skill name goes as a parameter to skill-activate
+      const systemCalls = mockMessageList.addSystem.mock.calls;
+      const allSystemContent = systemCalls.map((call: any) => call[0]?.content || call[0]).join('\n');
+
+      // Check that the instruction mentions skill-activate
+      expect(allSystemContent).toContain('skill-activate');
+
+      // The instruction should be clear enough that the model knows NOT to call skill names directly
+      expect(allSystemContent).toMatch(
+        /do not.*call.*skill.*directly|skill.*not.*tool|use.*skill-activate.*with.*name/i,
+      );
     });
   });
 });

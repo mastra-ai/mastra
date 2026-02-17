@@ -59,6 +59,22 @@ describe('Tools Handlers', () => {
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
       // expect(result[mockVercelTool.id]).toHaveProperty('id', mockVercelTool.id);
     });
+
+    it('should fall back to mastra.listTools() when registeredTools is empty object', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        tools: mockTools,
+      });
+      // This mirrors what happens in the real server adapters (hono/express):
+      // they set registeredTools to `this.tools || {}`, so when no tools are
+      // passed to the server constructor, registeredTools becomes {}
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+      });
+      expect(result).toHaveProperty(mockTool.id);
+      expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
+    });
   });
 
   describe('getToolByIdHandler', () => {

@@ -16,8 +16,17 @@ interface ValidationConfig {
 
 const DEFAULT_CONFIG: ValidationConfig = {
   sourceDir: 'src/content/en',
-  skipPaths: ['guides/', 'docs/community/', 'docs/getting-started/', 'docs/mastra-cloud/', 'docs/index.mdx', 'models/'],
-  packagePattern: /^@mastra\/[\w-]+$/,
+  skipPaths: [
+    'guides/',
+    'docs/community/',
+    'docs/getting-started/',
+    'docs/mastra-cloud/',
+    'docs/index.mdx',
+    'models/',
+    'docs/build-with-ai/skills.mdx',
+  ],
+  // Allow for @mastra/* packages + mastra + create-mastra
+  packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra)$/,
   concurrency: 50,
 }
 
@@ -74,7 +83,7 @@ function validatePackagesField(
     if (!config.packagePattern.test(pkg.value)) {
       errors.push({
         type: 'invalid_packages',
-        message: `invalid package name: "${pkg.value}" (must match @mastra/*)`,
+        message: `invalid package name: "${pkg.value}" (must match @mastra/*, mastra, or create-mastra)`,
         lineNumber: pkg.lineNumber,
       })
     }

@@ -56,7 +56,10 @@ export class CoreToolBuilder extends MastraBase {
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
-    if (!isVercelTool(this.originalTool) && input.autoResumeSuspendedTools) {
+    if (
+      !isVercelTool(this.originalTool) &&
+      (input.autoResumeSuspendedTools || (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-'))
+    ) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {
         schema = schema();
@@ -242,8 +245,17 @@ export class CoreToolBuilder extends MastraBase {
     logType?: 'tool' | 'toolset' | 'client-tool',
     processedSchema?: z.ZodTypeAny,
   ) {
-    // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, requestContext, model, ...rest } = options;
+    // don't add memory, mastra, or tracing context to logging (tracingContext may contain sensitive observability credentials)
+    const {
+      logger,
+      mastra: _mastra,
+      memory: _memory,
+      requestContext,
+      model,
+      tracingContext: _tracingContext,
+      tracingPolicy: _tracingPolicy,
+      ...rest
+    } = options;
     const logModelObject = {
       modelId: model?.modelId,
       provider: model?.provider,
@@ -318,6 +330,9 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             requestContext: options.requestContext ?? new RequestContext(),
+            // Workspace for file operations and command execution
+            // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
+            workspace: execOptions.workspace ?? options.workspace,
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -485,7 +500,7 @@ export class CoreToolBuilder extends MastraBase {
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
-              errorMessage: String(error),
+              errorMessage: String(err),
               argsJson: JSON.stringify(args),
               model: model?.modelId ?? '',
             },

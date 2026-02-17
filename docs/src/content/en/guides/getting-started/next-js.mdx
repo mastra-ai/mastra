@@ -45,7 +45,7 @@ cd my-nextjs-agent
 Run [`mastra init`](/reference/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
 ```bash npm2yarn
-npx --force mastra@latest init
+npx mastra@latest init
 ```
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
@@ -55,6 +55,16 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 -	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your Next.js routes in the next steps.
+
+:::tip[Using Mastra Studio alongside Next.js]
+If you want to run `mastra dev` (Mastra Studio) alongside your Next.js app and have both share the same database, update the storage URL in `src/mastra/index.ts` to use an absolute path:
+
+```typescript
+url: "file:/absolute/path/to/your/project/mastra.db"
+```
+
+Relative paths resolve based on each process's working directory, which differs between `next dev` and `mastra dev`.
+:::
 
 ## Install AI SDK UI & AI Elements
 
@@ -273,5 +283,5 @@ From here, you can extend the project with your own tools and logic:
 When you're ready, read more about how Mastra integrates with AI SDK UI and Next.js, and how to deploy your agent anywhere, including Vercel:
 
 - Integrate Mastra with [AI SDK UI](/guides/build-your-ui/ai-sdk-ui)
-- Deploy your agent to [Vercel](/guides/deployment/vercel-deployer)
+- Deploy your agent to [Vercel](/guides/deployment/vercel)
 - Deploy your agent [anywhere](/docs/deployment/overview)

@@ -29,6 +29,11 @@ type LinkComponentPaths = {
   networkThreadLink: (networkId: string, threadId: string) => string;
 
   scorerLink: (scorerId: string) => string;
+  cmsScorersCreateLink: () => string;
+  cmsScorerEditLink: (scorerId: string) => string;
+
+  cmsAgentCreateLink: () => string;
+  cmsAgentEditLink: (agentId: string) => string;
 
   toolLink: (toolId: string) => string;
   skillLink: (skillName: string, workspaceId?: string) => string;
@@ -41,6 +46,10 @@ type LinkComponentPaths = {
   mcpServerLink: (serverId: string) => string;
   mcpServerToolLink: (serverId: string, toolId: string) => string;
   workflowRunLink: (workflowId: string, runId: string) => string;
+
+  datasetLink: (datasetId: string) => string;
+  datasetItemLink: (datasetId: string, itemId: string) => string;
+  datasetExperimentLink: (datasetId: string, experimentId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -63,6 +72,10 @@ const LinkComponentContext = createContext<{
     networkNewThreadLink: () => '',
     networkThreadLink: () => '',
     scorerLink: () => '',
+    cmsScorersCreateLink: () => '',
+    cmsScorerEditLink: () => '',
+    cmsAgentCreateLink: () => '',
+    cmsAgentEditLink: () => '',
     toolLink: () => '',
     skillLink: () => '',
     workspacesLink: () => '',
@@ -73,6 +86,9 @@ const LinkComponentContext = createContext<{
     mcpServerLink: () => '',
     mcpServerToolLink: () => '',
     workflowRunLink: () => '',
+    datasetLink: () => '',
+    datasetItemLink: () => '',
+    datasetExperimentLink: () => '',
   },
 });
 

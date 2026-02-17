@@ -1005,7 +1005,7 @@ describe('MCPServer', () => {
         servers: {
           weather: {
             command: 'npx',
-            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/server-weather.ts')],
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__', 'server-weather.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
