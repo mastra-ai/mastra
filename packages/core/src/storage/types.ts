@@ -3,6 +3,7 @@ import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
+import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -399,10 +400,10 @@ export interface StorageAgentSnapshotType {
    * Static or conditional on request context.
    */
   integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  inputProcessors?: StorageConditionalField<string[]>;
-  /** Array of processor keys to resolve from Mastra's processor registry — static or conditional on request context */
-  outputProcessors?: StorageConditionalField<string[]>;
+  /** Processor graph for input processing — static or conditional on request context */
+  inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
+  /** Processor graph for output processing — static or conditional on request context */
+  outputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Memory configuration object — static or conditional on request context */
   memory?: StorageConditionalField<SerializedMemoryConfig>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
@@ -558,6 +559,53 @@ export interface RuleGroupDepth1 {
 export interface RuleGroup {
   operator: 'AND' | 'OR';
   conditions: (Rule | RuleGroupDepth1)[];
+}
+
+// ============================================================================
+// Stored Processor Graph Types
+// ============================================================================
+
+/**
+ * A single processor step in a stored processor graph.
+ * Each step references a ProcessorProvider by ID and stores its configuration.
+ */
+export interface ProcessorGraphStep {
+  /** Unique ID for this step within the graph */
+  id: string;
+  /** The ProcessorProvider ID that created this processor */
+  providerId: string;
+  /** Configuration matching the provider's configSchema, validated at creation time */
+  config: Record<string, unknown>;
+  /** Which processor phases to enable (subset of the provider's availablePhases) */
+  enabledPhases: ProcessorPhase[];
+}
+
+/**
+ * A condition for branching within a processor graph.
+ * Uses RuleGroup (evaluated against the previous step's output) to decide which branch to take.
+ */
+export interface ProcessorGraphCondition {
+  /** The steps to execute if this condition's rules match */
+  steps: ProcessorGraphEntry[];
+  /** Rules to evaluate against the previous step's output. If absent, this is the default branch. */
+  rules?: RuleGroup;
+}
+
+/**
+ * An entry in a stored processor graph.
+ * Simplified version of SerializedStepFlowEntry, supporting only step, parallel, and conditional.
+ */
+export type ProcessorGraphEntry =
+  | { type: 'step'; step: ProcessorGraphStep }
+  | { type: 'parallel'; branches: ProcessorGraphEntry[][] }
+  | { type: 'conditional'; conditions: ProcessorGraphCondition[] };
+
+/**
+ * A stored processor graph representing a pipeline of processors.
+ * The entries are ordered: sequential flow is array order, with parallel/conditional branching.
+ */
+export interface StoredProcessorGraph {
+  steps: ProcessorGraphEntry[];
 }
 
 /**

@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core';
 import type { IMastraEditor, MastraEditorConfig } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
+import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import { EditorAgentNamespace, EditorMCPNamespace, EditorPromptNamespace, EditorScorerNamespace } from './namespaces';
@@ -27,6 +28,7 @@ export class MastraEditor implements IMastraEditor {
   __logger?: Logger;
 
   private __toolProviders: Record<string, ToolProvider>;
+  private __processorProviders: Record<string, ProcessorProvider>;
 
   public readonly agent: EditorAgentNamespace;
   public readonly mcp: EditorMCPNamespace;
@@ -36,6 +38,7 @@ export class MastraEditor implements IMastraEditor {
   constructor(config?: MastraEditorConfig) {
     this.__logger = config?.logger;
     this.__toolProviders = config?.toolProviders ?? {};
+    this.__processorProviders = config?.processorProviders ?? {};
     this.agent = new EditorAgentNamespace(this);
     this.mcp = new EditorMCPNamespace(this);
     this.prompt = new EditorPromptNamespace(this);
@@ -61,5 +64,15 @@ export class MastraEditor implements IMastraEditor {
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider> {
     return this.__toolProviders;
+  }
+
+  /** Get a processor provider by ID */
+  getProcessorProvider(id: string): ProcessorProvider | undefined {
+    return this.__processorProviders[id];
+  }
+
+  /** List all registered processor providers */
+  listProcessorProviders(): Record<string, ProcessorProvider> {
+    return this.__processorProviders;
   }
 }

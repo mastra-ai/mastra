@@ -19,6 +19,7 @@ import {
   StoredMCPClient,
   StoredScorer,
   ToolProvider,
+  ProcessorProvider,
   Workspace,
 } from './resources';
 import type {
@@ -77,6 +78,7 @@ import type {
   ListVectorsResponse,
   ListEmbeddersResponse,
   ListToolProvidersResponse,
+  ListProcessorProvidersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -1011,6 +1013,27 @@ export class MastraClient extends BaseResource {
    */
   public getToolProvider(providerId: string): ToolProvider {
     return new ToolProvider(this.options, providerId);
+  }
+
+  // ============================================================================
+  // Processor Providers
+  // ============================================================================
+
+  /**
+   * Lists all registered processor providers
+   * @returns Promise containing list of processor provider info
+   */
+  public listProcessorProviders(): Promise<ListProcessorProvidersResponse> {
+    return this.request('/processor-providers');
+  }
+
+  /**
+   * Gets a processor provider instance by ID for further operations
+   * @param providerId - ID of the processor provider
+   * @returns ProcessorProvider instance
+   */
+  public getProcessorProvider(providerId: string): ProcessorProvider {
+    return new ProcessorProvider(this.options, providerId);
   }
 
   // ============================================================================

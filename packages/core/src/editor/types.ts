@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type {
   AgentInstructionBlock,
@@ -36,6 +37,8 @@ export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
   toolProviders?: Record<string, ToolProvider>;
+  /** Processor providers for configurable processors (e.g., moderation, token limiter) */
+  processorProviders?: Record<string, ProcessorProvider>;
 }
 
 export interface GetByIdOptions {
@@ -144,4 +147,9 @@ export interface IMastraEditor {
   getToolProvider(id: string): ToolProvider | undefined;
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider>;
+
+  /** Get a processor provider by ID */
+  getProcessorProvider(id: string): ProcessorProvider | undefined;
+  /** List all registered processor providers */
+  listProcessorProviders(): Record<string, ProcessorProvider>;
 }

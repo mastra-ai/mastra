@@ -8,6 +8,7 @@ import {
   conditionalFieldSchema,
   modelConfigSchema,
   toolsConfigSchema,
+  storedProcessorGraphSchema,
 } from './stored-agents';
 
 const mcpClientToolsConfigSchema = z.object({
@@ -110,12 +111,12 @@ export const agentVersionSchema = z.object({
   mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
-  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+  inputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
-  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .describe('Input processor graph — static or conditional'),
+  outputProcessors: conditionalFieldSchema(storedProcessorGraphSchema)
     .optional()
-    .describe('Array of processor keys — static or conditional'),
+    .describe('Output processor graph — static or conditional'),
   memory: conditionalFieldSchema(serializedMemoryConfigSchema)
     .optional()
     .describe('Memory configuration — static or conditional'),

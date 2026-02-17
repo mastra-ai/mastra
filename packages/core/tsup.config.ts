@@ -56,6 +56,7 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/test-utils/llm-mock.ts',
     'src/processors/index.ts',
+    'src/processor-provider/index.ts',
     'src/zod-to-json.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',

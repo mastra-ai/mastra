@@ -65,8 +65,12 @@ export const createFullSampleAgent = ({
   },
   workflows: ['order-workflow', 'support-workflow'],
   agents: ['helper-agent'],
-  inputProcessors: ['sanitize-processor'],
-  outputProcessors: ['format-processor'],
+  inputProcessors: {
+    steps: [{ type: 'step' as const, step: { id: 'sanitize', providerId: 'sanitize-processor', config: {}, enabledPhases: ['processInput' as const] } }],
+  },
+  outputProcessors: {
+    steps: [{ type: 'step' as const, step: { id: 'format', providerId: 'format-processor', config: {}, enabledPhases: ['processOutputResult' as const] } }],
+  },
   memory: { vector: 'default-vector' },
   scorers: {
     relevance: { sampling: { type: 'ratio', rate: 0.8 } },
