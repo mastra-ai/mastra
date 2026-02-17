@@ -160,7 +160,8 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       });
 
       // Return the resolved MCP client (thin record + version config)
-      const resolved = await mcpClientStore.getByIdResolved(id);
+      // Use draft status since newly created entities start as drafts
+      const resolved = await mcpClientStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created MCP client' });
       }

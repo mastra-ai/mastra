@@ -161,7 +161,8 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       });
 
       // Return the resolved prompt block (thin record + version config)
-      const resolved = await promptBlockStore.getByIdResolved(id);
+      // Use draft status since newly created entities start as drafts
+      const resolved = await promptBlockStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created prompt block' });
       }

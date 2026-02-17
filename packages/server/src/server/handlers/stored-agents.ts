@@ -213,13 +213,11 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       });
 
       // Return the resolved agent (thin record + version config)
-      const resolved = await agentsStore.getByIdResolved(id);
+      // Use draft status since newly created entities start as drafts
+      const resolved = await agentsStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
-
-      // TODO: The storage layer should set activeVersionId during agent creation
-      // For now, the agent might have null activeVersionId until the first update
 
       return resolved;
     } catch (error) {

@@ -187,7 +187,8 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       });
 
       // Return the resolved scorer definition (thin record + version config)
-      const resolved = await scorerStore.getByIdResolved(id);
+      // Use draft status since newly created entities start as drafts
+      const resolved = await scorerStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created scorer definition' });
       }

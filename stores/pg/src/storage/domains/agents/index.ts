@@ -590,13 +590,8 @@ export class AgentsPG extends AgentsStorage {
       // Add the ID for the WHERE clause
       values.push(id);
 
-      if (setClauses.length > 2) {
-        // More than just updatedAt and updatedAtZ
-        await this.#db.client.none(
-          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-          values,
-        );
-      }
+      // Always update the record (at minimum updatedAt/updatedAtZ are set)
+      await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
 
       // Return the updated agent
       const updatedAgent = await this.getById(id);

@@ -232,50 +232,10 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
         status: updates.status,
       };
 
-      // Extract config fields
-      const configFields: Record<string, any> = {};
-      for (const field of SNAPSHOT_FIELDS) {
-        if ((updates as any)[field] !== undefined) {
-          configFields[field] = (updates as any)[field];
-        }
-      }
-
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        const latestVersion = await this.getLatestVersion(id);
-
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('MONGODB', 'UPDATE_PROMPT_BLOCK', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for prompt block ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Extract existing snapshot and merge with updates
-        const existingSnapshot = this.extractSnapshotFields(latestVersion);
-
-        await this.createVersion({
-          id: randomUUID(),
-          blockId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...existingSnapshot,
-          ...configFields,
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreatePromptBlockVersionInput);
-      }
-
       // Handle metadata-level updates
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
       if (metadataFields.activeVersionId !== undefined) {
         updateDoc.activeVersionId = metadataFields.activeVersionId;
-        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
-        if (metadataFields.status === undefined) {
-          updateDoc.status = 'published';
-        }
       }
       if (metadataFields.status !== undefined) {
         updateDoc.status = metadataFields.status;

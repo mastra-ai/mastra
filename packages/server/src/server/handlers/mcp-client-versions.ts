@@ -115,6 +115,14 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       }
 
       const latestVersion = await mcpClientStore.getLatestVersion(mcpClientId);
+
+      // If no activeVersionId, fall back to latest version config
+      if (!mcpClient.activeVersionId && latestVersion) {
+        currentConfig = extractConfigFromVersion(
+          latestVersion as unknown as Record<string, unknown>,
+          SNAPSHOT_CONFIG_FIELDS,
+        );
+      }
       const previousConfig = latestVersion
         ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>, SNAPSHOT_CONFIG_FIELDS)
         : null;

@@ -115,6 +115,14 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       }
 
       const latestVersion = await promptBlockStore.getLatestVersion(promptBlockId);
+
+      // If no activeVersionId, fall back to latest version config
+      if (!promptBlock.activeVersionId && latestVersion) {
+        currentConfig = extractConfigFromVersion(
+          latestVersion as unknown as Record<string, unknown>,
+          SNAPSHOT_CONFIG_FIELDS,
+        );
+      }
       const previousConfig = latestVersion
         ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>, SNAPSHOT_CONFIG_FIELDS)
         : null;

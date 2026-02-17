@@ -124,6 +124,14 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
       }
 
       const latestVersion = await scorerStore.getLatestVersion(scorerId);
+
+      // If no activeVersionId, fall back to latest version config
+      if (!scorer.activeVersionId && latestVersion) {
+        currentConfig = extractConfigFromVersion(
+          latestVersion as unknown as Record<string, unknown>,
+          SNAPSHOT_CONFIG_FIELDS,
+        );
+      }
       const previousConfig = latestVersion
         ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>, SNAPSHOT_CONFIG_FIELDS)
         : null;

@@ -142,6 +142,14 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
 
       // Get the latest version to calculate changed fields
       const latestVersion = await agentsStore.getLatestVersion(agentId);
+
+      // If no activeVersionId, fall back to latest version config
+      if (!agent.activeVersionId && latestVersion) {
+        currentConfig = extractConfigFromVersion(
+          latestVersion as unknown as Record<string, unknown>,
+          SNAPSHOT_CONFIG_FIELDS,
+        );
+      }
       const previousConfig = latestVersion
         ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>, SNAPSHOT_CONFIG_FIELDS)
         : null;
