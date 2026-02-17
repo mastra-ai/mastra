@@ -1453,6 +1453,15 @@ Line 3 conclusion`;
       ).toThrow('Cannot use both "filesystem" and "mounts"');
     });
 
+    it('should throw when a class constructor is passed instead of an instance or resolver', () => {
+      expect(
+        () =>
+          new Workspace({
+            filesystem: LocalFilesystem as any,
+          }),
+      ).toThrow('class constructor');
+    });
+
     it('should not throw NO_PROVIDERS when only filesystem resolver is provided', () => {
       const resolver = () => new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({ filesystem: resolver });

@@ -419,6 +419,14 @@ export class Workspace<
         }
       }
     } else if (typeof config.filesystem === 'function') {
+      // Reject class constructors — a common mistake is passing the class itself instead of an instance
+      if (/^class\s/.test(Function.prototype.toString.call(config.filesystem))) {
+        throw new WorkspaceError(
+          'filesystem received a class constructor instead of an instance or resolver function. ' +
+            'Pass an instance (e.g., new LocalFilesystem(...)) or a resolver function (({ requestContext }) => fs).',
+          'INVALID_CONFIG',
+        );
+      }
       // Dynamic filesystem resolver — stored separately, no static _fs instance
       this._filesystemResolver = config.filesystem as WorkspaceFilesystemResolver;
     } else {
