@@ -1,0 +1,48 @@
+---
+title: "Reference: dataset.deleteItems() | Datasets"
+description: "Documentation for the `dataset.deleteItems()` method, which deletes multiple items from a dataset in bulk."
+packages:
+  - "@mastra/core"
+---
+
+# dataset.deleteItems()
+
+Deletes multiple items from the dataset in a single bulk operation.
+
+## Usage example
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const dataset = await mastra.datasets.get({ id: "dataset-id" });
+
+await dataset.deleteItems({
+  itemIds: ["item-1", "item-2", "item-3"],
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "itemIds",
+      type: "string[]",
+      description: "Array of item IDs to delete.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<void>",
+      description: "Resolves when all items are deleted.",
+    },
+  ]}
+/>
