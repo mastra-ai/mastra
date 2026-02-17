@@ -64,7 +64,8 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
     if (!skillStore) throw new Error('Skills storage domain is not available');
 
     const blobStore = await this.editor.resolveBlobStore();
-    if (!blobStore) throw new Error('No blob store is configured. Register one via new MastraEditor({ blobStores: [...] })');
+    if (!blobStore)
+      throw new Error('No blob store is configured. Register one via new MastraEditor({ blobStores: [...] })');
 
     // Collect and store blobs
     const { snapshot, tree } = await publishSkillFromSource(source, skillPath, blobStore);
