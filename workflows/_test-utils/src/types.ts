@@ -24,7 +24,7 @@ export interface DurableAgentLike<TOutput = undefined> {
   observe?(
     runId: string,
     options?: {
-      fromIndex?: number;
+      offset?: number;
       onChunk?: (chunk: any) => void | Promise<void>;
       onStepFinish?: (result: any) => void | Promise<void>;
       onFinish?: (result: any) => void | Promise<void>;

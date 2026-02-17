@@ -633,7 +633,7 @@ export class DurableAgent<
   async observe(
     runId: string,
     options?: {
-      fromIndex?: number;
+      offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
@@ -674,7 +674,7 @@ export class DurableAgent<
       },
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
-      fromIndex: options?.fromIndex,
+      offset: options?.offset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
       onFinish: async result => {

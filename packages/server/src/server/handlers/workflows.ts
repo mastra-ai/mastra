@@ -547,10 +547,10 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
   responseSchema: streamResponseSchema,
   summary: 'Observe workflow stream',
   description:
-    'Observes and streams updates from an already running workflow execution. Supports position-based resume with fromIndex for efficient reconnection.',
+    'Observes and streams updates from an already running workflow execution. Supports position-based resume with offset for efficient reconnection.',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId, runId, fromIndex, requestContext }) => {
+  handler: async ({ mastra, workflowId, runId, offset, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
@@ -583,7 +583,7 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
       }
 
       // Get cached chunks from the specified index (or 0 if not specified)
-      const startIndex = fromIndex ?? 0;
+      const startIndex = offset ?? 0;
       const cachedRunChunks = (await serverCache.listFromTo(runId, startIndex)) as ChunkType[];
       const liveStream = _run.observeStream();
 

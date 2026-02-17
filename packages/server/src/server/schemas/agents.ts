@@ -450,7 +450,7 @@ export const enhanceInstructionsResponseSchema = z.object({
  */
 export const observeAgentBodySchema = z.object({
   runId: z.string().describe('The run ID to observe/reconnect to'),
-  fromIndex: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+  offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
 });
 
 /**

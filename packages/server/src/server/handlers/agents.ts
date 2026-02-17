@@ -1224,10 +1224,10 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   responseSchema: observeAgentResponseSchema,
   summary: 'Observe agent stream',
   description:
-    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with fromIndex for efficient reconnection.',
+    'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, runId, fromIndex }) => {
+  handler: async ({ mastra, agentId, runId, offset }) => {
     try {
       // Verify agent exists (for authorization/validation)
       await getAgentFromSystem({ mastra, agentId });
@@ -1236,7 +1236,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       const pubsub = mastra.pubsub;
 
       // Create a ReadableStream that subscribes to the agent stream topic
-      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromIndex
+      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromOffset
       const topic = AGENT_STREAM_TOPIC(runId);
       let handleEvent: ((event: any) => void) | null = null;
 
@@ -1261,8 +1261,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
           // Subscribe with replay support
           const subscribePromise =
-            fromIndex !== undefined
-              ? pubsub.subscribeFromIndex(topic, fromIndex, handleEvent)
+            offset !== undefined
+              ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
               : pubsub.subscribeWithReplay(topic, handleEvent);
 
           subscribePromise.catch(error => {

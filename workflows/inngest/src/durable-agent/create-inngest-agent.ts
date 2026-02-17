@@ -215,12 +215,12 @@ export interface InngestAgent<TOutput = undefined> {
    * Use this to resume receiving events after a disconnection.
    *
    * @param runId - The run ID to observe
-   * @param options.fromIndex - Resume from this event index (0-based). If omitted, replays all events.
+   * @param options.offset - Resume from this event index (0-based). If omitted, replays all events.
    */
   observe(
     runId: string,
     options?: {
-      fromIndex?: number;
+      offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
@@ -578,7 +578,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           provider: undefined,
           version: 'v3',
         },
-        fromIndex: observeOptions?.fromIndex,
+        offset: observeOptions?.offset,
         onChunk: observeOptions?.onChunk,
         onStepFinish: observeOptions?.onStepFinish,
         onFinish: observeOptions?.onFinish,

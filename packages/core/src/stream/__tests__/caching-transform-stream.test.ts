@@ -131,8 +131,8 @@ describe('createCachingTransformStream', () => {
 
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    const fromIndex2 = await getHistory(2);
-    expect(fromIndex2).toEqual(['c', 'd', 'e']);
+    const fromOffset2 = await getHistory(2);
+    expect(fromOffset2).toEqual(['c', 'd', 'e']);
   });
 
   it('should clear cache', async () => {

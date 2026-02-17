@@ -19,10 +19,10 @@ export abstract class PubSub {
    * Override in implementations that support event caching.
    *
    * @param topic - The topic to get history for
-   * @param fromIndex - Starting index (0-based), defaults to 0
+   * @param offset - Starting index (0-based), defaults to 0
    * @returns Array of events from the specified index
    */
-  getHistory(_topic: string, _fromIndex?: number): Promise<Event[]> {
+  getHistory(_topic: string, _offset?: number): Promise<Event[]> {
     return Promise.resolve([]);
   }
 
@@ -46,10 +46,10 @@ export abstract class PubSub {
    * Override in implementations that support indexed event caching.
    *
    * @param topic - The topic to subscribe to
-   * @param fromIndex - Start replaying from this index (0-based)
+   * @param offset - Start replaying from this index (0-based)
    * @param cb - Callback invoked for each event
    */
-  subscribeFromIndex(topic: string, _fromIndex: number, cb: EventCallback): Promise<void> {
+  subscribeFromOffset(topic: string, _offset: number, cb: EventCallback): Promise<void> {
     return this.subscribeWithReplay(topic, cb);
   }
 }

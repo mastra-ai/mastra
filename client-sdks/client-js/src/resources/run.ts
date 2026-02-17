@@ -283,24 +283,24 @@ export class Run extends BaseResource {
    * Observe (reconnect to) an existing workflow stream.
    * Use this to resume receiving events after a disconnection.
    *
-   * @param params.fromIndex - Optional position to resume from (0-based). If omitted, replays all events.
+   * @param params.offset - Optional position to resume from (0-based). If omitted, replays all events.
    * @returns Promise containing a ReadableStream of workflow events
    *
    * @example
    * ```typescript
    * // Reconnect to a workflow stream from a specific position
-   * const stream = await run.observe({ fromIndex: 42 });
+   * const stream = await run.observe({ offset: 42 });
    *
    * for await (const event of stream) {
    *   console.log('Received:', event);
    * }
    * ```
    */
-  async observe(params?: { fromIndex?: number }) {
+  async observe(params?: { offset?: number }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
-    if (params?.fromIndex !== undefined) {
-      searchParams.set('fromIndex', String(params.fromIndex));
+    if (params?.offset !== undefined) {
+      searchParams.set('offset', String(params.offset));
     }
 
     const response: Response = await this.request(`/workflows/${this.workflowId}/observe?${searchParams.toString()}`, {

@@ -536,7 +536,7 @@ describe('Observe API', () => {
     result.cleanup();
   });
 
-  it('should support fromIndex for efficient resume', async () => {
+  it('should support offset for efficient resume', async () => {
     const mockModel = createTextModel('Indexed stream');
 
     const baseAgent = new Agent({
@@ -559,7 +559,7 @@ describe('Observe API', () => {
     streamCleanup();
 
     // Observe from a specific index (should not throw)
-    const result = await durableAgent.observe(runId, { fromIndex: 0 });
+    const result = await durableAgent.observe(runId, { offset: 0 });
 
     expect(result.runId).toBe(runId);
     result.cleanup();

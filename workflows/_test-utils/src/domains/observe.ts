@@ -49,7 +49,7 @@ export function createObserveTests(context: DurableAgentTestContext) {
       result.cleanup();
     });
 
-    it('should support fromIndex for efficient resume', async () => {
+    it('should support offset for efficient resume', async () => {
       const mockModel = createSimpleMockModel();
 
       const agent = await createAgent({
@@ -64,8 +64,8 @@ export function createObserveTests(context: DurableAgentTestContext) {
       await new Promise(r => setTimeout(r, eventPropagationDelay));
       cleanup();
 
-      // Observe with fromIndex to skip already-seen events
-      const result = await (agent as any).observe(runId, { fromIndex: 0 });
+      // Observe with offset to skip already-seen events
+      const result = await (agent as any).observe(runId, { offset: 0 });
       expect(result.runId).toBe(runId);
       expect(result.output).toBeDefined();
       result.cleanup();

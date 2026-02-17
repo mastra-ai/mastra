@@ -57,7 +57,7 @@ export function createCachingTransformStream<T>(options: CachingTransformStreamO
   /**
    * Get all cached chunks for this stream
    */
-  getHistory: (fromIndex?: number) => Promise<T[]>;
+  getHistory: (offset?: number) => Promise<T[]>;
 
   /**
    * Clear cached chunks for this stream
@@ -79,8 +79,8 @@ export function createCachingTransformStream<T>(options: CachingTransformStreamO
     },
   });
 
-  const getHistory = async (fromIndex = 0): Promise<T[]> => {
-    const cached = await cache.listFromTo(cacheKey, fromIndex);
+  const getHistory = async (offset = 0): Promise<T[]> => {
+    const cached = await cache.listFromTo(cacheKey, offset);
     return cached.map(item => deserialize(item));
   };
 
@@ -222,7 +222,7 @@ export function withStreamCaching<T>(options: CachingTransformStreamOptions<T>):
   /**
    * Get cached history for this stream
    */
-  getHistory: (fromIndex?: number) => Promise<T[]>;
+  getHistory: (offset?: number) => Promise<T[]>;
 
   /**
    * Clear the cache for this stream
@@ -237,9 +237,9 @@ export function withStreamCaching<T>(options: CachingTransformStreamOptions<T>):
       return transform;
     },
 
-    getHistory: async (fromIndex = 0) => {
+    getHistory: async (offset = 0) => {
       const deserializeFn = deserialize ?? ((x: unknown) => x as T);
-      const cached = await cache.listFromTo(cacheKey, fromIndex);
+      const cached = await cache.listFromTo(cacheKey, offset);
       return cached.map(item => deserializeFn(item));
     },
 

@@ -286,11 +286,11 @@ export const createWorkflowRunBodySchema = z.object({
 
 /**
  * Schema for observe workflow query params
- * Extends runId with optional fromIndex for efficient resume
+ * Extends runId with optional offset for efficient resume
  */
 export const observeWorkflowQuerySchema = z.object({
   runId: z.string().describe('Unique identifier for the run'),
-  fromIndex: z.coerce
+  offset: z.coerce
     .number()
     .optional()
     .describe('Resume from this event index (0-based). If omitted, replays all events.'),

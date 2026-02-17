@@ -171,10 +171,10 @@ export class CachingPubSub extends PubSub {
    * More efficient than full replay when the client knows their last position.
    *
    * @param topic - The topic to subscribe to
-   * @param fromIndex - Start replaying from this index (0-based)
+   * @param offset - Start replaying from this index (0-based)
    * @param cb - Callback invoked for each event
    */
-  async subscribeFromIndex(topic: string, fromIndex: number, cb: EventCallback): Promise<void> {
+  async subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
     // Each subscriber gets its own seen set for deduplication
     const seen = new Set<string>();
 
@@ -191,7 +191,7 @@ export class CachingPubSub extends PubSub {
     await this.inner.subscribe(topic, wrappedCb);
 
     // 2. Fetch and replay cached history FROM the specified index
-    const history = await this.getHistory(topic, fromIndex);
+    const history = await this.getHistory(topic, offset);
     for (const event of history) {
       if (!seen.has(event.id)) {
         seen.add(event.id);
@@ -215,9 +215,9 @@ export class CachingPubSub extends PubSub {
   /**
    * Get historical events for a topic from cache.
    */
-  async getHistory(topic: string, fromIndex: number = 0): Promise<Event[]> {
+  async getHistory(topic: string, offset: number = 0): Promise<Event[]> {
     const cacheKey = this.getCacheKey(topic);
-    const events = await this.cache.listFromTo(cacheKey, fromIndex);
+    const events = await this.cache.listFromTo(cacheKey, offset);
     return events as Event[];
   }
 
