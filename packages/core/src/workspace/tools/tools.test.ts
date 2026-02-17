@@ -134,9 +134,10 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/test.txt' });
 
-      expect(result.content).toBe('     1→Hello World');
-      expect(result.size).toBe(11);
-      expect(result.path).toBe('/test.txt');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('/test.txt');
+      expect(result).toContain('11 bytes');
+      expect(result).toContain('1→Hello World');
     });
 
     it('should read file content without line numbers when showLineNumbers is false', async () => {
@@ -151,9 +152,9 @@ describe('createWorkspaceTools', () => {
         showLineNumbers: false,
       });
 
-      expect(result.content).toBe('Hello World');
-      expect(result.size).toBe(11);
-      expect(result.path).toBe('/test.txt');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('Hello World');
+      expect(result).not.toContain('→Hello World');
     });
 
     it('should read file with offset and limit', async () => {
@@ -171,9 +172,9 @@ describe('createWorkspaceTools', () => {
         showLineNumbers: false,
       });
 
-      expect(result.content).toBe('Line 2\nLine 3');
-      expect(result.lines).toEqual({ start: 2, end: 3 });
-      expect(result.totalLines).toBe(5);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('lines 2-3 of 5');
+      expect(result).toContain('Line 2\nLine 3');
     });
 
     it('should handle binary content', async () => {
@@ -185,13 +186,11 @@ describe('createWorkspaceTools', () => {
       const tools = createWorkspaceTools(workspace);
 
       // With utf-8 encoding (default), binary content is read as string
-      // The tool should still return something readable
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: '/binary.bin' });
 
-      expect(result.path).toBe('/binary.bin');
-      expect(result.size).toBe(4);
-      // Content will be the binary bytes interpreted as utf-8 string with line numbers
-      expect(result.content).toBeDefined();
+      expect(typeof result).toBe('string');
+      expect(result).toContain('/binary.bin');
+      expect(result).toContain('4 bytes');
     });
   });
 
@@ -207,9 +206,8 @@ describe('createWorkspaceTools', () => {
         content: 'New content',
       });
 
-      expect(result.success).toBe(true);
-      expect(result.path).toBe('/new.txt');
-      expect(result.size).toBe(11);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('Wrote 11 bytes to /new.txt');
 
       // Verify file was actually written
       const written = await fs.readFile(path.join(tempDir, 'new.txt'), 'utf-8');
@@ -226,10 +224,13 @@ describe('createWorkspaceTools', () => {
       // Read first (required by safety)
       await workspace.filesystem!.readFile('/existing.txt');
 
-      await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
         path: '/existing.txt',
         content: 'updated',
       });
+
+      expect(typeof result).toBe('string');
+      expect(result).toContain('Wrote');
 
       const written = await fs.readFile(path.join(tempDir, 'existing.txt'), 'utf-8');
       expect(written).toBe('updated');
@@ -250,8 +251,9 @@ describe('createWorkspaceTools', () => {
         new_string: 'Universe',
       });
 
-      expect(result.success).toBe(true);
-      expect(result.replacements).toBe(1);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('Replaced 1 occurrence');
+      expect(result).toContain('/test.txt');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('Hello Universe');
@@ -270,9 +272,8 @@ describe('createWorkspaceTools', () => {
         new_string: 'bar',
       });
 
-      expect(result.success).toBe(false);
-      expect(result.replacements).toBe(0);
-      expect(result.error).toContain('not found');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('not found');
     });
 
     it('should fail when old_string not unique without replace_all', async () => {
@@ -288,9 +289,8 @@ describe('createWorkspaceTools', () => {
         new_string: 'hi',
       });
 
-      expect(result.success).toBe(false);
-      expect(result.replacements).toBe(0);
-      expect(result.error).toContain('3 times');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('3 times');
     });
 
     it('should replace all occurrences with replace_all', async () => {
@@ -307,8 +307,8 @@ describe('createWorkspaceTools', () => {
         replace_all: true,
       });
 
-      expect(result.success).toBe(true);
-      expect(result.replacements).toBe(3);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('Replaced 3 occurrence');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('hi hi hi');
@@ -327,9 +327,10 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/dir' });
 
-      expect(result.tree).toContain('file1.txt');
-      expect(result.tree).toContain('file2.txt');
-      expect(result.summary).toBe('0 directories, 2 files');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('file1.txt');
+      expect(result).toContain('file2.txt');
+      expect(result).toContain('0 directories, 2 files');
     });
 
     it('should list files recursively with maxDepth', async () => {
@@ -347,11 +348,12 @@ describe('createWorkspaceTools', () => {
         maxDepth: 5,
       });
 
-      expect(result.tree).toContain('subdir');
-      expect(result.tree).toContain('file1.txt');
-      expect(result.tree).toContain('file2.txt');
-      expect(result.summary).toContain('1 directory');
-      expect(result.summary).toContain('2 files');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('subdir');
+      expect(result).toContain('file1.txt');
+      expect(result).toContain('file2.txt');
+      expect(result).toContain('1 directory');
+      expect(result).toContain('2 files');
     });
 
     it('should respect maxDepth parameter (tree -L flag)', async () => {
@@ -369,11 +371,12 @@ describe('createWorkspaceTools', () => {
         maxDepth: 2,
       });
 
-      expect(result.tree).toContain('level1');
-      expect(result.tree).toContain('level2');
-      expect(result.tree).not.toContain('level3');
-      expect(result.tree).not.toContain('deep.txt');
-      expect(result.summary).toContain('truncated at depth 2');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('level1');
+      expect(result).toContain('level2');
+      expect(result).not.toContain('level3');
+      expect(result).not.toContain('deep.txt');
+      expect(result).toContain('truncated at depth 2');
     });
 
     it('should default maxDepth to 3', async () => {
@@ -389,14 +392,15 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' });
 
+      expect(typeof result).toBe('string');
       // With default maxDepth of 3, should show up to level3 but not level4 contents
-      expect(result.tree).toContain('level1');
-      expect(result.tree).toContain('level2');
+      expect(result).toContain('level1');
+      expect(result).toContain('level2');
       // Verify level3 directory itself is shown (confirms depth=3)
-      expect(result.tree).toContain('level3');
-      expect(result.tree).not.toContain('level4');
-      expect(result.tree).not.toContain('deep.txt');
-      expect(result.summary).toContain('truncated at depth 3');
+      expect(result).toContain('level3');
+      expect(result).not.toContain('level4');
+      expect(result).not.toContain('deep.txt');
+      expect(result).toContain('truncated at depth 3');
     });
 
     it('should filter by extension (tree -P flag)', async () => {
@@ -413,10 +417,11 @@ describe('createWorkspaceTools', () => {
         extension: '.ts',
       });
 
-      expect(result.tree).toContain('index.ts');
-      expect(result.tree).toContain('utils.ts');
-      expect(result.tree).not.toContain('style.css');
-      expect(result.summary).toBe('0 directories, 2 files');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('index.ts');
+      expect(result).toContain('utils.ts');
+      expect(result).not.toContain('style.css');
+      expect(result).toContain('0 directories, 2 files');
     });
 
     it('should show hidden files with showHidden (tree -a flag)', async () => {
@@ -430,15 +435,18 @@ describe('createWorkspaceTools', () => {
 
       // Without showHidden
       const resultHidden = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' });
-      expect(resultHidden.tree).not.toContain('.gitignore');
-      expect(resultHidden.tree).not.toContain('.hidden-dir');
-      expect(resultHidden.tree).toContain('visible.txt');
+      expect(resultHidden).not.toContain('.gitignore');
+      expect(resultHidden).not.toContain('.hidden-dir');
+      expect(resultHidden).toContain('visible.txt');
 
       // With showHidden
-      const resultVisible = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/', showHidden: true });
-      expect(resultVisible.tree).toContain('.gitignore');
-      expect(resultVisible.tree).toContain('.hidden-dir');
-      expect(resultVisible.tree).toContain('visible.txt');
+      const resultVisible = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
+        path: '/',
+        showHidden: true,
+      });
+      expect(resultVisible).toContain('.gitignore');
+      expect(resultVisible).toContain('.hidden-dir');
+      expect(resultVisible).toContain('visible.txt');
     });
 
     it('should list directories only with dirsOnly (tree -d flag)', async () => {
@@ -457,11 +465,12 @@ describe('createWorkspaceTools', () => {
         dirsOnly: true,
       });
 
-      expect(result.tree).toContain('src');
-      expect(result.tree).toContain('tests');
-      expect(result.tree).not.toContain('package.json');
-      expect(result.tree).not.toContain('index.ts');
-      expect(result.summary).toContain('0 files');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('src');
+      expect(result).toContain('tests');
+      expect(result).not.toContain('package.json');
+      expect(result).not.toContain('index.ts');
+      expect(result).toContain('0 files');
     });
 
     it('should exclude patterns with exclude (tree -I flag)', async () => {
@@ -480,10 +489,11 @@ describe('createWorkspaceTools', () => {
         exclude: 'node_modules',
       });
 
-      expect(result.tree).toContain('src');
-      expect(result.tree).toContain('index.ts');
-      expect(result.tree).not.toContain('node_modules');
-      expect(result.tree).not.toContain('lodash');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('src');
+      expect(result).toContain('index.ts');
+      expect(result).not.toContain('node_modules');
+      expect(result).not.toContain('lodash');
     });
   });
 
@@ -504,9 +514,10 @@ describe('createWorkspaceTools', () => {
         pattern: '**/*.ts',
       });
 
-      expect(result.tree).toContain('index.ts');
-      expect(result.tree).not.toContain('style.css');
-      expect(result.tree).not.toContain('README.md');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('index.ts');
+      expect(result).not.toContain('style.css');
+      expect(result).not.toContain('README.md');
     });
 
     it('should support multiple glob patterns', async () => {
@@ -523,9 +534,10 @@ describe('createWorkspaceTools', () => {
         pattern: ['**/*.ts', '**/*.tsx'],
       });
 
-      expect(result.tree).toContain('index.ts');
-      expect(result.tree).toContain('App.tsx');
-      expect(result.tree).not.toContain('style.css');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('index.ts');
+      expect(result).toContain('App.tsx');
+      expect(result).not.toContain('style.css');
     });
   });
 
@@ -539,8 +551,8 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/test.txt' });
 
-      expect(result.success).toBe(true);
-      expect(result.path).toBe('/test.txt');
+      expect(typeof result).toBe('string');
+      expect(result).toBe('Deleted /test.txt');
 
       // Verify file was deleted
       const exists = await fs
@@ -559,8 +571,8 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/emptydir' });
 
-      expect(result.success).toBe(true);
-      expect(result.path).toBe('/emptydir');
+      expect(typeof result).toBe('string');
+      expect(result).toBe('Deleted /emptydir');
 
       // Verify directory was deleted
       const exists = await fs
@@ -583,7 +595,8 @@ describe('createWorkspaceTools', () => {
         recursive: true,
       });
 
-      expect(result.success).toBe(true);
+      expect(typeof result).toBe('string');
+      expect(result).toBe('Deleted /dirwithfiles');
 
       // Verify directory was deleted
       const exists = await fs
@@ -595,7 +608,7 @@ describe('createWorkspaceTools', () => {
   });
 
   describe('workspace_file_stat', () => {
-    it('should return full stat for existing file', async () => {
+    it('should return stat string for existing file', async () => {
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
@@ -604,14 +617,14 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/test.txt' });
 
-      expect(result.exists).toBe(true);
-      expect(result.type).toBe('file');
-      expect(result.size).toBe(7); // 'content' is 7 bytes
-      expect(result.modifiedAt).toBeDefined();
-      expect(new Date(result.modifiedAt!).getTime()).toBeGreaterThan(0);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('/test.txt');
+      expect(result).toContain('Type: file');
+      expect(result).toContain('Size: 7 bytes');
+      expect(result).toContain('Modified:');
     });
 
-    it('should return exists=false for non-existing path', async () => {
+    it('should return not found for non-existing path', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
@@ -619,10 +632,8 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/nonexistent' });
 
-      expect(result.exists).toBe(false);
-      expect(result.type).toBe('none');
-      expect(result.size).toBeUndefined();
-      expect(result.modifiedAt).toBeUndefined();
+      expect(typeof result).toBe('string');
+      expect(result).toBe('/nonexistent: not found');
     });
 
     it('should return type=directory for directories', async () => {
@@ -634,10 +645,10 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT].execute({ path: '/subdir' });
 
-      expect(result.exists).toBe(true);
-      expect(result.type).toBe('directory');
-      expect(result.size).toBeDefined();
-      expect(result.modifiedAt).toBeDefined();
+      expect(typeof result).toBe('string');
+      expect(result).toContain('/subdir');
+      expect(result).toContain('Type: directory');
+      expect(result).toContain('Modified:');
     });
   });
 
@@ -650,8 +661,8 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: '/newdir' });
 
-      expect(result.success).toBe(true);
-      expect(result.path).toBe('/newdir');
+      expect(typeof result).toBe('string');
+      expect(result).toBe('Created directory /newdir');
 
       // Verify directory was created
       const stat = await fs.stat(path.join(tempDir, 'newdir'));
@@ -666,7 +677,8 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: '/a/b/c' });
 
-      expect(result.success).toBe(true);
+      expect(typeof result).toBe('string');
+      expect(result).toBe('Created directory /a/b/c');
 
       const stat = await fs.stat(path.join(tempDir, 'a', 'b', 'c'));
       expect(stat.isDirectory()).toBe(true);
@@ -689,8 +701,10 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'quick' });
 
-      expect(result.count).toBeGreaterThan(0);
-      expect(result.mode).toBe('bm25');
+      expect(typeof result).toBe('string');
+      expect(result).toContain('bm25 search');
+      // Should have at least 1 result
+      expect(result).not.toContain('0 results');
     });
 
     it('should return empty results for no matches', async () => {
@@ -704,7 +718,8 @@ describe('createWorkspaceTools', () => {
 
       const result = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'elephant' });
 
-      expect(result.count).toBe(0);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('0 results');
     });
   });
 
@@ -721,12 +736,13 @@ describe('createWorkspaceTools', () => {
         content: 'Document content',
       });
 
-      expect(result.success).toBe(true);
-      expect(result.path).toBe('/doc.txt');
+      expect(typeof result).toBe('string');
+      expect(result).toBe('Indexed /doc.txt');
 
       // Verify it's searchable
       const searchResult = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'Document' });
-      expect(searchResult.count).toBeGreaterThan(0);
+      expect(typeof searchResult).toBe('string');
+      expect(searchResult).not.toContain('0 results');
     });
   });
 
@@ -753,9 +769,8 @@ describe('createWorkspaceTools', () => {
         mockToolContext,
       );
 
-      expect(result.success).toBe(true);
-      expect(result.stdout).toContain('hello');
-      expect(result.exitCode).toBe(0);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('hello');
 
       await workspace.destroy();
     });
@@ -779,8 +794,8 @@ describe('createWorkspaceTools', () => {
         mockToolContext,
       );
 
-      expect(result.success).toBe(false);
-      expect(result.exitCode).not.toBe(0);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('Exit code:');
 
       await workspace.destroy();
     });

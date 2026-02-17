@@ -40,6 +40,7 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   args: Record<string, unknown> | string;
   result: any;
   metadata?: MastraUIMessage['metadata'];
+  toolOutput?: Array<{ type: string; data?: Record<string, unknown> }>;
   toolCalled?: boolean;
 }
 
@@ -49,6 +50,7 @@ export const FileTreeBadge = ({
   result,
   toolCallId,
   toolApprovalMetadata,
+  toolOutput,
   isNetwork,
   toolCalled: toolCalledProp,
 }: FileTreeBadgeProps) => {
@@ -90,13 +92,31 @@ export const FileTreeBadge = ({
     argsDisplay.push(`ext: ${extension}`);
   }
 
-  // Get tree output from result
-  const treeOutput = result?.tree || '';
-  const summary = result?.summary || '';
-  // Check for error - could be result.error (tool error) or result itself being an Error-like object
-  const rawError =
-    result?.error?.message ?? result?.error ?? (result?.message && !result?.tree ? result.message : null);
-  const errorMessage = rawError != null ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)) : null;
+  // Get tree output + summary from result — handle both string (new) and object (old) formats
+  let treeOutput = '';
+  let summary = '';
+  if (typeof result === 'string' && result) {
+    // New format: "tree\n\nsummary"
+    const lastDoubleNewline = result.lastIndexOf('\n\n');
+    if (lastDoubleNewline !== -1) {
+      treeOutput = result.slice(0, lastDoubleNewline);
+      summary = result.slice(lastDoubleNewline + 2);
+    } else {
+      treeOutput = result;
+    }
+  } else if (result && typeof result === 'object') {
+    // Old format: { tree, summary, metadata }
+    treeOutput = result.tree || '';
+    summary = result.summary || '';
+  }
+
+  // Check for error — handle both string and object results
+  let errorMessage: string | null = null;
+  if (typeof result !== 'string' && result) {
+    const rawError =
+      result.error?.message ?? result.error ?? (result.message && !result.tree ? result.message : null);
+    errorMessage = rawError != null ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)) : null;
+  }
   const hasError = !!errorMessage;
   const hasResult = !!treeOutput || hasError;
   const toolCalled = toolCalledProp ?? hasResult;
@@ -108,8 +128,17 @@ export const FileTreeBadge = ({
     }
   }, [hasError]);
 
-  // Extract filesystem metadata from result (if provided by the tool)
-  const fsMeta: FilesystemMetadata | undefined = result?.metadata;
+  // Extract filesystem metadata from data chunks (new) or result.metadata (old)
+  const dataChunk = toolOutput?.find(c => c.type === 'data-workspace-metadata')?.data;
+  const fsMeta: FilesystemMetadata | undefined =
+    dataChunk
+      ? { workspace: dataChunk.workspace as WorkspaceInfo, filesystem: dataChunk.filesystem as FilesystemInfo }
+      : result?.metadata;
+
+  // Prefer summary from data chunk if available (richer than parsed string)
+  if (dataChunk?.summary && typeof dataChunk.summary === 'string') {
+    summary = dataChunk.summary;
+  }
 
   const onCopy = () => {
     if (!treeOutput || isCopied) return;
