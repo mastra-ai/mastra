@@ -836,12 +836,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
   async #removeSkillFromIndex(skill: InternalSkill): Promise<void> {
     if (!this.#searchEngine?.remove) return;
 
-    // Remove SKILL.md index entry
-    await this.#searchEngine.remove(`skill:${skill.name}:SKILL.md`);
-
-    // Remove each reference index entry
-    for (const refPath of skill.references) {
-      await this.#searchEngine.remove(`skill:${skill.name}:${refPath}`);
+    const ids = [`skill:${skill.name}:SKILL.md`, ...skill.references.map(r => `skill:${skill.name}:${r}`)];
+    for (const id of ids) {
+      try {
+        await this.#searchEngine.remove(id);
+      } catch {
+        // Best-effort removal; entry may already be gone
+      }
     }
   }
 
@@ -850,7 +851,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   #inferSource(skillPath: string): ContentSource {
     for (const rp of this.#resolvedPaths) {
-      if (skillPath === rp || skillPath.startsWith(rp + '/') || rp.startsWith(skillPath + '/')) {
+      if (skillPath === rp || skillPath.startsWith(rp + '/')) {
         return this.#determineSource(rp);
       }
     }

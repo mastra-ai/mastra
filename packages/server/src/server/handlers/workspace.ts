@@ -178,6 +178,8 @@ async function getSkillsById(mastra: any, workspaceId: string): Promise<Workspac
  */
 function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: string, requestedMount?: string): string {
   if (isCompositeFilesystem(filesystem)) {
+    const stripTrailingSlash = (p: string) => (p.endsWith('/') ? p.slice(0, -1) : p);
+
     if (requestedMount) {
       // Validate the requested mount exists
       const mountFs = filesystem.mounts.get(requestedMount);
@@ -189,15 +191,13 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
       if (mountFs.readOnly) {
         throw new HTTPException(403, { message: `Mount "${requestedMount}" is read-only` });
       }
-      const cleanMount = requestedMount.endsWith('/') ? requestedMount.slice(0, -1) : requestedMount;
-      return `${cleanMount}/${SKILLS_SH_DIR}/${safeSkillId}`;
+      return `${stripTrailingSlash(requestedMount)}/${SKILLS_SH_DIR}/${safeSkillId}`;
     }
 
     // Default: use first writable mount
     for (const [mountPath, mountFs] of filesystem.mounts) {
       if (!mountFs.readOnly) {
-        const cleanMount = mountPath.endsWith('/') ? mountPath.slice(0, -1) : mountPath;
-        return `${cleanMount}/${SKILLS_SH_DIR}/${safeSkillId}`;
+        return `${stripTrailingSlash(mountPath)}/${SKILLS_SH_DIR}/${safeSkillId}`;
       }
     }
 
