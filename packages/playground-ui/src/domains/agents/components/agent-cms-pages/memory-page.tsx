@@ -35,7 +35,7 @@ export function MemoryPage() {
         <SectionHeader
           title="Memory"
           subtitle="Configure memory settings for conversation persistence and semantic recall."
-          icon={<MemoryIcon className="text-neutral3" />}
+          icon={<MemoryIcon />}
         />
 
         <div className="flex flex-col gap-4">

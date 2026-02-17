@@ -1,24 +1,29 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Controller, useWatch } from 'react-hook-form';
-import { ChevronRight, Ruler, Trash2, PlusIcon } from 'lucide-react';
+import { useWatch } from 'react-hook-form';
+import { ChevronRight, Ruler, PlusIcon } from 'lucide-react';
 
 import { SectionHeader } from '@/domains/cms';
 import { JudgeIcon, Icon } from '@/ds/icons';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { IconButton } from '@/ds/components/IconButton';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { Button } from '@/ds/components/Button';
 import { SideDialog } from '@/ds/components/SideDialog';
+import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { stringToColor } from '@/lib/colors';
+import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/lib/utils';
+import { Searchbar } from '@/ds/components/Searchbar';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
 import { RuleBuilder, countLeafRules } from '@/lib/rule-engine';
-import { cn } from '@/lib/utils';
 import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -26,10 +31,10 @@ import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 export function ScorersPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const { data: scorers, isLoading } = useScorers();
+  const { data: scorers } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
   const variables = useWatch({ control, name: 'variables' });
-  const count = Object.keys(selectedScorers || {}).length;
+  const [search, setSearch] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const options = useMemo(() => {
@@ -41,9 +46,47 @@ export function ScorersPage() {
     }));
   }, [scorers]);
 
+  const selectedScorerIds = Object.keys(selectedScorers || {});
+  const count = selectedScorerIds.length;
+
   const getOriginalDescription = (id: string): string => {
     const option = options.find(opt => opt.value === id);
     return option?.description || '';
+  };
+
+  const handleValueChange = (scorerId: string) => {
+    const isSet = selectedScorers?.[scorerId] !== undefined;
+    if (isSet) {
+      const next = { ...selectedScorers };
+      delete next[scorerId];
+      form.setValue('scorers', next);
+    } else {
+      form.setValue('scorers', {
+        ...selectedScorers,
+        [scorerId]: { ...selectedScorers?.[scorerId], description: getOriginalDescription(scorerId) },
+      });
+    }
+  };
+
+  const handleDescriptionChange = (scorerId: string, description: string) => {
+    form.setValue('scorers', {
+      ...selectedScorers,
+      [scorerId]: { ...selectedScorers?.[scorerId], description },
+    });
+  };
+
+  const handleSamplingChange = (scorerId: string, samplingConfig: ScorerConfig['sampling'] | undefined) => {
+    form.setValue('scorers', {
+      ...selectedScorers,
+      [scorerId]: { ...selectedScorers?.[scorerId], sampling: samplingConfig },
+    });
+  };
+
+  const handleRulesChange = (scorerId: string, rules: RuleGroup | undefined) => {
+    form.setValue('scorers', {
+      ...selectedScorers,
+      [scorerId]: { ...selectedScorers?.[scorerId], rules },
+    });
   };
 
   const handleScorerCreated = useCallback(
@@ -55,6 +98,10 @@ export function ScorersPage() {
     [form],
   );
 
+  const filteredOptions = useMemo(() => {
+    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6">
@@ -62,7 +109,7 @@ export function ScorersPage() {
           <SectionHeader
             title="Scorers"
             subtitle={`Configure scorers for evaluating agent responses.${count > 0 ? ` (${count} selected)` : ''}`}
-            icon={<JudgeIcon className="text-neutral3" />}
+            icon={<JudgeIcon />}
           />
           {!readOnly && (
             <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
@@ -72,87 +119,77 @@ export function ScorersPage() {
           )}
         </div>
 
-        <Controller
-          name="scorers"
-          control={control}
-          render={({ field }) => {
-            const currentScorers = field.value || {};
-            const selectedIds = Object.keys(currentScorers);
-            const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+        <SubSectionRoot>
+          <Section.Header>
+            <SubSectionHeader title="Available Scorers" icon={<JudgeIcon />} />
+          </Section.Header>
 
-            const handleValueChange = (newIds: string[]) => {
-              const newScorers: Record<string, ScorerConfig> = {};
-              for (const id of newIds) {
-                newScorers[id] = currentScorers[id] || {
-                  description: getOriginalDescription(id),
-                };
-              }
-              field.onChange(newScorers);
-            };
+          <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers" />
 
-            const handleDescriptionChange = (scorerId: string, description: string) => {
-              field.onChange({
-                ...currentScorers,
-                [scorerId]: { ...currentScorers[scorerId], description },
-              });
-            };
+          {filteredOptions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {filteredOptions.map(scorer => {
+                const bg = stringToColor(scorer.value);
+                const text = stringToColor(scorer.value, 25);
+                const isSelected = selectedScorerIds.includes(scorer.value);
+                const isDisabled = readOnly || !isSelected;
 
-            const handleSamplingChange = (scorerId: string, samplingConfig: ScorerConfig['sampling'] | undefined) => {
-              field.onChange({
-                ...currentScorers,
-                [scorerId]: { ...currentScorers[scorerId], sampling: samplingConfig },
-              });
-            };
+                return (
+                  <div key={scorer.value} className="flex flex-col">
+                    <Entity className="bg-surface2">
+                      <div
+                        className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
+                        style={{ backgroundColor: bg, color: text }}
+                      >
+                        <Icon size="lg">
+                          <JudgeIcon />
+                        </Icon>
+                      </div>
 
-            const handleRemove = (scorerId: string) => {
-              const newScorers = { ...currentScorers };
-              delete newScorers[scorerId];
-              field.onChange(newScorers);
-            };
+                      <EntityContent>
+                        <EntityName>{scorer.label}</EntityName>
+                        <EntityDescription>
+                          <input
+                            type="text"
+                            disabled={isDisabled}
+                            className={cn(
+                              'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                              !isDisabled && 'border-border1 border-dashed ',
+                            )}
+                            value={
+                              isSelected
+                                ? (selectedScorers?.[scorer.value]?.description ?? scorer.description)
+                                : scorer.description
+                            }
+                            onChange={e => handleDescriptionChange(scorer.value, e.target.value)}
+                          />
 
-            const handleRulesChange = (scorerId: string, rules: RuleGroup | undefined) => {
-              field.onChange({
-                ...currentScorers,
-                [scorerId]: { ...currentScorers[scorerId], rules },
-              });
-            };
+                          {isSelected && (
+                            <div className="pt-2">
+                              <ScorerConfigPanel
+                                scorerId={scorer.value}
+                                samplingConfig={selectedScorers?.[scorer.value]?.sampling}
+                                onSamplingChange={config => handleSamplingChange(scorer.value, config)}
+                                readOnly={readOnly}
+                                schema={variables}
+                                rules={selectedScorers?.[scorer.value]?.rules || undefined}
+                                onRulesChange={readOnly ? undefined : rules => handleRulesChange(scorer.value, rules)}
+                              />
+                            </div>
+                          )}
+                        </EntityDescription>
+                      </EntityContent>
 
-            return (
-              <div className="flex flex-col gap-2">
-                <MultiCombobox
-                  options={options}
-                  value={selectedIds}
-                  onValueChange={handleValueChange}
-                  placeholder="Select scorers..."
-                  searchPlaceholder="Search scorers..."
-                  emptyText="No scorers available"
-                  disabled={isLoading || readOnly}
-                  variant="light"
-                />
-                {selectedOptions.length > 0 && (
-                  <div className="flex flex-col gap-3 mt-2">
-                    {selectedOptions.map(scorer => (
-                      <ScorerConfigPanel
-                        key={scorer.value}
-                        scorerId={scorer.value}
-                        scorerName={scorer.label}
-                        description={currentScorers[scorer.value]?.description || ''}
-                        samplingConfig={currentScorers[scorer.value]?.sampling}
-                        onDescriptionChange={desc => handleDescriptionChange(scorer.value, desc)}
-                        onSamplingChange={config => handleSamplingChange(scorer.value, config)}
-                        onRemove={() => handleRemove(scorer.value)}
-                        readOnly={readOnly}
-                        schema={variables}
-                        rules={currentScorers[scorer.value]?.rules || undefined}
-                        onRulesChange={readOnly ? undefined : rules => handleRulesChange(scorer.value, rules)}
-                      />
-                    ))}
+                      {!readOnly && (
+                        <Switch checked={isSelected} onCheckedChange={() => handleValueChange(scorer.value)} />
+                      )}
+                    </Entity>
                   </div>
-                )}
-              </div>
-            );
-          }}
-        />
+                );
+              })}
+            </div>
+          )}
+        </SubSectionRoot>
       </div>
 
       <SideDialog
@@ -171,12 +208,8 @@ export function ScorersPage() {
 
 interface ScorerConfigPanelProps {
   scorerId: string;
-  scorerName: string;
-  description: string;
   samplingConfig?: ScorerConfig['sampling'];
-  onDescriptionChange: (description: string) => void;
   onSamplingChange: (config: ScorerConfig['sampling'] | undefined) => void;
-  onRemove: () => void;
   readOnly?: boolean;
   schema?: JsonSchema;
   rules?: RuleGroup;
@@ -185,12 +218,8 @@ interface ScorerConfigPanelProps {
 
 function ScorerConfigPanel({
   scorerId,
-  scorerName,
-  description,
   samplingConfig,
-  onDescriptionChange,
   onSamplingChange,
-  onRemove,
   readOnly = false,
   schema,
   rules,
@@ -218,81 +247,55 @@ function ScorerConfigPanel({
   };
 
   return (
-    <div className="rounded-md border border-border1 overflow-hidden">
-      <div className="bg-surface2 p-3 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Icon size="sm">
-              <JudgeIcon className="text-neutral3" />
-            </Icon>
-            <span className="text-xs font-medium text-icon6">{scorerName}</span>
-          </div>
-          {!readOnly && (
-            <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
-              <Trash2 />
-            </IconButton>
-          )}
-        </div>
-
-        <Textarea
-          id={`description-${scorerId}`}
-          value={description}
-          onChange={e => onDescriptionChange(e.target.value)}
-          placeholder="Custom description for this scorer..."
-          className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
-          size="sm"
+    <div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">
+          Sampling
+        </Label>
+        <RadioGroup
+          id={`sampling-type-${scorerId}`}
+          value={samplingType}
+          onValueChange={handleTypeChange}
+          className="flex flex-col gap-2"
           disabled={readOnly}
-        />
+        >
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
+            <Label htmlFor={`${scorerId}-none`} className="text-ui-xs text-icon5 cursor-pointer">
+              None (evaluate all)
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
+            <Label htmlFor={`${scorerId}-ratio`} className="text-ui-xs text-icon5 cursor-pointer">
+              Ratio (percentage)
+            </Label>
+          </div>
+        </RadioGroup>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">
-            Sampling
-          </Label>
-          <RadioGroup
-            id={`sampling-type-${scorerId}`}
-            value={samplingType}
-            onValueChange={handleTypeChange}
-            className="flex flex-col gap-2"
-            disabled={readOnly}
-          >
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-              <Label htmlFor={`${scorerId}-none`} className="text-sm text-icon5 cursor-pointer">
-                None (evaluate all)
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-              <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-icon5 cursor-pointer">
-                Ratio (percentage)
-              </Label>
-            </div>
-          </RadioGroup>
-
-          {samplingType === 'ratio' && (
-            <div className="flex flex-col gap-1.5 mt-1">
-              <Label htmlFor={`rate-${scorerId}`} className="text-xs text-icon4">
-                Sample Rate (0-1)
-              </Label>
-              <Input
-                id={`rate-${scorerId}`}
-                type="number"
-                min="0"
-                max="1"
-                step="0.1"
-                value={samplingConfig?.rate ?? 0.1}
-                onChange={e => handleRateChange(parseFloat(e.target.value))}
-                className="h-8"
-                disabled={readOnly}
-              />
-            </div>
-          )}
-        </div>
+        {samplingType === 'ratio' && (
+          <div className="flex flex-col gap-1.5 mt-2">
+            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-icon4">
+              Sample Rate (0-1)
+            </Label>
+            <Input
+              id={`rate-${scorerId}`}
+              type="number"
+              min="0"
+              max="1"
+              step="0.1"
+              value={samplingConfig?.rate ?? 0.1}
+              onChange={e => handleRateChange(parseFloat(e.target.value))}
+              className="h-8"
+              disabled={readOnly}
+            />
+          </div>
+        )}
       </div>
 
       {showRulesSection && (
-        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border1 bg-surface2">
-          <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2">
+        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border1 pt-2">
+          <CollapsibleTrigger className="flex items-center gap-2 w-full">
             <Icon>
               <ChevronRight
                 className={cn('text-icon3 transition-transform', {

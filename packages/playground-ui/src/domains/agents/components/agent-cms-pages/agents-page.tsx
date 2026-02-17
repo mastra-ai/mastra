@@ -95,7 +95,7 @@ export function AgentsPage() {
           <SectionHeader
             title="Sub-Agents"
             subtitle={`Select sub-agents for this agent to delegate to.${count > 0 ? ` (${count} selected)` : ''}`}
-            icon={<AgentIcon className="text-accent1" />}
+            icon={<AgentIcon />}
           />
           {!readOnly && (
             <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
@@ -124,7 +124,7 @@ export function AgentsPage() {
                 return (
                   <Entity key={agent.value} className="bg-surface2">
                     <div
-                      className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
+                      className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
                       style={{ backgroundColor: bg, color: text }}
                     >
                       <Icon size="lg">

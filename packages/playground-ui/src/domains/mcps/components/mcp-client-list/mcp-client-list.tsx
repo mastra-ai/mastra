@@ -145,7 +145,7 @@ export function MCPClientList() {
                   onClick={() => setViewIndex(index)}
                 >
                   <div
-                    className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
+                    className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
                     style={{ backgroundColor: bg, color: text }}
                   >
                     <Icon>

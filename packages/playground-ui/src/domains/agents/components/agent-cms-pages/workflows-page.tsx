@@ -71,7 +71,7 @@ export function WorkflowsPage() {
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}
-          icon={<WorkflowIcon className="text-accent3" />}
+          icon={<WorkflowIcon />}
         />
 
         <SubSectionRoot>
@@ -93,7 +93,7 @@ export function WorkflowsPage() {
                 return (
                   <Entity key={workflow.value} className="bg-surface2">
                     <div
-                      className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
+                      className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
                       style={{ backgroundColor: bg, color: text }}
                     >
                       <Icon size="lg">
