@@ -31,6 +31,7 @@
  */
 
 import type { IMastraLogger } from '../logger';
+import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
@@ -53,6 +54,14 @@ import type { WorkspaceStatus } from './types';
 // =============================================================================
 
 /**
+ * A function that resolves a WorkspaceFilesystem dynamically based on request context.
+ * Called on each tool invocation, allowing different filesystems per request.
+ */
+export type WorkspaceFilesystemResolver = (context: {
+  requestContext: RequestContext;
+}) => WorkspaceFilesystem | Promise<WorkspaceFilesystem>;
+
+/**
  * Configuration for creating a Workspace.
  * Users pass provider instances directly.
  *
@@ -72,11 +81,15 @@ export interface WorkspaceConfig<
   name?: string;
 
   /**
-   * Filesystem provider instance.
-   * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
-   * Extend MastraFilesystem for automatic logger integration.
+   * Filesystem provider instance, or a resolver function for dynamic per-request filesystems.
+   *
+   * Static: Pass a LocalFilesystem, AgentFS, or any WorkspaceFilesystem instance.
+   * Dynamic: Pass a function `({ requestContext }) => WorkspaceFilesystem` to resolve
+   * a different filesystem per request. The resolver is called at tool execution time.
+   *
+   * Extend MastraFilesystem for automatic logger integration (static instances only).
    */
-  filesystem?: TFilesystem;
+  filesystem?: TFilesystem | WorkspaceFilesystemResolver;
 
   /**
    * Sandbox provider instance.
@@ -374,6 +387,7 @@ export class Workspace<
 
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
+  private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
@@ -404,6 +418,9 @@ export class Workspace<
           this._sandbox.mounts.setOnMount(config.onMount);
         }
       }
+    } else if (typeof config.filesystem === 'function') {
+      // Dynamic filesystem resolver — stored separately, no static _fs instance
+      this._filesystemResolver = config.filesystem as WorkspaceFilesystemResolver;
     } else {
       this._fs = config.filesystem;
     }
@@ -457,7 +474,7 @@ export class Workspace<
 
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
-    if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
+    if (!this._fs && !this._filesystemResolver && !this._sandbox && !this.hasSkillsConfig()) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skills', 'NO_PROVIDERS');
     }
   }
@@ -504,6 +521,30 @@ export class Workspace<
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
+  }
+
+  /**
+   * Returns true if a filesystem is configured, either as a static instance or a resolver function.
+   */
+  hasFilesystemConfig(): boolean {
+    return this._fs !== undefined || this._filesystemResolver !== undefined;
+  }
+
+  /**
+   * Resolve the filesystem for a given request context.
+   * When a resolver function is configured, calls it with the provided requestContext.
+   * When a static filesystem is configured, returns it directly.
+   * Returns undefined if no filesystem is configured.
+   */
+  async resolveFilesystem({
+    requestContext,
+  }: {
+    requestContext: RequestContext;
+  }): Promise<WorkspaceFilesystem | undefined> {
+    if (this._filesystemResolver) {
+      return await this._filesystemResolver({ requestContext });
+    }
+    return this._fs;
   }
 
   /**
@@ -843,6 +884,7 @@ export class Workspace<
    */
   __setLogger(logger: IMastraLogger): void {
     // Propagate logger to filesystem provider if it extends MastraFilesystem
+    // Skip when using a resolver — no static instance to set logger on
     if (this._fs instanceof MastraFilesystem) {
       this._fs.__setLogger(logger);
     }

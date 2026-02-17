@@ -673,6 +673,138 @@ describe('Dynamic workspace configuration', () => {
   });
 });
 
+describe('Dynamic filesystem resolver in auto-injected workspace tools', () => {
+  let tempDirA: string;
+  let tempDirB: string;
+
+  beforeEach(async () => {
+    tempDirA = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dynfs-a-'));
+    tempDirB = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-dynfs-b-'));
+  });
+
+  afterEach(async () => {
+    for (const dir of [tempDirA, tempDirB]) {
+      try {
+        await fs.rm(dir, { recursive: true, force: true });
+      } catch {
+        // Ignore
+      }
+    }
+  });
+
+  it('should resolve filesystem per-request in auto-injected read_file tool', async () => {
+    // Create different content in each directory
+    await fs.writeFile(path.join(tempDirA, 'config.txt'), 'admin config');
+    await fs.writeFile(path.join(tempDirB, 'config.txt'), 'user config');
+
+    // Single workspace with dynamic filesystem resolver
+    const workspace = new Workspace({
+      id: 'dynamic-fs-workspace',
+      filesystem: ({ requestContext }: { requestContext: RequestContext }) => {
+        const role = requestContext.get('role') as string;
+        return role === 'admin'
+          ? new LocalFilesystem({ basePath: tempDirA })
+          : new LocalFilesystem({ basePath: tempDirB });
+      },
+    });
+
+    // Mock model that calls mastra_workspace_read_file
+    const readFileMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'tool-call',
+            toolCallType: 'function',
+            toolCallId: 'call-read-1',
+            toolName: 'mastra_workspace_read_file',
+            input: '{"path":"/config.txt","showLineNumbers":false}',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'dynamic-fs-agent',
+      name: 'Dynamic FS Agent',
+      instructions: 'You are an agent with dynamic filesystem.',
+      model: readFileMockModel,
+      workspace,
+    });
+
+    // Call as admin — should read from tempDirA
+    const adminCtx = new RequestContext([['role', 'admin']]);
+    const adminResponse = await agent.generate('Read config', { requestContext: adminCtx });
+    const adminResult = adminResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
+      ?.payload?.result;
+    expect(adminResult?.content).toBe('admin config');
+
+    // Call as user — should read from tempDirB
+    const userCtx = new RequestContext([['role', 'user']]);
+    const userResponse = await agent.generate('Read config', { requestContext: userCtx });
+    const userResult = userResponse.toolResults.find((r: any) => r.payload.toolName === 'mastra_workspace_read_file')
+      ?.payload?.result;
+    expect(userResult?.content).toBe('user config');
+  });
+
+  it('should block writes on read-only resolved filesystem via auto-injected tools', async () => {
+    // Single workspace that resolves to read-only filesystem
+    const workspace = new Workspace({
+      id: 'readonly-resolver-workspace',
+      filesystem: () => new LocalFilesystem({ basePath: tempDirA, readOnly: true }),
+    });
+
+    // Mock model that calls mastra_workspace_write_file
+    const writeFileMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'tool-calls',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'tool-call',
+            toolCallType: 'function',
+            toolCallId: 'call-write-1',
+            toolName: 'mastra_workspace_write_file',
+            input: '{"path":"/test.txt","content":"should fail"}',
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'readonly-resolver-agent',
+      name: 'ReadOnly Resolver Agent',
+      instructions: 'You are an agent.',
+      model: writeFileMockModel,
+      workspace,
+    });
+
+    const response = await agent.generate('Write a file', { requestContext: new RequestContext() });
+    const writeResult = response.toolResults.find(
+      (r: any) => r.payload.toolName === 'mastra_workspace_write_file',
+    )?.payload;
+
+    // The tool error is caught by the framework and serialized into result
+    expect(writeResult?.result?.message).toContain('read-only');
+    expect(writeResult?.result?.cause?.code).toBe('READ_ONLY');
+  });
+});
+
 // Note: Processor workspace integration (passing workspace to/from processors) is not yet implemented.
 // The types (ProcessInputStepArgs.workspace, ProcessInputStepResult.workspace) were added to define
 // the interface, but the execution flow doesn't yet pass workspace to processors or handle
