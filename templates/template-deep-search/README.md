@@ -42,17 +42,14 @@ This starts Mastra Studio at [localhost:4111](http://localhost:4111).
 2. The workflow asks a few clarifying questions — answer them and resume
 3. Watch the console as it searches, evaluates, and iterates
 
-```
+```bash
 generateQueries start    { initialQuery: "best espresso machine", gaps: 0 }
 search query done        { results: 10 }
 evaluateResults done     { answerIsSatisfactory: false, gaps: ["pricing"] }
 generateQueries start    { gaps: 1 }
-...
 ```
 
 When it's satisfied, you get a sourced answer.
-
----
 
 ## About Mastra templates
 
