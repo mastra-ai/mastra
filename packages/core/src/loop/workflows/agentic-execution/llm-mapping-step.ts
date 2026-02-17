@@ -289,6 +289,34 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           rest.messageList.add(toolResultMessage, 'response');
         }
 
+        // Persist provider-executed tool results (e.g. Anthropic web_search) so
+        // MessageMerger updates their invocations from state:"call" to state:"result".
+        // Without this, they stay at "call" in the DB and cause HTTP 400 on resume.
+        const providerExecutedToolCalls = inputData.filter(toolCall => toolCall.providerExecuted);
+        if (providerExecutedToolCalls.length > 0) {
+          const providerResultMessage: MastraDBMessage = {
+            id: toolResultMessageId || '',
+            role: 'assistant' as const,
+            content: {
+              format: 2,
+              parts: providerExecutedToolCalls.map(toolCall => ({
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  args: toolCall.args,
+                  result: toolCall.result,
+                },
+                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                providerExecuted: true as const,
+              })),
+            },
+            createdAt: new Date(),
+          };
+          rest.messageList.add(providerResultMessage, 'response');
+        }
+
         return {
           ...initialResult,
           messages: {

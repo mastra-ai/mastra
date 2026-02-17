@@ -504,7 +504,7 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
     });
   });
 
-  it('should exclude provider-executed tools from the tool-result message added to messageList', async () => {
+  it('should split client-executed and provider-executed tools into separate messageList entries', async () => {
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
@@ -523,25 +523,26 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
 
     await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // messageList.add should be called with a tool-result message
-    expect(messageList.add).toHaveBeenCalled();
+    expect(messageList.add).toHaveBeenCalledTimes(2);
 
-    // Find the tool-result message (the one with tool-invocation parts at state: 'result')
     const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
-    const toolResultMsg = addCalls.find(([msg]: [any]) =>
-      msg.content?.parts?.some((p: any) => p.toolInvocation?.state === 'result'),
-    );
-    expect(toolResultMsg).toBeDefined();
 
-    const parts = toolResultMsg![0].content.parts;
-    const toolNames = parts.map((p: any) => p.toolInvocation.toolName);
+    // First call: client-executed tools only
+    const clientMsg = addCalls[0][0];
+    const clientToolNames = clientMsg.content.parts.map((p: any) => p.toolInvocation.toolName);
+    expect(clientToolNames).toContain('get_company_info');
+    expect(clientToolNames).not.toContain('web_search_20250305');
 
-    // Only the client-executed tool should be in the message
-    expect(toolNames).toContain('get_company_info');
-    expect(toolNames).not.toContain('web_search_20250305');
+    // Second call: provider-executed tools with providerExecuted flag
+    const providerMsg = addCalls[1][0];
+    const providerParts = providerMsg.content.parts;
+    expect(providerParts).toHaveLength(1);
+    expect(providerParts[0].toolInvocation.toolName).toBe('web_search_20250305');
+    expect(providerParts[0].toolInvocation.state).toBe('result');
+    expect(providerParts[0].providerExecuted).toBe(true);
   });
 
-  it('should not add a tool-result message to messageList when all tools are provider-executed', async () => {
+  it('should add a provider-executed tool-result message to messageList to update state from call to result', async () => {
     const inputData: ToolCallOutput[] = [
       {
         toolCallId: 'call-1',
@@ -554,8 +555,14 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
 
     await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // messageList.add should NOT be called — no client-executed tools to record
-    expect(messageList.add).not.toHaveBeenCalled();
+    expect(messageList.add).toHaveBeenCalledTimes(1);
+
+    const addCall = (messageList.add as ReturnType<typeof vi.fn>).mock.calls[0];
+    const msg = addCall[0];
+    expect(msg.content.parts).toHaveLength(1);
+    expect(msg.content.parts[0].toolInvocation.state).toBe('result');
+    expect(msg.content.parts[0].toolInvocation.toolName).toBe('web_search_20250305');
+    expect(msg.content.parts[0].providerExecuted).toBe(true);
   });
 
   it('should still emit stream chunks for provider-executed tools even though they are excluded from messageList', async () => {

@@ -62,7 +62,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect((result[0]!.parts[0] as any).providerExecuted).toBe(true);
   });
 
-  it('should keep output-available parts regardless of providerExecuted flag', () => {
+  it('should keep output-available parts for client-executed tools', () => {
     const msg = makeMessage([
       makeToolPart({
         type: 'tool-get_info',
@@ -79,7 +79,7 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect(result[0]!.parts).toHaveLength(1);
   });
 
-  it('should handle mixed parallel tool calls: keep output-available + provider-executed input-available, drop regular input-available', () => {
+  it('should handle mid-loop parallel calls: keep client output-available + provider input-available, drop regular input-available', () => {
     const msg = makeMessage([
       // Regular tool with result — keep
       makeToolPart({
@@ -115,6 +115,71 @@ describe('sanitizeV5UIMessages — provider-executed tool handling', () => {
     expect(toolCallIds).toContain('call-1');
     expect(toolCallIds).toContain('call-2');
     expect(toolCallIds).not.toContain('call-3');
+  });
+
+  it('should strip output-available provider-executed tool parts so completed server_tool_use blocks are not sent back to the LLM', () => {
+    const msg = makeMessage([
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'call-1',
+        state: 'output-available',
+        input: { query: 'anthropic' },
+        output: { results: ['result1'] },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], true);
+
+    // Entire message dropped — its only part was a completed provider-executed tool
+    expect(result).toHaveLength(0);
+  });
+
+  it('should strip output-error provider-executed tool parts', () => {
+    const msg = makeMessage([
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'call-1',
+        state: 'output-error',
+        input: { query: 'test' },
+        providerExecuted: true,
+      } as any),
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], true);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('should handle resume scenario: keep client output-available, strip completed provider output-available', () => {
+    const msg = makeMessage([
+      // Client-executed tool with result — keep (needs to go back in prompt)
+      makeToolPart({
+        type: 'tool-get_company_info',
+        toolCallId: 'call-1',
+        state: 'output-available',
+        input: { name: 'test' },
+        output: { company: 'Acme' },
+      }),
+      // Provider-executed tool already completed — strip (provider handles internally)
+      makeToolPart({
+        type: 'tool-web_search_20250305',
+        toolCallId: 'call-2',
+        state: 'output-available',
+        input: { query: 'test' },
+        output: { results: ['result1'] },
+        providerExecuted: true,
+      }),
+    ]);
+
+    const result = sanitizeV5UIMessages([msg], true);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.parts).toHaveLength(1);
+
+    const toolCallIds = result[0]!.parts.map((p: any) => p.toolCallId);
+    expect(toolCallIds).toContain('call-1');
+    expect(toolCallIds).not.toContain('call-2');
   });
 
   it('should not filter provider-executed tools when filterIncompleteToolCalls is false', () => {
