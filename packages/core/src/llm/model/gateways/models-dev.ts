@@ -15,7 +15,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -211,7 +211,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKey,
         }).chat(modelId);
       case 'anthropic':
-        return createAnthropic({ apiKey })(modelId);
+        return createAnthropic({ apiKey, headers: { 'User-Agent': MASTRA_USER_AGENT, ...headers } })(modelId);
       case 'mistral':
         return createMistral({ apiKey })(modelId);
       case 'groq':

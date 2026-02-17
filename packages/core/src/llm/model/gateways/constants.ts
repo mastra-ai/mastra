@@ -1,3 +1,17 @@
+import { createRequire } from 'node:module';
+
+function getMastraUserAgent(): string {
+  try {
+    const require = createRequire(import.meta.url || 'file://');
+    const pkg = require('@mastra/core/package.json') as { version: string };
+    return `mastra/${pkg.version}`;
+  } catch {
+    return 'mastra';
+  }
+}
+
+export const MASTRA_USER_AGENT = getMastraUserAgent();
+
 // anything in this list will use the corresponding ai sdk package instead of using openai-compat endpoints
 export const PROVIDERS_WITH_INSTALLED_PACKAGES = [
   'anthropic',
