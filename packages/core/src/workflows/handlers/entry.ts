@@ -15,6 +15,68 @@ import type {
   WorkflowRunStatus,
 } from '../types';
 
+/**
+ * After resuming a single step within a parallel or conditional block, check whether
+ * all relevant branch steps are now complete and build the appropriate block-level result.
+ *
+ * For parallel blocks every step must complete; for conditional blocks only the steps
+ * that were actually executed (have entries in stepResults) are considered.
+ */
+function buildResumedBlockResult(
+  entrySteps: StepFlowEntry[],
+  stepResults: Record<string, StepResult<any, any, any, any>>,
+  executionContext: ExecutionContext,
+  opts?: { onlyExecutedSteps?: boolean },
+): any {
+  const stepsToCheck = opts?.onlyExecutedSteps
+    ? entrySteps.filter(s => s.type === 'step' && stepResults[s.step.id] !== undefined)
+    : entrySteps;
+
+  const allComplete = stepsToCheck.every(s => {
+    if (s.type === 'step') {
+      const r = stepResults[s.step.id];
+      return r && r.status === 'success';
+    }
+    return true;
+  });
+
+  let result: any;
+  if (allComplete) {
+    result = {
+      status: 'success',
+      output: entrySteps.reduce((acc: Record<string, any>, s) => {
+        if (s.type === 'step') {
+          const r = stepResults[s.step.id];
+          if (r && r.status === 'success') {
+            acc[s.step.id] = r.output;
+          }
+        }
+        return acc;
+      }, {}),
+    };
+  } else {
+    const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
+    const suspendData =
+      stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
+    result = {
+      status: 'suspended',
+      payload: suspendData,
+      suspendPayload: suspendData,
+      suspendedAt: Date.now(),
+    };
+  }
+
+  if (result.status === 'suspended') {
+    entrySteps.forEach((s, stepIndex) => {
+      if (s.type === 'step' && stepResults[s.step.id]?.status === 'suspended') {
+        executionContext.suspendedPaths[s.step.id] = [...executionContext.executionPath, stepIndex];
+      }
+    });
+  }
+
+  return result;
+}
+
 export interface PersistStepUpdateParams {
   workflowId: string;
   runId: string;
@@ -197,62 +259,11 @@ export async function executeEntry(
       perStep,
     });
 
-    // After resuming one parallel step, check if ALL parallel steps are complete
     // Apply context changes from resumed step
     engine.applyMutableContext(executionContext, resumedStepResult.mutableContext);
     Object.assign(stepResults, resumedStepResult.stepResults);
 
-    // Check the status of all parallel steps in this block
-    const allParallelStepsComplete = entry.steps.every(parallelStep => {
-      if (parallelStep.type === 'step') {
-        const stepResult = stepResults[parallelStep.step.id];
-        return stepResult && stepResult.status === 'success';
-      }
-      return true; // Non-step entries are considered complete
-    });
-
-    if (allParallelStepsComplete) {
-      // All parallel steps are complete, return success for the parallel block
-      execResults = {
-        status: 'success',
-        output: entry.steps.reduce((acc: Record<string, any>, parallelStep) => {
-          if (parallelStep.type === 'step') {
-            const stepResult = stepResults[parallelStep.step.id];
-            if (stepResult && stepResult.status === 'success') {
-              acc[parallelStep.step.id] = stepResult.output;
-            }
-          }
-          return acc;
-        }, {}),
-      };
-    } else {
-      // Some parallel steps are still suspended, keep the parallel block suspended
-      const stillSuspended = entry.steps.find(parallelStep => {
-        if (parallelStep.type === 'step') {
-          const stepResult = stepResults[parallelStep.step.id];
-          return stepResult && stepResult.status === 'suspended';
-        }
-        return false;
-      });
-      execResults = {
-        status: 'suspended',
-        payload:
-          stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {},
-      };
-    }
-
-    // For suspended parallel blocks, maintain suspended paths for non-resumed steps
-    if (execResults.status === 'suspended') {
-      entry.steps.forEach((parallelStep, stepIndex) => {
-        if (parallelStep.type === 'step') {
-          const stepResult = stepResults[parallelStep.step.id];
-          if (stepResult && stepResult.status === 'suspended') {
-            // Ensure this step remains in suspendedPaths
-            executionContext.suspendedPaths[parallelStep.step.id] = [...executionContext.executionPath, stepIndex];
-          }
-        }
-      });
-    }
+    execResults = buildResumedBlockResult(entry.steps, stepResults, executionContext);
 
     return {
       result: execResults,
@@ -280,6 +291,95 @@ export async function executeEntry(
       disableScorers,
       perStep,
     });
+  } else if (resume?.resumePath?.length && entry.type === 'conditional') {
+    // Resume-aware handling for conditional entries: skip condition re-evaluation
+    // and go directly to the branch step identified by the resume path.
+    // This mirrors the parallel resume handling above.
+    const idx = resume.resumePath.shift();
+    const branchStep = entry.steps[idx!]!;
+
+    let branchResult: EntryExecutionResult;
+
+    if (branchStep.type !== 'step') {
+      // Recurse through executeEntry for nested block types (parallel, conditional, etc.)
+      branchResult = await executeEntry(engine, {
+        workflowId,
+        runId,
+        resourceId,
+        entry: branchStep,
+        prevStep,
+        serializedStepGraph,
+        stepResults,
+        resume,
+        executionContext: {
+          workflowId,
+          runId,
+          executionPath: [...executionContext.executionPath, idx!],
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
+          retryConfig: executionContext.retryConfig,
+          activeStepsPath: executionContext.activeStepsPath,
+          state: executionContext.state,
+        },
+        tracingContext,
+        pubsub,
+        abortController,
+        requestContext,
+        outputWriter,
+        disableScorers,
+        perStep,
+      });
+    } else {
+      // Use the step's stored payload from the snapshot as prevOutput, since the previous
+      // step (e.g., a .map() step) may have a non-deterministic ID that doesn't match
+      // between workflow constructions.
+      const resumePrevOutput = stepResults[branchStep.step.id]?.payload ?? prevOutput;
+
+      branchResult = await engine.executeStep({
+        workflowId,
+        runId,
+        resourceId,
+        step: branchStep.step,
+        prevOutput: resumePrevOutput,
+        stepResults,
+        serializedStepGraph,
+        resume,
+        restart,
+        timeTravel,
+        executionContext: {
+          workflowId,
+          runId,
+          executionPath: [...executionContext.executionPath, idx!],
+          suspendedPaths: executionContext.suspendedPaths,
+          resumeLabels: executionContext.resumeLabels,
+          retryConfig: executionContext.retryConfig,
+          activeStepsPath: executionContext.activeStepsPath,
+          state: executionContext.state,
+        },
+        tracingContext,
+        pubsub,
+        abortController,
+        requestContext,
+        outputWriter,
+        disableScorers,
+        perStep,
+      });
+    }
+
+    // Apply context changes from resumed step
+    engine.applyMutableContext(executionContext, branchResult.mutableContext);
+    Object.assign(stepResults, branchResult.stepResults);
+
+    // For conditionals, only check steps that were actually executed (have results).
+    // Branches whose conditions were false during initial execution should be ignored.
+    execResults = buildResumedBlockResult(entry.steps, stepResults, executionContext, { onlyExecutedSteps: true });
+
+    return {
+      result: execResults,
+      stepResults,
+      mutableContext: engine.buildMutableContext(executionContext),
+      requestContext: branchResult.requestContext,
+    };
   } else if (entry.type === 'conditional') {
     execResults = await engine.executeConditional({
       workflowId,
