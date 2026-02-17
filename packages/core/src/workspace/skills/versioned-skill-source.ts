@@ -105,6 +105,11 @@ export class VersionedSkillSource implements SkillSource {
       throw new Error(`Blob not found for hash ${entry.blobHash} (file: ${path})`);
     }
 
+    // Decode base64-encoded binary content back to Buffer
+    if (entry.encoding === 'base64') {
+      return Buffer.from(blob.content, 'base64');
+    }
+
     return blob.content;
   }
 

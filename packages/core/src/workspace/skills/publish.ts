@@ -27,9 +27,12 @@ export interface SkillPublishResult {
 // =============================================================================
 
 /**
- * Compute SHA-256 hex hash of content.
+ * Compute SHA-256 hex hash of content (string or Buffer).
  */
-function hashContent(content: string): string {
+function hashContent(content: string | Buffer): string {
+  if (Buffer.isBuffer(content)) {
+    return createHash('sha256').update(content).digest('hex');
+  }
   return createHash('sha256').update(content, 'utf-8').digest('hex');
 }
 
@@ -59,16 +62,39 @@ function detectMimeType(filename: string): string | undefined {
 }
 
 /**
+ * Whether a MIME type represents binary content that cannot be safely stored as UTF-8 text.
+ */
+function isBinaryMimeType(mimeType: string | undefined): boolean {
+  if (!mimeType) return false;
+  // Text-based types are safe for UTF-8
+  if (mimeType.startsWith('text/')) return false;
+  // JSON and YAML are text-safe
+  if (mimeType === 'application/json') return false;
+  // SVG is XML-based text
+  if (mimeType === 'image/svg+xml') return false;
+  // Everything else (image/png, image/jpeg, application/octet-stream, etc.) is binary
+  return true;
+}
+
+interface WalkedFile {
+  path: string;
+  /** Text content (UTF-8) or raw binary content (Buffer) */
+  content: string | Buffer;
+  /** Whether this file is binary */
+  isBinary: boolean;
+}
+
+/**
  * Recursively walk a directory in a SkillSource, returning all files
- * with their relative paths and content.
+ * with their relative paths and content. Binary files are returned as Buffers.
  */
 async function walkSkillDirectory(
   source: SkillSource,
   basePath: string,
   currentPath: string = basePath,
-): Promise<{ path: string; content: string }[]> {
+): Promise<WalkedFile[]> {
   const entries: SkillSourceEntry[] = await source.readdir(currentPath);
-  const files: { path: string; content: string }[] = [];
+  const files: WalkedFile[] = [];
 
   for (const entry of entries) {
     const entryPath = joinPath(currentPath, entry.name);
@@ -78,10 +104,19 @@ async function walkSkillDirectory(
       files.push(...subFiles);
     } else {
       const rawContent = await source.readFile(entryPath);
-      const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
-      // Compute relative path from basePath
       const relativePath = entryPath.substring(basePath.length + 1);
-      files.push({ path: relativePath, content });
+      const mimeType = detectMimeType(entry.name);
+      const isBinary = isBinaryMimeType(mimeType);
+
+      if (isBinary) {
+        // Keep binary content as Buffer
+        const buf = Buffer.isBuffer(rawContent) ? rawContent : Buffer.from(rawContent, 'utf-8');
+        files.push({ path: relativePath, content: buf, isBinary: true });
+      } else {
+        // Text content as string
+        const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
+        files.push({ path: relativePath, content, isBinary: false });
+      }
     }
   }
 
@@ -133,22 +168,49 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
   for (const file of files) {
     const hash = hashContent(file.content);
     const mimeType = detectMimeType(file.path);
-    const size = Buffer.byteLength(file.content, 'utf-8');
 
-    treeEntries[file.path] = {
-      blobHash: hash,
-      size,
-      mimeType,
-    };
+    if (file.isBinary) {
+      // Binary file: store as base64-encoded string
+      const buf = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content as string);
+      const size = buf.length;
+      const base64Content = buf.toString('base64');
 
-    if (!blobMap.has(hash)) {
-      blobMap.set(hash, {
-        hash,
-        content: file.content,
+      treeEntries[file.path] = {
+        blobHash: hash,
         size,
         mimeType,
-        createdAt: now,
-      });
+        encoding: 'base64',
+      };
+
+      if (!blobMap.has(hash)) {
+        blobMap.set(hash, {
+          hash,
+          content: base64Content,
+          size,
+          mimeType,
+          createdAt: now,
+        });
+      }
+    } else {
+      // Text file: store as UTF-8 string
+      const content = file.content as string;
+      const size = Buffer.byteLength(content, 'utf-8');
+
+      treeEntries[file.path] = {
+        blobHash: hash,
+        size,
+        mimeType,
+      };
+
+      if (!blobMap.has(hash)) {
+        blobMap.set(hash, {
+          hash,
+          content,
+          size,
+          mimeType,
+          createdAt: now,
+        });
+      }
     }
   }
 
@@ -161,7 +223,7 @@ export async function collectSkillForPublish(source: SkillSource, skillPath: str
     throw new Error(`SKILL.md not found in ${skillPath}`);
   }
 
-  const parsed = matter(skillMdFile.content);
+  const parsed = matter(skillMdFile.content as string);
   const frontmatter = parsed.data;
   const instructions = parsed.content.trim();
 

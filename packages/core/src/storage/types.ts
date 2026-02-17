@@ -1660,6 +1660,12 @@ export interface SkillVersionTreeEntry {
   size: number;
   /** Optional MIME type */
   mimeType?: string;
+  /**
+   * Content encoding used in the blob store.
+   * - 'utf-8' (default): content stored as UTF-8 text
+   * - 'base64': content stored as base64-encoded string (for binary files like images)
+   */
+  encoding?: 'utf-8' | 'base64';
 }
 
 /**

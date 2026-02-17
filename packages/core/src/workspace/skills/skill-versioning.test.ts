@@ -897,3 +897,298 @@ describe('WorkspaceSkillsImpl with VersionedSkillSource', () => {
     expect(skill!.instructions).toBe('# API Design\n\nFollow RESTful conventions.');
   });
 });
+
+// =============================================================================
+// 7. Binary asset support
+// =============================================================================
+
+/**
+ * Create a mock SkillSource that supports both text (string) and binary (Buffer) content.
+ */
+function createMockBinarySource(files: Record<string, string | Buffer>): SkillSource {
+  const fileMap = new Map<string, string | Buffer>(Object.entries(files));
+  const directories = new Set<string>();
+  directories.add('');
+
+  for (const filePath of Object.keys(files)) {
+    const parts = filePath.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      directories.add(parts.slice(0, i).join('/'));
+    }
+  }
+
+  return {
+    exists: vi.fn(async (path: string): Promise<boolean> => {
+      return fileMap.has(path) || directories.has(path);
+    }),
+    stat: vi.fn(async (path: string): Promise<SkillSourceStat> => {
+      const name = path.split('/').pop() || path || '.';
+      if (fileMap.has(path)) {
+        const content = fileMap.get(path)!;
+        const size = Buffer.isBuffer(content) ? content.length : Buffer.byteLength(content, 'utf-8');
+        return {
+          name,
+          type: 'file',
+          size,
+          createdAt: new Date('2024-01-01'),
+          modifiedAt: new Date('2024-01-01'),
+        };
+      }
+      if (directories.has(path)) {
+        return {
+          name,
+          type: 'directory',
+          size: 0,
+          createdAt: new Date('2024-01-01'),
+          modifiedAt: new Date('2024-01-01'),
+        };
+      }
+      throw new Error(`Path not found: ${path}`);
+    }),
+    readFile: vi.fn(async (path: string): Promise<string | Buffer> => {
+      const content = fileMap.get(path);
+      if (content === undefined) {
+        throw new Error(`File not found: ${path}`);
+      }
+      return content;
+    }),
+    readdir: vi.fn(async (path: string): Promise<SkillSourceEntry[]> => {
+      const prefix = path === '' ? '' : path + '/';
+      const seen = new Set<string>();
+      const entries: SkillSourceEntry[] = [];
+
+      for (const filePath of fileMap.keys()) {
+        if (!filePath.startsWith(prefix)) continue;
+        const remaining = filePath.slice(prefix.length);
+        const nextSegment = remaining.split('/')[0];
+        if (!nextSegment || seen.has(nextSegment)) continue;
+        seen.add(nextSegment);
+
+        const isDirectory = remaining.includes('/');
+        entries.push({
+          name: nextSegment,
+          type: isDirectory ? 'directory' : 'file',
+        });
+      }
+
+      return entries;
+    }),
+  };
+}
+
+describe('Binary asset support', () => {
+  // A small 4x1 red PNG image (valid PNG binary data)
+  const PNG_BYTES = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAQAAAABCAYAAAD5PA/NAAAADklEQVQI12P4z8BQDwAEgAF/QualzQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+
+  // A JPEG signature followed by some bytes
+  const JPEG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+  function createBinarySkillSource(
+    files: Record<string, string | Buffer>,
+    skillDir = 'my-skill',
+  ): { source: SkillSource; skillPath: string } {
+    const prefixed: Record<string, string | Buffer> = {};
+    for (const [key, value] of Object.entries(files)) {
+      prefixed[`${skillDir}/${key}`] = value;
+    }
+    return { source: createMockBinarySource(prefixed), skillPath: skillDir };
+  }
+
+  describe('collectSkillForPublish — binary files', () => {
+    it('should mark binary assets with encoding: base64 in tree entries', async () => {
+      const skillMd = createSkillMd(
+        { name: 'binary-skill', description: 'Binary test' },
+        '# Binary Skill\n\nHas images.',
+      );
+      const { source, skillPath } = createBinarySkillSource({
+        'SKILL.md': skillMd,
+        'assets/logo.png': PNG_BYTES,
+        'assets/photo.jpg': JPEG_BYTES,
+        'references/doc.md': '# Text reference',
+      });
+
+      const result = await collectSkillForPublish(source, skillPath);
+
+      // Binary files should have encoding: 'base64'
+      expect(result.tree.entries['assets/logo.png']!.encoding).toBe('base64');
+      expect(result.tree.entries['assets/photo.jpg']!.encoding).toBe('base64');
+
+      // Text files should not have encoding set (defaults to utf-8)
+      expect(result.tree.entries['SKILL.md']!.encoding).toBeUndefined();
+      expect(result.tree.entries['references/doc.md']!.encoding).toBeUndefined();
+    });
+
+    it('should store base64-encoded content for binary blobs', async () => {
+      const skillMd = createSkillMd({ name: 'binary-blob-skill', description: 'Binary blob test' }, '# Blob Skill');
+      const { source, skillPath } = createBinarySkillSource({
+        'SKILL.md': skillMd,
+        'assets/logo.png': PNG_BYTES,
+      });
+
+      const result = await collectSkillForPublish(source, skillPath);
+      const pngEntry = result.tree.entries['assets/logo.png']!;
+      const pngBlob = result.blobs.find(b => b.hash === pngEntry.blobHash)!;
+
+      // Content should be a base64 string
+      expect(typeof pngBlob.content).toBe('string');
+      // Decoding should produce the original bytes
+      expect(Buffer.from(pngBlob.content, 'base64')).toEqual(PNG_BYTES);
+    });
+
+    it('should compute correct size for binary files', async () => {
+      const skillMd = createSkillMd({ name: 'size-skill', description: 'Size test' }, '# Size Skill');
+      const { source, skillPath } = createBinarySkillSource({
+        'SKILL.md': skillMd,
+        'assets/logo.png': PNG_BYTES,
+      });
+
+      const result = await collectSkillForPublish(source, skillPath);
+
+      // Size should be the raw binary size, not the base64 size
+      expect(result.tree.entries['assets/logo.png']!.size).toBe(PNG_BYTES.length);
+    });
+
+    it('should hash binary content based on raw bytes', async () => {
+      const skillMd = createSkillMd({ name: 'hash-skill', description: 'Hash test' }, '# Hash Skill');
+      const { source, skillPath } = createBinarySkillSource({
+        'SKILL.md': skillMd,
+        'assets/logo.png': PNG_BYTES,
+      });
+
+      const result = await collectSkillForPublish(source, skillPath);
+      const expectedHash = createHash('sha256').update(PNG_BYTES).digest('hex');
+
+      expect(result.tree.entries['assets/logo.png']!.blobHash).toBe(expectedHash);
+    });
+
+    it('should deduplicate identical binary blobs', async () => {
+      const skillMd = createSkillMd({ name: 'dedup-bin-skill', description: 'Dedup binary test' }, '# Dedup Bin');
+      const { source, skillPath } = createBinarySkillSource({
+        'SKILL.md': skillMd,
+        'assets/logo.png': PNG_BYTES,
+        'assets/logo-copy.png': PNG_BYTES,
+      });
+
+      const result = await collectSkillForPublish(source, skillPath);
+
+      // Two tree entries but only one blob for the identical PNG
+      expect(result.tree.entries['assets/logo.png']!.blobHash).toBe(
+        result.tree.entries['assets/logo-copy.png']!.blobHash,
+      );
+      // 2 unique blobs: SKILL.md + PNG (deduplicated)
+      expect(result.blobs).toHaveLength(2);
+    });
+  });
+
+  describe('VersionedSkillSource — binary round-trip', () => {
+    it('should return Buffer when reading base64-encoded binary files', async () => {
+      const blobStore = new InMemoryBlobStore();
+      const blobHash = createHash('sha256').update(PNG_BYTES).digest('hex');
+      const base64Content = PNG_BYTES.toString('base64');
+
+      await blobStore.put({
+        hash: blobHash,
+        content: base64Content,
+        size: PNG_BYTES.length,
+        mimeType: 'image/png',
+        createdAt: new Date(),
+      });
+
+      const tree: SkillVersionTree = {
+        entries: {
+          'assets/logo.png': {
+            blobHash,
+            size: PNG_BYTES.length,
+            mimeType: 'image/png',
+            encoding: 'base64',
+          },
+        },
+      };
+
+      const source = new VersionedSkillSource(tree, blobStore, new Date());
+      const content = await source.readFile('assets/logo.png');
+
+      expect(Buffer.isBuffer(content)).toBe(true);
+      expect(content).toEqual(PNG_BYTES);
+    });
+
+    it('should return string when reading text files', async () => {
+      const blobStore = new InMemoryBlobStore();
+      const textContent = '# Hello\n\nWorld.';
+      const blobHash = createHash('sha256').update(textContent, 'utf-8').digest('hex');
+
+      await blobStore.put({
+        hash: blobHash,
+        content: textContent,
+        size: Buffer.byteLength(textContent, 'utf-8'),
+        mimeType: 'text/markdown',
+        createdAt: new Date(),
+      });
+
+      const tree: SkillVersionTree = {
+        entries: {
+          'SKILL.md': {
+            blobHash,
+            size: Buffer.byteLength(textContent, 'utf-8'),
+            mimeType: 'text/markdown',
+            // No encoding field — defaults to utf-8
+          },
+        },
+      };
+
+      const source = new VersionedSkillSource(tree, blobStore, new Date());
+      const content = await source.readFile('SKILL.md');
+
+      expect(typeof content).toBe('string');
+      expect(content).toBe(textContent);
+    });
+  });
+
+  describe('End-to-end: publish binary skill → read via VersionedSkillSource', () => {
+    it('should round-trip binary assets through publish and read', async () => {
+      const skillMd = createSkillMd(
+        { name: 'roundtrip-skill', description: 'Round-trip test' },
+        '# Round-Trip\n\nSkill with binary assets.',
+      );
+      const { source, skillPath } = createBinarySkillSource({
+        'SKILL.md': skillMd,
+        'assets/logo.png': PNG_BYTES,
+        'assets/photo.jpg': JPEG_BYTES,
+        'references/notes.md': '# Notes',
+      });
+
+      // 1. Collect (simulates publish)
+      const result = await collectSkillForPublish(source, skillPath);
+
+      // 2. Store blobs
+      const blobStore = new InMemoryBlobStore();
+      for (const blob of result.blobs) {
+        await blobStore.put(blob);
+      }
+
+      // 3. Read back via VersionedSkillSource
+      const versionedSource = new VersionedSkillSource(result.tree, blobStore, new Date());
+
+      // Binary files should come back as Buffers matching original data
+      const pngContent = await versionedSource.readFile('assets/logo.png');
+      expect(Buffer.isBuffer(pngContent)).toBe(true);
+      expect(pngContent).toEqual(PNG_BYTES);
+
+      const jpegContent = await versionedSource.readFile('assets/photo.jpg');
+      expect(Buffer.isBuffer(jpegContent)).toBe(true);
+      expect(jpegContent).toEqual(JPEG_BYTES);
+
+      // Text files should come back as strings
+      const mdContent = await versionedSource.readFile('SKILL.md');
+      expect(typeof mdContent).toBe('string');
+      expect(mdContent).toContain('# Round-Trip');
+
+      const notesContent = await versionedSource.readFile('references/notes.md');
+      expect(typeof notesContent).toBe('string');
+      expect(notesContent).toBe('# Notes');
+    });
+  });
+});
