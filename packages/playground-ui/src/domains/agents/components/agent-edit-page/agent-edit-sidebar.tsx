@@ -39,14 +39,10 @@ function RecursiveFieldRenderer({
               size="md"
               className="[&_input]:bg-surface3 w-full"
             />
-
-            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-surface3 w-full" />
-            <JSONSchemaForm.FieldRemove variant="light" size="md" className="shrink-0" />
-          </div>
-
-          <div className="flex flex-row gap-2 items-center">
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
+            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-surface3 w-full" />
+            <JSONSchemaForm.FieldRemove variant="light" size="md" className="shrink-0" />
           </div>
         </div>
 
