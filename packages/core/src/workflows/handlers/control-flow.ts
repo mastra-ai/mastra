@@ -6,7 +6,7 @@ import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { NESTED_WATCH_TOPIC_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction, Step } from '../step';
 import { getStepResult } from '../step';
@@ -50,6 +50,7 @@ export interface ExecuteParallelParams {
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
   pubsub: PubSub;
+  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -165,6 +166,7 @@ export async function executeParallel(
           currentSpan: parallelSpan,
         },
         pubsub,
+        nestedWatchTopic: params.nestedWatchTopic,
         abortController,
         requestContext,
         outputWriter,
@@ -248,6 +250,7 @@ export interface ExecuteConditionalParams {
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
   pubsub: PubSub;
+  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -334,6 +337,7 @@ export async function executeConditional(
               abortController?.abort();
             },
             [PUBSUB_SYMBOL]: pubsub,
+            [NESTED_WATCH_TOPIC_SYMBOL]: params.nestedWatchTopic,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
             engine: engine.getEngineContext(),
             abortSignal: abortController?.signal,
@@ -462,6 +466,7 @@ export async function executeConditional(
           currentSpan: conditionalSpan,
         },
         pubsub,
+        nestedWatchTopic: params.nestedWatchTopic,
         abortController,
         requestContext,
         outputWriter,
@@ -549,6 +554,7 @@ export interface ExecuteLoopParams {
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
   pubsub: PubSub;
+  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -624,6 +630,7 @@ export async function executeLoop(
         currentSpan: loopSpan,
       },
       pubsub,
+      nestedWatchTopic: params.nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -696,6 +703,7 @@ export async function executeLoop(
             abortController?.abort();
           },
           [PUBSUB_SYMBOL]: pubsub,
+          [NESTED_WATCH_TOPIC_SYMBOL]: params.nestedWatchTopic,
           [STREAM_FORMAT_SYMBOL]: executionContext.format,
           engine: engine.getEngineContext(),
           abortSignal: abortController?.signal,
@@ -767,6 +775,7 @@ export interface ExecuteForeachParams {
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
   pubsub: PubSub;
+  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -894,6 +903,7 @@ export async function executeForeach(
           prevOutput: item,
           tracingContext: { currentSpan: loopSpan },
           pubsub,
+          nestedWatchTopic: params.nestedWatchTopic,
           abortController,
           requestContext,
           skipEmits: true,

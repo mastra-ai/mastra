@@ -637,6 +637,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       forEachIndex?: number;
     };
     pubsub: PubSub;
+    nestedWatchTopic?: string;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -671,6 +672,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       restart,
       timeTravel,
       perStep,
+      nestedWatchTopic,
     } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
@@ -744,6 +746,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
         abortController: params.abortController,
         pubsub: params.pubsub,
+        nestedWatchTopic,
         requestContext: currentRequestContext,
         outputWriter: params.outputWriter,
         disableScorers,

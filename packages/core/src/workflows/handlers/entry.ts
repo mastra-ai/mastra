@@ -103,6 +103,7 @@ export interface ExecuteEntryParams {
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
   pubsub: PubSub;
+  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -128,6 +129,7 @@ export async function executeEntry(
     executionContext,
     tracingContext,
     pubsub,
+    nestedWatchTopic,
     abortController,
     requestContext,
     outputWriter,
@@ -154,6 +156,7 @@ export async function executeEntry(
       prevOutput,
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -190,6 +193,7 @@ export async function executeEntry(
       },
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -274,6 +278,7 @@ export async function executeEntry(
       executionContext,
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -294,6 +299,7 @@ export async function executeEntry(
       executionContext,
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -314,6 +320,7 @@ export async function executeEntry(
       executionContext,
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -335,6 +342,7 @@ export async function executeEntry(
       executionContext,
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -389,6 +397,7 @@ export async function executeEntry(
       executionContext,
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,
@@ -493,6 +502,7 @@ export async function executeEntry(
       executionContext,
       tracingContext,
       pubsub,
+      nestedWatchTopic,
       abortController,
       requestContext,
       outputWriter,

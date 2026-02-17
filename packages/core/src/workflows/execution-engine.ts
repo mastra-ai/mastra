@@ -163,6 +163,7 @@ export abstract class ExecutionEngine extends MastraBase {
       label?: string;
     };
     pubsub: PubSub;
+    nestedWatchTopic?: string;
     requestContext: RequestContext;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {

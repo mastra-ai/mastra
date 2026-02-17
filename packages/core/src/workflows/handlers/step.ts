@@ -8,7 +8,7 @@ import { EntityType, SpanType, wrapMastra } from '../../observability';
 import type { TracingContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { NESTED_WATCH_TOPIC_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
@@ -48,6 +48,7 @@ export interface ExecuteStepParams {
   };
   prevOutput: any;
   pubsub: PubSub;
+  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   skipEmits?: boolean;
@@ -393,6 +394,7 @@ export async function executeStep(
               }
             : undefined,
         [PUBSUB_SYMBOL]: pubsub,
+        [NESTED_WATCH_TOPIC_SYMBOL]: params.nestedWatchTopic,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,

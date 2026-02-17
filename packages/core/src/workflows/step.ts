@@ -6,7 +6,7 @@ import type { RequestContext } from '../request-context';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
-import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import type { NESTED_WATCH_TOPIC_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { OutputWriter, StepResult, StepMetadata } from './types';
 import type { AnyWorkflow } from './workflow';
 
@@ -58,6 +58,7 @@ export type ExecuteFunctionParams<
   };
   restart?: boolean;
   [PUBSUB_SYMBOL]: PubSub;
+  [NESTED_WATCH_TOPIC_SYMBOL]?: string;
   [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
