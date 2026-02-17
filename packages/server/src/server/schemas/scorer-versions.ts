@@ -1,4 +1,5 @@
 import z from 'zod';
+import { modelConfigSchema } from './stored-agents';
 import {
   listVersionsQuerySchema,
   compareVersionsQuerySchema,
@@ -36,13 +37,6 @@ const samplingConfigSchema = z.union([
   z.object({ type: z.literal('none') }),
   z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
 ]);
-
-const modelConfigSchema = z
-  .object({
-    provider: z.string(),
-    name: z.string(),
-  })
-  .passthrough();
 
 const scorerTypeEnum = z.enum([
   'llm-judge',

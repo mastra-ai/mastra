@@ -1,6 +1,7 @@
 import z from 'zod';
 
 import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
+import { modelConfigSchema } from './stored-agents';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -40,14 +41,6 @@ const samplingConfigSchema = z.union([
   z.object({ type: z.literal('none') }),
   z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
 ]);
-
-const modelConfigSchema = z
-  .object({
-    provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
-    name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
-  })
-  .passthrough()
-  .describe('Model configuration');
 
 const scorerTypeEnum = z
   .enum([
