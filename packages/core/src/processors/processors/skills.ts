@@ -539,6 +539,19 @@ ${skillInstructions}`;
   }
 
   // ===========================================================================
+  // Helpers
+  // ===========================================================================
+
+  /**
+   * Mark a tool as never requiring approval.
+   * Skill tools are internal plumbing and should bypass requireToolApproval.
+   */
+  private withNoApproval<T extends object>(tool: T): T & { needsApprovalFn: () => false } {
+    (tool as any).needsApprovalFn = () => false as const;
+    return tool as T & { needsApprovalFn: () => false };
+  }
+
+  // ===========================================================================
   // Processor Interface
   // ===========================================================================
 
@@ -589,27 +602,14 @@ ${skillInstructions}`;
     const skillTools: Record<string, unknown> = {};
 
     if (hasSkills) {
-      const activateTool = this.createSkillActivateTool();
-      (activateTool as any).needsApprovalFn = () => false;
-      skillTools['skill-activate'] = activateTool;
-
-      const searchTool = this.createSkillSearchTool();
-      (searchTool as any).needsApprovalFn = () => false;
-      skillTools['skill-search'] = searchTool;
+      skillTools['skill-activate'] = this.withNoApproval(this.createSkillActivateTool());
+      skillTools['skill-search'] = this.withNoApproval(this.createSkillSearchTool());
     }
 
     if (this._activatedSkills.size > 0) {
-      const refTool = this.createSkillReadReferenceTool();
-      (refTool as any).needsApprovalFn = () => false;
-      skillTools['skill-read-reference'] = refTool;
-
-      const scriptTool = this.createSkillReadScriptTool();
-      (scriptTool as any).needsApprovalFn = () => false;
-      skillTools['skill-read-script'] = scriptTool;
-
-      const assetTool = this.createSkillReadAssetTool();
-      (assetTool as any).needsApprovalFn = () => false;
-      skillTools['skill-read-asset'] = assetTool;
+      skillTools['skill-read-reference'] = this.withNoApproval(this.createSkillReadReferenceTool());
+      skillTools['skill-read-script'] = this.withNoApproval(this.createSkillReadScriptTool());
+      skillTools['skill-read-asset'] = this.withNoApproval(this.createSkillReadAssetTool());
     }
 
     return {

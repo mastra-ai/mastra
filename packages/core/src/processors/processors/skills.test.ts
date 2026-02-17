@@ -690,7 +690,7 @@ describe('SkillsProcessor', () => {
       expect(assetTool.needsApprovalFn()).toBe(false);
     });
 
-    it('should not have needsApprovalFn on skill-read-* tools when no skills are activated', async () => {
+    it('should not expose skill-read-* tools when no skills are activated', async () => {
       const result = await processor.processInputStep({
         messageList: mockMessageList as any,
         tools: {},
