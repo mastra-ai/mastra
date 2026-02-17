@@ -670,14 +670,4 @@ export class MongoDBScorerDefinitionsStorage extends ScorerDefinitionsStorage {
 
     return result as ScorerDefinitionVersion;
   }
-
-  private extractSnapshotFields(version: ScorerDefinitionVersion): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const field of SNAPSHOT_FIELDS) {
-      if ((version as any)[field] !== undefined) {
-        result[field] = (version as any)[field];
-      }
-    }
-    return result;
-  }
 }

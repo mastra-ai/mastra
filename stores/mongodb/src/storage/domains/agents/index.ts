@@ -717,16 +717,6 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   /**
    * Extracts just the snapshot config fields from a version.
    */
-  private extractSnapshotFields(version: AgentVersion): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const field of SNAPSHOT_FIELDS) {
-      if ((version as any)[field] !== undefined) {
-        result[field] = (version as any)[field];
-      }
-    }
-    return result;
-  }
-
   /**
    * Transforms a raw MongoDB version document into an AgentVersion.
    * Config fields are returned directly (no nested snapshot object).

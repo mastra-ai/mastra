@@ -667,14 +667,4 @@ export class MongoDBMCPClientsStorage extends MCPClientsStorage {
 
     return result as MCPClientVersion;
   }
-
-  private extractSnapshotFields(version: MCPClientVersion): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const field of SNAPSHOT_FIELDS) {
-      if ((version as any)[field] !== undefined) {
-        result[field] = (version as any)[field];
-      }
-    }
-    return result;
-  }
 }

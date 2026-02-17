@@ -547,7 +547,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(finalAgent).toBeDefined();
       });
 
-      it('should handle mixed metadata and config updates correctly', async () => {
+      it('should handle mixed metadata and config updates correctly (only metadata persisted)', async () => {
         const agent = createSampleAgent({
           name: 'Initial Name',
           instructions: 'Initial instructions',
@@ -562,18 +562,18 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.update({
           id: agent.id,
           metadata: { category: 'updated', newField: 'value' }, // metadata update
-          name: 'New Name', // config update
-          instructions: 'New instructions', // config update
+          name: 'New Name', // config update — ignored by storage, handled by server
+          instructions: 'New instructions', // config update — ignored by storage, handled by server
         });
 
-        // Should create a new version for config changes
+        // No new version — versioning is handled by server's handleAutoVersioning
         const versionCountAfter = await agentsStorage.countVersions(agent.id);
-        expect(versionCountAfter).toBe(2);
+        expect(versionCountAfter).toBe(1);
 
-        // Verify both metadata and config updates applied
+        // Config fields remain unchanged (from initial version)
         const resolved = await agentsStorage.getByIdResolved(agent.id);
-        expect(resolved?.name).toBe('New Name');
-        expect(resolved?.instructions).toBe('New instructions');
+        expect(resolved?.name).toBe('Initial Name');
+        expect(resolved?.instructions).toBe('Initial instructions');
         // Note: metadata merge/replace behavior is adapter-specific
       });
 
