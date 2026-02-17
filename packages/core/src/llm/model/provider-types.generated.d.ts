@@ -496,6 +496,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'glm-4.7',
     'glm-5',
+    'glm-5-free',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
