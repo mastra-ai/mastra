@@ -20,7 +20,7 @@ function loadYouTubeAPI(): Promise<void> {
   if (apiLoadPromise) return apiLoadPromise
   if (window.YT?.Player) return Promise.resolve()
 
-  apiLoadPromise = new Promise<void>(resolve => {
+  apiLoadPromise = new Promise<void>((resolve, reject) => {
     const prev = window.onYouTubeIframeAPIReady
     window.onYouTubeIframeAPIReady = () => {
       prev?.()
@@ -28,6 +28,10 @@ function loadYouTubeAPI(): Promise<void> {
     }
     const script = document.createElement('script')
     script.src = 'https://www.youtube.com/iframe_api'
+    script.onerror = () => {
+      apiLoadPromise = null
+      reject(new Error('Failed to load YouTube API'))
+    }
     document.head.appendChild(script)
   })
   return apiLoadPromise
@@ -78,9 +82,14 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
             if (destroyed) return
             playerRef.current = player
             setIsReady(true)
-            setDuration(player!.getDuration())
-            if (startSecondsRef.current > 0) {
-              player!.seekTo(startSecondsRef.current, true)
+            const dur = player!.getDuration()
+            setDuration(dur)
+            const saved = startSecondsRef.current
+            // If saved position is near the end, restart from the beginning
+            if (saved > 0 && dur > 0 && dur - saved <= 15) {
+              player!.seekTo(0, true)
+            } else if (saved > 0) {
+              player!.seekTo(saved, true)
             }
           },
           onStateChange: (event: YT.OnStateChangeEvent) => {

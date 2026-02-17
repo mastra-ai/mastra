@@ -1369,6 +1369,50 @@ article p {
   list-style: none !important;
 }
 
+/* Meta text: lesson info bar above headline */
+.learn-meta-text {
+  color: var(--mastra-text-tertiary);
+}
+[data-theme='dark'] .learn-meta-text {
+  color: #b0b0b0;
+}
+
+/* Watched icon: shared between header checkbox and sidebar */
+.learn-watched-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  border: 2px solid var(--border);
+  color: transparent;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.learn-watched-icon.is-watched {
+  background-color: #22c55e;
+  border-color: #22c55e;
+  color: white;
+  animation: learn-watched-pop 0.3s ease;
+}
+
+@keyframes learn-watched-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 /* Coming soon icon: dashed border circle */
 .learn-sidebar-icon-coming-soon {
   width: 1rem;

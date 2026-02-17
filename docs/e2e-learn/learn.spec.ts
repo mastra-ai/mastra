@@ -62,19 +62,20 @@ test.describe('Learn section', () => {
 
   test('watched checkbox persists via localStorage', async ({ page }) => {
     await page.goto('/learn/01-what-is-an-agent')
-    const checkbox = page.locator('input[type="checkbox"]')
-    await checkbox.check()
-    await expect(checkbox).toBeChecked()
+    // Click the label text to toggle watched state (checkbox is sr-only)
+    await page.getByText('Mark as watched').click()
+    await expect(page.getByText('Watched')).toBeVisible()
 
     // Navigate away and back to verify localStorage persistence
     await page.goto('/learn')
     await page.goto('/learn/01-what-is-an-agent')
-    await expect(page.locator('input[type="checkbox"]')).toBeChecked({ timeout: 10000 })
+    await expect(page.getByText('Watched', { exact: true })).toBeVisible({ timeout: 10000 })
   })
 
   test('progress updates after marking lesson watched', async ({ page }) => {
     await page.goto('/learn/01-what-is-an-agent')
-    await page.locator('input[type="checkbox"]').check()
+    // Click the label text to toggle watched state (checkbox is sr-only)
+    await page.getByText('Mark as watched').click()
     await page.goto('/learn')
     await expect(page.locator('aside').getByText('1 of 4 completed · 13 coming soon')).toBeVisible()
   })

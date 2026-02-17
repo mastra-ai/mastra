@@ -1,6 +1,7 @@
 import { useEffect, lazy, Suspense, useMemo } from 'react'
 import { useLocation } from '@docusaurus/router'
 import Head from '@docusaurus/Head'
+import MDXContent from '@theme/MDXContent'
 import { course } from '../course'
 import { useLessonProgress } from '../hooks/useLessonProgress'
 import { contentModules } from '../contentIndex'
@@ -86,10 +87,12 @@ function PublishedContent({
         />
       )}
       {MdxContent && (
-        <div className="learn-mdx-content mt-6">
-          <Suspense fallback={<div className="py-4 text-(--mastra-text-tertiary)">Loading content...</div>}>
-            <MdxContent />
-          </Suspense>
+        <div className="markdown mt-6">
+          <MDXContent>
+            <Suspense fallback={<div className="py-4 text-(--mastra-text-tertiary)">Loading content...</div>}>
+              <MdxContent />
+            </Suspense>
+          </MDXContent>
         </div>
       )}
       <CourseSignupCTA className="mt-8" />
