@@ -30,7 +30,7 @@ export function mapPRResponse(data: any) {
     title: data.title as string,
     body: (data.body as string) ?? null,
     state: data.state as string,
-    author: data.user.login as string,
+    author: (data.user?.login as string) ?? 'ghost',
     baseBranch: data.base.ref as string,
     headBranch: data.head.ref as string,
     headSha: data.head.sha as string,

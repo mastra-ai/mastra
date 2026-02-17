@@ -100,7 +100,7 @@ export const getPullRequestFiles = createTool({
     return {
       files: pageFiles,
       totalFiles: allFiles.length,
-      reviewableCount: pageFiles.length,
+      reviewableCount: reviewableFiles.length,
       hasMore: start + FILES_PER_PAGE < reviewableFiles.length,
       page,
     }

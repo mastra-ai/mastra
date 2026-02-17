@@ -4,7 +4,7 @@ An AI-powered code review agent built with [Mastra](https://mastra.ai/) that ana
 
 ## Why we built this
 
-This template shows how Mastra's workspaces primitives enable you to build a powerful, flexible code review agent that can handle real-world PRs of any size.
+This template shows how Mastra's workspace primitives enable you to build a powerful, flexible code review agent that can handle real-world PRs of any size.
 
 ## Demo
 
