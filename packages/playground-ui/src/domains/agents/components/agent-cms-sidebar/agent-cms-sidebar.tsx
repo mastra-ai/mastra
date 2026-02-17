@@ -9,6 +9,7 @@ import { Icon } from '@/ds/icons';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { Txt } from '@/ds/components/Txt';
+import { useSidebarDescriptions } from './use-sidebar-descriptions';
 
 interface AgentCmsSidebarProps {
   basePath: string;
@@ -26,7 +27,8 @@ function isActive(basePath: string, currentPath: string, pathSuffix: string): bo
 }
 
 export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps) {
-  const { handlePublish, isSubmitting, mode, readOnly } = useAgentEditFormContext();
+  const { handlePublish, isSubmitting, mode, readOnly, form } = useAgentEditFormContext();
+  const descriptions = useSidebarDescriptions(form.control);
 
   return (
     <div className="h-full flex flex-col">
@@ -40,7 +42,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={false}
               basePath={basePath}
               active={isActive(basePath, currentPath, '')}
-              description="hello"
+              description={descriptions.identity.description}
+              done={descriptions.identity.done}
             />
             <SidebarLink
               index={1}
@@ -49,7 +52,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={false}
               basePath={basePath}
               active={isActive(basePath, currentPath, '/instruction-blocks')}
-              description="hello"
+              description={descriptions.instructions.description}
+              done={descriptions.instructions.done}
             />
             <SidebarLink
               index={2}
@@ -58,7 +62,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={false}
               basePath={basePath}
               active={isActive(basePath, currentPath, '/tools')}
-              description="hello"
+              description={descriptions.tools.description}
+              done={descriptions.tools.done}
             />
             <SidebarLink
               index={3}
@@ -67,7 +72,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={false}
               basePath={basePath}
               active={isActive(basePath, currentPath, '/agents')}
-              description="hello"
+              description={descriptions.agents.description}
+              done={descriptions.agents.done}
             />
             <SidebarLink
               index={4}
@@ -76,7 +82,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={false}
               basePath={basePath}
               active={isActive(basePath, currentPath, '/scorers')}
-              description="hello"
+              description={descriptions.scorers.description}
+              done={descriptions.scorers.done}
             />
             <SidebarLink
               index={5}
@@ -85,7 +92,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={false}
               basePath={basePath}
               active={isActive(basePath, currentPath, '/workflows')}
-              description="hello"
+              description={descriptions.workflows.description}
+              done={descriptions.workflows.done}
             />
             <SidebarLink
               index={6}
@@ -94,7 +102,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={false}
               basePath={basePath}
               active={isActive(basePath, currentPath, '/memory')}
-              description="hello"
+              description={descriptions.memory.description}
+              done={descriptions.memory.done}
             />
             <SidebarLink
               index={7}
@@ -103,7 +112,8 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
               isLast={true}
               basePath={basePath}
               active={isActive(basePath, currentPath, '/variables')}
-              description="hello"
+              description={descriptions.variables.description}
+              done={descriptions.variables.done}
             />
           </ul>
         </nav>
@@ -140,9 +150,10 @@ interface SidebarLinkProps {
   basePath: string;
   active: boolean;
   description: string;
+  done: boolean;
 }
 
-const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, description }: SidebarLinkProps) => {
+const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, description, done }: SidebarLinkProps) => {
   const { Link } = useLinkComponent();
 
   return (
@@ -154,12 +165,18 @@ const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, descri
           active ? 'bg-surface2 text-neutral5' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
         )}
       >
-        <Txt
-          className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono"
-          variant="ui-sm"
-        >
-          {index + 1}
-        </Txt>
+        {done ? (
+          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center flex-shrink-0">
+            <Check className="size-3.5 text-white" />
+          </div>
+        ) : (
+          <Txt
+            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono flex-shrink-0"
+            variant="ui-sm"
+          >
+            {index + 1}
+          </Txt>
+        )}
 
         <div>
           <Txt variant="ui-sm" className="text-neutral5">
