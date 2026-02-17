@@ -33,7 +33,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { AnyWorkspace } from '../workspace';
+import type { AnyWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -323,8 +323,8 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
-  #workspace?: AnyWorkspace;
-  #workspaces: Record<string, AnyWorkspace> = {};
+  #workspace?: Workspace;
+  #workspaces: Record<string, Workspace> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -1183,7 +1183,7 @@ export class Mastra<
    * }
    * ```
    */
-  public getWorkspace(): AnyWorkspace | undefined {
+  public getWorkspace(): Workspace | undefined {
     return this.#workspace;
   }
 
@@ -1198,7 +1198,7 @@ export class Mastra<
    * const files = await workspace.filesystem.readdir('/');
    * ```
    */
-  public getWorkspaceById(id: string): AnyWorkspace {
+  public getWorkspaceById(id: string): Workspace {
     const workspace = this.#workspaces[id];
     if (!workspace) {
       const error = new MastraError({
@@ -1229,7 +1229,7 @@ export class Mastra<
    * }
    * ```
    */
-  public listWorkspaces(): Record<string, AnyWorkspace> {
+  public listWorkspaces(): Record<string, Workspace> {
     return { ...this.#workspaces };
   }
 
