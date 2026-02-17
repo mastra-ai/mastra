@@ -1,6 +1,6 @@
 import Head from '@docusaurus/Head'
 import { course } from '../course'
-import { useLearnStorage } from '../hooks/useLearnStorage'
+import { useSharedLearnStorage } from '../hooks/LearnStorageContext'
 import { LearnLayout } from '../components/LearnLayout'
 import { LearnProgressBar } from '../components/LearnProgressBar'
 import { ContinueCard } from '../components/ContinueCard'
@@ -8,13 +8,13 @@ import { LessonListItem } from '../components/LessonListItem'
 import { CourseSignupCTA } from '../components/CourseSignupCTA'
 import { getPublishedCount } from '../utils'
 
-export default function LearnLandingPage() {
-  const { storage } = useLearnStorage()
+function LandingContent() {
+  const { storage } = useSharedLearnStorage()
   const publishedTotal = getPublishedCount(course.lessons)
   const watchedCount = course.lessons.filter(l => l.status === 'published' && storage.lessons[l.slug]?.watched).length
 
   return (
-    <LearnLayout title="Learn | Mastra" description={course.description}>
+    <>
       <Head>
         <meta property="og:title" content="Learn | Mastra" />
         <meta property="og:description" content={course.description} />
@@ -30,7 +30,12 @@ export default function LearnLandingPage() {
       <ContinueCard storage={storage} lessons={course.lessons} className="mb-6" />
 
       {/* Progress */}
-      <LearnProgressBar completed={watchedCount} total={publishedTotal} className="mb-8" />
+      <LearnProgressBar
+        completed={watchedCount}
+        total={publishedTotal}
+        totalLessons={course.lessons.length}
+        className="mb-8"
+      />
 
       {/* Lesson list */}
       <div className="flex flex-col gap-2">
@@ -40,7 +45,15 @@ export default function LearnLandingPage() {
       </div>
 
       {/* Footer CTA */}
-      <CourseSignupCTA variant="full" className="mt-10" />
+      <CourseSignupCTA className="mt-10" />
+    </>
+  )
+}
+
+export default function LearnLandingPage() {
+  return (
+    <LearnLayout title="Learn | Mastra" description={course.description}>
+      <LandingContent />
     </LearnLayout>
   )
 }

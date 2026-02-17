@@ -43,7 +43,7 @@ function ComingSoonContent({ lesson }: { lesson: (typeof course.lessons)[number]
           ))}
         </ul>
       </div>
-      <CourseSignupCTA variant="full" className="mt-8" />
+      <CourseSignupCTA className="mt-8" />
     </div>
   )
 }
@@ -79,7 +79,7 @@ function PublishedContent({ lesson }: { lesson: (typeof course.lessons)[number] 
           </Suspense>
         </div>
       )}
-      <CourseSignupCTA variant="compact" className="mt-8" />
+      <CourseSignupCTA className="mt-8" />
     </>
   )
 }

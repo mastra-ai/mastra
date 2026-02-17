@@ -10,12 +10,12 @@ type ContinueCardProps = {
 }
 
 export function ContinueCard({ storage, lessons, className }: ContinueCardProps) {
-  const slug = storage.lastVisitedLesson
-  if (!slug) return null
+  // Find the first published lesson the user hasn't watched yet
+  const nextLesson = lessons.find(l => l.status === 'published' && !storage.lessons[l.slug]?.watched)
+  if (!nextLesson) return null
 
-  const lesson = lessons.find(l => l.slug === slug)
-  if (!lesson) return null
-
+  const slug = nextLesson.slug
+  const lesson = nextLesson
   const progress = storage.lessons[slug]
   const hasTimestamp = progress && progress.seconds > 10
 
@@ -23,7 +23,7 @@ export function ContinueCard({ storage, lessons, className }: ContinueCardProps)
     <Link
       to={`/learn/${slug}`}
       className={cn(
-        'flex items-center justify-between rounded-lg border border-(--border) p-4 no-underline transition-colors hover:border-(--mastra-green-accent-2)',
+        'flex items-center justify-between rounded-lg border border-(--border) p-4 no-underline transition-colors hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
         className,
       )}
     >

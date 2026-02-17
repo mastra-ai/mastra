@@ -22,13 +22,15 @@ function getProgressStatus(storage: LearnStorageV1, slug: string): LessonProgres
 function ProgressDot({ status }: { status: LessonProgressStatus }) {
   if (status === 'completed') {
     return (
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 text-xs text-white">✓</span>
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500 text-xs text-white">
+        ✓
+      </span>
     )
   }
   if (status === 'in-progress') {
-    return <span className="h-3 w-3 rounded-full bg-yellow-500" />
+    return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-yellow-500" />
   }
-  return <span className="h-3 w-3 rounded-full border border-(--border)" />
+  return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-(--border)" />
 }
 
 export function LessonListItem({ lesson, index, storage, className }: LessonListItemProps) {
@@ -45,7 +47,7 @@ export function LessonListItem({ lesson, index, storage, className }: LessonList
     <Link
       to={`/learn/${lesson.slug}`}
       className={cn(
-        'group flex items-center gap-4 rounded-lg border border-(--border) p-4 no-underline transition-colors hover:border-(--mastra-green-accent-2)',
+        'group flex items-center gap-4 rounded-lg border border-(--border) p-4 no-underline transition-colors hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
         className,
       )}
     >
@@ -54,14 +56,14 @@ export function LessonListItem({ lesson, index, storage, className }: LessonList
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-(--mastra-text-primary)">
+          <span className="truncate text-sm font-medium text-(--mastra-text-primary) no-underline">
             {index + 1}. {lesson.title}
           </span>
           <LessonStatusChip status={lesson.status} />
         </div>
         <span className="text-xs text-(--mastra-text-tertiary)">{lesson.durationMin} min</span>
       </div>
-      <span className="shrink-0 rounded-md border border-(--border) px-3 py-1 text-xs font-medium text-(--mastra-text-secondary) transition-colors group-hover:border-(--mastra-green-accent-2) group-hover:text-(--mastra-text-primary)">
+      <span className="shrink-0 rounded-md border border-(--border) px-3 py-1 text-xs font-medium text-(--mastra-text-secondary) transition-colors group-hover:border-(--mastra-green-accent-3) group-hover:text-(--mastra-text-primary) dark:group-hover:border-(--mastra-green-accent)">
         {buttonLabel}
       </span>
     </Link>

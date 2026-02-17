@@ -8,6 +8,7 @@ function getDefault(): LearnStorageV1 {
 }
 
 function readStorage(): LearnStorageV1 {
+  if (typeof window === 'undefined') return getDefault()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return getDefault()
@@ -29,12 +30,15 @@ export function useLearnStorage() {
   }, [])
 
   const updateLesson = useCallback((slug: string, partial: Partial<LessonProgress>) => {
-    setStorage(prev => {
-      const existing = prev.lessons[slug] ?? { watched: false, seconds: 0, updatedAt: new Date().toISOString() }
+    setStorage(() => {
+      // Always read fresh from localStorage to avoid race conditions between
+      // multiple setStorage calls and the initial useEffect hydration
+      const current = readStorage()
+      const existing = current.lessons[slug] ?? { watched: false, seconds: 0, updatedAt: new Date().toISOString() }
       const next: LearnStorageV1 = {
-        ...prev,
+        ...current,
         lessons: {
-          ...prev.lessons,
+          ...current.lessons,
           [slug]: { ...existing, ...partial, updatedAt: new Date().toISOString() },
         },
       }
@@ -44,8 +48,10 @@ export function useLearnStorage() {
   }, [])
 
   const setLastVisited = useCallback((slug: string) => {
-    setStorage(prev => {
-      const next: LearnStorageV1 = { ...prev, lastVisitedLesson: slug }
+    setStorage(() => {
+      // Always read fresh from localStorage to avoid race conditions
+      const current = readStorage()
+      const next: LearnStorageV1 = { ...current, lastVisitedLesson: slug }
       writeStorage(next)
       return next
     })
