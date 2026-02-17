@@ -52,7 +52,7 @@ export const globalWorkspace = new Workspace({
   // Auto-index FAQ content for search
   autoIndexPaths: ['/content'],
   // Discover skills from these paths (global skills only)
-  skills: ['/**/skills'],
+  skills: ['.agents/skills', '/skills'],
 });
 
 /**

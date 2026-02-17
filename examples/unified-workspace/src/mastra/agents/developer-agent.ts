@@ -39,18 +39,36 @@ export const developerAgent = new Agent({
     name: 'Cloud Workspace',
     id: 'cloud-workspace',
     mounts: {
-      '/workspace': new LocalFilesystem({
+      '/local': new LocalFilesystem({
         basePath: './workspace',
       }),
       '/.agents': new LocalFilesystem({
         basePath: './.agents',
       }),
+      // S3 mount — only if S3_BUCKET is configured
+      ...(process.env.S3_BUCKET && {
+        '/r2': new S3Filesystem({
+          bucket: process.env.S3_BUCKET,
+          region: 'auto',
+          accessKeyId: process.env.S3_ACCESS_KEY_ID as string,
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY as string,
+          endpoint: process.env.S3_ENDPOINT as string,
+        }),
+      }),
+      // GCS mount — only if GCS_BUCKET is configured
+      ...(process.env.GCS_BUCKET && {
+        '/gcs': new GCSFilesystem({
+          bucket: process.env.GCS_BUCKET,
+          credentials: process.env.GCS_SERVICE_ACCOUNT_KEY
+            ? JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY)
+            : undefined,
+        }),
+      }),
     },
     sandbox: new E2BSandbox({
       id: 'developer-e2b-sandbox',
     }),
-    // Test: relative ./workspace path with /workspace mount (colleague's repro case)
-    skills: ['./workspace/api-design/SKILL.md'],
+    skills: ['/.agents/skills', '/local/skills', '/r2/skills'],
     tools: {
       [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
         enabled: true,
