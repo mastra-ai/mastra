@@ -153,11 +153,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
     try {
       const collection = await this.getCollection(TABLE_SKILLS);
 
-      // Derive skill ID from name
-      const id = skill.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
+      const id = skill.id;
 
       // Check if skill already exists
       const existing = await collection.findOne({ id });

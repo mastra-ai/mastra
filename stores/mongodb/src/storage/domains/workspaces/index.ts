@@ -152,11 +152,21 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
     try {
       const collection = await this.getCollection(TABLE_WORKSPACES);
 
-      // Derive workspace ID from name
-      const id = workspace.name
+      // Derive workspace ID from name, falling back to caller-provided ID
+      const slug = workspace.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '');
+      const id = slug || workspace.id;
+      if (!id) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'CREATE_WORKSPACE', 'INVALID_NAME'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Cannot derive a valid ID from workspace name "${workspace.name}"`,
+          details: { name: workspace.name },
+        });
+      }
 
       // Check if workspace already exists
       const existing = await collection.findOne({ id });
