@@ -120,8 +120,20 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const raw = (agent as Agent).toRawConfig?.();
       if (!raw?.skills) continue;
 
-      const skills = raw.skills as Record<string, unknown>;
-      if (skillId in skills) {
+      const skillsField = raw.skills;
+      let found = false;
+
+      if (Array.isArray(skillsField)) {
+        // StorageConditionalVariant<Record<string, StorageSkillConfig>>[]
+        found = skillsField.some(
+          (variant: { value?: Record<string, unknown> }) => variant?.value && skillId in variant.value,
+        );
+      } else if (typeof skillsField === 'object' && skillsField !== null) {
+        // Plain Record<string, StorageSkillConfig>
+        found = skillId in (skillsField as Record<string, unknown>);
+      }
+
+      if (found) {
         this.logger?.debug(
           `[invalidateAgentsReferencingSkill] Evicting agent "${agentId}" (references skill "${skillId}")`,
         );
