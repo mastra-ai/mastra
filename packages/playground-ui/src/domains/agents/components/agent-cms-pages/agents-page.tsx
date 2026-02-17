@@ -2,13 +2,12 @@ import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { AgentIcon, Icon } from '@/ds/icons';
+import { AgentIcon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
-import { stringToColor } from '@/lib/colors';
 import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
@@ -104,23 +103,12 @@ export function AgentsPage() {
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
               {filteredOptions.map(agent => {
-                const bg = stringToColor(agent.value);
-                const text = stringToColor(agent.value, 25);
                 const isSelected = selectedAgentIds.includes(agent.value);
 
                 const isDisabled = readOnly || !isSelected;
 
                 return (
                   <Entity key={agent.value} className="bg-surface2">
-                    <div
-                      className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-                      style={{ backgroundColor: bg, color: text }}
-                    >
-                      <Icon size="lg">
-                        <AgentIcon />
-                      </Icon>
-                    </div>
-
                     <EntityContent>
                       <EntityName>{agent.label}</EntityName>
                       <EntityDescription>

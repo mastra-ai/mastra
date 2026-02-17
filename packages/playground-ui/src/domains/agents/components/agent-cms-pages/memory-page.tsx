@@ -1,14 +1,13 @@
 import { Controller, useWatch } from 'react-hook-form';
 
 import { SectionHeader } from '@/domains/cms';
-import { MemoryIcon, Icon } from '@/ds/icons';
+import { MemoryIcon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
-import { stringToColor } from '@/lib/colors';
 import { useVectors } from '@/domains/vectors/hooks/use-vectors';
 import { useEmbedders } from '@/domains/embedders/hooks/use-embedders';
 import { LLMProviders, LLMModels } from '@/domains/llm';
@@ -55,20 +54,8 @@ function LastMessagesEntity() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
 
-  const bg = stringToColor('lastMessages');
-  const text = stringToColor('lastMessages', 25);
-
   return (
     <Entity className="bg-surface2">
-      <div
-        className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-        style={{ backgroundColor: bg, color: text }}
-      >
-        <Icon size="lg">
-          <MemoryIcon />
-        </Icon>
-      </div>
-
       <EntityContent>
         <EntityName>Last Messages</EntityName>
         <EntityDescription>
@@ -111,20 +98,8 @@ function SemanticRecallEntity() {
   const vectors = vectorsData?.vectors ?? [];
   const embedders = embeddersData?.embedders ?? [];
 
-  const bg = stringToColor('semanticRecall');
-  const text = stringToColor('semanticRecall', 25);
-
   return (
     <Entity className="bg-surface2">
-      <div
-        className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-        style={{ backgroundColor: bg, color: text }}
-      >
-        <Icon size="lg">
-          <MemoryIcon />
-        </Icon>
-      </div>
-
       <EntityContent>
         <EntityName>Semantic Recall</EntityName>
         <EntityDescription>
@@ -200,20 +175,8 @@ function ReadOnlyEntity() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
 
-  const bg = stringToColor('readOnly');
-  const text = stringToColor('readOnly', 25);
-
   return (
     <Entity className="bg-surface2">
-      <div
-        className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-        style={{ backgroundColor: bg, color: text }}
-      >
-        <Icon size="lg">
-          <MemoryIcon />
-        </Icon>
-      </div>
-
       <EntityContent>
         <EntityName>Read Only</EntityName>
         <EntityDescription>Memory is read-only (no new messages stored)</EntityDescription>
@@ -235,20 +198,8 @@ function ObservationalMemoryEntity() {
   const { control } = form;
   const observationalMemoryEnabled = useWatch({ control, name: 'memory.observationalMemory.enabled' }) ?? false;
 
-  const bg = stringToColor('observationalMemory');
-  const text = stringToColor('observationalMemory', 25);
-
   return (
     <Entity className="bg-surface2">
-      <div
-        className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-        style={{ backgroundColor: bg, color: text }}
-      >
-        <Icon size="lg">
-          <MemoryIcon />
-        </Icon>
-      </div>
-
       <EntityContent>
         <EntityName>Observational Memory</EntityName>
         <EntityDescription>

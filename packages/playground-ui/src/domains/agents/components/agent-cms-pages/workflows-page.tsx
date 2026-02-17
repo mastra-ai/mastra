@@ -2,13 +2,12 @@ import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { WorkflowIcon, Icon } from '@/ds/icons';
+import { WorkflowIcon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
-import { stringToColor } from '@/lib/colors';
 import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
@@ -93,23 +92,12 @@ export function WorkflowsPage() {
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
               {filteredOptions.map(workflow => {
-                const bg = stringToColor(workflow.value);
-                const text = stringToColor(workflow.value, 25);
                 const isSelected = selectedWorkflowIds.includes(workflow.value);
 
                 const isDisabled = readOnly || !isSelected;
 
                 return (
                   <Entity key={workflow.value} className="bg-surface2">
-                    <div
-                      className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-                      style={{ backgroundColor: bg, color: text }}
-                    >
-                      <Icon size="lg">
-                        <WorkflowIcon />
-                      </Icon>
-                    </div>
-
                     <EntityContent>
                       <EntityName>{workflow.label}</EntityName>
                       <EntityDescription>

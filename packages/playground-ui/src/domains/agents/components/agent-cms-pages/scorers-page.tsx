@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { JudgeIcon, Icon } from '@/ds/icons';
+import { JudgeIcon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
@@ -11,7 +11,6 @@ import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
-import { stringToColor } from '@/lib/colors';
 import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
@@ -106,23 +105,12 @@ export function ScorersPage() {
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
               {filteredOptions.map(scorer => {
-                const bg = stringToColor(scorer.value);
-                const text = stringToColor(scorer.value, 25);
                 const isSelected = selectedScorerIds.includes(scorer.value);
                 const isDisabled = readOnly || !isSelected;
 
                 return (
                   <div key={scorer.value} className="flex flex-col">
                     <Entity className="bg-surface2">
-                      <div
-                        className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-                        style={{ backgroundColor: bg, color: text }}
-                      >
-                        <Icon size="lg">
-                          <JudgeIcon />
-                        </Icon>
-                      </div>
-
                       <EntityContent>
                         <EntityName>{scorer.label}</EntityName>
                         <EntityDescription>

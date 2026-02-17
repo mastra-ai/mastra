@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
-import { Icon, ToolsIcon } from '@/ds/icons';
+import { ToolsIcon } from '@/ds/icons';
 import { Section } from '@/ds/components/Section';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
@@ -14,7 +14,6 @@ import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
-import { stringToColor } from '@/lib/colors';
 import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
@@ -132,23 +131,12 @@ export function ToolsPage() {
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
               {filteredOptions.map(tool => {
-                const bg = stringToColor(tool.value);
-                const text = stringToColor(tool.value, 25);
                 const isSelected = selectedToolIds.includes(tool.value);
 
                 const isDisabled = readOnly || !isSelected;
 
                 return (
                   <Entity key={tool.value} className="bg-surface2">
-                    <div
-                      className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
-                      style={{ backgroundColor: bg, color: text }}
-                    >
-                      <Icon size="lg">
-                        <ToolsIcon />
-                      </Icon>
-                    </div>
-
                     <EntityContent>
                       <EntityName>{tool.label}</EntityName>
                       <EntityDescription>
