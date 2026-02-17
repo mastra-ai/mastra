@@ -6849,7 +6849,17 @@ describe('Per-step save deduplication', () => {
       });
     };
 
-    return { storage, threadId, messageList, runStep, addToolResponse, finalize };
+    async function waitForAsyncOps(timeoutMs = 5000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    return { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps };
   }
 
   it('should save each user message exactly once across a multi-step turn', async () => {
@@ -6899,9 +6909,8 @@ describe('Per-step save deduplication', () => {
   it('should not duplicate sealed-for-buffering messages during per-step save', async () => {
     // Low threshold triggers async buffering at step 0, which seals the user message.
     // handlePerStepSave at step 1 must skip the already-persisted sealed message.
-    const { storage, threadId, messageList, runStep, addToolResponse, finalize } = await setupMultiStepScenario({
-      messageTokens: 50,
-    });
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
 
     messageList.add(
       {
@@ -6922,8 +6931,10 @@ describe('Per-step save deduplication', () => {
     );
 
     await runStep(0);
+    await waitForAsyncOps();
     addToolResponse('resp-0', 'debug_service', 'c1', 1);
     await runStep(1);
+    await waitForAsyncOps();
     addToolResponse('resp-1', 'check_network', 'c2', 2);
     await runStep(2);
 
