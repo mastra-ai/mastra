@@ -1,4 +1,5 @@
 packages:
+  - mastracode
   - docs
   - packages/_vendored/*
   - packages/*

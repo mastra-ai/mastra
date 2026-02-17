@@ -1,0 +1,28 @@
+{
+  "name": "@mastra/mastracode",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "ai": "^6.0.50",
+    "@ai-sdk/anthropic": "^3.0.23",
+    "@ai-sdk/openai": "^3.0.21",
+    "@mariozechner/pi-tui": "^0.52.12",
+    "@mastra/core": "workspace:*",
+    "chalk": "^5.6.2",
+    "cli-highlight": "^2.1.11",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.3",
+    "tsx": "^4.19.2",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
