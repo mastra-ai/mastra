@@ -1,0 +1,38 @@
+{
+  "name": "pdf-quiz-generator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.29.3",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.0",
+    "@mastra/core": "^1.4.0",
+    "@mastra/evals": "^1.1.1",
+    "@mastra/libsql": "^1.4.0",
+    "@mastra/loggers": "^1.0.1",
+    "@mastra/memory": "^1.3.0",
+    "@mastra/observability": "^1.2.0",
+    "@mastra/rag": "^2.1.0",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "@types/pdf-parse": "^1.1.5",
+    "mastra": "^1.3.1",
+    "typescript": "^5.9.3"
+  }
+}
