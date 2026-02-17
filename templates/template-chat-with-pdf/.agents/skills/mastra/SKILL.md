@@ -4,7 +4,7 @@ description: "Comprehensive Mastra framework guide. Teaches how to find current 
 license: Apache-2.0
 metadata:
   author: Mastra
-  version: "2.0.0"
+  version: '2.0.0'
   repository: https://github.com/mastra-ai/skills
 ---
 

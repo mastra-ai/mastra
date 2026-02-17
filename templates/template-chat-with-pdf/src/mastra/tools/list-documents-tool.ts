@@ -1,10 +1,10 @@
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { vectorStore, PDF_INDEX_NAME } from "../lib/vector-store";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
+import { vectorStore, PDF_INDEX_NAME } from '../lib/vector-store';
 
 export const listDocumentsTool = createTool({
-  id: "list-documents",
+  id: 'list-documents',
   description: `List all indexed PDF documents available for quizzing.
 Use this tool when:
 - The user asks what documents/books are available
@@ -14,8 +14,8 @@ Use this tool when:
   execute: async () => {
     try {
       // Query vectors to find unique documents
-      const embeddingModel = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
-      const { embeddings } = await embeddingModel.doEmbed({ values: ["document"] });
+      const embeddingModel = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
+      const { embeddings } = await embeddingModel.doEmbed({ values: ['document'] });
 
       const results = await vectorStore.query({
         indexName: PDF_INDEX_NAME,
@@ -24,18 +24,21 @@ Use this tool when:
       });
 
       // Extract unique documents from metadata
-      const documentsMap = new Map<string, {
-        documentId: string;
-        title: string;
-        totalPages: number;
-      }>();
+      const documentsMap = new Map<
+        string,
+        {
+          documentId: string;
+          title: string;
+          totalPages: number;
+        }
+      >();
 
       for (const result of results) {
         const docId = result.metadata?.documentId as string;
         if (docId && !documentsMap.has(docId)) {
           documentsMap.set(docId, {
             documentId: docId,
-            title: (result.metadata?.documentTitle as string) || "Untitled",
+            title: (result.metadata?.documentTitle as string) || 'Untitled',
             totalPages: (result.metadata?.totalPages as number) || 0,
           });
         }
@@ -46,7 +49,7 @@ Use this tool when:
       if (documents.length === 0) {
         return {
           documents: [],
-          message: "No documents have been indexed yet. Use the index-pdf workflow to add a PDF.",
+          message: 'No documents have been indexed yet. Use the index-pdf workflow to add a PDF.',
         };
       }
 
@@ -57,7 +60,7 @@ Use this tool when:
     } catch {
       return {
         documents: [],
-        message: "Could not retrieve documents. The vector index may not exist yet.",
+        message: 'Could not retrieve documents. The vector index may not exist yet.',
       };
     }
   },

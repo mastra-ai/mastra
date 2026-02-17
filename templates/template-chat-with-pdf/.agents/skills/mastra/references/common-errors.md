@@ -87,7 +87,7 @@ Property 'memory' does not exist on type 'AgentConfig'
 ```typescript
 // 1. Create tool
 const weatherTool = createTool({
-  id: "get-weather",
+  id: 'get-weather',
   // ... tool config
 });
 
@@ -100,7 +100,7 @@ const mastra = new Mastra({
 
 // 3. Assign to agent
 const agent = new Agent({
-  id: "weather-agent",
+  id: 'weather-agent',
   tools: { weatherTool }, // Reference the tool
   // ... other config
 });
@@ -110,9 +110,9 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  id: "weather-agent",
+  id: 'weather-agent',
   tools: {
-    weatherTool: createTool({ id: "get-weather" /* ... */ }),
+    weatherTool: createTool({ id: 'get-weather' /* ... */ }),
   },
 });
 ```
@@ -140,7 +140,7 @@ const storage = new PostgresStore({
 
 // 2. Create memory with storage
 const memory = new Memory({
-  id: "chat-memory",
+  id: 'chat-memory',
   storage,
   options: {
     lastMessages: 10, // How many messages to retrieve
@@ -149,14 +149,14 @@ const memory = new Memory({
 
 // 3. Assign memory to agent
 const agent = new Agent({
-  id: "chat-agent",
+  id: 'chat-agent',
   memory,
 });
 
 // 4. Use consistent threadId
-await agent.generate("Hello", {
-  threadId: "user-123-conversation", // Same threadId for entire conversation
-  resourceId: "user-123",
+await agent.generate('Hello', {
+  threadId: 'user-123-conversation', // Same threadId for entire conversation
+  resourceId: 'user-123',
 });
 ```
 
@@ -182,7 +182,7 @@ Workflow execution fails immediately
 
 ```typescript
 const workflow = createWorkflow({
-  id: "my-workflow",
+  id: 'my-workflow',
   inputSchema: z.object({ data: z.string() }),
   outputSchema: z.object({ result: z.string() }),
 })
@@ -192,7 +192,7 @@ const workflow = createWorkflow({
 
 // Then execute
 const run = await workflow.createRun();
-const result = await run.start({ inputData: { data: "test" } });
+const result = await run.start({ inputData: { data: 'test' } });
 ```
 
 ### Workflow state not updating
@@ -211,20 +211,20 @@ const result = await run.start({ inputData: { data: "test" } });
 
 ```typescript
 const step1 = createStep({
-  id: "step1",
+  id: 'step1',
   execute: async ({ state, setState }) => {
     // Update state
     await setState({ ...state, counter: (state.counter || 0) + 1 });
-    return { result: "done" };
+    return { result: 'done' };
   },
 });
 
 // Access state in subsequent steps
 const step2 = createStep({
-  id: "step2",
+  id: 'step2',
   execute: async ({ state }) => {
     console.log(state.counter); // Access updated state
-    return { result: "complete" };
+    return { result: 'complete' };
   },
 });
 ```
@@ -249,7 +249,7 @@ Memory instantiation fails
 ```typescript
 // Always provide storage when creating Memory
 const memory = new Memory({
-  id: "my-memory",
+  id: 'my-memory',
   storage: postgresStore, // REQUIRED
   options: {
     lastMessages: 10,
@@ -274,7 +274,7 @@ const memory = new Memory({
 
 ```typescript
 const memory = new Memory({
-  id: "semantic-memory",
+  id: 'semantic-memory',
   storage: postgresStore,
   vector: chromaVectorStore, // REQUIRED for semantic recall
   embedder: openaiEmbedder, // REQUIRED for semantic recall
@@ -306,20 +306,20 @@ ZodError: Expected string, received number
 
 ```typescript
 const tool = createTool({
-  id: "my-tool",
+  id: 'my-tool',
   inputSchema: z.object({
     name: z.string(),
     age: z.number().optional(), // Make optional fields explicit
   }),
-  execute: async (input) => {
+  execute: async input => {
     // input is validated and typed
     return { result: `Hello ${input.name}` };
   },
 });
 
 // Correct usage
-await tool.execute({ name: "Alice" }); // Works
-await tool.execute({ name: "Bob", age: 30 }); // Works
+await tool.execute({ name: 'Alice' }); // Works
+await tool.execute({ name: 'Bob', age: 30 }); // Works
 await tool.execute({ age: 30 }); // ERROR: name is required
 ```
 
@@ -339,7 +339,7 @@ await tool.execute({ age: 30 }); // ERROR: name is required
 
 ```typescript
 const approvalTool = createTool({
-  id: "approval",
+  id: 'approval',
   inputSchema: z.object({ request: z.string() }),
   outputSchema: z.object({ approved: z.boolean() }),
   suspendSchema: z.object({ requestId: z.string() }),
@@ -438,14 +438,14 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 2. Load environment variables (for Node.js):
 
 ```typescript
-import "dotenv/config"; // At top of entry file
+import 'dotenv/config'; // At top of entry file
 ```
 
 3. Verify variable is loaded:
 
 ```typescript
 if (!process.env.OPENAI_API_KEY) {
-  throw new Error("OPENAI_API_KEY is required");
+  throw new Error('OPENAI_API_KEY is required');
 }
 ```
 
@@ -472,7 +472,7 @@ Error: Invalid model format
 
 ```typescript
 const agent = new Agent({
-  model: "openai/gpt-4o", // ✅ Correct
+  model: 'openai/gpt-4o', // ✅ Correct
   // NOT: model: 'gpt-4o'       // ❌ Missing provider
 });
 ```
@@ -498,8 +498,8 @@ ls node_modules/@mastra/core/dist/docs/
 ```typescript
 const mastra = new Mastra({
   logger: new PinoLogger({
-    name: "mastra",
-    level: "debug", // or 'trace' for even more detail
+    name: 'mastra',
+    level: 'debug', // or 'trace' for even more detail
   }),
 });
 ```

@@ -1,9 +1,9 @@
-import { createStep, createWorkflow } from "@mastra/core/workflows";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { MDocument } from "@mastra/rag";
-import { z } from "zod";
-import { PDFParse } from "pdf-parse";
-import { vectorStore, PDF_INDEX_NAME } from "../lib/vector-store";
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
+import { MDocument } from '@mastra/rag';
+import { z } from 'zod';
+import { PDFParse } from 'pdf-parse';
+import { vectorStore, PDF_INDEX_NAME } from '../lib/vector-store';
 
 const EMBEDDING_DIMENSION = 1536; // OpenAI text-embedding-3-small
 
@@ -13,7 +13,7 @@ async function initializeVectorIndex(): Promise<void> {
     await vectorStore.createIndex({
       indexName: PDF_INDEX_NAME,
       dimension: EMBEDDING_DIMENSION,
-      metric: "cosine",
+      metric: 'cosine',
     });
   }
 }
@@ -22,10 +22,10 @@ async function initializeVectorIndex(): Promise<void> {
  * Step 1: Download PDF and extract text from each page
  */
 const downloadAndExtractText = createStep({
-  id: "download-and-extract-text",
-  description: "Download PDF from URL and extract text page by page",
+  id: 'download-and-extract-text',
+  description: 'Download PDF from URL and extract text page by page',
   inputSchema: z.object({
-    url: z.url().describe("URL of the PDF to ingest"),
+    url: z.url().describe('URL of the PDF to ingest'),
   }),
   outputSchema: z.object({
     documentId: z.string(),
@@ -41,7 +41,7 @@ const downloadAndExtractText = createStep({
   }),
   execute: async ({ inputData }) => {
     if (!inputData) {
-      throw new Error("Input data not found");
+      throw new Error('Input data not found');
     }
 
     const { url } = inputData;
@@ -49,9 +49,7 @@ const downloadAndExtractText = createStep({
     // Fetch PDF
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(
-        `Failed to fetch PDF: ${response.status} ${response.statusText}`,
-      );
+      throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -94,8 +92,8 @@ const downloadAndExtractText = createStep({
  * Step 2: Split pages into smaller chunks for embedding
  */
 const splitIntoChunks = createStep({
-  id: "split-into-chunks",
-  description: "Split page text into smaller overlapping chunks",
+  id: 'split-into-chunks',
+  description: 'Split page text into smaller overlapping chunks',
   inputSchema: z.object({
     documentId: z.string(),
     title: z.string(),
@@ -127,7 +125,7 @@ const splitIntoChunks = createStep({
 
       // Chunk using recursive strategy
       const chunks = await doc.chunk({
-        strategy: "recursive",
+        strategy: 'recursive',
         maxSize: 512,
         overlap: 50,
       });
@@ -161,8 +159,8 @@ const splitIntoChunks = createStep({
  * Step 3: Generate embeddings and store in vector database
  */
 const generateAndStoreEmbeddings = createStep({
-  id: "generate-and-store-embeddings",
-  description: "Generate embeddings for each chunk and store in vector database",
+  id: 'generate-and-store-embeddings',
+  description: 'Generate embeddings for each chunk and store in vector database',
   inputSchema: z.object({
     documentId: z.string(),
     title: z.string(),
@@ -187,10 +185,8 @@ const generateAndStoreEmbeddings = createStep({
 
     // Generate embeddings using Mastra's model router
     // Batch to stay under OpenAI's 2048 values per call limit
-    const embeddingModel = new ModelRouterEmbeddingModel(
-      "openai/text-embedding-3-small",
-    );
-    const texts = chunks.map((c) => c.text);
+    const embeddingModel = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
+    const texts = chunks.map(c => c.text);
     const BATCH_SIZE = 2000;
     const embeddings: number[][] = [];
 
@@ -203,7 +199,7 @@ const generateAndStoreEmbeddings = createStep({
     }
 
     // Prepare metadata for storage
-    const metadata = chunks.map((c) => ({
+    const metadata = chunks.map(c => ({
       text: c.text,
       ...c.metadata,
     }));
@@ -236,9 +232,9 @@ const generateAndStoreEmbeddings = createStep({
 
 // Create the workflow
 const indexPdfWorkflow = createWorkflow({
-  id: "index-pdf",
+  id: 'index-pdf',
   inputSchema: z.object({
-    url: z.url().describe("URL of the PDF to ingest"),
+    url: z.url().describe('URL of the PDF to ingest'),
   }),
   outputSchema: z.object({
     documentId: z.string(),
@@ -259,13 +255,13 @@ export { indexPdfWorkflow };
 function extractTitleFromUrl(url: string): string {
   try {
     const pathname = new URL(url).pathname;
-    const filename = pathname.split("/").pop() || "document";
-    return filename.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
+    const filename = pathname.split('/').pop() || 'document';
+    return filename.replace(/\.pdf$/i, '').replace(/[-_]/g, ' ');
   } catch {
-    return "Untitled PDF";
+    return 'Untitled PDF';
   }
 }
 
 function generateDocumentId(url: string): string {
-  return `pdf-${Buffer.from(url).toString("base64url").slice(-12)}`;
+  return `pdf-${Buffer.from(url).toString('base64url').slice(-12)}`;
 }

@@ -1,10 +1,10 @@
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-import { vectorStore, PDF_INDEX_NAME } from "../lib/vector-store";
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
+import { vectorStore, PDF_INDEX_NAME } from '../lib/vector-store';
 
 export const pdfQueryTool = createTool({
-  id: "query-pdf-content",
+  id: 'query-pdf-content',
   description: `Search PDF content with even distribution across page ranges.
 
 When the user specifies pages (e.g., "pages 50-67"), use pageStart and pageEnd.
@@ -12,15 +12,15 @@ The tool retrieves chunks from EACH page in the range, ensuring full coverage.
 
 For general topic searches without page constraints, omit pageStart/pageEnd.`,
   inputSchema: z.object({
-    queryText: z.string().describe("Semantic search query describing the content to find"),
-    documentId: z.string().optional().describe("Filter by specific document ID (from list-documents tool)"),
-    pageStart: z.number().optional().describe("Start of page range (inclusive)"),
-    pageEnd: z.number().optional().describe("End of page range (inclusive)"),
-    chunksPerPage: z.number().default(3).describe("Number of chunks to retrieve per page (default: 3)"),
+    queryText: z.string().describe('Semantic search query describing the content to find'),
+    documentId: z.string().optional().describe('Filter by specific document ID (from list-documents tool)'),
+    pageStart: z.number().optional().describe('Start of page range (inclusive)'),
+    pageEnd: z.number().optional().describe('End of page range (inclusive)'),
+    chunksPerPage: z.number().default(3).describe('Number of chunks to retrieve per page (default: 3)'),
   }),
   execute: async ({ queryText, documentId, pageStart, pageEnd, chunksPerPage = 3 }) => {
     // Generate embedding for the query using Mastra's model router
-    const embeddingModel = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+    const embeddingModel = new ModelRouterEmbeddingModel('openai/text-embedding-3-small');
     const { embeddings } = await embeddingModel.doEmbed({ values: [queryText] });
     const queryVector = embeddings[0];
 
@@ -34,8 +34,8 @@ For general topic searches without page constraints, omit pageStart/pageEnd.`,
       });
 
       return {
-        chunks: results.map((r) => ({
-          text: r.metadata?.text || "",
+        chunks: results.map(r => ({
+          text: r.metadata?.text || '',
           pageNumber: r.metadata?.pageNumber,
           documentTitle: r.metadata?.documentTitle,
           score: r.score,
@@ -104,7 +104,7 @@ For general topic searches without page constraints, omit pageStart/pageEnd.`,
 
         for (const r of pageResults) {
           results.push({
-            text: (r.metadata?.text as string) || "",
+            text: (r.metadata?.text as string) || '',
             pageNumber: page,
             score: r.score || 0,
           });
@@ -122,7 +122,7 @@ For general topic searches without page constraints, omit pageStart/pageEnd.`,
       pagesCovered: `${pageStart}-${pageEnd}`,
       pagesReturned: selectedPages.sort((a, b) => a - b),
       totalChunks: shuffledResults.length,
-      note: "Stratified sample: chunks from early, middle, AND late pages. Each chunk has a pageNumber - use it for the hint.",
+      note: 'Stratified sample: chunks from early, middle, AND late pages. Each chunk has a pageNumber - use it for the hint.',
     };
   },
 });

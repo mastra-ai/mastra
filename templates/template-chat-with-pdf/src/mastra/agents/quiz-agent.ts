@@ -1,12 +1,12 @@
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { pdfQueryTool } from "../tools/pdf-query-tool";
-import { listDocumentsTool } from "../tools/list-documents-tool";
-import { indexPdfWorkflow } from "../workflows/index-pdf";
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { pdfQueryTool } from '../tools/pdf-query-tool';
+import { listDocumentsTool } from '../tools/list-documents-tool';
+import { indexPdfWorkflow } from '../workflows/index-pdf';
 
 export const quizAgent = new Agent({
-  id: "quiz-agent",
-  name: "PDF Quiz Generator",
+  id: 'quiz-agent',
+  name: 'PDF Quiz Generator',
   instructions: `You are an educational quiz generator that creates comprehension questions from PDF documents.
 
 ## Your Capabilities
@@ -111,7 +111,7 @@ When asking about code examples:
 - If asked about content not in the PDF, acknowledge the limitation
 - Be encouraging and supportive - this is for learning!
 `,
-  model: "openai/gpt-5.2",
+  model: 'openai/gpt-5.2',
   tools: { pdfQueryTool, listDocumentsTool },
   workflows: { indexPdfWorkflow },
   memory: new Memory(),
