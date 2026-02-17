@@ -1,4 +1,4 @@
-import { Check, Blocks } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
@@ -10,22 +10,6 @@ import { Icon } from '@/ds/icons';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { Txt } from '@/ds/components/Txt';
 
-interface NavItem {
-  name: string;
-  pathSuffix: string;
-}
-
-const navItems: NavItem[] = [
-  { name: 'Identity', pathSuffix: '' },
-  { name: 'Instructions', pathSuffix: '/instruction-blocks' },
-  { name: 'Tools', pathSuffix: '/tools' },
-  { name: 'Agents', pathSuffix: '/agents' },
-  { name: 'Scorers', pathSuffix: '/scorers' },
-  { name: 'Workflows', pathSuffix: '/workflows' },
-  { name: 'Memory', pathSuffix: '/memory' },
-  { name: 'Variables', pathSuffix: '/variables' },
-];
-
 interface AgentCmsSidebarProps {
   basePath: string;
   currentPath: string;
@@ -33,9 +17,11 @@ interface AgentCmsSidebarProps {
 
 function isActive(basePath: string, currentPath: string, pathSuffix: string): boolean {
   const fullPath = basePath + pathSuffix;
+
   if (pathSuffix === '') {
     return currentPath === basePath || currentPath === basePath + '/';
   }
+
   return currentPath.startsWith(fullPath);
 }
 
@@ -47,22 +33,78 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
       <ScrollArea className="flex-1 min-h-0">
         <nav className="py-4">
           <ul className="flex flex-col gap-0">
-            {navItems.map((item, index) => {
-              const active = isActive(basePath, currentPath, item.pathSuffix);
-              const isLast = index === navItems.length - 1;
-
-              return (
-                <SidebarLink
-                  index={index}
-                  name={item.name}
-                  pathSuffix={item.pathSuffix}
-                  isLast={isLast}
-                  basePath={basePath}
-                  active={active}
-                  description="hello"
-                />
-              );
-            })}
+            <SidebarLink
+              index={0}
+              name="Identity"
+              pathSuffix=""
+              isLast={false}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '')}
+              description="hello"
+            />
+            <SidebarLink
+              index={1}
+              name="Instructions"
+              pathSuffix="/instruction-blocks"
+              isLast={false}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '/instruction-blocks')}
+              description="hello"
+            />
+            <SidebarLink
+              index={2}
+              name="Tools"
+              pathSuffix="/tools"
+              isLast={false}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '/tools')}
+              description="hello"
+            />
+            <SidebarLink
+              index={3}
+              name="Agents"
+              pathSuffix="/agents"
+              isLast={false}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '/agents')}
+              description="hello"
+            />
+            <SidebarLink
+              index={4}
+              name="Scorers"
+              pathSuffix="/scorers"
+              isLast={false}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '/scorers')}
+              description="hello"
+            />
+            <SidebarLink
+              index={5}
+              name="Workflows"
+              pathSuffix="/workflows"
+              isLast={false}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '/workflows')}
+              description="hello"
+            />
+            <SidebarLink
+              index={6}
+              name="Memory"
+              pathSuffix="/memory"
+              isLast={false}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '/memory')}
+              description="hello"
+            />
+            <SidebarLink
+              index={7}
+              name="Variables"
+              pathSuffix="/variables"
+              isLast={true}
+              basePath={basePath}
+              active={isActive(basePath, currentPath, '/variables')}
+              description="hello"
+            />
           </ul>
         </nav>
       </ScrollArea>

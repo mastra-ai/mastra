@@ -16,7 +16,6 @@ import { SubSectionHeader } from '@/domains/cms/components/section/section-heade
 import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
 import { stringToColor } from '@/lib/colors';
 import { Switch } from '@/ds/components/Switch';
-import { Textarea } from '@/ds/components/Textarea';
 import { cn } from '@/lib/utils';
 
 export function ToolsPage() {
@@ -102,8 +101,6 @@ export function ToolsPage() {
     [form, selectedIntegrationTools],
   );
 
-  const selectedOptions = options.filter(opt => selectedToolIds.includes(opt.value));
-
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6 p-4">
@@ -155,7 +152,11 @@ export function ToolsPage() {
                             'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
                             !isDisabled && 'border-border1 border-dashed ',
                           )}
-                          value={isSelected ? (selectedTools?.[tool.value]?.description ?? tool.description) : tool.description}
+                          value={
+                            isSelected
+                              ? (selectedTools?.[tool.value]?.description ?? tool.description)
+                              : tool.description
+                          }
                           onChange={e => handleDescriptionChange(tool.value, e.target.value)}
                         />
                       </EntityDescription>
@@ -172,37 +173,6 @@ export function ToolsPage() {
               })}
             </div>
           )}
-
-          {/* <div className="flex flex-col gap-2">
-            <MultiCombobox
-              options={options}
-              value={selectedToolIds}
-              onValueChange={handleValueChange}
-              placeholder="Select tools..."
-              searchPlaceholder="Search tools..."
-              emptyText="No tools available"
-              disabled={isLoadingTools || readOnly}
-              variant="light"
-            />
-            {selectedOptions.length > 0 && (
-              <div className="flex flex-col gap-3 mt-2">
-                {selectedOptions.map(tool => (
-                  <EntityAccordionItem
-                    key={tool.value}
-                    id={tool.value}
-                    name={tool.label}
-                    icon={<ToolsIcon className="text-accent6" />}
-                    description={selectedTools?.[tool.value]?.description || ''}
-                    onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)}
-                    onRemove={readOnly ? undefined : () => handleRemove(tool.value)}
-                    schema={variables}
-                    rules={selectedTools?.[tool.value]?.rules || undefined}
-                    onRulesChange={readOnly ? undefined : rules => handleRulesChange(tool.value, rules)}
-                  />
-                ))}
-              </div>
-            )}
-          </div> */}
         </SubSectionRoot>
       </div>
     </ScrollArea>
