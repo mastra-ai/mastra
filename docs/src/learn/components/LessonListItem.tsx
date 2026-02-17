@@ -21,11 +21,7 @@ function getProgressStatus(storage: LearnStorageV1, slug: string): LessonProgres
 
 function ProgressDot({ status }: { status: LessonProgressStatus }) {
   if (status === 'completed') {
-    return (
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500 text-xs text-white">
-        ✓
-      </span>
-    )
+    return <span className="learn-watched-icon is-watched h-5 w-5 shrink-0 text-xs">✓</span>
   }
   if (status === 'in-progress') {
     return <span className="h-5 w-5 shrink-0 rounded-full border-2 border-yellow-500" />
