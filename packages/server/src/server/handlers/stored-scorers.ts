@@ -16,6 +16,7 @@ import { toSlug } from '../utils';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
 
 const SCORER_SNAPSHOT_CONFIG_FIELDS = [
   'name',
@@ -280,7 +281,7 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       // This creates a new version if there are meaningful config changes.
       // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       await handleAutoVersioning(
-        scorerStore,
+        scorerStore as unknown as VersionedStoreInterface,
         storedScorerId,
         'scorerDefinitionId',
         SCORER_SNAPSHOT_CONFIG_FIELDS,

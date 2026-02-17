@@ -23,6 +23,7 @@ import {
   createVersionWithRetry,
   enforceRetentionLimit,
 } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
 
 const SNAPSHOT_CONFIG_FIELDS = [
   'name',
@@ -130,7 +131,7 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
       const changedFields = calculateChangedFields(previousConfig, currentConfig);
 
       const { versionId } = await createVersionWithRetry(
-        scorerStore,
+        scorerStore as unknown as VersionedStoreInterface,
         scorerId,
         'scorerDefinitionId',
         currentConfig,
@@ -143,7 +144,12 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to retrieve created version' });
       }
 
-      await enforceRetentionLimit(scorerStore, scorerId, 'scorerDefinitionId', scorer.activeVersionId);
+      await enforceRetentionLimit(
+        scorerStore as unknown as VersionedStoreInterface,
+        scorerId,
+        'scorerDefinitionId',
+        scorer.activeVersionId,
+      );
 
       return version;
     } catch (error) {
@@ -311,7 +317,7 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
       const changedFields = calculateChangedFields(previousConfig, restoredConfig);
 
       const { versionId: newVersionId } = await createVersionWithRetry(
-        scorerStore,
+        scorerStore as unknown as VersionedStoreInterface,
         scorerId,
         'scorerDefinitionId',
         restoredConfig,
@@ -326,7 +332,12 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to retrieve created version' });
       }
 
-      await enforceRetentionLimit(scorerStore, scorerId, 'scorerDefinitionId', scorer.activeVersionId);
+      await enforceRetentionLimit(
+        scorerStore as unknown as VersionedStoreInterface,
+        scorerId,
+        'scorerDefinitionId',
+        scorer.activeVersionId,
+      );
 
       return newVersion;
     } catch (error) {

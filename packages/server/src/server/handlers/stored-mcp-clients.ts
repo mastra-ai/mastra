@@ -16,6 +16,7 @@ import { toSlug } from '../utils';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
 
 const MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'servers'] as const;
 
@@ -234,7 +235,7 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       // This creates a new version if there are meaningful config changes.
       // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       await handleAutoVersioning(
-        mcpClientStore,
+        mcpClientStore as unknown as VersionedStoreInterface,
         storedMCPClientId,
         'mcpClientId',
         MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,

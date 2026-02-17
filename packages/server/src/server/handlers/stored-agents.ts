@@ -18,8 +18,26 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
-import { handleAutoVersioning } from './agent-versions';
 import { handleError } from './error';
+import { handleAutoVersioning } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
+
+const AGENT_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+  'requestContextSchema',
+] as const;
 
 // ============================================================================
 // Route Definitions
@@ -315,8 +333,10 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       // This creates a new version if there are meaningful config changes.
       // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       const autoVersionResult = await handleAutoVersioning(
-        agentsStore,
+        agentsStore as unknown as VersionedStoreInterface,
         storedAgentId,
+        'agentId',
+        AGENT_SNAPSHOT_CONFIG_FIELDS,
         existing,
         updatedAgent,
         providedConfigFields,

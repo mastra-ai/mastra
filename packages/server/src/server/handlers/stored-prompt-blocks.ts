@@ -16,6 +16,7 @@ import { toSlug } from '../utils';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
 
 const PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'content', 'rules'] as const;
 
@@ -237,7 +238,7 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       // This creates a new version if there are meaningful config changes.
       // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       await handleAutoVersioning(
-        promptBlockStore,
+        promptBlockStore as unknown as VersionedStoreInterface,
         storedPromptBlockId,
         'blockId',
         PROMPT_BLOCK_SNAPSHOT_CONFIG_FIELDS,

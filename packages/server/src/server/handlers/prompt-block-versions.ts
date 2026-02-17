@@ -23,6 +23,7 @@ import {
   createVersionWithRetry,
   enforceRetentionLimit,
 } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
 
 const SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'content', 'rules'] as const;
 
@@ -121,7 +122,7 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       const changedFields = calculateChangedFields(previousConfig, currentConfig);
 
       const { versionId } = await createVersionWithRetry(
-        promptBlockStore,
+        promptBlockStore as unknown as VersionedStoreInterface,
         promptBlockId,
         'blockId',
         currentConfig,
@@ -134,7 +135,12 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to retrieve created version' });
       }
 
-      await enforceRetentionLimit(promptBlockStore, promptBlockId, 'blockId', promptBlock.activeVersionId);
+      await enforceRetentionLimit(
+        promptBlockStore as unknown as VersionedStoreInterface,
+        promptBlockId,
+        'blockId',
+        promptBlock.activeVersionId,
+      );
 
       return version;
     } catch (error) {
@@ -302,7 +308,7 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       const changedFields = calculateChangedFields(previousConfig, restoredConfig);
 
       const { versionId: newVersionId } = await createVersionWithRetry(
-        promptBlockStore,
+        promptBlockStore as unknown as VersionedStoreInterface,
         promptBlockId,
         'blockId',
         restoredConfig,
@@ -317,7 +323,12 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to retrieve created version' });
       }
 
-      await enforceRetentionLimit(promptBlockStore, promptBlockId, 'blockId', promptBlock.activeVersionId);
+      await enforceRetentionLimit(
+        promptBlockStore as unknown as VersionedStoreInterface,
+        promptBlockId,
+        'blockId',
+        promptBlock.activeVersionId,
+      );
 
       return newVersion;
     } catch (error) {

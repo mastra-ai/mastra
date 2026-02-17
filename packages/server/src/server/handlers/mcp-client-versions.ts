@@ -23,6 +23,7 @@ import {
   createVersionWithRetry,
   enforceRetentionLimit,
 } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
 
 const SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'servers'] as const;
 
@@ -121,7 +122,7 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const changedFields = calculateChangedFields(previousConfig, currentConfig);
 
       const { versionId } = await createVersionWithRetry(
-        mcpClientStore,
+        mcpClientStore as unknown as VersionedStoreInterface,
         mcpClientId,
         'mcpClientId',
         currentConfig,
@@ -134,7 +135,12 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to retrieve created version' });
       }
 
-      await enforceRetentionLimit(mcpClientStore, mcpClientId, 'mcpClientId', mcpClient.activeVersionId);
+      await enforceRetentionLimit(
+        mcpClientStore as unknown as VersionedStoreInterface,
+        mcpClientId,
+        'mcpClientId',
+        mcpClient.activeVersionId,
+      );
 
       return version;
     } catch (error) {
@@ -302,7 +308,7 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const changedFields = calculateChangedFields(previousConfig, restoredConfig);
 
       const { versionId: newVersionId } = await createVersionWithRetry(
-        mcpClientStore,
+        mcpClientStore as unknown as VersionedStoreInterface,
         mcpClientId,
         'mcpClientId',
         restoredConfig,
@@ -317,7 +323,12 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to retrieve created version' });
       }
 
-      await enforceRetentionLimit(mcpClientStore, mcpClientId, 'mcpClientId', mcpClient.activeVersionId);
+      await enforceRetentionLimit(
+        mcpClientStore as unknown as VersionedStoreInterface,
+        mcpClientId,
+        'mcpClientId',
+        mcpClient.activeVersionId,
+      );
 
       return newVersion;
     } catch (error) {
