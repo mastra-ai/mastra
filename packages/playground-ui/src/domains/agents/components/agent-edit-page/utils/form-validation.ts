@@ -154,6 +154,18 @@ export const agentFormSchema = z.object({
   memory: memoryConfigSchema.optional(),
   variables: z.custom<JsonSchema>().optional(),
   instructionBlocks: z.array(instructionBlockSchema).optional(),
+  mcpClients: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        name: z.string().min(1),
+        description: z.string().optional(),
+        servers: z.record(z.string(), z.any()),
+      }),
+    )
+    .optional()
+    .default([]),
+  mcpClientsToDelete: z.array(z.string()).optional().default([]),
 });
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;

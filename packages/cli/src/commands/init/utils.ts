@@ -713,7 +713,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             message: 'Enter your API key:',
             placeholder: 'sk-...',
             validate: value => {
-              if (value.length === 0) return 'API key cannot be empty';
+              if (!value || value.length === 0) return 'API key cannot be empty';
             },
           });
         }
