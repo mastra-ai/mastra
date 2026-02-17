@@ -152,7 +152,7 @@ describe('DurableAgent stopWhen callback', () => {
       cleanup();
     });
 
-    it('should accept stopWhen callback in prepare options', async () => {
+    it('should handle prepare options with maxSteps', async () => {
       const mockModel = createTextModel('Here is your answer.');
 
       const baseAgent = new Agent({
@@ -163,10 +163,6 @@ describe('DurableAgent stopWhen callback', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const _stopWhen = vi.fn().mockReturnValue(false);
-
-      // Note: stopWhen is typically used with stream, not prepare
-      // but we verify the options handling
       const result = await durableAgent.prepare('Hello', {
         maxSteps: 5,
       });
@@ -351,7 +347,7 @@ describe('DurableAgent stopWhen edge cases', () => {
     cleanup();
   });
 
-  it('should handle stopWhen that throws an error', async () => {
+  it('should accept stopWhen callback in stream options', async () => {
     const mockModel = createTextModel('Response');
 
     const baseAgent = new Agent({
@@ -362,11 +358,7 @@ describe('DurableAgent stopWhen edge cases', () => {
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    // This would normally throw, but we're testing that it's accepted
-    const stopWhen = vi.fn().mockImplementation(() => {
-      // In actual execution, errors would be caught
-      return false;
-    });
+    const stopWhen = vi.fn().mockReturnValue(false);
 
     const { runId, cleanup } = await durableAgent.stream('Hello', {
       stopWhen,

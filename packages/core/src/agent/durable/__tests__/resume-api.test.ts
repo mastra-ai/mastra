@@ -182,6 +182,7 @@ describe('Resume API', () => {
 
     it('should return stream result from resume', async () => {
       const mockModel = createTextModel('Resumed successfully');
+      const testPubsub = new EventEmitterPubSub();
 
       const baseAgent = new Agent({
         id: 'factory-resume-agent',
@@ -192,7 +193,7 @@ describe('Resume API', () => {
 
       const durableAgent = createDurableAgent({
         agent: baseAgent,
-        pubsub: new EventEmitterPubSub(),
+        pubsub: testPubsub,
       });
 
       const { runId } = await durableAgent.prepare('Hello');
@@ -203,6 +204,7 @@ describe('Resume API', () => {
       expect(result.output).toBeDefined();
       expect(typeof result.cleanup).toBe('function');
       result.cleanup();
+      await testPubsub.close();
     });
   });
 });
@@ -265,8 +267,7 @@ describe('Resume with CachingPubSub Event Replay', () => {
     const topic = `agent.stream.${runId}`;
     const cachedEvents = await cachingPubsub.getHistory(topic);
     // Events should be cached (at least the start event)
-    expect(cachedEvents.length).toBeGreaterThanOrEqual(0);
-    // Note: The exact number depends on timing and workflow execution
+    expect(cachedEvents.length).toBeGreaterThan(0);
   });
 
   it('should deduplicate events during resume replay', async () => {
@@ -316,7 +317,7 @@ describe('Resume with Tool Approval', () => {
     await pubsub.close();
   });
 
-  it('should support onSuspended callback in resume options', async () => {
+  it('should accept onSuspended option in resume', async () => {
     const mockModel = createTextModel('Done');
     const onSuspended = vi.fn();
 
@@ -457,13 +458,17 @@ describe('Resume State Preservation', () => {
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-    const { cleanup } = await durableAgent.stream('Test message');
+    const { runId, cleanup } = await durableAgent.stream('Test message');
+
+    // Run should be registered initially
+    expect(durableAgent.runRegistry.has(runId)).toBe(true);
 
     // Wait for stream to complete
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Cleanup should complete without error
+    // Cleanup should remove from registry
     cleanup();
+    expect(durableAgent.runRegistry.has(runId)).toBe(false);
   });
 });
 
@@ -560,7 +565,7 @@ describe('Observe API', () => {
     result.cleanup();
   });
 
-  it('should support callbacks in observe', async () => {
+  it('should accept callbacks in observe options', async () => {
     const mockModel = createTextModel('Callback test');
     const onChunk = vi.fn();
     const onFinish = vi.fn();

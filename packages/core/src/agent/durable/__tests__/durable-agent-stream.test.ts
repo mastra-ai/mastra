@@ -173,6 +173,8 @@ describe('DurableAgent streaming execution', () => {
       // Wait for events to propagate
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      expect(chunks.length).toBeGreaterThan(0);
+
       cleanup();
     });
 
@@ -196,6 +198,9 @@ describe('DurableAgent streaming execution', () => {
       });
 
       await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(chunks.length).toBeGreaterThan(0);
+
       cleanup();
     });
 
@@ -229,7 +234,7 @@ describe('DurableAgent streaming execution', () => {
   describe('callbacks', () => {
     it('should invoke onFinish callback when streaming completes', async () => {
       const mockModel = createTextStreamModel('Complete response');
-      let _finishData: any = null;
+      let finishData: any = null;
 
       const baseAgent = new Agent({
         id: 'finish-callback-agent',
@@ -240,14 +245,16 @@ describe('DurableAgent streaming execution', () => {
 
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      const { runId: _runId, cleanup } = await durableAgent.stream('Test', {
+      const { cleanup } = await durableAgent.stream('Test', {
         onFinish: data => {
-          _finishData = data;
+          finishData = data;
         },
       });
 
       // Wait for workflow to complete
       await new Promise(resolve => setTimeout(resolve, 200));
+
+      expect(finishData).not.toBeNull();
 
       cleanup();
     });
@@ -259,7 +266,7 @@ describe('DurableAgent streaming execution', () => {
         },
       });
 
-      let _errorReceived: Error | null = null;
+      let errorReceived: Error | null = null;
 
       const baseAgent = new Agent({
         id: 'error-callback-agent',
@@ -272,12 +279,14 @@ describe('DurableAgent streaming execution', () => {
 
       const { cleanup } = await durableAgent.stream('Test', {
         onError: error => {
-          _errorReceived = error;
+          errorReceived = error;
         },
       });
 
       // Wait for error to propagate
       await new Promise(resolve => setTimeout(resolve, 200));
+
+      expect(errorReceived).not.toBeNull();
 
       cleanup();
     });
@@ -302,6 +311,10 @@ describe('DurableAgent streaming execution', () => {
       });
 
       await new Promise(resolve => setTimeout(resolve, 200));
+
+      // stepResults may or may not contain entries depending on workflow execution timing
+      expect(Array.isArray(stepResults)).toBe(true);
+
       cleanup();
     });
   });
@@ -517,7 +530,7 @@ describe('DurableAgent error handling', () => {
       },
     });
 
-    let _errorReceived: Error | null = null;
+    let errorReceived: Error | null = null;
 
     const baseAgent = new Agent({
       id: 'error-model-agent',
@@ -530,11 +543,13 @@ describe('DurableAgent error handling', () => {
 
     const { cleanup } = await durableAgent.stream('Test', {
       onError: error => {
-        _errorReceived = error;
+        errorReceived = error;
       },
     });
 
     await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(errorReceived).not.toBeNull();
 
     cleanup();
   });

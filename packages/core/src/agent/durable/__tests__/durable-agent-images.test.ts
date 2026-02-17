@@ -248,7 +248,7 @@ describe('DurableAgent image handling', () => {
 
     it('should handle large base64 images', async () => {
       const mockModel = createTextModel('Large image received.');
-      // Create a larger base64 string (still valid, just repeated)
+      // Create a large payload (repeated base64 is not a valid image — tests serialization of large payloads)
       const largeBase64 = SAMPLE_BASE64_IMAGE.repeat(100);
 
       const baseAgent = new Agent({

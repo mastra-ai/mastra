@@ -836,7 +836,7 @@ describe('DurableAgent lazy initialization', () => {
     await pubsub.close();
   });
 
-  it('should not initialize Agent until first async method call', () => {
+  it('should provide agent properties synchronously after construction', () => {
     const mockModel = createTextModel('Hello');
 
     const baseAgent = new Agent({

@@ -403,7 +403,7 @@ describe('DurableAgent preparation', () => {
 
     // Check that tool metadata is serialized
     expect(result.workflowInput.toolsMetadata).toBeDefined();
-    expect(result.workflowInput.toolsMetadata.length).toBeGreaterThanOrEqual(0);
+    expect(result.workflowInput.toolsMetadata.length).toBeGreaterThanOrEqual(1);
 
     // Verify tools are stored in registry (with execute functions)
     const tools = durableAgent.runRegistry.getTools(result.runId);

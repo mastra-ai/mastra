@@ -181,7 +181,7 @@ describe('DurableAgent usage tracking', () => {
   });
 
   describe('workflow initialization state', () => {
-    it('should initialize with zero accumulated usage', async () => {
+    it('should expose workflow with correct id', async () => {
       const mockModel = createModelWithUsage({
         inputTokens: 10,
         outputTokens: 20,

@@ -20,7 +20,7 @@ import { createDurableAgent } from '../create-durable-agent';
 /**
  * Creates a mock model that returns reasoning then text
  */
-function createReasoningModel(reasoningText: string, responseText: string) {
+function createReasoningModel(_reasoningText: string, responseText: string) {
   return new MockLanguageModelV2({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
