@@ -67,14 +67,20 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
     // Create version 1 from the config
     const versionId = crypto.randomUUID();
-    await this.createVersion({
-      id: versionId,
-      skillId: skill.id,
-      versionNumber: 1,
-      ...snapshotConfig,
-      changedFields: Object.keys(snapshotConfig),
-      changeMessage: 'Initial version',
-    });
+    try {
+      await this.createVersion({
+        id: versionId,
+        skillId: skill.id,
+        versionNumber: 1,
+        ...snapshotConfig,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+      });
+    } catch (error) {
+      // Roll back the orphaned skill record
+      this.db.skills.delete(skill.id);
+      throw error;
+    }
 
     // Return the thin record
     return this.deepCopyConfig(newConfig);
