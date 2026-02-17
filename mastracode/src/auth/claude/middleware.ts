@@ -1,4 +1,4 @@
-import { LanguageModelMiddleware } from "ai"
+import type { LanguageModelMiddleware } from "ai"
 
 /**
  * Prompt caching middleware for Anthropic

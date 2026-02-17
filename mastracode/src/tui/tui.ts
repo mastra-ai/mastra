@@ -5,6 +5,7 @@ import type {
     HarnessMessage,
     TokenUsage,
 } from "@mastra/core/harness"
+import type { MastraCodeCustomEvent, MastraCodeEvent } from "../harness"
 import { execSync } from "node:child_process"
 import { Container, ProcessTerminal, Spacer, Text, TUI, visibleWidth } from "@mariozechner/pi-tui"
 import chalk from "chalk"
@@ -42,7 +43,7 @@ import { ToolApprovalDialogComponent } from "./components/tool/approval-dialog"
 import { bold, fg, getEditorTheme, mastra, tintHex } from "./theme"
 
 export interface MastraTUIOptions {
-    harness: Harness<any>
+    harness: Harness<any, MastraCodeCustomEvent>
     initialMessage?: string
     verbose?: boolean
     appName?: string
@@ -51,7 +52,7 @@ export interface MastraTUIOptions {
 }
 
 export class MastraTUI {
-    private harness: Harness<any>
+    private harness: Harness<any, MastraCodeCustomEvent>
     private options: MastraTUIOptions
 
     private ui: TUI
@@ -269,10 +270,169 @@ ${instructions}`,
     }
 
     private subscribeToHarness(): void {
-        const listener: HarnessEventListener = async (event) => {
-            await this.handleEvent(event)
+        // Core HarnessEvents — handled via switch-case in handleCoreEvent
+        const coreListener: HarnessEventListener<MastraCodeCustomEvent> = async (event) => {
+            await this.handleCoreEvent(event as HarnessEvent)
         }
-        this.unsubscribe = this.harness.subscribe(listener)
+        this.unsubscribe = this.harness.subscribe(coreListener)
+
+        // Custom MastraCode events — typed on() subscriptions
+        this.registerCustomEventHandlers()
+    }
+
+    /**
+     * Register typed event handlers for MastraCode-specific events.
+     * Each handler receives a properly typed event — no manual casting.
+     */
+    private registerCustomEventHandlers(): void {
+        this.harness.on("model_changed", () => {
+            this.updateStatusLine()
+            this.ui.requestRender()
+        })
+
+        this.harness.on("om_model_changed", () => {
+            this.updateStatusLine()
+            this.ui.requestRender()
+        })
+
+        this.harness.on("follow_up_queued", (event) => {
+            this.showInfo(`Follow-up queued (${event.count} pending)`)
+            this.ui.requestRender()
+        })
+
+        this.harness.on("todo_updated" as any, (event: any) => {
+            this.todoProgress?.updateTodos(event.todos ?? [])
+            this.ui.requestRender()
+        })
+
+        this.harness.on("workspace_error", (event) => {
+            this.showError(`Workspace: ${event.error.message}`)
+            this.ui.requestRender()
+        })
+
+        this.harness.on("workspace_status_changed", (event) => {
+            if (event.status === "error" && event.error) {
+                this.showError(`Workspace: ${event.error.message}`)
+                this.ui.requestRender()
+            }
+        })
+
+        this.harness.on("subagent_start" as any, (event: any) => {
+            const label = [event.agentType, event.modelId].filter(Boolean).join(" · ") || "subagent"
+            const status = event.task ? `start: ${event.task}` : "started"
+            this.addOMComponentBeforeStreaming(new SubagentExecutionComponent(label, status))
+            this.ui.requestRender()
+        })
+
+        this.harness.on("subagent_tool_start" as any, (event: any) => {
+            this.addOMComponentBeforeStreaming(
+                new SubagentExecutionComponent("subagent", `tool start: ${event.subToolName ?? "unknown"}`),
+            )
+            this.ui.requestRender()
+        })
+
+        this.harness.on("subagent_tool_end" as any, (event: any) => {
+            this.addOMComponentBeforeStreaming(
+                new SubagentExecutionComponent(
+                    "subagent",
+                    `${event.isError ? "tool failed" : "tool done"}: ${event.subToolName ?? "unknown"}`,
+                ),
+            )
+            this.ui.requestRender()
+        })
+
+        this.harness.on("subagent_end" as any, (event: any) => {
+            this.addOMComponentBeforeStreaming(
+                new SubagentExecutionComponent(
+                    "subagent",
+                    `${event.isError ? "failed" : "done"}${typeof event.durationMs === "number" ? ` (${event.durationMs}ms)` : ""}`,
+                ),
+            )
+            this.ui.requestRender()
+        })
+
+        this.harness.on("ask_question" as any, (event: any) => {
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`[ask] ${event.question}`),
+            )
+            if (event.options?.length) {
+                this.chatContainer.addChild(
+                    new SystemReminderComponent(
+                        event.options.map((o: any, i: number) => `${i + 1}. ${o.label}`).join("  "),
+                    ),
+                )
+            }
+            this.activeInlineQuestion = new AskQuestionInlineComponent(
+                {
+                    id: event.questionId,
+                    prompt: event.question,
+                    options:
+                        event.options?.map((o: any, i: number) => ({
+                            id: String(i + 1),
+                            label: o.label,
+                        })) ?? [],
+                    allowMultiple: false,
+                },
+                (answers: string[]) => {
+                    this.harness.respondToQuestion(event.questionId, answers[0] ?? "")
+                },
+            )
+            this.pendingQuestionId = event.questionId
+            this.chatContainer.addChild(this.activeInlineQuestion)
+            this.ui.requestRender()
+        })
+
+        this.harness.on("sandbox_access_request" as any, (event: any) => {
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`[sandbox] ${event.reason}`),
+            )
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`Path: ${event.path} (y/n)`),
+            )
+            this.activeInlineQuestion = new AskQuestionInlineComponent(
+                {
+                    id: event.questionId,
+                    prompt: `Grant sandbox access to ${event.path}?`,
+                    options: [
+                        { id: "y", label: "Yes" },
+                        { id: "n", label: "No" },
+                    ],
+                    allowMultiple: false,
+                },
+                (answers: string[]) => {
+                    const a = (answers[0] ?? "").toLowerCase()
+                    this.harness.respondToQuestion(
+                        event.questionId,
+                        a === "y" || a === "yes" ? "yes" : "no",
+                    )
+                },
+            )
+            this.pendingQuestionId = event.questionId
+            this.chatContainer.addChild(this.activeInlineQuestion)
+            this.ui.requestRender()
+        })
+
+        this.harness.on("plan_approval_required" as any, (event: any) => {
+            this.chatContainer.addChild(
+                new SystemReminderComponent(`[plan] ${event.title}`),
+            )
+            this.chatContainer.addChild(new SlashCommandComponent("/plan", event.plan))
+            this.activeInlinePlanApproval = new PlanApprovalInlineComponent((approved: boolean) => {
+                void this.harness.respondToPlanApproval(event.planId, {
+                    action: approved ? "approved" : "rejected",
+                })
+            })
+            this.pendingPlanId = event.planId
+            this.chatContainer.addChild(this.activeInlinePlanApproval)
+            this.ui.requestRender()
+        })
+
+        this.harness.on("plan_approved" as any, () => {
+            this.chatContainer.addChild(new SystemReminderComponent("plan approved"))
+            this.activeInlinePlanApproval = undefined
+            this.pendingPlanId = undefined
+            this.ui.requestRender()
+        })
     }
 
     private updateTerminalTitle(): void {
@@ -804,177 +964,12 @@ ${instructions}`,
         }
     }
 
-    private async handleEvent(event: HarnessEvent): Promise<void> {
-        const eventType = (event as { type: string }).type
-
-        if (eventType === "model_changed") {
-            this.updateStatusLine()
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "om_model_changed" || eventType === "subagent_model_changed") {
-            this.updateStatusLine()
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "follow_up_queued") {
-            const e = event as { count: number }
-            this.showInfo(`Follow-up queued (${e.count} pending)`)
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "todo_updated") {
-            const e = event as { todos?: TodoItem[] }
-            this.todoProgress?.updateTodos(e.todos ?? [])
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "workspace_error") {
-            const e = event as { error: Error }
-            this.showError(`Workspace: ${e.error.message}`)
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "workspace_status_changed") {
-            const e = event as { status: string; error?: Error }
-            if (e.status === "error" && e.error) {
-                this.showError(`Workspace: ${e.error.message}`)
-                this.ui.requestRender()
-            }
-            return
-        }
-        if (eventType === "subagent_start") {
-            const e = event as { agentType?: string; task?: string; modelId?: string }
-            const label = [e.agentType, e.modelId].filter(Boolean).join(" · ") || "subagent"
-            const status = e.task ? `start: ${e.task}` : "started"
-            this.addOMComponentBeforeStreaming(new SubagentExecutionComponent(label, status))
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "subagent_tool_start") {
-            const e = event as { subToolName?: string }
-            this.addOMComponentBeforeStreaming(
-                new SubagentExecutionComponent("subagent", `tool start: ${e.subToolName ?? "unknown"}`),
-            )
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "subagent_tool_end") {
-            const e = event as { subToolName?: string; isError?: boolean }
-            this.addOMComponentBeforeStreaming(
-                new SubagentExecutionComponent(
-                    "subagent",
-                    `${e.isError ? "tool failed" : "tool done"}: ${e.subToolName ?? "unknown"}`,
-                ),
-            )
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "subagent_end") {
-            const e = event as { isError?: boolean; durationMs?: number }
-            this.addOMComponentBeforeStreaming(
-                new SubagentExecutionComponent(
-                    "subagent",
-                    `${e.isError ? "failed" : "done"}${typeof e.durationMs === "number" ? ` (${e.durationMs}ms)` : ""}`,
-                ),
-            )
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "subagent_text_delta" || eventType === "workspace_ready") {
-            return
-        }
-        if (eventType === "ask_question") {
-            const e = event as {
-                questionId: string
-                question: string
-                options?: Array<{ label: string; description?: string }>
-            }
-            this.chatContainer.addChild(
-                new SystemReminderComponent(`[ask] ${e.question}`),
-            )
-            if (e.options?.length) {
-                this.chatContainer.addChild(
-                    new SystemReminderComponent(
-                        e.options.map((o, i) => `${i + 1}. ${o.label}`).join("  "),
-                    ),
-                )
-            }
-            this.activeInlineQuestion = new AskQuestionInlineComponent(
-                {
-                    id: e.questionId,
-                    prompt: e.question,
-                    options:
-                        e.options?.map((o, i) => ({
-                            id: String(i + 1),
-                            label: o.label,
-                        })) ?? [],
-                    allowMultiple: false,
-                },
-                (answers) => {
-                    this.harness.respondToQuestion(e.questionId, answers[0] ?? "")
-                },
-            )
-            this.pendingQuestionId = e.questionId
-            this.chatContainer.addChild(this.activeInlineQuestion)
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "sandbox_access_request") {
-            const e = event as { questionId: string; path: string; reason: string }
-            this.chatContainer.addChild(
-                new SystemReminderComponent(`[sandbox] ${e.reason}`),
-            )
-            this.chatContainer.addChild(
-                new SystemReminderComponent(`Path: ${e.path} (y/n)`),
-            )
-            this.activeInlineQuestion = new AskQuestionInlineComponent(
-                {
-                    id: e.questionId,
-                    prompt: `Grant sandbox access to ${e.path}?`,
-                    options: [
-                        { id: "y", label: "Yes" },
-                        { id: "n", label: "No" },
-                    ],
-                    allowMultiple: false,
-                },
-                (answers) => {
-                    const a = (answers[0] ?? "").toLowerCase()
-                    this.harness.respondToQuestion(
-                        e.questionId,
-                        a === "y" || a === "yes" ? "yes" : "no",
-                    )
-                },
-            )
-            this.pendingQuestionId = e.questionId
-            this.chatContainer.addChild(this.activeInlineQuestion)
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "plan_approval_required") {
-            const e = event as { planId: string; title: string; plan: string }
-            this.chatContainer.addChild(
-                new SystemReminderComponent(`[plan] ${e.title}`),
-            )
-            this.chatContainer.addChild(new SlashCommandComponent("/plan", e.plan))
-            this.activeInlinePlanApproval = new PlanApprovalInlineComponent((approved) => {
-                void this.harness.respondToPlanApproval(e.planId, {
-                    action: approved ? "approved" : "rejected",
-                })
-            })
-            this.pendingPlanId = e.planId
-            this.chatContainer.addChild(this.activeInlinePlanApproval)
-            this.ui.requestRender()
-            return
-        }
-        if (eventType === "plan_approved") {
-            this.chatContainer.addChild(new SystemReminderComponent("plan approved"))
-            this.activeInlinePlanApproval = undefined
-            this.pendingPlanId = undefined
-            this.ui.requestRender()
-            return
-        }
-
+    /**
+     * Handle core HarnessEvent types via switch-case.
+     * Custom MastraCode events (subagent_*, todo_updated, ask_question, etc.)
+     * are handled by typed on() subscriptions registered in registerCustomEventHandlers().
+     */
+    private async handleCoreEvent(event: HarnessEvent): Promise<void> {
         switch (event.type) {
             case "agent_start":
                 this.isAgentActive = true

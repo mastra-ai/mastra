@@ -1,5 +1,5 @@
 import { createAnthropic } from "@ai-sdk/anthropic"
-import { MastraModelConfig } from "@mastra/core/llm"
+import type { MastraModelConfig } from "@mastra/core/llm"
 import { wrapLanguageModel } from "ai"
 import { claudeCodeMiddleware, promptCacheMiddleware } from "./middleware"
 import { getAuthStorage } from "../storage-singleton"

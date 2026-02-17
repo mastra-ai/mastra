@@ -16,7 +16,7 @@ import { createTool } from "@mastra/core/tools"
 import { Agent } from "@mastra/core/agent"
 import { z } from "zod"
 import { getSubagentDefinition, getSubagentIds } from "../agents"
-import type { HarnessEvent } from "@mastra/core/harness"
+import type { MastraCodeEvent } from "../harness"
 
 export interface SubagentToolDeps {
     /**
@@ -32,16 +32,17 @@ export interface SubagentToolDeps {
     resolveModel: (modelId: string) => any
 
     /**
-     * Emit a HarnessEvent to the TUI for live updates.
-     * Closed over the harness instance at tool-construction time.
+     * Emit a MastraCodeEvent to the TUI for live updates.
+     * Wire to harness.emitEvent() or use requestContext.get("harness").emitEvent.
      */
-    emitEvent: (event: HarnessEvent) => void
+    emitEvent: (event: MastraCodeEvent) => void
 
     /**
      * Get the current abort signal (changes per-stream invocation).
      * Returns undefined if no stream is active.
+     * Wire to harness.getAbortSignal().
      */
-    getAbortSignal?: () => AbortSignal | undefined
+    getAbortSignal: () => AbortSignal | undefined
 
     /**
      * Resolve a configured model ID for a specific subagent type.

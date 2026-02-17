@@ -6,7 +6,7 @@ import { LibSQLStore } from "@mastra/libsql"
 // Create Storage (shared across all projects)
 // =============================================================================
 
-export function createStorage(project: ProjectInfo): LibSQLStore {
+export function createStorage(project: ProjectInfo) {
     const storageConfig = getStorageConfig(project.rootPath)
     return new LibSQLStore({
         id: "mastra-code-storage",

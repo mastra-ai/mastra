@@ -1,5 +1,6 @@
 export { Harness } from './harness';
 export type {
+  EventOfType,
   HarnessConfig,
   HarnessEvent,
   HarnessEventListener,
@@ -10,11 +11,19 @@ export type {
   HarnessModeAccessor,
   HarnessRequestContext,
   HarnessSession,
+  HarnessStorage,
+  HarnessToolContext,
   HarnessStateAccessor,
   HarnessStateSchema,
+  StateOf,
   HarnessThread,
   HarnessThreads,
   HarnessUsageAccessor,
   ObservationalMemoryDebugEvent,
+  PendingInteraction,
+  StreamChunkHandler,
+  StreamHandlerContext,
   TokenUsage,
+  ToolPolicy,
+  TypedEventListener,
 } from './types';

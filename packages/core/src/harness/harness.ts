@@ -1,5 +1,3 @@
-import type z from 'zod';
-
 import type { MastraDBMessage } from '../agent';
 import { RequestContext } from '../request-context';
 import { Workspace } from '../workspace';
@@ -16,11 +14,16 @@ import type {
   HarnessRequestContext,
   HarnessStateAccessor,
   HarnessStateSchema,
+  StateOf,
   HarnessThread,
   HarnessThreads,
   HarnessUsageAccessor,
   HarnessSession,
+  PendingInteraction,
+  StreamChunkHandler,
+  StreamHandlerContext,
   TokenUsage,
+  TypedEventListener,
 } from './types';
 
 // =============================================================================
@@ -55,13 +58,25 @@ import type {
  *       id: "plan",
  *       name: "Plan Mode",
  *       default: true,
+ *       toolPolicy: { readOnly: true, allowedTools: ["read_file", "grep"] },
  *       agent: (state) => planAgent,
+ *     },
+ *     {
+ *       id: "build",
+ *       name: "Build Mode",
+ *       agent: buildAgent,
  *     },
  *   ],
  * })
  *
+ * // Subscribe to all events
  * harness.subscribe((event) => {
  *   if (event.type === "message_update") renderMessage(event.message)
+ * })
+ *
+ * // Subscribe to a specific event type (typed!)
+ * harness.on("mode_changed", (event) => {
+ *   console.log(`Switched from ${event.previousModeId} to ${event.modeId}`)
  * })
  *
  * await harness.init()
@@ -69,7 +84,10 @@ import type {
  * await harness.send("Hello!")
  * ```
  */
-export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
+export class Harness<
+  TState extends HarnessStateSchema = HarnessStateSchema,
+  TCustomEvent extends { type: string } = never,
+> {
   readonly id: string;
 
   // -- Namespaced public API ---------------------------------------------
@@ -80,7 +98,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   // -- Config & internal state -------------------------------------------
   private config: HarnessConfig<TState>;
-  private _state: z.infer<TState>;
+  private _state: StateOf<TState>;
   private _currentModeId: string;
   private _currentThreadId: string | null = null;
   private _resourceId: string;
@@ -89,7 +107,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private _isRemoteStorage: boolean;
 
   // -- Event system -----------------------------------------------------
-  private listeners: HarnessEventListener[] = [];
+  private listeners: HarnessEventListener<TCustomEvent>[] = [];
+  private typedListeners = new Map<string, Set<(event: any) => void | Promise<void>>>();
 
   // -- Operation tracking -----------------------------------------------
   private abortController: AbortController | null = null;
@@ -98,17 +117,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private currentRunId: string | null = null;
   private followUpQueue: string[] = [];
 
-  // -- Tool approval ----------------------------------------------------
-  private pendingApprovalResolve: ((decision: 'approve' | 'decline') => void) | null = null;
+  // -- Pending interactions (unified) -----------------------------------
+  private pendingInteractions = new Map<string, PendingInteraction<any>>();
 
-  // -- Interactive prompts ----------------------------------------------
-  private pendingQuestions = new Map<string, (answer: string) => void>();
-  private pendingPlanApprovals = new Map<
-    string,
-    (result: { action: 'approved' | 'rejected'; feedback?: string }) => void
-  >();
-
-  // -- Token usage ------------------------------------------------------
+  // -- Token usage (cumulative per thread) ------------------------------
   private _tokenUsage: TokenUsage = {
     promptTokens: 0,
     completionTokens: 0,
@@ -118,6 +130,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // -- Workspace --------------------------------------------------------
   private _workspace: Workspace | undefined = undefined;
   private workspaceInitialized = false;
+
+  // -- Stream handlers --------------------------------------------------
+  private streamHandlers: Map<string, StreamChunkHandler>;
 
   // =====================================================================
   // Lifecycle
@@ -135,7 +150,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this._state = {
       ...this.getSchemaDefaults(),
       ...config.initialState,
-    } as z.infer<TState>;
+    } as StateOf<TState>;
 
     // Find default mode
     const defaultMode = config.modes.find(m => m.default) ?? config.modes[0];
@@ -148,6 +163,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     if (config.workspace instanceof Workspace) {
       this._workspace = config.workspace;
     }
+
+    // Build stream handler registry from config
+    this.streamHandlers = new Map(Object.entries(config.streamHandlers ?? {}));
 
     // Build namespaced public API
     this.threads = {
@@ -260,10 +278,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // =====================================================================
 
   /**
-   * Subscribe to harness events.
+   * Subscribe to all harness events.
    * Returns an unsubscribe function.
+   *
+   * The listener receives `HarnessEvent | TCustomEvent` — both core events
+   * and any application-specific events emitted via `emitEvent()`.
    */
-  subscribe(listener: HarnessEventListener): () => void {
+  subscribe(listener: HarnessEventListener<TCustomEvent>): () => void {
     this.listeners.push(listener);
     return () => {
       const index = this.listeners.indexOf(listener);
@@ -273,13 +294,79 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     };
   }
 
-  /** Emit an event to all listeners. */
+  /**
+   * Subscribe to a specific event type with full type narrowing.
+   * Returns an unsubscribe function.
+   *
+   * @example
+   * ```ts
+   * harness.on('mode_changed', (event) => {
+   *   // event is typed as { type: 'mode_changed'; modeId: string; previousModeId: string }
+   *   console.log(`Mode: ${event.modeId}`);
+   * });
+   * ```
+   */
+  on<TType extends string & (HarnessEvent | TCustomEvent)['type']>(
+    eventType: TType,
+    listener: TypedEventListener<HarnessEvent | TCustomEvent, TType>,
+  ): () => void {
+    let set = this.typedListeners.get(eventType);
+    if (!set) {
+      set = new Set();
+      this.typedListeners.set(eventType, set);
+    }
+    set.add(listener);
+
+    return () => {
+      const s = this.typedListeners.get(eventType);
+      if (s) {
+        s.delete(listener);
+        if (s.size === 0) {
+          this.typedListeners.delete(eventType);
+        }
+      }
+    };
+  }
+
+  /**
+   * Emit a custom (consumer-defined) event to all listeners.
+   * Use this from application-layer tools/hooks to emit events
+   * beyond the core HarnessEvent set.
+   */
+  emitEvent(event: HarnessEvent | TCustomEvent): void {
+    void this.emitToListeners(event);
+  }
+
+  /**
+   * Emit an event to all listeners.
+   *
+   * HarnessEvent is always a valid member of `HarnessEvent | TCustomEvent`,
+   * so internal emit() calls (which pass core events) need no casting.
+   */
   private async emit(event: HarnessEvent): Promise<void> {
+    await this.emitToListeners(event);
+  }
+
+  /** Shared dispatch — sends an event to every registered listener. */
+  private async emitToListeners(event: HarnessEvent | TCustomEvent): Promise<void> {
+    // Broadcast to universal subscribers
     for (const listener of this.listeners) {
       try {
         await listener(event);
       } catch (err) {
         console.error('Error in harness event listener:', err);
+      }
+    }
+
+    // Dispatch to typed subscribers
+    const typedSet = this.typedListeners.get(event.type);
+    if (typedSet) {
+      for (const listener of typedSet) {
+        try {
+          await listener(event);
+        } catch (err) {
+          console.error('Error in typed harness event listener:', err);
+        }
       }
     }
   }
@@ -317,6 +404,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   /**
    * Send a user message to the current mode's agent and process its stream.
+   *
+   * After the initial response completes, automatically drains the follow-up
+   * queue (populated by `steer()` or `onAfterSend` with `continueWorking`).
+   * Each follow-up is sent as a new message in the same conversation turn.
    */
   async send(
     content: string,
@@ -349,35 +440,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     void this.emit({ type: 'agent_start' });
 
     try {
-      const agent = this.getCurrentAgent();
-      const modelId = (this._state as Record<string, unknown>).currentModelId;
-      const dynamicToolsets = typeof modelId === 'string' ? this.config.getToolsets?.(modelId) : undefined;
+      await this.sendOneMessage(content, options);
 
-      const streamResult = await agent.stream(content, {
-        requestContext: this.buildRequestContext(),
-        memory: this._currentThreadId
-          ? {
-              thread: this._currentThreadId,
-              resource: this._resourceId,
-            }
-          : undefined,
-        toolsets: dynamicToolsets as any,
-        maxSteps: options?.maxSteps,
-      });
-
-      const result = await this.processStream(streamResult.fullStream);
-      await this.persistTokenUsage();
-
-      const afterSend = await this.config.hooks?.onAfterSend?.({
-        text: result.text,
-        stopReason: result.stopReason,
-      });
-      if (afterSend?.continueWorking) {
-        this.followUpQueue.push(afterSend.reason?.trim() || 'Continue with the next best step.');
-        void this.emit({
-          type: 'follow_up_queued',
-          count: this.followUpQueue.length,
-        });
+      // Drain the follow-up queue: each queued follow-up becomes a new send
+      while (this.followUpQueue.length > 0 && !this.abortRequested) {
+        const followUp = this.followUpQueue.shift()!;
+        await this.sendOneMessage(followUp, options);
       }
     } catch (error) {
       endReason = 'error';
@@ -403,7 +471,47 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   /**
+   * Send a single message to the agent and process its stream.
+   * This is the inner loop — `send()` calls this for the initial message
+   * and then again for each follow-up.
+   */
+  private async sendOneMessage(content: string, options?: { maxSteps?: number }): Promise<void> {
+    const agent = this.getCurrentAgent();
+    const modelId = (this._state as Record<string, unknown>).currentModelId;
+    const dynamicToolsets = typeof modelId === 'string' ? this.config.getToolsets?.(modelId) : undefined;
+
+    const streamResult = await agent.stream(content, {
+      requestContext: this.buildRequestContext(),
+      memory: this._currentThreadId
+        ? {
+            thread: this._currentThreadId,
+            resource: this._resourceId,
+          }
+        : undefined,
+      toolsets: dynamicToolsets as any,
+      maxSteps: options?.maxSteps,
+    });
+
+    const result = await this.processStream(streamResult.fullStream);
+    await this.persistTokenUsage();
+
+    const afterSend = await this.config.hooks?.onAfterSend?.({
+      text: result.text,
+      stopReason: result.stopReason,
+    });
+    if (afterSend?.continueWorking) {
+      this.followUpQueue.push(afterSend.reason?.trim() || 'Continue with the next best step.');
+      void this.emit({
+        type: 'follow_up_queued',
+        count: this.followUpQueue.length,
+      });
+    }
+  }
+
+  /**
    * Queue a follow-up steering instruction.
+   * The instruction will be sent as the next user message after the current
+   * agent response completes.
    */
   steer(instruction: string): void {
     if (!instruction.trim()) return;
@@ -413,6 +521,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   /**
    * Abort the current operation.
+   * Also rejects all pending interactions so tools aren't left hanging.
    */
   abort(): void {
     if (this.abortController) {
@@ -422,6 +531,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       } catch {}
       this.abortController = null;
     }
+
+    // Reject all pending interactions on abort
+    for (const interaction of this.pendingInteractions.values()) {
+      interaction.reject(new Error('Operation aborted'));
+    }
+    this.pendingInteractions.clear();
   }
 
   /**
@@ -432,6 +547,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   /**
+   * Get the current AbortSignal, if a send is in progress.
+   * Tools can use this to abort long-running operations when the user cancels.
+   */
+  getAbortSignal(): AbortSignal | undefined {
+    return this.abortController?.signal ?? undefined;
+  }
+
+  /**
    * Get the number of queued follow-up messages.
    */
   getFollowUpCount(): number {
@@ -439,39 +562,88 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   // =====================================================================
-  // Tool Approval
+  // Pending Interactions (unified)
   // =====================================================================
+
+  /**
+   * Register a pending interaction and return a promise that resolves
+   * when the UI/user responds.
+   *
+   * This is the unified mechanism for tool approval, questions, plan approvals,
+   * and any future interaction type.
+   *
+   * @param kind - Discriminator (e.g., "tool_approval", "question", "plan_approval")
+   * @param id - Unique ID for this interaction (auto-generated if omitted)
+   * @returns A promise that resolves with the user's response
+   */
+  requestInteraction<T>(kind: string, id?: string): Promise<T> {
+    const interactionId = id ?? this.generateId();
+
+    return new Promise<T>((resolve, reject) => {
+      this.pendingInteractions.set(interactionId, {
+        id: interactionId,
+        kind,
+        createdAt: new Date(),
+        resolve,
+        reject,
+      });
+    });
+  }
+
+  /**
+   * Resolve a pending interaction with a response.
+   *
+   * @returns true if the interaction was found and resolved, false otherwise
+   */
+  resolveInteraction<T>(id: string, response: T): boolean {
+    const interaction = this.pendingInteractions.get(id);
+    if (!interaction) return false;
+    this.pendingInteractions.delete(id);
+    interaction.resolve(response);
+    return true;
+  }
+
+  /**
+   * Get all pending interactions, optionally filtered by kind.
+   */
+  getPendingInteractions(kind?: string): PendingInteraction[] {
+    const all = Array.from(this.pendingInteractions.values());
+    return kind ? all.filter(i => i.kind === kind) : all;
+  }
+
+  // -- Backward-compatible convenience methods ---------------------------
 
   /**
    * Respond to a pending tool approval from the UI.
+   * Convenience wrapper around `resolveInteraction`.
    */
   resolveToolApprovalDecision(decision: 'approve' | 'decline'): void {
-    if (this.pendingApprovalResolve) {
-      this.pendingApprovalResolve(decision);
-      this.pendingApprovalResolve = null;
+    // Find the most recent tool_approval interaction
+    const approvals = this.getPendingInteractions('tool_approval');
+    if (approvals.length > 0) {
+      this.resolveInteraction(approvals[0]!.id, decision);
     }
   }
 
-  // =====================================================================
-  // Questions & Plan Approvals
-  // =====================================================================
-
   /**
    * Register a pending question resolver (used by ask_user tools).
+   * Convenience wrapper: registers a pending interaction and wires the resolve callback.
    */
   registerQuestion(questionId: string, resolve: (answer: string) => void): void {
-    this.pendingQuestions.set(questionId, resolve);
+    this.pendingInteractions.set(questionId, {
+      id: questionId,
+      kind: 'question',
+      createdAt: new Date(),
+      resolve,
+      reject: () => resolve(''),
+    });
   }
 
   /**
    * Resolve a pending question with the user's answer.
    */
   respondToQuestion(questionId: string, answer: string): void {
-    const resolve = this.pendingQuestions.get(questionId);
-    if (resolve) {
-      this.pendingQuestions.delete(questionId);
-      resolve(answer);
-    }
+    this.resolveInteraction(questionId, answer);
   }
 
   /**
@@ -481,7 +653,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     planId: string,
     resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void,
   ): void {
-    this.pendingPlanApprovals.set(planId, resolve);
+    this.pendingInteractions.set(planId, {
+      id: planId,
+      kind: 'plan_approval',
+      createdAt: new Date(),
+      resolve,
+      reject: () => resolve({ action: 'rejected', feedback: 'Operation aborted' }),
+    });
   }
 
   /**
@@ -494,11 +672,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       feedback?: string;
     },
   ): Promise<void> {
-    const resolve = this.pendingPlanApprovals.get(planId);
-    if (!resolve) return;
-
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
+    this.resolveInteraction(planId, response);
   }
 
   // =====================================================================
@@ -545,11 +719,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // State Management (private — exposed via this.state)
   // =====================================================================
 
-  private getState(): Readonly<z.infer<TState>> {
+  private getState(): Readonly<StateOf<TState>> {
     return { ...this._state };
   }
 
-  private async setState(updates: Partial<z.infer<TState>>): Promise<void> {
+  private async setState(updates: Partial<StateOf<TState>>): Promise<void> {
     const changedKeys = Object.keys(updates);
     const newState = { ...this._state, ...updates };
 
@@ -558,7 +732,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       throw new Error(`Invalid state update: ${result.error.message}`);
     }
 
-    this._state = result.data as z.infer<TState>;
+    this._state = result.data as StateOf<TState>;
 
     void this.emit({
       type: 'state_changed',
@@ -568,7 +742,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   /** Extract default values from Zod schema shape. */
-  private getSchemaDefaults(): Partial<z.infer<TState>> {
+  private getSchemaDefaults(): Partial<StateOf<TState>> {
     const shape = this.config.stateSchema.shape;
     const defaults: Record<string, unknown> = {};
 
@@ -581,7 +755,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
-    return defaults as Partial<z.infer<TState>>;
+    return defaults as Partial<StateOf<TState>>;
   }
 
   // =====================================================================
@@ -630,6 +804,38 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       return mode.agent(this._state);
     }
     return mode.agent;
+  }
+
+  // =====================================================================
+  // Tool Policy
+  // =====================================================================
+
+  /**
+   * Evaluate whether a tool call is allowed by the current mode's tool policy.
+   *
+   * @returns 'allow' if policy permits, 'deny' if policy blocks, 'pass' if no policy applies
+   */
+  private evaluateToolPolicy(toolName: string): 'allow' | 'deny' | 'pass' {
+    const mode = this.getCurrentMode();
+    const policy = mode.toolPolicy;
+    if (!policy) return 'pass';
+
+    // Check denylist first (highest priority)
+    if (policy.deniedTools?.includes(toolName)) {
+      return 'deny';
+    }
+
+    // Check explicit allowlist
+    if (policy.allowedTools) {
+      return policy.allowedTools.includes(toolName) ? 'allow' : 'deny';
+    }
+
+    // readOnly with no allowlist denies everything
+    if (policy.readOnly) {
+      return 'deny';
+    }
+
+    return 'pass';
   }
 
   // =====================================================================
@@ -894,7 +1100,27 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     ctx.set('threadId', this._currentThreadId);
     ctx.set('resourceId', this._resourceId);
     ctx.set('modeId', this._currentModeId);
-    ctx.set('state', this.getState() as z.infer<TState>);
+    ctx.set('state', this.getState() as StateOf<TState>);
+
+    // Provide the harness handle so tools can emit events, request
+    // interactions, and access state/abort signals at execution time.
+    const harness = this;
+    ctx.set('harness', {
+      emitEvent: (event: any) => harness.emitEvent(event),
+      requestInteraction: <T>(kind: string, id?: string) => harness.requestInteraction<T>(kind, id),
+      resolveInteraction: <T>(id: string, response: T) => harness.resolveInteraction(id, response),
+      getAbortSignal: () => harness.getAbortSignal(),
+      get abortSignal() {
+        return harness.getAbortSignal();
+      },
+      getState: () => harness.getState() as StateOf<TState>,
+      setState: (updates: Partial<StateOf<TState>>) => harness.setState(updates as any),
+      registerQuestion: (questionId: string, resolve: (answer: string) => void) =>
+        harness.registerQuestion(questionId, resolve),
+      registerPlanApproval: (planId: string, resolve: (result: any) => void) =>
+        harness.registerPlanApproval(planId, resolve),
+    } as any);
+
     return ctx;
   }
 
@@ -903,58 +1129,62 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     let stopReason: 'complete' | 'tool_use' | 'aborted' | 'error' = 'complete';
     let approvalDeclined = false;
 
+    // Build handler context for custom stream handlers
+    const handlerContext: StreamHandlerContext = {
+      emit: (event: HarnessEvent) => {
+        void this.emit(event);
+      },
+      getMessage: () => message,
+      setMessage: (msg: HarnessMessage) => {
+        message = msg;
+      },
+      generateId: () => this.generateId(),
+      hooks: this.config.hooks ?? {},
+      registerInteraction: <T>(kind: string, id?: string) => this.requestInteraction<T>(kind, id),
+      setApprovalDeclined: () => {
+        approvalDeclined = true;
+      },
+    };
+
     const reader = stream.getReader();
     while (true) {
       const { value: chunk, done } = await reader.read();
       if (done) break;
       const part = chunk as any;
 
-      // OM and other data chunks
+      // Data chunks: delegate to custom handlers first, then built-in OM handlers
       if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+        const customHandler = this.streamHandlers.get(part.type);
+        if (customHandler) {
+          await customHandler(part, handlerContext);
+          continue;
+        }
+
+        // Built-in data chunk handling (OM events)
         const data = (part.data ?? {}) as Record<string, unknown>;
-        switch (part.type) {
-          case 'data-om-status':
-            void this.emit({ type: 'om_status', ...(data as any) });
-            break;
-          case 'data-om-observation-start':
-            void this.emit({ type: 'om_observation_start', ...(data as any) });
-            break;
-          case 'data-om-observation-end':
-            void this.emit({ type: 'om_observation_end', ...(data as any) });
-            break;
-          case 'data-om-observation-failed':
-            void this.emit({ type: 'om_observation_failed', ...(data as any) });
-            break;
-          case 'data-om-reflection-start':
-            void this.emit({ type: 'om_reflection_start', ...(data as any) });
-            break;
-          case 'data-om-reflection-end':
-            void this.emit({ type: 'om_reflection_end', ...(data as any) });
-            break;
-          case 'data-om-reflection-failed':
-            void this.emit({ type: 'om_reflection_failed', ...(data as any) });
-            break;
-          case 'data-om-buffering-start':
-            void this.emit({ type: 'om_buffering_start', ...(data as any) });
-            break;
-          case 'data-om-buffering-end':
-            void this.emit({ type: 'om_buffering_end', ...(data as any) });
-            break;
-          case 'data-om-buffering-failed':
-            void this.emit({ type: 'om_buffering_failed', ...(data as any) });
-            break;
-          case 'data-om-activation':
-            void this.emit({ type: 'om_activation', ...(data as any) });
-            break;
-          case 'data-om-model-changed':
-            void this.emit({ type: 'om_model_changed', ...(data as any) });
-            break;
-          default:
-            break;
+        const omTypeMap: Record<string, string> = {
+          'data-om-status': 'om_status',
+          'data-om-observation-start': 'om_observation_start',
+          'data-om-observation-end': 'om_observation_end',
+          'data-om-observation-failed': 'om_observation_failed',
+          'data-om-reflection-start': 'om_reflection_start',
+          'data-om-reflection-end': 'om_reflection_end',
+          'data-om-reflection-failed': 'om_reflection_failed',
+          'data-om-buffering-start': 'om_buffering_start',
+          'data-om-buffering-end': 'om_buffering_end',
+          'data-om-buffering-failed': 'om_buffering_failed',
+          'data-om-activation': 'om_activation',
+          'data-om-model-changed': 'om_model_changed',
+        };
+
+        const mappedType = omTypeMap[part.type];
+        if (mappedType) {
+          void this.emit({ type: mappedType, ...(data as any) } as HarnessEvent);
         }
         continue;
       }
 
+      // Core chunk handling
       switch (part.type) {
         case 'text-start': {
           message = {
@@ -1045,23 +1275,36 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           const toolCallId = String(part.payload?.toolCallId ?? this.generateId());
           const toolName = String(part.payload?.toolName ?? 'unknown_tool');
           const args = part.payload?.args;
-          const policyDecision = this.config.hooks?.resolveToolApproval?.(toolName, args) ?? 'ask';
-          let approved = policyDecision === 'allow';
 
-          if (policyDecision === 'deny') {
+          // Evaluate mode tool policy first
+          const policyResult = this.evaluateToolPolicy(toolName);
+          let approved: boolean;
+
+          if (policyResult === 'deny') {
             approved = false;
-          } else if (policyDecision === 'ask') {
-            void this.emit({
-              type: 'tool_approval_required',
-              toolCallId,
-              toolName,
-              args,
-            });
-            const userDecision = await new Promise<'approve' | 'decline'>(resolve => {
-              this.pendingApprovalResolve = resolve;
-            });
-            approved = userDecision === 'approve';
-            this.pendingApprovalResolve = null;
+          } else if (policyResult === 'allow') {
+            approved = true;
+          } else {
+            // Policy doesn't apply — fall through to hooks
+            const hookDecision = this.config.hooks?.resolveToolApproval?.(toolName, args) ?? 'ask';
+
+            if (hookDecision === 'allow') {
+              approved = true;
+            } else if (hookDecision === 'deny') {
+              approved = false;
+            } else {
+              // 'ask' — prompt the user via pending interaction
+              void this.emit({
+                type: 'tool_approval_required',
+                toolCallId,
+                toolName,
+                args,
+              });
+
+              const interactionId = `tool_approval_${toolCallId}`;
+              const userDecision = await this.requestInteraction<'approve' | 'decline'>('tool_approval', interactionId);
+              approved = userDecision === 'approve';
+            }
           }
 
           if (approved) {
@@ -1143,11 +1386,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           const prompt = Number(usage?.inputTokens ?? usage?.promptTokens ?? 0) || 0;
           const completion = Number(usage?.outputTokens ?? usage?.completionTokens ?? 0) || 0;
           const total = Number(usage?.totalTokens ?? prompt + completion) || 0;
+
+          // Accumulate tokens across steps instead of overwriting
           this._tokenUsage = {
-            promptTokens: prompt,
-            completionTokens: completion,
-            totalTokens: total,
+            promptTokens: this._tokenUsage.promptTokens + prompt,
+            completionTokens: this._tokenUsage.completionTokens + completion,
+            totalTokens: this._tokenUsage.totalTokens + total,
           };
+
           void this.emit({
             type: 'usage_update',
             usage: this._tokenUsage,
@@ -1194,8 +1440,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           void this.emit({ type: 'message_end', message });
           break;
         }
-        default:
+        default: {
+          // Check for custom handler registered for non-data chunk types
+          const customHandler = this.streamHandlers.get(part.type);
+          if (customHandler) {
+            await customHandler(part, handlerContext);
+          }
           break;
+        }
       }
     }
 

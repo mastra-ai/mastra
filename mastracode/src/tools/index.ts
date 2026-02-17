@@ -34,8 +34,7 @@ export { createSubagentTool, parseSubagentMeta } from "./subagent"
 export type { SubagentToolDeps } from "./subagent"
 
 // Sandbox access request (for paths outside project root)
-export { createRequestSandboxAccessTool } from "./request-sandbox-access"
-export type { SandboxAccessDeps } from "./request-sandbox-access"
+export { requestSandboxAccessTool } from "./request-sandbox-access"
 
 // Global confirmation tracking
 export { setGlobalConfirmationId, getGlobalConfirmationId } from "./wrap-with-confirmation"

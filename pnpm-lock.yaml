@@ -1160,6 +1160,9 @@ importers:
       '@mastra/libsql':
         specifier: ^1.4.0
         version: 1.4.0(@mastra/core@packages+core)
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../packages/memory
       ai:
         specifier: ^6.0.50
         version: 6.0.69(zod@4.3.6)

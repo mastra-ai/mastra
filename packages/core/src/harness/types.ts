@@ -1,7 +1,6 @@
-import type z from 'zod';
 import type { Agent } from '../agent';
 import type { MastraMemory } from '../memory';
-import type { MastraCompositeStore } from '../storage';
+import type { StorageDomains } from '../storage';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
 
 // =============================================================================
@@ -9,9 +8,33 @@ import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
 // =============================================================================
 
 /**
- * Schema type for harness state - must be a Zod object schema.
+ * Structural interface for storage backends accepted by the Harness.
+ *
+ * Uses structural typing instead of the concrete MastraCompositeStore class
+ * so that any store implementation (LibSQLStore, PgStore, etc.) is assignable
+ * without `as any` casts — avoiding the #private field incompatibility
+ * that TypeScript imposes on classes with ES private fields.
  */
-export type HarnessStateSchema = z.ZodObject<z.ZodRawShape>;
+export interface HarnessStorage {
+  init(): Promise<void>;
+  getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined>;
+}
+
+/**
+ * Schema type for harness state.
+ *
+ * Defined structurally so both zod v3 and v4 object schemas satisfy it.
+ * The harness uses .safeParse() for validation and .shape for extracting defaults.
+ */
+export interface HarnessStateSchema {
+  safeParse(data: unknown): { success: boolean; data?: any; error?: any };
+  shape: Record<string, unknown>;
+  /** Phantom brand — carries the inferred output type for z.infer compatibility. */
+  _output: any;
+}
+
+/** Infer the state type from a HarnessStateSchema (replaces StateOf<TState>). */
+export type StateOf<T extends HarnessStateSchema> = T['_output'];
 
 /**
  * Token usage statistics from the model.
@@ -20,6 +43,110 @@ export interface TokenUsage {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+}
+
+// =============================================================================
+// Pending Interactions
+// =============================================================================
+
+/**
+ * A pending interaction represents any point where the agent is blocked
+ * waiting for human input. This unifies tool approvals, questions,
+ * plan approvals, and any future interaction types into a single mechanism.
+ *
+ * @typeParam T - The shape of the response the interaction expects.
+ */
+export interface PendingInteraction<T = unknown> {
+  /** Unique identifier for this interaction */
+  id: string;
+
+  /** Discriminator for the interaction type (e.g., "tool_approval", "question", "plan_approval") */
+  kind: string;
+
+  /** Timestamp when the interaction was registered */
+  createdAt: Date;
+
+  /** Resolve the interaction with a response */
+  resolve: (response: T) => void;
+
+  /** Reject the interaction (e.g., on abort) */
+  reject: (reason?: Error) => void;
+}
+
+// =============================================================================
+// Stream Chunk Handler
+// =============================================================================
+
+/**
+ * Context passed to stream chunk handlers during processStream.
+ * Provides access to harness capabilities without coupling handlers
+ * to the Harness class.
+ */
+export interface StreamHandlerContext {
+  /** Emit an event to all harness listeners */
+  emit: (event: HarnessEvent) => void;
+
+  /** Get the current in-progress message (may be null) */
+  getMessage: () => HarnessMessage | null;
+
+  /** Set or replace the in-progress message */
+  setMessage: (message: HarnessMessage) => void;
+
+  /** Generate a unique ID */
+  generateId: () => string;
+
+  /** Access harness hooks */
+  hooks: HarnessHooks;
+
+  /** Register a pending interaction (for approval flows, etc.) */
+  registerInteraction: <T>(kind: string, id?: string) => Promise<T>;
+
+  /** Mark that a tool approval was declined (affects stop reason) */
+  setApprovalDeclined: () => void;
+}
+
+/**
+ * A handler for a specific stream chunk type.
+ *
+ * Stream processing is decomposed into handlers keyed by chunk type.
+ * This allows the core harness to handle standard chunk types while
+ * consumers register handlers for domain-specific chunks (e.g., OM events).
+ *
+ * @returns Optional partial result to accumulate (text, stop reason, etc.)
+ */
+export type StreamChunkHandler = (chunk: any, context: StreamHandlerContext) => void | Promise<void>;
+
+// =============================================================================
+// Tool Policy
+// =============================================================================
+
+/**
+ * Tool execution policy for a mode.
+ *
+ * Controls which tools the agent can use when in this mode.
+ * Evaluated by the harness before tool execution (in the approval flow).
+ */
+export interface ToolPolicy {
+  /**
+   * If true, all tool calls in this mode are automatically denied
+   * unless explicitly listed in `allowedTools`.
+   * Useful for "plan" or "ask" modes that should be read-only.
+   */
+  readOnly?: boolean;
+
+  /**
+   * Explicit allowlist of tool IDs that may execute in this mode.
+   * When set, tools not in this list are automatically denied.
+   * Takes precedence over `readOnly` — tools in this list are allowed
+   * even when `readOnly` is true.
+   */
+  allowedTools?: string[];
+
+  /**
+   * Explicit denylist of tool IDs that may NOT execute in this mode.
+   * Evaluated after `allowedTools`. A tool in both lists is denied.
+   */
+  deniedTools?: string[];
 }
 
 // =============================================================================
@@ -54,11 +181,31 @@ export interface HarnessMode<TState extends HarnessStateSchema = HarnessStateSch
    * The agent for this mode.
    * Can be a static Agent or a function that receives harness state.
    */
-  agent: Agent | ((state: z.infer<TState>) => Agent);
+  agent: Agent | ((state: StateOf<TState>) => Agent);
+
+  /**
+   * Tool execution policy for this mode.
+   *
+   * Controls which tools the agent is allowed to invoke. Evaluated in
+   * the tool approval flow before `resolveToolApproval` and `onBeforeToolUse`.
+   *
+   * @example Read-only mode (plan/review)
+   * ```ts
+   * { readOnly: true, allowedTools: ['read_file', 'grep', 'list_files'] }
+   * ```
+   *
+   * @example Unrestricted mode (build)
+   * ```ts
+   * // Omit toolPolicy — all tools are allowed by default.
+   * ```
+   */
+  toolPolicy?: ToolPolicy;
 }
 
 /**
  * Configuration for creating a Harness instance.
+ *
+ * @typeParam TState - Zod schema for harness state.
  */
 export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateSchema> {
   /** Unique identifier for this harness instance */
@@ -91,13 +238,13 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   isRemoteStorage?: boolean;
 
   /** Storage backend for persistence (threads, messages, state) */
-  storage: MastraCompositeStore;
+  storage: HarnessStorage;
 
   /** Zod schema defining the shape of harness state */
   stateSchema: TState;
 
   /** Initial state values (must conform to schema) */
-  initialState?: Partial<z.infer<TState>>;
+  initialState?: Partial<StateOf<TState>>;
 
   /** Memory configuration (shared across all modes) */
   memory?: MastraMemory;
@@ -155,6 +302,27 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * @see HarnessHooks for detailed documentation of each hook.
    */
   hooks?: HarnessHooks<TState>;
+
+  /**
+   * Custom stream chunk handlers, keyed by chunk type string.
+   *
+   * Use this to handle domain-specific stream chunks (e.g., observational
+   * memory events) without modifying the core harness. Handlers are called
+   * during `processStream` when a chunk matches the key.
+   *
+   * Built-in handlers for standard chunk types (text-delta, tool-call, etc.)
+   * cannot be overridden — custom handlers are called for unrecognized types.
+   *
+   * @example
+   * ```ts
+   * streamHandlers: {
+   *   'data-my-custom-event': (chunk, ctx) => {
+   *     ctx.emit({ type: 'my_custom_event', ...chunk.data });
+   *   },
+   * }
+   * ```
+   */
+  streamHandlers?: Record<string, StreamChunkHandler>;
 }
 
 // =============================================================================
@@ -443,88 +611,32 @@ export type HarnessEvent =
     }
   | { type: 'workspace_error'; error: Error }
 
-  // -- Subagent / task delegation ----------------------------------------
-  | {
-      type: 'subagent_start';
-      toolCallId: string;
-      agentType: string;
-      task: string;
-      modelId?: string;
-    }
-  | {
-      type: 'subagent_tool_start';
-      toolCallId: string;
-      agentType: string;
-      subToolName: string;
-      subToolArgs: unknown;
-    }
-  | {
-      type: 'subagent_tool_end';
-      toolCallId: string;
-      agentType: string;
-      subToolName: string;
-      subToolResult: unknown;
-      isError: boolean;
-    }
-  | {
-      type: 'subagent_text_delta';
-      toolCallId: string;
-      agentType: string;
-      textDelta: string;
-    }
-  | {
-      type: 'subagent_end';
-      toolCallId: string;
-      agentType: string;
-      result: string;
-      isError: boolean;
-      durationMs: number;
-    }
-  | {
-      type: 'subagent_model_changed';
-      modelId: string;
-      scope: 'global' | 'thread';
-      agentType: string;
-    }
-
-  // -- UI interactions --------------------------------------------------
-  | {
-      type: 'todo_updated';
-      todos: Array<{
-        content: string;
-        status: 'pending' | 'in_progress' | 'completed';
-        activeForm: string;
-      }>;
-    }
-  | {
-      type: 'ask_question';
-      questionId: string;
-      question: string;
-      options?: Array<{ label: string; description?: string }>;
-    }
-  | {
-      type: 'sandbox_access_request';
-      questionId: string;
-      path: string;
-      reason: string;
-    }
-  | {
-      type: 'plan_approval_required';
-      planId: string;
-      title: string;
-      plan: string;
-    }
-  | {
-      type: 'plan_approved';
-    }
-
   // -- Misc -------------------------------------------------------------
   | { type: 'follow_up_queued'; count: number };
 
 /**
  * Listener function for harness events.
+ *
+ * @typeParam TCustomEvent - Additional application-specific event types
+ *   beyond the core `HarnessEvent` set. Defaults to `never` (no custom events).
+ *   The listener receives `HarnessEvent | TCustomEvent`.
  */
-export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
+export type HarnessEventListener<TCustomEvent extends { type: string } = never> = (
+  event: HarnessEvent | TCustomEvent,
+) => void | Promise<void>;
+
+/**
+ * Extract the subset of an event union whose `type` field matches the given string(s).
+ * Used by `on()` to narrow the event type for typed subscriptions.
+ */
+export type EventOfType<TEvent extends { type: string }, TType extends string> = Extract<TEvent, { type: TType }>;
+
+/**
+ * Typed listener for a specific event type.
+ */
+export type TypedEventListener<TEvent extends { type: string }, TType extends string> = (
+  event: EventOfType<TEvent, TType>,
+) => void | Promise<void>;
 
 // =============================================================================
 // Session
@@ -615,7 +727,7 @@ export interface HarnessHooks<TState extends HarnessStateSchema = HarnessStateSc
    *
    * @default No-op (returns empty object).
    */
-  onThreadLoad?: (metadata: Record<string, unknown>) => Partial<z.infer<TState>>;
+  onThreadLoad?: (metadata: Record<string, unknown>) => Partial<StateOf<TState>>;
 
   /**
    * Inject app-specific metadata when creating a new thread.
@@ -623,7 +735,7 @@ export interface HarnessHooks<TState extends HarnessStateSchema = HarnessStateSc
    *
    * @default No-op (returns empty object).
    */
-  onThreadCreate?: (thread: HarnessThread, state: z.infer<TState>) => Record<string, unknown>;
+  onThreadCreate?: (thread: HarnessThread, state: StateOf<TState>) => Record<string, unknown>;
 
   /**
    * Parse or classify errors for better user feedback.
@@ -640,16 +752,52 @@ export interface HarnessHooks<TState extends HarnessStateSchema = HarnessStateSc
 }
 
 // =============================================================================
-// Runtime Context (Serializable Only)
+// Runtime Context
 // =============================================================================
 
 /**
- * Serializable context passed to agent.stream() via RequestContext.
+ * The harness handle available to tools via requestContext.get("harness").
  *
- * Contains only data — no functions, no object references.
- * Tools that need to call back into the Harness (e.g., emitEvent,
- * registerQuestion) should close over the Harness instance at
- * tool-construction time in the application layer.
+ * Provides the subset of Harness functionality that tools commonly need:
+ * emitting events, requesting user interactions, accessing state and abort signals.
+ *
+ * Note: RequestContext is a Map — it can hold anything, including functions
+ * and object references. The `.toJSON()` output is what's serializable-only.
+ */
+export interface HarnessToolContext<TState extends HarnessStateSchema = HarnessStateSchema> {
+  /** Emit an event to all harness listeners (TUI, etc.) */
+  emitEvent: (event: { type: string; [key: string]: unknown }) => void;
+
+  /** Request a user interaction and await the response (question, plan approval, etc.) */
+  requestInteraction: <T>(kind: string, id?: string) => Promise<T>;
+
+  /** Resolve a pending interaction by ID */
+  resolveInteraction: <T>(id: string, response: T) => boolean;
+
+  /** Get the current abort signal (undefined if no stream is active) */
+  getAbortSignal: () => AbortSignal | undefined;
+
+  /** The active abort signal for the current stream (convenience alias) */
+  abortSignal: AbortSignal | undefined;
+
+  /** Get current harness state */
+  getState: () => StateOf<TState>;
+
+  /** Merge updates into harness state */
+  setState: (updates: Partial<StateOf<TState>>) => void;
+
+  // Backward-compatible aliases
+  /** @deprecated Use requestInteraction('question', id) instead */
+  registerQuestion: (questionId: string, resolve: (answer: string) => void) => void;
+  /** @deprecated Use requestInteraction('plan_approval', id) instead */
+  registerPlanApproval: (planId: string, resolve: (result: any) => void) => void;
+}
+
+/**
+ * Context passed to agent.stream() via RequestContext.
+ *
+ * Contains both data fields (harnessId, threadId, etc.) and the
+ * harness tool context for tools that need to interact with the harness.
  */
 export interface HarnessRequestContext<TState extends HarnessStateSchema = HarnessStateSchema> {
   /** The harness instance ID */
@@ -665,7 +813,10 @@ export interface HarnessRequestContext<TState extends HarnessStateSchema = Harne
   modeId: string;
 
   /** Snapshot of harness state at request time */
-  state: z.infer<TState>;
+  state: StateOf<TState>;
+
+  /** Harness handle for tool callbacks (emitEvent, requestInteraction, etc.) */
+  harness: HarnessToolContext<TState>;
 }
 
 // =============================================================================
@@ -701,9 +852,9 @@ export interface HarnessThreads {
  */
 export interface HarnessStateAccessor<TState extends HarnessStateSchema = HarnessStateSchema> {
   /** Get a read-only snapshot of the current state. */
-  get(): Readonly<z.infer<TState>>;
+  get(): Readonly<StateOf<TState>>;
   /** Update state (validated against schema). Emits state_changed event. */
-  set(updates: Partial<z.infer<TState>>): Promise<void>;
+  set(updates: Partial<StateOf<TState>>): Promise<void>;
 }
 
 /**

@@ -1,81 +1,112 @@
-import { z } from "zod"
+/**
+ * MastraCode-specific event types.
+ *
+ * These extend the core HarnessEvent union with subagent lifecycle
+ * and UI interaction events. Passed as TCustomEvent to Harness<>.
+ */
+import type { HarnessEvent } from "@mastra/core/harness"
 
-import type { Agent } from "@mastra/core/agent"
-import { Harness } from "@mastra/core/harness"
-import type {
-    HarnessMode,
-} from "@mastra/core/harness"
-import type { MastraCompositeStore } from "@mastra/core/storage"
-
-export const mastraCodeStateSchema = z.object({
-    currentModelId: z.string().default("anthropic/claude-sonnet-4-20250514"),
-    cwd: z.string().optional(),
-})
-
-export type MastraCodeState = z.infer<typeof mastraCodeStateSchema>
-
-export interface CreateMastraCodeHarnessOptions {
-    id?: string
-    resourceId: string
-    storage: MastraCompositeStore
-    stateSchema?: z.ZodObject<z.ZodRawShape>
-    modes?: HarnessMode[]
-    defaultAgent?: Agent
-    initialState?: Record<string, unknown>
-    userId?: string
-    isRemoteStorage?: boolean
-    configOverrides?: Record<string, unknown>
-}
+// =============================================================================
+// Subagent Events
+// =============================================================================
 
 /**
- * First application-layer consumer of the core Harness primitive.
- * This keeps core generic while giving MastraCode a concrete entrypoint.
+ * Subagent lifecycle events — emitted by the `subagent` tool
+ * when delegating focused tasks to constrained agents.
  */
-export function createMastraCodeHarness(
-    options: CreateMastraCodeHarnessOptions,
-): Harness {
-    const {
-        id = "mastracode",
-        resourceId,
-        storage,
-        stateSchema,
-        modes,
-        defaultAgent,
-        initialState,
-        userId,
-        isRemoteStorage,
-        configOverrides,
-    } = options
-
-    const resolvedModes: HarnessMode[] =
-        modes ??
-        (defaultAgent
-            ? [
-                {
-                    id: "code",
-                    name: "Code",
-                    default: true,
-                    agent: defaultAgent,
-                },
-            ]
-            : [])
-
-    if (resolvedModes.length === 0) {
-        throw new Error(
-            "createMastraCodeHarness requires either `modes` or `defaultAgent`.",
-        )
+export type SubagentEvent =
+    | {
+        type: "subagent_start"
+        toolCallId: string
+        agentType: string
+        task: string
+        modelId?: string
+    }
+    | {
+        type: "subagent_tool_start"
+        toolCallId: string
+        agentType: string
+        subToolName: string
+        subToolArgs: unknown
+    }
+    | {
+        type: "subagent_tool_end"
+        toolCallId: string
+        agentType: string
+        subToolName: string
+        subToolResult: unknown
+        isError: boolean
+    }
+    | {
+        type: "subagent_text_delta"
+        toolCallId: string
+        agentType: string
+        textDelta: string
+    }
+    | {
+        type: "subagent_end"
+        toolCallId: string
+        agentType: string
+        result: string
+        isError: boolean
+        durationMs: number
+    }
+    | {
+        type: "subagent_model_changed"
+        modelId: string
+        scope: "global" | "thread"
+        agentType: string
     }
 
-    return new Harness({
-        id,
-        resourceId,
-        storage,
-        stateSchema: (stateSchema ?? mastraCodeStateSchema) as any,
-        initialState,
-        modes: resolvedModes,
-        userId,
-        isRemoteStorage,
-        ...(configOverrides as any),
-    })
-}
+// =============================================================================
+// UI Events
+// =============================================================================
 
+/**
+ * UI interaction events — emitted by mastracode-specific tools
+ * (todo_write, ask_user, submit_plan, request_sandbox_access).
+ */
+export type UIEvent =
+    | {
+        type: "todo_updated"
+        todos: Array<{
+            content: string
+            status: "pending" | "in_progress" | "completed"
+            activeForm: string
+        }>
+    }
+    | {
+        type: "ask_question"
+        questionId: string
+        question: string
+        options?: Array<{ label: string; description?: string }>
+    }
+    | {
+        type: "sandbox_access_request"
+        questionId: string
+        path: string
+        reason: string
+    }
+    | {
+        type: "plan_approval_required"
+        planId: string
+        title: string
+        plan: string
+    }
+    | { type: "plan_approved" }
+
+// =============================================================================
+// Composite Event Types
+// =============================================================================
+
+/**
+ * Custom events specific to MastraCode — subagent lifecycle + UI interactions.
+ * Passed as the TCustomEvent parameter to the Harness generic.
+ */
+export type MastraCodeCustomEvent = SubagentEvent | UIEvent
+
+/**
+ * Full event union for MastraCode — core HarnessEvent + custom events.
+ * This is the type that listeners receive.
+ */
+export type MastraCodeEvent = HarnessEvent | MastraCodeCustomEvent

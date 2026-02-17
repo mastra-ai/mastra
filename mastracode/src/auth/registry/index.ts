@@ -1,6 +1,6 @@
 import { claudeOAuthProvider } from "../claude/oauth"
 import { codexOAuthProvider } from "../codex/oauth"
-import { OAuthProviderId, OAuthProviderInterface } from "../storage/types"
+import type { OAuthProviderId, OAuthProviderInterface } from "../storage/types"
 
 const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
     [claudeOAuthProvider.id, claudeOAuthProvider],

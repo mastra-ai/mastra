@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai"
-import { MastraModelConfig } from "@mastra/core/llm"
+import type { MastraModelConfig } from "@mastra/core/llm"
 import { wrapLanguageModel } from "ai"
 import { CODEX_API_ENDPOINT } from "./constants"
 import { codexMiddleware } from "./middleware"

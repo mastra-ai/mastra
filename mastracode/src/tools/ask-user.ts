@@ -1,6 +1,9 @@
 /**
  * ask_user tool — presents structured questions to the user via TUI dialogs.
  * Supports single-select options and free-text input.
+ *
+ * Accesses the harness via requestContext.get("harness"), which the core
+ * Harness populates with emitEvent, requestInteraction, etc.
  */
 import { createTool } from "@mastra/core/tools"
 import { z } from "zod"
@@ -36,7 +39,7 @@ export const askUserTool = createTool({
         try {
             const harnessCtx = (context as any)?.requestContext?.get("harness")
 
-            if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
+            if (!harnessCtx?.emitEvent || !harnessCtx?.requestInteraction) {
                 return {
                     content: `[Question for user]: ${question}${options ? "\nOptions: " + options.map((o: any) => o.label).join(", ") : ""}`,
                     isError: false,
@@ -45,15 +48,21 @@ export const askUserTool = createTool({
 
             const questionId = `q_${++questionCounter}_${Date.now()}`
 
-            const answer = await new Promise<string>((resolve) => {
-                harnessCtx.registerQuestion!(questionId, resolve)
-                harnessCtx.emitEvent!({
-                    type: "ask_question",
-                    questionId,
-                    question,
-                    options,
-                } as any)
+            // Emit the event so the TUI renders the question UI
+            harnessCtx.emitEvent({
+                type: "ask_question",
+                questionId,
+                question,
+                options,
             })
+
+            // Await the user's response via the unified interaction system.
+            // The harness tracks this as a PendingInteraction and resolves
+            // it when the TUI calls respondToQuestion(questionId, answer).
+            const answer = await harnessCtx.requestInteraction<string>(
+                "question",
+                questionId,
+            )
 
             return { content: `User answered: ${answer}`, isError: false }
         } catch (error) {

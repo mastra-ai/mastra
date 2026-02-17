@@ -2,16 +2,19 @@
  * submit_plan tool — presents a completed plan for user review.
  * Renders inline as markdown with Approve/Reject/Edit options.
  * On approval, auto-switches to Build mode.
+ *
+ * Accesses the harness via requestContext.get("harness"), which the core
+ * Harness populates with emitEvent, requestInteraction, etc.
  */
 import { createTool } from "@mastra/core/tools"
 import { z } from "zod"
-
-let planCounter = 0
 
 export interface PlanApprovalResult {
     action: "approved" | "rejected"
     feedback?: string
 }
+
+let planCounter = 0
 
 export const submitPlanTool = createTool({
     id: "submit_plan",
@@ -32,7 +35,7 @@ export const submitPlanTool = createTool({
         try {
             const harnessCtx = (context as any)?.requestContext?.get("harness")
 
-            if (!harnessCtx?.emitEvent || !harnessCtx?.registerPlanApproval) {
+            if (!harnessCtx?.emitEvent || !harnessCtx?.requestInteraction) {
                 return {
                     content: `[Plan submitted for review]\n\nTitle: ${title || "Implementation Plan"}\n\n${plan}`,
                     isError: false,
@@ -41,15 +44,21 @@ export const submitPlanTool = createTool({
 
             const planId = `plan_${++planCounter}_${Date.now()}`
 
-            const result = await new Promise<PlanApprovalResult>((resolve) => {
-                harnessCtx.registerPlanApproval!(planId, resolve)
-                harnessCtx.emitEvent!({
-                    type: "plan_approval_required",
-                    planId,
-                    title: title || "Implementation Plan",
-                    plan,
-                } as any)
+            // Emit the event so the TUI renders the plan review UI
+            harnessCtx.emitEvent({
+                type: "plan_approval_required",
+                planId,
+                title: title || "Implementation Plan",
+                plan,
             })
+
+            // Await the user's decision via the unified interaction system.
+            // The harness tracks this as a PendingInteraction and resolves
+            // it when the TUI calls respondToPlanApproval(planId, result).
+            const result = await harnessCtx.requestInteraction<PlanApprovalResult>(
+                "plan_approval",
+                planId,
+            )
 
             if (result.action === "approved") {
                 return {
