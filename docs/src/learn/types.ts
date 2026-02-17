@@ -7,7 +7,6 @@ export type Lesson = {
   status: LessonStatus
   youtubeId?: string
   preview: { intro: string; bullets: string[] }
-  contentPath?: string
   module: string
   seo?: { title?: string; description?: string }
 }

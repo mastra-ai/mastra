@@ -19,11 +19,7 @@ function ProgressIcon({ storage, slug, status }: { storage: LearnStorageV1; slug
   }
   const p = storage.lessons[slug]
   if (p?.watched) {
-    return (
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-green-500 text-[10px] text-white">
-        ✓
-      </span>
-    )
+    return <span className="learn-watched-icon is-watched shrink-0 text-[10px]">✓</span>
   }
   if (p && p.seconds > 0) {
     return <span className="h-4 w-4 shrink-0 rounded-full border-2 border-yellow-500" />
