@@ -40,18 +40,6 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
 // ============================================================================
 
 /**
- * Scorer config schema with optional sampling
- */
-const scorerConfigSchema = z.object({
-  sampling: z
-    .union([
-      z.object({ type: z.literal('none') }),
-      z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
-    ])
-    .optional(),
-});
-
-/**
  * Rule and RuleGroup schemas for conditional prompt block evaluation.
  */
 const ruleSchema = z.object({
@@ -93,6 +81,20 @@ const ruleGroupSchema = z.object({
 });
 
 /**
+ * Scorer config schema with optional sampling and rules
+ */
+const scorerConfigSchema = z.object({
+  description: z.string().optional(),
+  sampling: z
+    .union([
+      z.object({ type: z.literal('none') }),
+      z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
+    ])
+    .optional(),
+  rules: ruleGroupSchema.optional(),
+});
+
+/**
  * Agent instruction block schema for prompt-block-based instructions.
  */
 const agentInstructionBlockSchema = z.discriminatedUnion('type', [
@@ -128,12 +130,15 @@ const modelConfigSchema = z
   })
   .passthrough();
 
+/** Per-tool config schema */
+const toolConfigSchema = z.object({ description: z.string().optional(), rules: ruleGroupSchema.optional() });
+
 /** Base tools config schema */
-const toolsConfigSchema = z.record(z.string(), z.object({ description: z.string().optional() }));
+const toolsConfigSchema = z.record(z.string(), toolConfigSchema);
 
 /** MCP client tools config schema — specifies which tools to use from an MCP client/server */
 const mcpClientToolsConfigSchema = z.object({
-  tools: z.record(z.string(), z.object({ description: z.string().optional() })).optional(),
+  tools: z.record(z.string(), toolConfigSchema).optional(),
 });
 
 /**
@@ -156,12 +161,12 @@ const snapshotConfigSchema = z.object({
   defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
     .optional()
     .describe('Default options for generate/stream calls — static or conditional'),
-  workflows: conditionalFieldSchema(z.array(z.string()))
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of workflow keys — static or conditional'),
-  agents: conditionalFieldSchema(z.array(z.string()))
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of agent keys — static or conditional'),
+    .describe('Agent keys with optional per-agent config — static or conditional'),
   integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
@@ -253,12 +258,12 @@ export const storedAgentSchema = z.object({
   defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
     .optional()
     .describe('Default options for generate/stream calls — static or conditional'),
-  workflows: conditionalFieldSchema(z.array(z.string()))
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of workflow keys — static or conditional'),
-  agents: conditionalFieldSchema(z.array(z.string()))
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of agent keys — static or conditional'),
+    .describe('Agent keys with optional per-agent config — static or conditional'),
   integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
     .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
@@ -358,4 +363,11 @@ export const previewInstructionsResponseSchema = z.object({
 /**
  * Exported for use in agent-versions.ts schemas
  */
-export { snapshotConfigSchema, scorerConfigSchema, conditionalFieldSchema, modelConfigSchema, toolsConfigSchema };
+export {
+  snapshotConfigSchema,
+  scorerConfigSchema,
+  conditionalFieldSchema,
+  modelConfigSchema,
+  toolConfigSchema,
+  toolsConfigSchema,
+};

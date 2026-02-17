@@ -33,6 +33,11 @@ export class StoreOperationsInMemory extends StoreOperations {
       mastra_skills: new Map(),
       mastra_skill_versions: new Map(),
       mastra_skill_blobs: new Map(),
+      mastra_datasets: new Map(),
+      mastra_dataset_items: new Map(),
+      mastra_dataset_versions: new Map(),
+      mastra_experiments: new Map(),
+      mastra_experiment_results: new Map(),
     };
   }
 

@@ -8,3 +8,4 @@ export * from './components/scorer-create-content';
 export * from './hooks/use-trace-span-scores';
 export { useScorers, useScorer, useScoresByScorerId } from './hooks/use-scorers';
 export { useStoredScorer, useStoredScorerMutations } from './hooks/use-stored-scorers';
+export * from './components/scorer-create-content';

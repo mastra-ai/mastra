@@ -12,6 +12,8 @@ import type {
   MemoryStorage,
   ObservabilityStorage,
   BlobStore,
+  DatasetsStorage,
+  ExperimentsStorage,
 } from './domains';
 
 export type StorageDomains = {
@@ -20,6 +22,8 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
+  datasets?: DatasetsStorage;
+  experiments?: ExperimentsStorage;
   promptBlocks?: PromptBlocksStorage;
   scorerDefinitions?: ScorerDefinitionsStorage;
   mcpClients?: MCPClientsStorage;
@@ -216,6 +220,8 @@ export class MastraCompositeStore extends MastraBase {
         scores: domainOverrides.scores ?? defaultStores?.scores,
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
+        datasets: domainOverrides.datasets ?? defaultStores?.datasets,
+        experiments: domainOverrides.experiments ?? defaultStores?.experiments,
         promptBlocks: domainOverrides.promptBlocks ?? defaultStores?.promptBlocks,
         scorerDefinitions: domainOverrides.scorerDefinitions ?? defaultStores?.scorerDefinitions,
         mcpClients: domainOverrides.mcpClients ?? defaultStores?.mcpClients,
@@ -275,6 +281,14 @@ export class MastraCompositeStore extends MastraBase {
 
     if (this.stores?.agents) {
       initTasks.push(this.stores.agents.init());
+    }
+
+    if (this.stores?.datasets) {
+      initTasks.push(this.stores.datasets.init());
+    }
+
+    if (this.stores?.experiments) {
+      initTasks.push(this.stores.experiments.init());
     }
 
     if (this.stores?.promptBlocks) {
