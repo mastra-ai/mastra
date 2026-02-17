@@ -35,7 +35,7 @@ export function WorkflowsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 p-4">
+      <div className="flex flex-col gap-6">
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}

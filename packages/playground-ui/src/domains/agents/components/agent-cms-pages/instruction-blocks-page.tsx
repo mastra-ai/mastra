@@ -14,29 +14,23 @@ export function InstructionBlocksPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-8 p-4">
-        <section className="flex flex-col gap-6">
-          <SectionHeader
-            title="Instruction blocks"
-            subtitle="Add instruction blocks to your agent."
-            icon={<Blocks />}
-          />
+      <section className="flex flex-col gap-6">
+        <SectionHeader title="Instruction blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
 
-          <Controller
-            name="instructionBlocks"
-            control={form.control}
-            defaultValue={[]}
-            render={({ field }) => (
-              <AgentCMSBlocks
-                items={field.value ?? []}
-                onChange={field.onChange}
-                placeholder="Enter content..."
-                schema={schema}
-              />
-            )}
-          />
-        </section>
-      </div>
+        <Controller
+          name="instructionBlocks"
+          control={form.control}
+          defaultValue={[]}
+          render={({ field }) => (
+            <AgentCMSBlocks
+              items={field.value ?? []}
+              onChange={field.onChange}
+              placeholder="Enter content..."
+              schema={schema}
+            />
+          )}
+        />
+      </section>
     </ScrollArea>
   );
 }

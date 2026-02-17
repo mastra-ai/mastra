@@ -78,7 +78,7 @@ export function VariablesPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-8 p-4">
+      <div className="flex flex-col gap-8">
         <section className="flex flex-col gap-6">
           <div className="border-b border-border1 pb-4">
             <SectionHeader

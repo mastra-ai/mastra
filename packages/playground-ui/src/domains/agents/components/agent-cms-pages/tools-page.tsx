@@ -108,7 +108,7 @@ export function ToolsPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 p-4">
+      <div className="flex flex-col gap-6">
         <SectionHeader
           title="Tools"
           subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}

@@ -9,7 +9,11 @@ import {
   Icon,
   AgentIcon,
   MainContentLayout,
+  HeaderAction,
+  Button,
+  Spinner,
 } from '@mastra/playground-ui';
+import { Check } from 'lucide-react';
 
 function CreateLayoutWrapper() {
   const { navigate, paths } = useLinkComponent();
@@ -29,6 +33,24 @@ function CreateLayoutWrapper() {
           </Icon>
           Create an agent
         </HeaderTitle>
+
+        <HeaderAction>
+          <Button variant="primary" onClick={handlePublish} disabled={isSubmitting} className="w-full">
+            {isSubmitting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Check />
+                </Icon>
+                Create agent
+              </>
+            )}
+          </Button>
+        </HeaderAction>
       </Header>
       <AgentCmsFormShell
         form={form}

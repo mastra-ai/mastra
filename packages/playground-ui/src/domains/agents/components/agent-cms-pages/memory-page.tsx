@@ -31,7 +31,7 @@ export function MemoryPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 p-4">
+      <div className="flex flex-col gap-6">
         <SectionHeader
           title="Memory"
           subtitle="Configure memory settings for conversation persistence and semantic recall."

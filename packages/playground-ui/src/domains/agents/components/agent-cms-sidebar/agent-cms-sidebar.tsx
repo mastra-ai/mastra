@@ -2,10 +2,8 @@ import { Check } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
-import { Button } from '@/ds/components/Button';
+
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Spinner } from '@/ds/components/Spinner';
-import { Icon } from '@/ds/icons';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { Txt } from '@/ds/components/Txt';
@@ -27,7 +25,7 @@ function isActive(basePath: string, currentPath: string, pathSuffix: string): bo
 }
 
 export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps) {
-  const { handlePublish, isSubmitting, mode, readOnly, form } = useAgentEditFormContext();
+  const { form } = useAgentEditFormContext();
   const descriptions = useSidebarDescriptions(form.control);
 
   return (
@@ -118,26 +116,6 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
           </ul>
         </nav>
       </ScrollArea>
-
-      {!readOnly && (
-        <div className="flex-shrink-0 p-4">
-          <Button variant="primary" onClick={handlePublish} disabled={isSubmitting} className="w-full">
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                {mode === 'edit' ? 'Updating...' : 'Creating...'}
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <Check />
-                </Icon>
-                {mode === 'edit' ? 'Update agent' : 'Create agent'}
-              </>
-            )}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

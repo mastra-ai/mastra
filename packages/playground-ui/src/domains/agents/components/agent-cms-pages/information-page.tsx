@@ -20,7 +20,7 @@ export function InformationPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-8 p-4">
+      <div className="flex flex-col gap-8">
         {/* Identity Section */}
         <section className="flex flex-col gap-6">
           <SectionHeader

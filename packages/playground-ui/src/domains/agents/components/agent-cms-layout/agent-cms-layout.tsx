@@ -12,7 +12,7 @@ export function AgentsCmsLayout({ children, currentPath, basePath }: AgentsCmsLa
       <div className="overflow-y-auto h-full border-r border-border1">
         <AgentCmsSidebar basePath={basePath} currentPath={currentPath} />
       </div>
-      <div className="overflow-y-auto h-full">{children}</div>
+      <div className="overflow-y-auto h-full p-8">{children}</div>
     </div>
   );
 }
