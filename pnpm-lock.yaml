@@ -2822,8 +2822,8 @@ importers:
   packages/evals:
     dependencies:
       compromise:
-        specifier: ^14.14.4
-        version: 14.14.4
+        specifier: ^14.14.5
+        version: 14.14.5
       keyword-extractor:
         specifier: ^0.0.28
         version: 0.0.28
@@ -15201,8 +15201,8 @@ packages:
     resolution: {integrity: sha512-9mAqGPHLakhCLeNyxPkK4xVo746zQ/czLH1Ky+vkitMnWfWZps8r0qXuwhwizagCRttsL4lfG4pIOvaWLpAP0w==}
     engines: {node: '>= 0.8.0'}
 
-  compromise@14.14.4:
-    resolution: {integrity: sha512-QdbJwronwxeqb7a5KFK/+Y5YieZ4PE1f7ai0vU58Pp4jih+soDCBMuKVbhDEPQ+6+vI3vSiG4UAAjTAXLJw1Qw==}
+  compromise@14.14.5:
+    resolution: {integrity: sha512-9qWxpOWo4crzvbdxAYDTwO6z0WljXwi6mL7CqCjAXKn7QtFijmSj7fCyAqGWldCVT2zNboMvg4kNL06drMg2Vw==}
     engines: {node: '>=12.0.0'}
 
   compute-scroll-into-view@3.1.1:
@@ -34835,7 +34835,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  compromise@14.14.4:
+  compromise@14.14.5:
     dependencies:
       efrt: 2.7.0
       grad-school: 0.0.5
