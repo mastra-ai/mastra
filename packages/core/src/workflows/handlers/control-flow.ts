@@ -422,7 +422,7 @@ export async function executeConditional(
   });
 
   const results: StepResult<any, any, any, any>[] = await Promise.all(
-    stepsToRun.map(async (step, index) => {
+    stepsToRun.map(async step => {
       const currStepResult = stepResults[step.step.id];
       const isRestartStep = restart ? !!restart.activeStepsPath[step.step.id] : undefined;
 
@@ -450,7 +450,7 @@ export async function executeConditional(
         executionContext: {
           workflowId,
           runId,
-          executionPath: [...executionContext.executionPath, index],
+          executionPath: [...executionContext.executionPath, entry.steps.indexOf(step)],
           activeStepsPath: executionContext.activeStepsPath,
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,

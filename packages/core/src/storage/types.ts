@@ -22,6 +22,11 @@ export interface StorageColumn {
     column: string;
   };
 }
+
+export interface StorageTableConfig {
+  columns: Record<string, StorageColumn>;
+  compositePrimaryKey?: string[];
+}
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -275,6 +280,8 @@ export type ThreadSortDirection = 'ASC' | 'DESC';
 export interface StorageToolConfig {
   /** Custom description override for this tool in this agent context */
   description?: string;
+  /** Conditional rules for when this tool should be available */
+  rules?: RuleGroup;
 }
 
 /**
@@ -291,8 +298,12 @@ export interface StorageMCPClientToolsConfig {
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
+  /** Custom description override for this scorer in this agent context */
+  description?: string;
   /** Sampling configuration for this scorer */
   sampling?: ScoringSamplingConfig;
+  /** Conditional rules for when this scorer should be active */
+  rules?: RuleGroup;
 }
 
 /**
@@ -391,10 +402,10 @@ export interface StorageAgentSnapshotType {
   tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /** Default options for generate/stream calls — static or conditional on request context */
   defaultOptions?: StorageConditionalField<StorageDefaultOptions>;
-  /** Array of workflow keys to resolve from Mastra's workflow registry — static or conditional on request context */
-  workflows?: StorageConditionalField<string[]>;
-  /** Array of agent keys to resolve from Mastra's agent registry — static or conditional on request context */
-  agents?: StorageConditionalField<string[]>;
+  /** Workflow keys with optional per-workflow config — static or conditional on request context */
+  workflows?: StorageConditionalField<Record<string, StorageToolConfig>>;
+  /** Agent keys with optional per-agent config — static or conditional on request context */
+  agents?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /**
    * Map of tool provider IDs to their tool configurations.
    * Keys are provider IDs (e.g., "composio"), values configure which tools from that provider to include.
@@ -1409,4 +1420,234 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
   }
 
   return result as Record<keyof Shape & string, StorageColumn>;
+}
+
+// ============================================
+// Dataset Types
+// ============================================
+
+export type TargetType = 'agent' | 'workflow' | 'scorer' | 'processor';
+
+export interface DatasetRecord {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetItemRow {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  validTo: number | null;
+  isDeleted: boolean;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DatasetVersion {
+  id: string;
+  datasetId: string;
+  version: number;
+  createdAt: Date;
+}
+
+// Dataset CRUD Input/Output Types
+
+export interface CreateDatasetInput {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
+}
+
+export interface UpdateDatasetInput {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
+}
+
+export interface AddDatasetItemInput {
+  datasetId: string;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateDatasetItemInput {
+  id: string;
+  datasetId: string;
+  input?: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListDatasetsInput {
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetsOutput {
+  datasets: DatasetRecord[];
+  pagination: PaginationInfo;
+}
+
+export interface ListDatasetItemsInput {
+  datasetId: string;
+  version?: number;
+  search?: string;
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetItemsOutput {
+  items: DatasetItem[];
+  pagination: PaginationInfo;
+}
+
+export interface ListDatasetVersionsInput {
+  datasetId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListDatasetVersionsOutput {
+  versions: DatasetVersion[];
+  pagination: PaginationInfo;
+}
+
+export interface BatchInsertItemsInput {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface BatchDeleteItemsInput {
+  datasetId: string;
+  itemIds: string[];
+}
+
+// ============================================
+// Experiment Types (Dataset Experiments)
+// ============================================
+
+export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface Experiment {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  datasetId: string | null;
+  datasetVersion: number | null;
+  targetType: TargetType;
+  targetId: string;
+  status: ExperimentStatus;
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ExperimentResult {
+  id: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: { message: string; stack?: string; code?: string } | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  traceId: string | null;
+  createdAt: Date;
+}
+
+export interface CreateExperimentInput {
+  id?: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  datasetId: string | null;
+  datasetVersion: number | null;
+  targetType: TargetType;
+  targetId: string;
+  totalItems: number;
+}
+
+export interface UpdateExperimentInput {
+  id: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  status?: ExperimentStatus;
+  succeededCount?: number;
+  failedCount?: number;
+  skippedCount?: number;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface AddExperimentResultInput {
+  id?: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: { message: string; stack?: string; code?: string } | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  traceId?: string | null;
+}
+
+export interface ListExperimentsInput {
+  datasetId?: string;
+  pagination: StoragePagination;
+}
+
+export interface ListExperimentsOutput {
+  experiments: Experiment[];
+  pagination: PaginationInfo;
+}
+
+export interface ListExperimentResultsInput {
+  experimentId: string;
+  pagination: StoragePagination;
+}
+
+export interface ListExperimentResultsOutput {
+  results: ExperimentResult[];
+  pagination: PaginationInfo;
 }

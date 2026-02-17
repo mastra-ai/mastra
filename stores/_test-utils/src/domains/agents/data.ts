@@ -63,8 +63,8 @@ export const createFullSampleAgent = ({
   defaultOptions: {
     maxSteps: 5,
   },
-  workflows: ['order-workflow', 'support-workflow'],
-  agents: ['helper-agent'],
+  workflows: { 'order-workflow': {}, 'support-workflow': {} },
+  agents: { 'helper-agent': {} },
   inputProcessors: ['sanitize-processor'],
   outputProcessors: ['format-processor'],
   memory: { vector: 'default-vector' },

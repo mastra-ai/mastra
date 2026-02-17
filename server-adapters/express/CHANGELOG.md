@@ -1,5 +1,79 @@
 # @mastra/express
 
+## 1.1.3
+
+### Patch Changes
+
+- Fixed DELETE requests with JSON bodies not being parsed. Now parses request bodies for DELETE methods (previously only POST, PUT, PATCH). ([#12747](https://github.com/mastra-ai/mastra/pull/12747))
+
+- Fixed custom API routes registered via `registerApiRoute()` being silently ignored by Koa, Express, Fastify, and Hono server adapters. Routes previously appeared in the OpenAPI spec but returned 404 at runtime. Custom routes now work correctly across all server adapters. ([#12960](https://github.com/mastra-ai/mastra/pull/12960))
+
+  **Example:**
+
+  ```ts
+  import Koa from 'koa';
+  import { Mastra } from '@mastra/core';
+  import { registerApiRoute } from '@mastra/core/server';
+  import { MastraServer } from '@mastra/koa';
+
+  const mastra = new Mastra({
+    server: {
+      apiRoutes: [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello!' }),
+        }),
+      ],
+    },
+  });
+
+  const app = new Koa();
+  const server = new MastraServer({ app, mastra });
+  await server.init();
+  // GET /hello now returns 200 instead of 404
+  ```
+
+- Updated dependencies [[`7ef618f`](https://github.com/mastra-ai/mastra/commit/7ef618f3c49c27e2f6b27d7f564c557c0734325b), [`b373564`](https://github.com/mastra-ai/mastra/commit/b37356491d43b4d53067f10cb669abaf2502f218), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`5fbb1a8`](https://github.com/mastra-ai/mastra/commit/5fbb1a8f68a5953b4c7a60dd6d081c33111223f4), [`b896b41`](https://github.com/mastra-ai/mastra/commit/b896b41343de7fcc14442fb40fe82d189e65bbe2), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428), [`0831bbb`](https://github.com/mastra-ai/mastra/commit/0831bbb5bc750c18e9b22b45f18687c964b70828), [`6297864`](https://github.com/mastra-ai/mastra/commit/62978644cd93b0782eae75c9f202fe846e7802d7), [`63f7eda`](https://github.com/mastra-ai/mastra/commit/63f7eda605eb3e0c8c35ee3912ffe7c999c69f69), [`a5b67a3`](https://github.com/mastra-ai/mastra/commit/a5b67a3589a74415feb663a55d1858324a2afde9), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`d87e96b`](https://github.com/mastra-ai/mastra/commit/d87e96b63cb47f0fe87d9147b915ebd0509f4ca3), [`7567222`](https://github.com/mastra-ai/mastra/commit/7567222b1366f0d39980594792dd9d5060bfe2ab), [`af71458`](https://github.com/mastra-ai/mastra/commit/af71458e3b566f09c11d0e5a0a836dc818e7a24a), [`eb36bd8`](https://github.com/mastra-ai/mastra/commit/eb36bd8c52fcd6ec9674ac3b7a6412405b5983e1), [`3cbf121`](https://github.com/mastra-ai/mastra/commit/3cbf121f55418141924754a83102aade89835947), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428)]:
+  - @mastra/core@1.4.0
+  - @mastra/server@1.4.0
+
+## 1.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed DELETE requests with JSON bodies not being parsed. Now parses request bodies for DELETE methods (previously only POST, PUT, PATCH). ([#12747](https://github.com/mastra-ai/mastra/pull/12747))
+
+- Fixed custom API routes registered via `registerApiRoute()` being silently ignored by Koa, Express, Fastify, and Hono server adapters. Routes previously appeared in the OpenAPI spec but returned 404 at runtime. Custom routes now work correctly across all server adapters. ([#12960](https://github.com/mastra-ai/mastra/pull/12960))
+
+  **Example:**
+
+  ```ts
+  import Koa from 'koa';
+  import { Mastra } from '@mastra/core';
+  import { registerApiRoute } from '@mastra/core/server';
+  import { MastraServer } from '@mastra/koa';
+
+  const mastra = new Mastra({
+    server: {
+      apiRoutes: [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello!' }),
+        }),
+      ],
+    },
+  });
+
+  const app = new Koa();
+  const server = new MastraServer({ app, mastra });
+  await server.init();
+  // GET /hello now returns 200 instead of 404
+  ```
+
+- Updated dependencies [[`7ef618f`](https://github.com/mastra-ai/mastra/commit/7ef618f3c49c27e2f6b27d7f564c557c0734325b), [`b373564`](https://github.com/mastra-ai/mastra/commit/b37356491d43b4d53067f10cb669abaf2502f218), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`5fbb1a8`](https://github.com/mastra-ai/mastra/commit/5fbb1a8f68a5953b4c7a60dd6d081c33111223f4), [`b896b41`](https://github.com/mastra-ai/mastra/commit/b896b41343de7fcc14442fb40fe82d189e65bbe2), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428), [`0831bbb`](https://github.com/mastra-ai/mastra/commit/0831bbb5bc750c18e9b22b45f18687c964b70828), [`6297864`](https://github.com/mastra-ai/mastra/commit/62978644cd93b0782eae75c9f202fe846e7802d7), [`63f7eda`](https://github.com/mastra-ai/mastra/commit/63f7eda605eb3e0c8c35ee3912ffe7c999c69f69), [`a5b67a3`](https://github.com/mastra-ai/mastra/commit/a5b67a3589a74415feb663a55d1858324a2afde9), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`d87e96b`](https://github.com/mastra-ai/mastra/commit/d87e96b63cb47f0fe87d9147b915ebd0509f4ca3), [`7567222`](https://github.com/mastra-ai/mastra/commit/7567222b1366f0d39980594792dd9d5060bfe2ab), [`af71458`](https://github.com/mastra-ai/mastra/commit/af71458e3b566f09c11d0e5a0a836dc818e7a24a), [`eb36bd8`](https://github.com/mastra-ai/mastra/commit/eb36bd8c52fcd6ec9674ac3b7a6412405b5983e1), [`3cbf121`](https://github.com/mastra-ai/mastra/commit/3cbf121f55418141924754a83102aade89835947), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428)]:
+  - @mastra/core@1.4.0-alpha.0
+  - @mastra/server@1.4.0-alpha.0
+
 ## 1.1.2
 
 ### Patch Changes

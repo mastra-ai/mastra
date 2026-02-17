@@ -7,12 +7,8 @@ import { ToolsIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import type { AgentFormValues } from '../utils/form-validation';
+import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-
-interface EntityConfig {
-  description?: string;
-}
 
 interface ToolsSectionProps {
   control: Control<AgentFormValues>;
