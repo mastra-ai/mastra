@@ -436,3 +436,159 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(false);
   });
 });
+
+describe('createLLMMappingStep provider-executed tool message filtering', () => {
+  let controller: { enqueue: ReturnType<typeof vi.fn> };
+  let messageList: MessageList;
+  let llmExecutionStep: any;
+  let bail: ReturnType<typeof vi.fn>;
+  let getStepResult: ReturnType<typeof vi.fn>;
+  let llmMappingStep: ReturnType<typeof createLLMMappingStep>;
+
+  const createExecuteParams = (
+    inputData: ToolCallOutput[],
+  ): ExecuteFunctionParams<{}, ToolCallOutput[], any, any, any> => ({
+    inputData,
+    getInitData: () => ({}),
+    getStepResult,
+    mapiTraceId: 'test-trace',
+    bail,
+    resume: vi.fn(),
+    emitEvent: vi.fn(),
+    tracingContext: {},
+    run: { id: 'test-run' },
+    inputSchema: z.array(z.any()),
+    outputSchema: z.any(),
+    validateSchemas: false,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+
+    messageList = {
+      get: {
+        all: { aiV5: { model: () => [] } },
+        input: { aiV5: { model: () => [] } },
+        response: { aiV5: { model: () => [] } },
+      },
+      add: vi.fn(),
+    } as unknown as MessageList;
+
+    llmExecutionStep = createStep({
+      id: 'test-llm-execution',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({
+        stepResult: { isContinued: true, reason: undefined },
+        metadata: {},
+      }),
+    });
+
+    bail = vi.fn(data => data);
+    getStepResult = vi.fn(() => ({
+      stepResult: { isContinued: true, reason: undefined },
+      metadata: {},
+    }));
+
+    llmMappingStep = createLLMMappingStep({
+      llmExecutionStep,
+      messageList,
+      controller: controller as any,
+      runId: 'test-run',
+      from: 'agent' as any,
+      logger: undefined as any,
+      toolStream: new ToolStream({ prefix: 'tool', callId: 'test-call-id', name: 'test-tool', runId: 'test-run' }),
+      requestContext: new RequestContext(),
+    });
+  });
+
+  it('should exclude provider-executed tools from the tool-result message added to messageList', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'get_company_info',
+        args: { name: 'test' },
+        result: { company: 'Acme' },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // messageList.add should be called with a tool-result message
+    expect(messageList.add).toHaveBeenCalled();
+
+    // Find the tool-result message (the one with tool-invocation parts at state: 'result')
+    const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
+    const toolResultMsg = addCalls.find(([msg]: [any]) =>
+      msg.content?.parts?.some((p: any) => p.toolInvocation?.state === 'result'),
+    );
+    expect(toolResultMsg).toBeDefined();
+
+    const parts = toolResultMsg![0].content.parts;
+    const toolNames = parts.map((p: any) => p.toolInvocation.toolName);
+
+    // Only the client-executed tool should be in the message
+    expect(toolNames).toContain('get_company_info');
+    expect(toolNames).not.toContain('web_search_20250305');
+  });
+
+  it('should not add a tool-result message to messageList when all tools are provider-executed', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // messageList.add should NOT be called — no client-executed tools to record
+    expect(messageList.add).not.toHaveBeenCalled();
+  });
+
+  it('should still emit stream chunks for provider-executed tools even though they are excluded from messageList', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'get_company_info',
+        args: { name: 'test' },
+        result: { company: 'Acme' },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Stream chunks should be emitted for BOTH tools
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({ toolCallId: 'call-1' }),
+      }),
+    );
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({ toolCallId: 'call-2' }),
+      }),
+    );
+  });
+});

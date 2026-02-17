@@ -258,12 +258,17 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
+        // Exclude provider-executed tools from the tool-result message. These tools (e.g.
+        // Anthropic web_search) are executed server-side — sending a client-fabricated result
+        // would conflict with the provider's deferred execution.
+        const clientExecutedToolCalls = inputData.filter(toolCall => !toolCall.providerExecuted);
+
         const toolResultMessage: MastraDBMessage = {
           id: toolResultMessageId || '',
           role: 'assistant' as const,
           content: {
             format: 2,
-            parts: inputData.map(toolCall => {
+            parts: clientExecutedToolCalls.map(toolCall => {
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
@@ -280,7 +285,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           createdAt: new Date(),
         };
 
-        rest.messageList.add(toolResultMessage, 'response');
+        if (clientExecutedToolCalls.length > 0) {
+          rest.messageList.add(toolResultMessage, 'response');
+        }
 
         return {
           ...initialResult,
