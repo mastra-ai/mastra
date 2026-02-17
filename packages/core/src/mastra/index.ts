@@ -33,7 +33,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -230,7 +230,7 @@ export interface Config<
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
    */
-  workspace?: Workspace;
+  workspace?: AnyWorkspace;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -323,8 +323,8 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
-  #workspace?: Workspace;
-  #workspaces: Record<string, Workspace> = {};
+  #workspace?: AnyWorkspace;
+  #workspaces: Record<string, AnyWorkspace> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -1183,7 +1183,7 @@ export class Mastra<
    * }
    * ```
    */
-  public getWorkspace(): Workspace | undefined {
+  public getWorkspace(): AnyWorkspace | undefined {
     return this.#workspace;
   }
 
@@ -1198,7 +1198,7 @@ export class Mastra<
    * const files = await workspace.filesystem.readdir('/');
    * ```
    */
-  public getWorkspaceById(id: string): Workspace {
+  public getWorkspaceById(id: string): AnyWorkspace {
     const workspace = this.#workspaces[id];
     if (!workspace) {
       const error = new MastraError({
@@ -1229,7 +1229,7 @@ export class Mastra<
    * }
    * ```
    */
-  public listWorkspaces(): Record<string, Workspace> {
+  public listWorkspaces(): Record<string, AnyWorkspace> {
     return { ...this.#workspaces };
   }
 
@@ -1249,7 +1249,7 @@ export class Mastra<
    * mastra.addWorkspace(workspace);
    * ```
    */
-  public addWorkspace(workspace: Workspace, key?: string): void {
+  public addWorkspace(workspace: AnyWorkspace, key?: string): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
     }

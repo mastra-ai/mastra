@@ -57,7 +57,7 @@ import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -153,7 +153,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<Workspace | undefined>;
+  #workspace?: DynamicArgument<AnyWorkspace | undefined>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -859,7 +859,7 @@ export class Agent<
    */
   public async getWorkspace({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
+  }: { requestContext?: RequestContext } = {}): Promise<AnyWorkspace | undefined> {
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {

@@ -34,7 +34,7 @@ import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
@@ -237,7 +237,7 @@ export interface AgentConfig<
    * Workspace for file storage and code execution.
    * When configured, workspace tools are automatically injected into the agent.
    */
-  workspace?: DynamicArgument<Workspace | undefined>;
+  workspace?: DynamicArgument<AnyWorkspace | undefined>;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
