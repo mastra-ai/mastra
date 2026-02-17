@@ -134,7 +134,7 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
         scorerId,
         'scorerDefinitionId',
         currentConfig,
-        changedFields.length > 0 ? changedFields : [],
+        changedFields,
         { changeMessage },
       );
 

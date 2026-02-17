@@ -125,7 +125,7 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
         promptBlockId,
         'blockId',
         currentConfig,
-        changedFields.length > 0 ? changedFields : [],
+        changedFields,
         { changeMessage },
       );
 

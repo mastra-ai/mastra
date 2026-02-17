@@ -125,7 +125,7 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         mcpClientId,
         'mcpClientId',
         currentConfig,
-        changedFields.length > 0 ? changedFields : [],
+        changedFields,
         { changeMessage },
       );
 
