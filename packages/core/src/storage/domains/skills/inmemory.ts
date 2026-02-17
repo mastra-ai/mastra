@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { normalizePerPage, calculatePagination } from '../../base';
 import type {
   StorageSkillType,
@@ -66,7 +68,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
 
     // Create version 1 from the config
-    const versionId = crypto.randomUUID();
+    const versionId = randomUUID();
     try {
       await this.createVersion({
         id: versionId,
@@ -165,7 +167,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
       // Only create a new version if something actually changed
       if (changedFields.length > 0) {
-        const newVersionId = crypto.randomUUID();
+        const newVersionId = randomUUID();
         const newVersionNumber = latestVersion.versionNumber + 1;
 
         await this.createVersion({
