@@ -1437,7 +1437,13 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       // Surgically update the skills cache for the newly installed skill
       if (workspace.skills?.addSkill) {
-        await workspace.skills.addSkill(installPath);
+        try {
+          await workspace.skills.addSkill(installPath);
+        } catch (cacheError) {
+          console.warn(
+            `[skills-sh] Failed to update cache after install: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`,
+          );
+        }
       }
 
       return {
@@ -1518,7 +1524,13 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 
       // Surgically remove the skill from the cache
       if (workspace.skills?.removeSkill) {
-        await workspace.skills.removeSkill(safeSkillName);
+        try {
+          await workspace.skills.removeSkill(safeSkillName);
+        } catch (cacheError) {
+          console.warn(
+            `[skills-sh] Failed to update cache after remove: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`,
+          );
+        }
       }
 
       return {
@@ -1682,7 +1694,13 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
 
           // Surgically update the skills cache for the updated skill
           if (workspace.skills?.addSkill) {
-            await workspace.skills.addSkill(installPath);
+            try {
+              await workspace.skills.addSkill(installPath);
+            } catch (cacheError) {
+              console.warn(
+                `[skills-sh] Failed to update cache after update: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`,
+              );
+            }
           }
 
           results.push({
