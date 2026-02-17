@@ -517,6 +517,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     } catch (error) {
       if (error instanceof Error) {
         console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${error.message}`);
+      } else {
+        console.warn(`[WorkspaceSkills] Cannot access skills path "${skillsPath}": ${String(error)}`);
       }
       return;
     }

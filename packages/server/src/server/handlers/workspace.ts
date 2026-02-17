@@ -176,10 +176,13 @@ async function getSkillsById(mastra: any, workspaceId: string): Promise<Workspac
  * validates it is writable, and returns `<mount>/.agents/skills/<skillId>`.
  * For non-composite: returns `.agents/skills/<skillId>` (unchanged behavior).
  */
+/** Strip a single trailing slash (leaves `/` alone). */
+function stripTrailingSlash(p: string): string {
+  return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
+}
+
 function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: string, requestedMount?: string): string {
   if (isCompositeFilesystem(filesystem)) {
-    const stripTrailingSlash = (p: string) => (p.endsWith('/') ? p.slice(0, -1) : p);
-
     if (requestedMount) {
       // Validate the requested mount exists
       const mountFs = filesystem.mounts.get(requestedMount);
@@ -1592,7 +1595,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         if (isCompositeFilesystem(workspace.filesystem)) {
           for (const [mountPath, mountFs] of workspace.filesystem.mounts) {
             if (!mountFs.readOnly) {
-              dirsToScan.push(`${mountPath}/${SKILLS_SH_DIR}`);
+              dirsToScan.push(`${stripTrailingSlash(mountPath)}/${SKILLS_SH_DIR}`);
             }
           }
         } else {
