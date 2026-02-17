@@ -1,5 +1,5 @@
 import z from 'zod';
-import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
 
@@ -26,19 +26,7 @@ const storageOrderBySchema = z.object({
   direction: z.enum(['ASC', 'DESC']).optional(),
 });
 
-/**
- * Status filter for get-by-id endpoints.
- * Controls which version is resolved:
- * - 'published' (default) — resolve with the active (published) version.
- * - 'draft' — resolve with the latest version (which may be ahead of the published one).
- */
-export const statusQuerySchema = z.object({
-  status: z
-    .enum(['draft', 'published', 'archived'])
-    .optional()
-    .default('published')
-    .describe('Which version to resolve: published (active version) or draft (latest version)'),
-});
+export { statusQuerySchema };
 
 /**
  * GET /stored/agents - List stored agents

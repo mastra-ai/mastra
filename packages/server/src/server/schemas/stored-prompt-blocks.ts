@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -19,13 +19,7 @@ const storageOrderBySchema = z.object({
   direction: z.enum(['ASC', 'DESC']).optional(),
 });
 
-export const statusQuerySchema = z.object({
-  status: z
-    .enum(['draft', 'published', 'archived'])
-    .optional()
-    .default('published')
-    .describe('Which version to resolve: published (active version) or draft (latest version)'),
-});
+export { statusQuerySchema };
 
 export const listStoredPromptBlocksQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
