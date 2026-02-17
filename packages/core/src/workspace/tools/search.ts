@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
-import { emitWorkspaceMetadata, requireWorkspace } from './helpers';
+import { requireWorkspace } from './helpers';
 
 export const searchTool = createTool({
   id: WORKSPACE_TOOLS.SEARCH.SEARCH,
@@ -18,7 +18,6 @@ export const searchTool = createTool({
   }),
   execute: async ({ query, topK, mode, minScore }, context) => {
     const workspace = requireWorkspace(context);
-    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SEARCH.SEARCH);
 
     const results = await workspace.search(query, {
       topK,
@@ -27,6 +26,16 @@ export const searchTool = createTool({
     });
 
     const effectiveMode = mode ?? (workspace.canHybrid ? 'hybrid' : workspace.canVector ? 'vector' : 'bm25');
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.SEARCH.SEARCH,
+        count: results.length,
+        mode: effectiveMode,
+        workspace: { id: workspace.id, name: workspace.name },
+      },
+    });
 
     const lines = results.map(r => {
       const lineInfo = r.lineRange ? `:${r.lineRange.start}-${r.lineRange.end}` : '';

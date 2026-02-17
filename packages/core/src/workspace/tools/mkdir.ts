@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
-import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { requireFilesystem } from './helpers';
 
 export const mkdirTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
@@ -16,14 +16,24 @@ export const mkdirTool = createTool({
       .describe('Whether to create parent directories if they do not exist'),
   }),
   execute: async ({ path, recursive }, context) => {
-    const { filesystem } = requireFilesystem(context);
-    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     if (filesystem.readOnly) {
       throw new WorkspaceReadOnlyError('mkdir');
     }
 
     await filesystem.mkdir(path, { recursive });
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.MKDIR,
+        path,
+        workspace: { id: workspace.id, name: workspace.name },
+        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+      },
+    });
+
     return `Created directory ${path}`;
   },
 });

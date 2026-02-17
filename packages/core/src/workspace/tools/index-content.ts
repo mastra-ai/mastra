@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
-import { emitWorkspaceMetadata, requireWorkspace } from './helpers';
+import { requireWorkspace } from './helpers';
 
 export const indexContentTool = createTool({
   id: WORKSPACE_TOOLS.SEARCH.INDEX,
@@ -13,9 +13,18 @@ export const indexContentTool = createTool({
   }),
   execute: async ({ path, content, metadata }, context) => {
     const workspace = requireWorkspace(context);
-    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SEARCH.INDEX);
 
     await workspace.index(path, content, { metadata });
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.SEARCH.INDEX,
+        path,
+        workspace: { id: workspace.id, name: workspace.name },
+      },
+    });
+
     return `Indexed ${path}`;
   },
 });

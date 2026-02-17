@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
-import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { requireFilesystem } from './helpers';
 
 export const readFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
@@ -26,8 +26,7 @@ export const readFileTool = createTool({
       .describe('Whether to prefix each line with its line number (default: true)'),
   }),
   execute: async ({ path, encoding, offset, limit, showLineNumbers }, context) => {
-    const { filesystem } = requireFilesystem(context);
-    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    const { workspace, filesystem } = requireFilesystem(context);
 
     const effectiveEncoding = (encoding as BufferEncoding) ?? 'utf-8';
     const fullContent = await filesystem.readFile(path, { encoding: effectiveEncoding });
@@ -36,10 +35,32 @@ export const readFileTool = createTool({
     const isTextEncoding = !encoding || encoding === 'utf-8' || encoding === 'utf8';
 
     if (!isTextEncoding) {
+      await context?.writer?.custom({
+        type: 'data-workspace-metadata',
+        data: {
+          toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+          path: stat.path,
+          size: stat.size,
+          encoding: effectiveEncoding,
+          workspace: { id: workspace.id, name: workspace.name },
+          filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+        },
+      });
       return `${stat.path} (${stat.size} bytes, ${effectiveEncoding})\n${fullContent}`;
     }
 
     if (typeof fullContent !== 'string') {
+      await context?.writer?.custom({
+        type: 'data-workspace-metadata',
+        data: {
+          toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+          path: stat.path,
+          size: stat.size,
+          encoding: 'base64',
+          workspace: { id: workspace.id, name: workspace.name },
+          filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+        },
+      });
       return `${stat.path} (${stat.size} bytes, base64)\n${fullContent.toString('base64')}`;
     }
 
@@ -57,6 +78,18 @@ export const readFileTool = createTool({
     } else {
       header = `${stat.path} (${stat.size} bytes)`;
     }
+
+    await context?.writer?.custom({
+      type: 'data-workspace-metadata',
+      data: {
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+        path: stat.path,
+        size: stat.size,
+        ...(hasLineRange && { lines: result.lines, totalLines: result.totalLines }),
+        workspace: { id: workspace.id, name: workspace.name },
+        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
+      },
+    });
 
     return `${header}\n${formattedContent}`;
   },

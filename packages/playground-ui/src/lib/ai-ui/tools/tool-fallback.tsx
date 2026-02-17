@@ -113,6 +113,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         args={args}
         result={result}
         metadata={metadata}
+        toolOutput={result?.toolOutput || []}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
         isNetwork={isNetwork ?? false}

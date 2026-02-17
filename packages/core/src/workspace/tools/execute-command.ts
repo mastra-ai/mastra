@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, requireSandbox } from './helpers';
+import { requireSandbox } from './helpers';
 
 export const executeCommandTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
@@ -12,7 +12,7 @@ Usage:
 - Verify parent directories exist before running commands that create files or directories.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
 - Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`,
+- Use cwd to set the working directory, or commands run from the sandbox default.`,
   inputSchema: z.object({
     command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
     args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
@@ -20,45 +20,64 @@ Usage:
     cwd: z.string().nullish().describe('Working directory for the command'),
   }),
   execute: async ({ command, args, timeout, cwd }, context) => {
-    const { sandbox } = requireSandbox(context);
+    const { workspace, sandbox } = requireSandbox(context);
 
     if (!sandbox.executeCommand) {
       throw new SandboxFeatureNotSupportedError('executeCommand');
     }
 
-    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+    const getExecutionMetadata = () => ({
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+      },
+      sandbox: {
+        id: sandbox.id,
+        name: sandbox.name,
+        provider: sandbox.provider,
+        status: sandbox.status,
+      },
+    });
 
-    const toolCallId = context?.agent?.toolCallId;
     const startedAt = Date.now();
-    let stdout = '';
-    let stderr = '';
     try {
       const result = await sandbox.executeCommand(command, args ?? [], {
         timeout: timeout ?? undefined,
         cwd: cwd ?? undefined,
         onStdout: async (data: string) => {
-          stdout += data;
-          await context?.writer?.custom({
-            type: 'data-sandbox-stdout',
-            data: { output: data, timestamp: Date.now(), toolCallId },
+          await context?.writer?.write({
+            type: 'sandbox-stdout',
+            data,
+            timestamp: Date.now(),
+            metadata: getExecutionMetadata(),
           });
         },
         onStderr: async (data: string) => {
-          stderr += data;
-          await context?.writer?.custom({
-            type: 'data-sandbox-stderr',
-            data: { output: data, timestamp: Date.now(), toolCallId },
+          await context?.writer?.write({
+            type: 'sandbox-stderr',
+            data,
+            timestamp: Date.now(),
+            metadata: getExecutionMetadata(),
           });
         },
       });
 
+      await context?.writer?.write({
+        type: 'sandbox-exit',
+        exitCode: result.exitCode,
+        success: result.success,
+        executionTimeMs: result.executionTimeMs,
+        metadata: getExecutionMetadata(),
+      });
+
       await context?.writer?.custom({
-        type: 'data-sandbox-exit',
+        type: 'data-workspace-metadata',
         data: {
+          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          command,
           exitCode: result.exitCode,
-          success: result.success,
           executionTimeMs: result.executionTimeMs,
-          toolCallId,
+          ...getExecutionMetadata(),
         },
       });
 
@@ -70,20 +89,14 @@ Usage:
 
       return result.stdout || '(no output)';
     } catch (error) {
-      await context?.writer?.custom({
-        type: 'data-sandbox-exit',
-        data: {
-          exitCode: -1,
-          success: false,
-          executionTimeMs: Date.now() - startedAt,
-          toolCallId,
-        },
+      await context?.writer?.write({
+        type: 'sandbox-exit',
+        exitCode: -1,
+        success: false,
+        executionTimeMs: Date.now() - startedAt,
+        metadata: getExecutionMetadata(),
       });
-      // Include any stdout/stderr captured before the error (e.g., timeout)
-      const parts = [stdout, stderr].filter(Boolean);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      parts.push(`Error: ${errorMessage}`);
-      return parts.join('\n');
+      throw error;
     }
   },
 });
