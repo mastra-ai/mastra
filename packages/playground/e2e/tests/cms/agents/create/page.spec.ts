@@ -116,12 +116,13 @@ test.describe('Page Structure & Initial State', () => {
     await expect(page.locator('h1')).toHaveText('Create an agent');
   });
 
-  test('displays Create agent button', async ({ page }) => {
+  test('displays Create agent button disabled until required fields are filled', async ({ page }) => {
     await page.goto('/cms/agents/create');
 
     const createButton = page.getByRole('button', { name: 'Create agent' });
     await expect(createButton).toBeVisible();
-    await expect(createButton).toBeEnabled();
+    // Button should be disabled when form is empty
+    await expect(createButton).toBeDisabled();
   });
 
   test('displays sidebar navigation with all pages', async ({ page }) => {
@@ -135,36 +136,69 @@ test.describe('Page Structure & Initial State', () => {
   });
 });
 
-test.describe('Required Field Validation', () => {
-  test('shows error toast when submitting empty form', async ({ page }) => {
+test.describe('Create Button Enable/Disable Behavior', () => {
+  test('button stays disabled when only partial identity fields are filled', async ({ page }) => {
     await page.goto('/cms/agents/create');
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
+    const createButton = page.getByRole('button', { name: 'Create agent' });
 
-    await expect(page.getByText('Please fill in all required fields')).toBeVisible({ timeout: 5000 });
-  });
+    // Fill only name — missing provider, model, and instructions
+    const nameInput = page.locator('#agent-name');
+    await nameInput.fill('Test Agent');
 
-  test('shows validation error when name is empty but other fields filled', async ({ page }) => {
-    await page.goto('/cms/agents/create');
+    await expect(createButton).toBeDisabled();
 
-    // Fill provider and model but NOT name
+    // Fill provider but not model
     const providerCombobox = page.getByRole('combobox').nth(0);
     await providerCombobox.click();
     await page.getByRole('option', { name: 'OpenAI' }).click();
 
-    const modelCombobox = page.getByRole('combobox').nth(1);
-    await modelCombobox.click();
-    await page.getByRole('option', { name: 'gpt-4o-mini' }).click();
+    await expect(createButton).toBeDisabled();
+  });
 
-    // Add instruction block content via sidebar navigation
-    await clickSidebarLink(page, 'Instructions');
-    const editor = page.locator('.cm-content').first();
-    await editor.click();
-    await page.keyboard.type('Some instructions');
+  test('button stays disabled when identity is complete but instructions are empty', async ({ page }) => {
+    await page.goto('/cms/agents/create');
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
+    const createButton = page.getByRole('button', { name: 'Create agent' });
 
-    await expect(page.getByText('Please fill in all required fields')).toBeVisible({ timeout: 5000 });
+    // Fill all identity fields
+    await fillIdentityFields(page, { name: 'Test Agent' });
+
+    // Button should still be disabled because instructions are empty
+    await expect(createButton).toBeDisabled();
+  });
+
+  test('button becomes enabled when all required fields are filled', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const createButton = page.getByRole('button', { name: 'Create agent' });
+
+    // Initially disabled
+    await expect(createButton).toBeDisabled();
+
+    // Fill all required fields
+    await fillRequiredFields(page);
+
+    // Now enabled
+    await expect(createButton).toBeEnabled();
+  });
+
+  test('button becomes disabled again when required field is cleared', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const createButton = page.getByRole('button', { name: 'Create agent' });
+
+    // Fill all required fields
+    await fillRequiredFields(page);
+    await expect(createButton).toBeEnabled();
+
+    // Go back to identity and clear the name
+    await clickSidebarLink(page, 'Identity');
+    const nameInput = page.locator('#agent-name');
+    await nameInput.clear();
+
+    // Button should be disabled again
+    await expect(createButton).toBeDisabled();
   });
 });
 

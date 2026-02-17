@@ -19,7 +19,7 @@ function CreateLayoutWrapper() {
   const { navigate, paths } = useLinkComponent();
   const location = useLocation();
 
-  const { form, handlePublish, isSubmitting } = useAgentCmsForm({
+  const { form, handlePublish, isSubmitting, canPublish } = useAgentCmsForm({
     mode: 'create',
     onSuccess: agentId => navigate(`${paths.agentLink(agentId)}/chat`),
   });
@@ -35,7 +35,7 @@ function CreateLayoutWrapper() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button variant="primary" onClick={handlePublish} disabled={isSubmitting} className="w-full">
+          <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || !canPublish} className="w-full">
             {isSubmitting ? (
               <>
                 <Spinner className="h-4 w-4" />

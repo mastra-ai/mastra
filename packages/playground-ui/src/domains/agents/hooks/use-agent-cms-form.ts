@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useWatch } from 'react-hook-form';
 import { useMastraClient } from '@mastra/react';
 import type { CreateStoredAgentParams } from '@mastra/client-js';
 
@@ -159,5 +160,13 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     }
   }, [form, isEdit, client, createStoredAgent, updateStoredAgent, options]);
 
-  return { form, handlePublish, isSubmitting };
+  const watched = useWatch({ control: form.control });
+
+  const canPublish = useMemo(() => {
+    const identityDone = !!watched.name && !!watched.model?.provider && !!watched.model?.name;
+    const instructionsDone = (watched.instructionBlocks ?? []).some(b => b.content?.trim());
+    return identityDone && instructionsDone;
+  }, [watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);
+
+  return { form, handlePublish, isSubmitting, canPublish };
 }
