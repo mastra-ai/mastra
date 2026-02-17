@@ -19,7 +19,7 @@ function LearnNotFound() {
         <h1 className="text-3xl font-bold text-(--mastra-text-primary)">Lesson not found</h1>
         <p className="mt-2 text-(--mastra-text-tertiary)">
           The lesson you're looking for doesn't exist.{' '}
-          <a href="/learn" className="text-(--mastra-green-accent-2) hover:underline">
+          <a href="/learn" className="text-(--mastra-green-accent-3) hover:underline dark:text-(--mastra-green-accent)">
             Back to course overview
           </a>
         </p>
@@ -37,7 +37,7 @@ function ComingSoonContent({ lesson }: { lesson: (typeof course.lessons)[number]
         <ul className="m-0 list-none space-y-2 p-0">
           {lesson.preview.bullets.map((bullet, i) => (
             <li key={i} className="flex items-start gap-2 text-sm text-(--mastra-text-secondary)">
-              <span className="mt-1 text-green-500">•</span>
+              <span className="learn-bullet mt-1">•</span>
               <span>{bullet}</span>
             </li>
           ))}

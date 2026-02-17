@@ -14,7 +14,7 @@ export function LessonNav({ prev, next, className }: LessonNavProps) {
       {prev ? (
         <Link
           to={`/learn/${prev.slug}`}
-          className="learn-link flex items-center gap-2 rounded-lg border border-(--border) px-4 py-2 text-sm text-(--mastra-text-secondary) transition-colors hover:border-(--mastra-green-accent-2) hover:text-(--mastra-text-primary)"
+          className="learn-link flex items-center gap-2 rounded-lg border border-(--border) px-4 py-2 text-sm text-(--mastra-text-secondary) transition-colors hover:border-(--mastra-green-accent-3) hover:text-(--mastra-text-primary)"
         >
           <span aria-hidden>←</span>
           <span>{prev.title}</span>
@@ -26,7 +26,7 @@ export function LessonNav({ prev, next, className }: LessonNavProps) {
       {next ? (
         <Link
           to={`/learn/${next.slug}`}
-          className="learn-link flex items-center gap-2 rounded-lg border border-(--border) px-4 py-2 text-sm text-(--mastra-text-secondary) transition-colors hover:border-(--mastra-green-accent-2) hover:text-(--mastra-text-primary)"
+          className="learn-link flex items-center gap-2 rounded-lg border border-(--border) px-4 py-2 text-sm text-(--mastra-text-secondary) transition-colors hover:border-(--mastra-green-accent-3) hover:text-(--mastra-text-primary)"
         >
           <span>
             {next.title}

@@ -6,9 +6,7 @@ export function LessonStatusChip({ status, className }: { status: LessonStatus; 
     <span
       className={cn(
         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        status === 'published'
-          ? 'bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400'
-          : 'bg-yellow-500/10 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400',
+        status === 'published' ? 'learn-status-published' : 'learn-status-coming-soon',
         className,
       )}
     >
