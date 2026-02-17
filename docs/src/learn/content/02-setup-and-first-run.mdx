@@ -1,0 +1,52 @@
+## How people start with Mastra
+
+There are three main paths:
+
+1. **Integrate with your framework** — add Mastra to an existing project, then call agents and workflows from your app's routes or server logic
+2. **Scaffold a new project** — use `create-mastra` to generate a runnable example you can adapt
+3. **Start from a template** — use a pre-built starting point when you already have a use case in mind
+
+This course takes path 2: we'll scaffold a project and iterate entirely in **Mastra Studio** before worrying about UI integration.
+
+## Scaffold and run
+
+```bash
+npx create-mastra@latest my-project
+cd my-project
+pnpm install
+```
+
+Add your LLM provider key to `.env`:
+
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+Then start the dev server:
+
+```bash
+pnpm dev
+```
+
+## Meet Mastra Studio
+
+Studio opens at `http://localhost:4111`. It's an interactive UI for building and testing agents — plus a local REST API that exposes your Mastra app as a service.
+
+The key areas:
+
+- **Agents** — chat with your agents, adjust settings, test prompts
+- **Tools** — run tools in isolation to verify inputs and outputs
+- **Workflows** — execute step-by-step runs and inspect each step
+- **Traces** — see exactly what happened: model calls, tool executions, errors
+
+Studio is your development environment. It's where you'll iterate for the rest of this course. It is _not_ the thing you ship to end users — that comes later when we talk about deployment.
+
+## The local dev loop
+
+The workflow you'll repeat throughout this course:
+
+1. Change code (agent instructions, tools, workflows)
+2. Restart the dev server
+3. Test in Studio
+4. Inspect traces to understand what happened
+5. Repeat

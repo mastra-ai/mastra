@@ -42,6 +42,7 @@ const config: Config = {
   },
   plugins: [
     [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
+    [require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
     [
       '@docusaurus/plugin-vercel-analytics',
       {

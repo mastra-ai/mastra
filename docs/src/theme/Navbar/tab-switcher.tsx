@@ -27,6 +27,12 @@ const docsTabs = [
     href: '/reference',
     basePath: '/reference',
   },
+  {
+    id: 'Learn',
+    label: 'Learn',
+    href: '/learn',
+    basePath: '/learn',
+  },
 ]
 
 export const TabSwitcher = ({ className }: { className?: string }) => {
