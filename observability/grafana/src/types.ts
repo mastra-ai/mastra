@@ -60,17 +60,53 @@ export interface GrafanaExporterConfig extends BaseExporterConfig {
   lokiEndpoint?: string;
 
   /**
-   * Authentication configuration.
+   * Default authentication configuration, used for all services unless overridden.
    * Use the `grafanaCloud()` or `grafana()` helpers to construct this.
    */
   auth?: GrafanaAuth;
 
   /**
-   * Tenant ID for multi-tenant Grafana deployments.
+   * Per-service auth override for Tempo (traces).
+   * Falls back to `auth` if not set.
+   */
+  tempoAuth?: GrafanaAuth;
+
+  /**
+   * Per-service auth override for Mimir (metrics).
+   * Falls back to `auth` if not set.
+   */
+  mimirAuth?: GrafanaAuth;
+
+  /**
+   * Per-service auth override for Loki (logs).
+   * Falls back to `auth` if not set.
+   */
+  lokiAuth?: GrafanaAuth;
+
+  /**
+   * Default tenant ID for multi-tenant Grafana deployments.
    * Sent as `X-Scope-OrgID` header.
    * For Grafana Cloud, this is the instance ID.
    */
   tenantId?: string;
+
+  /**
+   * Per-service tenant ID override for Tempo (traces).
+   * Falls back to `tenantId` if not set.
+   */
+  tempoTenantId?: string;
+
+  /**
+   * Per-service tenant ID override for Mimir (metrics).
+   * Falls back to `tenantId` if not set.
+   */
+  mimirTenantId?: string;
+
+  /**
+   * Per-service tenant ID override for Loki (logs).
+   * Falls back to `tenantId` if not set.
+   */
+  lokiTenantId?: string;
 
   /**
    * Maximum number of items to buffer before flushing for each signal.
@@ -94,14 +130,36 @@ export interface GrafanaExporterConfig extends BaseExporterConfig {
 
 /**
  * Grafana Cloud-specific configuration used by the `grafanaCloud()` helper.
+ *
+ * Grafana Cloud assigns a unique instance ID per service (Tempo, Mimir, Loki).
+ * You can specify per-service instance IDs, or use a single `instanceId` as a fallback.
  */
 export interface GrafanaCloudConfig {
   /**
-   * Grafana Cloud instance ID (numeric).
+   * Default Grafana Cloud instance ID (numeric).
+   * Used as fallback when per-service instance IDs are not set.
    * Found in Grafana Cloud portal under your stack details.
    * Falls back to `GRAFANA_CLOUD_INSTANCE_ID` env var.
    */
   instanceId?: string;
+
+  /**
+   * Tempo (traces) instance ID.
+   * Falls back to `GRAFANA_CLOUD_TEMPO_INSTANCE_ID` env var, then `instanceId`.
+   */
+  tempoInstanceId?: string;
+
+  /**
+   * Mimir (metrics) instance ID.
+   * Falls back to `GRAFANA_CLOUD_MIMIR_INSTANCE_ID` env var, then `instanceId`.
+   */
+  mimirInstanceId?: string;
+
+  /**
+   * Loki (logs) instance ID.
+   * Falls back to `GRAFANA_CLOUD_LOKI_INSTANCE_ID` env var, then `instanceId`.
+   */
+  lokiInstanceId?: string;
 
   /**
    * Grafana Cloud API key (or service account token).

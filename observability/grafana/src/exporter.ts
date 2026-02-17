@@ -81,7 +81,11 @@ export class GrafanaExporter extends BaseExporter {
   private serviceName: string;
   private readonly batchSize: number;
   private readonly flushIntervalMs: number;
-  private readonly tenantId?: string;
+
+  // Per-service tenant IDs (for X-Scope-OrgID header)
+  private readonly tempoTenantId?: string;
+  private readonly mimirTenantId?: string;
+  private readonly lokiTenantId?: string;
 
   // Batching buffers
   private spanBuffer: AnyExportedSpan[] = [];
@@ -91,8 +95,10 @@ export class GrafanaExporter extends BaseExporter {
   // Flush timer
   private flushTimer: ReturnType<typeof setInterval> | undefined;
 
-  // Auth headers (cached)
-  private readonly authHeaders: Record<string, string>;
+  // Per-service auth headers (cached)
+  private readonly tempoAuthHeaders: Record<string, string>;
+  private readonly mimirAuthHeaders: Record<string, string>;
+  private readonly lokiAuthHeaders: Record<string, string>;
 
   constructor(config: GrafanaExporterConfig = {}) {
     super(config);
@@ -110,7 +116,9 @@ export class GrafanaExporter extends BaseExporter {
       this.tempoEndpoint = '';
       this.mimirEndpoint = '';
       this.lokiEndpoint = '';
-      this.authHeaders = {};
+      this.tempoAuthHeaders = {};
+      this.mimirAuthHeaders = {};
+      this.lokiAuthHeaders = {};
       this.serviceName = DEFAULTS.serviceName;
       this.batchSize = DEFAULTS.batchSize;
       this.flushIntervalMs = DEFAULTS.flushIntervalMs;
@@ -124,10 +132,17 @@ export class GrafanaExporter extends BaseExporter {
     this.tempoEndpoint = tempoEndpoint ?? '';
     this.mimirEndpoint = mimirEndpoint ?? '';
     this.lokiEndpoint = lokiEndpoint ?? '';
-    this.tenantId = config.tenantId;
 
-    // Build auth headers
-    this.authHeaders = config.auth ? buildAuthHeaders(config.auth) : {};
+    // Resolve per-service tenant IDs, falling back to the shared tenantId
+    this.tempoTenantId = config.tempoTenantId ?? config.tenantId;
+    this.mimirTenantId = config.mimirTenantId ?? config.tenantId;
+    this.lokiTenantId = config.lokiTenantId ?? config.tenantId;
+
+    // Build per-service auth headers, falling back to the shared auth
+    const defaultAuthHeaders = config.auth ? buildAuthHeaders(config.auth) : {};
+    this.tempoAuthHeaders = config.tempoAuth ? buildAuthHeaders(config.tempoAuth) : defaultAuthHeaders;
+    this.mimirAuthHeaders = config.mimirAuth ? buildAuthHeaders(config.mimirAuth) : defaultAuthHeaders;
+    this.lokiAuthHeaders = config.lokiAuth ? buildAuthHeaders(config.lokiAuth) : defaultAuthHeaders;
 
     this.serviceName = config.serviceName ?? DEFAULTS.serviceName;
     this.batchSize = config.batchSize ?? DEFAULTS.batchSize;
@@ -305,7 +320,7 @@ export class GrafanaExporter extends BaseExporter {
    */
   private async sendToTempo(body: unknown): Promise<void> {
     const url = `${this.tempoEndpoint}/v1/traces`;
-    await this.sendRequest(url, body);
+    await this.sendRequest(url, body, this.tempoAuthHeaders, this.tempoTenantId);
   }
 
   /**
@@ -313,7 +328,7 @@ export class GrafanaExporter extends BaseExporter {
    */
   private async sendToMimir(body: unknown): Promise<void> {
     const url = `${this.mimirEndpoint}/v1/metrics`;
-    await this.sendRequest(url, body);
+    await this.sendRequest(url, body, this.mimirAuthHeaders, this.mimirTenantId);
   }
 
   /**
@@ -321,20 +336,25 @@ export class GrafanaExporter extends BaseExporter {
    */
   private async sendToLoki(body: unknown): Promise<void> {
     const url = `${this.lokiEndpoint}/loki/api/v1/push`;
-    await this.sendRequest(url, body);
+    await this.sendRequest(url, body, this.lokiAuthHeaders, this.lokiTenantId);
   }
 
   /**
    * Send an authenticated JSON request to a Grafana endpoint.
    */
-  private async sendRequest(url: string, body: unknown): Promise<void> {
+  private async sendRequest(
+    url: string,
+    body: unknown,
+    authHeaders: Record<string, string>,
+    tenantId?: string,
+  ): Promise<void> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...this.authHeaders,
+      ...authHeaders,
     };
 
-    if (this.tenantId) {
-      headers['X-Scope-OrgID'] = this.tenantId;
+    if (tenantId) {
+      headers['X-Scope-OrgID'] = tenantId;
     }
 
     const response = await fetch(url, {

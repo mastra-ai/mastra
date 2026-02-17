@@ -170,6 +170,61 @@ describe('GrafanaExporter', () => {
       expect(config.tenantId).toBe('123');
     });
 
+    it('should set per-service auth when per-service instance IDs differ', () => {
+      const config = grafanaCloud({
+        tempoInstanceId: '111',
+        mimirInstanceId: '222',
+        lokiInstanceId: '333',
+        apiKey: 'my-api-key',
+      });
+
+      // Should NOT have shared auth when IDs differ
+      expect(config.auth).toBeUndefined();
+      expect(config.tenantId).toBeUndefined();
+
+      // Should have per-service auth
+      expect(config.tempoAuth).toEqual({ type: 'basic', username: '111', password: 'my-api-key' });
+      expect(config.mimirAuth).toEqual({ type: 'basic', username: '222', password: 'my-api-key' });
+      expect(config.lokiAuth).toEqual({ type: 'basic', username: '333', password: 'my-api-key' });
+
+      // Should have per-service tenant IDs
+      expect(config.tempoTenantId).toBe('111');
+      expect(config.mimirTenantId).toBe('222');
+      expect(config.lokiTenantId).toBe('333');
+    });
+
+    it('should use shared auth when all per-service instance IDs are the same', () => {
+      const config = grafanaCloud({
+        tempoInstanceId: '123',
+        mimirInstanceId: '123',
+        lokiInstanceId: '123',
+        apiKey: 'my-api-key',
+      });
+
+      // Should use shared auth
+      expect(config.auth).toEqual({ type: 'basic', username: '123', password: 'my-api-key' });
+      expect(config.tenantId).toBe('123');
+
+      // Per-service auth should NOT be set
+      expect(config.tempoAuth).toBeUndefined();
+      expect(config.mimirAuth).toBeUndefined();
+      expect(config.lokiAuth).toBeUndefined();
+    });
+
+    it('should fall back per-service instance IDs to default instanceId', () => {
+      const config = grafanaCloud({
+        instanceId: '999',
+        tempoInstanceId: '111',
+        apiKey: 'key',
+      });
+
+      // Tempo uses its own ID, Mimir and Loki fall back to instanceId
+      // Since they differ, per-service auth should be set
+      expect(config.tempoAuth).toEqual({ type: 'basic', username: '111', password: 'key' });
+      expect(config.mimirAuth).toEqual({ type: 'basic', username: '999', password: 'key' });
+      expect(config.lokiAuth).toEqual({ type: 'basic', username: '999', password: 'key' });
+    });
+
     it('should allow endpoint overrides', () => {
       const config = grafanaCloud({
         instanceId: '123',
@@ -308,6 +363,47 @@ describe('GrafanaExporter', () => {
       const options = mockFetch.mock.calls[0]![1] as RequestInit;
       const headers = options.headers as Record<string, string>;
       expect(headers['X-Scope-OrgID']).toBeUndefined();
+    });
+
+    it('should send per-service auth headers and tenant IDs', async () => {
+      const exporter = new GrafanaExporter({
+        ...grafanaCloud({
+          tempoInstanceId: '111',
+          mimirInstanceId: '222',
+          lokiInstanceId: '333',
+          apiKey: 'test-key',
+        }),
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      // Send one of each signal type to trigger flushes
+      await exporter.onTracingEvent(makeTracingEvent());
+      await exporter.onMetricEvent(makeMetricEvent());
+      await exporter.onLogEvent(makeLogEvent());
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+
+      // Find each call by URL
+      const calls = mockFetch.mock.calls.map((c: unknown[]) => ({
+        url: c[0] as string,
+        headers: (c[1] as RequestInit).headers as Record<string, string>,
+      }));
+
+      const tempoCall = calls.find(c => c.url.includes('/v1/traces'));
+      const mimirCall = calls.find(c => c.url.includes('/v1/metrics'));
+      const lokiCall = calls.find(c => c.url.includes('/loki/api/v1/push'));
+
+      // Verify per-service tenant IDs
+      expect(tempoCall!.headers['X-Scope-OrgID']).toBe('111');
+      expect(mimirCall!.headers['X-Scope-OrgID']).toBe('222');
+      expect(lokiCall!.headers['X-Scope-OrgID']).toBe('333');
+
+      // Verify per-service Basic auth (each uses its own instance ID as username)
+      expect(tempoCall!.headers['Authorization']).toBe(`Basic ${btoa('111:test-key')}`);
+      expect(mimirCall!.headers['Authorization']).toBe(`Basic ${btoa('222:test-key')}`);
+      expect(lokiCall!.headers['Authorization']).toBe(`Basic ${btoa('333:test-key')}`);
     });
   });
 

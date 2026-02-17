@@ -12,8 +12,11 @@ import { DEFAULTS } from './types.js';
 /**
  * Configure GrafanaExporter for **Grafana Cloud**.
  *
- * Resolves instance ID, API key, and zone from config or environment variables,
+ * Resolves instance IDs, API key, and zone from config or environment variables,
  * then constructs the appropriate endpoints and Basic auth headers.
+ *
+ * Grafana Cloud assigns a unique instance ID per service (Tempo, Mimir, Loki).
+ * You can provide per-service instance IDs, or use a single `instanceId` as fallback.
  *
  * Grafana Cloud uses a unified OTLP gateway for traces and metrics:
  * - Traces: `https://otlp-gateway-{zone}.grafana.net/otlp/v1/traces`
@@ -30,19 +33,37 @@ import { DEFAULTS } from './types.js';
  * new GrafanaExporter(grafanaCloud())
  * ```
  *
- * @example Explicit config
+ * @example Per-service instance IDs (recommended for Grafana Cloud)
  * ```typescript
  * new GrafanaExporter(grafanaCloud({
- *   instanceId: '123456',
+ *   tempoInstanceId: '111111',
+ *   mimirInstanceId: '222222',
+ *   lokiInstanceId: '333333',
  *   apiKey: 'glc_...',
  *   zone: 'prod-eu-west-0',
  * }))
  * ```
+ *
+ * @example Single instance ID (fallback for all services)
+ * ```typescript
+ * new GrafanaExporter(grafanaCloud({
+ *   instanceId: '123456',
+ *   apiKey: 'glc_...',
+ * }))
+ * ```
  */
 export function grafanaCloud(config: GrafanaCloudConfig = {}): GrafanaExporterConfig {
-  const instanceId = config.instanceId ?? process.env['GRAFANA_CLOUD_INSTANCE_ID'];
+  const defaultInstanceId = config.instanceId ?? process.env['GRAFANA_CLOUD_INSTANCE_ID'];
   const apiKey = config.apiKey ?? process.env['GRAFANA_CLOUD_API_KEY'];
   const zone = config.zone ?? process.env['GRAFANA_CLOUD_ZONE'] ?? DEFAULTS.zone;
+
+  // Resolve per-service instance IDs, falling back to the default
+  const tempoInstanceId =
+    config.tempoInstanceId ?? process.env['GRAFANA_CLOUD_TEMPO_INSTANCE_ID'] ?? defaultInstanceId;
+  const mimirInstanceId =
+    config.mimirInstanceId ?? process.env['GRAFANA_CLOUD_MIMIR_INSTANCE_ID'] ?? defaultInstanceId;
+  const lokiInstanceId =
+    config.lokiInstanceId ?? process.env['GRAFANA_CLOUD_LOKI_INSTANCE_ID'] ?? defaultInstanceId;
 
   // Grafana Cloud uses a unified OTLP gateway for traces and metrics,
   // and the standard Loki endpoint for logs.
@@ -65,10 +86,29 @@ export function grafanaCloud(config: GrafanaCloudConfig = {}): GrafanaExporterCo
       `https://logs-${zone}.grafana.net`,
   };
 
-  // Set up Basic auth if credentials are available
-  if (instanceId && apiKey) {
-    result.auth = { type: 'basic', username: instanceId, password: apiKey };
-    result.tenantId = instanceId;
+  if (apiKey) {
+    // Check if any per-service IDs differ from each other
+    const allSame = tempoInstanceId === mimirInstanceId && mimirInstanceId === lokiInstanceId;
+
+    if (allSame && tempoInstanceId) {
+      // All services share the same instance ID — use a single auth
+      result.auth = { type: 'basic', username: tempoInstanceId, password: apiKey };
+      result.tenantId = tempoInstanceId;
+    } else {
+      // Per-service instance IDs differ — set per-service auth
+      if (tempoInstanceId) {
+        result.tempoAuth = { type: 'basic', username: tempoInstanceId, password: apiKey };
+        result.tempoTenantId = tempoInstanceId;
+      }
+      if (mimirInstanceId) {
+        result.mimirAuth = { type: 'basic', username: mimirInstanceId, password: apiKey };
+        result.mimirTenantId = mimirInstanceId;
+      }
+      if (lokiInstanceId) {
+        result.lokiAuth = { type: 'basic', username: lokiInstanceId, password: apiKey };
+        result.lokiTenantId = lokiInstanceId;
+      }
+    }
   }
 
   return result;
