@@ -136,6 +136,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         ? await run.resume({
             resumeData: resumeContext.resumeData,
             tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            requestContext,
             label: toolCallId,
           })
         : await run.start({
