@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '@site/src/lib/utils'
 import type { Lesson } from '../types'
 import { LessonStatusChip } from './LessonStatusChip'
@@ -19,6 +20,8 @@ export function LessonHeader({
   onWatchedChange,
   className,
 }: LessonHeaderProps) {
+  const [animating, setAnimating] = useState(false)
+
   return (
     <div className={cn('mb-6', className)}>
       <div className="mb-2 flex items-center gap-3">
@@ -34,11 +37,19 @@ export function LessonHeader({
             <input
               type="checkbox"
               checked={watched ?? false}
-              onChange={e => onWatchedChange(e.target.checked)}
+              onChange={e => {
+                setAnimating(true)
+                onWatchedChange(e.target.checked)
+              }}
               className="sr-only"
             />
             <span className="learn-meta-text text-sm">{watched ? 'Watched' : 'Mark as watched'}</span>
-            <span className={cn('learn-watched-icon', watched && 'is-watched')}>{watched && '✓'}</span>
+            <span
+              className={cn('learn-watched-icon', watched && 'is-watched', animating && 'is-animate')}
+              onAnimationEnd={() => setAnimating(false)}
+            >
+              {watched && '✓'}
+            </span>
           </label>
         )}
       </div>

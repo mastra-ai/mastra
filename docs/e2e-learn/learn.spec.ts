@@ -128,8 +128,6 @@ test.describe('Learn section', () => {
     // The navbar-sidebar should appear with learn lesson links
     const mobileSidebar = page.locator('.navbar-sidebar')
     await expect(mobileSidebar).toBeVisible()
-    // Navigate to secondary menu (learn sidebar content)
-    const backButton = mobileSidebar.getByText('← Back to main menu')
     // If secondary menu auto-shows, we should see lesson links
     const lessonLink = mobileSidebar.locator('a[href="/learn/01-what-is-an-agent"]')
     await expect(lessonLink).toBeVisible({ timeout: 5000 })
