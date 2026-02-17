@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
-import { ChevronRight, Ruler, PlusIcon } from 'lucide-react';
+import { ChevronRight, Ruler } from 'lucide-react';
 
 import { SectionHeader } from '@/domains/cms';
 import { JudgeIcon, Icon } from '@/ds/icons';
@@ -10,8 +10,6 @@ import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-import { Button } from '@/ds/components/Button';
-import { SideDialog } from '@/ds/components/SideDialog';
 import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
@@ -21,7 +19,6 @@ import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
 import { Searchbar } from '@/ds/components/Searchbar';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
 import { RuleBuilder, countLeafRules } from '@/lib/rule-engine';
 import type { ScorerConfig } from '../../components/agent-edit-page/utils/form-validation';
@@ -35,7 +32,6 @@ export function ScorersPage() {
   const selectedScorers = useWatch({ control, name: 'scorers' });
   const variables = useWatch({ control, name: 'variables' });
   const [search, setSearch] = useState('');
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const options = useMemo(() => {
     if (!scorers) return [];
@@ -89,14 +85,6 @@ export function ScorersPage() {
     });
   };
 
-  const handleScorerCreated = useCallback(
-    (scorer: { id: string }) => {
-      const current = form.getValues('scorers') || {};
-      form.setValue('scorers', { ...current, [scorer.id]: { description: '' } }, { shouldDirty: true });
-      setIsCreateDialogOpen(false);
-    },
-    [form],
-  );
 
   const filteredOptions = useMemo(() => {
     return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
@@ -111,12 +99,6 @@ export function ScorersPage() {
             subtitle={`Configure scorers for evaluating agent responses.${count > 0 ? ` (${count} selected)` : ''}`}
             icon={<JudgeIcon />}
           />
-          {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-              <PlusIcon className="w-3 h-3 mr-1" />
-              Create
-            </Button>
-          )}
         </div>
 
         <SubSectionRoot>
@@ -192,16 +174,6 @@ export function ScorersPage() {
         </SubSectionRoot>
       </div>
 
-      <SideDialog
-        dialogTitle="Create Scorer"
-        dialogDescription="Create a new scorer for evaluating agent responses"
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-      >
-        <SideDialog.Content className="p-0 overflow-hidden">
-          <ScorerCreateContent onSuccess={handleScorerCreated} />
-        </SideDialog.Content>
-      </SideDialog>
     </ScrollArea>
   );
 }

@@ -75,7 +75,6 @@ interface AgentEditSidebarProps {
   formRef?: RefObject<HTMLFormElement | null>;
   mode?: 'create' | 'edit';
   readOnly?: boolean;
-  hideSubAgentCreate?: boolean;
 }
 
 export function AgentEditSidebar({
@@ -86,7 +85,6 @@ export function AgentEditSidebar({
   formRef,
   mode = 'create',
   readOnly = false,
-  hideSubAgentCreate,
 }: AgentEditSidebarProps) {
   const {
     register,
@@ -232,7 +230,6 @@ export function AgentEditSidebar({
                 error={errors.agents?.root?.message}
                 currentAgentId={currentAgentId}
                 readOnly={readOnly}
-                hideCreateButton={hideSubAgentCreate}
               />
               <ScorersSection control={control} readOnly={readOnly} />
               <MemorySection control={control} setValue={form.setValue} readOnly={readOnly} />

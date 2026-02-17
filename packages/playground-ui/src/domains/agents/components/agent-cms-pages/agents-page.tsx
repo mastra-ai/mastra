@@ -1,12 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
-import { PlusIcon } from 'lucide-react';
 
 import { SectionHeader } from '@/domains/cms';
 import { AgentIcon, Icon } from '@/ds/icons';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Button } from '@/ds/components/Button';
-import { SideDialog } from '@/ds/components/SideDialog';
 import { Section } from '@/ds/components/Section';
 import { SubSectionRoot } from '@/ds/components/Section/section-root';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
@@ -18,7 +15,6 @@ import { Searchbar } from '@/ds/components/Searchbar';
 import { useAgents } from '../../hooks/use-agents';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { AgentCreateContent } from '../agent-create-content';
 
 export function AgentsPage() {
   const { form, readOnly, agentId: currentAgentId } = useAgentEditFormContext();
@@ -26,7 +22,6 @@ export function AgentsPage() {
   const { data: agents } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
   const [search, setSearch] = useState('');
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const options = useMemo(() => {
     if (!agents) return [];
@@ -75,14 +70,6 @@ export function AgentsPage() {
     });
   };
 
-  const handleAgentCreated = useCallback(
-    (agent: { id: string }) => {
-      const current = form.getValues('agents') || {};
-      form.setValue('agents', { ...current, [agent.id]: { description: '' } }, { shouldDirty: true });
-      setIsCreateDialogOpen(false);
-    },
-    [form],
-  );
 
   const filteredOptions = useMemo(() => {
     return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
@@ -97,12 +84,6 @@ export function AgentsPage() {
             subtitle={`Select sub-agents for this agent to delegate to.${count > 0 ? ` (${count} selected)` : ''}`}
             icon={<AgentIcon />}
           />
-          {!readOnly && (
-            <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-              <PlusIcon className="w-3 h-3 mr-1" />
-              Create
-            </Button>
-          )}
         </div>
 
         <SubSectionRoot>
@@ -166,16 +147,6 @@ export function AgentsPage() {
         </SubSectionRoot>
       </div>
 
-      <SideDialog
-        dialogTitle="Create Sub-Agent"
-        dialogDescription="Create a new agent to use as a sub-agent"
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-      >
-        <SideDialog.Content className="p-0 overflow-hidden">
-          <AgentCreateContent onSuccess={handleAgentCreated} hideSubAgentCreate />
-        </SideDialog.Content>
-      </SideDialog>
     </ScrollArea>
   );
 }

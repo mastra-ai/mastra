@@ -1,21 +1,18 @@
 import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
-import { Trash2, ChevronRight, Plus } from 'lucide-react';
+import { Trash2, ChevronRight } from 'lucide-react';
 
 import { JudgeIcon, Icon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { IconButton } from '@/ds/components/IconButton';
-import { Button } from '@/ds/components/Button';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 import type { AgentFormValues, ScorerConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { SideDialog } from '@/ds/components/SideDialog';
 
 interface ScorersSectionProps {
   control: Control<AgentFormValues>;
@@ -25,7 +22,6 @@ interface ScorersSectionProps {
 
 export function ScorersSection({ control, error, readOnly = false }: ScorersSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { data: scorers, isLoading } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
   const count = Object.keys(selectedScorers || {}).length;
@@ -95,16 +91,6 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                     </SectionTitle>
                   </CollapsibleTrigger>
 
-                  {!readOnly && (
-                    <div className="flex justify-end items-center">
-                      <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-                        <Icon size="sm">
-                          <Plus />
-                        </Icon>
-                        Create
-                      </Button>
-                    </div>
-                  )}
                 </div>
 
                 <CollapsibleContent>
@@ -143,17 +129,6 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                   </div>
                 </CollapsibleContent>
               </Collapsible>
-              <ScorersSideDialog
-                isOpen={isCreateDialogOpen}
-                onClose={() => setIsCreateDialogOpen(false)}
-                onScorerCreated={scorer => {
-                  field.onChange({
-                    ...selectedScorers,
-                    [scorer.id]: { description: '' },
-                  });
-                  setIsCreateDialogOpen(false);
-                }}
-              />
             </>
           );
         }}
@@ -272,27 +247,3 @@ function ScorerConfigPanel({
     </div>
   );
 }
-
-interface ScorersSideDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onScorerCreated?: (scorer: { id: string }) => void;
-}
-
-const ScorersSideDialog = ({ isOpen, onClose, onScorerCreated }: ScorersSideDialogProps) => {
-  return (
-    <SideDialog
-      isOpen={isOpen}
-      onClose={onClose}
-      dialogTitle="Create a new scorer"
-      dialogDescription="Create a new scorer to evaluate the performance of your agents."
-    >
-      <SideDialog.Top>
-        <SideDialog.Header>
-          <SideDialog.Heading>Create a new scorer</SideDialog.Heading>
-        </SideDialog.Header>
-      </SideDialog.Top>
-      <ScorerCreateContent onSuccess={onScorerCreated} />
-    </SideDialog>
-  );
-};

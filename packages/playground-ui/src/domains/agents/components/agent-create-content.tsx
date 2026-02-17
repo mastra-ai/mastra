@@ -12,10 +12,9 @@ import { useStoredAgentMutations } from '../hooks/use-stored-agents';
 
 interface AgentCreateContentProps {
   onSuccess?: (agent: { id: string; description?: string }) => void;
-  hideSubAgentCreate?: boolean;
 }
 
-export function AgentCreateContent({ onSuccess, hideSubAgentCreate }: AgentCreateContentProps) {
+export function AgentCreateContent({ onSuccess }: AgentCreateContentProps) {
   const { createStoredAgent } = useStoredAgentMutations();
   const formRef = useRef<HTMLFormElement | null>(null);
   const { form } = useAgentEditForm();
@@ -145,7 +144,6 @@ export function AgentCreateContent({ onSuccess, hideSubAgentCreate }: AgentCreat
           onPublish={handlePublish}
           isSubmitting={createStoredAgent.isPending}
           formRef={formRef}
-          hideSubAgentCreate={hideSubAgentCreate}
         />
       }
     >
