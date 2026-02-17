@@ -47,6 +47,7 @@ export async function build({
         toolsPaths: discoveredTools,
         projectRoot: rootDir,
       });
+
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
       if (studio) {
         logger.info(
@@ -69,6 +70,7 @@ export async function build({
       toolsPaths: discoveredTools,
       projectRoot: rootDir,
     });
+
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     try {

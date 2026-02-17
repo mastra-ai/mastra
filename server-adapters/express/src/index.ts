@@ -1,5 +1,6 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -15,6 +16,31 @@ import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+
+/**
+ * Convert Express request to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(req: Request): globalThis.Request {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost';
+  const url = `${protocol}://${host}${req.originalUrl || req.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: req.method,
+    headers,
+  });
+}
 
 // Extend Express types to include Mastra context
 declare global {
@@ -357,6 +383,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
           getQuery: name => req.query[name] as string | undefined,
           requestContext: res.locals.requestContext,
+          request: toWebRequest(req),
         });
 
         if (authError) {
@@ -420,6 +447,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           abortSignal: res.locals.abortSignal,
           routePrefix: prefix,
         };
+
+        // Check route permission requirement (EE feature)
+        // Uses convention-based permission derivation: permissions are auto-derived
+        // from route path/method unless explicitly set or route is public
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+          if (permissionError) {
+            return res.status(permissionError.status).json({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
+          }
+        }
 
         try {
           const result = await route.handler(handlerParams);

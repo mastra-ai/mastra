@@ -1,4 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -79,7 +80,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       // Parse request context from request body (POST/PUT)
       if (c.req.method === 'POST' || c.req.method === 'PUT') {
         const contentType = c.req.header('content-type');
-        if (contentType?.includes('application/json')) {
+        const contentLength = c.req.header('content-length');
+        // Only parse if content-type is JSON and body is not empty
+        if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
             const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
@@ -351,6 +354,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           getHeader: name => c.req.header(name),
           getQuery: name => c.req.query(name),
           requestContext: c.get('requestContext'),
+          request: c.req.raw,
         });
 
         if (authError) {
@@ -422,7 +426,27 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           taskStore: c.get('taskStore'),
           abortSignal: c.get('abortSignal'),
           routePrefix: prefix,
+          request: c.req.raw, // Standard Request object with headers/cookies
         };
+
+        // Check route permission requirement (EE feature)
+        // Uses convention-based permission derivation: permissions are auto-derived
+        // from route path/method unless explicitly set or route is public
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+          if (permissionError) {
+            return c.json(
+              {
+                error: permissionError.error,
+                message: permissionError.message,
+              },
+              permissionError.status as any,
+            );
+          }
+        }
 
         try {
           const result = await route.handler(handlerParams);

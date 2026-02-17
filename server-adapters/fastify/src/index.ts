@@ -1,5 +1,6 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -15,6 +16,31 @@ import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandl
 import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+
+/**
+ * Convert Fastify request to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(request: FastifyRequest): globalThis.Request {
+  const protocol = request.protocol || 'http';
+  const host = request.headers.host || 'localhost';
+  const url = `${protocol}://${host}${request.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: request.method,
+    headers,
+  });
+}
 
 // Extend Fastify types to include Mastra context
 declare module 'fastify' {
@@ -386,6 +412,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
         getQuery: name => (request.query as Record<string, string>)[name],
         requestContext: request.requestContext,
+        request: toWebRequest(request),
       });
 
       if (authError) {
@@ -449,6 +476,22 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         abortSignal: request.abortSignal,
         routePrefix: prefix,
       };
+
+      // Check route permission requirement (EE feature)
+      // Uses convention-based permission derivation: permissions are auto-derived
+      // from route path/method unless explicitly set or route is public
+      const authConfig = this.mastra.getServer()?.auth;
+      if (authConfig) {
+        const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+        if (permissionError) {
+          return reply.status(permissionError.status).send({
+            error: permissionError.error,
+            message: permissionError.message,
+          });
+        }
+      }
 
       try {
         const result = await route.handler(handlerParams);
