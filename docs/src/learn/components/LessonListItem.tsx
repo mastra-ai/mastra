@@ -47,7 +47,7 @@ export function LessonListItem({ lesson, index, storage, className }: LessonList
     <Link
       to={`/learn/${lesson.slug}`}
       className={cn(
-        'group flex items-center gap-4 rounded-lg border border-(--border) p-4 no-underline transition-colors hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
+        'learn-link group flex items-center gap-4 rounded-lg border border-(--border) p-4 transition-colors hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
         className,
       )}
     >
