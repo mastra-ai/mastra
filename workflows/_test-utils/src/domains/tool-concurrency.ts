@@ -50,7 +50,7 @@ export function createToolConcurrencyTests({ createAgent }: DurableAgentTestCont
         expect(result.workflowInput.options.toolCallConcurrency).toBe(5);
       });
 
-      it('should default toolCallConcurrency when not specified', async () => {
+      it('should prepare with tool when toolCallConcurrency not specified', async () => {
         const mockModel = createMultiToolCallModel([{ toolName: 'tool1', args: { data: 'test' } }]);
 
         const tool1 = createTool({

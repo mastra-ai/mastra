@@ -285,7 +285,7 @@ export function createToolApprovalTests({ createAgent }: DurableAgentTestContext
   });
 
   describe('tool approval with workflows as tools', () => {
-    it('should handle requireToolApproval with workflow default options', async () => {
+    it('should propagate defaultOptions.requireToolApproval', async () => {
       const mockModel = createToolCallModel('workflowTool', { input: 'test' });
 
       const workflowTool = createTool({

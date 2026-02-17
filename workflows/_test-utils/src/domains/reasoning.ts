@@ -186,7 +186,7 @@ export function createReasoningTests({ createAgent }: DurableAgentTestContext) {
         expect(serialized).toBeDefined();
       });
 
-      it('should handle special characters in reasoning content', async () => {
+      it('should handle reasoning model with prepare', async () => {
         const mockModel = createTextStreamModel('Done.');
 
         const agent = await createAgent({
@@ -204,7 +204,7 @@ export function createReasoningTests({ createAgent }: DurableAgentTestContext) {
   });
 
   describe('V3 usage format', () => {
-    it('should handle V3-style usage with detailed token breakdown', async () => {
+    it('should stream with V3-style model', async () => {
       const mockModel = createTextStreamModel('Response');
 
       const agent = await createAgent({

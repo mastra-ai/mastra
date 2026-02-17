@@ -34,6 +34,7 @@ export function createStreamTests(context: DurableAgentTestContext) {
         // Wait for events to propagate
         await new Promise(resolve => setTimeout(resolve, eventPropagationDelay));
 
+        expect(chunks.length).toBeGreaterThan(0);
         cleanup();
       });
 
@@ -55,6 +56,7 @@ export function createStreamTests(context: DurableAgentTestContext) {
         });
 
         await new Promise(resolve => setTimeout(resolve, eventPropagationDelay));
+        expect(chunks.length).toBeGreaterThan(0);
         cleanup();
       });
 

@@ -56,7 +56,7 @@ export function createSaveAndErrorsTests(context: DurableAgentTestContext) {
 
       const { cleanup } = await agent.stream('Hello', {
         onError: () => {
-          // Error received - this is expected
+          // Error received — expected for error models
         },
       });
 

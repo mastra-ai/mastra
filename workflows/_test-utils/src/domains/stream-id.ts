@@ -47,7 +47,7 @@ export function createStreamIdTests(context: DurableAgentTestContext) {
       expect(result.messageId.length).toBeGreaterThan(0);
     });
 
-    it('should generate unique runIds for sequential calls', async () => {
+    it('should generate unique runIds across agents', async () => {
       const mockModel1 = createTextStreamModel('Hello');
       const mockModel2 = createTextStreamModel('World');
 

@@ -183,7 +183,8 @@ export function createPubSubTests({ getPubSub, eventPropagationDelay }: DurableA
       expect(received.length).toBe(1);
       expect(received[0].type).toBe(AgentStreamEventTypes.ERROR);
       expect(received[0].data.error.message).toBe('Test error');
-      expect(received[0].data.error.stack).toBe('test stack');
+      // stack intentionally omitted from emitErrorEvent to avoid leaking internals
+      expect(received[0].data.error.stack).toBeUndefined();
     });
 
     it('emitSuspendedEvent should publish suspended events', async () => {

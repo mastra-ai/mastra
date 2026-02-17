@@ -1,9 +1,9 @@
 /**
  * RequestContext tests for DurableAgent
  *
- * Tests for RequestContext reserved keys and security features.
- * Validates that middleware can securely set resourceId and threadId
- * via reserved keys that take precedence over client-provided values.
+ * Tests for RequestContext handling in DurableAgent.
+ * Validates that RequestContext can carry middleware context (e.g. resourceId, threadId)
+ * and that memory options from the request body are used for thread/resource resolution.
  */
 
 import { describe, it, expect } from 'vitest';

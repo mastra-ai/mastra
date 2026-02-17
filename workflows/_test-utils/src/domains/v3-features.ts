@@ -13,7 +13,7 @@ export function createV3FeaturesTests(context: DurableAgentTestContext) {
   const { createAgent } = context;
 
   describe('V3 model features', () => {
-    it('should serialize model config with specificationVersion', async () => {
+    it('should serialize model config with version info', async () => {
       const mockModel = createTextStreamModel('Hello from V2');
 
       const agent = await createAgent({

@@ -45,7 +45,7 @@ export function createStopWhenTests({ createAgent }: DurableAgentTestContext) {
         cleanup();
       });
 
-      it('should accept stopWhen callback in prepare options', async () => {
+      it('should handle prepare options with maxSteps', async () => {
         const mockModel = createTextStreamModel('Here is your answer.');
 
         const agent = await createAgent({
@@ -190,7 +190,7 @@ export function createStopWhenTests({ createAgent }: DurableAgentTestContext) {
       cleanup();
     });
 
-    it('should handle stopWhen that throws an error', async () => {
+    it('should accept stopWhen callback in stream options', async () => {
       const mockModel = createTextStreamModel('Response');
 
       const agent = await createAgent({
@@ -200,9 +200,7 @@ export function createStopWhenTests({ createAgent }: DurableAgentTestContext) {
         model: mockModel,
       });
 
-      const stopWhen = vi.fn().mockImplementation(() => {
-        return false;
-      });
+      const stopWhen = vi.fn().mockReturnValue(false);
 
       const { runId, cleanup } = await agent.stream('Hello', {
         stopWhen,

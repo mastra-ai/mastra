@@ -111,7 +111,7 @@ export function createPrepareTests(context: DurableAgentTestContext) {
 
       // Check that tool metadata is serialized
       expect(result.workflowInput.toolsMetadata).toBeDefined();
-      expect(result.workflowInput.toolsMetadata.length).toBeGreaterThanOrEqual(0);
+      expect(result.workflowInput.toolsMetadata.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should handle memory options', async () => {

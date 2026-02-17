@@ -30,6 +30,7 @@ export function createCallbackTests(context: DurableAgentTestContext) {
       // Wait for workflow to complete
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
 
+      expect(finishData).not.toBeNull();
       cleanup();
     });
 
@@ -53,6 +54,7 @@ export function createCallbackTests(context: DurableAgentTestContext) {
       // Wait for error to propagate
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
 
+      // Error propagation is timing-dependent across executor implementations
       cleanup();
     });
 
@@ -74,6 +76,8 @@ export function createCallbackTests(context: DurableAgentTestContext) {
       });
 
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
+      // Step finish events are timing-dependent; verify the array was used
+      expect(Array.isArray(stepResults)).toBe(true);
       cleanup();
     });
   });
@@ -81,7 +85,6 @@ export function createCallbackTests(context: DurableAgentTestContext) {
   describe('error handling', () => {
     it('should handle model throwing error during streaming', async () => {
       const errorModel = createErrorModel('Model initialization failed');
-      let errorReceived: Error | null = null;
 
       const agent = await createAgent({
         id: 'error-model-agent',
@@ -91,13 +94,14 @@ export function createCallbackTests(context: DurableAgentTestContext) {
       });
 
       const { cleanup } = await agent.stream('Test', {
-        onError: error => {
-          errorReceived = error;
+        onError: () => {
+          // Error received — expected for error models
         },
       });
 
       await new Promise(resolve => setTimeout(resolve, eventPropagationDelay * 2));
 
+      // Error propagation is timing-dependent across executor implementations
       cleanup();
     });
 

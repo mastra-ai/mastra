@@ -170,7 +170,7 @@ export function createAdvancedTests({ createAgent }: DurableAgentTestContext) {
       expect(result.workflowInput.messageListState).toBeDefined();
     });
 
-    it('should handle mixed message formats', async () => {
+    it('should handle array message format', async () => {
       const mockModel = createTextStreamModel('Response');
 
       const agent = await createAgent({
