@@ -4,6 +4,9 @@ import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 
 // import { mastraAuth, rbacProvider } from './auth';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { z } from 'zod';
+import { ComposioToolProvider } from '@mastra/editor/composio';
 
 import {
   agentThatHarassesYou,
@@ -73,4 +76,9 @@ const config = {
 
 export const mastra = new Mastra({
   ...config,
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+  }),
 });

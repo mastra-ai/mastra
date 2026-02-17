@@ -19162,7 +19162,6 @@ describe('Workflow', () => {
         step: resumedResult.suspended[0],
         resumeData: new Date('2024-12-31'),
       });
-
       expect(finalResult.status).toBe('success');
       expect(secondItemDateAction).toHaveBeenCalledTimes(2);
 
@@ -19186,6 +19185,114 @@ describe('Workflow', () => {
         processed: 'second',
         date: new Date('2024-12-31'),
       });
+    });
+
+    it('should pass correct inputData to branch condition when resuming after map', async () => {
+      const localTestStorage = new MockStore();
+
+      const conditionSpy = vi.fn();
+
+      // Helper to build the workflow (simulates reconstruction after server restart)
+      const buildWorkflow = () => {
+        const suspendingStep = createStep({
+          id: 'suspending-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async ({ inputData, suspend, resumeData }) => {
+            if (!resumeData) {
+              await suspend({ prompt: 'Please provide an answer' });
+              return { result: '' };
+            }
+            return { result: `processed: ${inputData.mappedValue}, answer: ${resumeData.answer}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-wf-with-suspend',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .then(suspendingStep)
+          .commit();
+
+        const fallbackStep = createStep({
+          id: 'fallback-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData }) => {
+            return { result: `fallback: ${inputData.mappedValue}` };
+          },
+        });
+
+        const mainWorkflow = createWorkflow({
+          id: 'map-branch-suspend-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .map(async ({ inputData }) => {
+            return { mappedValue: inputData.value * 2 };
+          })
+          .branch([
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue > 10;
+              },
+              nestedWorkflow,
+            ],
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue <= 10;
+              },
+              fallbackStep,
+            ],
+          ])
+          .commit();
+
+        return { mainWorkflow, nestedWorkflow };
+      };
+
+      // First construction: start the workflow
+      const { mainWorkflow: wf1, nestedWorkflow: nwf1 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf1, 'nested-wf-with-suspend': nwf1 },
+      });
+
+      const run1 = await wf1.createRun();
+      const initialResult = await run1.start({ inputData: { value: 10 } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(conditionSpy).toHaveBeenCalledWith({ mappedValue: 20 });
+      conditionSpy.mockClear();
+
+      // Second construction: simulate server restart (new workflow objects, new map step UUIDs)
+      const { mainWorkflow: wf2, nestedWorkflow: nwf2 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf2, 'nested-wf-with-suspend': nwf2 },
+      });
+
+      // Resume using the NEW workflow instance (simulating server restart)
+      const run2 = await wf2.createRun({ runId: run1.runId });
+      const resumedResult = await run2.resume({
+        step: initialResult.suspended[0],
+        resumeData: { answer: 'hello' },
+      });
+
+      // Branch conditions should NOT be re-evaluated during resume.
+      // The resume path from suspendedPaths already identifies the correct branch.
+      // Re-evaluating conditions was the cause of issue #12982: the map step output
+      // uses a non-deterministic UUID as key, so after workflow reconstruction the
+      // condition would receive undefined inputData.
+      expect(conditionSpy).not.toHaveBeenCalled();
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.steps['nested-wf-with-suspend'].status).toBe('success');
     });
 
     it('should maintain correct step status after resuming in branching workflows - #6419', async () => {

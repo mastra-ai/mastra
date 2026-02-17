@@ -6,6 +6,15 @@ import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './type
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
+ * Marker to identify Mastra tools even when `instanceof` fails.
+ * This can happen in environments like Vite SSR where the same module
+ * may be loaded multiple times, creating different class instances.
+ * Uses Symbol.for() so the same symbol is shared across module copies.
+ * Follows the naming convention: <org>.<product>.<category>.<className>
+ */
+export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
+
+/**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
  * @template TSchemaIn - Input schema type
@@ -163,6 +172,7 @@ export class Tool<
    * ```
    */
   constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>) {
+    (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;

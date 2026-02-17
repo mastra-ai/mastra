@@ -7,6 +7,7 @@ settings:
 overrides:
   '@mastra/auth-better-auth': link:../../auth/better-auth
   '@mastra/auth-workos': link:../../auth/workos
+  '@mastra/auth-cloud': link:../../auth/cloud
   '@mastra/core': link:../../packages/core
   '@mastra/editor': link:../../packages/editor
   '@mastra/loggers': link:../../packages/loggers
@@ -38,6 +39,9 @@ importers:
       '@mastra/auth-better-auth':
         specifier: link:../../auth/better-auth
         version: link:../../auth/better-auth
+      '@mastra/auth-cloud':
+        specifier: link:../../auth/cloud
+        version: link:../../auth/cloud
       '@mastra/auth-workos':
         specifier: link:../../auth/workos
         version: link:../../auth/workos

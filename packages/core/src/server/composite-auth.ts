@@ -30,7 +30,14 @@ export class CompositeAuth
   private providers: MastraAuthProvider[];
 
   constructor(providers: MastraAuthProvider[]) {
-    super();
+    const combinedPublic = providers.flatMap(provider => provider.public ?? []);
+    const combinedProtected = providers.flatMap(provider => provider.protected ?? []);
+
+    super({
+      public: combinedPublic,
+      protected: combinedProtected,
+    });
+
     this.providers = providers;
   }
 

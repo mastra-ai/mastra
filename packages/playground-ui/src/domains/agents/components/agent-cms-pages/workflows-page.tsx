@@ -6,18 +6,17 @@ import { WorkflowIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import type { RuleGroup } from '@/lib/rule-engine';
+import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-
-interface EntityConfig {
-  description?: string;
-}
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
   const { data: workflows, isLoading } = useWorkflows();
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
+  const variables = useWatch({ control, name: 'variables' });
   const count = Object.keys(selectedWorkflows || {}).length;
 
   const options = useMemo(() => {
@@ -73,6 +72,13 @@ export function WorkflowsPage() {
               field.onChange(newValue);
             };
 
+            const handleRulesChange = (workflowId: string, rules: RuleGroup | undefined) => {
+              field.onChange({
+                ...field.value,
+                [workflowId]: { ...field.value?.[workflowId], rules },
+              });
+            };
+
             return (
               <div className="flex flex-col gap-2">
                 <MultiCombobox
@@ -98,6 +104,9 @@ export function WorkflowsPage() {
                           readOnly ? undefined : desc => handleDescriptionChange(workflow.value, desc)
                         }
                         onRemove={readOnly ? undefined : () => handleRemove(workflow.value)}
+                        schema={variables}
+                        rules={field.value?.[workflow.value]?.rules || undefined}
+                        onRulesChange={readOnly ? undefined : rules => handleRulesChange(workflow.value, rules)}
                       />
                     ))}
                   </div>

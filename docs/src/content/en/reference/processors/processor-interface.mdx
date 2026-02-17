@@ -453,6 +453,12 @@ processOutputStream?(args: ProcessOutputStreamArgs): Promise<ChunkType | null | 
       description: "Request-scoped context with execution metadata.",
       isOptional: true,
     },
+    {
+      name: "writer",
+      type: "ProcessorStreamWriter",
+      description: "Stream writer for emitting custom data chunks back to the client. Call writer.custom() to emit data-* typed chunks. Available during streaming.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -503,6 +509,12 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
       name: "requestContext",
       type: "RequestContext",
       description: "Request-scoped context with execution metadata.",
+      isOptional: true,
+    },
+    {
+      name: "writer",
+      type: "ProcessorStreamWriter",
+      description: "Stream writer for emitting custom data chunks back to the client. Call writer.custom() to emit data-* typed chunks. Available during streaming.",
       isOptional: true,
     },
   ]}

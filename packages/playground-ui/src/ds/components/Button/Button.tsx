@@ -15,7 +15,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   variant?: 'default' | 'light' | 'outline' | 'ghost' | 'primary' | 'cta' | 'standard';
   target?: string;
   type?: 'button' | 'submit' | 'reset';
-  onClick?: () => void;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 const sizeClasses = {

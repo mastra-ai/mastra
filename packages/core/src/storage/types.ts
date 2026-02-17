@@ -278,6 +278,8 @@ export type ThreadSortDirection = 'ASC' | 'DESC';
 export interface StorageToolConfig {
   /** Custom description override for this tool in this agent context */
   description?: string;
+  /** Conditional rules for when this tool should be available */
+  rules?: RuleGroup;
 }
 
 /**
@@ -294,8 +296,12 @@ export interface StorageMCPClientToolsConfig {
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
+  /** Custom description override for this scorer in this agent context */
+  description?: string;
   /** Sampling configuration for this scorer */
   sampling?: ScoringSamplingConfig;
+  /** Conditional rules for when this scorer should be active */
+  rules?: RuleGroup;
 }
 
 /**
@@ -394,10 +400,10 @@ export interface StorageAgentSnapshotType {
   tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /** Default options for generate/stream calls — static or conditional on request context */
   defaultOptions?: StorageConditionalField<StorageDefaultOptions>;
-  /** Array of workflow keys to resolve from Mastra's workflow registry — static or conditional on request context */
-  workflows?: StorageConditionalField<string[]>;
-  /** Array of agent keys to resolve from Mastra's agent registry — static or conditional on request context */
-  agents?: StorageConditionalField<string[]>;
+  /** Workflow keys with optional per-workflow config — static or conditional on request context */
+  workflows?: StorageConditionalField<Record<string, StorageToolConfig>>;
+  /** Agent keys with optional per-agent config — static or conditional on request context */
+  agents?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /**
    * Map of tool provider IDs to their tool configurations.
    * Keys are provider IDs (e.g., "composio"), values configure which tools from that provider to include.

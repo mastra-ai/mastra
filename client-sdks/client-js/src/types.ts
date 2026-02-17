@@ -748,6 +748,7 @@ export interface DefaultOptions {
  */
 export interface StoredAgentToolConfig {
   description?: string;
+  rules?: RuleGroup;
 }
 
 /**
@@ -764,7 +765,9 @@ export interface StoredMCPClientToolsConfig {
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
+  description?: string;
   sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
+  rules?: RuleGroup;
 }
 
 // ============================================================================
@@ -800,8 +803,8 @@ export interface StoredAgentResponse {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
@@ -871,8 +874,8 @@ export interface CreateStoredAgentParams {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
@@ -898,8 +901,8 @@ export interface UpdateStoredAgentParams {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;
@@ -1157,8 +1160,8 @@ export interface AgentVersionResponse {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<string[]>;

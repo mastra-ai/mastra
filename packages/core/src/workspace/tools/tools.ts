@@ -357,7 +357,10 @@ Examples:
 - List root: { path: "/" }
 - Deep listing: { path: "/src", maxDepth: 5 }
 - Directories only: { path: "/", dirsOnly: true }
-- Exclude node_modules: { path: "/", exclude: "node_modules" }`,
+- Exclude node_modules: { path: "/", exclude: "node_modules" }
+- Find TypeScript files: { path: "/src", pattern: "**/*.ts" }
+- Find config files: { path: "/", pattern: "*.config.{js,ts}" }
+- Multiple patterns: { path: "/", pattern: ["**/*.ts", "**/*.tsx"] }`,
         requireApproval: listFilesConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().default('/').describe('Directory path to list'),
@@ -381,6 +384,12 @@ Examples:
             .optional()
             .describe('Pattern to exclude (e.g., "node_modules"). Similar to tree -I flag.'),
           extension: z.string().optional().describe('Filter by file extension (e.g., ".ts"). Similar to tree -P flag.'),
+          pattern: z
+            .union([z.string(), z.array(z.string())])
+            .optional()
+            .describe(
+              'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
+            ),
         }),
         outputSchema: z.object({
           tree: z.string().describe('Tree-style directory listing'),
@@ -404,13 +413,14 @@ Examples:
             .optional()
             .describe('Metadata about the workspace and filesystem'),
         }),
-        execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension }) => {
+        execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }) => {
           const result = await formatAsTree(workspace.filesystem!, path, {
             maxDepth,
             showHidden,
             dirsOnly,
             exclude: exclude || undefined,
             extension: extension || undefined,
+            pattern: pattern || undefined,
           });
 
           // Include workspace/filesystem metadata for UI display
