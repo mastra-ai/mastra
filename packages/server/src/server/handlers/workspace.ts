@@ -189,13 +189,15 @@ function buildSkillInstallPath(filesystem: WorkspaceFilesystem, safeSkillId: str
       if (mountFs.readOnly) {
         throw new HTTPException(403, { message: `Mount "${requestedMount}" is read-only` });
       }
-      return `${requestedMount}/${SKILLS_SH_DIR}/${safeSkillId}`;
+      const cleanMount = requestedMount.endsWith('/') ? requestedMount.slice(0, -1) : requestedMount;
+      return `${cleanMount}/${SKILLS_SH_DIR}/${safeSkillId}`;
     }
 
     // Default: use first writable mount
     for (const [mountPath, mountFs] of filesystem.mounts) {
       if (!mountFs.readOnly) {
-        return `${mountPath}/${SKILLS_SH_DIR}/${safeSkillId}`;
+        const cleanMount = mountPath.endsWith('/') ? mountPath.slice(0, -1) : mountPath;
+        return `${cleanMount}/${SKILLS_SH_DIR}/${safeSkillId}`;
       }
     }
 
@@ -373,15 +375,24 @@ export const GET_WORKSPACE_ROUTE = createRoute({
       if (isCompositeFilesystem(workspace.filesystem)) {
         mounts = [];
         for (const [mountPath, mountFs] of workspace.filesystem.mounts) {
-          const info = await mountFs.getInfo?.();
-          mounts.push({
-            path: mountPath,
-            provider: info?.provider ?? mountFs.provider ?? 'unknown',
-            readOnly: mountFs.readOnly ?? false,
-            displayName: info?.name ?? mountFs.name,
-            icon: info?.icon,
-            name: mountFs.name,
-          });
+          try {
+            const info = await mountFs.getInfo?.();
+            mounts.push({
+              path: mountPath,
+              provider: info?.provider ?? mountFs.provider ?? 'unknown',
+              readOnly: mountFs.readOnly ?? false,
+              displayName: info?.name ?? mountFs.name,
+              icon: info?.icon,
+              name: mountFs.name,
+            });
+          } catch {
+            mounts.push({
+              path: mountPath,
+              provider: mountFs.provider ?? 'unknown',
+              readOnly: mountFs.readOnly ?? true,
+              name: mountFs.name,
+            });
+          }
         }
       }
 
@@ -1621,7 +1632,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
         const installPath = `${basePath}/${skill}`;
         const metaPath = `${installPath}/.meta.json`;
         try {
-          const metaContent = await workspace?.filesystem?.readFile(metaPath, { encoding: 'utf-8' });
+          const metaContent = await workspace.filesystem.readFile(metaPath, { encoding: 'utf-8' });
           const meta: SkillMetaFile = JSON.parse(metaContent as string);
 
           // Re-fetch skill files from the Skills API

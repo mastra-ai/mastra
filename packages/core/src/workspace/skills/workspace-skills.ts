@@ -850,7 +850,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   #inferSource(skillPath: string): ContentSource {
     for (const rp of this.#resolvedPaths) {
-      if (skillPath.startsWith(rp) || rp.startsWith(skillPath)) {
+      if (skillPath === rp || skillPath.startsWith(rp + '/') || rp.startsWith(skillPath + '/')) {
         return this.#determineSource(rp);
       }
     }
