@@ -1,5 +1,19 @@
 import z from 'zod';
-import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import {
+  listVersionsQuerySchema,
+  compareVersionsQuerySchema,
+  createVersionBodySchema,
+  activateVersionResponseSchema,
+  deleteVersionResponseSchema,
+  versionDiffEntrySchema,
+  createListVersionsResponseSchema,
+  createCompareVersionsResponseSchema,
+} from './version-common';
+
+// Re-export shared schemas under domain-specific names
+export const listPromptBlockVersionsQuerySchema = listVersionsQuerySchema;
+export const comparePromptBlockVersionsQuerySchema = compareVersionsQuerySchema;
+export const createPromptBlockVersionBodySchema = createVersionBodySchema;
 
 // ============================================================================
 // Path Parameter Schemas
@@ -12,32 +26,6 @@ export const promptBlockVersionPathParams = z.object({
 export const promptBlockVersionIdPathParams = z.object({
   promptBlockId: z.string().describe('Unique identifier for the stored prompt block'),
   versionId: z.string().describe('Unique identifier for the version (UUID)'),
-});
-
-// ============================================================================
-// Query Parameter Schemas
-// ============================================================================
-
-const versionOrderBySchema = z.object({
-  field: z.enum(['versionNumber', 'createdAt']).optional(),
-  direction: z.enum(['ASC', 'DESC']).optional(),
-});
-
-export const listPromptBlockVersionsQuerySchema = createPagePaginationSchema(20).extend({
-  orderBy: versionOrderBySchema.optional(),
-});
-
-export const comparePromptBlockVersionsQuerySchema = z.object({
-  from: z.string().describe('Version ID (UUID) to compare from'),
-  to: z.string().describe('Version ID (UUID) to compare to'),
-});
-
-// ============================================================================
-// Body Parameter Schemas
-// ============================================================================
-
-export const createPromptBlockVersionBodySchema = z.object({
-  changeMessage: z.string().max(500).optional().describe('Optional message describing the changes'),
 });
 
 // ============================================================================
@@ -93,9 +81,7 @@ export const promptBlockVersionSchema = z.object({
   createdAt: z.coerce.date().describe('When this version was created'),
 });
 
-export const listPromptBlockVersionsResponseSchema = paginationInfoSchema.extend({
-  versions: z.array(promptBlockVersionSchema),
-});
+export const listPromptBlockVersionsResponseSchema = createListVersionsResponseSchema(promptBlockVersionSchema);
 
 export const getPromptBlockVersionResponseSchema = promptBlockVersionSchema;
 
@@ -108,27 +94,12 @@ export const createPromptBlockVersionResponseSchema = promptBlockVersionSchema.p
   }),
 );
 
-export const activatePromptBlockVersionResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-  activeVersionId: z.string(),
-});
+export const activatePromptBlockVersionResponseSchema = activateVersionResponseSchema;
 
 export const restorePromptBlockVersionResponseSchema = promptBlockVersionSchema;
 
-export const deletePromptBlockVersionResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-});
+export const deletePromptBlockVersionResponseSchema = deleteVersionResponseSchema;
 
-export const versionDiffEntrySchema = z.object({
-  field: z.string().describe('The field path that changed'),
-  previousValue: z.unknown().describe('The value in the "from" version'),
-  currentValue: z.unknown().describe('The value in the "to" version'),
-});
+export const comparePromptBlockVersionsResponseSchema = createCompareVersionsResponseSchema(promptBlockVersionSchema);
 
-export const comparePromptBlockVersionsResponseSchema = z.object({
-  diffs: z.array(versionDiffEntrySchema),
-  fromVersion: promptBlockVersionSchema,
-  toVersion: promptBlockVersionSchema,
-});
+export { versionDiffEntrySchema };
