@@ -42,6 +42,7 @@ const SNAPSHOT_CONFIG_FIELDS = [
 export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/scorers/:scorerId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: scorerVersionPathParams,
   queryParamSchema: listScorerVersionsQuerySchema,
@@ -87,6 +88,7 @@ export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
 export const CREATE_SCORER_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/scorers/:scorerId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: scorerVersionPathParams,
   bodySchema: createScorerVersionBodySchema,
@@ -172,6 +174,7 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
 export const GET_SCORER_VERSION_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/scorers/:scorerId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: getScorerVersionResponseSchema,
@@ -216,6 +219,7 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
 export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/scorers/:scorerId/versions/:versionId/activate',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: activateScorerVersionResponseSchema,
@@ -273,6 +277,7 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
 export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/scorers/:scorerId/versions/:versionId/restore',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: restoreScorerVersionResponseSchema,
@@ -360,6 +365,7 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
 export const DELETE_SCORER_VERSION_ROUTE = createRoute({
   method: 'DELETE',
   path: '/stored/scorers/:scorerId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: scorerVersionIdPathParams,
   responseSchema: deleteScorerVersionResponseSchema,
@@ -418,6 +424,7 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
 export const COMPARE_SCORER_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/scorers/:scorerId/versions/compare',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: scorerVersionPathParams,
   queryParamSchema: compareScorerVersionsQuerySchema,

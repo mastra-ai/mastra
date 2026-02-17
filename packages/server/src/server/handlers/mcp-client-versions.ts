@@ -22,10 +22,9 @@ import {
   computeVersionDiffs,
   createVersionWithRetry,
   enforceRetentionLimit,
+  MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
 } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
-
-const SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'servers'] as const;
 
 /**
  * GET /stored/mcp-clients/:mcpClientId/versions - List all versions for an MCP client
@@ -33,6 +32,7 @@ const SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'servers'] as const;
 export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/mcp-clients/:mcpClientId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: mcpClientVersionPathParams,
   queryParamSchema: listMCPClientVersionsQuerySchema,
@@ -78,6 +78,7 @@ export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
 export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/mcp-clients/:mcpClientId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: mcpClientVersionPathParams,
   bodySchema: createMCPClientVersionBodySchema,
@@ -109,7 +110,7 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         if (activeVersion) {
           currentConfig = extractConfigFromVersion(
             activeVersion as unknown as Record<string, unknown>,
-            SNAPSHOT_CONFIG_FIELDS,
+            MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
           );
         }
       }
@@ -120,11 +121,14 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       if (!mcpClient.activeVersionId && latestVersion) {
         currentConfig = extractConfigFromVersion(
           latestVersion as unknown as Record<string, unknown>,
-          SNAPSHOT_CONFIG_FIELDS,
+          MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
         );
       }
       const previousConfig = latestVersion
-        ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>, SNAPSHOT_CONFIG_FIELDS)
+        ? extractConfigFromVersion(
+            latestVersion as unknown as Record<string, unknown>,
+            MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
+          )
         : null;
 
       const changedFields = calculateChangedFields(previousConfig, currentConfig);
@@ -163,6 +167,7 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/mcp-clients/:mcpClientId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: mcpClientVersionIdPathParams,
   responseSchema: getMCPClientVersionResponseSchema,
@@ -207,6 +212,7 @@ export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
 export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/mcp-clients/:mcpClientId/versions/:versionId/activate',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: mcpClientVersionIdPathParams,
   responseSchema: activateMCPClientVersionResponseSchema,
@@ -264,6 +270,7 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/mcp-clients/:mcpClientId/versions/:versionId/restore',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: mcpClientVersionIdPathParams,
   responseSchema: restoreMCPClientVersionResponseSchema,
@@ -300,7 +307,7 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const restoredConfig = extractConfigFromVersion(
         versionToRestore as unknown as Record<string, unknown>,
-        SNAPSHOT_CONFIG_FIELDS,
+        MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
       );
 
       await mcpClientStore.update({
@@ -310,7 +317,10 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const latestVersion = await mcpClientStore.getLatestVersion(mcpClientId);
       const previousConfig = latestVersion
-        ? extractConfigFromVersion(latestVersion as unknown as Record<string, unknown>, SNAPSHOT_CONFIG_FIELDS)
+        ? extractConfigFromVersion(
+            latestVersion as unknown as Record<string, unknown>,
+            MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
+          )
         : null;
 
       const changedFields = calculateChangedFields(previousConfig, restoredConfig);
@@ -351,6 +361,7 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   method: 'DELETE',
   path: '/stored/mcp-clients/:mcpClientId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: mcpClientVersionIdPathParams,
   responseSchema: deleteMCPClientVersionResponseSchema,
@@ -409,6 +420,7 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/mcp-clients/:mcpClientId/versions/compare',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: mcpClientVersionPathParams,
   queryParamSchema: compareMCPClientVersionsQuerySchema,
@@ -451,11 +463,11 @@ export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
 
       const fromConfig = extractConfigFromVersion(
         fromVersion as unknown as Record<string, unknown>,
-        SNAPSHOT_CONFIG_FIELDS,
+        MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
       );
       const toConfig = extractConfigFromVersion(
         toVersion as unknown as Record<string, unknown>,
-        SNAPSHOT_CONFIG_FIELDS,
+        MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS,
       );
 
       const diffs = computeVersionDiffs(fromConfig, toConfig);

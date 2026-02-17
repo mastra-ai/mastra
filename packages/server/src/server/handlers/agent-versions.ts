@@ -44,6 +44,7 @@ const SNAPSHOT_CONFIG_FIELDS = [
   'memory',
   'scorers',
   'requestContextSchema',
+  'mcpClients',
 ] as const;
 
 // ============================================================================
@@ -56,6 +57,7 @@ const SNAPSHOT_CONFIG_FIELDS = [
 export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:agentId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   queryParamSchema: listVersionsQuerySchema,
@@ -102,6 +104,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
 export const CREATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/agents/:agentId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   bodySchema: createVersionBodySchema,
@@ -194,6 +197,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
 export const GET_AGENT_VERSION_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:agentId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: getVersionResponseSchema,
@@ -237,6 +241,7 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
 export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/agents/:agentId/versions/:versionId/activate',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: activateVersionResponseSchema,
@@ -295,6 +300,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
 export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/agents/:agentId/versions/:versionId/restore',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: restoreVersionResponseSchema,
@@ -392,6 +398,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
 export const DELETE_AGENT_VERSION_ROUTE = createRoute({
   method: 'DELETE',
   path: '/stored/agents/:agentId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: versionIdPathParams,
   responseSchema: deleteVersionResponseSchema,
@@ -451,6 +458,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
 export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:agentId/versions/compare',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: agentVersionPathParams,
   queryParamSchema: compareVersionsQuerySchema,

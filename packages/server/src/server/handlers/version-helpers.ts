@@ -6,6 +6,9 @@
 // Default maximum versions per entity (can be made configurable in the future)
 export const DEFAULT_MAX_VERSIONS = 50;
 
+/** Snapshot config fields for MCP client versioning. */
+export const MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'servers'] as const;
+
 /**
  * Deep equality comparison for comparing two values.
  * Handles primitives, arrays, objects, and Date instances.

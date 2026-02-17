@@ -37,6 +37,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'memory',
   'scorers',
   'requestContextSchema',
+  'mcpClients',
 ] as const;
 
 // ============================================================================

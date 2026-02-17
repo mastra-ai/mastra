@@ -33,6 +33,7 @@ const SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'content', 'rules'] as co
 export const LIST_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/prompt-blocks/:promptBlockId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: promptBlockVersionPathParams,
   queryParamSchema: listPromptBlockVersionsQuerySchema,
@@ -78,6 +79,7 @@ export const LIST_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
 export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/prompt-blocks/:promptBlockId/versions',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: promptBlockVersionPathParams,
   bodySchema: createPromptBlockVersionBodySchema,
@@ -163,6 +165,7 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 export const GET_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/prompt-blocks/:promptBlockId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: promptBlockVersionIdPathParams,
   responseSchema: getPromptBlockVersionResponseSchema,
@@ -207,6 +210,7 @@ export const GET_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/prompt-blocks/:promptBlockId/versions/:versionId/activate',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: promptBlockVersionIdPathParams,
   responseSchema: activatePromptBlockVersionResponseSchema,
@@ -264,6 +268,7 @@ export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   method: 'POST',
   path: '/stored/prompt-blocks/:promptBlockId/versions/:versionId/restore',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: promptBlockVersionIdPathParams,
   responseSchema: restorePromptBlockVersionResponseSchema,
@@ -351,6 +356,7 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   method: 'DELETE',
   path: '/stored/prompt-blocks/:promptBlockId/versions/:versionId',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: promptBlockVersionIdPathParams,
   responseSchema: deletePromptBlockVersionResponseSchema,
@@ -409,6 +415,7 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 export const COMPARE_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/prompt-blocks/:promptBlockId/versions/compare',
+  requiresAuth: true,
   responseType: 'json',
   pathParamSchema: promptBlockVersionPathParams,
   queryParamSchema: comparePromptBlockVersionsQuerySchema,

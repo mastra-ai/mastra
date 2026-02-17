@@ -15,10 +15,8 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
-import { handleAutoVersioning } from './version-helpers';
+import { handleAutoVersioning, MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
-
-const MCP_CLIENT_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'servers'] as const;
 
 // ============================================================================
 // Route Definitions
