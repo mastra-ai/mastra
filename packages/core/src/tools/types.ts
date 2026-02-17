@@ -195,6 +195,15 @@ export type CoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to transform tool output before returning to the model.
+   * Passed through from the original tool definition.
+   */
+  toModelOutput?: (options: {
+    toolCallId: string;
+    input: any;
+    output: any;
+  }) => unknown | PromiseLike<unknown>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -227,6 +236,15 @@ export type InternalCoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to transform tool output before returning to the model.
+   * Passed through from the original tool definition.
+   */
+  toModelOutput?: (options: {
+    toolCallId: string;
+    input: any;
+    output: any;
+  }) => unknown | PromiseLike<unknown>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -302,6 +320,15 @@ export interface ToolAction<
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to transform tool output before returning to the model.
+   * Passed through from the original tool definition.
+   */
+  toModelOutput?: (options: {
+    toolCallId: string;
+    input: any;
+    output: any;
+  }) => unknown | PromiseLike<unknown>;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata
