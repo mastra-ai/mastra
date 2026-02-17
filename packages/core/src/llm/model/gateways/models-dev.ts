@@ -241,8 +241,6 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createAnthropic({ apiKey, baseURL })(modelId);
       }
       case 'vercel': {
-        // Vercel AI Gateway speaks the full OpenAI API, so use createOpenAI
-        // instead of createOpenAICompatible to support file parts (audio, PDF)
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
         return createOpenAI({ apiKey, baseURL, headers }).chat(modelId);
       }
