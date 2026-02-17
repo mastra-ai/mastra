@@ -1362,6 +1362,14 @@ article p {
   text-decoration: none !important;
 }
 
+/* Override Infima's a:hover color for sidebar items */
+.learn-sidebar-item:hover {
+  color: var(--mastra-green-accent-3) !important;
+}
+[data-theme='dark'] .learn-sidebar-item:hover {
+  color: var(--mastra-green-accent) !important;
+}
+
 .learn-sidebar ul,
 .learn-sidebar li {
   margin: 0 !important;
