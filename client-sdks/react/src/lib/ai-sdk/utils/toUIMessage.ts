@@ -210,10 +210,8 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
-      const parts = [...lastMessage.parts];
       const textId = chunk.payload.id || `text-${Date.now()}`;
 
-      // Always create a new text part on text-start
       const newTextPart: MastraExtendedTextPart = {
         type: 'text',
         text: '',
@@ -221,6 +219,19 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
         textId: textId,
         providerMetadata: chunk.payload.providerMetadata,
       };
+
+      // If the last message is a completion-check message, start a new assistant message
+      if (lastMessage.metadata?.completionResult) {
+        const newMessage: MastraUIMessage = {
+          id: `start-${chunk.runId}-${Date.now()}`,
+          role: 'assistant',
+          parts: [newTextPart],
+          metadata,
+        };
+        return [...result, newMessage];
+      }
+
+      const parts = [...lastMessage.parts];
       parts.push(newTextPart);
 
       return [

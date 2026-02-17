@@ -396,9 +396,9 @@ export const supervisorAgent = new Agent({
             const hasResearch = text.includes('research') || text.includes('findings');
             const hasAnalysis = text.includes('analysis') || text.includes('insight');
             const hasRecommendations = text.includes('recommendation');
-            // return (hasResearch && hasAnalysis) || hasRecommendations ? 1 : 0.5;
-            supervisorScorerCount++;
-            return supervisorScorerCount > 2 ? 1 : 0.7;
+            return (hasResearch && hasAnalysis) || hasRecommendations ? 1 : 0.5;
+            // supervisorScorerCount++;
+            // return supervisorScorerCount > 2 ? 1 : 0.7;
             // return 1;
           })
           .generateReason(async context => {
@@ -406,12 +406,12 @@ export const supervisorAgent = new Agent({
             const hasResearch = text.includes('research') || text.includes('findings');
             const hasAnalysis = text.includes('analysis') || text.includes('insight');
             const hasRecommendations = text.includes('recommendation');
-            return supervisorScorerCount > 2
-              ? 'Research is complete'
-              : 'Research is not complete, please provide more details, ensure words like research/findings analysis/insight are added and add recommendations based on the research analysis';
-            // return (hasResearch && hasAnalysis) || hasRecommendations
+            // return supervisorScorerCount > 2
             //   ? 'Research is complete'
             //   : 'Research is not complete, please provide more details, ensure words like research/findings analysis/insight are added and add recommendations based on the research analysis';
+            return (hasResearch && hasAnalysis) || hasRecommendations
+              ? 'Research is complete'
+              : 'Research is not complete, please provide more details, ensure words like research/findings analysis/insight are added and add recommendations based on the research analysis';
           }),
 
         // Scorer 2: Validate response has sufficient detail
@@ -424,20 +424,20 @@ export const supervisorAgent = new Agent({
             const text = (context.run.output || '').toString();
             console.dir({ 'response-quality-Scorer': text }, { depth: null });
             const wordCount = text.split(/\s+/).length;
-            // return wordCount >= 200 ? 1 : wordCount / 200;
-            supervisorScorerCount++;
-            return supervisorScorerCount > 2 ? 1 : 0.7;
+            return wordCount >= 200 ? 1 : wordCount / 200;
+            // supervisorScorerCount++;
+            // return supervisorScorerCount > 2 ? 1 : 0.7;
             // return 1;
           })
           .generateReason(async context => {
             const text = (context.run.output || '').toString();
             const wordCount = text.split(/\s+/).length;
-            // return wordCount >= 200
-            //   ? 'Response is sufficient'
-            //   : 'Response is not sufficient, please provide more details, at least 200 words';
-            return supervisorScorerCount > 2
+            return wordCount >= 200
               ? 'Response is sufficient'
               : 'Response is not sufficient, please provide more details, at least 200 words';
+            // return supervisorScorerCount > 2
+            //   ? 'Response is sufficient'
+            //   : 'Response is not sufficient, please provide more details, at least 200 words';
           }),
       ],
       strategy: 'all', // All scorers must pass
@@ -445,7 +445,7 @@ export const supervisorAgent = new Agent({
         console.log('✨ Completion check:', result.complete ? 'PASSED ✅' : 'FAILED ❌');
         console.log('📊 Scores:', result.scorers.map(s => `${s.scorerName}: ${s.score.toFixed(2)}`).join(', '));
       },
-      suppressFeedback: true,
+      // suppressFeedback: true,
     },
 
     // Iteration Hooks - Monitor progress after each iteration

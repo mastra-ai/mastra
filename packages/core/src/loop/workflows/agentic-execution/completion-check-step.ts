@@ -33,25 +33,16 @@ export function createCompletionCheckStep<Tools extends ToolSet = ToolSet, OUTPU
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData }) => {
-      // const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
-
-      // console.dir({ inputData }, { depth: null });
-
       // Increment iteration count
       currentIteration++;
 
       // Only run completion check if scorers are configured
       const hasCompletionScorers = completion?.scorers && completion.scorers.length > 0;
 
-      console.log('completion step iteration==', agentId, currentIteration);
-
       //Also check if the step result is not continued to avoid running scorers before the LLM is done
       if (!hasCompletionScorers || inputData.stepResult?.isContinued) {
-        console.log('completion step skipped', agentId);
         return inputData;
       }
-
-      console.log('completion step running', agentId);
       // Get the original user message for context
       const userMessages = messageList.get.input.db();
       const firstUserMessage = userMessages[0];
@@ -124,9 +115,7 @@ export function createCompletionCheckStep<Tools extends ToolSet = ToolSet, OUTPU
 
       // Add feedback as assistant message for the LLM to see in next iteration
       const maxIterationReached = maxSteps ? currentIteration >= maxSteps : false;
-      console.log('maxIterationReached==', agentId, { maxSteps }, maxIterationReached);
       const feedback = formatStreamCompletionFeedback(completionResult, maxIterationReached);
-      console.log('adding completion feedback to messageList', agentId, JSON.stringify(completionResult, null, 2));
       messageList.add(
         {
           id: mastra?.generateId(),
