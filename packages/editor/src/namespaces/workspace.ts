@@ -156,14 +156,14 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
       );
     }
     const config = { ...fsConfig.config, readOnly: fsConfig.readOnly };
-    return provider.createFilesystem(config);
+    return await provider.createFilesystem(config);
   }
 
   /**
    * Resolve a stored sandbox config to a runtime WorkspaceSandbox instance.
    * Looks up the provider by ID in the editor's registry (which includes built-in providers).
    */
-  private async resolveSandbox(sandboxConfig: StorageSandboxConfig) {
+  private async resolveSandbox(sandboxConfig: StorageSandboxConfig): Promise<WorkspaceSandbox> {
     const provider = this.editor.__sandboxes.get(sandboxConfig.provider);
     if (!provider) {
       throw new Error(
@@ -171,7 +171,7 @@ export class EditorWorkspaceNamespace extends CrudEditorNamespace<
           `Register it via new MastraEditor({ sandboxes: [yourProvider] })`,
       );
     }
-    return provider.createSandbox(sandboxConfig.config);
+    return await provider.createSandbox(sandboxConfig.config);
   }
 
   protected async getStorageAdapter(): Promise<
