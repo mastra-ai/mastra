@@ -10,8 +10,6 @@ import { getPublishedCount } from '../utils'
 type LearnSidebarProps = {
   lessons: Lesson[]
   storage: LearnStorageV1
-  mobileOpen: boolean
-  onMobileToggle: () => void
   className?: string
 }
 
@@ -33,7 +31,7 @@ function ProgressIcon({ storage, slug, status }: { storage: LearnStorageV1; slug
   return <span className="h-4 w-4 shrink-0 rounded-full border-2 border-(--border)" />
 }
 
-export function LearnSidebar({ lessons, storage, mobileOpen, onMobileToggle, className }: LearnSidebarProps) {
+export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps) {
   const location = useLocation()
 
   const modules = useMemo(() => {
@@ -49,71 +47,62 @@ export function LearnSidebar({ lessons, storage, mobileOpen, onMobileToggle, cla
   const publishedTotal = getPublishedCount(lessons)
   const watchedCount = lessons.filter(l => l.status === 'published' && storage.lessons[l.slug]?.watched).length
 
-  const sidebar = (
-    <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
-      <div className="px-4 pb-4">
-        <Link
-          to="/learn"
-          className="learn-link text-sm font-semibold text-(--mastra-text-primary) hover:text-(--mastra-green-accent-2)"
-        >
-          Mastra Learn
-        </Link>
-        <LearnProgressBar
-          completed={watchedCount}
-          total={publishedTotal}
-          totalLessons={lessons.length}
-          className="mt-3"
-        />
-      </div>
-
-      <div className="flex-1">
-        {modules.map(([moduleName, moduleLessons]) => (
-          <div key={moduleName} className="mb-3">
-            <h4 className="px-4 py-1 text-xs font-semibold text-(--mastra-text-tertiary)">{moduleName}</h4>
-            <ul>
-              {moduleLessons.map(lesson => {
-                const isActive =
-                  location.pathname === `/learn/${lesson.slug}` || location.pathname === `/learn/${lesson.slug}/`
-                const isComingSoon = lesson.status === 'comingSoon'
-                return (
-                  <li key={lesson.slug}>
-                    <Link
-                      to={`/learn/${lesson.slug}`}
-                      onClick={() => mobileOpen && onMobileToggle()}
-                      className={cn(
-                        'learn-sidebar-item relative flex items-center gap-2 px-4 py-1 text-sm transition-colors',
-                        isActive
-                          ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
-                          : isComingSoon
-                            ? 'text-(--mastra-text-muted) hover:text-(--mastra-text-tertiary)'
-                            : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
-                      )}
-                    >
-                      <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />
-                      <span className="truncate">{lesson.title}</span>
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      {/* Color mode toggle */}
-      <footer className="mr-4 flex justify-end border-t-[0.5px] border-(--border) py-2 pr-0.5">
-        <ThemeSwitcher />
-      </footer>
-    </nav>
-  )
-
   return (
-    <>
-      {/* Mobile overlay */}
-      {mobileOpen && <div className="learn-mobile-overlay" onClick={onMobileToggle} />}
+    <aside className={cn('learn-sidebar-container', className)}>
+      <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
+        <div className="px-4 pb-4">
+          <Link
+            to="/learn"
+            className="learn-link text-sm font-semibold text-(--mastra-text-primary) hover:text-(--mastra-green-accent-2)"
+          >
+            Mastra Learn
+          </Link>
+          <LearnProgressBar
+            completed={watchedCount}
+            total={publishedTotal}
+            totalLessons={lessons.length}
+            className="mt-3"
+          />
+        </div>
 
-      {/* Sidebar */}
-      <aside className={cn('learn-sidebar-container', mobileOpen && 'is-open', className)}>{sidebar}</aside>
-    </>
+        <div className="flex-1">
+          {modules.map(([moduleName, moduleLessons]) => (
+            <div key={moduleName} className="mb-3">
+              <h4 className="px-4 py-1 text-xs font-semibold text-(--mastra-text-tertiary)">{moduleName}</h4>
+              <ul>
+                {moduleLessons.map(lesson => {
+                  const isActive =
+                    location.pathname === `/learn/${lesson.slug}` || location.pathname === `/learn/${lesson.slug}/`
+                  const isComingSoon = lesson.status === 'comingSoon'
+                  return (
+                    <li key={lesson.slug}>
+                      <Link
+                        to={`/learn/${lesson.slug}`}
+                        className={cn(
+                          'learn-sidebar-item relative flex items-center gap-2 px-4 py-1 text-sm transition-colors',
+                          isActive
+                            ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
+                            : isComingSoon
+                              ? 'text-(--mastra-text-muted) hover:text-(--mastra-text-tertiary)'
+                              : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',
+                        )}
+                      >
+                        <ProgressIcon storage={storage} slug={lesson.slug} status={lesson.status} />
+                        <span className="truncate">{lesson.title}</span>
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        {/* Color mode toggle */}
+        <footer className="mr-4 flex justify-end border-t-[0.5px] border-(--border) py-2 pr-0.5">
+          <ThemeSwitcher />
+        </footer>
+      </nav>
+    </aside>
   )
 }
