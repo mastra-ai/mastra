@@ -94,6 +94,8 @@ export interface AgentGenerateOptions {
   threadId?: string;
   resourceId?: string;
   memory?: { thread: string; resource?: string };
+  /** v4 structured output schema — auto-transformed to `structuredOutput: { schema }` for v5+ */
+  output?: unknown;
   [key: string]: unknown;
 }
 
@@ -123,11 +125,16 @@ export async function agentGenerate(
 ): Promise<unknown> {
   if (isV5PlusModel(model)) {
     // Transform deprecated threadId/resourceId to memory format for v5+
-    const { threadId, resourceId, ...rest } = options;
+    const { threadId, resourceId, output, ...rest } = options;
     const transformedOptions: Record<string, unknown> = { ...rest };
 
     if (threadId) {
       transformedOptions.memory = { thread: threadId, resource: resourceId };
+    }
+
+    // Transform v4 `output` to v5+ `structuredOutput: { schema }`
+    if (output && !transformedOptions.structuredOutput) {
+      transformedOptions.structuredOutput = { schema: output };
     }
 
     return agent.generate(message as string, transformedOptions as any);
@@ -206,10 +213,13 @@ export interface ProviderApiKeys {
  * @param providers - Which provider keys to set (default: all)
  */
 export function setupDummyApiKeys(
-  mode: 'replay' | 'record' | 'live',
+  mode: string,
   providers: (keyof ProviderApiKeys)[] = ['openai', 'anthropic', 'google', 'openrouter'],
 ): void {
-  if (mode !== 'replay') return;
+  // Set dummy keys for modes that may replay recordings.
+  // In auto mode, we may replay so dummy keys are needed as fallback.
+  // Only skip for live, record, and update modes which always need real keys.
+  if (mode === 'live' || mode === 'record' || mode === 'update') return;
 
   const dummyKeys: ProviderApiKeys = {
     openai: 'sk-dummy-for-replay-mode',

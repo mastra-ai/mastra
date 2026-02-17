@@ -2003,14 +2003,13 @@ importers:
         version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.19.7)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.10(@types/node@22.19.7)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   packages/_test-utils:
-    dependencies:
-      msw:
-        specifier: ^2.8.4
-        version: 2.12.10(@types/node@22.19.7)(typescript@5.9.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/llm-recorder':
+        specifier: workspace:*
+        version: link:../_llm-recorder
       '@mastra/core':
         specifier: workspace:*
         version: link:../core

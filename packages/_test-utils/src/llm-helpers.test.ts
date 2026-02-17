@@ -4,26 +4,46 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getLLMTestMode, hasLLMRecording, listLLMRecordings, getLLMRecordingsDir } from './llm-recorder';
+import { getLLMTestMode, hasLLMRecording, listLLMRecordings, getLLMRecordingsDir } from '@internal/llm-recorder';
 import { getModelRecordingName, isV5PlusModel, setupDummyApiKeys, hasApiKey } from './llm-helpers';
 
 describe('getLLMTestMode', () => {
   const originalEnv = { ...process.env };
+  const originalArgv = [...process.argv];
 
   beforeEach(() => {
     // Clear relevant env vars before each test
     delete process.env.LLM_TEST_MODE;
     delete process.env.RECORD_LLM;
     delete process.env.CI;
+    delete process.env.UPDATE_RECORDINGS;
+    // Reset argv to remove any flags
+    process.argv = originalArgv.filter(a => a !== '--update-recordings' && a !== '-U');
   });
 
   afterEach(() => {
-    // Restore original env
+    // Restore original env and argv
     process.env = { ...originalEnv };
+    process.argv = [...originalArgv];
   });
 
-  it('returns "live" by default', () => {
-    expect(getLLMTestMode()).toBe('live');
+  it('returns "auto" by default', () => {
+    expect(getLLMTestMode()).toBe('auto');
+  });
+
+  it('returns "update" when UPDATE_RECORDINGS=true', () => {
+    process.env.UPDATE_RECORDINGS = 'true';
+    expect(getLLMTestMode()).toBe('update');
+  });
+
+  it('returns "update" when --update-recordings flag is present', () => {
+    process.argv.push('--update-recordings');
+    expect(getLLMTestMode()).toBe('update');
+  });
+
+  it('returns "update" when -U flag is present', () => {
+    process.argv.push('-U');
+    expect(getLLMTestMode()).toBe('update');
   });
 
   it('returns "replay" when LLM_TEST_MODE=replay', () => {
@@ -41,6 +61,11 @@ describe('getLLMTestMode', () => {
     expect(getLLMTestMode()).toBe('live');
   });
 
+  it('returns "auto" when LLM_TEST_MODE=auto', () => {
+    process.env.LLM_TEST_MODE = 'auto';
+    expect(getLLMTestMode()).toBe('auto');
+  });
+
   it('is case-insensitive', () => {
     process.env.LLM_TEST_MODE = 'REPLAY';
     expect(getLLMTestMode()).toBe('replay');
@@ -54,27 +79,22 @@ describe('getLLMTestMode', () => {
     expect(getLLMTestMode()).toBe('record');
   });
 
-  it('returns "replay" when CI=true', () => {
-    process.env.CI = 'true';
-    expect(getLLMTestMode()).toBe('replay');
+  it('UPDATE_RECORDINGS takes priority over LLM_TEST_MODE', () => {
+    process.env.UPDATE_RECORDINGS = 'true';
+    process.env.LLM_TEST_MODE = 'live';
+    expect(getLLMTestMode()).toBe('update');
+  });
+
+  it('--update-recordings flag takes priority over LLM_TEST_MODE', () => {
+    process.argv.push('--update-recordings');
+    process.env.LLM_TEST_MODE = 'live';
+    expect(getLLMTestMode()).toBe('update');
   });
 
   it('LLM_TEST_MODE takes priority over RECORD_LLM', () => {
     process.env.LLM_TEST_MODE = 'live';
     process.env.RECORD_LLM = 'true';
     expect(getLLMTestMode()).toBe('live');
-  });
-
-  it('LLM_TEST_MODE takes priority over CI', () => {
-    process.env.LLM_TEST_MODE = 'record';
-    process.env.CI = 'true';
-    expect(getLLMTestMode()).toBe('record');
-  });
-
-  it('RECORD_LLM takes priority over CI', () => {
-    process.env.RECORD_LLM = 'true';
-    process.env.CI = 'true';
-    expect(getLLMTestMode()).toBe('record');
   });
 });
 
@@ -172,8 +192,21 @@ describe('setupDummyApiKeys', () => {
     expect(process.env.OPENAI_API_KEY).toBeUndefined();
   });
 
+  it('does nothing in update mode', () => {
+    setupDummyApiKeys('update');
+    expect(process.env.OPENAI_API_KEY).toBeUndefined();
+  });
+
   it('sets all dummy keys in replay mode by default', () => {
     setupDummyApiKeys('replay');
+    expect(process.env.OPENAI_API_KEY).toBe('sk-dummy-for-replay-mode');
+    expect(process.env.ANTHROPIC_API_KEY).toBe('sk-ant-dummy-for-replay-mode');
+    expect(process.env.GOOGLE_API_KEY).toBe('dummy-google-key-for-replay-mode');
+    expect(process.env.OPENROUTER_API_KEY).toBe('sk-or-dummy-for-replay-mode');
+  });
+
+  it('sets all dummy keys in auto mode by default', () => {
+    setupDummyApiKeys('auto');
     expect(process.env.OPENAI_API_KEY).toBe('sk-dummy-for-replay-mode');
     expect(process.env.ANTHROPIC_API_KEY).toBe('sk-ant-dummy-for-replay-mode');
     expect(process.env.GOOGLE_API_KEY).toBe('dummy-google-key-for-replay-mode');

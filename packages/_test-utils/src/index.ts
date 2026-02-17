@@ -1,48 +1,19 @@
 /**
  * @internal/test-utils
  *
- * Internal test utilities for Mastra packages.
- * Not for public consumption - use for Mastra package testing only.
+ * Mastra-specific test helpers for internal packages.
+ * Provides version-agnostic agent wrappers, dummy API key setup, and model config utilities.
+ *
+ * For LLM recording/replay, use `@internal/llm-recorder` instead.
  *
  * @example
  * ```typescript
- * import { useLLMRecording } from '@internal/test-utils';
+ * import { setupDummyApiKeys, getModelRecordingName, agentGenerate } from '@internal/test-utils';
+ * import { getLLMTestMode } from '@internal/llm-recorder';
  *
- * describe('My Tests', () => {
- *   // Automatically handles setup/teardown
- *   const recording = useLLMRecording('my-tests');
- *
- *   it('generates text', async () => {
- *     const result = await agent.generate('Hello');
- *     expect(result.text).toBeDefined();
- *   });
- *
- *   it('streams text', async () => {
- *     const { textStream } = await agent.stream('Count to 3');
- *     const chunks = [];
- *     for await (const chunk of textStream) {
- *       chunks.push(chunk);
- *     }
- *     expect(chunks.length).toBeGreaterThan(0);
- *   });
- * });
+ * setupDummyApiKeys(getLLMTestMode(), ['openai']);
  * ```
- *
- * ## Recording Mode
- *
- * To record new fixtures (or refresh existing ones):
- * ```bash
- * RECORD_LLM=true pnpm test
- * ```
- *
- * Recordings are stored in `__recordings__/` as human-readable JSON.
  */
 
-// Main API - unified MSW-based recorder
-export * from './llm-recorder';
-
-// Contract validation for nightly tests
-export * from './llm-contract';
-
-// Common test helpers to reduce boilerplate
+// Mastra-specific test helpers
 export * from './llm-helpers';

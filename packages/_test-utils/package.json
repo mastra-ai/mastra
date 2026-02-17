@@ -1,7 +1,7 @@
 {
   "name": "@internal/test-utils",
   "version": "0.0.1",
-  "description": "Internal test utilities for Mastra - LLM recording/replay, contract validation",
+  "description": "Mastra-specific test helpers - version-agnostic agent wrappers, dummy API keys",
   "type": "module",
   "private": true,
   "files": [
@@ -31,6 +31,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/llm-recorder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.7",
     "@vitest/coverage-v8": "catalog:",
@@ -40,9 +41,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "dependencies": {
-    "msw": "^2.8.4"
-  },
+  "dependencies": {},
   "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",
