@@ -22,7 +22,7 @@ export function InformationPage() {
 
   return (
     <ScrollArea className="h-full">
-      <SectionRoot className="max-w-2xl">
+      <SectionRoot>
         <SectionHeader
           title="Identity"
           subtitle="Define your agent's name, description, and model."
@@ -36,7 +36,7 @@ export function InformationPage() {
           <Input
             id="agent-name"
             placeholder="My Agent"
-            className="bg-surface3"
+            className="bg-surface2"
             {...register('name')}
             error={!!errors.name}
             disabled={readOnly}
@@ -51,7 +51,7 @@ export function InformationPage() {
           <Textarea
             id="agent-description"
             placeholder="Describe what this agent does"
-            className="bg-surface3"
+            className="bg-surface2"
             {...register('description')}
             error={!!errors.description}
             disabled={readOnly}
@@ -59,7 +59,7 @@ export function InformationPage() {
           {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
         </div>
 
-        <div className=" border-t border-border1 pt-8">
+        <div className="border-t border-border1 pt-8">
           <SubSectionRoot>
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">
@@ -72,7 +72,7 @@ export function InformationPage() {
                   control={control}
                   render={({ field }) => (
                     <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                      <LLMProviders value={field.value} onValueChange={field.onChange} variant="light" />
+                      <LLMProviders value={field.value} onValueChange={field.onChange} />
                     </div>
                   )}
                 />
@@ -94,7 +94,6 @@ export function InformationPage() {
                         value={field.value}
                         onValueChange={field.onChange}
                         llmId={form.watch('model.provider') || ''}
-                        variant="light"
                       />
                     </div>
                   )}

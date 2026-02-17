@@ -17,7 +17,7 @@ import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/compo
 import { stringToColor } from '@/lib/colors';
 import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
-import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
+import { Searchbar } from '@/ds/components/Searchbar';
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -112,7 +112,7 @@ export function ToolsPage() {
         <SectionHeader
           title="Tools"
           subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
-          icon={<ToolsIcon className="text-accent6" />}
+          icon={<ToolsIcon />}
         />
 
         <MCPClientList />

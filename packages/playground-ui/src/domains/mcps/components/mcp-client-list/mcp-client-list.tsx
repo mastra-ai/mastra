@@ -121,7 +121,9 @@ export function MCPClientList() {
               descriptionSlot="Add one to get started."
               actionSlot={
                 <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)}>
-                  <PlusIcon />
+                  <Icon size="sm">
+                    <PlusIcon />
+                  </Icon>
                   Add MCP Client
                 </Button>
               }

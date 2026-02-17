@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { ChevronRight, GripVertical, Ruler, Trash2 } from 'lucide-react';
+import { ChevronRight, GripVertical, Ruler, X } from 'lucide-react';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 
 import { ContentBlock } from '@/ds/components/ContentBlocks';
@@ -13,6 +13,7 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { cn } from '@/lib/utils';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 
 export interface AgentCMSBlockProps {
   index: number;
@@ -26,6 +27,7 @@ export interface AgentCMSBlockProps {
 }
 
 interface AgentCMSBlockContentProps {
+  index: number;
   block: InstructionBlock;
   onBlockChange: (block: InstructionBlock) => void;
   placeholder?: string;
@@ -36,6 +38,7 @@ interface AgentCMSBlockContentProps {
 }
 
 const AgentCMSBlockContent = ({
+  index,
   block,
   onBlockChange,
   placeholder,
@@ -69,20 +72,26 @@ const AgentCMSBlockContent = ({
     <div className="h-full grid grid-rows-[auto_1fr_auto]">
       {/* Top bar with drag handle and delete button */}
       <div className="bg-surface2 px-2 py-1 flex items-center justify-between gap-2">
-        <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Icon>
-                <GripVertical />
-              </Icon>
-            </TooltipTrigger>
-            <TooltipContent>Drag to reorder</TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-2">
+          <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Icon>
+                  <GripVertical />
+                </Icon>
+              </TooltipTrigger>
+              <TooltipContent>Drag to reorder</TooltipContent>
+            </Tooltip>
+          </div>
+
+          <Txt variant="ui-sm" className="text-neutral3 font-mono">
+            {index + 1}
+          </Txt>
         </div>
 
         {onDelete && (
           <IconButton variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
-            <Trash2 />
+            <X />
           </IconButton>
         )}
       </div>
@@ -151,6 +160,7 @@ export const AgentCMSBlock = ({
     >
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <AgentCMSBlockContent
+          index={index}
           block={block}
           onBlockChange={onBlockChange}
           placeholder={placeholder}

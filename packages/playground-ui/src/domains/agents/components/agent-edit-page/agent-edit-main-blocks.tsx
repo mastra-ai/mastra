@@ -16,7 +16,11 @@ export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }
 
   return (
     <div className="grid grid-rows-[auto_1fr] gap-6 h-full px-4 pb-4">
-      <SectionHeader title="Instruction blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
+      <SectionHeader
+        title="Instruction blocks"
+        subtitle="Add instruction blocks to your agent. Blocks are combined in order to form the system prompt."
+        icon={<Blocks />}
+      />
 
       <div className="h-full overflow-y-auto">
         <Controller

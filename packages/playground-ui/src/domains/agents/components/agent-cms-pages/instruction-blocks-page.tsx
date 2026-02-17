@@ -6,6 +6,7 @@ import { SectionHeader } from '@/domains/cms';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentCMSBlocks } from '../agent-cms-blocks';
+import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 
 export function InstructionBlocksPage() {
   const { form } = useAgentEditFormContext();
@@ -15,7 +16,21 @@ export function InstructionBlocksPage() {
   return (
     <ScrollArea className="h-full">
       <section className="flex flex-col gap-6">
-        <SectionHeader title="Instruction blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
+        <SectionHeader
+          title="Instruction blocks"
+          subtitle="Add instruction blocks to your agent. Blocks are combined in order to form the system prompt."
+          icon={<Blocks />}
+        />
+
+        <Alert variant="info">
+          <AlertTitle>Using variables</AlertTitle>
+
+          <AlertDescription as="p">
+            Blocks are combined in order to form the system prompt. Use{' '}
+            <span className="bg-accent3/10 px-1 py-0.5 rounded-md font-mono">{`{{ variableName }}`}</span> to insert
+            dynamic values.
+          </AlertDescription>
+        </Alert>
 
         <Controller
           name="instructionBlocks"
