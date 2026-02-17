@@ -50,7 +50,7 @@ export const EntityName = ({ children, className }: EntityProps) => {
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className={cn('text-neutral3', className)}>
+    <Txt as="div" variant="ui-sm" className={cn('text-neutral3', className)}>
       {children}
     </Txt>
   );
