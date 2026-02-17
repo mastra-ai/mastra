@@ -1237,14 +1237,20 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
       // Create a ReadableStream that subscribes to the agent stream topic
       // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromIndex
+      const topic = AGENT_STREAM_TOPIC(runId);
+      let handleEvent: ((event: any) => void) | null = null;
+
       const stream = new ReadableStream({
         start(controller) {
-          const topic = AGENT_STREAM_TOPIC(runId);
-
-          // Event handler that enqueues events to the stream
-          const handleEvent = (event: any) => {
+          handleEvent = (event: any) => {
             try {
               controller.enqueue(event);
+              // Close stream on terminal events to avoid hanging clients
+              if (event.type === 'finish' || event.type === 'error') {
+                controller.close();
+                void pubsub.unsubscribe(topic, handleEvent!);
+                handleEvent = null;
+              }
             } catch {
               // Stream may be closed
             }
@@ -1260,6 +1266,12 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
             console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
             controller.error(error);
           });
+        },
+        cancel() {
+          if (handleEvent) {
+            void pubsub.unsubscribe(topic, handleEvent);
+            handleEvent = null;
+          }
         },
       });
 

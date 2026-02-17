@@ -56,13 +56,15 @@ export class InMemoryServerCache extends MastraServerCache {
   }
 
   async listPush(key: string, value: unknown): Promise<void> {
-    const list = this.cache.get(key) as unknown[];
-    if (Array.isArray(list)) {
-      list.push(value);
+    const existing = this.cache.get(key);
+    if (Array.isArray(existing)) {
+      existing.push(value);
       // Refresh TTL on push by re-setting the key with the updated list
       if (this.ttlMs > 0) {
-        this.cache.set(key, list, { ttl: this.ttlMs });
+        this.cache.set(key, existing, { ttl: this.ttlMs });
       }
+    } else if (existing !== undefined) {
+      throw new Error(`${key} exists but is not an array`);
     } else {
       this.cache.set(key, [value]);
     }

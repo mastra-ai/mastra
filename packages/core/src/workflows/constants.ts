@@ -5,13 +5,6 @@ export const PUBSUB_SYMBOL = Symbol('pubsub');
 // Symbol used to pass stream format preferences through step context.
 export const STREAM_FORMAT_SYMBOL = Symbol('stream_format');
 
-// Symbol used to pass scoped nested-watch topic through step context.
-// When a run starts, it creates a scoped topic `nested-watch:${runId}` and threads it
-// through the execution chain. Nested workflows publish child events to this topic
-// instead of the global 'nested-watch', preventing feedback loops when parent and child
-// share the same pubsub instance.
-export const NESTED_WATCH_TOPIC_SYMBOL = Symbol('nested_watch_topic');
-
 // Symbol used to identify results from nested workflow execution.
 //
 // When a workflow contains another workflow as a step, the inner workflow's execute()

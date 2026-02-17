@@ -4,7 +4,7 @@ import type { PubSub } from '../../events/pubsub';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
-import { NESTED_WATCH_TOPIC_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ExecuteFunction, InnerOutput } from '../step';
 import { getStepResult } from '../step';
@@ -38,7 +38,6 @@ export interface ExecuteSleepParams {
   };
   executionContext: ExecutionContext;
   pubsub: PubSub;
-  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -102,7 +101,6 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
           abortController?.abort();
         },
         [PUBSUB_SYMBOL]: pubsub,
-        [NESTED_WATCH_TOPIC_SYMBOL]: params.nestedWatchTopic,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
@@ -163,7 +161,6 @@ export interface ExecuteSleepUntilParams {
   };
   executionContext: ExecutionContext;
   pubsub: PubSub;
-  nestedWatchTopic?: string;
   abortController: AbortController;
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
@@ -231,7 +228,6 @@ export async function executeSleepUntil(
           abortController?.abort();
         },
         [PUBSUB_SYMBOL]: pubsub,
-        [NESTED_WATCH_TOPIC_SYMBOL]: params.nestedWatchTopic,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,

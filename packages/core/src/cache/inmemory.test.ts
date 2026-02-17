@@ -107,11 +107,9 @@ describe('InMemoryServerCache', () => {
         expect(result).toEqual(['string', 42, { key: 'value' }, [1, 2, 3]]);
       });
 
-      it('should create new list when existing value is not an array', async () => {
+      it('should throw when existing value is not an array', async () => {
         await cache.set('notAnArray', 'string value');
-        await cache.listPush('notAnArray', 'newItem');
-        const result = await cache.get('notAnArray');
-        expect(result).toEqual(['newItem']);
+        await expect(cache.listPush('notAnArray', 'newItem')).rejects.toThrow('notAnArray exists but is not an array');
       });
     });
 
@@ -260,7 +258,11 @@ describe('InMemoryServerCache', () => {
       await cache.set('mixedKey', 'initial');
       expect(await cache.get('mixedKey')).toBe('initial');
 
-      // Convert to list by pushing
+      // Pushing to a non-array key should throw
+      await expect(cache.listPush('mixedKey', 'listItem')).rejects.toThrow('mixedKey exists but is not an array');
+
+      // Delete and start fresh as a list
+      await cache.delete('mixedKey');
       await cache.listPush('mixedKey', 'listItem');
       expect(await cache.get('mixedKey')).toEqual(['listItem']);
 

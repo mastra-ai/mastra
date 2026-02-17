@@ -31,7 +31,7 @@ import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import { isZodType } from '../utils';
-import { NESTED_WATCH_TOPIC_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type {
@@ -2118,7 +2118,6 @@ export class Workflow<
     resume,
     timeTravel,
     [PUBSUB_SYMBOL]: pubsub,
-    [NESTED_WATCH_TOPIC_SYMBOL]: _nestedWatchTopic,
     mastra,
     requestContext,
     abort,
@@ -2150,7 +2149,6 @@ export class Workflow<
       forEachIndex?: number;
     };
     [PUBSUB_SYMBOL]: PubSub;
-    [NESTED_WATCH_TOPIC_SYMBOL]?: string;
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
@@ -2902,7 +2900,6 @@ export class Run<
       input: inputDataToUse,
       initialState: initialStateToUse,
       pubsub: this.pubsub,
-      nestedWatchTopic: `nested-watch:${this.runId}`,
       retryConfig: this.retryConfig,
       requestContext: (requestContext ?? new RequestContext()) as RequestContext,
       abortController: this.abortController,
