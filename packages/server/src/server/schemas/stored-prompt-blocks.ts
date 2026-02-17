@@ -57,7 +57,6 @@ export const updateStoredPromptBlockBodySchema = z
     authorId: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
-  .partial()
   .merge(snapshotConfigSchema.partial());
 
 // ============================================================================
