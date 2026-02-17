@@ -303,7 +303,7 @@ describe('InMemoryMCPClientsStorage', () => {
       expect(versionCountAfter).toBe(1);
     });
 
-    it('should create new version when updating config fields', async () => {
+    it('should not create new version when updating config fields', async () => {
       const versionCountBefore = await storage.countVersions(clientId);
       expect(versionCountBefore).toBe(1);
 
@@ -313,14 +313,9 @@ describe('InMemoryMCPClientsStorage', () => {
         servers: sampleStdioServer,
       });
 
-      // New version created
+      // No new version created — update() no longer creates versions
       const versionCountAfter = await storage.countVersions(clientId);
-      expect(versionCountAfter).toBe(2);
-
-      // Resolved should reflect new values
-      const resolved = await storage.getByIdResolved(clientId);
-      expect(resolved!.name).toBe('Updated Name');
-      expect(resolved!.servers).toEqual(sampleStdioServer);
+      expect(versionCountAfter).toBe(1);
     });
 
     it('should handle mixed metadata and config updates', async () => {
@@ -334,9 +329,9 @@ describe('InMemoryMCPClientsStorage', () => {
         servers: sampleStdioServer, // config update
       });
 
-      // Should create new version for config changes
+      // No new version created — update() no longer creates versions
       const versionCountAfter = await storage.countVersions(clientId);
-      expect(versionCountAfter).toBe(2);
+      expect(versionCountAfter).toBe(1);
 
       const client = await storage.getById(clientId);
       expect(client!.metadata).toEqual({
@@ -344,13 +339,9 @@ describe('InMemoryMCPClientsStorage', () => {
         key2: 'val2',
         key3: 'val3',
       });
-
-      const resolved = await storage.getByIdResolved(clientId);
-      expect(resolved!.name).toBe('Mixed Update Name');
-      expect(resolved!.servers).toEqual(sampleStdioServer);
     });
 
-    it('should set status=published when activeVersionId is updated', async () => {
+    it('should not auto-publish when activeVersionId is updated', async () => {
       // Create a second version
       const versionId = 'version-2';
       await storage.createVersion({
@@ -368,7 +359,8 @@ describe('InMemoryMCPClientsStorage', () => {
         activeVersionId: versionId,
       });
 
-      expect(result.status).toBe('published');
+      // Status remains 'draft' — the handler manages status changes, not the storage layer
+      expect(result.status).toBe('draft');
       expect(result.activeVersionId).toBe(versionId);
     });
 
@@ -451,14 +443,14 @@ describe('InMemoryMCPClientsStorage', () => {
     });
 
     it('should return all clients with default pagination', async () => {
-      const result = await storage.list();
+      const result = await storage.list({ status: 'draft' });
       expect(result.mcpClients).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.page).toBe(0);
     });
 
     it('should filter by authorId', async () => {
-      const result = await storage.list({ authorId: 'author-a' });
+      const result = await storage.list({ authorId: 'author-a', status: 'draft' });
       expect(result.mcpClients).toHaveLength(3);
       result.mcpClients.forEach(c => {
         expect(c.authorId).toBe('author-a');
@@ -466,22 +458,22 @@ describe('InMemoryMCPClientsStorage', () => {
     });
 
     it('should filter by metadata (AND logic)', async () => {
-      const result = await storage.list({ metadata: { index: 3 } });
+      const result = await storage.list({ metadata: { index: 3 }, status: 'draft' });
       expect(result.mcpClients).toHaveLength(1);
       expect(result.mcpClients[0]!.id).toBe('mcp-3');
     });
 
     it('should support pagination', async () => {
-      const page0 = await storage.list({ page: 0, perPage: 2 });
+      const page0 = await storage.list({ page: 0, perPage: 2, status: 'draft' });
       expect(page0.mcpClients).toHaveLength(2);
       expect(page0.hasMore).toBe(true);
       expect(page0.total).toBe(5);
 
-      const page1 = await storage.list({ page: 1, perPage: 2 });
+      const page1 = await storage.list({ page: 1, perPage: 2, status: 'draft' });
       expect(page1.mcpClients).toHaveLength(2);
       expect(page1.hasMore).toBe(true);
 
-      const page2 = await storage.list({ page: 2, perPage: 2 });
+      const page2 = await storage.list({ page: 2, perPage: 2, status: 'draft' });
       expect(page2.mcpClients).toHaveLength(1);
       expect(page2.hasMore).toBe(false);
     });
@@ -493,7 +485,7 @@ describe('InMemoryMCPClientsStorage', () => {
     });
 
     it('should sort by createdAt DESC by default', async () => {
-      const result = await storage.list();
+      const result = await storage.list({ status: 'draft' });
       const ids = result.mcpClients.map(c => c.id);
       // DESC means newest first
       expect(ids[0]).toBe('mcp-5');
@@ -503,6 +495,7 @@ describe('InMemoryMCPClientsStorage', () => {
     it('should sort by createdAt ASC when specified', async () => {
       const result = await storage.list({
         orderBy: { field: 'createdAt', direction: 'ASC' },
+        status: 'draft',
       });
       const ids = result.mcpClients.map(c => c.id);
       expect(ids[0]).toBe('mcp-1');
@@ -523,7 +516,7 @@ describe('InMemoryMCPClientsStorage', () => {
         mcpClient: { id: 'mcp-2', name: 'Client Two', servers: sampleStdioServer },
       });
 
-      const result = await storage.listResolved();
+      const result = await storage.listResolved({ status: 'draft' });
       expect(result.mcpClients).toHaveLength(2);
 
       // Each resolved client should have both thin record fields and snapshot fields

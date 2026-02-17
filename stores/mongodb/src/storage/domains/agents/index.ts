@@ -285,65 +285,24 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updatedAt: new Date(),
       };
 
-      // Separate metadata-level fields from config fields
+      // Metadata-level fields
       const metadataFields = {
         authorId: updates.authorId,
         activeVersionId: updates.activeVersionId,
         metadata: updates.metadata,
+        status: updates.status,
       };
 
-      // Extract config fields (anything that's part of StorageAgentSnapshotType)
-      const configFields: Record<string, any> = {};
-      for (const field of SNAPSHOT_FIELDS) {
-        if ((updates as any)[field] !== undefined) {
-          configFields[field] = (updates as any)[field];
-        }
-      }
-
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        // Get the latest version number
-        const latestVersion = await this.getLatestVersion(id);
-        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-        // If we have a latest version, start from its config, otherwise error
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('MONGODB', 'UPDATE_AGENT', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for agent ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Convert null values to undefined (null means "remove this field")
-        const sanitizedConfigFields = Object.fromEntries(
-          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-        );
-
-        // Create new version with the config updates
-        const versionInput: CreateVersionInput = {
-          id: randomUUID(),
-          agentId: id,
-          versionNumber: nextVersionNumber,
-          ...this.extractSnapshotFields(latestVersion), // Start from latest version
-          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateVersionInput;
-
-        await this.createVersion(versionInput);
-      }
-
-      // Handle metadata-level updates (these go to the agent record)
+      // Handle metadata-level updates
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
       if (metadataFields.activeVersionId !== undefined) {
         updateDoc.activeVersionId = metadataFields.activeVersionId;
-        // Do NOT automatically set status='published' when activeVersionId is updated
+      }
+      if (metadataFields.status !== undefined) {
+        updateDoc.status = metadataFields.status;
       }
 
-      // Merge metadata if provided (MongoDB adapter uses merge semantics)
+      // Merge metadata
       if (metadataFields.metadata !== undefined) {
         const existingMetadata = existingAgent.metadata || {};
         updateDoc.metadata = { ...existingMetadata, ...metadataFields.metadata };

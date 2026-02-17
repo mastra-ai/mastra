@@ -474,89 +474,7 @@ export class AgentsPG extends AgentsStorage {
         });
       }
 
-      // Separate metadata fields from config fields
-      const { authorId, activeVersionId, metadata, ...configFields } = updates;
-
-      // Extract just the config field names from StorageAgentSnapshotType
-      const configFieldNames = [
-        'name',
-        'description',
-        'instructions',
-        'model',
-        'tools',
-        'defaultOptions',
-        'workflows',
-        'agents',
-        'integrationTools',
-        'inputProcessors',
-        'outputProcessors',
-        'memory',
-        'scorers',
-        'mcpClients',
-        'requestContextSchema',
-      ];
-
-      // Check if any config fields are present in the update
-      const hasConfigUpdate = configFieldNames.some(field => field in configFields);
-
-      // Handle config updates by creating a new version
-      if (hasConfigUpdate) {
-        // Get the latest version to use as base
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_AGENT', 'NO_VERSIONS'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.SYSTEM,
-            text: `No versions found for agent ${id}`,
-            details: { agentId: id },
-          });
-        }
-
-        // Extract config from latest version
-        const {
-          id: _versionId,
-          agentId: _agentId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        // Merge updates into latest config
-        // Convert null values to undefined (null means "remove this field")
-        const sanitizedConfigFields = Object.fromEntries(
-          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-        );
-        const newConfig = {
-          ...latestConfig,
-          ...sanitizedConfigFields,
-        };
-
-        // Identify which fields changed
-        const changedFields = configFieldNames.filter(
-          field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
-
-        // Create new version only if fields changed
-        if (changedFields.length > 0) {
-          const newVersionId = crypto.randomUUID();
-          const newVersionNumber = latestVersion.versionNumber + 1;
-
-          await this.createVersion({
-            id: newVersionId,
-            agentId: id,
-            versionNumber: newVersionNumber,
-            ...newConfig,
-            changedFields,
-            changeMessage: `Updated ${changedFields.join(', ')}`,
-          });
-        }
-      }
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Update metadata fields on the agent record
       const setClauses: string[] = [];
@@ -572,6 +490,11 @@ export class AgentsPG extends AgentsStorage {
         setClauses.push(`"activeVersionId" = $${paramIndex++}`);
         values.push(activeVersionId);
         // Do NOT automatically set status='published' when activeVersionId is updated
+      }
+
+      if (status !== undefined) {
+        setClauses.push(`status = $${paramIndex++}`);
+        values.push(status);
       }
 
       if (metadata !== undefined) {

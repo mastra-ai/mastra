@@ -25,28 +25,6 @@ import type {
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 
-/**
- * The set of fields from StorageAgentSnapshotType that live on version rows.
- * Used to determine which updates create new versions vs update agent metadata.
- */
-const SNAPSHOT_FIELDS = [
-  'name',
-  'description',
-  'instructions',
-  'model',
-  'tools',
-  'defaultOptions',
-  'workflows',
-  'agents',
-  'integrationTools',
-  'inputProcessors',
-  'outputProcessors',
-  'memory',
-  'scorers',
-  'mcpClients',
-  'requestContextSchema',
-] as const;
-
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
   #client: Client;
@@ -406,9 +384,8 @@ export class AgentsLibSQL extends AgentsStorage {
   async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
     const { id, ...updates } = input;
     try {
-      // First, get the existing agent
-      const existingAgent = await this.getById(id);
-      if (!existingAgent) {
+      const existing = await this.getById(id);
+      if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -418,90 +395,27 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
-      // Separate metadata-level fields from config fields
-      const metadataFields = {
-        authorId: updates.authorId,
-        activeVersionId: updates.activeVersionId,
-        metadata: updates.metadata,
+      const { authorId, activeVersionId, metadata, status } = updates;
+
+      // Build update data for the agent record
+      const updateData: Record<string, unknown> = {
+        updatedAt: new Date().toISOString(),
       };
 
-      // Extract config fields (anything that's part of StorageAgentSnapshotType)
-      const configFields: Record<string, any> = {};
-      for (const field of SNAPSHOT_FIELDS) {
-        if ((updates as any)[field] !== undefined) {
-          configFields[field] = (updates as any)[field];
-        }
+      if (authorId !== undefined) updateData.authorId = authorId;
+      if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
+      if (status !== undefined) updateData.status = status;
+      if (metadata !== undefined) {
+        updateData.metadata = { ...existing.metadata, ...metadata };
       }
 
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        // Get the latest version number
-        const latestVersion = await this.getLatestVersion(id);
-        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+      await this.#db.update({
+        tableName: TABLE_AGENTS,
+        keys: { id },
+        data: updateData,
+      });
 
-        // If we have a latest version, start from its config, otherwise error
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for agent ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Extract snapshot fields from latest version
-        const latestSnapshot: Record<string, any> = {};
-        for (const field of SNAPSHOT_FIELDS) {
-          if ((latestVersion as any)[field] !== undefined) {
-            latestSnapshot[field] = (latestVersion as any)[field];
-          }
-        }
-
-        // Convert null values to undefined (null means "remove this field")
-        const sanitizedConfigFields = Object.fromEntries(
-          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-        );
-
-        // Create new version with the config updates
-        const versionInput: CreateVersionInput = {
-          id: crypto.randomUUID(),
-          agentId: id,
-          versionNumber: nextVersionNumber,
-          ...latestSnapshot, // Start from latest version
-          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateVersionInput;
-
-        await this.createVersion(versionInput);
-      }
-
-      // Build the data object with only metadata-level fields
-      const data: Record<string, any> = {
-        updatedAt: new Date(),
-      };
-
-      if (metadataFields.authorId !== undefined) data.authorId = metadataFields.authorId;
-      if (metadataFields.activeVersionId !== undefined) {
-        data.activeVersionId = metadataFields.activeVersionId;
-        // Do NOT automatically set status='published' when activeVersionId is updated
-      }
-      if (metadataFields.metadata !== undefined) {
-        // LibSQL uses REPLACE semantics for metadata
-        data.metadata = metadataFields.metadata;
-      }
-
-      // Only update if there's more than just updatedAt
-      if (Object.keys(data).length > 1) {
-        await this.#db.update({
-          tableName: TABLE_AGENTS,
-          keys: { id },
-          data,
-        });
-      }
-
-      // Return the updated agent
+      // Fetch and return updated agent
       const updatedAgent = await this.getById(id);
       if (!updatedAgent) {
         throw new MastraError({

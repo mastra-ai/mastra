@@ -224,7 +224,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(versionCountAfter).toBe(1); // No new version for metadata update
       });
 
-      it('should create new version when updating config fields', async () => {
+      it('should not create new version when updating config fields (versioning handled by server)', async () => {
         const agent = createSampleAgent({
           name: 'Original Name',
           instructions: 'Original instructions',
@@ -246,12 +246,12 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect([null, undefined]).toContain(updatedAgent.activeVersionId);
 
         const versionCountAfter = await agentsStorage.countVersions(agent.id);
-        expect(versionCountAfter).toBe(2); // New version created
+        expect(versionCountAfter).toBe(1); // No new version - versioning is handled by server's handleAutoVersioning
 
-        // Verify the new version has the updated config
+        // Config fields are NOT updated by storage.update() — they remain in the original version
         const resolved = await agentsStorage.getByIdResolved(agent.id);
-        expect(resolved?.name).toBe('Updated Name');
-        expect(resolved?.instructions).toBe('Updated instructions');
+        expect(resolved?.name).toBe('Original Name');
+        expect(resolved?.instructions).toBe('Original instructions');
       });
 
       it('should update activeVersionId while keeping status draft', async () => {
@@ -377,7 +377,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           await agentsStorage.create({ agent });
         }
 
-        const result = await agentsStorage.list();
+        const result = await agentsStorage.list({ status: 'draft' });
 
         expect(result.agents.length).toBe(5);
         expect(result.total).toBe(5);
@@ -390,19 +390,19 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           await agentsStorage.create({ agent });
         }
 
-        const page1 = await agentsStorage.list({ page: 0, perPage: 5 });
+        const page1 = await agentsStorage.list({ status: 'draft', page: 0, perPage: 5 });
         expect(page1.agents.length).toBe(5);
         expect(page1.total).toBe(15);
         expect(page1.page).toBe(0);
         expect(page1.perPage).toBe(5);
         expect(page1.hasMore).toBe(true);
 
-        const page2 = await agentsStorage.list({ page: 1, perPage: 5 });
+        const page2 = await agentsStorage.list({ status: 'draft', page: 1, perPage: 5 });
         expect(page2.agents.length).toBe(5);
         expect(page2.page).toBe(1);
         expect(page2.hasMore).toBe(true);
 
-        const page3 = await agentsStorage.list({ page: 2, perPage: 5 });
+        const page3 = await agentsStorage.list({ status: 'draft', page: 2, perPage: 5 });
         expect(page3.agents.length).toBe(5);
         expect(page3.hasMore).toBe(false);
       });
@@ -413,7 +413,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           await agentsStorage.create({ agent });
         }
 
-        const result = await agentsStorage.list({ perPage: false });
+        const result = await agentsStorage.list({ status: 'draft', perPage: false });
 
         expect(result.agents.length).toBe(10);
         expect(result.perPage).toBe(false);
@@ -434,7 +434,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent: agent3 });
 
         // list returns thin records; use listResolved for names
-        const result = await agentsStorage.listResolved();
+        const result = await agentsStorage.listResolved({ status: 'draft' });
 
         // Default sort is DESC, so newest first
         expect(result.agents[0]?.name).toBe('Third Agent');
@@ -455,6 +455,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         await agentsStorage.create({ agent: agent3 });
 
         const result = await agentsStorage.listResolved({
+          status: 'draft',
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
