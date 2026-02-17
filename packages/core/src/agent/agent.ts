@@ -1752,8 +1752,8 @@ export class Agent<
           });
         }
       }
-      // If no user message, return a default title for new threads
-      return `New Thread ${new Date().toISOString()}`;
+      // If no user message, return undefined so existing title is preserved
+      return undefined;
     } catch (e) {
       this.logger.error('Error generating title:', e);
       // Return undefined on error so existing title is preserved
@@ -3462,7 +3462,7 @@ export class Agent<
           instructions: titleInstructions,
         } = this.resolveTitleGenerationConfig(config.generateTitle);
 
-        if (shouldGenerate && !threadExists) {
+        if (shouldGenerate && !thread.title) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
             const title = await this.genTitle(

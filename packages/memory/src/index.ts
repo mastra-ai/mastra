@@ -422,7 +422,7 @@ export class Memory extends MastraMemory {
 
       await memoryStore.updateThread({
         id: threadId,
-        title: thread.title || 'Untitled Thread',
+        title: thread.title || '',
         metadata: {
           ...thread.metadata,
           workingMemory,
@@ -536,7 +536,7 @@ ${workingMemory}`;
 
         await memoryStore.updateThread({
           id: threadId,
-          title: thread.title || 'Untitled Thread',
+          title: thread.title || '',
           metadata: {
             ...thread.metadata,
             workingMemory,

@@ -521,7 +521,7 @@ export class AgentLegacyHandler {
               instructions: titleInstructions,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            if (shouldGenerate && !threadExists && userMessage) {
+            if (shouldGenerate && !thread.title && userMessage) {
               promises.push(
                 this.capabilities
                   .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)

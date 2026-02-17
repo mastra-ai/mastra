@@ -205,7 +205,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -215,7 +215,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -394,7 +394,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -405,7 +405,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -426,7 +426,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -437,7 +437,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -758,7 +758,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -768,7 +768,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -792,7 +792,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -802,7 +802,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -933,6 +933,131 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       // Thread should keep its original title
       const thread = await mockMemory.getThreadById({ threadId });
       expect(thread?.title).toBe(customTitle);
+    });
+
+    it('should generate title for pre-created threads with no messages (issue #13145)', async () => {
+      // When a thread is pre-created (e.g., to store metadata or for URL routing)
+      // but has no messages yet, the first conversation message should still trigger
+      // title generation. The current behavior incorrectly skips title generation
+      // because threadExists is true, even though this is the first turn.
+      let titleGenerationCallCount = 0;
+      let agentCallCount = 0;
+
+      const mockMemory = new MockMemory();
+
+      // Pre-create the thread without a title (simulating client SDK pre-creation)
+      // With the fix, createThread() uses empty string when no title is provided,
+      // so title generation correctly fires on the first conversation message.
+      const threadId = 'pre-created-thread-no-messages';
+      await mockMemory.saveThread({
+        thread: {
+          id: threadId,
+          title: '',
+          resourceId: 'user-123',
+          createdAt: new Date('2026-02-17T15:12:05.337Z'),
+          updatedAt: new Date('2026-02-17T15:12:05.337Z'),
+        },
+      });
+
+      mockMemory.getMergedThreadConfig = () => {
+        return {
+          generateTitle: true,
+        };
+      };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Help with coding project',
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Agent Response',
+              };
+            }
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Help with coding project',
+                content: [{ type: 'text', text: 'Help with coding project' }],
+                warnings: [],
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: 'Agent Response',
+                content: [{ type: 'text', text: 'Agent Response' }],
+                warnings: [],
+              };
+            }
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'pre-created-thread-title-gen-agent',
+        name: 'Pre-created Thread Title Gen Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      // Send first message to the pre-created thread (no messages exist yet)
+      if (version === 'v1') {
+        await agent.generateLegacy('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId,
+          },
+        });
+      } else {
+        await agent.generate('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId,
+          },
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Title generation SHOULD trigger because this is the first conversation
+      // turn on the thread, even though the thread was pre-created
+      expect(titleGenerationCallCount).toBe(1);
+      expect(agentCallCount).toBe(1);
+
+      // Thread title should be updated with the generated title
+      const thread = await mockMemory.getThreadById({ threadId });
+      expect(thread?.title).toBe('Help with coding project');
     });
 
     it('should handle errors in title generation gracefully', async () => {
@@ -1171,7 +1296,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1181,7 +1306,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1375,7 +1500,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -1386,7 +1511,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -1409,7 +1534,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -1420,7 +1545,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -1548,7 +1673,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1558,7 +1683,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1688,7 +1813,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1698,7 +1823,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2035,7 +2160,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2045,7 +2170,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2073,7 +2198,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2083,7 +2208,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2230,7 +2355,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: threadId,
-              title: 'New Thread',
+              title: '',
             },
           },
         });
@@ -2240,7 +2365,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: threadId,
-              title: 'New Thread',
+              title: '',
             },
           },
         });
