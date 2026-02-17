@@ -1,18 +1,23 @@
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { EntityAccordionItem, SectionHeader } from '@/domains/cms';
-import { ToolsIcon } from '@/ds/icons';
+import { SectionHeader } from '@/domains/cms';
+import { Icon, ToolsIcon } from '@/ds/icons';
 import { Section } from '@/ds/components/Section';
-import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
 import type { RuleGroup } from '@/lib/rule-engine';
-import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { stringToColor } from '@/lib/colors';
+import { Switch } from '@/ds/components/Switch';
+import { Textarea } from '@/ds/components/Textarea';
+import { cn } from '@/lib/utils';
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
@@ -48,14 +53,18 @@ export function ToolsPage() {
     return option?.description || '';
   };
 
-  const handleValueChange = (newIds: string[]) => {
-    const newTools: Record<string, EntityConfig> = {};
-
-    for (const id of newIds) {
-      newTools[id] = selectedTools?.[id] || { description: getOriginalDescription(id) };
+  const handleValueChange = (toolId: string) => {
+    const isSet = selectedTools?.[toolId] !== undefined;
+    if (isSet) {
+      const next = { ...selectedTools };
+      delete next[toolId];
+      form.setValue('tools', next);
+    } else {
+      form.setValue('tools', {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], description: getOriginalDescription(toolId) },
+      });
     }
-
-    form.setValue('tools', newTools);
   };
 
   const handleDescriptionChange = (toolId: string, description: string) => {
@@ -63,12 +72,6 @@ export function ToolsPage() {
       ...selectedTools,
       [toolId]: { ...selectedTools?.[toolId], description },
     });
-  };
-
-  const handleRemove = (toolId: string) => {
-    const next = { ...selectedTools };
-    delete next[toolId];
-    form.setValue('tools', next);
   };
 
   const handleRulesChange = (toolId: string, rules: RuleGroup | undefined) => {
@@ -117,15 +120,60 @@ export function ToolsPage() {
           onSubmitTools={readOnly ? undefined : handleIntegrationToolsSubmit}
         />
 
-        <Section>
+        <SubSectionRoot>
           <Section.Header>
-            <Section.Heading>
-              <ToolsIcon />
-              Available Tools
-            </Section.Heading>
+            <SubSectionHeader title="Available Tools" icon={<ToolsIcon />} />
           </Section.Header>
 
-          <div className="flex flex-col gap-2">
+          {options.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {options.map(tool => {
+                const bg = stringToColor(tool.value);
+                const text = stringToColor(tool.value, 25);
+                const isSelected = selectedToolIds.includes(tool.value);
+
+                const isDisabled = readOnly || !isSelected;
+
+                return (
+                  <Entity key={tool.value} className="bg-surface2">
+                    <div
+                      className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
+                      style={{ backgroundColor: bg, color: text }}
+                    >
+                      <Icon>
+                        <ToolsIcon />
+                      </Icon>
+                    </div>
+
+                    <EntityContent>
+                      <EntityName>{tool.label}</EntityName>
+                      <EntityDescription>
+                        <input
+                          type="text"
+                          disabled={isDisabled}
+                          className={cn(
+                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                            !isDisabled && 'border-border1 border-dashed ',
+                          )}
+                          value={isSelected ? (selectedTools?.[tool.value]?.description ?? tool.description) : tool.description}
+                          onChange={e => handleDescriptionChange(tool.value, e.target.value)}
+                        />
+                      </EntityDescription>
+                    </EntityContent>
+
+                    {!readOnly && (
+                      <Switch
+                        checked={selectedToolIds.includes(tool.value)}
+                        onCheckedChange={() => handleValueChange(tool.value)}
+                      />
+                    )}
+                  </Entity>
+                );
+              })}
+            </div>
+          )}
+
+          {/* <div className="flex flex-col gap-2">
             <MultiCombobox
               options={options}
               value={selectedToolIds}
@@ -154,8 +202,8 @@ export function ToolsPage() {
                 ))}
               </div>
             )}
-          </div>
-        </Section>
+          </div> */}
+        </SubSectionRoot>
       </div>
     </ScrollArea>
   );

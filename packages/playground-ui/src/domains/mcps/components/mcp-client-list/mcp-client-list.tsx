@@ -114,7 +114,7 @@ export function MCPClientList() {
               className="!py-4"
               iconSlot={
                 <div className="size-6 text-neutral3 rounded-full bg-surface3 p-2 flex items-center justify-center">
-                  <LaptopMinimal className="size-4" />
+                  <LaptopMinimal className="size-6" />
                 </div>
               }
               titleSlot="No MCP clients configured yet."
@@ -133,9 +133,9 @@ export function MCPClientList() {
           <div className="flex flex-col gap-1">
             {mcpClients.map((mcpClient, index) => {
               const serverCount = Object.keys(mcpClient.servers ?? {}).length;
-              const firstLetter = mcpClient.name.charAt(0).toUpperCase();
-              const bg = stringToColor(firstLetter);
-              const text = stringToColor(firstLetter, 25);
+              const bg = stringToColor(mcpClient.name);
+              const text = stringToColor(mcpClient.name, 25);
+
               return (
                 <Entity
                   key={mcpClient.id ?? `pending-${index}`}

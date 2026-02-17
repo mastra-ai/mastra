@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plug } from 'lucide-react';
 
 import { Section } from '@/ds/components/Section';
-import { Entity, EntityIcon, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@/ds/components/Entity';
 
 import { useToolProviders } from '../hooks/use-tool-providers';
 import { ToolProviderDialog } from './tool-provider-dialog';
@@ -40,9 +40,8 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
 
         <div className="flex flex-col gap-1">
           {providers.map(provider => {
-            const firstLetter = provider.name.charAt(0).toUpperCase();
-            const bg = stringToColor(firstLetter);
-            const text = stringToColor(firstLetter, 25);
+            const bg = stringToColor(provider.name);
+            const text = stringToColor(provider.name, 25);
 
             return (
               <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-surface2">
@@ -50,7 +49,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
                   className="aspect-square h-full rounded-lg flex items-center justify-center uppercase shrink-0"
                   style={{ backgroundColor: bg, color: text }}
                 >
-                  {firstLetter}
+                  {provider.name[0]}
                 </div>
 
                 <EntityContent>

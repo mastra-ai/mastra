@@ -9,7 +9,7 @@ interface AgentsCmsLayoutProps {
 export function AgentsCmsLayout({ children, currentPath, basePath }: AgentsCmsLayoutProps) {
   return (
     <div className="grid overflow-y-auto h-full bg-surface1 grid-cols-[240px_1fr]">
-      <div className="overflow-y-auto h-full border-r border-border1 bg-surface2">
+      <div className="overflow-y-auto h-full border-r border-border1">
         <AgentCmsSidebar basePath={basePath} currentPath={currentPath} />
       </div>
       <div className="overflow-y-auto h-full">{children}</div>

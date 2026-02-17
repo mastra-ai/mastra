@@ -8,22 +8,22 @@ import { Spinner } from '@/ds/components/Spinner';
 import { Icon, AgentIcon, ToolsIcon, JudgeIcon, WorkflowIcon, MemoryIcon, VariablesIcon } from '@/ds/icons';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { Txt } from '@/ds/components/Txt';
 
 interface NavItem {
   name: string;
-  icon: React.ReactNode;
   pathSuffix: string;
 }
 
 const navItems: NavItem[] = [
-  { name: 'Identity', icon: <AgentIcon />, pathSuffix: '' },
-  { name: 'Instructions', icon: <Blocks />, pathSuffix: '/instruction-blocks' },
-  { name: 'Tools', icon: <ToolsIcon className="text-accent6" />, pathSuffix: '/tools' },
-  { name: 'Agents', icon: <AgentIcon className="text-accent1" />, pathSuffix: '/agents' },
-  { name: 'Scorers', icon: <JudgeIcon className="text-neutral3" />, pathSuffix: '/scorers' },
-  { name: 'Workflows', icon: <WorkflowIcon className="text-accent3" />, pathSuffix: '/workflows' },
-  { name: 'Memory', icon: <MemoryIcon className="text-neutral3" />, pathSuffix: '/memory' },
-  { name: 'Variables', icon: <VariablesIcon />, pathSuffix: '/variables' },
+  { name: 'Identity', pathSuffix: '' },
+  { name: 'Instructions', pathSuffix: '/instruction-blocks' },
+  { name: 'Tools', pathSuffix: '/tools' },
+  { name: 'Agents', pathSuffix: '/agents' },
+  { name: 'Scorers', pathSuffix: '/scorers' },
+  { name: 'Workflows', pathSuffix: '/workflows' },
+  { name: 'Memory', pathSuffix: '/memory' },
+  { name: 'Variables', pathSuffix: '/variables' },
 ];
 
 interface AgentCmsSidebarProps {
@@ -46,22 +46,31 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
   return (
     <div className="h-full flex flex-col">
       <ScrollArea className="flex-1 min-h-0">
-        <nav className="p-2">
-          <ul className="flex flex-col gap-0.5">
-            {navItems.map(item => {
+        <nav className="py-4">
+          <ul className="flex flex-col gap-0">
+            {navItems.map((item, index) => {
               const active = isActive(basePath, currentPath, item.pathSuffix);
+              const isLast = index === navItems.length - 1;
               return (
-                <li key={item.name}>
+                <li key={item.name} className="flex flex-col gap-0">
                   <Link
                     href={basePath + item.pathSuffix}
                     className={cn(
-                      'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
-                      active ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
+                      'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors',
+                      active ? 'bg-surface2 text-neutral5' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
                     )}
                   >
-                    <Icon size="sm">{item.icon}</Icon>
+                    <Txt
+                      className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono"
+                      variant="ui-sm"
+                    >
+                      {index + 1}
+                    </Txt>
+
                     {item.name}
                   </Link>
+
+                  {!isLast && <div className="bg-surface3 w-0.5 h-2 inline-block ml-6" />}
                 </li>
               );
             })}
