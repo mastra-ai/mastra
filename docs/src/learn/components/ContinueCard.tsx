@@ -23,7 +23,7 @@ export function ContinueCard({ storage, lessons, className }: ContinueCardProps)
     <Link
       to={`/learn/${slug}`}
       className={cn(
-        'flex items-center justify-between rounded-lg border border-(--border) p-4 no-underline transition-colors hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
+        'learn-link flex items-center justify-between rounded-lg border border-(--border) p-4 transition-colors hover:border-(--mastra-green-accent-3) dark:hover:border-(--mastra-green-accent)',
         className,
       )}
     >

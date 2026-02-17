@@ -1348,3 +1348,21 @@ article p {
 .copilotKitCodeBlockToolbar {
   display: none !important;
 }
+
+/* Learn section — override Infima link and list styles */
+.learn-link,
+.learn-link:hover {
+  text-decoration: none !important;
+}
+
+.learn-sidebar-item,
+.learn-sidebar-item:hover {
+  text-decoration: none !important;
+}
+
+.learn-sidebar ul,
+.learn-sidebar li {
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+}

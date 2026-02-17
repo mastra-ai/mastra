@@ -46,11 +46,11 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
   const watchedCount = lessons.filter(l => l.status === 'published' && storage.lessons[l.slug]?.watched).length
 
   const sidebar = (
-    <nav className="flex h-full flex-col overflow-y-auto py-4">
+    <nav className="learn-sidebar flex h-full flex-col overflow-y-auto py-4">
       <div className="px-4 pb-4">
         <Link
           to="/learn"
-          className="text-sm font-semibold text-(--mastra-text-primary) no-underline hover:text-(--mastra-green-accent-2)"
+          className="learn-link text-sm font-semibold text-(--mastra-text-primary) hover:text-(--mastra-green-accent-2)"
         >
           Mastra Learn
         </Link>
@@ -68,17 +68,17 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
             <h4 className="px-4 py-1 text-xs font-semibold tracking-wide text-(--mastra-text-tertiary) uppercase">
               {moduleName}
             </h4>
-            <ul className="m-0 p-0" style={{ listStyle: 'none' }}>
+            <ul>
               {moduleLessons.map(lesson => {
                 const isActive =
                   location.pathname === `/learn/${lesson.slug}` || location.pathname === `/learn/${lesson.slug}/`
                 return (
-                  <li key={lesson.slug} className="m-0 p-0">
+                  <li key={lesson.slug}>
                     <Link
                       to={`/learn/${lesson.slug}`}
                       onClick={() => setMobileOpen(false)}
                       className={cn(
-                        'relative flex items-center gap-2 px-4 py-1 text-sm no-underline transition-colors',
+                        'learn-sidebar-item relative flex items-center gap-2 px-4 py-1 text-sm transition-colors',
                         isActive
                           ? 'font-medium text-(--mastra-green-accent-3) dark:text-(--mastra-green-accent)'
                           : 'text-(--mastra-text-tertiary) hover:text-(--mastra-green-accent-3) dark:hover:text-(--mastra-green-accent)',

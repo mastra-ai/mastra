@@ -78,6 +78,9 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
             playerRef.current = player
             setIsReady(true)
             setDuration(player!.getDuration())
+            if (startSeconds > 0) {
+              player!.seekTo(startSeconds, true)
+            }
           },
           onStateChange: (event: YT.OnStateChangeEvent) => {
             if (destroyed) return
@@ -133,7 +136,7 @@ export function useYouTubePlayer({ videoId, startSeconds = 0, onTimeUpdate, onAu
       }
       playerRef.current = null
     }
-  }, [videoId])
+  }, [videoId, startSeconds])
 
   const seekTo = useCallback((seconds: number) => {
     playerRef.current?.seekTo(seconds, true)
