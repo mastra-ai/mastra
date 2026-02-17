@@ -64,6 +64,7 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
     if (!skillStore) throw new Error('Skills storage domain is not available');
 
     const blobStore = await this.editor.resolveBlobStore();
+    if (!blobStore) throw new Error('No blob store is configured. Register one via new MastraEditor({ blobStores: [...] })');
 
     // Collect and store blobs
     const { snapshot, tree } = await publishSkillFromSource(source, skillPath, blobStore);
@@ -78,12 +79,13 @@ export class EditorSkillNamespace extends CrudEditorNamespace<
 
     // Point activeVersionId to the newly created version
     const latestVersion = await skillStore.getLatestVersion(skillId);
-    if (latestVersion) {
-      await skillStore.update({
-        id: skillId,
-        activeVersionId: latestVersion.id,
-      });
+    if (!latestVersion) {
+      throw new Error(`Failed to retrieve version after publishing skill "${skillId}"`);
     }
+    await skillStore.update({
+      id: skillId,
+      activeVersionId: latestVersion.id,
+    });
 
     // Fetch and return the resolved skill
     const resolved = await skillStore.getByIdResolved(skillId);
