@@ -1313,6 +1313,9 @@ importers:
       '@mastra/observability':
         specifier: workspace:*
         version: link:../mastra
+      snappyjs:
+        specifier: ^0.7.0
+        version: 0.7.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -20967,6 +20970,9 @@ packages:
   snakecase-keys@8.0.1:
     resolution: {integrity: sha512-Sj51kE1zC7zh6TDlNNz0/Jn1n5HiHdoQErxO8jLtnyrkJW/M5PrI7x05uDgY3BO7OUQYKCvmeMurW6BPUdwEOw==}
     engines: {node: '>=18'}
+
+  snappyjs@0.7.0:
+    resolution: {integrity: sha512-u5iEEXkMe2EInQio6Wv9LWHOQYRDbD2O9hzS27GpT/lwfIQhTCnHCTqedqHIHe9ZcvQo+9au6vngQayipz1NYw==}
 
   sockjs@0.3.24:
     resolution: {integrity: sha512-GJgLTZ7vYb/JtPSSZ10hsOYIvEYsjbNU+zPdIHcUaWVNUEPivzxku31865sSSud0Da0W4lEeOPlmw93zLQchuQ==}
@@ -42027,6 +42033,8 @@ snapshots:
       map-obj: 4.3.0
       snake-case: 3.0.4
       type-fest: 4.41.0
+
+  snappyjs@0.7.0: {}
 
   sockjs@0.3.24:
     dependencies:

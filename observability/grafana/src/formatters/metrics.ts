@@ -1,87 +1,24 @@
 /**
- * Metrics formatter for Grafana Mimir.
+ * Metrics formatter for Grafana Mimir via Prometheus Remote Write.
  *
- * Converts Mastra ExportedMetric to OTLP/HTTP JSON format for metrics.
- * Mimir accepts metrics via the OTLP/HTTP endpoint at /otlp/v1/metrics.
+ * Converts Mastra ExportedMetric to Prometheus Remote Write format
+ * (protobuf + snappy compression). This uses Mimir's native ingestion
+ * protocol rather than OTLP, differentiating @mastra/grafana from
+ * @mastra/otel-exporter.
  *
- * This approach avoids the complexity of Prometheus remote write (protobuf + snappy)
- * while providing full metrics support via Mimir's native OTLP ingestion.
+ * Endpoint: POST /api/prom/push (Grafana Cloud) or /api/v1/push (self-hosted Mimir)
+ * Content-Type: application/x-protobuf
+ * Content-Encoding: snappy
  *
- * @see https://grafana.com/docs/mimir/latest/references/http-api/#otlp
+ * @see https://prometheus.io/docs/specs/prw/remote_write_spec/
+ * @see https://grafana.com/docs/mimir/latest/references/http-api/#remote-write
  */
 
 import type { ExportedMetric } from '@mastra/core/observability';
+import SnappyJS from 'snappyjs';
 
-/**
- * OTLP JSON types for metrics export.
- */
-
-interface OtlpExportMetricsRequest {
-  resourceMetrics: OtlpResourceMetrics[];
-}
-
-interface OtlpResourceMetrics {
-  resource: {
-    attributes: OtlpKeyValue[];
-  };
-  scopeMetrics: OtlpScopeMetrics[];
-}
-
-interface OtlpScopeMetrics {
-  scope: {
-    name: string;
-  };
-  metrics: OtlpMetric[];
-}
-
-interface OtlpMetric {
-  name: string;
-  description?: string;
-  unit?: string;
-  sum?: OtlpSum;
-  gauge?: OtlpGauge;
-  histogram?: OtlpHistogram;
-}
-
-interface OtlpSum {
-  dataPoints: OtlpNumberDataPoint[];
-  aggregationTemporality: number;
-  isMonotonic: boolean;
-}
-
-interface OtlpGauge {
-  dataPoints: OtlpNumberDataPoint[];
-}
-
-interface OtlpHistogram {
-  dataPoints: OtlpHistogramDataPoint[];
-  aggregationTemporality: number;
-}
-
-interface OtlpNumberDataPoint {
-  attributes: OtlpKeyValue[];
-  timeUnixNano: string;
-  asDouble?: number;
-  asInt?: string;
-}
-
-interface OtlpHistogramDataPoint {
-  attributes: OtlpKeyValue[];
-  timeUnixNano: string;
-  count: string;
-  sum: number;
-  explicitBounds: number[];
-  bucketCounts: string[];
-}
-
-interface OtlpKeyValue {
-  key: string;
-  value: { stringValue?: string; intValue?: string; doubleValue?: number };
-}
-
-// OTLP aggregation temporality
-const AGGREGATION_TEMPORALITY_DELTA = 1;
-const AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+import type { PromLabel, PromTimeSeries, PromWriteRequest } from './protobuf.js';
+import { encodeWriteRequest } from './protobuf.js';
 
 /**
  * Default histogram bucket boundaries for duration metrics (ms).
@@ -99,23 +36,6 @@ const TOKEN_BUCKETS = [128, 512, 2048, 8192, 32768, 131072, 524288, 2097152];
 const GENERIC_BUCKETS = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000, 10000];
 
 /**
- * Convert a Date to nanoseconds as a string.
- */
-function dateToNanoString(date: Date): string {
-  return `${BigInt(date.getTime()) * 1_000_000n}`;
-}
-
-/**
- * Convert labels to OTLP key-value pairs.
- */
-function labelsToAttributes(labels: Record<string, string>): OtlpKeyValue[] {
-  return Object.entries(labels).map(([key, value]) => ({
-    key,
-    value: { stringValue: value },
-  }));
-}
-
-/**
  * Select appropriate histogram buckets based on metric name.
  */
 function selectBuckets(metricName: string): number[] {
@@ -129,135 +49,162 @@ function selectBuckets(metricName: string): number[] {
 }
 
 /**
- * Convert a single histogram observation into a histogram data point.
- * For single observations, we place the value into the appropriate bucket.
+ * Build Prometheus labels from a metric's name, labels, and service name.
+ * Prometheus requires `__name__` as the metric name label.
+ * Labels are sorted by name for consistent ordering.
  */
-function createHistogramDataPoint(
-  metric: ExportedMetric,
-  buckets: number[],
-): OtlpHistogramDataPoint {
-  const bucketCounts = new Array(buckets.length + 1).fill(0);
+function buildLabels(
+  metricName: string,
+  metricLabels: Record<string, string>,
+  serviceName: string,
+): PromLabel[] {
+  const labels: PromLabel[] = [
+    { name: '__name__', value: metricName },
+    { name: 'job', value: serviceName },
+  ];
 
-  // Place the value in the correct bucket
-  let placed = false;
-  for (let i = 0; i < buckets.length; i++) {
-    if (metric.value <= buckets[i]!) {
-      bucketCounts[i]++;
-      placed = true;
-      break;
-    }
-  }
-  if (!placed) {
-    // Value exceeds all bucket boundaries, goes in overflow bucket
-    bucketCounts[buckets.length]++;
+  for (const [k, v] of Object.entries(metricLabels)) {
+    labels.push({ name: k, value: v });
   }
 
-  return {
-    attributes: labelsToAttributes(metric.labels),
-    timeUnixNano: dateToNanoString(metric.timestamp),
-    count: '1',
-    sum: metric.value,
-    explicitBounds: buckets,
-    bucketCounts: bucketCounts.map(String),
-  };
+  // Prometheus convention: labels sorted by name
+  labels.sort((a, b) => a.name.localeCompare(b.name));
+  return labels;
 }
 
 /**
- * Convert a single ExportedMetric to an OTLP Metric structure.
+ * Convert a counter or gauge metric to a single Prometheus time series.
  */
-function convertMetricToOtlp(metric: ExportedMetric): OtlpMetric {
-  const attributes = labelsToAttributes(metric.labels);
-  const timeUnixNano = dateToNanoString(metric.timestamp);
+function convertSimpleMetric(
+  metric: ExportedMetric,
+  serviceName: string,
+): PromTimeSeries[] {
+  return [
+    {
+      labels: buildLabels(metric.name, metric.labels, serviceName),
+      samples: [
+        {
+          value: metric.value,
+          timestampMs: metric.timestamp.getTime(),
+        },
+      ],
+    },
+  ];
+}
 
+/**
+ * Convert a histogram metric to Prometheus classic histogram time series.
+ *
+ * A single histogram observation is decomposed into:
+ * - `{name}_bucket{le="X"}` for each bucket boundary (cumulative)
+ * - `{name}_bucket{le="+Inf"}` (always 1 for a single observation)
+ * - `{name}_sum` — the observed value
+ * - `{name}_count` — always 1 for a single observation
+ */
+function convertHistogramMetric(
+  metric: ExportedMetric,
+  serviceName: string,
+): PromTimeSeries[] {
+  const buckets = selectBuckets(metric.name);
+  const timestampMs = metric.timestamp.getTime();
+  const series: PromTimeSeries[] = [];
+
+  // Cumulative bucket counts: a value of 250 with buckets [100, 500, 1000]
+  // → le="100": 0, le="500": 1, le="1000": 1, le="+Inf": 1
+  let cumulative = 0;
+  for (const bound of buckets) {
+    if (metric.value <= bound) {
+      cumulative = 1;
+    }
+    series.push({
+      labels: buildLabels(
+        `${metric.name}_bucket`,
+        { ...metric.labels, le: String(bound) },
+        serviceName,
+      ),
+      samples: [{ value: cumulative, timestampMs }],
+    });
+  }
+
+  // +Inf bucket (always includes all observations)
+  series.push({
+    labels: buildLabels(
+      `${metric.name}_bucket`,
+      { ...metric.labels, le: '+Inf' },
+      serviceName,
+    ),
+    samples: [{ value: 1, timestampMs }],
+  });
+
+  // _sum
+  series.push({
+    labels: buildLabels(`${metric.name}_sum`, metric.labels, serviceName),
+    samples: [{ value: metric.value, timestampMs }],
+  });
+
+  // _count
+  series.push({
+    labels: buildLabels(`${metric.name}_count`, metric.labels, serviceName),
+    samples: [{ value: 1, timestampMs }],
+  });
+
+  return series;
+}
+
+/**
+ * Convert a single ExportedMetric to Prometheus time series.
+ */
+function convertMetric(metric: ExportedMetric, serviceName: string): PromTimeSeries[] {
   switch (metric.metricType) {
     case 'counter':
-      return {
-        name: metric.name,
-        sum: {
-          dataPoints: [
-            {
-              attributes,
-              timeUnixNano,
-              asDouble: metric.value,
-            },
-          ],
-          aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA,
-          isMonotonic: true,
-        },
-      };
-
     case 'gauge':
-      return {
-        name: metric.name,
-        gauge: {
-          dataPoints: [
-            {
-              attributes,
-              timeUnixNano,
-              asDouble: metric.value,
-            },
-          ],
-        },
-      };
-
-    case 'histogram': {
-      const buckets = selectBuckets(metric.name);
-      return {
-        name: metric.name,
-        histogram: {
-          dataPoints: [createHistogramDataPoint(metric, buckets)],
-          aggregationTemporality: AGGREGATION_TEMPORALITY_DELTA,
-        },
-      };
-    }
-
+      return convertSimpleMetric(metric, serviceName);
+    case 'histogram':
+      return convertHistogramMetric(metric, serviceName);
     default:
       // Fallback: treat unknown as gauge
-      return {
-        name: metric.name,
-        gauge: {
-          dataPoints: [
-            {
-              attributes,
-              timeUnixNano,
-              asDouble: metric.value,
-            },
-          ],
-        },
-      };
+      return convertSimpleMetric(metric, serviceName);
   }
 }
 
 /**
- * Format a batch of Mastra metrics into an OTLP ExportMetricsServiceRequest (JSON).
+ * Format a batch of Mastra metrics into a Prometheus Remote Write request.
+ *
+ * Returns the WriteRequest as a structured object (for testing).
+ * Use `formatMetricsForMimirBinary` to get the snappy-compressed protobuf.
  *
  * @param metrics - The metrics to format
- * @param serviceName - The service name for the resource
- * @returns The OTLP JSON request body
+ * @param serviceName - The service name used as the `job` label
+ * @returns The Prometheus WriteRequest structure
  */
 export function formatMetricsForMimir(
   metrics: ExportedMetric[],
   serviceName: string,
-): OtlpExportMetricsRequest {
-  return {
-    resourceMetrics: [
-      {
-        resource: {
-          attributes: [
-            { key: 'service.name', value: { stringValue: serviceName } },
-            { key: 'telemetry.sdk.name', value: { stringValue: '@mastra/grafana' } },
-            { key: 'telemetry.sdk.language', value: { stringValue: 'nodejs' } },
-          ],
-        },
-        scopeMetrics: [
-          {
-            scope: {
-              name: '@mastra/grafana',
-            },
-            metrics: metrics.map(convertMetricToOtlp),
-          },
-        ],
-      },
-    ],
-  };
+): PromWriteRequest {
+  const timeseries: PromTimeSeries[] = [];
+
+  for (const metric of metrics) {
+    timeseries.push(...convertMetric(metric, serviceName));
+  }
+
+  return { timeseries };
+}
+
+/**
+ * Format a batch of Mastra metrics into snappy-compressed protobuf
+ * for Prometheus Remote Write.
+ *
+ * This is the binary payload sent to Mimir/Prometheus via POST.
+ *
+ * @param metrics - The metrics to format
+ * @param serviceName - The service name used as the `job` label
+ * @returns Snappy-compressed protobuf bytes
+ */
+export function formatMetricsForMimirBinary(
+  metrics: ExportedMetric[],
+  serviceName: string,
+): Uint8Array {
+  const request = formatMetricsForMimir(metrics, serviceName);
+  const protobuf = encodeWriteRequest(request);
+  return new Uint8Array(SnappyJS.compress(protobuf));
 }

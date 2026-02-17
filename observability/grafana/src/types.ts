@@ -45,13 +45,12 @@ export interface GrafanaExporterConfig extends BaseExporterConfig {
   tempoEndpoint?: string;
 
   /**
-   * Mimir endpoint for metrics (OTLP/HTTP JSON).
-   * Exporter appends `/v1/metrics` unless the URL already includes it.
+   * Mimir endpoint for metrics (Prometheus Remote Write).
+   * Exporter appends `/api/v1/push` unless the URL already includes it.
    * URLs are normalized (https:// added if missing, trailing slashes stripped).
-   * NOTE: This must be an OTLP-compatible endpoint, not the Prometheus
-   * remote write endpoint (`/api/prom/push`).
-   * - Cloud default: `https://otlp-gateway-{zone}.grafana.net/otlp`
-   * - Self-hosted example: `http://localhost:9090/otlp`
+   * - Cloud: `https://prometheus-prod-XX-{zone}.grafana.net`
+   * - Cloud (with path): `https://prometheus-prod-XX-{zone}.grafana.net/api/prom/push`
+   * - Self-hosted example: `http://localhost:9009`
    * Falls back to `GRAFANA_MIMIR_ENDPOINT` env var.
    */
   mimirEndpoint?: string;

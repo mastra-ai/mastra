@@ -3,8 +3,11 @@
  *
  * Supports both Grafana Cloud and self-hosted deployments:
  * - Traces → Grafana Tempo (via OTLP/HTTP JSON)
- * - Metrics → Grafana Mimir (via OTLP/HTTP JSON)
+ * - Metrics → Grafana Mimir (via Prometheus Remote Write — protobuf + snappy)
  * - Logs → Grafana Loki (via JSON push API)
+ *
+ * Uses native Grafana protocols (not OTLP for metrics/logs), differentiating
+ * this package from @mastra/otel-exporter which uses OTLP for everything.
  *
  * Use the `grafanaCloud()` or `grafana()` config helpers for easy setup.
  *
@@ -23,7 +26,7 @@ import type { ExportedMetric, MetricEvent } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 
 import { formatLogsForLoki } from './formatters/logs.js';
-import { formatMetricsForMimir } from './formatters/metrics.js';
+import { formatMetricsForMimirBinary } from './formatters/metrics.js';
 import { formatSpansForTempo } from './formatters/traces.js';
 import type { GrafanaAuth, GrafanaExporterConfig } from './types.js';
 import { DEFAULTS } from './types.js';
@@ -33,7 +36,8 @@ import { DEFAULTS } from './types.js';
  * Used to detect if the user already included the path in their endpoint URL.
  */
 const TEMPO_PATH = '/v1/traces';
-const MIMIR_PATH = '/v1/metrics';
+const MIMIR_PATH = '/api/v1/push';
+const MIMIR_PATH_CLOUD = '/api/prom/push';
 const LOKI_PATH = '/loki/api/v1/push';
 
 /**
@@ -311,7 +315,7 @@ export class GrafanaExporter extends BaseExporter {
     this.metricBuffer = [];
 
     try {
-      const body = formatMetricsForMimir(metrics, this.serviceName);
+      const body = formatMetricsForMimirBinary(metrics, this.serviceName);
       await this.sendToMimir(body);
       this.logger.debug(`[Grafana] Exported ${metrics.length} metrics to Mimir`);
     } catch (error) {
@@ -356,11 +360,19 @@ export class GrafanaExporter extends BaseExporter {
   }
 
   /**
-   * Send OTLP metric data to Grafana Mimir.
+   * Send Prometheus Remote Write data to Grafana Mimir.
+   * Uses protobuf + snappy compression (native Prometheus protocol).
+   *
+   * Appends `/api/v1/push` unless the endpoint already ends with
+   * `/api/v1/push` or `/api/prom/push` (Grafana Cloud variant).
    */
-  private async sendToMimir(body: unknown): Promise<void> {
-    const url = buildUrl(this.mimirEndpoint, MIMIR_PATH);
-    await this.sendRequest(url, body, this.mimirAuthHeaders, this.mimirTenantId);
+  private async sendToMimir(body: Uint8Array): Promise<void> {
+    // Grafana Cloud uses /api/prom/push, self-hosted Mimir uses /api/v1/push
+    const alreadyHasPath =
+      this.mimirEndpoint.endsWith(MIMIR_PATH) ||
+      this.mimirEndpoint.endsWith(MIMIR_PATH_CLOUD);
+    const url = alreadyHasPath ? this.mimirEndpoint : `${this.mimirEndpoint}${MIMIR_PATH}`;
+    await this.sendBinaryRequest(url, body, this.mimirAuthHeaders, this.mimirTenantId);
   }
 
   /**
@@ -373,6 +385,7 @@ export class GrafanaExporter extends BaseExporter {
 
   /**
    * Send an authenticated JSON request to a Grafana endpoint.
+   * Used for Tempo (OTLP JSON) and Loki (JSON push API).
    */
   private async sendRequest(
     url: string,
@@ -393,6 +406,41 @@ export class GrafanaExporter extends BaseExporter {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => '(no body)');
+      throw new Error(
+        `Grafana API error: ${response.status} ${response.statusText} - ${responseText}`,
+      );
+    }
+  }
+
+  /**
+   * Send an authenticated binary request (protobuf + snappy) to Mimir.
+   * Used for Prometheus Remote Write.
+   */
+  private async sendBinaryRequest(
+    url: string,
+    body: Uint8Array,
+    authHeaders: Record<string, string>,
+    tenantId?: string,
+  ): Promise<void> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-protobuf',
+      'Content-Encoding': 'snappy',
+      'X-Prometheus-Remote-Write-Version': '0.1.0',
+      ...authHeaders,
+    };
+
+    if (tenantId) {
+      headers['X-Scope-OrgID'] = tenantId;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
     });
 
     if (!response.ok) {

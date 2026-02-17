@@ -75,8 +75,11 @@ export function grafanaCloud(config: GrafanaCloudConfig = {}): GrafanaExporterCo
   const lokiInstanceId =
     config.lokiInstanceId ?? process.env['GRAFANA_CLOUD_LOKI_INSTANCE_ID'] ?? defaultInstanceId;
 
-  // Grafana Cloud uses a unified OTLP gateway for traces and metrics.
-  // Logs use the Loki push API directly.
+  // Grafana Cloud endpoint defaults:
+  // - Traces: OTLP gateway (Tempo's native ingestion format)
+  // - Metrics: Prometheus endpoint (Remote Write — native protocol)
+  // - Logs: Loki endpoint (JSON push API — native protocol)
+  //
   // These are zone-based defaults — override with explicit endpoints if your
   // Grafana Cloud hostnames differ (e.g., logs-prod-042.grafana.net).
   const otlpGateway = `https://otlp-gateway-${zone}.grafana.net/otlp`;
@@ -90,7 +93,7 @@ export function grafanaCloud(config: GrafanaCloudConfig = {}): GrafanaExporterCo
     mimirEndpoint:
       config.mimirEndpoint ??
       process.env['GRAFANA_CLOUD_MIMIR_ENDPOINT'] ??
-      otlpGateway,
+      `https://prometheus-${zone}.grafana.net`,
 
     lokiEndpoint:
       config.lokiEndpoint ??

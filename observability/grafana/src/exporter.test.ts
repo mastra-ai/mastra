@@ -144,7 +144,7 @@ describe('GrafanaExporter', () => {
       });
 
       expect(config.tempoEndpoint).toBe('https://otlp-gateway-prod-eu-west-0.grafana.net/otlp');
-      expect(config.mimirEndpoint).toBe('https://otlp-gateway-prod-eu-west-0.grafana.net/otlp');
+      expect(config.mimirEndpoint).toBe('https://prometheus-prod-eu-west-0.grafana.net');
       expect(config.lokiEndpoint).toBe('https://logs-prod-eu-west-0.grafana.net');
     });
 
@@ -392,7 +392,7 @@ describe('GrafanaExporter', () => {
       }));
 
       const tempoCall = calls.find(c => c.url.includes('/v1/traces'));
-      const mimirCall = calls.find(c => c.url.includes('/v1/metrics'));
+      const mimirCall = calls.find(c => c.url.includes('/api/v1/push'));
       const lokiCall = calls.find(c => c.url.includes('/loki/api/v1/push'));
 
       // Verify per-service tenant IDs
@@ -454,9 +454,9 @@ describe('GrafanaExporter', () => {
       expect(url).toBe('https://tempo.example.com/v1/traces');
     });
 
-    it('should not double-append /v1/metrics if endpoint already includes it', async () => {
+    it('should not double-append /api/v1/push if endpoint already includes it', async () => {
       const exporter = new GrafanaExporter({
-        mimirEndpoint: 'https://mimir.example.com/otlp/v1/metrics',
+        mimirEndpoint: 'https://mimir.example.com/api/v1/push',
         batchSize: 1,
         flushIntervalMs: 60000,
         logger: mockLogger(),
@@ -465,7 +465,21 @@ describe('GrafanaExporter', () => {
       await exporter.onMetricEvent(makeMetricEvent());
 
       const url = mockFetch.mock.calls[0]![0] as string;
-      expect(url).toBe('https://mimir.example.com/otlp/v1/metrics');
+      expect(url).toBe('https://mimir.example.com/api/v1/push');
+    });
+
+    it('should not double-append when endpoint has /api/prom/push (Grafana Cloud)', async () => {
+      const exporter = new GrafanaExporter({
+        mimirEndpoint: 'https://prometheus-prod-66.grafana.net/api/prom/push',
+        batchSize: 1,
+        flushIntervalMs: 60000,
+        logger: mockLogger(),
+      });
+
+      await exporter.onMetricEvent(makeMetricEvent());
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toBe('https://prometheus-prod-66.grafana.net/api/prom/push');
     });
 
     it('should not double-append /loki/api/v1/push if endpoint already includes it', async () => {
@@ -486,7 +500,7 @@ describe('GrafanaExporter', () => {
       const exporter = new GrafanaExporter({
         tempoEndpoint: 'tempo-prod-30-prod-us-east-3.grafana.net:443',
         lokiEndpoint: 'logs-prod-042.grafana.net',
-        mimirEndpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
+        mimirEndpoint: 'prometheus-prod-66-prod-us-east-3.grafana.net/api/prom/push',
         auth: { type: 'basic', username: '123', password: 'key' },
         batchSize: 1,
         flushIntervalMs: 60000,
@@ -501,7 +515,7 @@ describe('GrafanaExporter', () => {
 
       expect(urls).toContain('https://tempo-prod-30-prod-us-east-3.grafana.net:443/v1/traces');
       expect(urls).toContain('https://logs-prod-042.grafana.net/loki/api/v1/push');
-      expect(urls).toContain('https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/metrics');
+      expect(urls).toContain('https://prometheus-prod-66-prod-us-east-3.grafana.net/api/prom/push');
     });
   });
 
@@ -648,27 +662,37 @@ describe('GrafanaExporter', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('should send metrics to Mimir OTLP endpoint', async () => {
+    it('should send metrics to Mimir Remote Write endpoint', async () => {
       const exporter = createCloudExporter();
 
       await exporter.onMetricEvent(makeMetricEvent());
       await exporter.onMetricEvent(makeMetricEvent());
 
       const url = mockFetch.mock.calls[0]![0] as string;
-      expect(url).toContain('/v1/metrics');
+      expect(url).toContain('/api/v1/push');
     });
 
-    it('should send valid OTLP metrics JSON body', async () => {
+    it('should send protobuf content type with snappy encoding', async () => {
       const exporter = createCloudExporter();
 
       await exporter.onMetricEvent(makeMetricEvent());
       await exporter.onMetricEvent(makeMetricEvent());
 
       const options = mockFetch.mock.calls[0]![1] as RequestInit;
-      const body = JSON.parse(options.body as string);
+      const headers = options.headers as Record<string, string>;
+      expect(headers['Content-Type']).toBe('application/x-protobuf');
+      expect(headers['Content-Encoding']).toBe('snappy');
+      expect(headers['X-Prometheus-Remote-Write-Version']).toBe('0.1.0');
+    });
 
-      expect(body.resourceMetrics).toBeDefined();
-      expect(body.resourceMetrics[0].scopeMetrics[0].metrics).toHaveLength(2);
+    it('should send binary body (not JSON)', async () => {
+      const exporter = createCloudExporter();
+
+      await exporter.onMetricEvent(makeMetricEvent());
+      await exporter.onMetricEvent(makeMetricEvent());
+
+      const options = mockFetch.mock.calls[0]![1] as RequestInit;
+      expect(options.body).toBeInstanceOf(Uint8Array);
     });
 
     it('should skip metrics when mimirEndpoint is not set', async () => {
