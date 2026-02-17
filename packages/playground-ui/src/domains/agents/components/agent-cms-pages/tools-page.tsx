@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { SectionHeader } from '@/domains/cms';
@@ -17,12 +17,13 @@ import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/compo
 import { stringToColor } from '@/lib/colors';
 import { Switch } from '@/ds/components/Switch';
 import { cn } from '@/lib/utils';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
   const { data: tools, isLoading: isLoadingTools } = useTools();
-
+  const [search, setSearch] = useState('');
   const selectedTools = useWatch({ control, name: 'tools' });
   const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
   const variables = useWatch({ control, name: 'variables' });
@@ -101,6 +102,10 @@ export function ToolsPage() {
     [form, selectedIntegrationTools],
   );
 
+  const filteredOptions = useMemo(() => {
+    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6 p-4">
@@ -122,9 +127,11 @@ export function ToolsPage() {
             <SubSectionHeader title="Available Tools" icon={<ToolsIcon />} />
           </Section.Header>
 
-          {options.length > 0 && (
+          <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
+
+          {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
-              {options.map(tool => {
+              {filteredOptions.map(tool => {
                 const bg = stringToColor(tool.value);
                 const text = stringToColor(tool.value, 25);
                 const isSelected = selectedToolIds.includes(tool.value);
