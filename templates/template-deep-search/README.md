@@ -29,27 +29,9 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 
 ## Quickstart 🚀
 
-1. **Clone the template**
-
-   ```bash
-   npx create-mastra@latest --template deep-search
-   cd deep-search
-   ```
-
-2. **Add your API keys** Create a `.env` file:
-
-   ```bash
-   OPENAI_API_KEY=sk-...
-   EXA_API_KEY=...
-   ```
-
-3. **Start the dev server**
-
-   ```bash
-   npm run dev
-   ```
-
-   This starts Mastra Studio at [localhost:4111](http://localhost:4111).
+1. **Clone the template** Run `npx create-mastra@latest --template deep-search` to scaffold the project locally.
+2. **Add your API keys** Copy `.env.example` to `.env` and fill in your keys.
+3. **Start the dev server** Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
 ## Making it yours
 
