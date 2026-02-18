@@ -1,5 +1,315 @@
 # @mastra/server
 
+## 1.4.0
+
+### Minor Changes
+
+- Added REST API routes for Datasets and Experiments. New endpoints under `/datasets` for full CRUD on datasets, items, versions, experiments, and experiment results. Includes batch operations and experiment comparison. ([#12747](https://github.com/mastra-ai/mastra/pull/12747))
+
+- Added observational memory configuration support for stored agents. When creating or editing a stored agent in the playground, you can now enable observational memory and configure its settings including model provider/name, scope (thread or resource), share token budget, and detailed observer/reflector parameters like token limits, buffer settings, and blocking thresholds. The configuration is serialized as part of the agent's memory config and round-trips through storage. ([#12962](https://github.com/mastra-ai/mastra/pull/12962))
+
+  **Example usage in the playground:**
+
+  Enable the Observational Memory toggle in the Memory section, then configure:
+  - Top-level model (provider + model) used by both observer and reflector
+  - Scope: `thread` (per-conversation) or `resource` (shared across threads)
+  - Expand **Observer** or **Reflector** sections to override models and tune token budgets
+
+  **Programmatic usage via client SDK:**
+
+  ```ts
+  await client.createStoredAgent({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await client.createStoredAgent({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+  **Programmatic usage via editor:**
+
+  ```ts
+  await editor.agent.create({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await editor.agent.create({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed the /api/tools endpoint returning an empty list even when tools are registered on the Mastra instance. Closes #12983 ([#13008](https://github.com/mastra-ai/mastra/pull/13008))
+
+- Fixed custom API routes registered via `registerApiRoute()` being silently ignored by Koa, Express, Fastify, and Hono server adapters. Routes previously appeared in the OpenAPI spec but returned 404 at runtime. Custom routes now work correctly across all server adapters. ([#12960](https://github.com/mastra-ai/mastra/pull/12960))
+
+  **Example:**
+
+  ```ts
+  import Koa from 'koa';
+  import { Mastra } from '@mastra/core';
+  import { registerApiRoute } from '@mastra/core/server';
+  import { MastraServer } from '@mastra/koa';
+
+  const mastra = new Mastra({
+    server: {
+      apiRoutes: [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello!' }),
+        }),
+      ],
+    },
+  });
+
+  const app = new Koa();
+  const server = new MastraServer({ app, mastra });
+  await server.init();
+  // GET /hello now returns 200 instead of 404
+  ```
+
+- Added API routes for stored MCP clients and tool provider discovery. ([#12974](https://github.com/mastra-ai/mastra/pull/12974))
+
+  **Stored MCP Client Routes**
+
+  New REST endpoints for managing stored MCP client configurations:
+  - `GET /api/stored-mcp-clients` — List all stored MCP clients
+  - `GET /api/stored-mcp-clients/:id` — Get a specific MCP client
+  - `POST /api/stored-mcp-clients` — Create a new MCP client
+  - `PATCH /api/stored-mcp-clients/:id` — Update an existing MCP client
+  - `DELETE /api/stored-mcp-clients/:id` — Delete an MCP client
+
+  ```ts
+  // Create a stored MCP client
+  const response = await fetch('/api/stored-mcp-clients', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: 'my-mcp-client',
+      name: 'My MCP Client',
+      servers: {
+        'github-server': { url: 'https://mcp.github.com/sse' },
+      },
+    }),
+  });
+  ```
+
+  **Tool Provider Routes**
+
+  New REST endpoints for browsing registered tool providers and their tools:
+  - `GET /api/tool-providers` — List all registered tool providers with metadata
+  - `GET /api/tool-providers/:providerId/toolkits` — List toolkits for a provider
+  - `GET /api/tool-providers/:providerId/tools` — List tools (with optional toolkit/search filtering)
+  - `GET /api/tool-providers/:providerId/tools/:toolSlug/schema` — Get input schema for a tool
+
+  ```ts
+  // List all registered tool providers
+  const providers = await fetch('/api/tool-providers');
+
+  // Browse tools in a specific toolkit
+  const tools = await fetch('/api/tool-providers/composio/tools?toolkit=github');
+
+  // Get schema for a specific tool
+  const schema = await fetch('/api/tool-providers/composio/tools/GITHUB_LIST_ISSUES/schema');
+  ```
+
+  Updated stored agent schemas to include `mcpClients` and `integrationTools` conditional fields, and updated agent version tracking accordingly.
+
+- Fixed requestContextSchema missing from the agent list API response. Agents with a requestContextSchema now correctly include it when listed via GET /agents. ([#12954](https://github.com/mastra-ai/mastra/pull/12954))
+
+- Expose filesystem info from getInfo() in the GET /api/workspaces/:id API response, including provider type, status, readOnly, and provider-specific metadata. ([#12971](https://github.com/mastra-ai/mastra/pull/12971))
+
+- Updated dependencies [[`7ef618f`](https://github.com/mastra-ai/mastra/commit/7ef618f3c49c27e2f6b27d7f564c557c0734325b), [`b373564`](https://github.com/mastra-ai/mastra/commit/b37356491d43b4d53067f10cb669abaf2502f218), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`b896b41`](https://github.com/mastra-ai/mastra/commit/b896b41343de7fcc14442fb40fe82d189e65bbe2), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428), [`0831bbb`](https://github.com/mastra-ai/mastra/commit/0831bbb5bc750c18e9b22b45f18687c964b70828), [`63f7eda`](https://github.com/mastra-ai/mastra/commit/63f7eda605eb3e0c8c35ee3912ffe7c999c69f69), [`a5b67a3`](https://github.com/mastra-ai/mastra/commit/a5b67a3589a74415feb663a55d1858324a2afde9), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`7567222`](https://github.com/mastra-ai/mastra/commit/7567222b1366f0d39980594792dd9d5060bfe2ab), [`af71458`](https://github.com/mastra-ai/mastra/commit/af71458e3b566f09c11d0e5a0a836dc818e7a24a), [`eb36bd8`](https://github.com/mastra-ai/mastra/commit/eb36bd8c52fcd6ec9674ac3b7a6412405b5983e1), [`3cbf121`](https://github.com/mastra-ai/mastra/commit/3cbf121f55418141924754a83102aade89835947)]:
+  - @mastra/core@1.4.0
+
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Added REST API routes for Datasets and Experiments. New endpoints under `/datasets` for full CRUD on datasets, items, versions, experiments, and experiment results. Includes batch operations and experiment comparison. ([#12747](https://github.com/mastra-ai/mastra/pull/12747))
+
+- Added observational memory configuration support for stored agents. When creating or editing a stored agent in the playground, you can now enable observational memory and configure its settings including model provider/name, scope (thread or resource), share token budget, and detailed observer/reflector parameters like token limits, buffer settings, and blocking thresholds. The configuration is serialized as part of the agent's memory config and round-trips through storage. ([#12962](https://github.com/mastra-ai/mastra/pull/12962))
+
+  **Example usage in the playground:**
+
+  Enable the Observational Memory toggle in the Memory section, then configure:
+  - Top-level model (provider + model) used by both observer and reflector
+  - Scope: `thread` (per-conversation) or `resource` (shared across threads)
+  - Expand **Observer** or **Reflector** sections to override models and tune token budgets
+
+  **Programmatic usage via client SDK:**
+
+  ```ts
+  await client.createStoredAgent({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await client.createStoredAgent({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+  **Programmatic usage via editor:**
+
+  ```ts
+  await editor.agent.create({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await editor.agent.create({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed the /api/tools endpoint returning an empty list even when tools are registered on the Mastra instance. Closes #12983 ([#13008](https://github.com/mastra-ai/mastra/pull/13008))
+
+- Fixed custom API routes registered via `registerApiRoute()` being silently ignored by Koa, Express, Fastify, and Hono server adapters. Routes previously appeared in the OpenAPI spec but returned 404 at runtime. Custom routes now work correctly across all server adapters. ([#12960](https://github.com/mastra-ai/mastra/pull/12960))
+
+  **Example:**
+
+  ```ts
+  import Koa from 'koa';
+  import { Mastra } from '@mastra/core';
+  import { registerApiRoute } from '@mastra/core/server';
+  import { MastraServer } from '@mastra/koa';
+
+  const mastra = new Mastra({
+    server: {
+      apiRoutes: [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello!' }),
+        }),
+      ],
+    },
+  });
+
+  const app = new Koa();
+  const server = new MastraServer({ app, mastra });
+  await server.init();
+  // GET /hello now returns 200 instead of 404
+  ```
+
+- Added API routes for stored MCP clients and tool provider discovery. ([#12974](https://github.com/mastra-ai/mastra/pull/12974))
+
+  **Stored MCP Client Routes**
+
+  New REST endpoints for managing stored MCP client configurations:
+  - `GET /api/stored-mcp-clients` — List all stored MCP clients
+  - `GET /api/stored-mcp-clients/:id` — Get a specific MCP client
+  - `POST /api/stored-mcp-clients` — Create a new MCP client
+  - `PATCH /api/stored-mcp-clients/:id` — Update an existing MCP client
+  - `DELETE /api/stored-mcp-clients/:id` — Delete an MCP client
+
+  ```ts
+  // Create a stored MCP client
+  const response = await fetch('/api/stored-mcp-clients', {
+    method: 'POST',
+    body: JSON.stringify({
+      id: 'my-mcp-client',
+      name: 'My MCP Client',
+      servers: {
+        'github-server': { url: 'https://mcp.github.com/sse' },
+      },
+    }),
+  });
+  ```
+
+  **Tool Provider Routes**
+
+  New REST endpoints for browsing registered tool providers and their tools:
+  - `GET /api/tool-providers` — List all registered tool providers with metadata
+  - `GET /api/tool-providers/:providerId/toolkits` — List toolkits for a provider
+  - `GET /api/tool-providers/:providerId/tools` — List tools (with optional toolkit/search filtering)
+  - `GET /api/tool-providers/:providerId/tools/:toolSlug/schema` — Get input schema for a tool
+
+  ```ts
+  // List all registered tool providers
+  const providers = await fetch('/api/tool-providers');
+
+  // Browse tools in a specific toolkit
+  const tools = await fetch('/api/tool-providers/composio/tools?toolkit=github');
+
+  // Get schema for a specific tool
+  const schema = await fetch('/api/tool-providers/composio/tools/GITHUB_LIST_ISSUES/schema');
+  ```
+
+  Updated stored agent schemas to include `mcpClients` and `integrationTools` conditional fields, and updated agent version tracking accordingly.
+
+- Fixed requestContextSchema missing from the agent list API response. Agents with a requestContextSchema now correctly include it when listed via GET /agents. ([#12954](https://github.com/mastra-ai/mastra/pull/12954))
+
+- Expose filesystem info from getInfo() in the GET /api/workspaces/:id API response, including provider type, status, readOnly, and provider-specific metadata. ([#12971](https://github.com/mastra-ai/mastra/pull/12971))
+
+- Updated dependencies [[`7ef618f`](https://github.com/mastra-ai/mastra/commit/7ef618f3c49c27e2f6b27d7f564c557c0734325b), [`b373564`](https://github.com/mastra-ai/mastra/commit/b37356491d43b4d53067f10cb669abaf2502f218), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`b896b41`](https://github.com/mastra-ai/mastra/commit/b896b41343de7fcc14442fb40fe82d189e65bbe2), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428), [`0831bbb`](https://github.com/mastra-ai/mastra/commit/0831bbb5bc750c18e9b22b45f18687c964b70828), [`63f7eda`](https://github.com/mastra-ai/mastra/commit/63f7eda605eb3e0c8c35ee3912ffe7c999c69f69), [`a5b67a3`](https://github.com/mastra-ai/mastra/commit/a5b67a3589a74415feb663a55d1858324a2afde9), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`7567222`](https://github.com/mastra-ai/mastra/commit/7567222b1366f0d39980594792dd9d5060bfe2ab), [`af71458`](https://github.com/mastra-ai/mastra/commit/af71458e3b566f09c11d0e5a0a836dc818e7a24a), [`eb36bd8`](https://github.com/mastra-ai/mastra/commit/eb36bd8c52fcd6ec9674ac3b7a6412405b5983e1), [`3cbf121`](https://github.com/mastra-ai/mastra/commit/3cbf121f55418141924754a83102aade89835947)]:
+  - @mastra/core@1.4.0-alpha.0
+
 ## 1.3.0
 
 ### Minor Changes

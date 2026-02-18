@@ -9,6 +9,7 @@ import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
+import { ToolNotFoundError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -44,6 +45,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   // Get tracing context from modelSpanTracker if available
   const tracingContext = rest.modelSpanTracker?.getTracingContext();
 
+  // Create a ProcessorStreamWriter from outputWriter so processOutputStream can emit custom chunks
+  const streamWriter = rest.outputWriter
+    ? { custom: async (data: { type: string }) => rest.outputWriter(data as ChunkType<OUTPUT>) }
+    : undefined;
+
   // Helper function to process a chunk through output processors and enqueue it
   async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
     if (processorRunner && rest.processorStates) {
@@ -59,6 +65,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         tracingContext,
         rest.requestContext,
         rest.messageList,
+        0,
+        streamWriter,
       );
 
       if (blocked) {
@@ -137,6 +145,77 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             createdAt: new Date(),
           };
           rest.messageList.add(msg, 'response');
+        }
+
+        // When all errors are tool-not-found errors, continue the agentic loop
+        // so the model can self-correct with the correct tool name.
+        // For other errors (e.g., tool execution failures), bail as before.
+        const allErrorsAreToolNotFound =
+          errorResults?.length > 0 && errorResults.every(tc => tc.error instanceof ToolNotFoundError);
+
+        // Check for pending HITL tool calls (tools with no result and no error).
+        // In mixed turns with both ToolNotFoundError and pending HITL tools,
+        // the HITL suspension path should take priority over continuing the loop.
+        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error);
+
+        if (allErrorsAreToolNotFound && !hasPendingHITL) {
+          // Process any successful tool results from this turn before continuing.
+          // In a mixed turn (e.g., one valid tool + one hallucinated), the successful
+          // results need their chunks emitted and messages added to the messageList.
+          const successfulResults = inputData.filter(tc => tc.result !== undefined);
+          if (successfulResults.length) {
+            for (const toolCall of successfulResults) {
+              const chunk: ChunkType<OUTPUT> = {
+                type: 'tool-result',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  result: toolCall.result,
+                  providerMetadata: toolCall.providerMetadata,
+                  providerExecuted: toolCall.providerExecuted,
+                },
+              };
+              await processAndEnqueueChunk(chunk);
+            }
+
+            const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+            const successMessage: MastraDBMessage = {
+              id: successMessageId || '',
+              role: 'assistant' as const,
+              content: {
+                format: 2,
+                parts: successfulResults.map(toolCall => ({
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    args: toolCall.args,
+                    result: toolCall.result,
+                  },
+                  ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                })),
+              },
+              createdAt: new Date(),
+            };
+            rest.messageList.add(successMessage, 'response');
+          }
+
+          // Continue the loop — the error messages are already in the messageList,
+          // so the model will see them and can retry with correct tool names
+          initialResult.stepResult.isContinued = true;
+          initialResult.stepResult.reason = 'tool-calls';
+          return {
+            ...initialResult,
+            messages: {
+              all: rest.messageList.get.all.aiV5.model(),
+              user: rest.messageList.get.input.aiV5.model(),
+              nonUser: rest.messageList.get.response.aiV5.model(),
+            },
+          };
         }
 
         // Only set isContinued = false if this is NOT a retry scenario

@@ -43,6 +43,7 @@ export function AgentCreateContent({ onSuccess, hideSubAgentCreate }: AgentCreat
                       rate: value.sampling.rate || 0,
                     }
                   : undefined,
+                rules: value.rules,
               },
             ]),
           )
@@ -58,9 +59,8 @@ export function AgentCreateContent({ onSuccess, hideSubAgentCreate }: AgentCreat
         })),
         model: values.model,
         tools: values.tools && Object.keys(values.tools).length > 0 ? values.tools : undefined,
-        workflows:
-          values.workflows && Object.keys(values.workflows).length > 0 ? Object.keys(values.workflows) : undefined,
-        agents: values.agents && Object.keys(values.agents).length > 0 ? Object.keys(values.agents) : undefined,
+        workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
+        agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         scorers,
         memory: values.memory?.enabled
           ? {

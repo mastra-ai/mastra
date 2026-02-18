@@ -9,6 +9,11 @@ import type {
   StorageScorerDefinitionType,
   StorageWorkflowRun,
   ObservationalMemoryRecord,
+  DatasetRecord,
+  DatasetItemRow,
+  DatasetVersion,
+  Experiment,
+  ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
 import type { MCPClientVersion } from './mcp-clients';
@@ -41,6 +46,15 @@ export class InMemoryDB {
   /** Observational memory records, keyed by resourceId, each holding array of records (generations) */
   readonly observationalMemory = new Map<string, ObservationalMemoryRecord[]>();
 
+  // Dataset domain maps
+  readonly datasets = new Map<string, DatasetRecord>();
+  readonly datasetItems = new Map<string, DatasetItemRow[]>();
+  readonly datasetVersions = new Map<string, DatasetVersion>();
+
+  // Experiment domain maps
+  readonly experiments = new Map<string, Experiment>();
+  readonly experimentResults = new Map<string, ExperimentResult>();
+
   /**
    * Clears all data from all collections.
    * Useful for testing.
@@ -61,5 +75,10 @@ export class InMemoryDB {
     this.mcpClients.clear();
     this.mcpClientVersions.clear();
     this.observationalMemory.clear();
+    this.datasets.clear();
+    this.datasetItems.clear();
+    this.datasetVersions.clear();
+    this.experiments.clear();
+    this.experimentResults.clear();
   }
 }

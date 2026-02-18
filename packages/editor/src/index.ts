@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core';
 import type { IMastraEditor, MastraEditorConfig } from '@mastra/core/editor';
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
+import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
@@ -38,7 +39,7 @@ export class MastraEditor implements IMastraEditor {
   constructor(config?: MastraEditorConfig) {
     this.__logger = config?.logger;
     this.__toolProviders = config?.toolProviders ?? {};
-    this.__processorProviders = config?.processorProviders ?? {};
+    this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
     this.agent = new EditorAgentNamespace(this);
     this.mcp = new EditorMCPNamespace(this);
     this.prompt = new EditorPromptNamespace(this);

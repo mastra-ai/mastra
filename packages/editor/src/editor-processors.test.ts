@@ -724,7 +724,7 @@ describe('Stored Agents with Processor Providers', () => {
         agent: makeStoredAgentConfig('agent-versioned', { inputProcessors: graphV1 }),
       });
 
-      // Version 2: suffixer added, tagger removed
+      // Version 2: suffixer as output, no input processors
       const graphV2: StoredProcessorGraph = {
         steps: [
           {
@@ -734,11 +734,16 @@ describe('Stored Agents with Processor Providers', () => {
         ],
       };
 
-      await agentsStore?.update({
-        id: 'agent-versioned',
+      await agentsStore?.createVersion({
+        id: 'v2-id',
+        agentId: 'agent-versioned',
+        versionNumber: 2,
+        name: 'Agent agent-versioned',
+        instructions: 'You are a test assistant',
+        model: { provider: 'openai', name: 'gpt-4' },
         outputProcessors: graphV2,
-        // Clear input processors in V2
-        inputProcessors: { steps: [] } as StoredProcessorGraph,
+        changedFields: ['outputProcessors', 'inputProcessors'],
+        changeMessage: 'V2: replaced input with output processors',
       });
 
       const editor = new MastraEditor({
@@ -765,7 +770,7 @@ describe('Stored Agents with Processor Providers', () => {
   });
 
   describe('ProcessorProvider registration on MastraEditor', () => {
-    it('should list all registered processor providers', () => {
+    it('should list all registered processor providers including built-ins', () => {
       const tagger = makeTaggingInputProvider('tagger', 'X');
       const suffixer = makeOutputSuffixProvider('suffixer', '!');
 
@@ -774,9 +779,19 @@ describe('Stored Agents with Processor Providers', () => {
       });
 
       const providers = editor.listProcessorProviders();
-      expect(Object.keys(providers)).toEqual(['tagger', 'suffixer']);
+      // Custom providers are present
       expect(providers['tagger']).toBe(tagger);
       expect(providers['suffixer']).toBe(suffixer);
+      // Built-in providers are also present
+      expect(providers['unicode-normalizer']).toBeDefined();
+      expect(providers['token-limiter']).toBeDefined();
+      expect(providers['tool-call-filter']).toBeDefined();
+      expect(providers['batch-parts']).toBeDefined();
+      expect(providers['moderation']).toBeDefined();
+      expect(providers['prompt-injection-detector']).toBeDefined();
+      expect(providers['pii-detector']).toBeDefined();
+      expect(providers['language-detector']).toBeDefined();
+      expect(providers['system-prompt-scrubber']).toBeDefined();
     });
 
     it('should return individual provider by id', () => {
@@ -788,6 +803,18 @@ describe('Stored Agents with Processor Providers', () => {
 
       expect(editor.getProcessorProvider('tagger')).toBe(tagger);
       expect(editor.getProcessorProvider('nonexistent')).toBeUndefined();
+    });
+
+    it('should allow custom providers to override built-in ones', () => {
+      const customUnicode = makeTaggingInputProvider('unicode-normalizer', 'CUSTOM');
+
+      const editor = new MastraEditor({
+        processorProviders: { 'unicode-normalizer': customUnicode },
+      });
+
+      const providers = editor.listProcessorProviders();
+      // Custom provider overrides the built-in one
+      expect(providers['unicode-normalizer']).toBe(customUnicode);
     });
   });
 

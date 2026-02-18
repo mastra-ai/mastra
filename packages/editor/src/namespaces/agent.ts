@@ -126,24 +126,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   /**
-   * Accumulate all matching variants for an array-typed field.
-   * Each matching variant's value (an array) is concatenated in order.
-   * Variants with no rules are treated as unconditional (always included).
-   */
-  private accumulateArrayVariants<T>(
-    variants: StorageConditionalVariant<T[]>[],
-    context: Record<string, unknown>,
-  ): T[] {
-    const result: T[] = [];
-    for (const variant of variants) {
-      if (!variant.rules || evaluateRuleGroup(variant.rules, context)) {
-        result.push(...variant.value);
-      }
-    }
-    return result;
-  }
-
-  /**
    * Accumulate all matching variants for an object/record-typed field.
    * Each matching variant's value is shallow-merged in order, so later
    * matches override keys from earlier ones.
@@ -249,29 +231,29 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       tools = { ...registryTools, ...mcpTools, ...integrationTools };
     }
 
-    // Workflows (array): accumulate by concatenating all matching variants
+    // Workflows (record): accumulate by merging all matching variants
     const workflows = hasConditionalWorkflows
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.workflows as StorageConditionalVariant<string[]>[],
+          const resolved = this.accumulateObjectVariants(
+            storedAgent.workflows as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
             ctx,
           );
           return this.resolveStoredWorkflows(resolved);
         }
-      : this.resolveStoredWorkflows(storedAgent.workflows as string[] | undefined);
+      : this.resolveStoredWorkflows(storedAgent.workflows as Record<string, StorageToolConfig> | undefined);
 
-    // Agents (array): accumulate by concatenating all matching variants
+    // Agents (record): accumulate by merging all matching variants
     const agents = hasConditionalAgents
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateArrayVariants(
-            storedAgent.agents as StorageConditionalVariant<string[]>[],
+          const resolved = this.accumulateObjectVariants(
+            storedAgent.agents as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
             ctx,
           );
           return this.resolveStoredAgents(resolved);
         }
-      : this.resolveStoredAgents(storedAgent.agents as string[] | undefined);
+      : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | undefined);
 
     // Memory (object): accumulate by merging config from all matching variants
     const memory = hasConditionalMemory
@@ -690,13 +672,16 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   private resolveStoredWorkflows(
-    storedWorkflows?: string[],
+    storedWorkflows?: Record<string, StorageToolConfig>,
   ): Record<string, Workflow<any, any, any, any, any, any, any>> {
-    if (!storedWorkflows || storedWorkflows.length === 0) return {};
+    if (!storedWorkflows) return {};
     if (!this.mastra) return {};
 
+    const keys = Object.keys(storedWorkflows);
+    if (keys.length === 0) return {};
+
     const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any, any>> = {};
-    for (const workflowKey of storedWorkflows) {
+    for (const workflowKey of keys) {
       try {
         resolvedWorkflows[workflowKey] = this.mastra.getWorkflow(workflowKey);
       } catch {
@@ -710,12 +695,15 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return resolvedWorkflows;
   }
 
-  private resolveStoredAgents(storedAgents?: string[]): Record<string, Agent<any>> {
-    if (!storedAgents || storedAgents.length === 0) return {};
+  private resolveStoredAgents(storedAgents?: Record<string, StorageToolConfig>): Record<string, Agent<any>> {
+    if (!storedAgents) return {};
     if (!this.mastra) return {};
 
+    const keys = Object.keys(storedAgents);
+    if (keys.length === 0) return {};
+
     const resolvedAgents: Record<string, Agent<any>> = {};
-    for (const agentKey of storedAgents) {
+    for (const agentKey of keys) {
       try {
         resolvedAgents[agentKey] = this.mastra.getAgent(agentKey);
       } catch {
@@ -904,8 +892,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const workflowKeys = Object.keys(workflows || {});
 
     // 5. Extract sub-agent keys
-    const agents = await agent.listAgents({ requestContext });
-    const agentKeys = Object.keys(agents || {});
+    const agentsResolved = await agent.listAgents({ requestContext });
+    const agentKeys = Object.keys(agentsResolved || {});
 
     // 6. Extract memory config
     const memory = await agent.getMemory({ requestContext });
@@ -953,8 +941,8 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       instructions: instructionsStr,
       model,
       tools: toolKeys.length > 0 ? Object.fromEntries(toolKeys.map(key => [key, {}])) : undefined,
-      workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
-      agents: agentKeys.length > 0 ? agentKeys : undefined,
+      workflows: workflowKeys.length > 0 ? Object.fromEntries(workflowKeys.map(key => [key, {}])) : undefined,
+      agents: agentKeys.length > 0 ? Object.fromEntries(agentKeys.map(key => [key, {}])) : undefined,
       memory: memoryConfig,
       scorers: storedScorers,
       defaultOptions: storageDefaultOptions,

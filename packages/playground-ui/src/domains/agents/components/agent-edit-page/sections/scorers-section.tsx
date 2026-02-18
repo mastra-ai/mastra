@@ -13,7 +13,7 @@ import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
-import type { AgentFormValues } from '../utils/form-validation';
+import type { AgentFormValues, ScorerConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
 import { SideDialog } from '@/ds/components/SideDialog';
 
@@ -21,16 +21,6 @@ interface ScorersSectionProps {
   control: Control<AgentFormValues>;
   error?: string;
   readOnly?: boolean;
-}
-
-interface ScoringSamplingConfig {
-  type: 'ratio';
-  rate?: number;
-}
-
-interface ScorerConfig {
-  description?: string;
-  sampling?: ScoringSamplingConfig;
 }
 
 export function ScorersSection({ control, error, readOnly = false }: ScorersSectionProps) {
@@ -81,7 +71,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
             });
           };
 
-          const handleSamplingChange = (scorerId: string, samplingConfig: ScoringSamplingConfig | undefined) => {
+          const handleSamplingChange = (scorerId: string, samplingConfig: ScorerConfig['sampling'] | undefined) => {
             field.onChange({
               ...selectedScorers,
               [scorerId]: { ...selectedScorers[scorerId], sampling: samplingConfig },
@@ -176,9 +166,9 @@ interface ScorerConfigPanelProps {
   scorerId: string;
   scorerName: string;
   description: string;
-  samplingConfig?: ScoringSamplingConfig;
+  samplingConfig?: ScorerConfig['sampling'];
   onDescriptionChange: (description: string) => void;
-  onSamplingChange: (config: ScoringSamplingConfig | undefined) => void;
+  onSamplingChange: (config: ScorerConfig['sampling'] | undefined) => void;
   onRemove: () => void;
   readOnly?: boolean;
 }

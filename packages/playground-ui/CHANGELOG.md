@@ -1,5 +1,243 @@
 # @mastra/playground-ui
 
+## 11.0.0
+
+### Minor Changes
+
+- Added Datasets and Experiments UI. Includes dataset management (create, edit, delete, duplicate), item CRUD with CSV/JSON import and export, SCD-2 version browsing and comparison, experiment triggering with scorer selection, experiment results with trace visualization, and cross-experiment comparison with score deltas. Uses `coreFeatures` runtime flag for feature gating instead of build-time env var. ([#12747](https://github.com/mastra-ai/mastra/pull/12747))
+
+- Add `workflow-step-progress` stream event for foreach workflow steps. Each iteration emits a progress event with `completedCount`, `totalCount`, `currentIndex`, `iterationStatus` (`success` | `failed` | `suspended`), and optional `iterationOutput`. Both the default and evented execution engines emit these events. ([#12838](https://github.com/mastra-ai/mastra/pull/12838))
+
+  The Mastra Studio UI now renders a progress bar with an N/total counter on foreach nodes, updating in real time as iterations complete:
+
+  ```ts
+  // Consuming progress events from the workflow stream
+  const run = workflow.createRun();
+  const result = await run.start({ inputData });
+  const stream = result.stream;
+
+  for await (const chunk of stream) {
+    if (chunk.type === 'workflow-step-progress') {
+      console.log(`${chunk.payload.completedCount}/${chunk.payload.totalCount} - ${chunk.payload.iterationStatus}`);
+    }
+  }
+  ```
+
+  `@mastra/react`: The `mapWorkflowStreamChunkToWatchResult` reducer now accumulates `foreachProgress` from `workflow-step-progress` events into step state, making progress data available to React consumers via the existing workflow watch hooks.
+
+- Added observational memory configuration support for stored agents. When creating or editing a stored agent in the playground, you can now enable observational memory and configure its settings including model provider/name, scope (thread or resource), share token budget, and detailed observer/reflector parameters like token limits, buffer settings, and blocking thresholds. The configuration is serialized as part of the agent's memory config and round-trips through storage. ([#12962](https://github.com/mastra-ai/mastra/pull/12962))
+
+  **Example usage in the playground:**
+
+  Enable the Observational Memory toggle in the Memory section, then configure:
+  - Top-level model (provider + model) used by both observer and reflector
+  - Scope: `thread` (per-conversation) or `resource` (shared across threads)
+  - Expand **Observer** or **Reflector** sections to override models and tune token budgets
+
+  **Programmatic usage via client SDK:**
+
+  ```ts
+  await client.createStoredAgent({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await client.createStoredAgent({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+  **Programmatic usage via editor:**
+
+  ```ts
+  await editor.agent.create({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await editor.agent.create({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+- Revamped agent CMS experience with dedicated route pages for each section (Identity, Instruction Blocks, Tools, Agents, Scorers, Workflows, Memory, Variables) and sidebar navigation ([#13016](https://github.com/mastra-ai/mastra/pull/13016))
+
+- Added ability to create sub-agents on-the-fly via a SideDialog in the Sub-Agents section of the agent editor ([#12952](https://github.com/mastra-ai/mastra/pull/12952))
+
+### Patch Changes
+
+- dependencies updates: ([#12949](https://github.com/mastra-ai/mastra/pull/12949))
+  - Updated dependency [`@codemirror/view@^6.39.13` ↗︎](https://www.npmjs.com/package/@codemirror/view/v/6.39.13) (from `^6.39.12`, in `dependencies`)
+
+- Removed experiment mode from the agent prompt sidebar. The system prompt is now displayed as readonly. ([#12994](https://github.com/mastra-ai/mastra/pull/12994))
+
+- Aligned frontend rule engine types with backend, added support for greater_than_or_equal, less_than_or_equal, exists, and not_exists operators, and switched instruction blocks to use RuleGroup ([#12864](https://github.com/mastra-ai/mastra/pull/12864))
+
+- Skip `awaitBufferStatus` calls when observational memory is disabled. Previously the Studio sidebar would unconditionally hit `/memory/observational-memory/buffer-status` after every agent message, which returns a 400 when OM is not configured and halts agent execution. ([#13025](https://github.com/mastra-ai/mastra/pull/13025))
+
+- Fix prompt experiment localStorage persisting stale prompts: only save to localStorage when the user edits the prompt away from the code-defined value, and clear it when they match. Previously, the code-defined prompt was eagerly saved on first load, causing code changes to agent instructions to be ignored. ([#12929](https://github.com/mastra-ai/mastra/pull/12929))
+
+- Fixed chat briefly showing an empty conversation after sending the first message on a new thread. ([#13018](https://github.com/mastra-ai/mastra/pull/13018))
+
+- Fixed missing validation for the instructions field in the scorer creation form and replaced manual submission state tracking with the mutation hook's built-in pending state ([#12993](https://github.com/mastra-ai/mastra/pull/12993))
+
+- Default Studio file browser to basePath when filesystem containment is disabled, preventing the browser from showing the host root directory. ([#12971](https://github.com/mastra-ai/mastra/pull/12971))
+
+- Updated dependencies [[`7ef618f`](https://github.com/mastra-ai/mastra/commit/7ef618f3c49c27e2f6b27d7f564c557c0734325b), [`b373564`](https://github.com/mastra-ai/mastra/commit/b37356491d43b4d53067f10cb669abaf2502f218), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`3da8a73`](https://github.com/mastra-ai/mastra/commit/3da8a73c9b9f042d528975ca330babc99563bd12), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`b896b41`](https://github.com/mastra-ai/mastra/commit/b896b41343de7fcc14442fb40fe82d189e65bbe2), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428), [`4ba40dc`](https://github.com/mastra-ai/mastra/commit/4ba40dcb6c9ef31eedbb01b6d5b8b0b3c71e5b61), [`0831bbb`](https://github.com/mastra-ai/mastra/commit/0831bbb5bc750c18e9b22b45f18687c964b70828), [`63f7eda`](https://github.com/mastra-ai/mastra/commit/63f7eda605eb3e0c8c35ee3912ffe7c999c69f69), [`a5b67a3`](https://github.com/mastra-ai/mastra/commit/a5b67a3589a74415feb663a55d1858324a2afde9), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`7567222`](https://github.com/mastra-ai/mastra/commit/7567222b1366f0d39980594792dd9d5060bfe2ab), [`40f224e`](https://github.com/mastra-ai/mastra/commit/40f224ec14e9b01a36802d8c5445a547a33992a5), [`af71458`](https://github.com/mastra-ai/mastra/commit/af71458e3b566f09c11d0e5a0a836dc818e7a24a), [`eb36bd8`](https://github.com/mastra-ai/mastra/commit/eb36bd8c52fcd6ec9674ac3b7a6412405b5983e1), [`3cbf121`](https://github.com/mastra-ai/mastra/commit/3cbf121f55418141924754a83102aade89835947)]:
+  - @mastra/core@1.4.0
+  - @mastra/client-js@1.4.0
+  - @mastra/react@0.2.3
+  - @mastra/ai-sdk@1.0.4
+
+## 11.0.0-alpha.0
+
+### Minor Changes
+
+- Added Datasets and Experiments UI. Includes dataset management (create, edit, delete, duplicate), item CRUD with CSV/JSON import and export, SCD-2 version browsing and comparison, experiment triggering with scorer selection, experiment results with trace visualization, and cross-experiment comparison with score deltas. Uses `coreFeatures` runtime flag for feature gating instead of build-time env var. ([#12747](https://github.com/mastra-ai/mastra/pull/12747))
+
+- Add `workflow-step-progress` stream event for foreach workflow steps. Each iteration emits a progress event with `completedCount`, `totalCount`, `currentIndex`, `iterationStatus` (`success` | `failed` | `suspended`), and optional `iterationOutput`. Both the default and evented execution engines emit these events. ([#12838](https://github.com/mastra-ai/mastra/pull/12838))
+
+  The Mastra Studio UI now renders a progress bar with an N/total counter on foreach nodes, updating in real time as iterations complete:
+
+  ```ts
+  // Consuming progress events from the workflow stream
+  const run = workflow.createRun();
+  const result = await run.start({ inputData });
+  const stream = result.stream;
+
+  for await (const chunk of stream) {
+    if (chunk.type === 'workflow-step-progress') {
+      console.log(`${chunk.payload.completedCount}/${chunk.payload.totalCount} - ${chunk.payload.iterationStatus}`);
+    }
+  }
+  ```
+
+  `@mastra/react`: The `mapWorkflowStreamChunkToWatchResult` reducer now accumulates `foreachProgress` from `workflow-step-progress` events into step state, making progress data available to React consumers via the existing workflow watch hooks.
+
+- Added observational memory configuration support for stored agents. When creating or editing a stored agent in the playground, you can now enable observational memory and configure its settings including model provider/name, scope (thread or resource), share token budget, and detailed observer/reflector parameters like token limits, buffer settings, and blocking thresholds. The configuration is serialized as part of the agent's memory config and round-trips through storage. ([#12962](https://github.com/mastra-ai/mastra/pull/12962))
+
+  **Example usage in the playground:**
+
+  Enable the Observational Memory toggle in the Memory section, then configure:
+  - Top-level model (provider + model) used by both observer and reflector
+  - Scope: `thread` (per-conversation) or `resource` (shared across threads)
+  - Expand **Observer** or **Reflector** sections to override models and tune token budgets
+
+  **Programmatic usage via client SDK:**
+
+  ```ts
+  await client.createStoredAgent({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await client.createStoredAgent({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+  **Programmatic usage via editor:**
+
+  ```ts
+  await editor.agent.create({
+    name: 'My Agent',
+    // ...other config
+    memory: {
+      observationalMemory: true, // enable with defaults
+      options: { lastMessages: 40 },
+    },
+  });
+
+  // Or with custom configuration:
+  await editor.agent.create({
+    name: 'My Agent',
+    memory: {
+      observationalMemory: {
+        model: 'google/gemini-2.5-flash',
+        scope: 'resource',
+        shareTokenBudget: true,
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 60000 },
+      },
+      options: { lastMessages: 40 },
+    },
+  });
+  ```
+
+- Revamped agent CMS experience with dedicated route pages for each section (Identity, Instruction Blocks, Tools, Agents, Scorers, Workflows, Memory, Variables) and sidebar navigation ([#13016](https://github.com/mastra-ai/mastra/pull/13016))
+
+- Added ability to create sub-agents on-the-fly via a SideDialog in the Sub-Agents section of the agent editor ([#12952](https://github.com/mastra-ai/mastra/pull/12952))
+
+### Patch Changes
+
+- dependencies updates: ([#12949](https://github.com/mastra-ai/mastra/pull/12949))
+  - Updated dependency [`@codemirror/view@^6.39.13` ↗︎](https://www.npmjs.com/package/@codemirror/view/v/6.39.13) (from `^6.39.12`, in `dependencies`)
+
+- Removed experiment mode from the agent prompt sidebar. The system prompt is now displayed as readonly. ([#12994](https://github.com/mastra-ai/mastra/pull/12994))
+
+- Aligned frontend rule engine types with backend, added support for greater_than_or_equal, less_than_or_equal, exists, and not_exists operators, and switched instruction blocks to use RuleGroup ([#12864](https://github.com/mastra-ai/mastra/pull/12864))
+
+- Skip `awaitBufferStatus` calls when observational memory is disabled. Previously the Studio sidebar would unconditionally hit `/memory/observational-memory/buffer-status` after every agent message, which returns a 400 when OM is not configured and halts agent execution. ([#13025](https://github.com/mastra-ai/mastra/pull/13025))
+
+- Fix prompt experiment localStorage persisting stale prompts: only save to localStorage when the user edits the prompt away from the code-defined value, and clear it when they match. Previously, the code-defined prompt was eagerly saved on first load, causing code changes to agent instructions to be ignored. ([#12929](https://github.com/mastra-ai/mastra/pull/12929))
+
+- Fixed chat briefly showing an empty conversation after sending the first message on a new thread. ([#13018](https://github.com/mastra-ai/mastra/pull/13018))
+
+- Fixed missing validation for the instructions field in the scorer creation form and replaced manual submission state tracking with the mutation hook's built-in pending state ([#12993](https://github.com/mastra-ai/mastra/pull/12993))
+
+- Default Studio file browser to basePath when filesystem containment is disabled, preventing the browser from showing the host root directory. ([#12971](https://github.com/mastra-ai/mastra/pull/12971))
+
+- Updated dependencies [[`7ef618f`](https://github.com/mastra-ai/mastra/commit/7ef618f3c49c27e2f6b27d7f564c557c0734325b), [`b373564`](https://github.com/mastra-ai/mastra/commit/b37356491d43b4d53067f10cb669abaf2502f218), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`3da8a73`](https://github.com/mastra-ai/mastra/commit/3da8a73c9b9f042d528975ca330babc99563bd12), [`927c2af`](https://github.com/mastra-ai/mastra/commit/927c2af9792286c122e04409efce0f3c804f777f), [`b896b41`](https://github.com/mastra-ai/mastra/commit/b896b41343de7fcc14442fb40fe82d189e65bbe2), [`6415277`](https://github.com/mastra-ai/mastra/commit/6415277a438faa00db2af850ead5dee25f40c428), [`4ba40dc`](https://github.com/mastra-ai/mastra/commit/4ba40dcb6c9ef31eedbb01b6d5b8b0b3c71e5b61), [`0831bbb`](https://github.com/mastra-ai/mastra/commit/0831bbb5bc750c18e9b22b45f18687c964b70828), [`63f7eda`](https://github.com/mastra-ai/mastra/commit/63f7eda605eb3e0c8c35ee3912ffe7c999c69f69), [`a5b67a3`](https://github.com/mastra-ai/mastra/commit/a5b67a3589a74415feb663a55d1858324a2afde9), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`877b02c`](https://github.com/mastra-ai/mastra/commit/877b02cdbb15e199184c7f2b8f217be8d3ebada7), [`7567222`](https://github.com/mastra-ai/mastra/commit/7567222b1366f0d39980594792dd9d5060bfe2ab), [`40f224e`](https://github.com/mastra-ai/mastra/commit/40f224ec14e9b01a36802d8c5445a547a33992a5), [`af71458`](https://github.com/mastra-ai/mastra/commit/af71458e3b566f09c11d0e5a0a836dc818e7a24a), [`eb36bd8`](https://github.com/mastra-ai/mastra/commit/eb36bd8c52fcd6ec9674ac3b7a6412405b5983e1), [`3cbf121`](https://github.com/mastra-ai/mastra/commit/3cbf121f55418141924754a83102aade89835947)]:
+  - @mastra/core@1.4.0-alpha.0
+  - @mastra/client-js@1.4.0-alpha.0
+  - @mastra/react@0.2.3-alpha.0
+  - @mastra/ai-sdk@1.0.4
+
 ## 10.0.0
 
 ### Minor Changes

@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -32,7 +33,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -229,7 +230,7 @@ export interface Config<
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
    */
-  workspace?: Workspace;
+  workspace?: AnyWorkspace;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -345,9 +346,17 @@ export class Mastra<
   #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
+  #datasets?: DatasetsManager;
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get datasets(): DatasetsManager {
+    if (!this.#datasets) {
+      this.#datasets = new DatasetsManager(this);
+    }
+    return this.#datasets;
   }
 
   /**
@@ -1240,7 +1249,7 @@ export class Mastra<
    * mastra.addWorkspace(workspace);
    * ```
    */
-  public addWorkspace(workspace: Workspace, key?: string): void {
+  public addWorkspace(workspace: AnyWorkspace, key?: string): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
     }

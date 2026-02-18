@@ -4784,100 +4784,185 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
 
-      it('should throw correct error message in generate when workflow step fails (e.g. tool not found)', async () => {
+      it('should not throw in generate when model calls non-existent tool (returns error to model)', async () => {
         const model = createModelWithNonExistentToolCall();
         const agent = createAgentWithMismatchedTool(model);
 
-        let caughtError: Error | null = null;
-        try {
-          await agent.generate('Please use a tool');
-        } catch (err: any) {
-          caughtError = err;
-        }
+        // With the fix, tool-not-found errors no longer throw.
+        // The error is returned to the model as a tool result, and the loop continues
+        // until maxSteps is reached. The agent completes normally.
+        const result = await agent.generate('Please use a tool', { maxSteps: 2 });
 
-        expect(caughtError).toBeDefined();
-        expect(caughtError).toBeInstanceOf(Error);
-        // The error should contain the actual error message, not "promise 'text' was not resolved"
-        expect(caughtError!.message).toMatch(/Tool nonExistentTool not found/i);
-        expect(caughtError!.message).not.toMatch(/promise.*was not resolved/i);
+        // Should complete without throwing
+        expect(result).toBeDefined();
+
+        // The steps should contain the tool-not-found error with available tool names
+        const toolResults = result.steps.flatMap(s => s.toolResults ?? []);
+        const notFoundResult = toolResults.find(
+          (tr: any) => (tr.payload?.toolName ?? tr.toolName) === 'nonExistentTool',
+        );
+        if (notFoundResult) {
+          const resultValue = (notFoundResult as any).payload?.result ?? (notFoundResult as any).result;
+          expect(String(resultValue)).toMatch(/not found/i);
+          expect(String(resultValue)).toMatch(/existingTool/);
+        }
       });
 
-      it('should have correct error in output.error and fullStream error chunk when workflow step fails in stream', async () => {
+      it('should emit tool-error chunks in stream when model calls non-existent tool', async () => {
         const model = createModelWithNonExistentToolCall();
         const agent = createAgentWithMismatchedTool(model);
 
-        const output = await agent.stream('Please use a tool');
+        const output = await agent.stream('Please use a tool', { maxSteps: 2 });
 
-        let errorChunk: any;
+        const toolErrorChunks: any[] = [];
         for await (const chunk of output.fullStream) {
-          if (chunk.type === 'error') {
-            errorChunk = chunk;
+          if (chunk.type === 'tool-error') {
+            toolErrorChunks.push(chunk);
           }
         }
 
-        // Verify error chunk has correct error
-        expect(errorChunk).toBeDefined();
-        expect(errorChunk.payload.error).toBeDefined();
-        expect(errorChunk.payload.error).toBeInstanceOf(Error);
-        expect((errorChunk.payload.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((errorChunk.payload.error as Error).message).not.toMatch(/promise.*was not resolved/i);
-
-        // Verify output.error has correct error
-        expect(output.error).toBeInstanceOf(Error);
-        expect((output.error as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((output.error as Error).message).not.toMatch(/promise.*was not resolved/i);
-
-        // Verify they are the same instance
-        expect(output.error).toBe(errorChunk.payload.error);
+        // Should have tool-error chunks with the "not found" message and available tool names
+        expect(toolErrorChunks.length).toBeGreaterThan(0);
+        const notFoundChunk = toolErrorChunks.find(
+          (c: any) => c.payload.toolName === 'nonExistentTool' || c.payload.error.message.match(/nonExistentTool/i),
+        );
+        expect(notFoundChunk).toBeDefined();
+        expect(notFoundChunk.payload.error.message).toMatch(/Tool "nonExistentTool" not found/i);
+        expect(notFoundChunk.payload.error.message).toMatch(/existingTool/);
+        expect(notFoundChunk.payload.error.name).toBe('ToolNotFoundError');
       });
 
-      it('should call onError with correct error in generate when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        let onErrorCalled = false;
-        let onErrorArg: string | Error | null = null;
-
-        try {
-          await agent.generate('Please use a tool', {
-            onError: ({ error }) => {
-              onErrorCalled = true;
-              onErrorArg = error;
-            },
-          });
-        } catch {
-          // Expected to throw
-        }
-
-        expect(onErrorCalled).toBe(true);
-        expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
-      });
-
-      it('should call onError with correct error in stream when workflow step fails', async () => {
-        const model = createModelWithNonExistentToolCall();
-        const agent = createAgentWithMismatchedTool(model);
-
-        let onErrorCalled = false;
-        let onErrorArg: string | Error | null = null;
-
-        const output = await agent.stream('Please use a tool', {
-          onError: ({ error }) => {
-            onErrorCalled = true;
-            onErrorArg = error;
+      it('should allow model to self-correct after calling non-existent tool in generate', async () => {
+        // Model first calls wrong tool, then self-corrects, then returns text
+        let callCount = 0;
+        const selfCorrectingModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            callCount++;
+            if (callCount === 1) {
+              // First call: model hallucinates a prefixed tool name
+              return {
+                content: [
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'creating:existingTool',
+                    input: '{"input": "test"}',
+                  },
+                ],
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                warnings: [],
+              };
+            }
+            if (callCount === 2) {
+              // Second call: model self-corrects and calls the correct tool
+              return {
+                content: [
+                  { type: 'tool-call', toolCallId: 'call-2', toolName: 'existingTool', input: '{"input": "test"}' },
+                ],
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                warnings: [],
+              };
+            }
+            // Third call: model returns text (ends the loop)
+            return {
+              content: [{ type: 'text', text: 'Done!' }],
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              warnings: [],
+            };
           },
         });
+        const agent = createAgentWithMismatchedTool(selfCorrectingModel);
 
-        // Consume the stream to trigger the error
-        for await (const _ of output.fullStream) {
-          // Just consume
+        const result = await agent.generate('Please use a tool', { maxSteps: 5 });
+
+        // Should complete successfully — the model self-corrected
+        expect(result).toBeDefined();
+        expect(callCount).toBe(3); // 1 wrong + 1 correct + 1 text response
+      });
+
+      it('should allow model to self-correct after calling non-existent tool in stream', async () => {
+        // Model first calls wrong tool, then self-corrects, then returns text
+        let callCount = 0;
+        const selfCorrectingModel = new MockLanguageModelV2({
+          doStream: async () => {
+            callCount++;
+            if (callCount === 1) {
+              // First call: model hallucinates a prefixed tool name
+              return {
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolCallType: 'function',
+                    toolName: 'creating:existingTool',
+                    input: '{"input": "test"}',
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            }
+            if (callCount === 2) {
+              // Second call: model self-corrects
+              return {
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-2',
+                    toolCallType: 'function',
+                    toolName: 'existingTool',
+                    input: '{"input": "test"}',
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            }
+            // Third call: model returns text (ends the loop)
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'text-delta', textDelta: 'Done!' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+            };
+          },
+        });
+        const agent = createAgentWithMismatchedTool(selfCorrectingModel);
+
+        const output = await agent.stream('Please use a tool', { maxSteps: 5 });
+
+        const toolErrorChunks: any[] = [];
+        const toolResultChunks: any[] = [];
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'tool-error') toolErrorChunks.push(chunk);
+          if (chunk.type === 'tool-result') toolResultChunks.push(chunk);
         }
 
-        expect(onErrorCalled).toBe(true);
-        expect(onErrorArg).toBeInstanceOf(Error);
-        expect((onErrorArg as unknown as Error).message).toMatch(/Tool nonExistentTool not found/i);
-        expect((onErrorArg as unknown as Error).message).not.toMatch(/promise.*was not resolved/i);
+        // Should have a tool-error for the first (wrong) call
+        expect(toolErrorChunks.length).toBeGreaterThan(0);
+        expect(toolErrorChunks[0].payload.error.message).toMatch(/not found/i);
+
+        // Should have a tool-result for the second (correct) call
+        expect(toolResultChunks.length).toBeGreaterThan(0);
+        expect(toolResultChunks[0].payload.toolName).toBe('existingTool');
+
+        expect(callCount).toBe(3); // 1 wrong + 1 correct + 1 text response
       });
     });
 

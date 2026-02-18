@@ -47,11 +47,6 @@ const SAFE_MARKER_NAME = /^mount-[a-z0-9]+$/;
 // =============================================================================
 
 /**
- * Runtime types supported by E2B.
- */
-export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust' | 'java' | 'cpp' | 'r';
-
-/**
  * E2B sandbox provider configuration.
  */
 export interface E2BSandboxOptions extends MastraSandboxOptions {
@@ -79,8 +74,6 @@ export interface E2BSandboxOptions extends MastraSandboxOptions {
   env?: Record<string, string>;
   /** Custom metadata */
   metadata?: Record<string, unknown>;
-  /** Supported runtimes (default: ['node', 'python', 'bash']) */
-  runtimes?: SandboxRuntime[];
 
   /** Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var. */
   domain?: string;
@@ -151,7 +144,6 @@ export class E2BSandbox extends MastraSandbox {
   private readonly templateSpec?: TemplateSpec;
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
-  private readonly configuredRuntimes: SandboxRuntime[];
   private readonly connectionOpts: Record<string, string>;
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
 
@@ -169,7 +161,6 @@ export class E2BSandbox extends MastraSandbox {
     this.templateSpec = options.template;
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
-    this.configuredRuntimes = options.runtimes ?? ['node', 'python', 'bash'];
     this.connectionOpts = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
@@ -187,14 +178,6 @@ export class E2BSandbox extends MastraSandbox {
 
   private generateId(): string {
     return `e2b-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  get supportedRuntimes(): readonly SandboxRuntime[] {
-    return this.configuredRuntimes;
-  }
-
-  get defaultRuntime(): SandboxRuntime {
-    return this.configuredRuntimes[0] ?? 'node';
   }
 
   /**
@@ -424,16 +407,6 @@ export class E2BSandbox extends MastraSandbox {
         `${LOG_PREFIX} Unmounted ${mountPath} (directory not removed: ${rmdirResult.stderr?.trim() || 'not empty'})`,
       );
     }
-  }
-
-  /**
-   * Get list of current mounts in the sandbox.
-   */
-  async getMounts(): Promise<Array<{ path: string; filesystem: string }>> {
-    return Array.from(this.mounts.entries).map(([path, entry]) => ({
-      path,
-      filesystem: entry.filesystem?.provider ?? entry.config?.type ?? 'unknown',
-    }));
   }
 
   /**

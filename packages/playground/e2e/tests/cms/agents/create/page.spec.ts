@@ -6,7 +6,7 @@ function uniqueAgentName(prefix = 'Test Agent') {
   return `${prefix} ${Date.now().toString(36)}`;
 }
 
-// Helper to fill identity sidebar fields (name, description, provider, model)
+// Helper to fill identity fields on the Information page (name, description, provider, model)
 async function fillIdentityFields(
   page: Page,
   options: {
@@ -59,7 +59,10 @@ async function fillRequiredFields(page: Page, agentName?: string) {
     provider: 'OpenAI',
     model: 'gpt-4o-mini',
   });
+
+  await navigateToInstructionBlocksPage(page);
   await fillInstructionBlock(page, 'You are a helpful assistant.');
+  await navigateToIdentityPage(page);
 }
 
 // Helper to add a new instruction block
@@ -69,9 +72,50 @@ async function addInstructionBlock(page: Page) {
   await expect(page.locator('.cm-content')).toHaveCount(countBefore + 1);
 }
 
-// Helper to navigate to the Variables tab
-async function navigateToVariablesTab(page: Page) {
-  await page.getByRole('tab', { name: 'Variables' }).click();
+// Helper to get the CMS sidebar (right side of the layout, not the main app sidebar)
+function getCmsSidebar(page: Page) {
+  return page.getByRole('main').locator('nav');
+}
+
+// Helper to navigate to entity pages via sidebar link clicks (preserves React state)
+async function navigateToInstructionBlocksPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Instructions' }).click();
+  await expect(page.getByText('Add instruction blocks to your agent')).toBeVisible({ timeout: 5000 });
+}
+
+async function navigateToToolsPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Tools' }).click();
+  await expect(page.getByText('Select the tools this agent can use')).toBeVisible({ timeout: 5000 });
+}
+
+async function navigateToWorkflowsPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Workflows' }).click();
+  await expect(page.getByText('Select workflows this agent can trigger')).toBeVisible({ timeout: 5000 });
+}
+
+async function navigateToAgentsPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Agents' }).click();
+  await expect(page.getByText('Select sub-agents for this agent')).toBeVisible({ timeout: 5000 });
+}
+
+async function navigateToScorersPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Scorers' }).click();
+  await expect(page.getByText('Configure scorers for evaluating agent responses')).toBeVisible({ timeout: 5000 });
+}
+
+async function navigateToMemoryPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Memory' }).click();
+  await expect(page.getByText('Configure memory settings')).toBeVisible({ timeout: 5000 });
+}
+
+async function navigateToVariablesPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Variables' }).click();
+  await expect(page.getByText('Variables are dynamic values')).toBeVisible({ timeout: 5000 });
+}
+
+async function navigateToIdentityPage(page: Page) {
+  await getCmsSidebar(page).getByRole('link', { name: 'Identity' }).click();
+  await expect(page.getByText('Define your agent')).toBeVisible({ timeout: 5000 });
 }
 
 // Helper to open Display Conditions on a specific block
@@ -119,6 +163,8 @@ test.afterEach(async () => {
 });
 
 test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
+  const basePath = '/cms/agents/create';
+
   // Helper to get the system prompt section on the agent by-id page
   function getSystemPromptSection(page: Page) {
     return page.locator('h3:has-text("System Prompt")').locator('..');
@@ -154,13 +200,16 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
 
   // Helper to create an agent with one conditional block and one unconditional block
   async function createAgentWithConditionalBlocks(page: Page, agentName: string) {
-    await page.goto('/cms/agents/create');
+    await page.goto(basePath);
 
     await fillIdentityFields(page, {
       name: agentName,
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
     });
+
+    // Navigate to instruction blocks page
+    await navigateToInstructionBlocksPage(page);
 
     // Fill first block with content that will have a display condition
     await fillInstructionBlock(page, 'Admin only content', 0);
@@ -169,13 +218,13 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
     await addInstructionBlock(page);
     await fillInstructionBlock(page, 'Default content', 1);
 
-    // Add variable (required before Display Conditions can appear)
-    // Note: We don't use addVariable() here because the type combobox defaults to "String"
-    // and no longer shows a "Type" placeholder when a default is pre-selected.
-    await navigateToVariablesTab(page);
+    // Navigate to Variables page and add a variable
+    await navigateToVariablesPage(page);
     await page.getByRole('button', { name: /Add variable/ }).click();
     await page.getByPlaceholder('Variable name').last().fill('userRole');
-    await page.getByRole('tab', { name: 'Identity' }).click();
+
+    // Navigate back to instruction blocks page for display conditions
+    await navigateToInstructionBlocksPage(page);
 
     // Add display condition on the first block: userRole equals admin
     await openDisplayConditions(page, 0);
@@ -189,7 +238,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
 
   // Behavior: Creating an agent persists it and it appears in the agents list
   test('creates agent and shows in agents list', async ({ page }) => {
-    await page.goto('/cms/agents/create');
+    await page.goto(basePath);
 
     const agentName = uniqueAgentName('List Verify');
     await fillRequiredFields(page, agentName);
@@ -203,7 +252,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
 
   // Behavior: Data entered during creation (name, description, instructions) is visible on agent detail page
   test('created agent data is visible on agent by-id page', async ({ page }) => {
-    await page.goto('/cms/agents/create');
+    await page.goto(basePath);
 
     const agentName = uniqueAgentName('Data Verify');
     const description = 'A test agent for data verification';
@@ -214,6 +263,8 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
     });
+
+    await navigateToInstructionBlocksPage(page);
     await fillInstructionBlock(page, 'You are a data verification assistant.');
 
     await page.getByRole('button', { name: 'Create agent' }).click();
@@ -234,7 +285,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
 
   // Behavior: Multiple instruction blocks without rules are concatenated in system prompt
   test('agent with 2 instruction blocks shows both on agent by-id page', async ({ page }) => {
-    await page.goto('/cms/agents/create');
+    await page.goto(basePath);
 
     const agentName = uniqueAgentName('Two Blocks');
     await fillIdentityFields(page, {
@@ -243,6 +294,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
       model: 'gpt-4o-mini',
     });
 
+    await navigateToInstructionBlocksPage(page);
     await fillInstructionBlock(page, 'Block 1 content', 0);
     await addInstructionBlock(page);
     await fillInstructionBlock(page, 'Block 2 content', 1);
@@ -257,7 +309,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
 
   // Behavior: Attached workflows, sub-agents, tools, scorers, and memory appear in Overview
   test('agent with all entity types shows them on agent by-id page', async ({ page }) => {
-    await page.goto('/cms/agents/create');
+    await page.goto(basePath);
 
     const agentName = uniqueAgentName('All Entities');
     await fillIdentityFields(page, {
@@ -266,41 +318,40 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
       provider: 'OpenAI',
       model: 'gpt-4o-mini',
     });
+
+    await navigateToInstructionBlocksPage(page);
     await fillInstructionBlock(page, 'You are a full-featured assistant.');
 
-    // Navigate to Capabilities tab and add all entity types
-    await page.getByRole('tab', { name: 'Capabilities' }).click();
-
-    // Add Tool
-    await page.getByRole('button', { name: /Tools/i }).click();
+    // Navigate to Tools page and add a tool
+    await navigateToToolsPage(page);
     const toolsCombobox = page.getByRole('combobox').filter({ hasText: /Select tools/ });
     await toolsCombobox.click();
     await page.getByRole('option', { name: /weatherInfo/i }).click();
     await page.keyboard.press('Escape');
 
-    // Add Workflow
-    await page.getByRole('button', { name: /Workflows/i }).click();
+    // Navigate to Workflows page and add a workflow
+    await navigateToWorkflowsPage(page);
     const workflowsCombobox = page.getByRole('combobox').filter({ hasText: /Select workflows/ });
     await workflowsCombobox.click();
     await page.getByRole('option', { name: /lessComplexWorkflow/i }).click();
     await page.keyboard.press('Escape');
 
-    // Add Sub-Agent
-    await page.getByRole('button', { name: /Sub-Agents/i }).click();
+    // Navigate to Agents page and add a sub-agent
+    await navigateToAgentsPage(page);
     const agentsCombobox = page.getByRole('combobox').filter({ hasText: /Select sub-agents/ });
     await agentsCombobox.click();
     await page.getByRole('option', { name: /Weather Agent/i }).click();
     await page.keyboard.press('Escape');
 
-    // Add Scorer
-    await page.getByRole('button', { name: /Scorers/i }).click();
+    // Navigate to Scorers page and add a scorer
+    await navigateToScorersPage(page);
     const scorersCombobox = page.getByRole('combobox').filter({ hasText: /Select scorers/ });
     await scorersCombobox.click();
     await page.getByRole('option', { name: /Response Quality/i }).click();
     await page.keyboard.press('Escape');
 
-    // Enable Memory
-    await page.getByRole('button', { name: /Memory/i }).click();
+    // Navigate to Memory page and enable memory
+    await navigateToMemoryPage(page);
     await page.getByRole('switch', { name: /Enable Memory/i }).click();
 
     // Create agent
@@ -326,7 +377,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
 
   // Behavior: Without variables/rules, all blocks show concatenated in system prompt
   test('multiple instruction blocks without variables concatenate in system prompt', async ({ page }) => {
-    await page.goto('/cms/agents/create');
+    await page.goto(basePath);
 
     const agentName = uniqueAgentName('Concat Blocks');
     await fillIdentityFields(page, {
@@ -335,6 +386,7 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
       model: 'gpt-4o-mini',
     });
 
+    await navigateToInstructionBlocksPage(page);
     await fillInstructionBlock(page, 'First block instructions', 0);
     await addInstructionBlock(page);
     await fillInstructionBlock(page, 'Second block instructions', 1);
@@ -375,5 +427,39 @@ test.describe('Agent CMS Creation - Agent By ID Page Verification', () => {
     const systemPromptSection = getSystemPromptSection(page);
     await expect(systemPromptSection.getByText('Admin only content')).toBeVisible({ timeout: 10000 });
     await expect(systemPromptSection.getByText('Default content')).toBeVisible({ timeout: 10000 });
+  });
+
+  // Behavior: Form data persists when navigating between routes
+  test('form data persists when navigating between routes', async ({ page }) => {
+    await page.goto(basePath);
+
+    const agentName = uniqueAgentName('Persist Test');
+    await fillIdentityFields(page, {
+      name: agentName,
+      provider: 'OpenAI',
+      model: 'gpt-4o-mini',
+    });
+
+    // Navigate to tools page and back via sidebar clicks (client-side navigation)
+    await navigateToToolsPage(page);
+    await navigateToIdentityPage(page);
+
+    // Verify the name field still has the value
+    await expect(page.getByLabel('Name')).toHaveValue(agentName);
+  });
+
+  // Behavior: Sidebar highlights active route correctly
+  test('sidebar highlights active route', async ({ page }) => {
+    await page.goto(basePath);
+
+    // Identity link should be active (it's the index route)
+    const cmsSidebar = getCmsSidebar(page);
+    const identityLink = cmsSidebar.getByRole('link', { name: 'Identity' });
+    await expect(identityLink).toBeVisible();
+
+    // Navigate to tools and check tools link is active
+    await navigateToToolsPage(page);
+    const toolsLink = cmsSidebar.getByRole('link', { name: 'Tools' });
+    await expect(toolsLink).toBeVisible();
   });
 });

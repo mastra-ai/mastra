@@ -184,7 +184,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.header('content-type') || '';
 
       if (contentType.includes('multipart/form-data')) {

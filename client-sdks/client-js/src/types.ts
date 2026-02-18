@@ -749,6 +749,7 @@ export interface DefaultOptions {
  */
 export interface StoredAgentToolConfig {
   description?: string;
+  rules?: RuleGroup;
 }
 
 /**
@@ -765,7 +766,9 @@ export interface StoredMCPClientToolsConfig {
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
+  description?: string;
   sampling?: { type: 'none' } | { type: 'ratio'; rate: number };
+  rules?: RuleGroup;
 }
 
 // ============================================================================
@@ -801,8 +804,8 @@ export interface StoredAgentResponse {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -872,8 +875,8 @@ export interface CreateStoredAgentParams {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -899,8 +902,8 @@ export interface UpdateStoredAgentParams {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1158,8 +1161,8 @@ export interface AgentVersionResponse {
   }>;
   tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<string[]>;
-  agents?: ConditionalField<string[]>;
+  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
+  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1820,4 +1823,174 @@ export class MastraClientError extends Error {
     this.statusText = statusText;
     this.body = body;
   }
+}
+
+// ============================================
+// Dataset Types
+// ============================================
+
+export interface DatasetItem {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: unknown;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+  version: number;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetExperiment {
+  id: string;
+  datasetId: string | null;
+  datasetVersion: number | null;
+  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
+  targetId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  totalItems: number;
+  succeededCount: number;
+  failedCount: number;
+  startedAt: string | Date | null;
+  completedAt: string | Date | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetExperimentResult {
+  id: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  output: unknown | null;
+  groundTruth: unknown | null;
+  error: string | null;
+  startedAt: string | Date;
+  completedAt: string | Date;
+  retryCount: number;
+  traceId: string | null;
+  scores: Array<{
+    scorerId: string;
+    scorerName: string;
+    score: number | null;
+    reason: string | null;
+    error: string | null;
+  }>;
+  createdAt: string | Date;
+}
+
+export interface CreateDatasetParams {
+  name: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+}
+
+export interface UpdateDatasetParams {
+  datasetId: string;
+  name?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+}
+
+export interface AddDatasetItemParams {
+  datasetId: string;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateDatasetItemParams {
+  datasetId: string;
+  itemId: string;
+  input?: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BatchInsertDatasetItemsParams {
+  datasetId: string;
+  items: Array<{
+    input: unknown;
+    groundTruth?: unknown;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface BatchDeleteDatasetItemsParams {
+  datasetId: string;
+  itemIds: string[];
+}
+
+export interface TriggerDatasetExperimentParams {
+  datasetId: string;
+  targetType: 'agent' | 'workflow' | 'scorer';
+  targetId: string;
+  scorerIds?: string[];
+  version?: number;
+  maxConcurrency?: number;
+}
+
+export interface CompareExperimentsParams {
+  datasetId: string;
+  experimentIdA: string;
+  experimentIdB: string;
+  thresholds?: Record<
+    string,
+    {
+      value: number;
+      direction?: 'higher-is-better' | 'lower-is-better';
+    }
+  >;
+}
+
+export interface DatasetItemVersionResponse {
+  id: string;
+  datasetId: string;
+  datasetVersion: number;
+  input: unknown;
+  groundTruth?: unknown;
+  metadata?: Record<string, unknown>;
+  validTo: number | null;
+  isDeleted: boolean;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface DatasetVersionResponse {
+  id: string;
+  datasetId: string;
+  version: number;
+  createdAt: string | Date;
+}
+
+export interface CompareExperimentsResponse {
+  baselineId: string;
+  items: Array<{
+    itemId: string;
+    input: unknown;
+    groundTruth: unknown;
+    results: Record<
+      string,
+      {
+        output: unknown;
+        scores: Record<string, number | null>;
+      } | null
+    >;
+  }>;
 }
