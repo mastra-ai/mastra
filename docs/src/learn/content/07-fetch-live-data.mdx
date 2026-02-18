@@ -1,0 +1,71 @@
+You have a park lookup tool that returns a `parkId`. Now you'll build the tool that uses it: a live wait times snapshot from the Queue-Times API. This is where the agent starts doing something a model genuinely can't do on its own, and where you'll see both tools chain together in a single run.
+
+## The second tool: live wait times
+
+`getQueueTimesLiveTool` takes a `parkId` and calls the Queue-Times live endpoint:
+
+```
+https://queue-times.com/parks/{parkId}/queue_times.json
+```
+
+It returns a curated list of rides with their current wait times, sorted shortest-first.
+
+## What the output shape includes
+
+The output is intentionally structured for the agent to reason over:
+
+- **`parkId`**: echoes back the park you fetched for
+- **`fetchedAt`**: a timestamp for when your tool fetched the data. Wait times change fast. The agent can say "As of 2:15pm..." instead of sounding like it's always current
+- **`items`**: a list of attractions, each with:
+  - `id`, `name`, `land`: what ride, and where in the park it is (useful for grouping suggestions like "these two are close together")
+  - `isOpen`: whether the attraction is currently operating
+  - `waitTime`: current posted wait in minutes
+  - `lastUpdatedUtc`: when the source last updated that ride
+
+The tool only includes ride items and sorts by `waitTime` ascending. Closed rides go last.
+
+## Use a Skill to scaffold
+
+Before writing the tool from scratch, this is a good moment to use your Mastra Skills. Instead of generating the final tool, use it to scaffold the shape so you're not hunting for exact patterns, schema conventions, or imports.
+
+Try a prompt like:
+
+```
+Use a Skill to check the Mastra documentation on creating tools, then scaffold a tool named getQueueTimesLiveTool with:
+- input schema: { parkId: number }
+- output schema: { parkId: number, fetchedAt: string, items: [{ id: string, name, land, isOpen, waitTime, lastUpdatedUtc }] }
+- Use fetch to call: https://queue-times.com/parks/${parkId}/queue_times.json
+- Convert each item id to a string, return a sorted list of rides by waitTime ascending, and include only ride items.
+```
+
+Compare what it produces against the course repo version. You control the final code. Scaffolding gets you to a working shape faster.
+
+## Tool reliability: three common failure modes
+
+When tool calling feels inconsistent, it's almost always one of these:
+
+1. **The description is vague**: the model doesn't know clearly when to use the tool
+2. **The input schema is too broad**: the model isn't sure what to provide
+3. **The output shape is messy**: the model can't build on the result cleanly
+
+This tool stays simple on purpose: a `parkId` plus an optional `limit`, and a short list of rides in a stable format.
+
+## Test in Studio
+
+Go to **Tools** in Studio and test the tools in sequence:
+
+1. Run `findQueueTimesParkTool` with a park name. Copy a `parkId` from the matches
+2. Run `getQueueTimesLiveTool` with that `parkId`. Verify you get a list with ride names, open status, and wait times
+
+Then go to **Agents**, open the Theme Park agent, and prompt it with:
+
+> Show me the current wait times for Busch Gardens Tampa.
+
+The agent should call the park lookup tool first, get a `parkId`, then call the live snapshot tool with it. Open **Observability** after the run and trace through both tool calls: the arguments sent and the result returned for each.
+
+## Go deeper
+
+- [Using tools with agents](https://mastra.ai/docs/agents/using-tools): tool structure and patterns
+- [createTool reference](https://mastra.ai/reference/tools/create-tool): all options for defining a tool
+- [Queue-Times API](https://queue-times.com/en-US/pages/api): full API reference for the data source
+- [Mastra Studio](https://mastra.ai/docs/getting-started/studio): reading traces with multiple tool calls

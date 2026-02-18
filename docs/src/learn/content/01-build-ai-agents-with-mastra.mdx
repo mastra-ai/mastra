@@ -1,0 +1,40 @@
+This lesson covers what an agent actually is, how Mastra fits into that picture, and what you'll build throughout the course. If you've been wiring chat endpoints into apps and hitting the limits of that pattern, this is where you start to move past it.
+
+## Agent vs. chatbot
+
+A chatbot takes your message and responds. One turn, no tools, no autonomy. An **agent** goes further: it observes context, reasons about what to do, selects tools, takes actions, and loops until the task is done or it hits a stop condition.
+
+The model isn't only generating text. It's deciding which tools to call, in what order, and when it's done. That's the difference between a chat integration and an agent.
+
+Agents are already showing up in the tools people use every day: Cursor in your editor, Deep Research for digging into a topic, Fin for customer support. If you ship TypeScript apps, this is the pattern that matters right now.
+
+## The core Mastra building blocks
+
+Mastra gives you a structured way to build agents in TypeScript. Here's the high-level picture:
+
+- **Agents**: the decision-makers. They receive a goal, reason about it, call tools, and iterate until done
+- **Tools**: functions agents can call to interact with the real world (APIs, databases, live data)
+- **Workflows**: explicit multi-step sequences for tasks that need a fixed, repeatable order
+- **Memory**: persistent context so the agent can carry conversation history and tool results across interactions
+- **Observability**: traces and scoring so you can see exactly what the agent did and measure quality over time
+
+## What we're building
+
+Throughout this course, you'll build a **Theme Park Companion Agent**. It can:
+
+- Resolve a park name into a usable ID
+- Pull live wait times from the Queue-Times API
+- Factor in weather when making recommendations
+- Use Firecrawl to grab park hours and crowd data from the web
+- Remember user preferences across conversations
+
+The project is intentionally practical. The features are secondary; the Mastra patterns they demonstrate are the point, and those patterns transfer directly to whatever you build next.
+
+## Go deeper
+
+- [Mastra overview](https://mastra.ai/docs): what Mastra is and how it fits together
+- [Agents](https://mastra.ai/docs/agents/overview): how agents work in Mastra
+- [Using tools](https://mastra.ai/docs/agents/using-tools): how tools give agents real capabilities
+- [Workflows](https://mastra.ai/docs/workflows/overview): when and how to use workflows
+- [Memory](https://mastra.ai/docs/memory/overview): how agents retain context across turns
+- [Observability](https://mastra.ai/docs/observability/overview): traces, logging, and scoring
