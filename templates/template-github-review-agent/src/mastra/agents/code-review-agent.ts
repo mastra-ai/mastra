@@ -12,7 +12,7 @@ import { REVIEW_DEPTH_INSTRUCTIONS, SMALL_PR_MAX, MEDIUM_PR_MAX } from '../lib/r
 export const codeReviewAgent = new Agent({
   id: 'code-review-agent',
   name: 'GitHub PR Code Reviewer',
-  model: 'anthropic/claude-opus-4-6',
+  model: 'anthropic/claude-sonnet-4-5',
   instructions: `You are an expert code reviewer specializing in thorough, constructive pull request reviews. Your goal is to help developers ship better code by providing actionable, well-reasoned feedback.
 
 ## Core Behavior

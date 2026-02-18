@@ -4,7 +4,7 @@ import { Agent } from '@mastra/core/agent';
  * Lightweight reviewer used exclusively by the PR review workflow.
  *
  * Key differences from the main `codeReviewAgent`:
- * - Uses Haiku (faster, cheaper) instead of Opus.
+ * - Uses Haiku (faster, cheaper) instead of Sonnet.
  * - Has NO tools — the workflow feeds it data directly.
  * - Focused instructions for structured review output only.
  */

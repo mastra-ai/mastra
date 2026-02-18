@@ -51,7 +51,7 @@ Open the **GitHub PR Code Reviewer** agent and give it a PR URL:
 Review this PR: https://github.com/owner/repo/pull/123
 ```
 
-The agent (Claude Opus) will fetch the PR, adaptively page through files based on PR size, and return a structured review. Observational memory compresses tool results between turns, allowing the agent to handle large PRs without truncating data.
+The agent (Claude Sonnet) will fetch the PR, adaptively page through files based on PR size, and return a structured review. Observational memory compresses tool results between turns, allowing the agent to handle large PRs without truncating data.
 
 ### Workflow
 
@@ -78,7 +78,7 @@ Batch sizes for the workflow are configured at the top of `src/mastra/workflows/
 
 ### Swap models
 
-Change the `model` field in the agent files. The `code-review-agent` uses Opus for quality; the `workflow-review-agent` uses Haiku for speed. Any Anthropic model works, or switch to another provider supported by Mastra.
+Change the `model` field in the agent files. The `code-review-agent` uses Sonnet for quality; the `workflow-review-agent` uses Haiku for speed. Any Anthropic model works, or switch to another provider supported by Mastra.
 
 ## About Mastra templates
 
