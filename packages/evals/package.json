@@ -63,7 +63,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "compromise": "^14.14.4",
+    "compromise": "^14.14.5",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4"

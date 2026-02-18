@@ -220,6 +220,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/working-memory',
           label: 'Working Memory',
         },
@@ -227,14 +235,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/semantic-recall',
           label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',

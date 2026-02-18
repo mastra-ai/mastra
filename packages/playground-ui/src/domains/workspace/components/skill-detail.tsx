@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
-import { FileText, Code, Image, Package, Home, Server, ChevronRight, ChevronDown, Eye, FileCode2 } from 'lucide-react';
+import {
+  FileText,
+  Code,
+  Image,
+  Package,
+  Home,
+  Server,
+  ChevronRight,
+  ChevronDown,
+  Eye,
+  FileCode2,
+  FolderOpen,
+} from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
@@ -69,6 +81,7 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       {/* Metadata */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetadataCard label="Source" value={sourceInfo.label} icon={sourceInfo.icon} />
+        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen className="h-3.5 w-3.5" />} />
         {skill.license && <MetadataCard label="License" value={skill.license} />}
         {skill.compatibility != null && <MetadataCard label="Compatibility" value={skill.compatibility} />}
         <MetadataCard

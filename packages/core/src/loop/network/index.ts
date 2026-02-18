@@ -915,14 +915,11 @@ export async function createNetworkLoop({
                 },
               ],
               format: 2,
-              ...(requireApprovalMetadata || suspendedTools
-                ? {
-                    metadata: {
-                      ...(requireApprovalMetadata ? { requireApprovalMetadata } : {}),
-                      ...(suspendedTools ? { suspendedTools } : {}),
-                    },
-                  }
-                : {}),
+              metadata: {
+                mode: 'network',
+                ...(requireApprovalMetadata ? { requireApprovalMetadata } : {}),
+                ...(suspendedTools ? { suspendedTools } : {}),
+              },
             },
             createdAt: new Date(),
             threadId: initData?.threadId || runId,
@@ -1252,9 +1249,10 @@ export async function createNetworkLoop({
             content: {
               parts: [{ type: 'text', text: finalResult }],
               format: 2,
-              ...(suspendPayload
-                ? {
-                    metadata: {
+              metadata: {
+                mode: 'network',
+                ...(suspendPayload
+                  ? {
                       suspendedTools: {
                         [inputData.primitiveId]: {
                           args: input,
@@ -1269,9 +1267,9 @@ export async function createNetworkLoop({
                           toolCallId: inputData.primitiveId,
                         },
                       },
-                    },
-                  }
-                : {}),
+                    }
+                  : {}),
+              },
             },
             createdAt: new Date(),
             threadId: initData?.threadId || runId,
@@ -1605,6 +1603,9 @@ export async function createNetworkLoop({
                       },
                     ],
                     format: 2,
+                    metadata: {
+                      mode: 'network',
+                    },
                   },
                   createdAt: new Date(),
                   threadId: initData.threadId || runId,
@@ -1781,6 +1782,9 @@ export async function createNetworkLoop({
                   },
                 ],
                 format: 2,
+                metadata: {
+                  mode: 'network',
+                },
               },
               createdAt: new Date(),
               threadId: initData.threadId || runId,
@@ -1829,6 +1833,9 @@ export async function createNetworkLoop({
                 },
               ],
               format: 2,
+              metadata: {
+                mode: 'network',
+              },
             },
             createdAt: new Date(),
             threadId: initData.threadId || runId,

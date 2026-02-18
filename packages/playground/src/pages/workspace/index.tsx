@@ -163,9 +163,16 @@ export default function Workspace() {
   // None of these operations require sandbox - all are done via GitHub API + filesystem
   const canManageSkills = hasFilesystem && !isReadOnly;
 
+  // Derive writable mounts and mount paths for CompositeFilesystem
+  const mounts = workspaceInfo?.mounts;
+  const writableMounts = mounts
+    ?.filter(m => !m.readOnly)
+    .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
+  const mountPaths = mounts && mounts.length > 1 ? mounts.map(m => m.path) : undefined;
+
   // Skills.sh handlers
   const handleInstallSkill = useCallback(
-    (params: { repository: string; skillName: string }) => {
+    (params: { repository: string; skillName: string; mount?: string }) => {
       if (!effectiveWorkspaceId) return;
 
       installSkill.mutate(
@@ -614,6 +621,7 @@ export default function Workspace() {
                 onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
                 updatingSkillName={updatingSkillName ?? undefined}
                 removingSkillName={removingSkillName ?? undefined}
+                mountPaths={mountPaths}
               />
             )}
 
@@ -641,6 +649,8 @@ export default function Workspace() {
             .map(s => `${s.skillsShSource!.owner}/${s.skillsShSource!.repo}/${s.name}`)}
           // Fallback to names for skills without source info
           installedSkillNames={skills.filter(s => !s.skillsShSource).map(s => s.name)}
+          writableMounts={writableMounts}
+          installedSkillPaths={Object.fromEntries(skills.filter(s => s.path).map(s => [s.name, s.path]))}
         />
       )}
     </MainContentLayout>

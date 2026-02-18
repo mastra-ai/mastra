@@ -80,10 +80,10 @@ function CmsScorersEditForm({ scorer, scorerId }: CmsScorersEditFormProps) {
         model: values.model,
         instructions: values.instructions || undefined,
         scoreRange: values.scoreRange,
-        ...(values.defaultSampling?.type === 'ratio' &&
-          typeof values.defaultSampling.rate === 'number' && {
-            defaultSampling: values.defaultSampling,
-          }),
+        defaultSampling:
+          values.defaultSampling?.type === 'ratio' && typeof values.defaultSampling.rate === 'number'
+            ? values.defaultSampling
+            : { type: 'none' as const },
       };
 
       await updateStoredScorer.mutateAsync(updateParams);
