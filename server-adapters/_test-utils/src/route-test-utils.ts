@@ -251,6 +251,26 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':skillName')) params.skillName = 'test-skill';
   if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';
 
+  // Stored entity route params
+  if (route.path.includes(':storedMCPClientId')) params.storedMCPClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':mcpClientId')) params.mcpClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':storedPromptBlockId')) params.storedPromptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':promptBlockId')) params.promptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':storedWorkspaceId')) params.storedWorkspaceId = 'test-stored-workspace';
+  if (route.path.includes(':storedSkillId')) params.storedSkillId = 'test-stored-skill';
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/'))
+    params.scorerId = 'test-stored-scorer';
+
+  // Dataset route params
+  if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';
+  if (route.path.includes(':itemId')) params.itemId = 'test-item';
+  if (route.path.includes(':experimentId')) params.experimentId = 'test-experiment';
+  if (route.path.includes(':datasetVersion')) params.datasetVersion = '1';
+
+  // Tool provider route params
+  if (route.path.includes(':providerId')) params.providerId = 'test-provider';
+  if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
+
   return params;
 }
 

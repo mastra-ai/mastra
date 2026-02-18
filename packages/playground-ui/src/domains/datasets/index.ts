@@ -39,7 +39,6 @@ export { DatasetItemsList } from './components/items/dataset-items-list';
 export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
-export { EditItemDialog } from './components/edit-item-dialog';
 
 // Item detail components
 export { DatasetItemHeader } from './components/dataset-detail/dataset-item-header';

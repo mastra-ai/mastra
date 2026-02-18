@@ -82,7 +82,7 @@ import DatasetCompareVersions from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 
 const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}`,
+  agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
     workspaceId

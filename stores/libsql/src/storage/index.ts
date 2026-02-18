@@ -4,6 +4,7 @@ import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
+import { BlobsLibSQL } from './domains/blobs';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
@@ -12,11 +13,14 @@ import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
+import { SkillsLibSQL } from './domains/skills';
 import { WorkflowsLibSQL } from './domains/workflows';
+import { WorkspacesLibSQL } from './domains/workspaces';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsLibSQL,
+  BlobsLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
   MCPClientsLibSQL,
@@ -25,7 +29,9 @@ export {
   PromptBlocksLibSQL,
   ScorerDefinitionsLibSQL,
   ScoresLibSQL,
+  SkillsLibSQL,
   WorkflowsLibSQL,
+  WorkspacesLibSQL,
 };
 export type { LibSQLDomainConfig } from './db';
 
@@ -152,6 +158,9 @@ export class LibSQLStore extends MastraCompositeStore {
     const promptBlocks = new PromptBlocksLibSQL(domainConfig);
     const scorerDefinitions = new ScorerDefinitionsLibSQL(domainConfig);
     const mcpClients = new MCPClientsLibSQL(domainConfig);
+    const workspaces = new WorkspacesLibSQL(domainConfig);
+    const skills = new SkillsLibSQL(domainConfig);
+    const blobs = new BlobsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -164,6 +173,9 @@ export class LibSQLStore extends MastraCompositeStore {
       promptBlocks,
       scorerDefinitions,
       mcpClients,
+      workspaces,
+      skills,
+      blobs,
     };
   }
 }

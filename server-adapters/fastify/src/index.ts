@@ -15,8 +15,6 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
-
 /**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
  */
@@ -413,6 +411,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         getQuery: name => (request.query as Record<string, string>)[name],
         requestContext: request.requestContext,
         request: toWebRequest(request),
+        buildAuthorizeContext: () => toWebRequest(request),
       });
 
       if (authError) {
@@ -567,7 +566,43 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
 
     for (const route of routes) {
+      // Create pseudo ServerRoute for auth checking
+      const serverRoute: ServerRoute = {
+        method: route.method as any,
+        path: route.path,
+        responseType: 'json',
+        handler: async () => {},
+        requiresAuth: route.requiresAuth,
+      };
+
       const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+        // Per-route auth check (same pattern as registerRoute)
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path: String(request.url.split('?')[0] || '/'),
+          method: String(request.method || 'GET'),
+          getHeader: name => request.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => (request.query as Record<string, string>)[name],
+          requestContext: request.requestContext,
+          request: toWebRequest(request),
+          buildAuthorizeContext: () => toWebRequest(request),
+        });
+
+        if (authError) {
+          return reply.status(authError.status).send({ error: authError.error });
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const userPermissions = request.requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+          if (permissionError) {
+            return reply.status(permissionError.status).send({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
+          }
+        }
+
         const response = await this.handleCustomRouteRequest(
           `http://${request.headers.host}${request.url}`,
           request.method,
@@ -628,13 +663,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
-      return;
-    }
-
-    this.app.addHook('preHandler', authenticationMiddleware);
-    this.app.addHook('preHandler', authorizationMiddleware);
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
   }
 }
