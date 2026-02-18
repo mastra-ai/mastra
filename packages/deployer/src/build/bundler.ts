@@ -48,6 +48,7 @@ export async function getInputOptions(
       : nodeResolve({
           preferBuiltins: false,
           browser: true,
+          exportConditions: ['browser', 'worker', 'default'],
         });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());

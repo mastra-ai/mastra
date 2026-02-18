@@ -134,12 +134,14 @@ async function getInputPlugins(
     bundlerOptions,
     rootDir,
     externals,
+    platform,
   }: {
     transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { noBundling: boolean };
     rootDir: string;
     externals: string[];
+    platform: 'node' | 'browser' | 'neutral';
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -230,10 +232,16 @@ async function getInputPlugins(
     }),
     bundlerOptions.noBundling
       ? null
-      : nodeResolve({
-          preferBuiltins: true,
-          exportConditions: ['node'],
-        }),
+      : platform === 'node' || platform === 'neutral'
+        ? nodeResolve({
+            preferBuiltins: true,
+            exportConditions: ['node'],
+          })
+        : nodeResolve({
+            preferBuiltins: false,
+            browser: true,
+            exportConditions: ['browser', 'worker', 'default'],
+          }),
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),
@@ -292,6 +300,7 @@ async function buildExternalDependencies(
     rootDir,
     outputDir,
     bundlerOptions,
+    platform,
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
@@ -302,6 +311,7 @@ async function buildExternalDependencies(
       isDev: boolean;
       externalsPreset: boolean;
     };
+    platform: 'node' | 'browser' | 'neutral';
   },
 ) {
   /**
@@ -321,6 +331,7 @@ async function buildExternalDependencies(
     },
     rootDir,
     externals,
+    platform,
   });
 
   const bundler = await rollup({
@@ -453,9 +464,16 @@ export async function bundleExternals(
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
+    platform?: 'node' | 'browser' | 'neutral';
   },
 ) {
-  const { workspaceRoot = null, workspaceMap = new Map(), projectRoot = outputDir, bundlerOptions = {} } = options;
+  const {
+    workspaceRoot = null,
+    workspaceMap = new Map(),
+    projectRoot = outputDir,
+    bundlerOptions = {},
+    platform = 'node',
+  } = options;
   const { externals: customExternals = [], transpilePackages = [], isDev = false } = bundlerOptions || {};
   /**
    * A user can set `externals: true` to indicate they want to externalize all dependencies. In this case, we set `externalsPreset` to true to skip bundling any externals.
@@ -509,6 +527,7 @@ export async function bundleExternals(
       isDev,
       externalsPreset,
     },
+    platform,
   });
 
   const moduleResolveMap = new Map<string, Map<string, string>>();
