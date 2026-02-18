@@ -50,7 +50,7 @@
     "async-mutex": "^0.5.0",
     "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
-    "lru-cache": "^11.2.2",
+    "lru-cache": "^11.2.6",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
@@ -74,7 +74,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.4.1-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
