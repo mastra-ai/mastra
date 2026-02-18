@@ -26,7 +26,7 @@ function CreateLayoutWrapper() {
 
   return (
     <MainContentLayout>
-      <Header>
+      <Header className="bg-surface1">
         <HeaderTitle>
           <Icon>
             <AgentIcon />

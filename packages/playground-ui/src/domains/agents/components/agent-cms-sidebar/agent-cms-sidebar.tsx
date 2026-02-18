@@ -14,9 +14,10 @@ import { isActive } from './agent-cms-is-active';
 interface AgentCmsSidebarProps {
   basePath: string;
   currentPath: string;
+  versionId?: string;
 }
 
-export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps) {
+export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSidebarProps) {
   const { form } = useAgentEditFormContext();
   const descriptions = useSidebarDescriptions(form.control);
 
@@ -36,6 +37,7 @@ export function AgentCmsSidebar({ basePath, currentPath }: AgentCmsSidebarProps)
                 active={isActive(basePath, currentPath, section.pathSuffix)}
                 description={descriptions[section.descriptionKey].description}
                 done={descriptions[section.descriptionKey].done}
+                versionId={versionId}
               />
             ))}
           </ul>
@@ -54,15 +56,17 @@ interface SidebarLinkProps {
   active: boolean;
   description: string;
   done: boolean;
+  versionId?: string;
 }
 
-const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, description, done }: SidebarLinkProps) => {
+const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, description, done, versionId }: SidebarLinkProps) => {
   const { Link } = useLinkComponent();
+  const href = basePath + pathSuffix + (versionId ? `?versionId=${versionId}` : '');
 
   return (
     <li className="flex flex-col gap-0">
       <Link
-        href={basePath + pathSuffix}
+        href={href}
         className={cn(
           'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-r-2 border-transparent',
           active ? 'bg-surface2 text-neutral5 border-accent1' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',

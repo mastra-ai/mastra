@@ -27,8 +27,7 @@ export function InstructionBlocksPage() {
 
           <AlertDescription as="p">
             Blocks are combined in order to form the system prompt. Use{' '}
-            <span className="bg-accent3/10 px-1 py-0.5 rounded-md font-mono">{`{{ variableName }}`}</span> to insert
-            dynamic values.
+            <code className="text-accent1 font-medium">{'{{variableName}}'}</code> to insert dynamic values.
           </AlertDescription>
         </Alert>
 

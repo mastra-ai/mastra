@@ -20,6 +20,7 @@ import {
   Button,
   AlertTitle,
   type AgentDataSource,
+  AlertDescription,
 } from '@mastra/playground-ui';
 import { Check } from 'lucide-react';
 
@@ -46,10 +47,11 @@ function EditFormContent({
   const isViewingVersion = !!selectedVersionId && !!versionData;
 
   const banner = isViewingVersion ? (
-    <Alert variant="info" className="mb-4 mx-4">
-      <AlertTitle>You are seeing a specific version of the agent.</AlertTitle>
+    <Alert variant="info" className="mb-4">
+      <AlertTitle>This is a previous version</AlertTitle>
+      <AlertDescription as="p">You are seeing a specific version of the agent.</AlertDescription>
       <div className="pt-2">
-        <Button type="button" variant="light" onClick={() => setSearchParams({})}>
+        <Button type="button" variant="light" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
       </div>
@@ -67,6 +69,7 @@ function EditFormContent({
       basePath={`/cms/agents/${agentId}/edit`}
       currentPath={location.pathname}
       banner={banner}
+      versionId={selectedVersionId ?? undefined}
     >
       <Outlet />
     </AgentCmsFormShell>
@@ -115,7 +118,7 @@ function EditLayoutWrapper() {
 
   return (
     <MainContentLayout>
-      <Header>
+      <Header className="bg-surface1">
         <HeaderTitle>
           <Icon>
             <AgentIcon />
@@ -126,7 +129,13 @@ function EditLayoutWrapper() {
         </HeaderTitle>
         {isReady && (
           <HeaderAction>
-            {!isViewingVersion && (
+            <AgentVersionCombobox
+              agentId={agentId}
+              value={selectedVersionId ?? ''}
+              onValueChange={handleVersionSelect}
+              variant="outline"
+            />
+            {!selectedVersionId && (
               <Button variant="primary" onClick={handlePublish} disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
@@ -143,12 +152,6 @@ function EditLayoutWrapper() {
                 )}
               </Button>
             )}
-            <AgentVersionCombobox
-              agentId={agentId}
-              value={selectedVersionId ?? ''}
-              onValueChange={handleVersionSelect}
-              variant="outline"
-            />
           </HeaderAction>
         )}
       </Header>
