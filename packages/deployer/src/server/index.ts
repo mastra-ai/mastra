@@ -10,7 +10,7 @@ import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -93,11 +93,25 @@ export async function createHonoServer(
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
+  // Pre-process routes: bake hono-openapi describeRoute into route middleware
+  // so the adapter handles it as normal middleware without needing to know about hono-openapi
+  const processedRoutes = routes?.map(route => {
+    if ('openapi' in route && route.openapi) {
+      const existingMiddleware = route.middleware
+        ? Array.isArray(route.middleware)
+          ? route.middleware
+          : [route.middleware]
+        : [];
+      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+    }
+    return route;
+  });
+
   // Store custom route auth configurations
   const customRouteAuthConfig = new Map<string, boolean>();
 
-  if (routes) {
-    for (const route of routes) {
+  if (processedRoutes) {
+    for (const route of processedRoutes) {
       // By default, routes require authentication unless explicitly set to false
       const requiresAuth = route.requiresAuth !== false;
       const routeKey = `${route.method}:${route.path}`;
@@ -129,7 +143,7 @@ export async function createHonoServer(
     bodyLimitOptions,
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
-    customApiRoutes: routes,
+    customApiRoutes: processedRoutes,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -149,10 +163,15 @@ export async function createHonoServer(
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
+    // Check if auth is configured - if so, we need credentials for cookie-based sessions
+    const hasAuth = !!server?.auth;
+
     const corsConfig = {
-      origin: '*',
+      // When credentials are enabled, origin cannot be '*' - use dynamic origin
+      origin: hasAuth ? (origin: string) => origin || '*' : (server?.cors?.origin ?? '*'),
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      credentials: false,
+      // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
+      credentials: hasAuth ? true : false,
       maxAge: 3600,
       ...server?.cors,
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
@@ -214,30 +233,8 @@ export async function createHonoServer(
     }
   }
 
-  if (routes) {
-    for (const route of routes) {
-      const middlewares: MiddlewareHandler[] = [];
-
-      if (route.middleware) {
-        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
-      }
-      if (route.openapi) {
-        middlewares.push(describeRoute(route.openapi));
-      }
-
-      const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
-
-      // Register route using app.on() which supports dynamic method/path registration
-      // Hono's H type (Handler | MiddlewareHandler) is internal, so we use Handler
-      // which is compatible at runtime since both accept (context, next)
-      const allHandlers = [...middlewares, handler] as const;
-      if (route.method === 'ALL') {
-        app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      } else {
-        app.on(route.method, route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      }
-    }
-  }
+  // Register custom API routes via the adapter (auth + middleware handled uniformly)
+  await honoServerAdapter.registerCustomApiRoutes();
 
   if (server?.build?.apiReqLogs) {
     app.use(logger());
@@ -407,6 +404,9 @@ export async function createHonoServer(
         `'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`,
         `'${escapeForHtml(requestContextPresets)}'`,
       );
+
+      const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
+      indexHtml = indexHtml.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, `'${autoDetectUrl}'`);
 
       // Inject the base path for frontend routing
       // The <base href> tag uses this to resolve all relative URLs correctly
