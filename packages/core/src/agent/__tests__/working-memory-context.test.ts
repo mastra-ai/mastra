@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import type { ChunkType } from '../../stream/types';
-import { createTool } from '../../tools';
+import { createTool, Tool } from '../../tools';
+import { createWorkflow, createStep } from '../../workflows';
 import { Agent } from '../agent';
 import type { ToolsInput } from '../types';
 
@@ -324,5 +325,239 @@ describe('Working memory tool context propagation', () => {
     }
 
     expect(toolNames).not.toContain('updateWorkingMemory');
+  });
+
+  it('should provide memory context when updateWorkingMemory is called inside a workflow step', async () => {
+    const mockModel = createMockModelWithWorkingMemoryToolCall();
+    const mockMemory = new MockMemory({
+      enableWorkingMemory: true,
+      workingMemoryTemplate: `# Notes\n- **Key**:\n- **Value**:\n`,
+    });
+
+    const agent = new Agent({
+      id: 'wm-workflow-test-agent',
+      name: 'WM Workflow Test Agent',
+      instructions: 'You are a helpful agent that remembers information.',
+      model: mockModel,
+      memory: mockMemory,
+    });
+
+    const threadId = 'test-thread-workflow';
+    const resourceId = 'test-resource-workflow';
+
+    await mockMemory.saveThread({
+      thread: {
+        id: threadId,
+        title: 'Test Thread',
+        resourceId,
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create a workflow step that calls the agent with memory via stream
+    const agentStep = createStep({
+      id: 'agent-step',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ inputData }) => {
+        const stream = await agent.stream(inputData.prompt, {
+          memory: { thread: threadId, resource: resourceId },
+          maxSteps: 3,
+        });
+
+        const chunks: ChunkType[] = [];
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+
+        const errorChunks = chunks.filter(c => c.type === 'error');
+        if (errorChunks.length > 0) {
+          throw new Error(`Agent stream had errors: ${JSON.stringify(errorChunks)}`);
+        }
+
+        const textChunks = chunks.filter(c => c.type === 'text-delta');
+        const text = textChunks.map(c => (c.type === 'text-delta' ? c.payload.delta : '')).join('');
+        return { text };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'test-workflow',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      steps: [agentStep],
+    })
+      .then(agentStep)
+      .commit();
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { prompt: 'Remember that my favorite color is blue' } });
+
+    // Verify the workflow completed successfully (no memory undefined error)
+    expect(result.status).toBe('success');
+
+    // Verify working memory was actually saved
+    const savedWorkingMemory = await mockMemory.getWorkingMemory({ threadId, resourceId });
+    expect(savedWorkingMemory).not.toBeNull();
+  });
+
+  it('should provide memory context when updateWorkingMemory is called inside a workflow foreach step', async () => {
+    let agentCallCount = 0;
+    const mockMemory = new MockMemory({
+      enableWorkingMemory: true,
+      workingMemoryTemplate: `# Notes\n- **Key**:\n- **Value**:\n`,
+    });
+
+    const threadId = 'test-thread-foreach';
+    const resourceId = 'test-resource-foreach';
+
+    // Create a workflow with foreach that calls the agent
+    // foreach expects the previous step's output (or workflow input) to be an array
+    const agentStep = createStep({
+      id: 'foreach-agent-step',
+      inputSchema: z.object({ item: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ inputData }) => {
+        agentCallCount++;
+        const foreachThreadId = `${threadId}-${inputData.item}`;
+        await mockMemory.saveThread({
+          thread: {
+            id: foreachThreadId,
+            title: `Thread for ${inputData.item}`,
+            resourceId,
+            metadata: {},
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        // Fresh mock model per iteration so callCount resets and the tool call fires each time
+        const iterationModel = createMockModelWithWorkingMemoryToolCall();
+        const iterationAgent = new Agent({
+          id: `wm-foreach-test-agent-${inputData.item}`,
+          name: 'WM Foreach Test Agent',
+          instructions: 'You are a helpful agent that remembers information.',
+          model: iterationModel,
+          memory: mockMemory,
+        });
+
+        const stream = await iterationAgent.stream(inputData.item, {
+          memory: { thread: foreachThreadId, resource: resourceId },
+          maxSteps: 3,
+        });
+
+        const chunks: ChunkType[] = [];
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+
+        const errorChunks = chunks.filter(c => c.type === 'error');
+        if (errorChunks.length > 0) {
+          throw new Error(`Agent stream had errors: ${JSON.stringify(errorChunks)}`);
+        }
+
+        const textChunks = chunks.filter(c => c.type === 'text-delta');
+        const text = textChunks.map(c => (c.type === 'text-delta' ? c.payload.delta : '')).join('');
+        return { text };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'test-foreach-workflow',
+      inputSchema: z.array(z.object({ item: z.string() })),
+      outputSchema: z.any(),
+      steps: [agentStep],
+      options: {
+        validateInputs: false,
+      },
+    })
+      .foreach(agentStep)
+      .commit();
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: [{ item: 'task1' }, { item: 'task2' }] });
+
+    // Verify the workflow completed successfully (no memory undefined error)
+    expect(result.status).toBe('success');
+
+    // Verify the agent was actually called for each item
+    expect(agentCallCount).toBe(2);
+
+    // Verify working memory was saved for each foreach iteration
+    const wm1 = await mockMemory.getWorkingMemory({ threadId: `${threadId}-task1`, resourceId });
+    const wm2 = await mockMemory.getWorkingMemory({ threadId: `${threadId}-task2`, resourceId });
+    expect(wm1).not.toBeNull();
+    expect(wm2).not.toBeNull();
+  });
+
+  it('should provide memory context even when instanceof Tool check fails (simulating module duplication)', async () => {
+    // This test simulates what happens in environments like Vite SSR where the Tool class
+    // might be loaded from different module instances, causing instanceof to fail.
+    // When instanceof fails, isVercelTool incorrectly returns true, and the tool is called
+    // with AI SDK options instead of the enriched toolContext (which includes memory).
+    const mockModel = createMockModelWithWorkingMemoryToolCall();
+    const mockMemory = new MockMemory({
+      enableWorkingMemory: true,
+      workingMemoryTemplate: `# Notes\n- **Key**:\n- **Value**:\n`,
+    });
+
+    // Spy on Tool's Symbol.hasInstance to simulate instanceof failure
+    // This mimics what happens when the same module is loaded twice (e.g., Vite SSR)
+    const originalHasInstance = Tool[Symbol.hasInstance];
+    Object.defineProperty(Tool, Symbol.hasInstance, {
+      value: () => false, // Always return false, simulating module duplication
+      configurable: true,
+    });
+
+    try {
+      const agent = new Agent({
+        id: 'wm-instanceof-test',
+        name: 'WM instanceof Failure Test',
+        instructions: 'You are a helpful agent that remembers information.',
+        model: mockModel,
+        memory: mockMemory,
+      });
+
+      const threadId = 'test-thread-instanceof';
+      const resourceId = 'test-resource-instanceof';
+
+      await mockMemory.saveThread({
+        thread: {
+          id: threadId,
+          title: 'Test Thread',
+          resourceId,
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const stream = await agent.stream('Remember my name', {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 3,
+      });
+
+      const chunks: ChunkType[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      // Check for errors - if instanceof fails, the tool would be called without memory
+      // and we'd see an error about "Memory instance is required"
+      const errorChunks = chunks.filter(c => c.type === 'error');
+      expect(errorChunks).toHaveLength(0);
+
+      // Verify working memory was actually saved
+      const savedWorkingMemory = await mockMemory.getWorkingMemory({ threadId, resourceId });
+      expect(savedWorkingMemory).not.toBeNull();
+    } finally {
+      // Restore original Symbol.hasInstance
+      Object.defineProperty(Tool, Symbol.hasInstance, {
+        value: originalHasInstance,
+        configurable: true,
+      });
+    }
   });
 });
