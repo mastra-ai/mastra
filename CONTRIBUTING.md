@@ -114,7 +114,7 @@ Create a public GitHub repository with your reproduction:
 
 **Build vs runtime issues**:
 
-- Clarify if the bug occurs during `pnpm build`, `pnpm dev`, or at runtime
+- Clarify if the bug occurs during `mastra build`, `mastra dev`, or at runtime
 - Include build output if it's a build-time error
 
 **Monorepo context**:
