@@ -1693,21 +1693,9 @@ importers:
 
   packages/_changeset-cli:
     dependencies:
-      '@changesets/assemble-release-plan':
-        specifier: ^6.0.9
-        version: 6.0.9
-      '@changesets/config':
-        specifier: ^3.1.2
-        version: 3.1.2
       '@changesets/git':
         specifier: ^3.0.4
         version: 3.0.4
-      '@changesets/read':
-        specifier: ^0.6.6
-        version: 0.6.6
-      '@changesets/types':
-        specifier: ^6.1.0
-        version: 6.1.0
       '@changesets/write':
         specifier: ^0.4.0
         version: 0.4.0
@@ -1720,9 +1708,6 @@ importers:
       '@manypkg/get-packages':
         specifier: ^3.1.0
         version: 3.1.0
-      '@manypkg/tools':
-        specifier: ^2.1.0
-        version: 2.1.0
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
@@ -1732,18 +1717,12 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
-      execa:
-        specifier: ^9.6.1
-        version: 9.6.1
       mri:
         specifier: ^1.2.0
         version: 1.2.0
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
-      semver:
-        specifier: ^7.7.2
-        version: 7.7.3
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1751,9 +1730,6 @@ importers:
       '@types/node':
         specifier: 22.19.7
         version: 22.19.7
-      '@types/semver':
-        specifier: ^7.7.1
-        version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)

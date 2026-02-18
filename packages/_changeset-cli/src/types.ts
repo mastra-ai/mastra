@@ -19,11 +19,6 @@ export interface PackageJson {
   [key: string]: unknown;
 }
 
-export interface UpdatedPeerDependencies {
-  directUpdatedPackages: string[];
-  indirectUpdatedPackages: string[];
-}
-
 export interface PreSelectedPackages {
   major: string[];
   minor: string[];
