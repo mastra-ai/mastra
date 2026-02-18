@@ -163,6 +163,6 @@ export const toolCallInputSchema = z.object({
 });
 
 export const toolCallOutputSchema = toolCallInputSchema.extend({
-  result: z.any(),
+  result: z.any().optional(),
   error: z.any().optional(),
 });

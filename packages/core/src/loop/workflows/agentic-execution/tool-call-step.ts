@@ -227,7 +227,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         return {
-          result: undefined,
           error: new ToolNotFoundError(
             `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
           ),
@@ -249,7 +248,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       if (!tool.execute) {
-        return { ...inputData, result: undefined };
+        return inputData;
       }
 
       try {
@@ -529,7 +528,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         return { result, ...inputData };
       } catch (error) {
         return {
-          result: undefined,
           error: error as Error,
           ...inputData,
         };
