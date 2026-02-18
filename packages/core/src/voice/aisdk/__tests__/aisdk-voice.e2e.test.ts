@@ -11,12 +11,7 @@ describe('AI SDK Voice Integration Tests', () => {
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
-    try {
-      mkdirSync(outputDir, { recursive: true });
-    } catch (err) {
-      // Ignore if directory already exists
-      console.log('Directory already exists: ', err);
-    }
+    mkdirSync(outputDir, { recursive: true });
   });
 
   let speech: AISDKSpeech;
@@ -98,9 +93,6 @@ describe('AI SDK Voice Integration Tests', () => {
     }, 10000);
 
     it('should throw when trying to listen', async () => {
-      const audioStream = new PassThrough();
-      audioStream.end('test');
-
       await expect(speech.listen()).rejects.toThrow('AI SDK speech models do not support transcription');
     });
 

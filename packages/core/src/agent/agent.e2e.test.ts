@@ -47,7 +47,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
     }
   });
 
-  describe('test schema compat structured output', async () => {
+  describe('test schema compat structured output', () => {
     it('should convert optional fields to nullable for openai and succeed without error', async () => {
       const weatherInfo = createTool({
         id: 'weather-info',
@@ -157,7 +157,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
       } else {
         response = await agent.generate('Use the noSchemaTool to get test data');
-        console.log('response', JSON.stringify(response, null, 2));
+
         toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
       }
 
@@ -202,7 +202,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         toolCall = response.toolResults.find((result: any) => result.toolName === 'findUserTool');
       } else {
         response = await agentOne.generate('Find the user with name - Dero Israel');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
       }
 
       const name = toolCall?.result?.name;
@@ -381,8 +381,8 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         toolCall = res.toolResults.find((result: any) => result.payload.toolName === 'findUserTool').payload;
       }
 
-      expect(res.steps.length > 1);
-      expect(res.text.includes('joe@mail.com'));
+      expect(res.steps.length).toBeGreaterThan(1);
+      expect(res.text).toContain('joe@mail.com');
       expect(toolCall?.result?.email).toBe('joe@mail.com');
       expect(mockFindUser).toHaveBeenCalled();
     });
