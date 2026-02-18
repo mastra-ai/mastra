@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "langsmith": ">=0.3.79"
+    "langsmith": ">=0.4.6"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.35",
