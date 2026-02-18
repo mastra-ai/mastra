@@ -16,7 +16,7 @@ import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+import { authMiddleware } from './auth-middleware';
 
 /**
  * Convert Koa context to Web API Request for cookie-based auth providers.
@@ -592,7 +592,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       return;
     }
 
-    this.app.use(authenticationMiddleware);
-    this.app.use(authorizationMiddleware);
+    this.app.use(authMiddleware);
   }
 }

@@ -15,7 +15,7 @@ import {
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+import { authMiddleware } from './auth-middleware';
 
 /**
  * Convert Express request to Web API Request for cookie-based auth providers.
@@ -523,7 +523,6 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       return;
     }
 
-    this.app.use(authenticationMiddleware);
-    this.app.use(authorizationMiddleware);
+    this.app.use(authMiddleware);
   }
 }

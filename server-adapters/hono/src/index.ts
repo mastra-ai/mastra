@@ -17,7 +17,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+import { authMiddleware } from './auth-middleware';
 
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
@@ -511,7 +511,6 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       return;
     }
 
-    this.app.use('*', authenticationMiddleware);
-    this.app.use('*', authorizationMiddleware);
+    this.app.use('*', authMiddleware);
   }
 }

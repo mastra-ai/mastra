@@ -15,7 +15,7 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+import { authMiddleware } from './auth-middleware';
 
 /**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
@@ -634,7 +634,6 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       return;
     }
 
-    this.app.addHook('preHandler', authenticationMiddleware);
-    this.app.addHook('preHandler', authorizationMiddleware);
+    this.app.addHook('preHandler', authMiddleware);
   }
 }
