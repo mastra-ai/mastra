@@ -35,7 +35,7 @@ Usage:
       const content = await filesystem.readFile(path, { encoding: 'utf-8' });
 
       if (typeof content !== 'string') {
-        return 'Cannot edit binary files. Use workspace_write_file instead.';
+        return `Cannot edit binary files. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} instead.`;
       }
 
       const result = replaceString(content, old_string, new_string, replace_all);
