@@ -86,6 +86,7 @@ export abstract class ExecutionEngine extends MastraBase {
     input?: any;
     requestContext: RequestContext;
     state: Record<string, any>;
+    stepExecutionPath?: string[];
   }): Promise<void> {
     const { onFinish, onError } = this.options;
 
@@ -99,6 +100,7 @@ export abstract class ExecutionEngine extends MastraBase {
       requestContext: result.requestContext,
       logger: this.logger,
       state: result.state,
+      stepExecutionPath: result.stepExecutionPath,
     };
 
     // Always call onFinish if defined (for any terminal status)
@@ -159,6 +161,7 @@ export abstract class ExecutionEngine extends MastraBase {
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      stepExecutionPath?: string[];
       forEachIndex?: number;
       label?: string;
     };
