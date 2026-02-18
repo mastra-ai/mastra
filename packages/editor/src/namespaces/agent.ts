@@ -304,9 +304,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
               );
           return this.resolveStoredWorkflows(resolved);
         }
-      : this.resolveStoredWorkflows(
-          storedAgent.workflows as Record<string, StorageToolConfig> | string[] | undefined,
-        );
+      : this.resolveStoredWorkflows(storedAgent.workflows as Record<string, StorageToolConfig> | string[] | undefined);
 
     // Agents: variant values may be string[] or Record<string, StorageToolConfig>
     const agents = hasConditionalAgents
