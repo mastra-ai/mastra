@@ -210,13 +210,25 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Tell Koa we're handling the response ourselves
     ctx.respond = false;
 
+    const streamFormat = route.streamFormat || 'stream';
+
     // Set status and headers via ctx.res directly since we're bypassing Koa's response
+    const sseHeaders =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
     ctx.res.writeHead(200, {
-      'Content-Type': 'text/plain',
+      ...sseHeaders,
       'Transfer-Encoding': 'chunked',
     });
-
-    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
