@@ -1,6 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { ListTracesArgs } from '@mastra/core/storage';
-import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
+import { useInView, useInfiniteQuery, is403ForbiddenError } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
 const fetchTracesFn = async ({
@@ -54,14 +54,15 @@ export const useTraces = ({ filters }: TracesFilters) => {
       return data.pages.flatMap(page => page);
     },
     retry: false,
-    refetchInterval: 3000,
+    // Disable polling on 403 to prevent flickering
+    refetchInterval: query => (is403ForbiddenError(query.state.error) ? false : 3000),
   });
 
   useEffect(() => {
     if (isEndOfListInView && query.hasNextPage && !query.isFetchingNextPage) {
       query.fetchNextPage();
     }
-  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage]);
+  }, [isEndOfListInView, query.hasNextPage, query.isFetchingNextPage, query]);
 
   return { ...query, setEndOfListElement };
 };

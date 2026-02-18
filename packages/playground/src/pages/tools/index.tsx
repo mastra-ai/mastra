@@ -17,7 +17,7 @@ import { Link } from 'react-router';
 
 export default function Tools() {
   const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: tools = {}, isLoading: isLoadingTools } = useTools();
+  const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
 
   const hasDirectTools = Object.keys(tools).length > 0;
   const hasToolsFromAgents = Object.values(agentsRecord).some(
@@ -46,7 +46,7 @@ export default function Tools() {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <ToolTable tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} />
+        <ToolTable tools={tools} agents={agentsRecord} isLoading={isLoadingAgents || isLoadingTools} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

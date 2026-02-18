@@ -15,6 +15,7 @@ import { useLocation } from 'react-router';
 
 import {
   AgentIcon,
+  AuthStatus,
   GithubIcon,
   McpServerIcon,
   ToolsIcon,
@@ -27,6 +28,9 @@ import {
   MastraVersionFooter,
   useMastraPlatform,
   NavLink,
+  useAuthCapabilities,
+  isAuthenticated,
+  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -174,8 +178,16 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
+  const { data: authCapabilities } = useAuthCapabilities();
+  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
+
+  // Check if user is authenticated (small avatar) vs not (wide login button)
+  const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
 
   const filterPlatformLink = (link: NavLink) => {
+    if (link.name === 'Datasets' && !experimentalFeaturesEnabled) {
+      return false;
+    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }
@@ -186,8 +198,21 @@ export function AppSidebar() {
     <MainSidebar>
       <div className="pt-3 mb-4 -ml-0.5 sticky top-0 bg-surface1 z-10">
         {state === 'collapsed' ? (
-          <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+          <div className="flex flex-col gap-3 items-center">
+            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0 ml-3" />
+            {isUserAuthenticated && <AuthStatus />}
+          </div>
+        ) : isUserAuthenticated ? (
+          // Authenticated: avatar on same row as logo
+          <span className="flex items-center justify-between pl-3 pr-2">
+            <span className="flex items-center gap-2">
+              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+              <span className="font-serif text-sm">Mastra Studio</span>
+            </span>
+            <AuthStatus />
+          </span>
         ) : (
+          // Not authenticated: no login button (shown in main content via AuthRequired)
           <span className="flex items-center gap-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
             <span className="font-serif text-sm">Mastra Studio</span>
@@ -234,7 +259,7 @@ export function AppSidebar() {
                     url: 'https://mastra.ai/cloud',
                     icon: <CloudUploadIcon />,
                     variant: 'featured',
-                    tooltipMsg: 'You’re running Mastra Studio locally. Want your team to collaborate?',
+                    tooltipMsg: "You're running Mastra Studio locally. Want your team to collaborate?",
                     isOnMastraPlatform: false,
                   }}
                   state={state}
