@@ -192,9 +192,10 @@ export const SandboxExecutionBadge = ({
   // Streaming is complete if we have exit chunk or a final result
   const isStreamingComplete = !!exitChunk || typeof result === 'string';
 
+  const hasStarted = !!workspaceMetaPart; // metadata is emitted at tool start
   const hasStreamingOutput = sandboxChunks.length > 0;
-  const isRunning = hasStreamingOutput && !isStreamingComplete;
-  const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStreamingOutput);
+  const isRunning = hasStarted && !isStreamingComplete;
+  const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStarted);
 
   // Get exit info from data chunks
   const exitCode = exitChunk?.data?.exitCode;
