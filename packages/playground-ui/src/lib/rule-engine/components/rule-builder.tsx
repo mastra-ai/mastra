@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Plus, X, Component } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { Rule, RuleGroup, RuleGroupDepth1 } from '../types';
@@ -12,6 +12,28 @@ import { Button } from '@/ds/components/Button';
 import { IconButton } from '@/ds/components/IconButton';
 
 const DEFAULT_MAX_DEPTH = 3;
+
+/**
+ * AND/OR connector rendered between conditions as a horizontal line with centered pill
+ */
+const ConditionConnector: React.FC<{ operator: 'AND' | 'OR'; onToggle: () => void }> = ({ operator, onToggle }) => (
+  <div className="relative flex items-center w-full">
+    <div className="flex-1 border-t border-border1" />
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        'text-ui-xs px-3 py-0.5 rounded-full cursor-pointer shrink-0',
+        operator === 'OR'
+          ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
+          : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
+      )}
+    >
+      {operator.toLowerCase()}
+    </button>
+    <div className="flex-1 border-t border-border1" />
+  </div>
+);
 
 /**
  * Internal recursive component that renders one level of a rule group.
@@ -53,60 +75,81 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
     });
   };
 
-  return (
-    <div className={cn(isRoot ? 'bg-surface2' : 'pl-6 bg-surface3')}>
-      {/* Non-root group header */}
-      {!isRoot && (
-        <div className="flex items-center justify-between pl-3 pr-4 py-1.5 border-b border-border1 border-dashed">
-          <span className="text-ui-xs text-neutral3">Group</span>
+  if (!isRoot) {
+    return (
+      <div className="rounded-md border border-border1 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-ui-xs text-neutral3 uppercase tracking-wide">Group</span>
           {onRemove && (
             <IconButton type="button" onClick={onRemove} tooltip="Remove group" size="sm" variant="ghost">
               <X />
             </IconButton>
           )}
         </div>
-      )}
 
-      {group.conditions.map((condition, index) => (
-        <div key={index} className="border-b border-border1 border-dashed last:border-b-0">
-          <div className={cn('relative', isRule(condition) && 'p-4 border-l-4 border-border1')}>
-            {index > 0 && (
-              <button
-                type="button"
-                onClick={handleToggleOperator}
-                className={cn(
-                  'absolute left-1/2 -translate-x-1/2 z-10 -translate-y-1/2 top-0 text-ui-xs px-3 py-0.5 rounded-full cursor-pointer',
-                  group.operator === 'OR'
-                    ? 'bg-accent6Dark text-accent6 hover:bg-accent6Dark/70'
-                    : 'bg-accent3Dark text-accent3 hover:bg-accent3Dark/70',
-                )}
-              >
-                {group.operator.toLowerCase()}
-              </button>
-            )}
-
-            {isRule(condition) ? (
-              <RuleRow
-                schema={schema}
-                rule={condition}
-                onChange={updatedRule => handleConditionChange(index, updatedRule)}
-                onRemove={() => handleRemoveCondition(index)}
-              />
-            ) : (
-              <RuleGroupView
-                schema={schema}
-                group={condition}
-                onChange={updatedGroup => handleConditionChange(index, updatedGroup)}
-                onRemove={() => handleRemoveCondition(index)}
-                depth={depth + 1}
-                maxDepth={maxDepth}
-              />
-            )}
-          </div>
+        <div className="flex flex-col gap-2">
+          {group.conditions.map((condition, index) => (
+            <React.Fragment key={index}>
+              {index > 0 && <ConditionConnector operator={group.operator} onToggle={handleToggleOperator} />}
+              {isRule(condition) ? (
+                <RuleRow
+                  schema={schema}
+                  rule={condition}
+                  onChange={updatedRule => handleConditionChange(index, updatedRule)}
+                  onRemove={() => handleRemoveCondition(index)}
+                />
+              ) : (
+                <RuleGroupView
+                  schema={schema}
+                  group={condition}
+                  onChange={updatedGroup => handleConditionChange(index, updatedGroup)}
+                  onRemove={() => handleRemoveCondition(index)}
+                  depth={depth + 1}
+                  maxDepth={maxDepth}
+                />
+              )}
+            </React.Fragment>
+          ))}
         </div>
+
+        <div className="pt-3">
+          <Button type="button" onClick={handleAddRule} variant="ghost" size="sm">
+            <Icon>
+              <Plus />
+            </Icon>
+            Add rule
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {group.conditions.map((condition, index) => (
+        <React.Fragment key={index}>
+          {index > 0 && <ConditionConnector operator={group.operator} onToggle={handleToggleOperator} />}
+          {isRule(condition) ? (
+            <RuleRow
+              schema={schema}
+              rule={condition}
+              onChange={updatedRule => handleConditionChange(index, updatedRule)}
+              onRemove={() => handleRemoveCondition(index)}
+            />
+          ) : (
+            <RuleGroupView
+              schema={schema}
+              group={condition}
+              onChange={updatedGroup => handleConditionChange(index, updatedGroup)}
+              onRemove={() => handleRemoveCondition(index)}
+              depth={depth + 1}
+              maxDepth={maxDepth}
+            />
+          )}
+        </React.Fragment>
       ))}
 
-      <div className="p-2 flex gap-1">
+      <div className="pt-2 flex gap-1">
         <Button type="button" onClick={handleAddRule} variant="ghost" size="sm">
           <Icon>
             <Plus />
@@ -116,7 +159,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
         {depth < maxDepth - 1 && (
           <Button type="button" onClick={handleAddGroup} variant="ghost" size="sm">
             <Icon>
-              <Component />
+              <Plus />
             </Icon>
             Add group
           </Button>

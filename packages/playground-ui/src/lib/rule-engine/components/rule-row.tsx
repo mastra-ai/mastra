@@ -74,25 +74,31 @@ export const RuleRow: React.FC<RuleRowProps> = ({ schema, rule, onChange, onRemo
   );
 
   return (
-    <div className="flex justify-between gap-2">
-      <div className={cn('flex flex-wrap items-center gap-2', className)}>
-        <RuleFieldSelect schema={schema} value={rule.field} onChange={handleFieldChange} />
+    <div className={cn('flex items-center gap-2', className)}>
+      <div className="flex items-center rounded-md border border-border1 bg-surface3 divide-x divide-border1 overflow-hidden flex-1 min-w-0">
+        <div className="flex-1 min-w-0">
+          <RuleFieldSelect schema={schema} value={rule.field} onChange={handleFieldChange} />
+        </div>
 
         {showComparator && (
           <>
-            <RuleOperatorSelect
-              value={rule.operator}
-              onChange={handleOperatorChange}
-              operators={isArray ? (['in', 'not_in'] as const) : undefined}
-            />
+            <div className="shrink-0">
+              <RuleOperatorSelect
+                value={rule.operator}
+                onChange={handleOperatorChange}
+                operators={isArray ? (['in', 'not_in'] as const) : undefined}
+              />
+            </div>
 
             {showValueInput && (
-              <RuleValueInput
-                value={rule.value}
-                onChange={handleValueChange}
-                operator={rule.operator}
-                fieldType={fieldType}
-              />
+              <div className="flex-1 min-w-0">
+                <RuleValueInput
+                  value={rule.value}
+                  onChange={handleValueChange}
+                  operator={rule.operator}
+                  fieldType={fieldType}
+                />
+              </div>
             )}
           </>
         )}
