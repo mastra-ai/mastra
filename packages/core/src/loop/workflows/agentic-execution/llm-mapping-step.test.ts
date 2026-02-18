@@ -390,3 +390,284 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(false);
   });
 });
+
+describe('createLLMMappingStep toModelOutput', () => {
+  let controller: { enqueue: Mock };
+  let messageList: MessageList;
+  let llmExecutionStep: any;
+  let bail: Mock;
+  let getStepResult: Mock;
+
+  const createExecuteParams = (
+    inputData: ToolCallOutput[],
+  ): ExecuteFunctionParams<{}, ToolCallOutput[], any, any, any> => ({
+    runId: 'test-run',
+    workflowId: 'test-workflow',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult,
+    suspend: vi.fn(),
+    bail,
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'test-tool',
+      runId: 'test-run',
+    }),
+    validateSchemas: false,
+    inputData,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+
+    messageList = {
+      get: {
+        all: { aiV5: { model: () => [] } },
+        input: { aiV5: { model: () => [] } },
+        response: { aiV5: { model: () => [] } },
+      },
+      add: vi.fn(),
+    } as unknown as MessageList;
+
+    llmExecutionStep = createStep({
+      id: 'test-llm-execution',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({
+        stepResult: { isContinued: true, reason: undefined },
+        metadata: {},
+      }),
+    });
+
+    bail = vi.fn(data => data);
+    getStepResult = vi.fn(() => ({
+      stepResult: { isContinued: true, reason: undefined },
+      metadata: {},
+    }));
+  });
+
+  it('should call toModelOutput and store result on providerMetadata.mastra.modelOutput', async () => {
+    const toModelOutputMock = vi.fn((output: unknown) => ({
+      type: 'text',
+      value: `Transformed: ${JSON.stringify(output)}`,
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          weather: {
+            execute: async () => ({ temperature: 72 }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({ city: z.string() }),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'weather',
+        args: { city: 'NYC' },
+        result: { temperature: 72, conditions: 'sunny' },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // toModelOutput should have been called with the raw result
+    expect(toModelOutputMock).toHaveBeenCalledWith({ temperature: 72, conditions: 'sunny' });
+
+    // The message added to messageList should have providerMetadata.mastra.modelOutput
+    expect(messageList.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          parts: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                toolCallId: 'call-1',
+                result: { temperature: 72, conditions: 'sunny' }, // raw result preserved
+              }),
+              providerMetadata: expect.objectContaining({
+                mastra: expect.objectContaining({
+                  modelOutput: {
+                    type: 'text',
+                    value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
+                  },
+                }),
+              }),
+            }),
+          ]),
+        }),
+      }),
+      'response',
+    );
+  });
+
+  it('should NOT call toModelOutput for tools without it defined', async () => {
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          plainTool: {
+            execute: async () => ({ done: true }),
+            inputSchema: z.object({ input: z.string() }),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'plainTool',
+        args: { input: 'test' },
+        result: { done: true },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Message should NOT have providerMetadata on the part
+    expect(messageList.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          parts: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                toolCallId: 'call-1',
+                result: { done: true },
+              }),
+            }),
+          ]),
+        }),
+      }),
+      'response',
+    );
+
+    // providerMetadata should not be set on the part
+    const addedMessage = (messageList.add as Mock).mock.calls[0]![0];
+    const part = addedMessage.content.parts[0];
+    expect(part.providerMetadata).toBeUndefined();
+  });
+
+  it('should call toModelOutput for mixed tools (only the ones that define it)', async () => {
+    const toModelOutputMock = vi.fn((_output: unknown) => ({
+      type: 'text',
+      value: 'transformed',
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          withTransform: {
+            execute: async () => ({ data: 'raw' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+          withoutTransform: {
+            execute: async () => ({ data: 'raw' }),
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'withTransform',
+        args: {},
+        result: { data: 'raw' },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'withoutTransform',
+        args: {},
+        result: { data: 'raw' },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(toModelOutputMock).toHaveBeenCalledTimes(1);
+    expect(toModelOutputMock).toHaveBeenCalledWith({ data: 'raw' });
+
+    const addedMessage = (messageList.add as Mock).mock.calls[0]![0];
+    const parts = addedMessage.content.parts;
+
+    // First tool should have modelOutput
+    expect(parts[0].providerMetadata?.mastra?.modelOutput).toEqual({
+      type: 'text',
+      value: 'transformed',
+    });
+
+    // Second tool should NOT have providerMetadata
+    expect(parts[1].providerMetadata).toBeUndefined();
+  });
+
+  it('should NOT call toModelOutput when tool result is null/undefined', async () => {
+    const toModelOutputMock = vi.fn();
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          hitlTool: {
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'hitlTool',
+        args: {},
+        result: undefined, // HITL — no result yet
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // toModelOutput should NOT be called for undefined results
+    expect(toModelOutputMock).not.toHaveBeenCalled();
+  });
+});
