@@ -1241,6 +1241,624 @@ describe('PgVector', () => {
       });
     });
 
+    // Tests for bit vector type support (Issue #11035)
+    // Note: bit requires pgvector >= 0.7.0
+    describe('PgVector bit Type Support', () => {
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      let bitVectorDB: PgVector;
+      let bitSupported = false;
+
+      beforeAll(async () => {
+        bitVectorDB = new PgVector({
+          connectionString,
+          id: 'pg-vector-bit-test',
+        });
+
+        // Check if bit vector type is supported (pgvector >= 0.7.0)
+        const client = await bitVectorDB.pool.connect();
+        try {
+          const result = await client.query(`
+            SELECT extversion FROM pg_extension WHERE extname = 'vector'
+          `);
+          if (result.rows.length > 0) {
+            const version = result.rows[0].extversion;
+            const [major, minor] = version.split('.').map(Number);
+            // bit type was introduced in pgvector 0.7.0
+            bitSupported = major > 0 || (major === 0 && minor >= 7);
+          }
+        } catch {
+          bitSupported = false;
+        } finally {
+          client.release();
+        }
+      });
+
+      afterAll(async () => {
+        await bitVectorDB.disconnect();
+      });
+
+      describe('bit type for binary vectors', () => {
+        const testIndexName = 'test_bit_index';
+
+        afterEach(async () => {
+          try {
+            await bitVectorDB.deleteIndex({ indexName: testIndexName });
+          } catch {
+            // Ignore if doesn't exist
+          }
+        });
+
+        it('should accept bit as a valid vectorType', async () => {
+          if (!bitSupported) {
+            console.log('Skipping test: bit requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 64,
+            metric: 'cosine',
+            vectorType: 'bit',
+          });
+
+          const stats = await bitVectorDB.describeIndex({ indexName: testIndexName });
+          expect(stats.vectorType).toBe('bit');
+          expect(stats.dimension).toBe(64);
+        });
+
+        it('should create bit index with HNSW and hamming distance', async () => {
+          if (!bitSupported) {
+            console.log('Skipping test: bit requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 128,
+            metric: 'cosine', // Will need hamming metric support
+            indexConfig: {
+              type: 'hnsw',
+              hnsw: { m: 16, efConstruction: 64 },
+            },
+            vectorType: 'bit',
+          });
+
+          const stats = await bitVectorDB.describeIndex({ indexName: testIndexName });
+          expect(stats.type).toBe('hnsw');
+          expect(stats.vectorType).toBe('bit');
+        });
+
+        it('should verify bit column type in database', async () => {
+          if (!bitSupported) {
+            console.log('Skipping test: bit requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 64,
+            metric: 'cosine',
+            vectorType: 'bit',
+          });
+
+          const client = await bitVectorDB.pool.connect();
+          try {
+            const result = await client.query(
+              `
+              SELECT data_type, udt_name
+              FROM information_schema.columns
+              WHERE table_name = $1 AND column_name = 'embedding'
+            `,
+              [testIndexName],
+            );
+
+            expect(result.rows[0]?.udt_name).toBe('bit');
+          } finally {
+            client.release();
+          }
+        });
+
+        it('should be discoverable by listIndexes', async () => {
+          if (!bitSupported) {
+            console.log('Skipping test: bit requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 64,
+            metric: 'cosine',
+            vectorType: 'bit',
+          });
+
+          const indexes = await bitVectorDB.listIndexes();
+          expect(indexes).toContain(testIndexName);
+        });
+
+        it('should upsert and query bit vectors', async () => {
+          if (!bitSupported) {
+            console.log('Skipping test: bit requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 8,
+            metric: 'cosine',
+            indexConfig: { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+            vectorType: 'bit',
+          });
+
+          // Binary vectors: 8 bits each
+          const ids = await bitVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [
+              [1, 1, 1, 1, 0, 0, 0, 0], // 11110000
+              [1, 1, 0, 0, 0, 0, 0, 0], // 11000000
+              [0, 0, 0, 0, 0, 0, 0, 0], // 00000000
+            ],
+            metadata: [{ label: 'a' }, { label: 'b' }, { label: 'c' }],
+          });
+
+          expect(ids).toHaveLength(3);
+
+          // Query with a vector close to the first one
+          const results = await bitVectorDB.query({
+            indexName: testIndexName,
+            queryVector: [1, 1, 1, 1, 0, 0, 0, 0],
+            topK: 3,
+          });
+
+          expect(results.length).toBeGreaterThan(0);
+          // The exact match should score highest (hamming distance = 0 → score = 1)
+          expect(results[0]?.metadata?.label).toBe('a');
+          expect(results[0]?.score).toBeCloseTo(1, 3);
+        });
+
+        it('should return bit vector when includeVector is true', async () => {
+          if (!bitSupported) {
+            console.log('Skipping test: bit requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 4,
+            metric: 'cosine',
+            indexConfig: { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+            vectorType: 'bit',
+          });
+
+          await bitVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [[1, 0, 1, 0]],
+            metadata: [{ test: true }],
+          });
+
+          const results = await bitVectorDB.query({
+            indexName: testIndexName,
+            queryVector: [1, 0, 1, 0],
+            topK: 1,
+            includeVector: true,
+          });
+
+          expect(results[0]?.vector).toEqual([1, 0, 1, 0]);
+        });
+      });
+    });
+
+    // Tests for sparsevec type support (Issue #11035)
+    // Note: sparsevec requires pgvector >= 0.7.0
+    describe('PgVector sparsevec Type Support', () => {
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      let sparseVectorDB: PgVector;
+      let sparsevecSupported = false;
+
+      beforeAll(async () => {
+        sparseVectorDB = new PgVector({
+          connectionString,
+          id: 'pg-vector-sparsevec-test',
+        });
+
+        // Check if sparsevec type is supported (pgvector >= 0.7.0)
+        const client = await sparseVectorDB.pool.connect();
+        try {
+          const result = await client.query(`
+            SELECT extversion FROM pg_extension WHERE extname = 'vector'
+          `);
+          if (result.rows.length > 0) {
+            const version = result.rows[0].extversion;
+            const [major, minor] = version.split('.').map(Number);
+            // sparsevec was introduced in pgvector 0.7.0
+            sparsevecSupported = major > 0 || (major === 0 && minor >= 7);
+          }
+        } catch {
+          sparsevecSupported = false;
+        } finally {
+          client.release();
+        }
+      });
+
+      afterAll(async () => {
+        await sparseVectorDB.disconnect();
+      });
+
+      describe('sparsevec type for sparse embeddings', () => {
+        const testIndexName = 'test_sparsevec_index';
+
+        afterEach(async () => {
+          try {
+            await sparseVectorDB.deleteIndex({ indexName: testIndexName });
+          } catch {
+            // Ignore if doesn't exist
+          }
+        });
+
+        it('should accept sparsevec as a valid vectorType', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await sparseVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 100,
+            metric: 'cosine',
+            vectorType: 'sparsevec',
+          });
+
+          const stats = await sparseVectorDB.describeIndex({ indexName: testIndexName });
+          expect(stats.vectorType).toBe('sparsevec');
+          expect(stats.dimension).toBe(100);
+        });
+
+        it('should create sparsevec index with HNSW', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await sparseVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 100,
+            metric: 'cosine',
+            indexConfig: {
+              type: 'hnsw',
+              hnsw: { m: 16, efConstruction: 64 },
+            },
+            vectorType: 'sparsevec',
+          });
+
+          const stats = await sparseVectorDB.describeIndex({ indexName: testIndexName });
+          expect(stats.type).toBe('hnsw');
+          expect(stats.vectorType).toBe('sparsevec');
+        });
+
+        it('should verify sparsevec column type in database', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await sparseVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 100,
+            metric: 'cosine',
+            vectorType: 'sparsevec',
+          });
+
+          const client = await sparseVectorDB.pool.connect();
+          try {
+            const result = await client.query(
+              `
+              SELECT data_type, udt_name
+              FROM information_schema.columns
+              WHERE table_name = $1 AND column_name = 'embedding'
+            `,
+              [testIndexName],
+            );
+
+            expect(result.rows[0]?.udt_name).toBe('sparsevec');
+          } finally {
+            client.release();
+          }
+        });
+
+        it('should be discoverable by listIndexes', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await sparseVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 100,
+            metric: 'cosine',
+            vectorType: 'sparsevec',
+          });
+
+          const indexes = await sparseVectorDB.listIndexes();
+          expect(indexes).toContain(testIndexName);
+        });
+
+        it('should upsert and query sparsevec vectors', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await sparseVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 10,
+            metric: 'cosine',
+            indexConfig: { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+            vectorType: 'sparsevec',
+          });
+
+          // Sparse vectors: mostly zeros with a few non-zero values
+          const ids = await sparseVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [
+              [0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0.3], // sparse: indices 1 and 10
+              [0, 0, 0.8, 0, 0, 0, 0, 0, 0, 0], // sparse: index 3
+              [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.1], // sparse: index 10
+            ],
+            metadata: [{ label: 'a' }, { label: 'b' }, { label: 'c' }],
+          });
+
+          expect(ids).toHaveLength(3);
+
+          // Query with a vector similar to the first one
+          const results = await sparseVectorDB.query({
+            indexName: testIndexName,
+            queryVector: [0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0.3],
+            topK: 3,
+          });
+
+          expect(results.length).toBeGreaterThan(0);
+          // The exact match should score highest
+          expect(results[0]?.metadata?.label).toBe('a');
+          expect(results[0]?.score).toBeCloseTo(1, 3);
+        });
+
+        it('should return sparsevec vector when includeVector is true', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await sparseVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 5,
+            metric: 'cosine',
+            indexConfig: { type: 'hnsw', hnsw: { m: 16, efConstruction: 64 } },
+            vectorType: 'sparsevec',
+          });
+
+          await sparseVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [[0.5, 0, 0.2, 0, 0]],
+            metadata: [{ test: true }],
+          });
+
+          const results = await sparseVectorDB.query({
+            indexName: testIndexName,
+            queryVector: [0.5, 0, 0.2, 0, 0],
+            topK: 1,
+            includeVector: true,
+          });
+
+          expect(results[0]?.vector).toEqual([0.5, 0, 0.2, 0, 0]);
+        });
+
+        it('should default to HNSW index when no config provided', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          // No indexConfig — should auto-default to HNSW (not IVFFlat)
+          await sparseVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 10,
+            metric: 'cosine',
+            vectorType: 'sparsevec',
+          });
+
+          const stats = await sparseVectorDB.describeIndex({ indexName: testIndexName });
+          expect(stats.type).toBe('hnsw');
+          expect(stats.vectorType).toBe('sparsevec');
+        });
+
+        it('should reject IVFFlat index for sparsevec', async () => {
+          if (!sparsevecSupported) {
+            console.log('Skipping test: sparsevec requires pgvector >= 0.7.0');
+            return;
+          }
+
+          await expect(
+            sparseVectorDB.createIndex({
+              indexName: testIndexName,
+              dimension: 10,
+              metric: 'cosine',
+              indexConfig: { type: 'ivfflat' },
+              vectorType: 'sparsevec',
+            }),
+          ).rejects.toThrow(/IVFFlat indexes do not support sparsevec/);
+        });
+      });
+    });
+
+    // Tests for operator class generation for new types (Issue #11035)
+    describe('Operator class for bit and sparsevec types', () => {
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      let opClassDB: PgVector;
+
+      beforeAll(async () => {
+        opClassDB = new PgVector({
+          connectionString,
+          id: 'pg-vector-opclass-test',
+        });
+      });
+
+      afterAll(async () => {
+        await opClassDB.disconnect();
+      });
+
+      it('should generate correct operator class for bit type with cosine metric', () => {
+        // Access private method to test operator class generation
+        const opClass = opClassDB['getMetricOperatorClass']('cosine', 'bit');
+        expect(opClass).toBe('bit_hamming_ops');
+      });
+
+      it('should generate correct operator class for sparsevec type with cosine metric', () => {
+        const opClass = opClassDB['getMetricOperatorClass']('cosine', 'sparsevec');
+        expect(opClass).toBe('sparsevec_cosine_ops');
+      });
+
+      it('should generate correct operator class for sparsevec type with euclidean metric', () => {
+        const opClass = opClassDB['getMetricOperatorClass']('euclidean', 'sparsevec');
+        expect(opClass).toBe('sparsevec_l2_ops');
+      });
+
+      it('should generate correct operator class for sparsevec type with dotproduct metric', () => {
+        const opClass = opClassDB['getMetricOperatorClass']('dotproduct', 'sparsevec');
+        expect(opClass).toBe('sparsevec_ip_ops');
+      });
+
+      it('should still generate correct operator class for vector type', () => {
+        expect(opClassDB['getMetricOperatorClass']('cosine', 'vector')).toBe('vector_cosine_ops');
+        expect(opClassDB['getMetricOperatorClass']('euclidean', 'vector')).toBe('vector_l2_ops');
+        expect(opClassDB['getMetricOperatorClass']('dotproduct', 'vector')).toBe('vector_ip_ops');
+      });
+
+      it('should still generate correct operator class for halfvec type', () => {
+        expect(opClassDB['getMetricOperatorClass']('cosine', 'halfvec')).toBe('halfvec_cosine_ops');
+        expect(opClassDB['getMetricOperatorClass']('euclidean', 'halfvec')).toBe('halfvec_l2_ops');
+        expect(opClassDB['getMetricOperatorClass']('dotproduct', 'halfvec')).toBe('halfvec_ip_ops');
+      });
+    });
+
+    // Tests for distance operator selection (Issue #11035)
+    describe('Distance operator for bit and sparsevec types', () => {
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      let helperDB: PgVector;
+
+      beforeAll(async () => {
+        helperDB = new PgVector({
+          connectionString,
+          id: 'pg-vector-distance-op-test',
+        });
+      });
+
+      afterAll(async () => {
+        await helperDB.disconnect();
+      });
+
+      it('should return hamming operator for bit type', () => {
+        expect(helperDB['getDistanceOperator']('cosine', 'bit')).toBe('<~>');
+        expect(helperDB['getDistanceOperator']('euclidean', 'bit')).toBe('<~>');
+        expect(helperDB['getDistanceOperator']('dotproduct', 'bit')).toBe('<~>');
+      });
+
+      it('should return cosine operator for sparsevec with cosine metric', () => {
+        expect(helperDB['getDistanceOperator']('cosine', 'sparsevec')).toBe('<=>');
+      });
+
+      it('should return L2 operator for sparsevec with euclidean metric', () => {
+        expect(helperDB['getDistanceOperator']('euclidean', 'sparsevec')).toBe('<->');
+      });
+
+      it('should return inner product operator for sparsevec with dotproduct metric', () => {
+        expect(helperDB['getDistanceOperator']('dotproduct', 'sparsevec')).toBe('<#>');
+      });
+
+      it('should return standard operators for vector/halfvec types', () => {
+        expect(helperDB['getDistanceOperator']('cosine', 'vector')).toBe('<=>');
+        expect(helperDB['getDistanceOperator']('euclidean', 'vector')).toBe('<->');
+        expect(helperDB['getDistanceOperator']('dotproduct', 'vector')).toBe('<#>');
+        expect(helperDB['getDistanceOperator']('cosine', 'halfvec')).toBe('<=>');
+      });
+    });
+
+    // Tests for vector string formatting (Issue #11035)
+    describe('Vector string formatting for bit and sparsevec types', () => {
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      let fmtDB: PgVector;
+
+      beforeAll(async () => {
+        fmtDB = new PgVector({
+          connectionString,
+          id: 'pg-vector-format-test',
+        });
+      });
+
+      afterAll(async () => {
+        await fmtDB.disconnect();
+      });
+
+      it('should format bit vectors as binary string', () => {
+        expect(fmtDB['formatVectorString']([1, 0, 1, 1, 0], 'bit')).toBe('10110');
+        expect(fmtDB['formatVectorString']([0, 0, 0, 0], 'bit')).toBe('0000');
+        expect(fmtDB['formatVectorString']([1, 1, 1, 1], 'bit')).toBe('1111');
+      });
+
+      it('should format sparsevec as sparse representation', () => {
+        // [0.5, 0, 0.2, 0, 0] -> '{1:0.5,3:0.2}/5'
+        expect(fmtDB['formatVectorString']([0.5, 0, 0.2, 0, 0], 'sparsevec')).toBe('{1:0.5,3:0.2}/5');
+      });
+
+      it('should handle all-zero sparsevec', () => {
+        expect(fmtDB['formatVectorString']([0, 0, 0], 'sparsevec')).toBe('{}/3');
+      });
+
+      it('should use provided dimension for sparsevec', () => {
+        expect(fmtDB['formatVectorString']([0.5, 0, 0.2], 'sparsevec', 100)).toBe('{1:0.5,3:0.2}/100');
+      });
+
+      it('should format vector/halfvec as JSON array', () => {
+        expect(fmtDB['formatVectorString']([1, 2, 3], 'vector')).toBe('[1,2,3]');
+        expect(fmtDB['formatVectorString']([1.5, 2.5], 'halfvec')).toBe('[1.5,2.5]');
+      });
+    });
+
+    // Tests for embedding parsing (Issue #11035)
+    describe('Embedding parsing for bit and sparsevec types', () => {
+      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+      let parseDB: PgVector;
+
+      beforeAll(async () => {
+        parseDB = new PgVector({
+          connectionString,
+          id: 'pg-vector-parse-test',
+        });
+      });
+
+      afterAll(async () => {
+        await parseDB.disconnect();
+      });
+
+      it('should parse bit embedding from binary string', () => {
+        expect(parseDB['parseEmbedding']('10110', 'bit')).toEqual([1, 0, 1, 1, 0]);
+        expect(parseDB['parseEmbedding']('0000', 'bit')).toEqual([0, 0, 0, 0]);
+      });
+
+      it('should parse sparsevec embedding', () => {
+        const result = parseDB['parseEmbedding']('{1:0.5,3:0.2}/5', 'sparsevec');
+        expect(result).toEqual([0.5, 0, 0.2, 0, 0]);
+      });
+
+      it('should parse empty sparsevec', () => {
+        const result = parseDB['parseEmbedding']('{}/3', 'sparsevec');
+        expect(result).toEqual([0, 0, 0]);
+      });
+
+      it('should parse vector/halfvec as JSON', () => {
+        expect(parseDB['parseEmbedding']('[1,2,3]', 'vector')).toEqual([1, 2, 3]);
+        expect(parseDB['parseEmbedding']('[1.5,2.5]', 'halfvec')).toEqual([1.5, 2.5]);
+      });
+    });
+
     describe('Schema Support', () => {
       const customSchema = 'mastraTest';
       let vectorDB: PgVector;
