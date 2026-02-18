@@ -31,8 +31,8 @@ export function resolveProviderConfig(config: ProviderConfig): ResolvedProviderC
     return resolveTraceloopConfig(config.traceloop);
   } else if ('laminar' in config) {
     return resolveLaminarConfig(config.laminar);
-  } else if ('grafana' in config) {
-    return resolveGrafanaCloudConfig(config.grafana);
+  } else if ('grafana-cloud' in config) {
+    return resolveGrafanaCloudConfig(config['grafana-cloud']);
   } else if ('custom' in config) {
     return resolveCustomConfig(config.custom);
   } else {
