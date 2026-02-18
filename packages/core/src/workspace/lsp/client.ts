@@ -67,12 +67,9 @@ export async function loadLSPDeps(): Promise<{
   }
 
   try {
-    const jsonrpcName = 'vscode-jsonrpc' + '/node';
-    const protocolName = 'vscode-languageserver' + '-protocol';
-    const [jsonrpc, protocol] = await Promise.all([
-      import(/* webpackIgnore: true */ jsonrpcName),
-      import(/* webpackIgnore: true */ protocolName),
-    ]);
+    const req = createRequire(import.meta.url);
+    const jsonrpc = req('vscode-jsonrpc/node');
+    const protocol = req('vscode-languageserver-protocol');
     jsonrpcModule = {
       StreamMessageReader: jsonrpc.StreamMessageReader,
       StreamMessageWriter: jsonrpc.StreamMessageWriter,
