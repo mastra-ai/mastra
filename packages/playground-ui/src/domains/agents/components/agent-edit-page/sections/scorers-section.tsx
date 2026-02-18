@@ -1,21 +1,18 @@
 import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
-import { Trash2, ChevronRight, Plus } from 'lucide-react';
+import { Trash2, ChevronRight } from 'lucide-react';
 
 import { JudgeIcon, Icon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { IconButton } from '@/ds/components/IconButton';
-import { Button } from '@/ds/components/Button';
 import { Label } from '@/ds/components/Label';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
 import type { AgentFormValues, ScorerConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-import { SideDialog } from '@/ds/components/SideDialog';
 
 interface ScorersSectionProps {
   control: Control<AgentFormValues>;
@@ -25,7 +22,6 @@ interface ScorersSectionProps {
 
 export function ScorersSection({ control, error, readOnly = false }: ScorersSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { data: scorers, isLoading } = useScorers();
   const selectedScorers = useWatch({ control, name: 'scorers' });
   const count = Object.keys(selectedScorers || {}).length;
@@ -89,22 +85,11 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="flex items-center justify-between p-3 bg-surface3">
                   <CollapsibleTrigger className="flex items-center gap-1 w-full">
-                    <ChevronRight className="h-4 w-4 text-icon3" />
+                    <ChevronRight className="h-4 w-4 text-neutral3" />
                     <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
                       Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
-
-                  {!readOnly && (
-                    <div className="flex justify-end items-center">
-                      <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-                        <Icon size="sm">
-                          <Plus />
-                        </Icon>
-                        Create
-                      </Button>
-                    </div>
-                  )}
                 </div>
 
                 <CollapsibleContent>
@@ -143,17 +128,6 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                   </div>
                 </CollapsibleContent>
               </Collapsible>
-              <ScorersSideDialog
-                isOpen={isCreateDialogOpen}
-                onClose={() => setIsCreateDialogOpen(false)}
-                onScorerCreated={scorer => {
-                  field.onChange({
-                    ...selectedScorers,
-                    [scorer.id]: { description: '' },
-                  });
-                  setIsCreateDialogOpen(false);
-                }}
-              />
             </>
           );
         }}
@@ -206,7 +180,7 @@ function ScorerConfigPanel({
           <Icon size="sm">
             <JudgeIcon className="text-neutral3" />
           </Icon>
-          <span className="text-xs font-medium text-icon6">{scorerName}</span>
+          <span className="text-xs font-medium text-neutral6">{scorerName}</span>
         </div>
         {!readOnly && (
           <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
@@ -226,7 +200,7 @@ function ScorerConfigPanel({
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-neutral4">
           Sampling
         </Label>
         <RadioGroup
@@ -238,13 +212,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-sm text-icon5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-sm text-neutral5 cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-icon5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-neutral5 cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -252,7 +226,7 @@ function ScorerConfigPanel({
 
         {samplingType === 'ratio' && (
           <div className="flex flex-col gap-1.5 mt-1">
-            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-icon4">
+            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-neutral4">
               Sample Rate (0-1)
             </Label>
             <Input
@@ -272,27 +246,3 @@ function ScorerConfigPanel({
     </div>
   );
 }
-
-interface ScorersSideDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onScorerCreated?: (scorer: { id: string }) => void;
-}
-
-const ScorersSideDialog = ({ isOpen, onClose, onScorerCreated }: ScorersSideDialogProps) => {
-  return (
-    <SideDialog
-      isOpen={isOpen}
-      onClose={onClose}
-      dialogTitle="Create a new scorer"
-      dialogDescription="Create a new scorer to evaluate the performance of your agents."
-    >
-      <SideDialog.Top>
-        <SideDialog.Header>
-          <SideDialog.Heading>Create a new scorer</SideDialog.Heading>
-        </SideDialog.Header>
-      </SideDialog.Top>
-      <ScorerCreateContent onSuccess={onScorerCreated} />
-    </SideDialog>
-  );
-};

@@ -595,8 +595,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
                 content: typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
                 role: message.role,
                 type: message.type || 'v2',
-                createdAt: formatDateForMongoDB(time),
                 resourceId: message.resourceId,
+              },
+              $setOnInsert: {
+                createdAt: formatDateForMongoDB(time),
               },
             },
             upsert: true,

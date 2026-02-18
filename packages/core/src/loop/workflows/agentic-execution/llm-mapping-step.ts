@@ -45,6 +45,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   // Get tracing context from modelSpanTracker if available
   const tracingContext = rest.modelSpanTracker?.getTracingContext();
 
+  // Create a ProcessorStreamWriter from outputWriter so processOutputStream can emit custom chunks
+  const streamWriter = rest.outputWriter
+    ? { custom: async (data: { type: string }) => rest.outputWriter(data as ChunkType<OUTPUT>) }
+    : undefined;
+
   // Helper function to process a chunk through output processors and enqueue it
   async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<void> {
     if (processorRunner && rest.processorStates) {
@@ -60,6 +65,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         tracingContext,
         rest.requestContext,
         rest.messageList,
+        0,
+        streamWriter,
       );
 
       if (blocked) {
@@ -91,6 +98,28 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
+
+      // Compute toModelOutput for a successful tool call and return providerMetadata
+      // with the result stored at mastra.modelOutput
+      async function getProviderMetadataWithModelOutput(toolCall: {
+        toolName: string;
+        result?: unknown;
+        providerMetadata?: Record<string, unknown>;
+      }) {
+        const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
+        let modelOutput: unknown;
+        if (tool?.toModelOutput && toolCall.result != null) {
+          modelOutput = await tool.toModelOutput(toolCall.result);
+        }
+
+        const existingMastra = (toolCall.providerMetadata as any)?.mastra;
+        const providerMetadata = {
+          ...toolCall.providerMetadata,
+          ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+        };
+        const hasMetadata = Object.keys(providerMetadata).length > 0;
+        return hasMetadata ? providerMetadata : undefined;
+      }
 
       if (inputData?.some(toolCall => toolCall?.result === undefined)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error);
@@ -180,17 +209,22 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               role: 'assistant' as const,
               content: {
                 format: 2,
-                parts: successfulResults.map(toolCall => ({
-                  type: 'tool-invocation' as const,
-                  toolInvocation: {
-                    state: 'result' as const,
-                    toolCallId: toolCall.toolCallId,
-                    toolName: toolCall.toolName,
-                    args: toolCall.args,
-                    result: toolCall.result,
-                  },
-                  ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-                })),
+                parts: await Promise.all(
+                  successfulResults.map(async toolCall => {
+                    const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                    return {
+                      type: 'tool-invocation' as const,
+                      toolInvocation: {
+                        state: 'result' as const,
+                        toolCallId: toolCall.toolCallId,
+                        toolName: toolCall.toolName,
+                        args: toolCall.args,
+                        result: toolCall.result,
+                      },
+                      ...(providerMetadata ? { providerMetadata } : {}),
+                    };
+                  }),
+                ),
               },
               createdAt: new Date(),
             };
@@ -268,19 +302,22 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           role: 'assistant' as const,
           content: {
             format: 2,
-            parts: clientExecutedToolCalls.map(toolCall => {
-              return {
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'result' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  args: toolCall.args,
-                  result: toolCall.result,
-                },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-              };
-            }),
+            parts: await Promise.all(
+              clientExecutedToolCalls.map(async toolCall => {
+                const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                return {
+                  type: 'tool-invocation' as const,
+                  toolInvocation: {
+                    state: 'result' as const,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    args: toolCall.args,
+                    result: toolCall.result,
+                  },
+                  ...(providerMetadata ? { providerMetadata } : {}),
+                };
+              }),
+            ),
           },
           createdAt: new Date(),
         };

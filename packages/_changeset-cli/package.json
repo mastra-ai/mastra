@@ -28,7 +28,7 @@
     "@octokit/rest": "^22.0.1",
     "citty": "^0.1.6",
     "dotenv": "^17.2.3",
-    "execa": "^9.6.0",
+    "execa": "^9.6.1",
     "mri": "^1.2.0",
     "picocolors": "^1.1.1",
     "semver": "^7.7.2"
