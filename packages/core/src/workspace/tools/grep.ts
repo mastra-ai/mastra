@@ -12,6 +12,8 @@ export const grepTool = createTool({
 
 Usage:
 - Basic search: { pattern: "TODO" }
+- Regex: { pattern: "function\\s+\\w+\\(" }
+- Multiple terms: { pattern: "TODO|FIXME|HACK" }
 - Case-insensitive: { pattern: "error", caseSensitive: false }
 - Search in directory: { pattern: "import", path: "./src" }
 - Filter by glob: { pattern: "import", path: "**/*.ts" }
