@@ -440,12 +440,12 @@ export type BatchDeleteTracesArgs = z.infer<typeof batchDeleteTracesArgsSchema>;
 
 /**
  * Schema for deleteTracesOlderThan operation arguments.
- * Deletes all traces where the root span's startedAt is before the specified date.
+ * Deletes all traces where the root span's createdAt is before the specified date.
  */
 export const deleteTracesOlderThanArgsSchema = z
   .object({
-    /** Delete traces with root span started before this date */
-    beforeDate: z.date().describe('Delete traces with startedAt before this date'),
+    /** Delete traces with root span created before this date */
+    beforeDate: z.date().describe('Delete traces with createdAt before this date'),
     /** Optional filters to scope which traces are deleted */
     filters: z
       .object({

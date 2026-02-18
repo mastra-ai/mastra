@@ -795,9 +795,9 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       const conditions: string[] = [];
       const params: Record<string, any> = {};
 
-      // Date filter - delete traces where root span started before this date
+      // Date filter - delete traces where root span was created before this date
       // ClickHouse uses DateTime64(3) which stores milliseconds
-      conditions.push('startedAt < {beforeDate:DateTime64(3)}');
+      conditions.push('createdAt < {beforeDate:DateTime64(3)}');
       params.beforeDate = args.beforeDate.getTime();
 
       // Only match root spans (parentSpanId is empty string in ClickHouse for NULL)

@@ -789,8 +789,8 @@ export class ObservabilityPG extends ObservabilityStorage {
       const params: any[] = [];
       let paramIndex = 1;
 
-      // Date filter - delete traces where root span started before this date
-      conditions.push(`"startedAtZ" < $${paramIndex++}`);
+      // Date filter - delete traces where root span was created before this date
+      conditions.push(`"createdAtZ" < $${paramIndex++}`);
       params.push(args.beforeDate.toISOString());
 
       // Optional filters

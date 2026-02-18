@@ -158,10 +158,10 @@ export class ObservabilityStorage extends StorageDomain {
   }
 
   /**
-   * Deletes all traces where the root span's startedAt is before the specified date.
+   * Deletes all traces where the root span's createdAt is before the specified date.
    * This is useful for implementing data retention policies.
    *
-   * @param args.beforeDate - Delete traces with startedAt before this date
+   * @param args.beforeDate - Delete traces created before this date
    * @param args.filters - Optional filters to scope which traces are deleted
    * @returns The number of traces deleted
    */

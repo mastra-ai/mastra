@@ -805,8 +805,8 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       const conditions: string[] = [];
       const params: Record<string, any> = {};
 
-      // Date filter - delete traces where root span started before this date
-      conditions.push('startedAt < @beforeDate');
+      // Date filter - delete traces where root span was created before this date
+      conditions.push('createdAt < @beforeDate');
       params.beforeDate = args.beforeDate;
 
       // Only match root spans
