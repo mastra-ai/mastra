@@ -446,39 +446,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async deleteTracesOlderThan(args: DeleteTracesOlderThanArgs): Promise<DeleteTracesOlderThanResponse> {
     const { beforeDate, filters } = args;
-    const traceIdsToDelete: string[] = [];
-
-    for (const [traceId, traceEntry] of this.db.traces) {
-      const rootSpan = traceEntry.rootSpan;
-      if (!rootSpan) continue;
-
-      // Check if the root span started before the cutoff date
-      if (rootSpan.startedAt >= beforeDate) continue;
-
-      // Check optional filters
-      if (filters?.entityType !== undefined && rootSpan.entityType !== filters.entityType) {
-        continue;
-      }
-      if (filters?.entityId !== undefined && rootSpan.entityId !== filters.entityId) {
-        continue;
-      }
-      if (filters?.organizationId !== undefined && rootSpan.organizationId !== filters.organizationId) {
-        continue;
-      }
-      if (filters?.environment !== undefined && rootSpan.environment !== filters.environment) {
-        continue;
-      }
 
       traceIdsToDelete.push(traceId);
     }
 
     // Delete the matching traces
-    for (const traceId of traceIdsToDelete) {
-      this.db.traces.delete(traceId);
-    }
-
-    return {
-      deletedCount: traceIdsToDelete.length,
-    };
   }
 }

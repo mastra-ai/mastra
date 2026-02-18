@@ -464,69 +464,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       // Build the query to scan for matching workflow runs
-      // DynamoDB requires scanning all items and filtering client-side for date comparisons
-      let query = this.service.entities.workflow_snapshot.scan.where(
-        ({ createdAt }: { createdAt: string }, { lt }: { lt: (attr: string, value: string) => string }) =>
-          lt(createdAt, args.beforeDate.toISOString()),
-      );
-
-      // Apply optional filters
-      if (args.filters?.workflowName !== undefined) {
-        query = query.where(
-          ({ workflow_name }: { workflow_name: string }, { eq }: { eq: (attr: string, value: string) => string }) =>
-            eq(workflow_name, args.filters!.workflowName!),
-        );
-      }
-
-      if (args.filters?.resourceId !== undefined) {
-        query = query.where(
-          (
-            { resourceId }: { resourceId: string | undefined },
-            { eq }: { eq: (attr: string | undefined, value: string) => string },
-          ) => eq(resourceId, args.filters!.resourceId!),
-        );
-      }
-
-      // Execute scan to find matching items
-      const result = await query.go({ pages: 'all' });
-
-      if (!result.data || result.data.length === 0) {
-        return { deletedCount: 0 };
-      }
-
-      // Filter by status if specified (need to check snapshot.status)
-      let itemsToDelete = result.data as WorkflowSnapshotDBItem[];
-      if (args.filters?.status !== undefined) {
-        itemsToDelete = itemsToDelete.filter(item => {
-          const snapshot = item.snapshot;
-          return snapshot && snapshot.status === args.filters!.status;
-        });
-      }
-
-      if (itemsToDelete.length === 0) {
-        return { deletedCount: 0 };
-      }
-
-      // Delete matching items in batches (DynamoDB limits batch operations to 25 items)
-      const batchSize = 25;
-      for (let i = 0; i < itemsToDelete.length; i += batchSize) {
-        const batch = itemsToDelete.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(item =>
-            this.service.entities.workflow_snapshot
-              .delete({
-                entity: 'workflow_snapshot',
-                workflow_name: item.workflow_name,
-                run_id: item.run_id,
-              })
-              .go(),
-          ),
-        );
-      }
-
-      return {
-        deletedCount: itemsToDelete.length,
-      };
     } catch (error) {
       throw new MastraError(
         {

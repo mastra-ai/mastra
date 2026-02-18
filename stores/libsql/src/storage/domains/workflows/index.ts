@@ -7,6 +7,8 @@ import type {
   WorkflowRuns,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  DeleteWorkflowRunsOlderThanArgs,
+  DeleteWorkflowRunsOlderThanResponse,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -342,6 +344,49 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         );
       }
     }, 'deleteWorkflowRunById');
+  }
+
+  async deleteWorkflowRunsOlderThan(args: DeleteWorkflowRunsOlderThanArgs): Promise<DeleteWorkflowRunsOlderThanResponse> {
+    return this.executeWithRetry(async () => {
+      try {
+        const params: InValue[] = [args.beforeDate.toISOString()];
+        const conditions: string[] = ['"createdAt" < ?'];
+
+        if (args.filters?.workflowName !== undefined) {
+          params.push(args.filters.workflowName);
+          conditions.push('workflow_name = ?');
+        }
+        if (args.filters?.resourceId !== undefined) {
+          params.push(args.filters.resourceId);
+          conditions.push('"resourceId" = ?');
+        }
+        if (args.filters?.status !== undefined) {
+          params.push(args.filters.status);
+          conditions.push("json_extract(snapshot, '$.status') = ?");
+        }
+
+        const whereClause = conditions.join(' AND ');
+        const result = await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
+          args: params,
+        });
+
+        return { deletedCount: result.rowsAffected };
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('LIBSQL', 'DELETE_WORKFLOW_RUNS_OLDER_THAN', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              beforeDate: args.beforeDate.toISOString(),
+              filters: JSON.stringify(args.filters),
+            },
+          },
+          error,
+        );
+      }
+    }, 'deleteWorkflowRunsOlderThan');
   }
 
   async listWorkflowRuns({

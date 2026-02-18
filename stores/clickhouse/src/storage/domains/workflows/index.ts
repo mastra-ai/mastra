@@ -1,6 +1,9 @@
-import type { ClickHouseClient } from '@clickhouse/client';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
+import type {
+  ClickHouseClient } from '@clickhouse/client';,
+  import { ErrorCategory,
+  ErrorDomain,
+  MastraError } from '@mastra/core/error';,
+  import {,
   createStorageErrorId,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -472,14 +475,6 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       }
 
       // Delete the records
-      await this.client.command({
-        query: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
-        query_params: params,
-      });
-
-      return {
-        deletedCount,
-      };
     } catch (error) {
       throw new MastraError(
         {

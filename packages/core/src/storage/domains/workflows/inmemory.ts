@@ -393,12 +393,5 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     }
 
     // Delete the matching workflow runs
-    for (const key of keysToDelete) {
-      this.db.workflows.delete(key);
-    }
-
-    return {
-      deletedCount: keysToDelete.length,
-    };
   }
 }
