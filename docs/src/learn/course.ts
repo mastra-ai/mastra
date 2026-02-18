@@ -8,11 +8,11 @@ export const course: Course = {
   lessons: [
     // Module 1: Getting Started
     {
-      slug: '01-what-is-an-agent',
-      title: 'What Is an Agent, Why Mastra, and What We Are Building',
+      slug: '01-build-ai-agents-with-mastra',
+      title: 'Build AI Agents with Mastra',
       durationMin: 5,
       status: 'published',
-      youtubeId: 'oygruTFInws',
+      youtubeId: '7CwciY0fwHo',
       module: 'Getting Started',
       preview: {
         intro:
@@ -24,17 +24,17 @@ export const course: Course = {
         ],
       },
       seo: {
-        title: 'What Is an Agent? | Mastra 101',
+        title: 'Build AI Agents with Mastra | Mastra 101',
         description:
           'Learn what AI agents are, how they differ from chatbots, and preview the Theme Park Companion Agent you will build with Mastra.',
       },
     },
     {
       slug: '02-setup-and-first-run',
-      title: 'Setup and First Run in Mastra Studio',
-      durationMin: 5,
+      title: 'Mastra Setup and First Run',
+      durationMin: 5.5,
       status: 'published',
-      youtubeId: 'oygruTFInws',
+      youtubeId: 'KlBzeoU33iU',
       module: 'Getting Started',
       preview: {
         intro:
@@ -52,11 +52,11 @@ export const course: Course = {
       },
     },
     {
-      slug: '03-scaffolded-project-walkthrough',
-      title: 'Walkthrough of the Scaffolded Weather Project',
-      durationMin: 4,
+      slug: '03-mastra-project-structure',
+      title: 'Mastra Project Structure',
+      durationMin: 4.5,
       status: 'published',
-      youtubeId: 'oygruTFInws',
+      youtubeId: 'lDKFFWLmt1Q',
       module: 'Getting Started',
       preview: {
         intro:
@@ -68,17 +68,17 @@ export const course: Course = {
         ],
       },
       seo: {
-        title: 'Scaffolded Project Walkthrough | Mastra 101',
+        title: 'Mastra Project Structure | Mastra 101',
         description:
           'Understand the Mastra project structure — agents, tools, workflows, config, and how Studio maps to your source files.',
       },
     },
     {
-      slug: '04-create-new-agent',
-      title: 'Create a New Agent and Run It in Studio',
-      durationMin: 5,
+      slug: '04-create-a-new-agent',
+      title: 'Create a New Agent',
+      durationMin: 5.3,
       status: 'published',
-      youtubeId: 'oygruTFInws',
+      youtubeId: 'lwhJxPl_loQ',
       module: 'Getting Started',
       preview: {
         intro:
@@ -98,10 +98,11 @@ export const course: Course = {
 
     // Module 2: Tools
     {
-      slug: '05-build-your-first-tool',
-      title: 'Build Your First Tool',
-      durationMin: 5,
-      status: 'comingSoon',
+      slug: '05-create-a-tool',
+      title: 'Create a Tool',
+      durationMin: 7,
+      status: 'published',
+      youtubeId: 'P8voCXTIGVI',
       module: 'Tools',
       preview: {
         intro:
@@ -114,10 +115,11 @@ export const course: Course = {
       },
     },
     {
-      slug: '06-mcp-docs-server',
-      title: 'MCP Docs Server',
-      durationMin: 3,
-      status: 'comingSoon',
+      slug: '06-build-with-ai',
+      title: 'Build with AI',
+      durationMin: 3.5,
+      status: 'published',
+      youtubeId: 'AXdVW5chxiA',
       module: 'Tools',
       preview: {
         intro:
@@ -132,8 +134,9 @@ export const course: Course = {
     {
       slug: '07-fetch-live-data',
       title: 'Fetch Live Data with Tools',
-      durationMin: 5,
-      status: 'comingSoon',
+      durationMin: 7.5,
+      status: 'published',
+      youtubeId: 'CMofx-DhpoY',
       module: 'Tools',
       preview: {
         intro:
@@ -145,10 +148,27 @@ export const course: Course = {
         ],
       },
     },
+    {
+      slug: '08-connect-agents-to-mcp-servers',
+      title: 'Connect Agents to MCP Servers',
+      durationMin: 7.5,
+      status: 'published',
+      youtubeId: 'b8rNHmL4s2s',
+      module: 'Tools',
+      preview: {
+        intro:
+          'Connect your agent to external MCP servers to access tools from the MCP ecosystem. Show how Mastra bridges agent capabilities with the Model Context Protocol.',
+        bullets: [
+          'What MCP servers are and how they expose tools',
+          'Configure MCP server connections in your Mastra project',
+          'Use MCP-provided tools alongside your custom tools',
+        ],
+      },
+    },
 
     // Module 3: Workflows
     {
-      slug: '08-build-a-workflow',
+      slug: '09-build-a-workflow',
       title: 'Build a Workflow',
       durationMin: 5,
       status: 'comingSoon',
@@ -164,8 +184,8 @@ export const course: Course = {
       },
     },
     {
-      slug: '09-agents-vs-workflows',
-      title: 'Quick Aside: Agents vs. Workflows',
+      slug: '10-agents-vs-workflows',
+      title: 'Agents vs. Workflows',
       durationMin: 3,
       status: 'comingSoon',
       module: 'Workflows',
@@ -179,8 +199,8 @@ export const course: Course = {
       },
     },
     {
-      slug: '10-connect-agents-and-workflows',
-      title: 'Connect Agents and Workflows Together',
+      slug: '11-connect-agents-and-workflows',
+      title: 'Connect Agent to a Workflow',
       durationMin: 5,
       status: 'comingSoon',
       module: 'Workflows',
@@ -197,8 +217,8 @@ export const course: Course = {
 
     // Module 4: Memory
     {
-      slug: '11-why-agents-forget',
-      title: 'Why Agents "Forget" and What Mastra Means by Memory',
+      slug: '12-why-agents-forget',
+      title: 'Why Agents "Forget"',
       durationMin: 4,
       status: 'comingSoon',
       module: 'Memory',
@@ -213,8 +233,8 @@ export const course: Course = {
       },
     },
     {
-      slug: '12-turn-on-memory',
-      title: 'Turn On Memory and Prove Semantic Recall in Studio',
+      slug: '13-turn-on-memory',
+      title: 'Turn On Memory',
       durationMin: 5,
       status: 'comingSoon',
       module: 'Memory',
@@ -229,7 +249,7 @@ export const course: Course = {
       },
     },
     {
-      slug: '13-working-memory',
+      slug: '14-working-memory',
       title: 'Working Memory with a Template, Plus Scope',
       durationMin: 4,
       status: 'comingSoon',
@@ -247,7 +267,7 @@ export const course: Course = {
 
     // Module 5: Production
     {
-      slug: '14-debug-with-traces',
+      slug: '15-debug-with-traces',
       title: 'Debug with Traces and One Simple Scorer',
       durationMin: 5,
       status: 'comingSoon',
@@ -263,7 +283,7 @@ export const course: Course = {
       },
     },
     {
-      slug: '15-basic-rag',
+      slug: '16-basic-rag',
       title: 'Basic RAG: Add a Knowledge Base',
       durationMin: 5,
       status: 'comingSoon',
@@ -279,7 +299,7 @@ export const course: Course = {
       },
     },
     {
-      slug: '16-add-voice',
+      slug: '17-add-voice',
       title: 'Add Voice to an Agent: STT/TTS',
       durationMin: 4,
       status: 'comingSoon',
@@ -295,7 +315,7 @@ export const course: Course = {
       },
     },
     {
-      slug: '17-deployment-and-next-steps',
+      slug: '18-deployment-and-next-steps',
       title: 'Deployment and Next Steps',
       durationMin: 4,
       status: 'comingSoon',
