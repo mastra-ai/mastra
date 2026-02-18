@@ -17,7 +17,7 @@ function CreateLayoutWrapper() {
 
   const { form, handlePublish, isSubmitting } = useAgentCmsForm({
     mode: 'create',
-    onSuccess: agentId => navigate(`${paths.agentLink(agentId)}/chat`),
+    onSuccess: agentId => navigate(paths.agentLink(agentId)),
   });
 
   return (

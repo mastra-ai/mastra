@@ -1767,7 +1767,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];
       if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-        msg.content.parts.push(marker as any);
+        // Only push if the marker isn't already in the parts array.
+        // writer.custom() adds the marker to the stream, and the AI SDK may have
+        // already appended it to the message's parts before this runs.
+        const markerData = marker.data as { cycleId?: string } | undefined;
+        const alreadyPresent =
+          markerData?.cycleId &&
+          msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+        if (!alreadyPresent) {
+          msg.content.parts.push(marker as any);
+        }
         // Upsert the modified message to DB so the marker part is persisted.
         // Non-critical — if this fails, the marker is still in the stream,
         // it just won't survive page reload.
@@ -1805,7 +1814,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       // Find the last assistant message
       for (const msg of messages) {
         if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          msg.content.parts.push(marker as any);
+          // Only push if the marker isn't already in the parts array.
+          const markerData = marker.data as { cycleId?: string } | undefined;
+          const alreadyPresent =
+            markerData?.cycleId &&
+            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+          if (!alreadyPresent) {
+            msg.content.parts.push(marker as any);
+          }
           await this.messageHistory.persistMessages({
             messages: [msg],
             threadId,
@@ -2548,8 +2564,8 @@ ${suggestedResponse}
    * Calculate all threshold-related values for observation decision making.
    */
   private calculateObservationThresholds(
-    allMessages: MastraDBMessage[],
-    _unobservedMessages: MastraDBMessage[],
+    _allMessages: MastraDBMessage[],
+    unobservedMessages: MastraDBMessage[],
     _pendingTokens: number,
     otherThreadTokens: number,
     currentObservationTokens: number,
@@ -2560,16 +2576,13 @@ ${suggestedResponse}
     effectiveObservationTokensThreshold: number;
     isSharedBudget: boolean;
   } {
-    // For threshold checking, count ALL messages currently in the context window.
-    // With async buffering, observed messages may remain in context until the next
-    // turn (they're only removed at step 0). Using unobserved-only would undercount
-    // the actual context size, preventing threshold triggers and causing overflow.
-    const contextWindowTokens = this.tokenCounter.countMessages(allMessages);
+    // Count only unobserved messages for threshold checking.
+    // Already-observed messages may still be in the messageList (the AI SDK
+    // repopulates it each step), but they shouldn't count toward the threshold
+    // since they've already been captured in observations.
+    const contextWindowTokens = this.tokenCounter.countMessages(unobservedMessages);
 
-    // Total pending = all in-context tokens + other threads
-    // Note: we don't add record.pendingMessageTokens here because that's a DB artifact
-    // for cross-request state tracking. The allMessages already includes everything
-    // currently in the context window.
+    // Total pending = unobserved in-context tokens + other threads
     const totalPendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
     const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
@@ -2731,10 +2744,10 @@ ${suggestedResponse}
       const freshAllMessages = messageList.get.all.db();
       let freshUnobservedMessages = this.getUnobservedMessages(freshAllMessages, freshRecord);
 
-      // Re-check threshold inside the lock using all context window tokens.
-      // After activation, observed messages may still be in context (removed at next step 0),
-      // so we count everything to get the true context size.
-      const freshContextTokens = this.tokenCounter.countMessages(freshAllMessages);
+      // Re-check threshold inside the lock using only unobserved messages.
+      // Already-observed messages may still be in the messageList but shouldn't
+      // count toward the threshold since they've been captured in observations.
+      const freshContextTokens = this.tokenCounter.countMessages(freshUnobservedMessages);
       let freshOtherThreadTokens = 0;
       if (this.scope === 'resource' && resourceId) {
         const freshOtherContext = await this.loadOtherThreadsContext(resourceId, threadId);
@@ -3230,6 +3243,7 @@ ${suggestedResponse}
       if (bufferedChunks.length > 0) {
         // Compute threshold to check if activation is warranted
         const allMsgsForCheck = messageList.get.all.db();
+        const unobservedMsgsForCheck = this.getUnobservedMessages(allMsgsForCheck, record);
         const otherThreadTokensForCheck = unobservedContextBlocks
           ? this.tokenCounter.countString(unobservedContextBlocks)
           : 0;
@@ -3237,7 +3251,7 @@ ${suggestedResponse}
         const { totalPendingTokens: step0PendingTokens, threshold: step0Threshold } =
           this.calculateObservationThresholds(
             allMsgsForCheck,
-            [], // unobserved not needed for threshold calculation
+            unobservedMsgsForCheck,
             0, // pendingTokens not needed — allMessages covers context
             otherThreadTokensForCheck,
             currentObsTokensForCheck,
@@ -3355,6 +3369,13 @@ ${suggestedResponse}
       );
       const { totalPendingTokens, threshold } = thresholds;
 
+      // Subtract already-buffered message tokens from the pending count for buffering decisions.
+      // Buffered messages are "unobserved" (not yet in activeObservations) but have already been
+      // sent to the observer — counting them would cause redundant buffering ops, especially
+      // after activation resets lastBufferedBoundary to 0.
+      const bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.tokenCount ?? 0), 0);
+      const unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
+
       // Merge per-state sealedIds with static sealedMessageIds (survives across OM instances)
       const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
       const staticSealedIds = ObservationalMemory.sealedMessageIds.get(threadId) ?? new Set<string>();
@@ -3367,23 +3388,37 @@ ${suggestedResponse}
       // ════════════════════════════════════════════════════════════════════════
 
       if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
-        const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record);
+        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record);
         omDebug(
-          `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
+          `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
         );
         if (shouldTrigger) {
-          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer, totalPendingTokens);
+          this.startAsyncBufferedObservation(
+            record,
+            threadId,
+            unobservedMessages,
+            lockKey,
+            writer,
+            unbufferedPendingTokens,
+          );
         }
       } else if (this.isAsyncObservationEnabled()) {
         // Above threshold but we still need to check async buffering:
         // - At step 0, sync observation won't run, so we need chunks ready
         // - Below blockAfter, sync observation won't run, so we need chunks ready
-        const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record);
+        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record);
         omDebug(
-          `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
+          `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
         );
         if (shouldTrigger) {
-          this.startAsyncBufferedObservation(record, threadId, unobservedMessages, lockKey, writer, totalPendingTokens);
+          this.startAsyncBufferedObservation(
+            record,
+            threadId,
+            unobservedMessages,
+            lockKey,
+            writer,
+            unbufferedPendingTokens,
+          );
         }
       }
 
@@ -4476,12 +4511,26 @@ ${formattedMessages}
       return { success: false };
     }
 
+    // Re-check whether activation is still needed. A previous activation on this
+    // turn (or an in-flight buffering op that just completed) may have already
+    // brought us well below the threshold. Activating unnecessarily invalidates
+    // the prompt cache, so we skip if we're already under the threshold.
+    const messageTokensThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+    if (messageList) {
+      const freshPendingTokens = this.tokenCounter.countMessages(messageList.get.all.db());
+      if (freshPendingTokens < messageTokensThreshold) {
+        omDebug(
+          `[OM:tryActivate] skipping activation: freshPendingTokens=${freshPendingTokens} < threshold=${messageTokensThreshold}`,
+        );
+        return { success: false };
+      }
+    }
+
     // Perform partial swap with bufferActivation percentage
     const activationRatio = this.observationConfig.bufferActivation ?? 0.7;
     omDebug(
       `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, activationRatio=${activationRatio}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
     );
-    const messageTokensThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
       activationRatio,
