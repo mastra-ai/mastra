@@ -7655,7 +7655,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
-              "payload": {},
+              "payload": {
+                "originalError": {
+                  "message": "The user aborted a request.",
+                  "name": "AbortError",
+                },
+              },
               "runId": "test-run-id",
               "type": "abort",
             },
@@ -7674,8 +7679,27 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       ],
                       "role": "user",
                     },
+                    {
+                      "content": [
+                        {
+                          "text": "Hello",
+                          "type": "text",
+                        },
+                      ],
+                      "role": "assistant",
+                    },
                   ],
-                  "nonUser": [],
+                  "nonUser": [
+                    {
+                      "content": [
+                        {
+                          "text": "Hello",
+                          "type": "text",
+                        },
+                      ],
+                      "role": "assistant",
+                    },
+                  ],
                   "user": [
                     {
                       "content": [
@@ -8186,7 +8210,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
             {
               "from": "AGENT",
-              "payload": {},
+              "payload": {
+                "originalError": {
+                  "message": "The user aborted a request.",
+                  "name": "AbortError",
+                },
+              },
               "runId": "test-run-id",
               "type": "abort",
             },
