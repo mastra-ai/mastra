@@ -203,7 +203,7 @@ export function DatasetItems({
             <AlertTriangleIcon />
             <Notice.Message>Viewing version v{activeDatasetVersion}</Notice.Message>
             <Notice.Button onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}>
-              <ArrowRightToLineIcon className="mr-4" /> Return to the latest version
+              <ArrowRightToLineIcon /> Return to the latest version
             </Notice.Button>
           </Notice>
         )}
