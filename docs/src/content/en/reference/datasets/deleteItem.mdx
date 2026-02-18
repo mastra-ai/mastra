@@ -1,0 +1,46 @@
+---
+title: "Reference: dataset.deleteItem() | Datasets"
+description: "Documentation for the `dataset.deleteItem()` method, which deletes a single item from a dataset."
+packages:
+  - "@mastra/core"
+---
+
+# dataset.deleteItem()
+
+Deletes a single item from the dataset by ID.
+
+## Usage example
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const dataset = await mastra.datasets.get({ id: "dataset-id" });
+
+await dataset.deleteItem({ itemId: "item-id" });
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "itemId",
+      type: "string",
+      description: "ID of the item to delete.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<void>",
+      description: "Resolves when the item is deleted.",
+    },
+  ]}
+/>

@@ -595,6 +595,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
