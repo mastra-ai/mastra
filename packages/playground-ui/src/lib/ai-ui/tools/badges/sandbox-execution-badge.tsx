@@ -188,18 +188,16 @@ export const SandboxExecutionBadge = ({
     | { name: string; data: { exitCode: number; success: boolean; executionTimeMs: number } }
     | undefined;
 
-  const hasError = typeof result === 'string' && (result as string).includes('Exit code:');
-
-  // Streaming is complete if we have exit chunk, string result, or error
-  const isStreamingComplete = !!exitChunk || typeof result === 'string' || hasError;
+  // Streaming is complete if we have exit chunk or a final result
+  const isStreamingComplete = !!exitChunk || typeof result === 'string';
 
   const hasStreamingOutput = sandboxChunks.length > 0;
   const isRunning = hasStreamingOutput && !isStreamingComplete;
   const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStreamingOutput);
 
   // Get exit info from data chunks
-  const exitCode = exitChunk?.data?.exitCode ?? (hasError ? 1 : undefined);
-  const exitSuccess = hasError ? false : exitChunk?.data?.success;
+  const exitCode = exitChunk?.data?.exitCode;
+  const exitSuccess = exitChunk?.data?.success;
   const executionTime = exitChunk?.data?.executionTimeMs;
 
   // Combine streaming output into a single string
