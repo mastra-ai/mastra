@@ -21,7 +21,8 @@ These methods allow periodic cleanup of old traces and workflow run snapshots, h
 const thirtyDaysAgo = new Date();
 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-const result = await storage.observability.deleteTracesOlderThan({
+const observability = await storage.getStore('observability');
+const result = await observability.deleteTracesOlderThan({
   beforeDate: thirtyDaysAgo,
   filters: { environment: "production" },
 });
@@ -31,7 +32,8 @@ console.log(`Deleted ${result.deletedCount} traces`);
 const sevenDaysAgo = new Date();
 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-const result2 = await storage.workflows.deleteWorkflowRunsOlderThan({
+const workflows = await storage.getStore('workflows');
+const result2 = await workflows.deleteWorkflowRunsOlderThan({
   beforeDate: sevenDaysAgo,
   filters: { status: "completed" },
 });

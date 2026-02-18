@@ -942,7 +942,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       // Build query for root spans matching the criteria
       const query: Record<string, any> = {
         parentSpanId: null,
-        createdAt: { $lt: args.beforeDate },
+        createdAt: { $lt: args.beforeDate.toISOString() },
       };
 
       // Optional filters

@@ -267,7 +267,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
 
     it('should delete old workflow runs and keep recent ones', async () => {
       const oldDate = new Date('2023-01-01T00:00:00Z');
-      const recentDate = new Date(Date.now());
+      const recentDate = new Date();
 
       // Create an old workflow run
       const oldRun = createSampleWorkflowSnapshot('completed');

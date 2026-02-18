@@ -7,8 +7,6 @@ import type {
   WorkflowRuns,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
-  DeleteWorkflowRunsOlderThanArgs,
-  DeleteWorkflowRunsOlderThanResponse,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
