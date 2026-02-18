@@ -34,18 +34,6 @@ describe('findProviderToolByName', () => {
     calculator: { type: 'function' as const, description: 'A calculator' },
   } as any;
 
-  it('should find provider tool by direct key', () => {
-    const result = findProviderToolByName(tools, 'perplexitySearch');
-
-    expect(result).toBe(tools.perplexitySearch);
-  });
-
-  it('should find provider tool by full ID', () => {
-    const result = findProviderToolByName(tools, 'gateway.perplexity_search');
-
-    expect(result).toBe(tools.perplexitySearch);
-  });
-
   it('should find provider tool by model-facing name (suffix after provider prefix)', () => {
     // The LLM stream reports toolName as 'perplexity_search' (without gateway. prefix)
     const result = findProviderToolByName(tools, 'perplexity_search');

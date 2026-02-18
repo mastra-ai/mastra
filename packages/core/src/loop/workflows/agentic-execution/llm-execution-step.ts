@@ -993,7 +993,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         if (streamToolResults && streamToolResults.length > 0) {
           for (const chunk of streamToolResults) {
             const payload = chunk.payload;
-            if (payload.providerExecuted || findProviderToolByName(stepTools, payload.toolName)) {
+            if (findProviderToolByName(stepTools, payload.toolName)) {
               toolResultMap.set(payload.toolCallId, payload.result);
             }
           }
