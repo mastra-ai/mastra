@@ -36,7 +36,23 @@ You create an `MCPClient` with a `servers` config block. A server can be:
 - **Local**: invoked with a command like `npx`
 - **Remote**: accessed over HTTP with a URL
 
-The Firecrawl MCP server runs locally via `npx`. Once the client is configured, call `.listTools()` to retrieve all available tools from it. Tool names are namespaced by server name to prevent conflicts.
+The Firecrawl MCP server runs locally via `npx`. Add it to your editor's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "firecrawl-mcp": {
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
+
+Once the client is configured, call `.listTools()` to retrieve all available tools from it. Tool names are namespaced by server name to prevent conflicts.
 
 ## How the agent uses these tools
 
@@ -46,7 +62,12 @@ After calling `.listTools()`, you spread the results into the agent's `tools` ob
 
 The agent needs to know when to use Firecrawl. Add a rule to the instructions block:
 
-> Park page info: Confirm parkId first. For park hours, use firecrawl_firecrawl_extract on `https://queue-times.com/en-US/parks/{parkId}/queue_times`. For crowd forecast and ride stats, use firecrawl_firecrawl_extract on `https://queue-times.com/en-US/parks/{parkId}`.
+```
+Park page info:
+  - Confirm parkId first.
+  - Park hours (today): use firecrawl_firecrawl_extract on https://queue-times.com/en-US/parks/{parkId}/queue_times
+  - Crowd forecast, ride stats, attendance: use firecrawl_firecrawl_extract on https://queue-times.com/en-US/parks/{parkId}
+```
 
 ## Try these prompts in Studio
 
@@ -66,7 +87,12 @@ The agent should resolve the park first (if it doesn't have a `parkId` yet), the
 
 Weather is the third input that can change a park day plan. Add a `weatherTool` to the agent alongside the MCP tools using the same pattern. Update the instructions with a rule like:
 
-> Weather: Use weatherTool only if the user asks about weather, or if weather would clearly affect ride recommendations (heavy rain, extreme heat, lightning risk). When calling weatherTool, pass only the city name.
+```
+Weather:
+  - Use weatherTool only if the user asks about weather, or if weather would clearly affect ride recommendations (heavy rain, extreme heat, lightning risk).
+  - When calling weatherTool, pass only the city name (e.g., "Orlando" not "Epic Universe, Orlando" or "Orlando, FL").
+  - If weather is relevant and no location is confirmed, ask for clarification.
+```
 
 Then try:
 
@@ -78,6 +104,5 @@ Then try:
 
 - [MCP overview](https://mastra.ai/docs/mcp/overview): how MCPClient works and full configuration options
 - [MCPClient reference](https://mastra.ai/reference/tools/mcp-client): full API for configuring and querying MCP servers
-- [Firecrawl MCP](https://docs.firecrawl.dev/mcp): available tools and setup
 - [Model Context Protocol](https://modelcontextprotocol.io): the open standard
 - [MCP server registry](https://github.com/modelcontextprotocol/servers): community-built servers for popular APIs
