@@ -33,7 +33,7 @@ import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -230,7 +230,7 @@ export interface Config<
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
    */
-  workspace?: Workspace;
+  workspace?: AnyWorkspace;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -1249,7 +1249,7 @@ export class Mastra<
    * mastra.addWorkspace(workspace);
    * ```
    */
-  public addWorkspace(workspace: Workspace, key?: string): void {
+  public addWorkspace(workspace: AnyWorkspace, key?: string): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
     }

@@ -183,7 +183,6 @@ export function DatasetPageContent({
               featuredItemId ? 'max-w-[120rem]' : 'max-w-[90rem]',
             )}
           >
-            {/* Header */}
             <DatasetHeader
               dataset={dataset}
               isLoading={isDatasetLoading}
@@ -194,7 +193,6 @@ export function DatasetPageContent({
               onExperimentClick={onExperimentClick}
             />
 
-            {/* Content with tabs */}
             <div className="flex-1 overflow-hidden flex flex-col">
               <Tabs
                 defaultTab="items"

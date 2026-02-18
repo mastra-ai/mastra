@@ -752,8 +752,10 @@ describe('Tool Tracing Context Injection', () => {
 
     const builtTool = builder.build();
 
-    // Execute the tool - it should return a MastraError instead of throwing
-    const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
+    // Execute the tool - it should throw a MastraError so the stream emits 'tool-error' chunks
+    await expect(builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] })).rejects.toThrow(
+      'Tool execution failed',
+    );
 
     // Verify tool span was created
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalled();
@@ -764,10 +766,6 @@ describe('Tool Tracing Context Injection', () => {
       attributes: { success: false },
     });
     expect(mockToolSpan.end).not.toHaveBeenCalled(); // Should not call end() when error() is called
-
-    // Verify the result is a MastraError
-    expect(result).toHaveProperty('id', 'TOOL_EXECUTION_FAILED');
-    expect(result).toHaveProperty('message', 'Tool execution failed');
   });
 
   it('should create child span with correct logType attribute', async () => {
