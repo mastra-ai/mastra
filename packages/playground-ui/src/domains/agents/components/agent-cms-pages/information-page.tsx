@@ -5,7 +5,6 @@ import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
 import { Label } from '@/ds/components/Label';
 import { SectionHeader } from '@/domains/cms';
-import { AgentIcon } from '@/ds/icons';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -23,14 +22,10 @@ export function InformationPage() {
   return (
     <ScrollArea className="h-full">
       <SectionRoot>
-        <SectionHeader
-          title="Identity"
-          subtitle="Define your agent's name, description, and model."
-          icon={<AgentIcon />}
-        />
+        <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="agent-name" className="text-xs text-icon5">
+          <Label htmlFor="agent-name" className="text-xs text-neutral5">
             Name <span className="text-accent2">*</span>
           </Label>
           <Input
@@ -45,7 +40,7 @@ export function InformationPage() {
         </div>
 
         <div className="flex flex-col gap-1.5 pb-8">
-          <Label htmlFor="agent-description" className="text-xs text-icon5">
+          <Label htmlFor="agent-description" className="text-xs text-neutral5">
             Description
           </Label>
           <Textarea
@@ -64,7 +59,7 @@ export function InformationPage() {
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-icon5">
+                <Label className="text-xs text-neutral5">
                   Provider <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -82,7 +77,7 @@ export function InformationPage() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-icon5">
+                <Label className="text-xs text-neutral5">
                   Model <span className="text-accent2">*</span>
                 </Label>
                 <Controller

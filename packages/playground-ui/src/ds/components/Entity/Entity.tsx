@@ -21,7 +21,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
         }
       }}
       className={cn(
-        'flex gap-3 group/entity bg-surface3 rounded-lg border border-border1 py-3 px-4',
+        'flex gap-3 group/entity bg-surface3 rounded-xl border border-border1 py-3 px-4',
         onClick && 'cursor-pointer hover:bg-surface4 transition-all',
         className,
       )}

@@ -85,7 +85,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="flex items-center justify-between p-3 bg-surface3">
                   <CollapsibleTrigger className="flex items-center gap-1 w-full">
-                    <ChevronRight className="h-4 w-4 text-icon3" />
+                    <ChevronRight className="h-4 w-4 text-neutral3" />
                     <SectionTitle icon={<JudgeIcon className="text-neutral3" />}>
                       Scorers{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>
@@ -180,7 +180,7 @@ function ScorerConfigPanel({
           <Icon size="sm">
             <JudgeIcon className="text-neutral3" />
           </Icon>
-          <span className="text-xs font-medium text-icon6">{scorerName}</span>
+          <span className="text-xs font-medium text-neutral6">{scorerName}</span>
         </div>
         {!readOnly && (
           <IconButton tooltip={`Remove ${scorerName}`} onClick={onRemove} variant="ghost" size="sm">
@@ -200,7 +200,7 @@ function ScorerConfigPanel({
       />
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-neutral4">
           Sampling
         </Label>
         <RadioGroup
@@ -212,13 +212,13 @@ function ScorerConfigPanel({
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-sm text-icon5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-sm text-neutral5 cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-icon5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-sm text-neutral5 cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -226,7 +226,7 @@ function ScorerConfigPanel({
 
         {samplingType === 'ratio' && (
           <div className="flex flex-col gap-1.5 mt-1">
-            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-icon4">
+            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-neutral4">
               Sample Rate (0-1)
             </Label>
             <Input

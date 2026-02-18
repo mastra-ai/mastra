@@ -84,7 +84,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="flex items-center justify-between p-3 bg-surface3">
                   <CollapsibleTrigger className="flex items-center gap-1 w-full">
-                    <ChevronRight className="h-4 w-4 text-icon3" />
+                    <ChevronRight className="h-4 w-4 text-neutral3" />
                     <SectionTitle icon={<AgentIcon className="text-accent1" />}>
                       Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>

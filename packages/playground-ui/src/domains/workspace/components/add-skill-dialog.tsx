@@ -174,7 +174,7 @@ export function AddSkillDialog({
         <DialogBody className="flex-1 flex flex-col gap-4 overflow-hidden max-h-none">
           {/* Search Input */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-icon3" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral3" />
             <Input
               placeholder="Search skills..."
               value={searchQuery}
@@ -186,16 +186,16 @@ export function AddSkillDialog({
           <div className="flex flex-1 gap-4 min-h-0">
             {/* Skills List */}
             <div className="w-1/2 flex flex-col min-h-0">
-              <div className="text-xs font-medium text-icon4 uppercase tracking-wide mb-2">
+              <div className="text-xs font-medium text-neutral4 uppercase tracking-wide mb-2">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
               </div>
               <ScrollArea className="flex-1 border border-border1 rounded-lg">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-icon3" />
+                    <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-icon4">
+                  <div className="flex flex-col items-center justify-center py-8 text-neutral4">
                     <Package className="h-8 w-8 mb-2" />
                     <p className="text-sm">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
@@ -222,7 +222,7 @@ export function AddSkillDialog({
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm text-icon6 truncate">{skill.name}</span>
+                                <span className="font-medium text-sm text-neutral6 truncate">{skill.name}</span>
                                 {isInstalled && (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent1/20 text-accent1">
                                     <Check className="h-2.5 w-2.5" />
@@ -230,9 +230,9 @@ export function AddSkillDialog({
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs text-icon4 truncate">{skill.topSource}</div>
+                              <div className="text-xs text-neutral4 truncate">{skill.topSource}</div>
                             </div>
-                            <div className="flex items-center gap-1 text-xs text-icon3 shrink-0">
+                            <div className="flex items-center gap-1 text-xs text-neutral3 shrink-0">
                               <Download className="h-3 w-3" />
                               <span>{skill.installs.toLocaleString()}</span>
                             </div>
@@ -247,10 +247,10 @@ export function AddSkillDialog({
 
             {/* Preview Panel */}
             <div className="w-1/2 flex flex-col min-h-0">
-              <div className="text-xs font-medium text-icon4 uppercase tracking-wide mb-2">Preview</div>
+              <div className="text-xs font-medium text-neutral4 uppercase tracking-wide mb-2">Preview</div>
               <div className="flex-1 border border-border1 rounded-lg overflow-hidden flex flex-col">
                 {!selectedSkill ? (
-                  <div className="flex flex-col items-center justify-center h-full text-icon4">
+                  <div className="flex flex-col items-center justify-center h-full text-neutral4">
                     <Package className="h-8 w-8 mb-2" />
                     <p className="text-sm">Select a skill to preview</p>
                   </div>
@@ -260,11 +260,11 @@ export function AddSkillDialog({
                     <div className="p-4 border-b border-border1 bg-surface3">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-surface5">
-                          <SkillIcon className="h-5 w-5 text-icon4" />
+                          <SkillIcon className="h-5 w-5 text-neutral4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-icon6 truncate">{selectedSkill.name}</h3>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-icon4">
+                          <h3 className="font-semibold text-neutral6 truncate">{selectedSkill.name}</h3>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-neutral4">
                             <span className="flex items-center gap-1">
                               <Github className="h-3 w-3" />
                               {selectedSkill.topSource}
@@ -280,7 +280,7 @@ export function AddSkillDialog({
                             href={`https://github.com/${parsedSource.owner}/${parsedSource.repo}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-icon4 hover:text-icon5 transition-colors"
+                            className="text-neutral4 hover:text-neutral5 transition-colors"
                             title="View on GitHub"
                           >
                             <ExternalLink className="h-4 w-4" />
@@ -292,7 +292,7 @@ export function AddSkillDialog({
                     {/* Skill Content */}
                     {isLoadingPreview ? (
                       <div className="flex-1 flex items-center justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-icon3" />
+                        <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
@@ -301,7 +301,7 @@ export function AddSkillDialog({
                         </div>
                       </ScrollArea>
                     ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-icon4">
+                      <div className="flex-1 flex flex-col items-center justify-center text-neutral4">
                         <Package className="h-8 w-8 mb-2" />
                         <p className="text-sm">Preview unavailable</p>
                         {skillsUrl && (

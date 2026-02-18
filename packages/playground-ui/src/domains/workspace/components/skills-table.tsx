@@ -89,7 +89,7 @@ export function SkillsTable({
           <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-medium text-amber-500">Skills installed but not discovered</p>
-            <p className="text-icon4 mt-1">
+            <p className="text-neutral4 mt-1">
               You have skills in <code className="px-1 py-0.5 rounded bg-surface4 text-xs">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
             </p>
@@ -121,9 +121,9 @@ export function SkillsTable({
                   >
                     <div className="flex items-center gap-3">
                       <div className="p-1.5 rounded bg-surface5">
-                        <SkillIcon className="h-3.5 w-3.5 text-icon4" />
+                        <SkillIcon className="h-3.5 w-3.5 text-neutral4" />
                       </div>
-                      <span className="font-medium text-icon6">{skill.name}</span>
+                      <span className="font-medium text-neutral6">{skill.name}</span>
                     </div>
                     <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
                     {hasRowActions && (
@@ -200,10 +200,10 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
     <div className="grid place-items-center py-16">
       <div className="flex flex-col items-center text-center max-w-md">
         <div className="p-4 rounded-full bg-surface4 mb-4">
-          <SkillIcon className="h-8 w-8 text-icon3" />
+          <SkillIcon className="h-8 w-8 text-neutral3" />
         </div>
-        <h2 className="text-lg font-medium text-icon6 mb-2">Skills Not Configured</h2>
-        <p className="text-sm text-icon4 mb-6">
+        <h2 className="text-lg font-medium text-neutral6 mb-2">Skills Not Configured</h2>
+        <p className="text-sm text-neutral4 mb-6">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>

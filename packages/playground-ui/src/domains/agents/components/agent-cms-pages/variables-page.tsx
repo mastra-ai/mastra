@@ -8,7 +8,7 @@ import { JSONSchemaForm, type SchemaField, jsonSchemaToFields } from '@/ds/compo
 import type { JsonSchema } from '@/lib/json-schema';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { Icon, VariablesIcon } from '@/ds/icons';
+import { Icon } from '@/ds/icons';
 
 function RecursiveFieldRenderer({
   field,
@@ -79,7 +79,6 @@ export function VariablesPage() {
       <section className="flex flex-col gap-6">
         <SectionHeader
           title="Variables"
-          icon={<VariablesIcon />}
           subtitle={
             <>
               Variables are dynamic values that change based on the context of each request. Use them in your agent's

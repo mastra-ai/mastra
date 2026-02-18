@@ -89,7 +89,6 @@ export function AgentsPage() {
           <SectionHeader
             title="Sub-Agents"
             subtitle={`Select sub-agents for this agent to delegate to.${count > 0 ? ` (${count} selected)` : ''}`}
-            icon={<AgentIcon />}
           />
         </div>
 

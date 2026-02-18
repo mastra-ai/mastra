@@ -111,7 +111,6 @@ export function ToolsPage() {
         <SectionHeader
           title="Tools"
           subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
-          icon={<ToolsIcon />}
         />
 
         <MCPClientList />

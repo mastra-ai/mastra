@@ -1,5 +1,4 @@
 import { Controller } from 'react-hook-form';
-import { Blocks } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { SectionHeader } from '@/domains/cms';
@@ -19,7 +18,6 @@ export function InstructionBlocksPage() {
         <SectionHeader
           title="Instruction blocks"
           subtitle="Add instruction blocks to your agent. Blocks are combined in order to form the system prompt."
-          icon={<Blocks />}
         />
 
         <Alert variant="info">

@@ -79,7 +79,6 @@ export function WorkflowsPage() {
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}
-          icon={<WorkflowIcon />}
         />
 
         <SubSectionRoot>

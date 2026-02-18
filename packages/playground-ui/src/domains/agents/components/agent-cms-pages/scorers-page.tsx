@@ -91,7 +91,6 @@ export function ScorersPage() {
           <SectionHeader
             title="Scorers"
             subtitle={`Configure scorers for evaluating agent responses.${count > 0 ? ` (${count} selected)` : ''}`}
-            icon={<JudgeIcon />}
           />
         </div>
 
@@ -193,7 +192,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-icon4">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-neutral4">
           Sampling
         </Label>
         <RadioGroup
@@ -205,13 +204,13 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-ui-xs text-icon5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="text-ui-xs text-neutral5 cursor-pointer">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-ui-xs text-icon5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="text-ui-xs text-neutral5 cursor-pointer">
               Ratio (percentage)
             </Label>
           </div>
@@ -219,7 +218,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
 
         {samplingType === 'ratio' && (
           <div className="flex flex-col gap-1.5 mt-2">
-            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-icon4">
+            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-neutral4">
               Sample Rate (0-1)
             </Label>
             <Input

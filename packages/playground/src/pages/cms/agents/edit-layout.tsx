@@ -158,7 +158,7 @@ function EditLayoutWrapper() {
 
       {isNotFound ? (
         <>
-          <div className="flex items-center justify-center h-full text-icon3">Agent not found</div>
+          <div className="flex items-center justify-center h-full text-neutral3">Agent not found</div>
           <div className="hidden">
             <EditFormContent
               agentId={agentId ?? ''}

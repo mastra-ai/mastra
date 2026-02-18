@@ -317,9 +317,9 @@ export default function Workspace() {
               <div className="flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 mb-6">
                 <AlertTriangle className="h-8 w-8 text-amber-500" />
               </div>
-              <h2 className="text-xl font-semibold text-icon6 mb-2">Workspace Not Supported</h2>
-              <p className="text-icon4 max-w-md mb-6">
-                The workspace feature requires a newer version of <code className="text-icon5">@mastra/core</code>.
+              <h2 className="text-xl font-semibold text-neutral6 mb-2">Workspace Not Supported</h2>
+              <p className="text-neutral4 max-w-md mb-6">
+                The workspace feature requires a newer version of <code className="text-neutral5">@mastra/core</code>.
                 Please upgrade your dependencies to enable workspace functionality.
               </p>
               <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
@@ -417,16 +417,16 @@ export default function Workspace() {
                 {selectedWorkspace?.source === 'agent' ? (
                   <Bot className="h-4 w-4 text-accent1" />
                 ) : (
-                  <Server className="h-4 w-4 text-icon4" />
+                  <Server className="h-4 w-4 text-neutral4" />
                 )}
                 <span className="flex-1 text-left truncate">
                   {selectedWorkspace?.name ?? 'Select workspace'}
                   {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                    <span className="text-icon4 ml-1">({selectedWorkspace.agentName})</span>
+                    <span className="text-neutral4 ml-1">({selectedWorkspace.agentName})</span>
                   )}
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 text-icon4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
+                  className={`h-4 w-4 text-neutral4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
                 />
               </button>
 
@@ -446,11 +446,11 @@ export default function Workspace() {
                       {workspace.source === 'agent' ? (
                         <Bot className="h-4 w-4 text-accent1 flex-shrink-0" />
                       ) : (
-                        <Server className="h-4 w-4 text-icon4 flex-shrink-0" />
+                        <Server className="h-4 w-4 text-neutral4 flex-shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-icon6 truncate">{workspace.name}</div>
-                        <div className="text-xs text-icon4 truncate">
+                        <div className="text-sm font-medium text-neutral6 truncate">{workspace.name}</div>
+                        <div className="text-xs text-neutral4 truncate">
                           {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
                         </div>
                       </div>
@@ -461,13 +461,13 @@ export default function Workspace() {
                           </span>
                         )}
                         {workspace.capabilities.hasFilesystem && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">FS</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">FS</span>
                         )}
                         {workspace.capabilities.hasSandbox && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">Sandbox</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">Sandbox</span>
                         )}
                         {workspace.capabilities.hasSkills && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-icon4">Skills</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">Skills</span>
                         )}
                       </div>
                     </button>
@@ -479,7 +479,7 @@ export default function Workspace() {
 
           {/* Single workspace info badge - shown when only one workspace */}
           {workspaces.length === 1 && selectedWorkspace && (
-            <div className="flex items-center gap-2 text-sm text-icon4">
+            <div className="flex items-center gap-2 text-sm text-neutral4">
               {selectedWorkspace.source === 'agent' ? (
                 <Bot className="h-4 w-4 text-accent1" />
               ) : (
@@ -487,7 +487,7 @@ export default function Workspace() {
               )}
               <span>{selectedWorkspace.name}</span>
               {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
-                <span className="text-icon3">({selectedWorkspace.agentName})</span>
+                <span className="text-neutral3">({selectedWorkspace.agentName})</span>
               )}
               {isReadOnly && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Read-only</span>
@@ -500,7 +500,7 @@ export default function Workspace() {
             <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
               {hasFilesystem && (canBM25 || canVector) && (
                 <div>
-                  <h3 className="text-sm font-medium text-icon5 mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
                     <FileText className="h-4 w-4" />
                     Search Files
                   </h3>
@@ -517,7 +517,7 @@ export default function Workspace() {
 
               {hasSkills && isSkillsConfigured && skills.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-medium text-icon5 mb-3 flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
                     <Wand2 className="h-4 w-4" />
                     Search Skills
                   </h3>
@@ -537,7 +537,9 @@ export default function Workspace() {
               <button
                 onClick={() => setActiveTab('files')}
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === 'files' ? 'border-accent1 text-icon6' : 'border-transparent text-icon4 hover:text-icon5'
+                  activeTab === 'files'
+                    ? 'border-accent1 text-neutral6'
+                    : 'border-transparent text-neutral4 hover:text-neutral5'
                 }`}
               >
                 <FileText className="h-4 w-4" />
@@ -549,14 +551,14 @@ export default function Workspace() {
                 onClick={() => setActiveTab('skills')}
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'skills'
-                    ? 'border-accent1 text-icon6'
-                    : 'border-transparent text-icon4 hover:text-icon5'
+                    ? 'border-accent1 text-neutral6'
+                    : 'border-transparent text-neutral4 hover:text-neutral5'
                 }`}
               >
                 <Wand2 className="h-4 w-4" />
                 Skills
                 {isSkillsConfigured && skills.length > 0 && (
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-surface4 text-icon4">{skills.length}</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-surface4 text-neutral4">{skills.length}</span>
                 )}
               </button>
             )}
@@ -617,7 +619,7 @@ export default function Workspace() {
 
             {/* Show default tab if only one is available */}
             {!hasFilesystem && !hasSkills && (
-              <div className="py-12 text-center text-icon4">
+              <div className="py-12 text-center text-neutral4">
                 <p>No workspace capabilities are configured.</p>
               </div>
             )}
