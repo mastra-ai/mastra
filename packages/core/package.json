@@ -229,7 +229,7 @@
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.6",
     "p-map": "^7.0.3",
-    "p-retry": "^7.1.0",
+    "p-retry": "^7.1.1",
     "picomatch": "^4.0.3",
     "radash": "^12.1.1",
     "xxhash-wasm": "^1.1.0"
