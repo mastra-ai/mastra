@@ -137,32 +137,6 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
   );
 };
 
-// Extract error message from various possible locations
-// Priority: error.message > error (string) > message > stderr (for failed commands)
-const extractErrorMessage = (result: any): string | null => {
-  if (!result || Array.isArray(result)) return null;
-
-  // Direct error property
-  if (result.error?.message) return result.error.message;
-  if (typeof result.error === 'string') return result.error;
-  // Only treat result.message as an error when there's an explicit failure signal
-  if (result.message && (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))) {
-    return result.message;
-  }
-
-  // If command failed (non-zero exit, success=false) and has stderr but no stdout
-  if (result.success === false && result.stderr && !result.stdout) {
-    return result.stderr;
-  }
-
-  // If exitCode is non-zero/negative and no other output, indicate failure
-  if (typeof result.exitCode === 'number' && result.exitCode !== 0 && !result.stdout && !result.stderr) {
-    return `Command failed with exit code ${result.exitCode}`;
-  }
-
-  return null;
-};
-
 export const SandboxExecutionBadge = ({
   toolName,
   args,
@@ -218,18 +192,10 @@ export const SandboxExecutionBadge = ({
     | { name: string; data: { exitCode: number; success: boolean; executionTimeMs: number } }
     | undefined;
 
-  // Check if result is a string (new raw-text format) vs object (old format)
-  const isStringResult = typeof result === 'string';
+  const hasError = typeof result === 'string' && (result as string).includes('Exit code:');
 
-  // Check if result is the final execution result (object with exitCode) vs streaming array
-  const hasFinalResult = !isStringResult && result && !Array.isArray(result) && typeof result.exitCode === 'number';
-  const finalResult = hasFinalResult ? result : null;
-
-  const errorMessage = isStringResult ? null : extractErrorMessage(result);
-  const hasError = isStringResult ? (result as string).includes('Exit code:') : !!errorMessage;
-
-  // Streaming is complete if we have exit chunk, final result, string result, or error
-  const isStreamingComplete = !!exitChunk || hasFinalResult || isStringResult || !!errorMessage;
+  // Streaming is complete if we have exit chunk, string result, or error
+  const isStreamingComplete = !!exitChunk || typeof result === 'string' || hasError;
 
   const hasStreamingOutput = sandboxChunks.length > 0;
   const isRunning = hasStreamingOutput && !isStreamingComplete;
@@ -238,24 +204,13 @@ export const SandboxExecutionBadge = ({
   // Combine streaming output into a single string (data chunks nest the actual data under .data.data)
   const streamingContent = sandboxChunks.map(chunk => chunk.data?.data || '').join('');
 
-  // Get output content for display
-  // Priority: error > string result > final result > streaming output
-  let outputContent = '';
-  if (isStringResult) {
-    outputContent = result as string;
-  } else if (errorMessage) {
-    const extra = [finalResult?.stdout, finalResult?.stderr].filter(Boolean).join('\n');
-    outputContent = `Error: ${errorMessage}${extra ? '\n\n' + extra : ''}`;
-  } else if (finalResult) {
-    outputContent = [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n');
-  } else if (hasStreamingOutput) {
-    outputContent = streamingContent;
-  }
+  // Get output content — string result (final) or streaming chunks
+  const outputContent = typeof result === 'string' ? (result as string) : streamingContent;
 
-  // Get exit info - treat errors as failures
-  const exitCode = exitChunk?.data?.exitCode ?? finalResult?.exitCode ?? (hasError ? 1 : undefined);
-  const exitSuccess = isStringResult ? !hasError : (hasError ? false : (exitChunk?.data?.success ?? finalResult?.success));
-  const executionTime = exitChunk?.data?.executionTimeMs ?? finalResult?.executionTimeMs;
+  // Get exit info from data chunks
+  const exitCode = exitChunk?.data?.exitCode ?? (hasError ? 1 : undefined);
+  const exitSuccess = hasError ? false : exitChunk?.data?.success;
+  const executionTime = exitChunk?.data?.executionTimeMs;
 
   const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
 

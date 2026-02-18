@@ -91,11 +91,10 @@ export const FileTreeBadge = ({
     argsDisplay.push(`ext: ${extension}`);
   }
 
-  // Get tree output + summary from result — handle both string (new) and object (old) formats
+  // Get tree output + summary from result string: "tree\n\nsummary"
   let treeOutput = '';
   let summary = '';
   if (typeof result === 'string' && result) {
-    // New format: "tree\n\nsummary"
     const lastDoubleNewline = result.lastIndexOf('\n\n');
     if (lastDoubleNewline !== -1) {
       treeOutput = result.slice(0, lastDoubleNewline);
@@ -103,29 +102,10 @@ export const FileTreeBadge = ({
     } else {
       treeOutput = result;
     }
-  } else if (result && typeof result === 'object') {
-    // Old format: { tree, summary, metadata }
-    treeOutput = result.tree || '';
-    summary = result.summary || '';
   }
 
-  // Check for error — handle both string and object results
-  let errorMessage: string | null = null;
-  if (typeof result !== 'string' && result) {
-    const rawError =
-      result.error?.message ?? result.error ?? (result.message && !result.tree ? result.message : null);
-    errorMessage = rawError != null ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)) : null;
-  }
-  const hasError = !!errorMessage;
-  const hasResult = !!treeOutput || hasError;
+  const hasResult = !!treeOutput;
   const toolCalled = toolCalledProp ?? hasResult;
-
-  // Expand when there's an error so user can see it
-  useEffect(() => {
-    if (hasError) {
-      setIsCollapsed(false);
-    }
-  }, [hasError]);
 
   // Extract filesystem metadata from message data parts (via writer.custom)
   const message = useAuiState(s => s.message);
@@ -135,10 +115,9 @@ export const FileTreeBadge = ({
   }, [message.content]);
 
   const dataChunk = workspaceMetadata?.data;
-  const fsMeta: FilesystemMetadata | undefined =
-    dataChunk
-      ? { workspace: dataChunk.workspace as WorkspaceInfo, filesystem: dataChunk.filesystem as FilesystemInfo }
-      : typeof result !== 'string' ? result?.metadata : undefined;
+  const fsMeta: FilesystemMetadata | undefined = dataChunk
+    ? { workspace: dataChunk.workspace as WorkspaceInfo, filesystem: dataChunk.filesystem as FilesystemInfo }
+    : undefined;
 
   // Prefer summary from data chunk if available (richer than parsed string)
   if (dataChunk?.summary && typeof dataChunk.summary === 'string') {
@@ -203,15 +182,8 @@ export const FileTreeBadge = ({
             </div>
           )}
 
-          {/* Error state */}
-          {toolCalled && hasError && (
-            <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
-              <span className="text-xs text-red-400">{errorMessage}</span>
-            </div>
-          )}
-
           {/* Tree output panel - custom UI after tool has been called */}
-          {toolCalled && !hasError && treeOutput && (
+          {toolCalled && treeOutput && (
             <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
@@ -242,7 +214,7 @@ export const FileTreeBadge = ({
           )}
 
           {/* Loading state */}
-          {toolCalled && !hasResult && !hasError && (
+          {toolCalled && !hasResult && (
             <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
               <span className="text-xs text-icon6">Loading...</span>
             </div>
