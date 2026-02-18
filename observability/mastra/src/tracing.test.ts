@@ -1695,8 +1695,11 @@ describe('Tracing', () => {
         },
       });
 
-      // This child should NOT have extracted metadata
-      expect(childSpanNoContext.metadata).toBeUndefined();
+      // This child should inherit metadata from parent (even without requestContext)
+      expect(childSpanNoContext.metadata).toEqual({
+        userId: 'user-123',
+        sessionId: 'session-456',
+      });
       expect(childSpanNoContext.traceState).toEqual(rootSpan.traceState);
 
       rootSpan.end();
