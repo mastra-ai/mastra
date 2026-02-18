@@ -1,0 +1,93 @@
+---
+title: "Reference: Dataset Class | Datasets"
+description: "Documentation for the `Dataset` class in Mastra, which provides the public API for interacting with a single dataset."
+packages:
+  - "@mastra/core"
+---
+
+# Dataset Class
+
+**Added in:** `@mastra/core@1.4.0`
+
+The `Dataset` class provides methods for item CRUD, versioning, and experiment management on a single dataset. Obtained via `mastra.datasets.get()` or `mastra.datasets.create()`.
+
+## Usage examples
+
+### Add items and run an experiment
+
+```typescript title="src/mastra/datasets/usage.ts"
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const dataset = await mastra.datasets.create({
+  name: "QA pairs",
+});
+
+// Add items
+await dataset.addItems({
+  items: [
+    { input: { question: "What is AI?" }, groundTruth: { answer: "Artificial Intelligence" } },
+    { input: { question: "What is ML?" }, groundTruth: { answer: "Machine Learning" } },
+  ],
+});
+
+// Run an experiment
+const summary = await dataset.startExperiment({
+  targetType: "agent",
+  targetId: "my-agent",
+  scorers: ["accuracy"],
+});
+
+console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`);
+```
+
+### Manage versions and history
+
+```typescript title="src/mastra/datasets/versioning.ts"
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const dataset = await mastra.datasets.get({ id: "dataset-id" });
+
+// List versions
+const { versions } = await dataset.listVersions();
+
+// List items at a specific version
+const items = await dataset.listItems({ version: 2 });
+
+// Get item change history
+const history = await dataset.getItemHistory({ itemId: "item-id" });
+```
+
+## Access
+
+`Dataset` is not instantiated directly. Obtain one via `DatasetsManager`:
+
+```typescript
+const dataset = await mastra.datasets.get({ id: "dataset-id" });
+// or
+const dataset = await mastra.datasets.create({ name: "My dataset" });
+```
+
+## Properties
+
+For the full dataset record (name, description, schemas, version, timestamps), call [`dataset.getDetails()`](/reference/datasets/getDetails).
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "The unique identifier of the dataset. Read-only.",
+    },
+  ]}
+/>
+
+## Related
+
+- [DatasetsManager class](/reference/datasets/datasets-manager)
+- [dataset.startExperiment()](/reference/datasets/startExperiment)
+- [dataset.addItems()](/reference/datasets/addItems)
+- [dataset.listVersions()](/reference/datasets/listVersions)

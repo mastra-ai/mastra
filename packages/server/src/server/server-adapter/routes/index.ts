@@ -20,6 +20,8 @@ import { STORED_AGENTS_ROUTES } from './stored-agents';
 import { STORED_MCP_CLIENTS_ROUTES } from './stored-mcp-clients';
 import { STORED_PROMPT_BLOCKS_ROUTES } from './stored-prompt-blocks';
 import { STORED_SCORERS_ROUTES } from './stored-scorers';
+import { STORED_SKILLS_ROUTES } from './stored-skills';
+import { STORED_WORKSPACES_ROUTES } from './stored-workspaces';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
 import { TOOL_PROVIDER_ROUTES } from './tool-providers';
@@ -115,6 +117,8 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...STORED_MCP_CLIENTS_ROUTES,
   ...STORED_PROMPT_BLOCKS_ROUTES,
   ...STORED_SCORERS_ROUTES,
+  ...STORED_WORKSPACES_ROUTES,
+  ...STORED_SKILLS_ROUTES,
   ...TOOL_PROVIDER_ROUTES,
   ...PROCESSOR_PROVIDER_ROUTES,
   ...SYSTEM_ROUTES,
