@@ -167,7 +167,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
 
-          await stream.write('data: [DONE]\n\n');
+          if (streamFormat === 'sse') {
+            await stream.write('data: [DONE]\n\n');
+          }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
