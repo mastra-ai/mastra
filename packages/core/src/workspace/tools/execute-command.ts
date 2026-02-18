@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { requireSandbox } from './helpers';
+import { emitWorkspaceMetadata, requireSandbox } from './helpers';
 
 export const executeCommandTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
@@ -20,48 +20,33 @@ Usage:
     cwd: z.string().nullish().describe('Working directory for the command'),
   }),
   execute: async ({ command, args, timeout, cwd }, context) => {
-    const { workspace, sandbox } = requireSandbox(context);
+    const { sandbox } = requireSandbox(context);
 
     if (!sandbox.executeCommand) {
       throw new SandboxFeatureNotSupportedError('executeCommand');
     }
 
-    const getExecutionMetadata = () => ({
-      workspace: {
-        id: workspace.id,
-        name: workspace.name,
-      },
-      sandbox: {
-        id: sandbox.id,
-        name: sandbox.name,
-        provider: sandbox.provider,
-        status: sandbox.status,
-      },
-    });
+    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
 
     const startedAt = Date.now();
+    let stdout = '';
+    let stderr = '';
     try {
       const result = await sandbox.executeCommand(command, args ?? [], {
         timeout: timeout ?? undefined,
         cwd: cwd ?? undefined,
         onStdout: async (data: string) => {
+          stdout += data;
           await context?.writer?.custom({
             type: 'data-sandbox-stdout',
-            data: {
-              data,
-              timestamp: Date.now(),
-              metadata: getExecutionMetadata(),
-            },
+            data: { output: data, timestamp: Date.now() },
           });
         },
         onStderr: async (data: string) => {
+          stderr += data;
           await context?.writer?.custom({
             type: 'data-sandbox-stderr',
-            data: {
-              data,
-              timestamp: Date.now(),
-              metadata: getExecutionMetadata(),
-            },
+            data: { output: data, timestamp: Date.now() },
           });
         },
       });
@@ -72,18 +57,6 @@ Usage:
           exitCode: result.exitCode,
           success: result.success,
           executionTimeMs: result.executionTimeMs,
-          metadata: getExecutionMetadata(),
-        },
-      });
-
-      await context?.writer?.custom({
-        type: 'data-workspace-metadata',
-        data: {
-          toolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
-          command,
-          exitCode: result.exitCode,
-          executionTimeMs: result.executionTimeMs,
-          ...getExecutionMetadata(),
         },
       });
 
@@ -101,10 +74,13 @@ Usage:
           exitCode: -1,
           success: false,
           executionTimeMs: Date.now() - startedAt,
-          metadata: getExecutionMetadata(),
         },
       });
-      throw error;
+      // Include any stdout/stderr captured before the error (e.g., timeout)
+      const parts = [stdout, stderr].filter(Boolean);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      parts.push(`Error: ${errorMessage}`);
+      return parts.join('\n');
     }
   },
 });

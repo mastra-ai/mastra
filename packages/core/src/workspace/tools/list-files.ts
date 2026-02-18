@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
-import { requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import { formatAsTree } from './tree-formatter';
 
 export const listFilesTool = createTool({
@@ -46,7 +46,8 @@ Examples:
       ),
   }),
   execute: async ({ path = './', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }, context) => {
-    const { workspace, filesystem } = requireFilesystem(context);
+    const { filesystem } = requireFilesystem(context);
+    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
 
     const result = await formatAsTree(filesystem, path, {
       maxDepth,
@@ -55,17 +56,6 @@ Examples:
       exclude: exclude || undefined,
       extension: extension || undefined,
       pattern: pattern || undefined,
-    });
-
-    await context?.writer?.custom({
-      type: 'data-workspace-metadata',
-      data: {
-        toolName: WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
-        path,
-        summary: result.summary,
-        workspace: { id: workspace.id, name: workspace.name },
-        filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
-      },
     });
 
     return `${result.tree}\n\n${result.summary}`;

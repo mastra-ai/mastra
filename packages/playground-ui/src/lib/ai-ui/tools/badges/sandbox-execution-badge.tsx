@@ -11,21 +11,24 @@ import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 
-interface SandboxInfo {
+// Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
+interface WorkspaceMetadata {
+  toolName?: string;
   id?: string;
   name?: string;
-  provider?: string;
   status?: string;
-}
-
-interface WorkspaceInfo {
-  id?: string;
-  name?: string;
-}
-
-interface ExecutionMetadata {
-  workspace?: WorkspaceInfo;
-  sandbox?: SandboxInfo;
+  sandbox?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
+  filesystem?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
 }
 
 // Get status dot color based on sandbox status
@@ -149,11 +152,10 @@ export const SandboxExecutionBadge = ({
 }: SandboxExecutionBadgeProps) => {
   // Get sandbox streaming data parts from the message
   const message = useAuiState(s => s.message);
-  const toolOutput = useMemo(() => {
+  console.log(message);
+  const dataParts = useMemo(() => {
     const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.filter(
-      part => part.type === 'data' && (part.name === 'sandbox-stdout' || part.name === 'sandbox-stderr' || part.name === 'sandbox-exit'),
-    );
+    return content.filter(part => part.type === 'data');
   }, [message.content]);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -173,22 +175,16 @@ export const SandboxExecutionBadge = ({
     commandDisplay = toolName;
   }
 
-  // Filter toolOutput for sandbox stdout/stderr data parts (from message data parts: { type: 'data', name: 'sandbox-stdout', data: {...} })
+  // Sandbox stdout/stderr chunks (just output + timestamp, no metadata)
   const sandboxChunks =
-    toolOutput?.filter(chunk => chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr') || [];
+    dataParts.filter(chunk => chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr');
 
-  // Extract execution metadata from the most recent chunk
-  const chunksWithMetadata = toolOutput?.filter(
-    chunk =>
-      (chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr' || chunk.name === 'sandbox-exit') &&
-      chunk.data?.metadata,
-  ) || [];
-  const execMeta = chunksWithMetadata.length
-    ? (chunksWithMetadata[chunksWithMetadata.length - 1]?.data?.metadata as ExecutionMetadata | undefined)
-    : undefined;
+  // Workspace metadata emitted first — contains workspace/sandbox info
+  const workspaceMetaPart = dataParts.find(chunk => chunk.name === 'workspace-metadata');
+  const execMeta = workspaceMetaPart?.data as WorkspaceMetadata | undefined;
 
-  // Check for sandbox-exit data chunk which indicates streaming is complete
-  const exitChunk = toolOutput?.find(chunk => chunk.name === 'sandbox-exit') as
+  // Exit chunk indicates streaming is complete
+  const exitChunk = dataParts.find(chunk => chunk.name === 'sandbox-exit') as
     | { name: string; data: { exitCode: number; success: boolean; executionTimeMs: number } }
     | undefined;
 
@@ -201,21 +197,22 @@ export const SandboxExecutionBadge = ({
   const isRunning = hasStreamingOutput && !isStreamingComplete;
   const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStreamingOutput);
 
-  // Combine streaming output into a single string (data chunks nest the actual data under .data.data)
-  const streamingContent = sandboxChunks.map(chunk => chunk.data?.data || '').join('');
-
-  // Get output content — string result (final) or streaming chunks
-  const outputContent = typeof result === 'string' ? (result as string) : streamingContent;
-
   // Get exit info from data chunks
   const exitCode = exitChunk?.data?.exitCode ?? (hasError ? 1 : undefined);
   const exitSuccess = hasError ? false : exitChunk?.data?.success;
   const executionTime = exitChunk?.data?.executionTimeMs;
 
+  // Combine streaming output into a single string
+  const streamingContent = sandboxChunks.map(chunk => chunk.data?.output || '').join('');
+
+  // While running, show live streaming output.
+  // Once the tool completes, show the final result — it's what the LLM saw.
+  const outputContent = typeof result === 'string' ? result : streamingContent;
+
   const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
 
   // Get start time from first streaming chunk for live timer
-  const firstChunkTime = sandboxChunks[0]?.data?.timestamp;
+  const firstChunkTime = sandboxChunks[0]?.data?.timestamp as number | undefined;
   const elapsedTime = useElapsedTime(isRunning, firstChunkTime);
 
   const onCopy = () => {
@@ -232,17 +229,14 @@ export const SandboxExecutionBadge = ({
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
           <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
-          {execMeta?.sandbox?.name && (
+          {execMeta?.sandbox && (
             <Link
-              href={execMeta.workspace?.id ? `/workspaces/${execMeta.workspace.id}` : '/workspaces'}
+              href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
               className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
-              <span>{execMeta.sandbox.name}</span>
-              {execMeta.sandbox.id && (
-                <span className="text-icon4 text-[10px]">({execMeta.sandbox.id.slice(0, 8)})</span>
-              )}
+              <span>{execMeta.sandbox.name || execMeta.sandbox.provider}</span>
             </Link>
           )}
         </button>
