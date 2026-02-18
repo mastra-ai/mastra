@@ -2,30 +2,26 @@
  * Main entry point for Mastra Code TUI.
  * This is an example of how to wire up the Harness and TUI together.
  */
-import * as fs from "node:fs"
-import * as os from "node:os"
 import * as path from "node:path"
+
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { Mastra } from "@mastra/core"
 import { Agent } from "@mastra/core/agent"
 import { ModelRouterLanguageModel } from "@mastra/core/llm"
 import { noopLogger } from "@mastra/core/logger"
 import type { RequestContext } from "@mastra/core/request-context"
-import {
-	Workspace,
-	LocalFilesystem,
-	LocalSandbox,
-} from "@mastra/core/workspace"
 import { LibSQLStore } from "@mastra/libsql"
 import { Memory } from "@mastra/memory"
-import { z } from "zod"
+
+import { getDynamicWorkspace } from "./agents/workspace.js"
 import { AuthStorage } from "./auth/storage.js"
+import { DEFAULT_OM_MODEL_ID } from "./constants.js"
 import { Harness } from "./harness/harness.js"
 import type { HarnessRuntimeContext } from "./harness/types.js"
 import { HookManager } from "./hooks/index.js"
 import { MCPManager } from "./mcp/index.js"
-import { buildFullPrompt  } from "./prompts/index.js"
-import type {PromptContext} from "./prompts/index.js";
+import type { PromptContext } from "./prompts/index.js"
+import { buildFullPrompt } from "./prompts/index.js"
 import {
 	opencodeClaudeMaxProvider,
 	setAuthStorage,
@@ -34,6 +30,7 @@ import {
 	openaiCodexProvider,
 	setAuthStorage as setOpenAIAuthStorage,
 } from "./providers/openai-codex.js"
+import { stateSchema } from "./schema.js"
 import {
 	createViewTool,
 	createExecuteCommandTool,
@@ -64,6 +61,7 @@ import {
 	getAppDataDir,
 } from "./utils/project.js"
 import { releaseAllThreadLocks } from "./utils/thread-lock.js"
+
 
 // =============================================================================
 // Start Gateway Sync (keeps model registry up to date)
@@ -106,65 +104,14 @@ if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`)
 
 const userId = getUserId(project.rootPath)
 console.info(`User: ${userId}`)
-console.info()
+console.info('--------------------------------')
 
 // =============================================================================
 // Configuration
 // =============================================================================
-// Default OM model - using gemini-2.5-flash for efficiency
-const DEFAULT_OM_MODEL_ID = "google/gemini-2.5-flash"
+
 // State schema for the harness
-const stateSchema = z.object({
-	projectPath: z.string().optional(),
-	projectName: z.string().optional(),
-	gitBranch: z.string().optional(),
-	lastCommand: z.string().optional(),
-	currentModelId: z.string().default(""),
-	// Subagent model settings (per-thread/per-mode)
-	subagentModelId: z.string().optional(), // Thread-level default for subagents
-	// Observational Memory model settings
-	observerModelId: z.string().default(DEFAULT_OM_MODEL_ID),
-	reflectorModelId: z.string().default(DEFAULT_OM_MODEL_ID),
-	// Observational Memory threshold settings
-	observationThreshold: z.number().default(30_000),
-	reflectionThreshold: z.number().default(40_000),
-	// Thinking level for extended thinking (Anthropic models)
-	thinkingLevel: z.string().default("off"),
-	// YOLO mode — auto-approve all tool calls
-	yolo: z.boolean().default(false),
-	// Permission rules — per-category and per-tool approval policies
-	permissionRules: z
-		.object({
-			categories: z.record(z.string(), z.enum(["allow", "ask", "deny"])).default({}),
-			tools: z.record(z.string(), z.enum(["allow", "ask", "deny"])).default({}),
-		})
-		.default({}),
-	// Smart editing mode — use AST-based analysis for code edits
-	smartEditing: z.boolean().default(true),
-	// Notification mode — alert when TUI needs user attention
-	notifications: z.enum(["bell", "system", "both", "off"]).default("off"),
-	// Todo list (persisted per-thread)
-	todos: z
-		.array(
-			z.object({
-				content: z.string(),
-				status: z.enum(["pending", "in_progress", "completed"]),
-				activeForm: z.string(),
-			}),
-		)
-		.default([]),
-	// Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
-	sandboxAllowedPaths: z.array(z.string()).default([]),
-	// Active plan (set when a plan is approved in Plan mode)
-	activePlan: z
-		.object({
-			title: z.string(),
-			plan: z.string(),
-			approvedAt: z.string(),
-		})
-		.nullable()
-		.default(null),
-})
+
 // =============================================================================
 // Create Storage (shared across all projects)
 // =============================================================================
@@ -369,107 +316,6 @@ const subagentToolReadOnly = createSubagentTool({
 	allowedAgentTypes: ["explore", "plan"],
 })
 
-// =============================================================================
-// Create Workspace with Skills
-// =============================================================================
-
-// We support multiple skill locations for compatibility:
-// 1. Project-local: .mastracode/skills (project-specific mastracode skills)
-// 2. Project-local: .claude/skills (Claude Code compatible skills)
-// 3. Global: ~/.mastracode/skills (user-wide mastracode skills)
-// 4. Global: ~/.claude/skills (user-wide Claude Code skills)
-
-const mastraCodeLocalSkillsPath = path.join(
-	process.cwd(),
-	".mastracode",
-	"skills",
-)
-const claudeLocalSkillsPath = path.join(process.cwd(), ".claude", "skills")
-const mastraCodeGlobalSkillsPath = path.join(
-	os.homedir(),
-	".mastracode",
-	"skills",
-)
-const claudeGlobalSkillsPath = path.join(os.homedir(), ".claude", "skills")
-
-// Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
-// returns false for symlinks. Tools like `npx skills add` install skills as
-// symlinks, so we need to resolve them. For each symlinked skill directory,
-// we add the real (resolved) parent path as an additional skill scan path.
-function collectSkillPaths(skillsDirs: string[]): string[] {
-	const paths: string[] = []
-	const seen = new Set<string>()
-
-	for (const skillsDir of skillsDirs) {
-		if (!fs.existsSync(skillsDir)) continue
-
-		// Always add the directory itself
-		const resolved = fs.realpathSync(skillsDir)
-		if (!seen.has(resolved)) {
-			seen.add(resolved)
-			paths.push(skillsDir)
-		}
-
-		// Check for symlinked skill subdirectories and add their real parents
-		try {
-			const entries = fs.readdirSync(skillsDir, { withFileTypes: true })
-			for (const entry of entries) {
-				if (entry.isSymbolicLink()) {
-					const linkPath = path.join(skillsDir, entry.name)
-					const realPath = fs.realpathSync(linkPath)
-					const stat = fs.statSync(realPath)
-					if (stat.isDirectory()) {
-						// Add the real parent directory as a skill path
-						// so Mastra discovers it as a regular directory
-						const realParent = path.dirname(realPath)
-						if (!seen.has(realParent)) {
-							seen.add(realParent)
-							paths.push(realParent)
-						}
-					}
-				}
-			}
-		} catch {
-			// Ignore errors during symlink resolution
-		}
-	}
-
-	return paths
-}
-
-const skillPaths = collectSkillPaths([
-	mastraCodeLocalSkillsPath,
-	claudeLocalSkillsPath,
-	mastraCodeGlobalSkillsPath,
-	claudeGlobalSkillsPath,
-])
-
-// Create workspace with filesystem, sandbox, and skills.
-// Disable auto-injected mastra_workspace_* tools — we have our own custom tools
-// (view, write_file, string_replace_lsp, search_content, find_files, execute_command)
-// that properly respect sandboxAllowedPaths.
-const workspace = new Workspace({
-	id: "mastra-code-workspace",
-	name: "Mastra Code Workspace",
-	filesystem: new LocalFilesystem({
-		basePath: project.rootPath,
-		allowedPaths: skillPaths,
-	}),
-	sandbox: new LocalSandbox({
-		workingDirectory: project.rootPath,
-		env: process.env,
-	}),
-	...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
-	tools: { enabled: false },
-})
-
-if (skillPaths.length > 0) {
-	console.info(`Skills loaded from:`)
-	for (const p of skillPaths) {
-		console.info(`  - ${p}`)
-	}
-}
-
 // Create agent with dynamic model, dynamic prompt, and full toolset
 const codeAgent = new Agent({
 	id: "code-agent",
@@ -500,18 +346,7 @@ const codeAgent = new Agent({
 	},
 	model: getDynamicModel,
 	memory: getDynamicMemory,
-	workspace: ({ requestContext }) => {
-		const ctx = requestContext.get("harness") as
-			| HarnessRuntimeContext<typeof stateSchema>
-			| undefined
-		// Sync filesystem's allowedPaths with sandbox-granted paths from harness state
-		const sandboxPaths = ctx?.getState?.()?.sandboxAllowedPaths ?? []
-		workspace.filesystem.setAllowedPaths([
-			...skillPaths,
-			...sandboxPaths.map((p: string) => path.resolve(p)),
-		])
-		return workspace
-	},
+	workspace: getDynamicWorkspace,
 	tools: ({ requestContext }) => {
 		const harnessContext = requestContext.get("harness") as
 			| HarnessRuntimeContext<typeof stateSchema>
@@ -639,7 +474,7 @@ const harness = new Harness({
 		gitBranch: project.gitBranch,
 	},
 	getToolsets,
-	workspace,
+	workspace: getDynamicWorkspace,
 	hookManager,
 	mcpManager,
 	modes: [
