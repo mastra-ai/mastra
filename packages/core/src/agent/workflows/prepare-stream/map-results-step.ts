@@ -200,33 +200,40 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
-          try {
-            const outputText = messageList.get.all
-              .core()
-              .map(m => m.content)
-              .join('\n');
+          // Skip memory persistence when the abort signal has fired.
+          // The LLM response may have continued after the caller disconnected,
+          // and we should not persist a partial or full response for an aborted request.
+          const aborted = options.abortSignal?.aborted;
 
-            await capabilities.executeOnFinish({
-              result: payload,
-              outputText,
-              thread: result.thread,
-              threadId: result.threadId,
-              readOnlyMemory: memoryConfig?.readOnly,
-              resourceId,
-              memoryConfig,
-              requestContext,
-              agentSpan: agentSpan,
-              runId,
-              messageList,
-              threadExists: memoryData.threadExists,
-              structuredOutput: !!options.structuredOutput?.schema,
-              overrideScorers: options.scorers,
-            });
-          } catch (e) {
-            capabilities.logger.error('Error saving memory on finish', {
-              error: e,
-              runId,
-            });
+          if (!aborted) {
+            try {
+              const outputText = messageList.get.all
+                .core()
+                .map(m => m.content)
+                .join('\n');
+
+              await capabilities.executeOnFinish({
+                result: payload,
+                outputText,
+                thread: result.thread,
+                threadId: result.threadId,
+                readOnlyMemory: memoryConfig?.readOnly,
+                resourceId,
+                memoryConfig,
+                requestContext,
+                agentSpan: agentSpan,
+                runId,
+                messageList,
+                threadExists: memoryData.threadExists,
+                structuredOutput: !!options.structuredOutput?.schema,
+                overrideScorers: options.scorers,
+              });
+            } catch (e) {
+              capabilities.logger.error('Error saving memory on finish', {
+                error: e,
+                runId,
+              });
+            }
           }
 
           await options?.onFinish?.({
