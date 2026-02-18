@@ -92,7 +92,7 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
         <ToggleLeft />
       </Icon>
       <Select value={stringValue} onValueChange={handleChange}>
-        <SelectTrigger className="bg-transparent border-0 rounded-none shadow-none focus:ring-0 focus:shadow-none pl-7" size="sm">
+        <SelectTrigger className="min-w-[140px] bg-surface4 pl-7" size="sm">
           <SelectValue placeholder="Select value" />
         </SelectTrigger>
         <SelectContent>
@@ -133,8 +133,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter number'}
-        variant="unstyled"
-        className="pl-7"
+        className="min-w-[140px] bg-surface4 pl-7"
         size="sm"
       />
     </div>
@@ -163,8 +162,7 @@ const TextValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholder
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter value'}
-        variant="unstyled"
-        className="pl-7"
+        className="min-w-[140px] bg-surface4 pl-7"
         size="sm"
       />
     </div>
@@ -194,8 +192,7 @@ const ArrayValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholde
       value={displayValue}
       onChange={handleChange}
       placeholder={placeholder || 'Enter values (comma-separated)'}
-      variant="unstyled"
-      className={cn(className)}
+      className={cn('min-w-[160px] bg-surface4', className)}
       size="sm"
     />
   );

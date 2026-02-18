@@ -22,17 +22,6 @@ export const countLeafRules = (group: RuleGroup | undefined): number => {
 };
 
 /**
- * Recursively counts the number of nested RuleGroup nodes (excluding the root)
- */
-export const countGroups = (group: RuleGroup | undefined): number => {
-  if (!group) return 0;
-  return group.conditions.reduce((count, condition) => {
-    if (isRule(condition)) return count;
-    return count + 1 + countGroups(condition);
-  }, 0);
-};
-
-/**
  * Creates a default empty rule
  */
 export const createDefaultRule = (): Rule => ({

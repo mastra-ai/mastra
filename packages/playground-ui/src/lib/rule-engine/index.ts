@@ -4,7 +4,7 @@ export type { Rule, RuleGroup, ConditionOperator } from './types';
 export type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
 // Utilities
-export { isRule, isRuleGroup, countLeafRules, countGroups, createDefaultRule, createDefaultRuleGroup } from './utils';
+export { isRule, isRuleGroup, countLeafRules, createDefaultRule, createDefaultRuleGroup } from './utils';
 
 // Components
 export {

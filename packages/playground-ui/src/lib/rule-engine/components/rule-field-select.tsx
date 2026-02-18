@@ -49,7 +49,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="bg-transparent border-0 rounded-none shadow-none focus:ring-0 focus:shadow-none text-neutral6" size="sm">
+        <SelectTrigger className="min-w-[140px] text-neutral6 bg-surface4" size="sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -136,7 +136,7 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
   }
 
   return (
-    <div className={cn('w-full flex items-center gap-1', className)}>
+    <div className={cn('flex items-center gap-1', className)}>
       {selectors.map((selector, index) => (
         <React.Fragment key={`${selector.basePath}-${index}`}>
           {index > 0 && <span className="text-neutral3">.</span>}
