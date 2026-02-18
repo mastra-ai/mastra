@@ -1,0 +1,70 @@
+This lesson maps the scaffolded project to the code you'll actually edit. The Weather agent, tool, and workflow that come with `create-mastra` aren't just demo code. They're the clearest reference for how agents, tools, and workflows are structured in Mastra.
+
+## What create-mastra generates
+
+After scaffolding, your project looks like this:
+
+```
+src/
+├── mastra/
+│   ├── agents/
+│   │   └── weather-agent.ts
+│   ├── tools/
+│   │   └── weather-tool.ts
+│   ├── workflows/
+│   │   └── weather-workflow.ts
+│   ├── scorers/
+│   │   └── weather-scorer.ts
+│   └── index.ts
+├── .env.example
+├── package.json
+└── tsconfig.json
+```
+
+The scaffolded Weather agent is a working reference point. Let's break down what's in each file.
+
+## The agent file
+
+An agent has several configuration options. The core ones you'll work with in this course:
+
+- **`instructions`**: the system prompt. This is where you define what the agent is for, what it should and shouldn't do, and how to behave when info is missing
+- **`model`**: the LLM the agent uses to reason and generate responses
+- **`tools`**: the allowlist of tools the agent can call. If a tool isn't listed here, the agent cannot use it
+- **`memory`**: what allows follow-up questions to work. Without memory, every prompt is treated as a fresh conversation
+
+There are additional options for things like voice, evals, structured output, and provider-specific settings. See the agent configuration docs below for the full list.
+
+## The tool file
+
+A tool is a TypeScript function wrapped in a consistent interface the agent can call. Every tool has:
+
+- **`id`** and **`description`**: the description is plain-language context the model uses to decide when to call the tool
+- **`inputSchema`**: a Zod object defining what the tool expects
+- **`outputSchema`**: a Zod object defining what the tool promises to return
+- **`execute`**: the function that runs when the agent calls the tool
+
+Zod schemas do runtime validation. If a tool returns bad data, Zod catches it right away instead of letting the agent keep going with it.
+
+## The workflow file
+
+Workflows make the execution sequence explicit. Instead of the agent deciding what to do next, you define the steps and the order.
+
+The scaffolded weather workflow has two steps:
+1. `fetchWeather`: calls external weather APIs and returns a structured forecast
+2. `planActivities`: takes that forecast and calls an agent to generate recommendations
+
+Each step has its own input and output schema. The workflow wires them together with `.then()`, enforcing that step 2 gets exactly what step 1 returns.
+
+## The Mastra instance
+
+`src/mastra/index.ts` is where everything comes together. You create a `Mastra` instance and pass in your agents, memory config, and anything else your app needs. Once an agent is registered here, it becomes part of your app: callable from Studio, from other agents, from workflows, and over HTTP.
+
+If an agent isn't registered in `index.ts`, Studio won't show it.
+
+## Go deeper
+
+- [Agent configuration](https://mastra.ai/reference/agents/agent): all agent options explained
+- [Creating tools](https://mastra.ai/docs/agents/using-tools): tool structure, schemas, and patterns
+- [Workflows](https://mastra.ai/docs/workflows/overview): steps, transitions, and suspend/resume
+- [Mastra Studio](https://mastra.ai/docs/getting-started/studio): running and testing your project locally
+- [Zod](https://zod.dev/): schema validation library used throughout Mastra

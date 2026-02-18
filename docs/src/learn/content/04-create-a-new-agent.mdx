@@ -1,0 +1,57 @@
+This lesson is where you stop using the scaffolded Weather agent and start building your own. You'll create the Theme Park Companion agent, register it, run it in Studio, read your first trace, and see what changes when you turn memory on.
+
+## Create the agent file
+
+Create a new file at `src/mastra/agents/themepark-agent.ts`. You'll instantiate the `Agent` class with an `id`, `name`, and `instructions`. This is the agent you'll keep extending for the rest of the course.
+
+The instructions block is the system prompt. It's where you define what the agent is for, what it should and shouldn't do, and how it should behave when something is missing. This is also where you'll tell it which tools to use and when, as you add them later.
+
+Start with instructions only. This lets you lock in the agent's basic behavior and output format before adding capabilities.
+
+## Register the agent
+
+Open `src/mastra/index.ts`. Add your import and include the new agent in the `agents` object. Once it's registered, it's part of your Mastra app: visible in Studio, callable from workflows, and accessible over HTTP.
+
+**If an agent isn't registered here, Studio won't show it.**
+
+## Test it in Studio
+
+With the dev server running, open Studio at `http://localhost:4111` and go to **Agents**. You should see the Theme Park Companion alongside the original Weather agent.
+
+Try a prompt like:
+
+> I'm visiting a theme park with a small group. How should I approach the day?
+
+At this stage, the agent has no tools. It works from its instructions and whatever the model already knows.
+
+## Read the trace
+
+Open **Observability** and click the run you completed. You'll see the input, the model call, and the output. Later, when tools and workflows are involved, this view becomes critical. For now, this is where you verify what the model received and what it produced.
+
+## Add memory
+
+By default, the agent treats each prompt as a fresh conversation. You can see this by:
+
+1. Telling it your name and favorite park
+2. Asking a follow-up. It won't remember
+
+Adding `memory: new Memory()` to the agent definition changes that. With memory enabled, follow-up questions carry earlier context forward instead of starting over.
+
+The `Memory` class provides thread-based message storage. It requires a storage backend to persist data — by default it uses an in-memory store, which is fine for local development. In production you'd configure a real provider like LibSQL or PostgreSQL. There's more to memory (working memory, semantic recall, storage backends) and we'll cover those later in the course.
+
+## Try these prompts
+
+After enabling memory, run the same two messages in sequence to see the difference:
+
+> Hi, my name is [your name]. My favorite theme park is Islands of Adventure.
+
+> What is my name and favorite theme park?
+
+## Go deeper
+
+- [Agents overview](https://mastra.ai/docs/agents/overview): full agent configuration options
+- [Agent class reference](https://mastra.ai/reference/agents/agent): all constructor parameters
+- [Agent memory](https://mastra.ai/docs/agents/agent-memory): how memory works in Mastra
+- [Memory overview](https://mastra.ai/docs/memory/overview): message history, working memory, semantic recall
+- [Supported models](https://mastra.ai/models): switching providers and models
+- [Mastra Studio](https://mastra.ai/docs/getting-started/studio): reading traces and model settings

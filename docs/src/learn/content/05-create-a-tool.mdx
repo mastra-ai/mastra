@@ -1,0 +1,64 @@
+This lesson adds the first real capability to the agent. Right now it can only respond from its instructions. You'll build a park lookup tool that resolves a name like "Animal Kingdom" into a usable `parkId`, test it in Studio, then attach it and watch the agent call it.
+
+## When to use a tool
+
+Use tools when an agent needs to fetch live data, run a specific operation, or return structured, predictable output. These are things a model can't reliably handle on its own.
+
+A tool is a TypeScript function the agent is allowed to call. The agent decides when to call it based on the tool's description and the current conversation. You control what inputs it accepts, what it returns, and what it does.
+
+## The first tool: park lookup
+
+The Theme Park Companion needs a way to resolve a park name like "Animal Kingdom" into a numeric `parkId`. That ID is required for every Queue-Times API call.
+
+The `findQueueTimesParkTool`:
+- Takes a `parkName` string as input
+- Fetches the full park index from the Queue-Times API: `https://queue-times.com/parks.json`
+- Filters matches and returns a short list, each with a `parkId`, `name`, `parkUrl`, and optional `groupName`
+
+## Key tool concepts
+
+Every tool built with `createTool` has:
+
+- **`id`**: a unique identifier
+- **`description`**: plain-language context the model uses to decide when to call the tool. Write this carefully
+- **`inputSchema`**: a Zod object defining what arguments the tool expects
+- **`outputSchema`**: a Zod object defining what the tool promises to return
+- **`execute`**: the function that runs when the agent calls it
+
+Zod schemas enforce the shape of inputs and outputs at runtime. If the tool receives bad data or returns something that doesn't match, Zod catches it immediately.
+
+## Why return a short list instead of one result?
+
+Returning a small list (2-3 matches) instead of a single forced answer gives the agent the ability to ask a clarifying question when names are ambiguous. "Universal" might match Universal Studios Hollywood, Universal Orlando Resort, and Universal Studios Japan. The agent can present those options and wait for the user to confirm.
+
+## Test in Studio before attaching to the agent
+
+The **Tools** section in Studio lets you run a tool directly, without going through an agent conversation. This is the best way to verify the input/output shape before the agent ever touches it.
+
+Try these inputs in the Tools panel:
+
+- `parkName: "EPCOT"`
+- `parkName: "universal"`: should return multiple matches
+
+## Attach to the agent
+
+Once the tool works in isolation, import it into your agent file and add it to the `tools` object. That object is the **allowlist**: the agent can only call tools listed there.
+
+Update the agent's instructions to tell it when to use the tool. For example:
+
+> If the user names a park, use findQueueTimesParkTool to look it up. If multiple matches come back, ask one clarifying question and wait.
+
+## Verify in Studio
+
+Go to the Theme Park Companion agent in Studio and prompt it with something that forces the lookup:
+
+> Find Cedar Point
+
+The agent should call `findQueueTimesParkTool`, pass the park name, and use the matches in its response. Open **Observability** after the run to see the tool call, the arguments it sent, and the result your tool returned.
+
+## Go deeper
+
+- [Using tools with agents](https://mastra.ai/docs/agents/using-tools): full tool API and patterns
+- [createTool reference](https://mastra.ai/reference/tools/create-tool): all options for defining a tool
+- [Zod docs](https://zod.dev/): schema validation for inputs and outputs
+- [Queue-Times API](https://queue-times.com/en-US/pages/api): the API used in this project

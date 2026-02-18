@@ -1,0 +1,59 @@
+A quick aside before building the next tool. If you're using an AI coding agent in your editor, there's a good chance it's working from outdated or incomplete knowledge of Mastra. This lesson covers two options Mastra provides to fix that: Skills and the MCP Docs Server.
+
+## Keep your coding agent up to date on Mastra
+
+When you use an AI coding agent in your editor (Cursor, Claude Code, Copilot, or anything else), it may not have current knowledge of Mastra's APIs, patterns, or best practices. You can end up with plausible-looking but incorrect code because the model is working from stale or missing information.
+
+Mastra provides two options to fix that: **Skills** and the **MCP Docs Server**.
+
+## Mastra Skills
+
+Skills are files installed directly into your repo. Your coding agent reads them while generating or editing Mastra code, so it has the real API and best practices on hand.
+
+When you ran `create-mastra`, you were asked to choose between Skills and the MCP Docs Server. If you chose Skills for Cursor, they're in your project at:
+
+```
+.cursor/skills/mastra/
+```
+
+You may also see them at `.agents/skills/mastra/`, which is the standard location for non-editor-specific agents.
+
+Inside the skills folder:
+- **`SKILL.md`**: the entry point. Tells the agent what the skill is for and how to use the references
+- **`references/`**: markdown docs the agent pulls from while it helps you code. Includes setup notes, common errors, migration guidance, and more
+
+If you didn't install skills during setup, add them manually:
+
+```bash
+npx skills add mastra-ai/skills
+```
+
+```bash
+pnpm dlx skills add mastra-ai/skills
+```
+
+## The MCP Docs Server
+
+The **Mastra MCP Docs Server** (`@mastra/mcp-docs-server`) is a separate option. It gives MCP-capable agents direct access to Mastra's documentation, code examples, blog posts, and changelogs. It's useful for its tools, including a migration helper for upgrading between Mastra versions.
+
+For general coding assistance with Mastra, Skills perform better. Use the MCP Docs Server when you specifically want its tooling.
+
+To add it manually, wire it up in your editor's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "mastra": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
+
+## Go deeper
+
+- [Mastra Skills on npm](https://www.npmjs.com/package/@mastra/skills): the skills package
+- [MCP Docs Server package](https://www.npmjs.com/package/@mastra/mcp-docs-server): setup and available tools
+- [skills standard](https://skills.so): the open standard Skills are built on
