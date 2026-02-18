@@ -100,6 +100,11 @@ export class AgentsPG extends AgentsStorage {
       schema: TABLE_SCHEMAS[TABLE_AGENTS],
       ifNotExists: ['status', 'authorId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
+    });
 
     // Migrate tools field from string[] to JSONB format
     await this.#migrateToolsToJsonbFormat();

@@ -129,6 +129,7 @@ export interface GetAgentResponse {
   source?: 'code' | 'stored';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {

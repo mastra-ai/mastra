@@ -195,10 +195,12 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
         }
 
-        queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        queryClient.invalidateQueries({ queryKey: ['agents'] });
-        queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] }),
+          queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] }),
+          queryClient.invalidateQueries({ queryKey: ['agents'] }),
+          queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
+        ]);
         toast.success('Agent published');
         options.onSuccess(options.agentId);
       } else {

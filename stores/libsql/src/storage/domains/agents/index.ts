@@ -24,6 +24,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { buildSelectColumns } from '../../db/utils';
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
@@ -48,6 +49,11 @@ export class AgentsLibSQL extends AgentsStorage {
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
       ifNotExists: ['status', 'authorId'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: AGENT_VERSIONS_SCHEMA,
+      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -540,7 +546,7 @@ export class AgentsLibSQL extends AgentsStorage {
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
       const result = await this.#client.execute({
-        sql: `SELECT * FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        sql: `SELECT ${buildSelectColumns(TABLE_AGENTS)} FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
 

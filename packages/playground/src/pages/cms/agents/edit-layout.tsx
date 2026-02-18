@@ -115,7 +115,7 @@ function EditLayoutWrapper() {
     mode: 'edit',
     agentId: agentId ?? '',
     dataSource,
-    onSuccess: id => navigate(`${paths.agentLink(id)}/chat`),
+    onSuccess: id => navigate(paths.agentLink(id)),
   });
 
   const handleVersionSelect = useCallback(

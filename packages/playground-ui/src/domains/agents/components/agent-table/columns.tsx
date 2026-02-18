@@ -31,11 +31,10 @@ const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSou
       description={extractPrompt(row.original.instructions)}
       meta={
         row.original.source === 'stored' ? (
-          row.original.status === 'published' ? (
-            <Badge variant="success">Published</Badge>
-          ) : (
-            <Badge>Draft</Badge>
-          )
+          <>
+            {row.original.activeVersionId && <Badge variant="success">Published</Badge>}
+            <Badge variant={row.original.hasDraft || !row.original.activeVersionId ? 'info' : 'default'}>Draft</Badge>
+          </>
         ) : undefined
       }
     />
