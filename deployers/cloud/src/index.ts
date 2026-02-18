@@ -98,6 +98,8 @@ export class CloudDeployer extends Deployer {
 
   private getEntry(): string {
     return `
+import { fileURLToPath as __pkgFileURLToPath } from 'node:url';
+import { dirname as __pkgDirname, join as __pkgJoin } from 'node:path';
 import { createNodeServer, getToolExports } from '#server';
 import { tools } from '#tools';
 import { mastra } from '#mastra';
@@ -106,6 +108,12 @@ import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+// Set packages file path for CMS availability detection in built output
+if (!process.env.MASTRA_PACKAGES_FILE) {
+  const __bundleDir = __pkgDirname(__pkgFileURLToPath(import.meta.url));
+  process.env.MASTRA_PACKAGES_FILE = __pkgJoin(__bundleDir, 'mastra-packages.json');
+}
+
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
