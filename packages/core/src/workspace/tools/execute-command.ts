@@ -45,29 +45,35 @@ Usage:
         timeout: timeout ?? undefined,
         cwd: cwd ?? undefined,
         onStdout: async (data: string) => {
-          await context?.writer?.write({
-            type: 'sandbox-stdout',
-            data,
-            timestamp: Date.now(),
-            metadata: getExecutionMetadata(),
+          await context?.writer?.custom({
+            type: 'data-sandbox-stdout',
+            data: {
+              data,
+              timestamp: Date.now(),
+              metadata: getExecutionMetadata(),
+            },
           });
         },
         onStderr: async (data: string) => {
-          await context?.writer?.write({
-            type: 'sandbox-stderr',
-            data,
-            timestamp: Date.now(),
-            metadata: getExecutionMetadata(),
+          await context?.writer?.custom({
+            type: 'data-sandbox-stderr',
+            data: {
+              data,
+              timestamp: Date.now(),
+              metadata: getExecutionMetadata(),
+            },
           });
         },
       });
 
-      await context?.writer?.write({
-        type: 'sandbox-exit',
-        exitCode: result.exitCode,
-        success: result.success,
-        executionTimeMs: result.executionTimeMs,
-        metadata: getExecutionMetadata(),
+      await context?.writer?.custom({
+        type: 'data-sandbox-exit',
+        data: {
+          exitCode: result.exitCode,
+          success: result.success,
+          executionTimeMs: result.executionTimeMs,
+          metadata: getExecutionMetadata(),
+        },
       });
 
       await context?.writer?.custom({
@@ -89,12 +95,14 @@ Usage:
 
       return result.stdout || '(no output)';
     } catch (error) {
-      await context?.writer?.write({
-        type: 'sandbox-exit',
-        exitCode: -1,
-        success: false,
-        executionTimeMs: Date.now() - startedAt,
-        metadata: getExecutionMetadata(),
+      await context?.writer?.custom({
+        type: 'data-sandbox-exit',
+        data: {
+          exitCode: -1,
+          success: false,
+          executionTimeMs: Date.now() - startedAt,
+          metadata: getExecutionMetadata(),
+        },
       });
       throw error;
     }
