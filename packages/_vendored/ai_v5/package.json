@@ -54,7 +54,8 @@
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.1",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "zod": "^3.25.76 || ^4.0.0"
