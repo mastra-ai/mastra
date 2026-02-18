@@ -1,11 +1,14 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import { describe, it, expect, vi } from 'vitest';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { RequestContext } from '../../request-context';
 import { MockProvider } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { makeCoreTool } from '../../utils';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { MastraLLMV1 } from './model';
 
 describe('MastraLLM', () => {
   const mockMastra = {
@@ -13,6 +16,7 @@ describe('MastraLLM', () => {
       debug: vi.fn(),
       warn: vi.fn(),
       info: vi.fn(),
+      trackException: vi.fn(),
     } as any,
   };
 
@@ -744,5 +748,115 @@ describe('MastraLLM', () => {
 
       expect(streamSpy).toHaveBeenCalled();
     });
+  });
+
+  describe('Error Handling', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    function createErrorProvider(error: Error, objectGenerationMode?: 'json') {
+      const errorModel = new MockLanguageModelV1({
+        defaultObjectGenerationMode: objectGenerationMode,
+        doGenerate: async () => {
+          throw error;
+        },
+      });
+
+      const errorProvider = new MastraLLMV1({ model: errorModel });
+      errorProvider.__registerPrimitives(mockMastra as any);
+      return errorProvider;
+    }
+
+    describe('__text error handling', () => {
+      it('should call trackException when generateText throws an error', async () => {
+        const errorMessage = 'AI SDK generateText failed';
+        const testError = new Error(errorMessage);
+        const errorProvider = createErrorProvider(testError);
+
+        const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+        const runId = 'test-run-id';
+        const threadId = 'test-thread-id';
+        const resourceId = 'test-resource-id';
+
+        await expect(
+          errorProvider.__text({
+            messages,
+            runId,
+            threadId,
+            resourceId,
+            temperature: 0.7,
+            maxSteps: 5,
+            requestContext,
+            tracingContext,
+          }),
+        ).rejects.toThrow();
+
+        expect(mockMastra.logger.trackException).toHaveBeenCalledTimes(1);
+        const trackedError = mockMastra.logger.trackException.mock.calls[0][0] as MastraError;
+        expect(trackedError).toBeInstanceOf(MastraError);
+        expect(trackedError.id).toBe('LLM_GENERATE_TEXT_AI_SDK_EXECUTION_FAILED');
+        expect(trackedError.domain).toBe(ErrorDomain.LLM);
+        expect(trackedError.category).toBe(ErrorCategory.THIRD_PARTY);
+        expect(trackedError.details).toMatchObject({
+          modelId: expect.any(String),
+          modelProvider: expect.any(String),
+          runId,
+          threadId,
+          resourceId,
+        });
+        expect(trackedError.cause).toBe(testError);
+      });
+    });
+
+    describe('__textObject error handling', () => {
+      it('should call trackException when generateObject throws an error', async () => {
+        const errorMessage = 'AI SDK generateObject failed';
+        const testError = new Error(errorMessage);
+        const errorProvider = createErrorProvider(testError, 'json');
+
+        const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
+        const schema = z.object({
+          content: z.string(),
+        }) as z.ZodType<any>;
+        const runId = 'test-run-id';
+        const threadId = 'test-thread-id';
+        const resourceId = 'test-resource-id';
+
+        await expect(
+          errorProvider.__textObject({
+            messages,
+            structuredOutput: schema,
+            runId,
+            threadId,
+            resourceId,
+            temperature: 0.7,
+            requestContext,
+            tracingContext,
+          }),
+        ).rejects.toThrow();
+
+        expect(mockMastra.logger.trackException).toHaveBeenCalledTimes(1);
+        const trackedError = mockMastra.logger.trackException.mock.calls[0][0] as MastraError;
+        expect(trackedError).toBeInstanceOf(MastraError);
+        expect(trackedError.id).toBe('LLM_GENERATE_OBJECT_AI_SDK_EXECUTION_FAILED');
+        expect(trackedError.domain).toBe(ErrorDomain.LLM);
+        expect(trackedError.category).toBe(ErrorCategory.THIRD_PARTY);
+        expect(trackedError.details).toMatchObject({
+          modelId: expect.any(String),
+          modelProvider: expect.any(String),
+          runId,
+          threadId,
+          resourceId,
+        });
+        expect(trackedError.cause).toBe(testError);
+      });
+    });
+
+    // Note: We don't test __stream and __streamObject error handling here because:
+    // 1. streamText/streamObject from AI SDK rarely throw synchronously - they return streams that error when consumed
+    // 2. The catch blocks follow the same pattern as __text/__textObject which are tested above
+    // 3. Testing would require complex mocking of module-level functions that doesn't provide sufficient value
+    // The defensive catch blocks are in place and follow the established error handling pattern.
   });
 });
