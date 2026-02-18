@@ -4,6 +4,7 @@ import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { isProtectedCustomRoute } from '@mastra/server/auth';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
@@ -15,8 +16,6 @@ import {
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 import { ZodError } from 'zod';
-
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
 /**
  * Convert Koa context to Web API Request for cookie-based auth providers.
@@ -59,6 +58,113 @@ declare module 'koa' {
 }
 
 export class MastraServer extends MastraServerBase<Koa, Context, Context> {
+  async init() {
+    this.registerErrorMiddleware();
+    await super.init();
+  }
+
+  /**
+   * Register a global error-handling middleware at the top of the middleware chain.
+   * This acts as a safety net for errors that propagate past route handlers
+   * (e.g., from auth middleware, context middleware, or when route handlers re-throw).
+   *
+   * When `server.onError` is configured, calls it and uses the response.
+   * Otherwise provides a default JSON error response.
+   *
+   * Errors are emitted on the app for logging (Koa convention) but NOT re-thrown,
+   * so this middleware is the final error boundary. Users who need custom error handling
+   * should use `server.onError` or register their own middleware between this and the routes.
+   */
+  private registerErrorMiddleware(): void {
+    this.app.use(async (ctx: Context, next: Next) => {
+      try {
+        await next();
+      } catch (err) {
+        // Try onError first (may have already been called in registerRoute,
+        // but this catches errors from other middleware too)
+        if (await this.handleOnError(err, ctx)) {
+          return;
+        }
+
+        // Default error handling
+        const error = err instanceof Error ? err : new Error(String(err));
+        let status = 500;
+        if (err && typeof err === 'object') {
+          if ('status' in err) {
+            status = (err as any).status;
+          } else if (
+            'details' in err &&
+            (err as any).details &&
+            typeof (err as any).details === 'object' &&
+            'status' in (err as any).details
+          ) {
+            status = (err as any).details.status;
+          }
+        }
+        ctx.status = status;
+        ctx.body = { error: error.message || 'Unknown error' };
+
+        // Emit the error for logging (standard Koa pattern) but don't re-throw
+        // since this middleware is the final error boundary.
+        ctx.app.emit('error', err, ctx);
+      }
+    });
+  }
+
+  /**
+   * Try to handle an error using the `server.onError` hook.
+   * Creates a minimal context shim compatible with the Hono-style onError signature.
+   *
+   * @returns true if the error was handled and the response was set on ctx
+   */
+  private async handleOnError(err: unknown, ctx: Context): Promise<boolean> {
+    // Guard against double invocation (route catch → re-throw → error middleware)
+    if ((ctx as any)._mastraOnErrorAttempted) return false;
+    (ctx as any)._mastraOnErrorAttempted = true;
+
+    const onError = this.mastra.getServer()?.onError;
+    if (!onError) return false;
+
+    const error = err instanceof Error ? err : new Error(String(err));
+
+    // Create a minimal context shim compatible with the onError signature
+    const shimContext = {
+      json: (data: unknown, status: number = 200) =>
+        new Response(JSON.stringify(data), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      req: {
+        path: ctx.path,
+        method: ctx.method,
+        header: (name: string) => {
+          const value = ctx.headers[name.toLowerCase()];
+          if (Array.isArray(value)) return value.join(', ');
+          return value;
+        },
+        url: ctx.url,
+      },
+    };
+
+    try {
+      const response = await onError(error, shimContext as any);
+      // Apply the Response from onError to the Koa context
+      ctx.status = response.status;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        ctx.body = await response.json();
+      } else {
+        ctx.body = await response.text();
+      }
+      return true;
+    } catch (onErrorErr) {
+      this.mastra.getLogger()?.error('Error in custom onError handler', {
+        error: onErrorErr instanceof Error ? { message: onErrorErr.message, stack: onErrorErr.stack } : onErrorErr,
+      });
+      return false;
+    }
+  }
+
   createContextMiddleware(): Middleware {
     return async (ctx: Context, next: Next) => {
       // Parse request context from request body and add to context
@@ -410,6 +516,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         getQuery: name => (ctx.query as Record<string, string>)[name],
         requestContext: ctx.state.requestContext,
         request: toWebRequest(ctx),
+        buildAuthorizeContext: () => toWebRequest(ctx),
       });
 
       if (authError) {
@@ -513,25 +620,23 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           path: route.path,
           method: route.method,
         });
-        // Check if it's an HTTPException or MastraError with a status code
-        let status = 500;
+        // Attach status code to the error for upstream middleware
         if (error && typeof error === 'object') {
-          // Check for direct status property (HTTPException)
-          if ('status' in error) {
-            status = (error as any).status;
-          }
-          // Check for MastraError with status in details
-          else if (
-            'details' in error &&
-            error.details &&
-            typeof error.details === 'object' &&
-            'status' in error.details
-          ) {
-            status = (error.details as any).status;
+          if (!('status' in error)) {
+            // Check for MastraError with status in details
+            if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+              (error as any).status = (error.details as any).status;
+            }
           }
         }
-        ctx.status = status;
-        ctx.body = { error: error instanceof Error ? error.message : 'Unknown error' };
+
+        // Try to call server.onError if configured
+        if (await this.handleOnError(error, ctx)) {
+          return;
+        }
+
+        // Re-throw so the error propagates up Koa's middleware chain
+        throw error;
       }
     };
 
@@ -568,6 +673,49 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     if (!(await this.buildCustomRouteHandler())) return;
 
     this.app.use(async (ctx: Context, next: Next) => {
+      // Check if this request matches a protected custom route and run auth
+      const path = String(ctx.path || '/');
+      const method = String(ctx.method || 'GET');
+
+      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
+        const serverRoute: ServerRoute = {
+          method: method as any,
+          path,
+          responseType: 'json',
+          handler: async () => {},
+        };
+
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path,
+          method,
+          getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => (ctx.query as Record<string, string>)[name],
+          requestContext: ctx.state.requestContext,
+          request: toWebRequest(ctx),
+          buildAuthorizeContext: () => toWebRequest(ctx),
+        });
+
+        if (authError) {
+          ctx.status = authError.status;
+          ctx.body = { error: authError.error };
+          return;
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+          if (permissionError) {
+            ctx.status = permissionError.status;
+            ctx.body = {
+              error: permissionError.error,
+              message: permissionError.message,
+            };
+            return;
+          }
+        }
+      }
+
       const response = await this.handleCustomRouteRequest(
         `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
         ctx.method,
@@ -586,13 +734,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
-      return;
-    }
-
-    this.app.use(authenticationMiddleware);
-    this.app.use(authorizationMiddleware);
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
   }
 }

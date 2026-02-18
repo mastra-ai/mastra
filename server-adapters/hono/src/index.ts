@@ -17,8 +17,6 @@ import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
-
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
   mastra: Mastra;
@@ -355,6 +353,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           getQuery: name => c.req.query(name),
           requestContext: c.get('requestContext'),
           request: c.req.raw,
+          buildAuthorizeContext: () => c,
         });
 
         if (authError) {
@@ -490,6 +489,46 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       if (!handler) continue;
 
       const middlewares: MiddlewareHandler[] = [];
+
+      // Add per-route auth check middleware (same pattern as registerRoute)
+      const serverRoute: ServerRoute = {
+        method: route.method as any,
+        path: route.path,
+        responseType: 'json',
+        handler: async () => {},
+        requiresAuth: route.requiresAuth,
+      };
+
+      middlewares.push(async (c: Context, next) => {
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path: c.req.path,
+          method: c.req.method,
+          getHeader: name => c.req.header(name),
+          getQuery: name => c.req.query(name),
+          requestContext: c.get('requestContext'),
+          request: c.req.raw,
+          buildAuthorizeContext: () => c,
+        });
+
+        if (authError) {
+          return c.json({ error: authError.error }, authError.status as any);
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+          if (permissionError) {
+            return c.json(
+              { error: permissionError.error, message: permissionError.message },
+              permissionError.status as any,
+            );
+          }
+        }
+
+        return next();
+      });
+
       if (route.middleware) {
         middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
       }
@@ -505,13 +544,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
-      return;
-    }
-
-    this.app.use('*', authenticationMiddleware);
-    this.app.use('*', authorizationMiddleware);
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
   }
 }

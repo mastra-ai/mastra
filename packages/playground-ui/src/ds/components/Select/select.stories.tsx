@@ -28,6 +28,21 @@ export const Default: Story = {
   ),
 };
 
+export const Experimental: Story = {
+  render: () => (
+    <Select>
+      <SelectTrigger className="w-[180px]" variant="experimental" size="default">
+        <SelectValue placeholder="Select option" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="option1">Option 1</SelectItem>
+        <SelectItem value="option2">Option 2</SelectItem>
+        <SelectItem value="option3">Option 3</SelectItem>
+      </SelectContent>
+    </Select>
+  ),
+};
+
 export const WithValue: Story = {
   render: () => (
     <Select defaultValue="option2">
