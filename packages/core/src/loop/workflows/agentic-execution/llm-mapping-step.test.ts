@@ -503,16 +503,18 @@ describe('createLLMMappingStep provider-executed tool message filtering', () => 
       metadata: {},
     }));
 
-    llmMappingStep = createLLMMappingStep({
+    llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: {
+          generateId: () => 'test-message-id',
+        },
+      } as any,
       llmExecutionStep,
-      messageList,
-      controller: controller as any,
-      runId: 'test-run',
-      from: 'agent' as any,
-      logger: undefined as any,
-      toolStream: new ToolStream({ prefix: 'tool', callId: 'test-call-id', name: 'test-tool', runId: 'test-run' }),
-      requestContext: new RequestContext(),
-    });
+    );
   });
 
   it('should split client-executed and provider-executed tools into separate messageList entries', async () => {
