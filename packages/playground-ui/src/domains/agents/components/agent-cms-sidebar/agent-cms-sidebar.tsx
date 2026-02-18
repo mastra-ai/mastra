@@ -59,7 +59,17 @@ interface SidebarLinkProps {
   versionId?: string;
 }
 
-const SidebarLink = ({ index, name, pathSuffix, isLast, basePath, active, description, done, versionId }: SidebarLinkProps) => {
+const SidebarLink = ({
+  index,
+  name,
+  pathSuffix,
+  isLast,
+  basePath,
+  active,
+  description,
+  done,
+  versionId,
+}: SidebarLinkProps) => {
   const { Link } = useLinkComponent();
   const href = basePath + pathSuffix + (versionId ? `?versionId=${versionId}` : '');
 
