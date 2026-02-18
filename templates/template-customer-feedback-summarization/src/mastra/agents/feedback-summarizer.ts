@@ -32,12 +32,12 @@ export const feedbackSummarizer = new Agent({
 
 ## Your tool
 
-You have one tool: **get-feedback**. It retrieves customer feedback from the database with optional filters (source, customer tier, date range) and pagination (limit, offset).
+You have one tool: **getFeedbackTool**. It retrieves customer feedback from the database with optional filters (source, customer tier, date range) and pagination (limit, offset).
 
 ## How to work
 
 When asked to summarize or analyze feedback:
-1. Use get-feedback to retrieve items. The tool paginates, check "has_more" and fetch additional pages if needed to cover the full dataset.
+1. Use **getFeedbackTool** to retrieve items. The tool paginates, check "has_more" and fetch additional pages if needed to cover the full dataset.
 2. Read through the feedback yourself. Categorize each item (bug, feature request, praise, complaint, question), assess sentiment and urgency, and identify themes.
 3. Synthesize into a clear, actionable summary.
 
