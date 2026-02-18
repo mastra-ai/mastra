@@ -3,7 +3,18 @@ import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
-import type { AnyExportedSpan, TracingEvent } from '@mastra/core/observability';
+import type {
+  AnyExportedSpan,
+  TracingEvent,
+  LogEvent,
+  MetricEvent,
+  ScoreEvent,
+  FeedbackEvent,
+  ExportedLog,
+  ExportedMetric,
+  ExportedScore,
+  ExportedFeedback,
+} from '@mastra/core/observability';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { JsonExporter } from './json';
 
@@ -494,5 +505,564 @@ describe('JsonExporter', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('ended without starting'));
     });
+  });
+});
+
+// ============================================================================
+// Helpers for new signal types
+// ============================================================================
+
+function createMockLogEvent(overrides: Partial<ExportedLog> = {}): LogEvent {
+  return {
+    type: 'log',
+    log: {
+      timestamp: new Date(),
+      level: 'info',
+      message: 'test log message',
+      ...overrides,
+    },
+  };
+}
+
+function createMockMetricEvent(overrides: Partial<ExportedMetric> = {}): MetricEvent {
+  return {
+    type: 'metric',
+    metric: {
+      timestamp: new Date(),
+      name: 'mastra_test_counter',
+      metricType: 'counter',
+      value: 1,
+      labels: { env: 'test' },
+      ...overrides,
+    },
+  };
+}
+
+function createMockScoreEvent(overrides: Partial<ExportedScore> = {}): ScoreEvent {
+  return {
+    type: 'score',
+    score: {
+      timestamp: new Date(),
+      traceId: 'trace-123',
+      scorerName: 'relevance',
+      score: 0.85,
+      ...overrides,
+    },
+  };
+}
+
+function createMockFeedbackEvent(overrides: Partial<ExportedFeedback> = {}): FeedbackEvent {
+  return {
+    type: 'feedback',
+    feedback: {
+      timestamp: new Date(),
+      traceId: 'trace-123',
+      source: 'user',
+      feedbackType: 'thumbs',
+      value: 1,
+      ...overrides,
+    },
+  };
+}
+
+// ============================================================================
+// Tests for new signal handlers (Phase 2.2)
+// ============================================================================
+
+describe('JsonExporter - Log Events', () => {
+  let exporter: JsonExporter;
+
+  beforeEach(() => {
+    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+  });
+
+  it('should collect log events', async () => {
+    await exporter.onLogEvent(createMockLogEvent());
+    await exporter.onLogEvent(createMockLogEvent({ level: 'error', message: 'something failed' }));
+
+    expect(exporter.getLogEvents()).toHaveLength(2);
+    expect(exporter.getAllLogs()).toHaveLength(2);
+  });
+
+  it('should filter logs by level', async () => {
+    await exporter.onLogEvent(createMockLogEvent({ level: 'info', message: 'info msg' }));
+    await exporter.onLogEvent(createMockLogEvent({ level: 'error', message: 'error msg' }));
+    await exporter.onLogEvent(createMockLogEvent({ level: 'warn', message: 'warn msg' }));
+    await exporter.onLogEvent(createMockLogEvent({ level: 'info', message: 'info msg 2' }));
+
+    const infoLogs = exporter.getLogsByLevel('info');
+    const errorLogs = exporter.getLogsByLevel('error');
+
+    expect(infoLogs).toHaveLength(2);
+    expect(errorLogs).toHaveLength(1);
+    expect(errorLogs[0]?.message).toBe('error msg');
+  });
+
+  it('should filter logs by traceId', async () => {
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-A', message: 'log A' }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-B', message: 'log B' }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-A', message: 'log A2' }));
+
+    const logsA = exporter.getLogsByTraceId('trace-A');
+    expect(logsA).toHaveLength(2);
+    expect(logsA[0]?.message).toBe('log A');
+    expect(logsA[1]?.message).toBe('log A2');
+  });
+
+  it('should store debug logs for log events when enabled', async () => {
+    await exporter.onLogEvent(createMockLogEvent({ level: 'warn', message: 'check this' }));
+
+    const debugLogs = exporter.getLogs();
+    expect(debugLogs).toHaveLength(1);
+    expect(debugLogs[0]).toContain('log.warn');
+    expect(debugLogs[0]).toContain('check this');
+  });
+
+  it('should clear log events on reset', async () => {
+    await exporter.onLogEvent(createMockLogEvent());
+    expect(exporter.getAllLogs()).toHaveLength(1);
+
+    exporter.reset();
+    expect(exporter.getAllLogs()).toHaveLength(0);
+  });
+});
+
+describe('JsonExporter - Metric Events', () => {
+  let exporter: JsonExporter;
+
+  beforeEach(() => {
+    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+  });
+
+  it('should collect metric events', async () => {
+    await exporter.onMetricEvent(createMockMetricEvent());
+    await exporter.onMetricEvent(
+      createMockMetricEvent({ name: 'mastra_agent_duration_ms', metricType: 'histogram', value: 1500 }),
+    );
+
+    expect(exporter.getMetricEvents()).toHaveLength(2);
+    expect(exporter.getAllMetrics()).toHaveLength(2);
+  });
+
+  it('should filter metrics by name', async () => {
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_runs_started' }));
+    await exporter.onMetricEvent(
+      createMockMetricEvent({ name: 'mastra_agent_duration_ms', metricType: 'histogram', value: 1500 }),
+    );
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'mastra_agent_runs_started' }));
+
+    const startedMetrics = exporter.getMetricsByName('mastra_agent_runs_started');
+    expect(startedMetrics).toHaveLength(2);
+  });
+
+  it('should filter metrics by type', async () => {
+    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'counter' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'histogram', name: 'duration', value: 100 }));
+    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'counter' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ metricType: 'gauge', name: 'active', value: 5 }));
+
+    expect(exporter.getMetricsByType('counter')).toHaveLength(2);
+    expect(exporter.getMetricsByType('histogram')).toHaveLength(1);
+    expect(exporter.getMetricsByType('gauge')).toHaveLength(1);
+  });
+
+  it('should store debug logs for metric events', async () => {
+    await exporter.onMetricEvent(
+      createMockMetricEvent({ name: 'mastra_test', metricType: 'counter', value: 42, labels: { agent: 'test-agent' } }),
+    );
+
+    const debugLogs = exporter.getLogs();
+    expect(debugLogs).toHaveLength(1);
+    expect(debugLogs[0]).toContain('metric.counter');
+    expect(debugLogs[0]).toContain('mastra_test=42');
+    expect(debugLogs[0]).toContain('agent=test-agent');
+  });
+
+  it('should clear metric events on reset', async () => {
+    await exporter.onMetricEvent(createMockMetricEvent());
+    expect(exporter.getAllMetrics()).toHaveLength(1);
+
+    exporter.reset();
+    expect(exporter.getAllMetrics()).toHaveLength(0);
+  });
+});
+
+describe('JsonExporter - Score Events', () => {
+  let exporter: JsonExporter;
+
+  beforeEach(() => {
+    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+  });
+
+  it('should collect score events', async () => {
+    await exporter.onScoreEvent(createMockScoreEvent());
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'factuality', score: 0.92 }));
+
+    expect(exporter.getScoreEvents()).toHaveLength(2);
+    expect(exporter.getAllScores()).toHaveLength(2);
+  });
+
+  it('should filter scores by scorer name', async () => {
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance', score: 0.85 }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'factuality', score: 0.92 }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance', score: 0.9 }));
+
+    const relevanceScores = exporter.getScoresByScorer('relevance');
+    expect(relevanceScores).toHaveLength(2);
+    expect(relevanceScores[0]?.score).toBe(0.85);
+    expect(relevanceScores[1]?.score).toBe(0.9);
+  });
+
+  it('should filter scores by traceId', async () => {
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-A', scorerName: 'relevance' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-B', scorerName: 'relevance' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-A', scorerName: 'factuality' }));
+
+    const scoresA = exporter.getScoresByTraceId('trace-A');
+    expect(scoresA).toHaveLength(2);
+  });
+
+  it('should store debug logs for score events', async () => {
+    await exporter.onScoreEvent(
+      createMockScoreEvent({ traceId: 'abcdef1234567890', scorerName: 'relevance', score: 0.85 }),
+    );
+
+    const debugLogs = exporter.getLogs();
+    expect(debugLogs).toHaveLength(1);
+    expect(debugLogs[0]).toContain('score: relevance=0.85');
+  });
+
+  it('should clear score events on reset', async () => {
+    await exporter.onScoreEvent(createMockScoreEvent());
+    expect(exporter.getAllScores()).toHaveLength(1);
+
+    exporter.reset();
+    expect(exporter.getAllScores()).toHaveLength(0);
+  });
+});
+
+describe('JsonExporter - Feedback Events', () => {
+  let exporter: JsonExporter;
+
+  beforeEach(() => {
+    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+  });
+
+  it('should collect feedback events', async () => {
+    await exporter.onFeedbackEvent(createMockFeedbackEvent());
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'rating', value: 4 }));
+
+    expect(exporter.getFeedbackEvents()).toHaveLength(2);
+    expect(exporter.getAllFeedback()).toHaveLength(2);
+  });
+
+  it('should filter feedback by type', async () => {
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'thumbs', value: 1 }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'rating', value: 4 }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'thumbs', value: -1 }));
+
+    const thumbsFeedback = exporter.getFeedbackByType('thumbs');
+    expect(thumbsFeedback).toHaveLength(2);
+  });
+
+  it('should filter feedback by traceId', async () => {
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId: 'trace-A' }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId: 'trace-B' }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId: 'trace-A' }));
+
+    const feedbackA = exporter.getFeedbackByTraceId('trace-A');
+    expect(feedbackA).toHaveLength(2);
+  });
+
+  it('should store debug logs for feedback events', async () => {
+    await exporter.onFeedbackEvent(
+      createMockFeedbackEvent({
+        traceId: 'abcdef1234567890',
+        source: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+      }),
+    );
+
+    const debugLogs = exporter.getLogs();
+    expect(debugLogs).toHaveLength(1);
+    expect(debugLogs[0]).toContain('feedback: thumbs from user=1');
+  });
+
+  it('should clear feedback events on reset', async () => {
+    await exporter.onFeedbackEvent(createMockFeedbackEvent());
+    expect(exporter.getAllFeedback()).toHaveLength(1);
+
+    exporter.reset();
+    expect(exporter.getAllFeedback()).toHaveLength(0);
+  });
+});
+
+describe('JsonExporter - Cross-Signal Integration', () => {
+  let exporter: JsonExporter;
+
+  beforeEach(() => {
+    exporter = new JsonExporter({ storeLogs: true, logMetricsOnFlush: false });
+  });
+
+  it('should include all signals in getByTraceId', async () => {
+    const traceId = 'trace-cross-signal';
+    const span = createMockSpan({ traceId });
+
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
+    await exporter.onLogEvent(createMockLogEvent({ traceId, message: 'correlated log' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId, scorerName: 'accuracy' }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId }));
+
+    const result = exporter.getByTraceId(traceId);
+
+    expect(result.events).toHaveLength(2); // tracing events
+    expect(result.spans).toHaveLength(1);
+    expect(result.logs).toHaveLength(1);
+    expect(result.logs[0]?.message).toBe('correlated log');
+    expect(result.scores).toHaveLength(1);
+    expect(result.scores[0]?.scorerName).toBe('accuracy');
+    expect(result.feedback).toHaveLength(1);
+  });
+
+  it('should include trace IDs from all signal types in getTraceIds', async () => {
+    const span = createMockSpan({ traceId: 'trace-from-span' });
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.onLogEvent(createMockLogEvent({ traceId: 'trace-from-log' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ traceId: 'trace-from-score' }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ traceId: 'trace-from-feedback' }));
+
+    const traceIds = exporter.getTraceIds();
+
+    expect(traceIds).toHaveLength(4);
+    expect(traceIds).toContain('trace-from-span');
+    expect(traceIds).toContain('trace-from-log');
+    expect(traceIds).toContain('trace-from-score');
+    expect(traceIds).toContain('trace-from-feedback');
+  });
+
+  it('should include all signals in toJSON output', async () => {
+    const span = createMockSpan();
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
+    await exporter.onLogEvent(createMockLogEvent({ message: 'test log' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'test_metric' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'test_scorer' }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'test_feedback' }));
+
+    const json = exporter.toJSON();
+    const parsed = JSON.parse(json);
+
+    expect(parsed.spans).toHaveLength(1);
+    expect(parsed.logs).toHaveLength(1);
+    expect(parsed.logs[0].message).toBe('test log');
+    expect(parsed.metrics).toHaveLength(1);
+    expect(parsed.metrics[0].name).toBe('test_metric');
+    expect(parsed.scores).toHaveLength(1);
+    expect(parsed.scores[0].scorerName).toBe('test_scorer');
+    expect(parsed.feedback).toHaveLength(1);
+    expect(parsed.feedback[0].feedbackType).toBe('test_feedback');
+  });
+
+  it('should omit empty signal arrays from toJSON output', async () => {
+    const span = createMockSpan();
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
+
+    const json = exporter.toJSON();
+    const parsed = JSON.parse(json);
+
+    expect(parsed.spans).toHaveLength(1);
+    expect(parsed.logs).toBeUndefined();
+    expect(parsed.metrics).toBeUndefined();
+    expect(parsed.scores).toBeUndefined();
+    expect(parsed.feedback).toBeUndefined();
+  });
+
+  it('should clear all signals on reset', async () => {
+    const span = createMockSpan();
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.onLogEvent(createMockLogEvent());
+    await exporter.onMetricEvent(createMockMetricEvent());
+    await exporter.onScoreEvent(createMockScoreEvent());
+    await exporter.onFeedbackEvent(createMockFeedbackEvent());
+
+    exporter.reset();
+
+    expect(exporter.events).toHaveLength(0);
+    expect(exporter.getAllLogs()).toHaveLength(0);
+    expect(exporter.getAllMetrics()).toHaveLength(0);
+    expect(exporter.getAllScores()).toHaveLength(0);
+    expect(exporter.getAllFeedback()).toHaveLength(0);
+    expect(exporter.getLogs()).toHaveLength(0); // debug logs
+  });
+});
+
+describe('JsonExporter - Statistics with All Signals', () => {
+  let exporter: JsonExporter;
+
+  beforeEach(() => {
+    exporter = new JsonExporter({ logMetricsOnFlush: false });
+  });
+
+  it('should include all signal statistics', async () => {
+    const span = createMockSpan({ id: 'span-1', type: SpanType.AGENT_RUN });
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
+
+    await exporter.onLogEvent(createMockLogEvent({ level: 'info' }));
+    await exporter.onLogEvent(createMockLogEvent({ level: 'error' }));
+    await exporter.onLogEvent(createMockLogEvent({ level: 'info' }));
+
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'counter_a', metricType: 'counter' }));
+    await exporter.onMetricEvent(createMockMetricEvent({ name: 'hist_a', metricType: 'histogram', value: 100 }));
+
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'factuality' }));
+    await exporter.onScoreEvent(createMockScoreEvent({ scorerName: 'relevance' }));
+
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'thumbs' }));
+    await exporter.onFeedbackEvent(createMockFeedbackEvent({ feedbackType: 'rating' }));
+
+    const stats = exporter.getStatistics();
+
+    // Tracing stats
+    expect(stats.totalTracingEvents).toBe(2);
+    expect(stats.totalEvents).toBe(2); // deprecated alias
+    expect(stats.totalSpans).toBe(1);
+    expect(stats.completedSpans).toBe(1);
+
+    // Log stats
+    expect(stats.totalLogs).toBe(3);
+    expect(stats.logsByLevel.info).toBe(2);
+    expect(stats.logsByLevel.error).toBe(1);
+
+    // Metric stats
+    expect(stats.totalMetrics).toBe(2);
+    expect(stats.metricsByType.counter).toBe(1);
+    expect(stats.metricsByType.histogram).toBe(1);
+    expect(stats.metricsByName.counter_a).toBe(1);
+    expect(stats.metricsByName.hist_a).toBe(1);
+
+    // Score stats
+    expect(stats.totalScores).toBe(3);
+    expect(stats.scoresByScorer.relevance).toBe(2);
+    expect(stats.scoresByScorer.factuality).toBe(1);
+
+    // Feedback stats
+    expect(stats.totalFeedback).toBe(2);
+    expect(stats.feedbackByType.thumbs).toBe(1);
+    expect(stats.feedbackByType.rating).toBe(1);
+  });
+});
+
+describe('JsonExporter - Internal Metrics', () => {
+  it('should track internal metrics across all signal types', async () => {
+    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+
+    const span = createMockSpan();
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_ENDED, { ...span, endTime: new Date() }));
+    await exporter.onLogEvent(createMockLogEvent());
+    await exporter.onMetricEvent(createMockMetricEvent());
+    await exporter.onScoreEvent(createMockScoreEvent());
+    await exporter.onFeedbackEvent(createMockFeedbackEvent());
+
+    const metrics = exporter.getInternalMetrics();
+
+    expect(metrics.totalEventsReceived).toBe(6);
+    expect(metrics.bySignal.tracing).toBe(2);
+    expect(metrics.bySignal.log).toBe(1);
+    expect(metrics.bySignal.metric).toBe(1);
+    expect(metrics.bySignal.score).toBe(1);
+    expect(metrics.bySignal.feedback).toBe(1);
+    expect(metrics.flushCount).toBe(0);
+    expect(metrics.startedAt).toBeInstanceOf(Date);
+    expect(metrics.lastEventAt).toBeInstanceOf(Date);
+    expect(metrics.estimatedJsonBytes).toBeGreaterThan(0);
+  });
+
+  it('should track flush count', async () => {
+    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+
+    await exporter.flush();
+    await exporter.flush();
+    await exporter.flush();
+
+    const metrics = exporter.getInternalMetrics();
+    expect(metrics.flushCount).toBe(3);
+  });
+
+  it('should log summary on flush when logMetricsOnFlush is true', async () => {
+    const logger: Record<'info' | 'warn' | 'error' | 'debug', ReturnType<typeof vi.fn>> = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const exporter = new JsonExporter({ logger, logMetricsOnFlush: true });
+
+    const span = createMockSpan();
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, span));
+    await exporter.onLogEvent(createMockLogEvent());
+
+    await exporter.flush();
+
+    expect(logger.info).toHaveBeenCalled();
+    const flushCall = logger.info.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('flush #1 summary'),
+    );
+    expect(flushCall).toBeDefined();
+    expect(flushCall[0]).toContain('tracing=1');
+    expect(flushCall[0]).toContain('log=1');
+  });
+
+  it('should not log summary on flush when logMetricsOnFlush is false', async () => {
+    const logger: Record<'info' | 'warn' | 'error' | 'debug', ReturnType<typeof vi.fn>> = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const exporter = new JsonExporter({ logger, logMetricsOnFlush: false });
+
+    await exporter.exportTracingEvent(createEvent(TracingEventType.SPAN_STARTED, createMockSpan()));
+    await exporter.flush();
+
+    // Should not have logged any flush summary (only other potential logger calls)
+    const flushCalls = logger.info.mock.calls.filter(
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('flush'),
+    );
+    expect(flushCalls).toHaveLength(0);
+  });
+
+  it('should report lastEventAt as null when no events received', () => {
+    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+
+    const metrics = exporter.getInternalMetrics();
+    expect(metrics.lastEventAt).toBeNull();
+    expect(metrics.totalEventsReceived).toBe(0);
+  });
+
+  it('should not reset internal metrics on clearEvents', async () => {
+    const exporter = new JsonExporter({ logMetricsOnFlush: false });
+
+    await exporter.onLogEvent(createMockLogEvent());
+    await exporter.onMetricEvent(createMockMetricEvent());
+
+    exporter.clearEvents();
+
+    // Events should be cleared
+    expect(exporter.getAllLogs()).toHaveLength(0);
+    expect(exporter.getAllMetrics()).toHaveLength(0);
+
+    // But internal metrics should still reflect total history
+    const metrics = exporter.getInternalMetrics();
+    expect(metrics.totalEventsReceived).toBe(2);
+    expect(metrics.bySignal.log).toBe(1);
+    expect(metrics.bySignal.metric).toBe(1);
   });
 });
