@@ -118,7 +118,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         args={args}
         result={result}
         metadata={metadata}
-        toolOutput={result?.toolOutput || []}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
         isNetwork={isNetwork ?? false}
@@ -131,9 +130,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isSandboxExecution = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
 
   if (isSandboxExecution) {
-    // During streaming, result might be an array of output chunks
-    // After completion, it's the final tool result object
-    const streamingOutput = Array.isArray(result) ? result : result?.output || result?.toolOutput || [];
     return (
       <SandboxExecutionBadge
         toolName={toolName}
@@ -142,10 +138,8 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
-        toolOutput={streamingOutput}
       />
     );
   }

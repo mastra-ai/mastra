@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useAuiState } from '@assistant-ui/react';
 import { cn } from '@/lib/utils';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { IconButton } from '@/ds/components/IconButton';
@@ -40,7 +41,6 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   args: Record<string, unknown> | string;
   result: any;
   metadata?: MastraUIMessage['metadata'];
-  toolOutput?: Array<{ type: string; data?: Record<string, unknown> }>;
   toolCalled?: boolean;
 }
 
@@ -50,7 +50,6 @@ export const FileTreeBadge = ({
   result,
   toolCallId,
   toolApprovalMetadata,
-  toolOutput,
   isNetwork,
   toolCalled: toolCalledProp,
 }: FileTreeBadgeProps) => {
@@ -128,12 +127,18 @@ export const FileTreeBadge = ({
     }
   }, [hasError]);
 
-  // Extract filesystem metadata from data chunks (new) or result.metadata (old)
-  const dataChunk = toolOutput?.find(c => c.type === 'data-workspace-metadata')?.data;
+  // Extract filesystem metadata from message data parts (via writer.custom)
+  const message = useAuiState(s => s.message);
+  const workspaceMetadata = useMemo(() => {
+    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
+    return content.find(part => part.type === 'data' && part.name === 'workspace-metadata');
+  }, [message.content]);
+
+  const dataChunk = workspaceMetadata?.data;
   const fsMeta: FilesystemMetadata | undefined =
     dataChunk
       ? { workspace: dataChunk.workspace as WorkspaceInfo, filesystem: dataChunk.filesystem as FilesystemInfo }
-      : result?.metadata;
+      : typeof result !== 'string' ? result?.metadata : undefined;
 
   // Prefer summary from data chunk if available (richer than parsed string)
   if (dataChunk?.summary && typeof dataChunk.summary === 'string') {
