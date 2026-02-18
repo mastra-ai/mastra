@@ -5,6 +5,7 @@ import {
   useLinkComponent,
   useStoredAgent,
   useAgentVersion,
+  useAgentVersions,
   useAgentCmsForm,
   AgentCmsFormShell,
   AgentVersionCombobox,
@@ -19,10 +20,11 @@ import {
   Alert,
   Button,
   AlertTitle,
+  Badge,
   type AgentDataSource,
   AlertDescription,
 } from '@mastra/playground-ui';
-import { Check } from 'lucide-react';
+import { Check, Save } from 'lucide-react';
 
 function EditFormContent({
   agentId,
@@ -31,7 +33,9 @@ function EditFormContent({
   readOnly = false,
   form,
   handlePublish,
+  handleSaveDraft,
   isSubmitting,
+  isSavingDraft,
 }: {
   agentId: string;
   selectedVersionId: string | null;
@@ -39,7 +43,9 @@ function EditFormContent({
   readOnly?: boolean;
   form: ReturnType<typeof useAgentCmsForm>['form'];
   handlePublish: ReturnType<typeof useAgentCmsForm>['handlePublish'];
+  handleSaveDraft: ReturnType<typeof useAgentCmsForm>['handleSaveDraft'];
   isSubmitting: boolean;
+  isSavingDraft: boolean;
 }) {
   const [, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -64,7 +70,9 @@ function EditFormContent({
       mode="edit"
       agentId={agentId}
       isSubmitting={isSubmitting}
+      isSavingDraft={isSavingDraft}
       handlePublish={handlePublish}
+      handleSaveDraft={handleSaveDraft}
       readOnly={readOnly || isViewingVersion}
       basePath={`/cms/agents/${agentId}/edit`}
       currentPath={location.pathname}
@@ -82,11 +90,19 @@ function EditLayoutWrapper() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
 
-  const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId);
+  const { data: agent, isLoading: isLoadingAgent } = useStoredAgent(agentId, { status: 'draft' });
   const { data: versionData, isLoading: isLoadingVersion } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
   });
+  const { data: versionsData } = useAgentVersions({
+    agentId: agentId ?? '',
+    params: { sortDirection: 'DESC' },
+  });
+
+  const activeVersionId = agent?.activeVersionId;
+  const latestVersion = versionsData?.versions?.[0];
+  const hasDraft = !!(latestVersion && activeVersionId && latestVersion.id !== activeVersionId);
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
   const dataSource = useMemo<AgentDataSource>(() => {
@@ -95,7 +111,7 @@ function EditLayoutWrapper() {
     return {} as AgentDataSource;
   }, [isViewingVersion, versionData, agent]);
 
-  const { form, handlePublish, isSubmitting } = useAgentCmsForm({
+  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft } = useAgentCmsForm({
     mode: 'edit',
     agentId: agentId ?? '',
     dataSource,
@@ -126,6 +142,7 @@ function EditLayoutWrapper() {
           {isLoadingAgent && <Skeleton className="h-6 w-[200px]" />}
           {isNotFound && 'Agent not found'}
           {isReady && `Edit agent: ${agent.name}`}
+          {isReady && hasDraft && <Badge variant="info">Unpublished changes</Badge>}
         </HeaderTitle>
         {isReady && (
           <HeaderAction>
@@ -134,23 +151,41 @@ function EditLayoutWrapper() {
               value={selectedVersionId ?? ''}
               onValueChange={handleVersionSelect}
               variant="outline"
+              activeVersionId={activeVersionId}
             />
             {!selectedVersionId && (
-              <Button variant="primary" onClick={handlePublish} disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Updating...
-                  </>
-                ) : (
-                  <>
-                    <Icon>
-                      <Check />
-                    </Icon>
-                    Update agent
-                  </>
-                )}
-              </Button>
+              <>
+                <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft || isSubmitting}>
+                  {isSavingDraft ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Icon>
+                        <Save />
+                      </Icon>
+                      Save
+                    </>
+                  )}
+                </Button>
+                <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || isSavingDraft}>
+                  {isSubmitting ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <Icon>
+                        <Check />
+                      </Icon>
+                      Publish
+                    </>
+                  )}
+                </Button>
+              </>
             )}
           </HeaderAction>
         )}
@@ -167,7 +202,9 @@ function EditLayoutWrapper() {
               readOnly
               form={form}
               handlePublish={handlePublish}
+              handleSaveDraft={handleSaveDraft}
               isSubmitting={isSubmitting}
+              isSavingDraft={isSavingDraft}
             />
           </div>
         </>
@@ -179,7 +216,9 @@ function EditLayoutWrapper() {
           readOnly={isLoadingAgent || isLoadingVersion}
           form={form}
           handlePublish={handlePublish}
+          handleSaveDraft={handleSaveDraft}
           isSubmitting={isSubmitting}
+          isSavingDraft={isSavingDraft}
         />
       )}
     </MainContentLayout>

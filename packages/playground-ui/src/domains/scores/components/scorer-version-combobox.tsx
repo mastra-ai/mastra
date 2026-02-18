@@ -1,6 +1,6 @@
 import { Combobox } from '@/ds/components/Combobox';
 import { Badge } from '@/ds/components/Badge';
-import { useAgentVersions } from '../hooks/use-agent-versions';
+import { useScorerVersions } from '../hooks/use-scorer-versions';
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
@@ -13,8 +13,8 @@ function formatTimestamp(isoString: string): string {
   });
 }
 
-export interface AgentVersionComboboxProps {
-  agentId: string;
+export interface ScorerVersionComboboxProps {
+  scorerId: string;
   value?: string;
   onValueChange?: (value: string) => void;
   className?: string;
@@ -23,17 +23,17 @@ export interface AgentVersionComboboxProps {
   activeVersionId?: string;
 }
 
-export function AgentVersionCombobox({
-  agentId,
+export function ScorerVersionCombobox({
+  scorerId,
   value,
   onValueChange,
   className,
   disabled = false,
   variant = 'default',
   activeVersionId,
-}: AgentVersionComboboxProps) {
-  const { data, isLoading } = useAgentVersions({
-    agentId,
+}: ScorerVersionComboboxProps) {
+  const { data, isLoading } = useScorerVersions({
+    scorerId,
     params: { sortDirection: 'DESC' },
   });
 

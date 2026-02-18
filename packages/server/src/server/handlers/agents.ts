@@ -159,6 +159,7 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -506,6 +507,9 @@ async function formatAgentList({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
   };
 }
 
@@ -707,6 +711,9 @@ async function formatAgent({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
   };
 }
 
@@ -753,7 +760,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.agent.list({ status: 'draft' });
+          storedAgentsResult = await editor?.agent.list();
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;

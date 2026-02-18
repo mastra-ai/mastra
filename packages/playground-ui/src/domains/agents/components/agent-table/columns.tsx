@@ -29,6 +29,15 @@ const NameCell = ({ row, showSourceIcon }: { row: Row<AgentTableColumn>; showSou
         </Link>
       }
       description={extractPrompt(row.original.instructions)}
+      meta={
+        row.original.source === 'stored' ? (
+          row.original.status === 'published' ? (
+            <Badge variant="success">Published</Badge>
+          ) : (
+            <Badge>Draft</Badge>
+          )
+        ) : undefined
+      }
     />
   );
 };

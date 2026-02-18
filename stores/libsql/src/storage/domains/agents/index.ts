@@ -469,7 +469,7 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -492,8 +492,10 @@ export class AgentsLibSQL extends AgentsStorage {
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
-      conditions.push('status = ?');
-      queryParams.push(status);
+      if (status) {
+        conditions.push('status = ?');
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
@@ -516,7 +518,7 @@ export class AgentsLibSQL extends AgentsStorage {
         }
       }
 
-      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
       const countResult = await this.#client.execute({
