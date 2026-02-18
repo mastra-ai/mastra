@@ -11,20 +11,24 @@ import { MastraUIMessage } from '@mastra/react';
 import { useLinkComponent } from '@/lib/framework';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 
-interface FilesystemInfo {
+// Matches the shape returned by workspace.getInfo()
+interface WorkspaceMetadata {
+  toolName?: string;
   id?: string;
   name?: string;
-  provider?: string;
-}
-
-interface WorkspaceInfo {
-  id?: string;
-  name?: string;
-}
-
-interface FilesystemMetadata {
-  workspace?: WorkspaceInfo;
-  filesystem?: FilesystemInfo;
+  status?: string;
+  filesystem?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
+  sandbox?: {
+    id?: string;
+    name?: string;
+    provider?: string;
+    status?: string;
+  };
 }
 
 interface ParsedArgs {
@@ -114,15 +118,7 @@ export const FileTreeBadge = ({
     return content.find(part => part.type === 'data' && part.name === 'workspace-metadata');
   }, [message.content]);
 
-  const dataChunk = workspaceMetadata?.data;
-  const fsMeta: FilesystemMetadata | undefined = dataChunk
-    ? { workspace: dataChunk.workspace as WorkspaceInfo, filesystem: dataChunk.filesystem as FilesystemInfo }
-    : undefined;
-
-  // Prefer summary from data chunk if available (richer than parsed string)
-  if (dataChunk?.summary && typeof dataChunk.summary === 'string') {
-    summary = dataChunk.summary;
-  }
+  const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 
   const onCopy = () => {
     if (!treeOutput || isCopied) return;
@@ -144,17 +140,17 @@ export const FileTreeBadge = ({
         </button>
 
         {/* Filesystem badge - outside button to prevent overlap */}
-        {fsMeta?.filesystem?.name && (
+        {wsMeta?.filesystem && (
           <Link
             href={
-              fsMeta.workspace?.id
-                ? `/workspaces/${fsMeta.workspace.id}?path=${encodeURIComponent(path)}`
+              wsMeta.id
+                ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}`
                 : '/workspaces'
             }
             className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
           >
             <HardDrive className="size-3" />
-            <span>{fsMeta.filesystem.name}</span>
+            <span>{wsMeta.name || wsMeta.filesystem.name}</span>
           </Link>
         )}
 

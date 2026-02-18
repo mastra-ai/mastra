@@ -17,7 +17,7 @@ export { indexContentTool } from './index-content';
 export { executeCommandTool } from './execute-command';
 
 // Helpers
-export { requireWorkspace, requireFilesystem, requireSandbox } from './helpers';
+export { requireWorkspace, requireFilesystem, requireSandbox, emitWorkspaceMetadata } from './helpers';
 
 // Tree formatter
 export * from './tree-formatter';

@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
 import { replaceString, StringNotFoundError, StringNotUniqueError } from '../line-utils';
-import { requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 
 export const editFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
@@ -25,7 +25,8 @@ Usage:
       .describe('If true, replace all occurrences. If false (default), old_string must be unique.'),
   }),
   execute: async ({ path, old_string, new_string, replace_all }, context) => {
-    const { workspace, filesystem } = requireFilesystem(context);
+    const { filesystem } = requireFilesystem(context);
+    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
 
     if (filesystem.readOnly) {
       throw new WorkspaceReadOnlyError('edit_file');
@@ -40,17 +41,6 @@ Usage:
 
       const result = replaceString(content, old_string, new_string, replace_all);
       await filesystem.writeFile(path, result.content, { overwrite: true });
-
-      await context?.writer?.custom({
-        type: 'data-workspace-metadata',
-        data: {
-          toolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
-          path,
-          replacements: result.replacements,
-          workspace: { id: workspace.id, name: workspace.name },
-          filesystem: { id: filesystem.id, name: filesystem.name, provider: filesystem.provider },
-        },
-      });
 
       return `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
     } catch (error) {

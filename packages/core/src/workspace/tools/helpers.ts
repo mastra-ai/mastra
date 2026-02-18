@@ -50,3 +50,16 @@ export function requireSandbox(context: ToolExecutionContext): {
   }
   return { workspace, sandbox: workspace.sandbox };
 }
+
+/**
+ * Emit workspace metadata as a data chunk so the UI can render workspace info immediately.
+ * Should be called at the start of every workspace tool's execute function.
+ */
+export async function emitWorkspaceMetadata(context: ToolExecutionContext, toolName: string) {
+  const workspace = requireWorkspace(context);
+  const info = await workspace.getInfo();
+  await context?.writer?.custom({
+    type: 'data-workspace-metadata',
+    data: { toolName, ...info },
+  });
+}
