@@ -2,6 +2,7 @@
 '@mastra/client-js': patch
 '@mastra/core': patch
 '@mastra/hono': patch
+'@mastra/server': patch
 '@mastra/pg': patch
 '@mastra/libsql': patch
 '@mastra/playground-ui': patch
