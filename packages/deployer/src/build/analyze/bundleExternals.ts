@@ -232,15 +232,15 @@ async function getInputPlugins(
     }),
     bundlerOptions.noBundling
       ? null
-      : platform === 'node' || platform === 'neutral'
+      : platform === 'browser'
         ? nodeResolve({
-            preferBuiltins: true,
-            exportConditions: ['node'],
-          })
-        : nodeResolve({
             preferBuiltins: false,
             browser: true,
             exportConditions: ['browser', 'worker', 'default'],
+          })
+        : nodeResolve({
+            preferBuiltins: true,
+            exportConditions: ['node'],
           }),
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root

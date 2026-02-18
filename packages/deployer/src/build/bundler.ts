@@ -38,17 +38,18 @@ export async function getInputOptions(
     externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
-  // For 'neutral' platform (Bun), use similar settings to 'node' for module resolution
+  // For 'browser' platform (Cloudflare Workers), use browser-compatible module resolution.
+  // For 'neutral' platform (Bun) and 'node', use Node.js module resolution.
   let nodeResolvePlugin =
-    platform === 'node' || platform === 'neutral'
+    platform === 'browser'
       ? nodeResolve({
-          preferBuiltins: true,
-          exportConditions: ['node'],
-        })
-      : nodeResolve({
           preferBuiltins: false,
           browser: true,
           exportConditions: ['browser', 'worker', 'default'],
+        })
+      : nodeResolve({
+          preferBuiltins: true,
+          exportConditions: ['node'],
         });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
