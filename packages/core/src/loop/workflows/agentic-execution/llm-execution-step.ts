@@ -888,7 +888,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
           }
 
-          if (isAbortError(error) && options?.abortSignal?.aborted) {
+          if (options?.abortSignal?.aborted) {
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });

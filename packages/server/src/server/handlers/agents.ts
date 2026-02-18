@@ -1189,6 +1189,10 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         abortSignal,
       });
 
+      // Consume stream in background to ensure onFinish callbacks execute
+      // even if the client disconnects mid-stream
+      streamResult.consumeStream?.().catch(console.error);
+
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');
@@ -1244,6 +1248,10 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         abortSignal,
       });
 
+      // Consume stream in background to ensure onFinish callbacks execute
+      // even if the client disconnects mid-stream
+      streamResult.consumeStream?.().catch(console.error);
+
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error approving tool call');
@@ -1283,6 +1291,10 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         ...params,
         abortSignal,
       });
+
+      // Consume stream in background to ensure onFinish callbacks execute
+      // even if the client disconnects mid-stream
+      streamResult.consumeStream?.().catch(console.error);
 
       return streamResult.fullStream;
     } catch (error) {

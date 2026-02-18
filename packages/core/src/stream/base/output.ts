@@ -869,6 +869,102 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               break;
 
+            case 'abort': {
+              self.#status = 'failed';
+              self.#finishReason = 'abort';
+              self.#streamFinished = true;
+
+              // Add partial assistant message to messageList so output processors can persist it
+              const partialText = self.#bufferedText.join('');
+              if (partialText && self.messageList.get.response.db().length === 0) {
+                const partialMessage: MastraDBMessage = {
+                  id: self.messageId,
+                  role: 'assistant' as const,
+                  content: {
+                    format: 2,
+                    parts: [{ type: 'text' as const, text: partialText }],
+                  },
+                  createdAt: new Date(),
+                };
+                self.messageList.add(partialMessage, 'response');
+              }
+
+              // Run output processors (e.g., MessageHistory) to persist partial messages on abort
+              try {
+                if (self.processorRunner && !self.#options.isLLMExecutionStep) {
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    options.tracingContext,
+                    self.#options.requestContext,
+                  );
+                }
+              } catch {
+                // Swallow processor errors on abort — best-effort persistence
+              }
+
+              const abortReasoningText =
+                self.#bufferedReasoning.length > 0
+                  ? self.#bufferedReasoning.map(r => r.payload.text).join('')
+                  : undefined;
+
+              self.resolvePromises({
+                text: self.#bufferedText.join(''),
+                finishReason: 'abort',
+                usage: self.#usageCount,
+                totalUsage: self.#getTotalUsage(),
+                warnings: self.#warnings,
+                steps: self.#bufferedSteps,
+                toolCalls: self.#toolCalls,
+                toolResults: self.#toolResults,
+                reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+                reasoningText: abortReasoningText,
+                sources: self.#bufferedSources,
+                files: self.#bufferedFiles,
+                content: messageList.get.response.aiV5.stepContent(),
+                object: undefined,
+                request: self.#request || {},
+                response: {},
+                providerMetadata: undefined,
+                suspendPayload: undefined,
+                resumeSchema: undefined,
+              });
+
+              const abortStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+              if (abortStep) {
+                const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
+                  providerMetadata: abortStep.providerMetadata,
+                  text: self.#bufferedText.join(''),
+                  warnings: abortStep.warnings ?? [],
+                  finishReason: 'abort',
+                  content: messageList.get.response.aiV5.stepContent(),
+                  request: self.#request || {},
+                  error: undefined,
+                  reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+                  reasoningText: abortReasoningText,
+                  sources: self.#bufferedSources,
+                  files: self.#bufferedFiles,
+                  steps: self.#bufferedSteps,
+                  response: {
+                    ...abortStep.response,
+                    messages: messageList.get.response.aiV5.model(),
+                  },
+                  usage: self.#usageCount,
+                  totalUsage: self.#getTotalUsage(),
+                  toolCalls: self.#toolCalls,
+                  toolResults: self.#toolResults,
+                  staticToolCalls: self.#toolCalls.filter(tc => tc?.payload?.dynamic === false),
+                  staticToolResults: self.#toolResults.filter(tr => tr?.payload?.dynamic === false),
+                  dynamicToolCalls: self.#toolCalls.filter(tc => tc?.payload?.dynamic === true),
+                  dynamicToolResults: self.#toolResults.filter(tr => tr?.payload?.dynamic === true),
+                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                  object: undefined,
+                };
+
+                await options?.onFinish?.(onFinishPayload);
+              }
+              break;
+            }
+
             case 'error':
               const error = getErrorFromUnknown(chunk.payload.error, {
                 fallbackMessage: 'Unknown error chunk in stream',
