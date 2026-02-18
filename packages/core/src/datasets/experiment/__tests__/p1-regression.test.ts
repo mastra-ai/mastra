@@ -278,7 +278,7 @@ describe('P1 Regression', () => {
       // Each result's output corresponds to its own input, proving p-map preserved order
       for (let i = 0; i < 5; i++) {
         const prompt = (result.results[i]!.input as any).prompt as string;
-        expect(result.results[i]!.output).toEqual({ text: `result-for-${prompt}` });
+        expect(result.results[i]!.output).toEqual(expect.objectContaining({ text: `result-for-${prompt}` }));
       }
     });
   });

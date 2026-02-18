@@ -1,12 +1,21 @@
 import { cn } from '@/lib/utils';
 import * as React from 'react';
-import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/ds/components/Select';
-import { formElementFocus, formElementRadius, type FormElementSize } from '@/ds/primitives/form-element';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+  SelectTrigger,
+  SelectTriggerProps,
+} from '@/ds/components/Select';
+import { type FormElementSize } from '@/ds/primitives/form-element';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'> & {
   name?: string;
   testId?: string;
   label?: React.ReactNode;
+  labelIsHidden?: boolean;
   required?: boolean;
   disabled?: boolean;
   value?: string;
@@ -15,13 +24,15 @@ export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement
   options: { value: string; label: string; icon?: React.ReactNode }[];
   placeholder?: string;
   onValueChange: (value: string) => void;
-  size?: FormElementSize;
+  size?: FormElementSize | 'default';
+  variant?: SelectTriggerProps['variant'];
 };
 
 export function SelectField({
   name,
   value,
   label,
+  labelIsHidden = false,
   className,
   required,
   disabled,
@@ -30,7 +41,12 @@ export function SelectField({
   onValueChange,
   placeholder = 'Select an option',
   size = 'lg',
+  variant = 'default',
 }: SelectFieldProps) {
+  const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
+    return labelIsHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
+  };
+
   return (
     <div
       className={cn(
@@ -42,18 +58,14 @@ export function SelectField({
         className,
       )}
     >
-      {label && (
+      <LabelWrapper>
         <label className={cn('text-ui-sm text-neutral3 flex justify-between items-center shrink-0')}>
           {label}
           {required && <i className="text-neutral2">(required)</i>}
         </label>
-      )}
+      </LabelWrapper>
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger
-          id="select-dataset"
-          size={size}
-          className={cn('w-full border border-border1 min-w-20 gap-2', formElementRadius, formElementFocus)}
-        >
+        <SelectTrigger id={`select-${name}`} size={size} variant={variant}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

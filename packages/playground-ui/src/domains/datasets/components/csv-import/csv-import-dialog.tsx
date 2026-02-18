@@ -56,14 +56,13 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [shouldCancel, setShouldCancel] = useState(false);
 
   // Schema validation result
   const [schemaValidation, setSchemaValidation] = useState<CsvValidationResult | null>(null);
 
   // Hooks
   const { parseFile, isParsing, error: parseError } = useCSVParser();
-  const { addItem } = useDatasetMutations();
+  const { batchInsertItems } = useDatasetMutations();
   const { data: dataset } = useDataset(datasetId);
 
   // Column mapping - initialize with empty headers, update when CSV is parsed
@@ -229,27 +228,17 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
     setStep('importing');
     setIsImporting(true);
-    setShouldCancel(false);
 
     const rowsToImport = schemaValidation.validRows;
-    let successCount = 0;
-    let errorCount = 0;
 
     setImportProgress({ current: 0, total: rowsToImport.length });
 
-    for (let i = 0; i < rowsToImport.length; i++) {
-      // Check for cancellation
-      if (shouldCancel) {
-        break;
-      }
+    const items = rowsToImport.map(row => {
+      const { input, groundTruth } = row;
 
-      const { input, groundTruth } = rowsToImport[i];
-
-      // Get metadata from original row data
-      // Note: validRows contains mapped data, metadata is extracted separately
       let metadata: Record<string, unknown> | undefined;
       if (parsedCSV) {
-        const originalRowIndex = rowsToImport[i].rowNumber - 2; // Convert back to 0-indexed
+        const originalRowIndex = row.rowNumber - 2;
         const { headers } = parsedCSV;
         const { mapping } = columnMapping;
         const originalRow = parsedCSV.data[originalRowIndex];
@@ -264,30 +253,20 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
         }
       }
 
-      try {
-        await addItem.mutateAsync({
-          datasetId,
-          input,
-          groundTruth,
-          metadata: metadata,
-        });
-        successCount++;
-      } catch {
-        errorCount++;
-      }
+      return { input, groundTruth, metadata };
+    });
 
-      setImportProgress({ current: i + 1, total: rowsToImport.length });
+    try {
+      await batchInsertItems.mutateAsync({ datasetId, items });
+      setImportResult({ success: items.length, errors: 0 });
+    } catch {
+      setImportResult({ success: 0, errors: items.length });
     }
 
-    setImportResult({ success: successCount, errors: errorCount });
+    setImportProgress({ current: rowsToImport.length, total: rowsToImport.length });
     setIsImporting(false);
     setStep('complete');
-  }, [schemaValidation, addItem, datasetId, shouldCancel, parsedCSV, columnMapping]);
-
-  // Handle cancel import
-  const handleCancelImport = useCallback(() => {
-    setShouldCancel(true);
-  }, []);
+  }, [schemaValidation, batchInsertItems, datasetId, parsedCSV, columnMapping]);
 
   // Handle done - close dialog and notify
   const handleDone = useCallback(() => {
@@ -319,14 +298,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
   // Handle dialog close
   const handleClose = useCallback(() => {
-    if (isImporting) {
-      // Confirm before closing during import
-      if (confirm('Import is in progress. Are you sure you want to cancel?')) {
-        handleCancelImport();
-        onOpenChange(false);
-      }
-      return;
-    }
+    if (isImporting) return;
 
     onOpenChange(false);
 
@@ -339,7 +311,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
       setImportProgress({ current: 0, total: 0 });
       setImportResult(null);
     }, 150);
-  }, [isImporting, handleCancelImport, onOpenChange]);
+  }, [isImporting, onOpenChange]);
 
   // Handle mapping change
   const handleMappingChange = useCallback(
@@ -435,9 +407,6 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
-            <Button variant="standard" size="default" onClick={handleCancelImport}>
-              Cancel
-            </Button>
           </div>
         );
 
