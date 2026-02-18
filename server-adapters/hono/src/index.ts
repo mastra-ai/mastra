@@ -438,9 +438,26 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             // Check for direct status property (HTTPException)
             if ('status' in error) {
               const status = (error as any).status;
-              const cause = error instanceof Error && error.cause ? error.cause : undefined;
+              let safeCause: { failingItems: unknown[] } | undefined;
+              try {
+                const raw = error instanceof Error ? error.cause : undefined;
+                if (
+                  raw &&
+                  typeof raw === 'object' &&
+                  !Array.isArray(raw) &&
+                  'failingItems' in raw &&
+                  Array.isArray((raw as any).failingItems)
+                ) {
+                  safeCause = { failingItems: (raw as any).failingItems };
+                }
+              } catch {
+                // serialization or access error — omit cause
+              }
               return c.json(
-                { error: error instanceof Error ? error.message : 'Unknown error', ...(cause ? { cause } : {}) },
+                {
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                  ...(safeCause ? { cause: safeCause } : {}),
+                },
                 status,
               );
             }
