@@ -55,13 +55,16 @@ for (const item of comparison.items) {
 
 ## Returns
 
+Throws `MastraError` if fewer than 2 experiment IDs are provided.
+
 <PropertiesTable
   content={[
     {
       name: "result",
       type: "Promise<object>",
       description: "Comparison results.",
-      properties: {
+      properties: [{
+        type: "object",
         parameters: [
           {
             name: "baselineId",
@@ -72,7 +75,8 @@ for (const item of comparison.items) {
             name: "items",
             type: "Array<object>",
             description: "Per-item comparison data.",
-            properties: {
+            properties: [{
+              type: "object",
               parameters: [
                 {
                   name: "itemId",
@@ -95,15 +99,13 @@ for (const item of comparison.items) {
                   description: "Results keyed by experiment ID. Each entry contains the output and scorer results for that experiment.",
                 },
               ],
-            },
+            }],
           },
         ],
-      },
+      }],
     },
   ]}
 />
-
-Throws `MastraError` if fewer than 2 experiment IDs are provided.
 
 ## Related
 

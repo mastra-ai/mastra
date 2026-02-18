@@ -37,7 +37,8 @@ console.log(`Added ${items.length} items`);
       name: "items",
       type: "Array<object>",
       description: "Array of items to add. Each item has the same shape as the dataset.addItem() input.",
-      properties: {
+      properties: [{
+        type: "DatasetItem",
         parameters: [
           {
             name: "input",
@@ -57,7 +58,7 @@ console.log(`Added ${items.length} items`);
             description: "Arbitrary metadata.",
           },
         ],
-      },
+      }],
     },
   ]}
 />

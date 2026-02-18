@@ -73,6 +73,8 @@ When `version` is specified:
   ]}
 />
 
+<br />
+
 When `version` is not specified:
 
 <PropertiesTable
@@ -81,7 +83,8 @@ When `version` is not specified:
       name: "result",
       type: "Promise<object>",
       description: "Paginated response.",
-      properties: {
+      properties: [{
+        type: "object",
         parameters: [
           {
             name: "items",
@@ -92,7 +95,8 @@ When `version` is not specified:
             name: "pagination",
             type: "object",
             description: "Pagination metadata.",
-            properties: {
+            properties: [{
+              type: "object",
               parameters: [
                 {
                   name: "total",
@@ -115,10 +119,10 @@ When `version` is not specified:
                   description: "Whether more pages are available.",
                 },
               ],
-            },
+            }],
           },
         ],
-      },
+      }],
     },
   ]}
 />

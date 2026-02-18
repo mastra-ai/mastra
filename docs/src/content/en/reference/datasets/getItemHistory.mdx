@@ -45,7 +45,8 @@ for (const row of history) {
       name: "result",
       type: "Promise<DatasetItemRow[]>",
       description: "Array of versioned item rows, ordered by version.",
-      properties: {
+      properties: [{
+        type: "DatasetItemRow",
         parameters: [
           {
             name: "id",
@@ -100,7 +101,7 @@ for (const row of history) {
             description: "When this row was last updated.",
           },
         ],
-      },
+      }],
     },
   ]}
 />

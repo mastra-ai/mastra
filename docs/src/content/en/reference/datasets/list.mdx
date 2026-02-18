@@ -50,7 +50,8 @@ for (const ds of datasets) {
       name: "result",
       type: "Promise<object>",
       description: "Paginated dataset list.",
-      properties: {
+      properties: [{
+        type: "object",
         parameters: [
           {
             name: "datasets",
@@ -63,7 +64,7 @@ for (const ds of datasets) {
             description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
           },
         ],
-      },
+      }],
     },
   ]}
 />

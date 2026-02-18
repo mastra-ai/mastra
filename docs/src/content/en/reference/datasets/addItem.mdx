@@ -59,7 +59,8 @@ console.log(item.id);
       name: "result",
       type: "Promise<DatasetItem>",
       description: "The created dataset item.",
-      properties: {
+      properties: [{
+        type: "DatasetItem",
         parameters: [
           {
             name: "id",
@@ -104,7 +105,7 @@ console.log(item.id);
             description: "When the item was last updated.",
           },
         ],
-      },
+      }],
     },
   ]}
 />

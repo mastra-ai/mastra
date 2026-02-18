@@ -52,13 +52,15 @@ for (const version of versions) {
       name: "result",
       type: "Promise<object>",
       description: "Paginated version list.",
-      properties: {
+      properties: [{
+        type: "object",
         parameters: [
           {
             name: "versions",
             type: "DatasetVersion[]",
             description: "Array of version records.",
-            properties: {
+            properties: [{
+              type: "DatasetVersion",
               parameters: [
                 {
                   name: "id",
@@ -81,13 +83,14 @@ for (const version of versions) {
                   description: "When this version was created.",
                 },
               ],
-            },
+            }],
           },
           {
             name: "pagination",
             type: "object",
             description: "Pagination metadata.",
-            properties: {
+            properties: [{
+              type: "object",
               parameters: [
                 {
                   name: "total",
@@ -110,10 +113,10 @@ for (const version of versions) {
                   description: "Whether more pages are available.",
                 },
               ],
-            },
+            }],
           },
         ],
-      },
+      }],
     },
   ]}
 />

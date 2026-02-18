@@ -61,13 +61,15 @@ for (const result of results) {
       name: "result",
       type: "Promise<object>",
       description: "Paginated experiment results.",
-      properties: {
+      properties: [{
+        type: "object",
         parameters: [
           {
             name: "results",
             type: "ExperimentResult[]",
             description: "Array of item-level results.",
-            properties: {
+            properties: [{
+              type: "ExperimentResult",
               parameters: [
                 {
                   name: "id",
@@ -135,7 +137,7 @@ for (const result of results) {
                   description: "When the result record was created.",
                 },
               ],
-            },
+            }],
           },
           {
             name: "pagination",
@@ -143,7 +145,7 @@ for (const result of results) {
             description: "Pagination metadata with `total`, `page`, `perPage`, and `hasMore`.",
           },
         ],
-      },
+      }],
     },
   ]}
 />

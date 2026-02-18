@@ -29,7 +29,7 @@ This method takes no parameters.
 
 ## Returns
 
-Returns a `Promise<DatasetRecord>` with the following fields:
+Returns a `Promise<DatasetRecord>`. Throws `MastraError` if the dataset is not found.
 
 <PropertiesTable
   content={[
@@ -84,5 +84,3 @@ Returns a `Promise<DatasetRecord>` with the following fields:
     },
   ]}
 />
-
-Throws `MastraError` if the dataset is not found.

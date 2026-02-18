@@ -44,7 +44,8 @@ Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/referen
       name: "result",
       type: "Promise<object>",
       description: "Immediate response with experiment ID.",
-      properties: {
+      properties: [{
+        type: "object",
         parameters: [
           {
             name: "experimentId",
@@ -57,7 +58,7 @@ Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/referen
             description: "Always `'pending'` since the experiment hasn't started executing yet.",
           },
         ],
-      },
+      }],
     },
   ]}
 />

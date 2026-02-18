@@ -71,6 +71,8 @@ const dataset = await mastra.datasets.create({ name: "My dataset" });
 
 ## Properties
 
+For the full dataset record (name, description, schemas, version, timestamps), call [`dataset.getDetails()`](/reference/datasets/getDetails).
+
 <PropertiesTable
   content={[
     {
@@ -80,8 +82,6 @@ const dataset = await mastra.datasets.create({ name: "My dataset" });
     },
   ]}
 />
-
-For the full dataset record (name, description, schemas, version, timestamps), call [`dataset.getDetails()`](/reference/datasets/getDetails).
 
 ## Related
 

@@ -111,7 +111,8 @@ console.log(`Status: ${summary.status}`);
       name: "result",
       type: "Promise<ExperimentSummary>",
       description: "Summary of the completed experiment.",
-      properties: {
+      properties: [{
+        type: "ExperimentSummary",
         parameters: [
           {
             name: "experimentId",
@@ -162,7 +163,8 @@ console.log(`Status: ${summary.status}`);
             name: "results",
             type: "ItemWithScores[]",
             description: "All item results with their scores.",
-            properties: {
+            properties: [{
+              type: "ItemWithScores",
               parameters: [
                 {
                   name: "itemId",
@@ -213,7 +215,8 @@ console.log(`Status: ${summary.status}`);
                   name: "scores",
                   type: "ScorerResult[]",
                   description: "Results from all scorers for this item.",
-                  properties: {
+                  properties: [{
+                    type: "ScorerResult",
                     parameters: [
                       {
                         name: "scorerId",
@@ -241,13 +244,13 @@ console.log(`Status: ${summary.status}`);
                         description: "Error message if the scorer failed.",
                       },
                     ],
-                  },
+                  }],
                 },
               ],
-            },
+            }],
           },
         ],
-      },
+      }],
     },
   ]}
 />

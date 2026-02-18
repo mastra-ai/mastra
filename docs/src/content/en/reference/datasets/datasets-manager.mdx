@@ -42,6 +42,24 @@ const dataset = await mastra.datasets.get({ id: "dataset-id" });
 await mastra.datasets.delete({ id: "dataset-id" });
 ```
 
+### Get experiment
+
+Retrieves a specific experiment (run) by ID. Unlike `dataset.getExperiment()`, this works across all datasets without needing a dataset reference first.
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+// Get experiment directly without knowing the dataset
+const experiment = await mastra.datasets.getExperiment({
+  experimentId: "exp-id",
+});
+
+console.log(`Dataset: ${experiment.datasetId}`);
+console.log(`Status: ${experiment.status}`);
+```
+
 ### Compare experiments
 
 ```typescript title="src/mastra/datasets/compare.ts"
