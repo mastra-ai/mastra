@@ -1,10 +1,42 @@
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
 import { ToolStream } from '../../../tools/stream';
+import type { OuterLLMRun } from '../../types';
 import { createToolCallStep } from './tool-call-step';
+
+// Shared helpers used by multiple describe blocks
+const createMessageList = () =>
+  ({
+    get: {
+      input: { aiV5: { model: () => [] } },
+      response: { db: () => [] },
+      all: { db: () => [] },
+    },
+  }) as unknown as MessageList;
+
+const makeBaseExecuteParams = (suspend: Mock, overrides: any = {}) => ({
+  runId: 'test-run-id',
+  workflowId: 'test-workflow-id',
+  mastra: {} as any,
+  requestContext: new RequestContext(),
+  state: {},
+  setState: vi.fn(),
+  retryCount: 1,
+  tracingContext: {} as any,
+  getInitData: vi.fn(),
+  getStepResult: vi.fn(),
+  suspend,
+  bail: vi.fn(),
+  abort: vi.fn(),
+  engine: 'default' as any,
+  abortSignal: new AbortController().signal,
+  validateSchemas: false,
+  ...overrides,
+});
 
 describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
@@ -15,7 +47,6 @@ describe('createToolCallStep tool approval workflow', () => {
   let toolCallStep: ReturnType<typeof createToolCallStep>;
   let neverResolve: Promise<never>;
 
-  // Helper functions to reduce duplication
   const makeInputData = () => ({
     toolCallId: 'test-call-id',
     toolName: 'test-tool',
@@ -23,28 +54,13 @@ describe('createToolCallStep tool approval workflow', () => {
   });
 
   const makeExecuteParams = (overrides: any = {}) => ({
-    runId: 'test-run-id',
-    workflowId: 'test-workflow-id',
-    mastra: {} as any,
-    requestContext: new RequestContext(),
-    state: {},
-    setState: vi.fn(),
-    retryCount: 1,
-    tracingContext: {} as any,
-    getInitData: vi.fn(),
-    getStepResult: vi.fn(),
-    suspend,
-    bail: vi.fn(),
-    abort: vi.fn(),
-    engine: 'default' as any,
-    abortSignal: new AbortController().signal,
+    ...makeBaseExecuteParams(suspend),
     writer: new ToolStream({
       prefix: 'tool',
       callId: 'test-call-id',
       name: 'test-tool',
       runId: 'test-run-id',
     }),
-    validateSchemas: false,
     inputData: makeInputData(),
     ...overrides,
   });
@@ -68,21 +84,7 @@ describe('createToolCallStep tool approval workflow', () => {
         requireApproval: true,
       },
     };
-    messageList = {
-      get: {
-        input: {
-          aiV5: {
-            model: () => [],
-          },
-        },
-        response: {
-          db: () => [],
-        },
-        all: {
-          db: () => [],
-        },
-      },
-    } as unknown as MessageList;
+    messageList = createMessageList();
 
     toolCallStep = createToolCallStep({
       tools,
@@ -182,5 +184,97 @@ describe('createToolCallStep tool approval workflow', () => {
       result: toolResult,
       ...inputData,
     });
+  });
+});
+
+describe('createToolCallStep provider-executed tools', () => {
+  let controller: ReadableStreamDefaultController;
+  let suspend: Mock;
+  let messageList: MessageList;
+
+  beforeEach(() => {
+    controller = {
+      enqueue: vi.fn(),
+      desiredSize: 1,
+      close: vi.fn(),
+      error: vi.fn(),
+    } as unknown as ReadableStreamDefaultController;
+    suspend = vi.fn();
+    messageList = createMessageList();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should skip execution and return pre-merged output for provider-executed tools', async () => {
+    const providerResult = { results: [{ title: 'Example', url: 'https://example.com' }] };
+    const executeFn = vi.fn();
+    const tools = {
+      webSearch: {
+        type: 'provider-defined' as const,
+        id: 'openai.web_search',
+        execute: executeFn,
+      },
+    } as unknown as ToolSet;
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+    } as unknown as OuterLLMRun);
+
+    const inputData = {
+      toolCallId: 'call-123',
+      toolName: 'web_search',
+      args: { query: 'test' },
+      providerExecuted: true,
+      output: providerResult,
+    };
+
+    const result = await step.execute({
+      ...makeBaseExecuteParams(suspend),
+      writer: new ToolStream({ prefix: 'tool', callId: 'call-123', name: 'web_search', runId: 'test-run' }),
+      inputData,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ result: providerResult }));
+    expect(executeFn).not.toHaveBeenCalled();
+    expect(suspend).not.toHaveBeenCalled();
+  });
+
+  it('should execute normally when providerExecuted is false', async () => {
+    const toolResult = { data: 'calculated' };
+    const executeFn = vi.fn().mockResolvedValue(toolResult);
+    const tools = {
+      calculator: {
+        execute: executeFn,
+      },
+    } as unknown as ToolSet;
+
+    const step = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+    } as unknown as OuterLLMRun);
+
+    const inputData = {
+      toolCallId: 'call-789',
+      toolName: 'calculator',
+      args: { expression: '2+2' },
+      providerExecuted: false,
+    };
+
+    const result = await step.execute({
+      ...makeBaseExecuteParams(suspend),
+      writer: new ToolStream({ prefix: 'tool', callId: 'call-789', name: 'calculator', runId: 'test-run' }),
+      inputData,
+    });
+
+    expect(executeFn).toHaveBeenCalledWith({ expression: '2+2' }, expect.objectContaining({ toolCallId: 'call-789' }));
+    expect(result).toEqual(expect.objectContaining({ result: toolResult }));
   });
 });

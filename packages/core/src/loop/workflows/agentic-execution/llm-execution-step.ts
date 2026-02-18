@@ -988,29 +988,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const streamToolResults = outputStream._getImmediateToolResults();
 
       if (toolCalls.length > 0) {
-        // Build a map of tool results by toolCallId for efficient lookup
-        const toolResultMap = new Map<string, unknown>();
-        if (streamToolResults && streamToolResults.length > 0) {
-          for (const chunk of streamToolResults) {
-            const payload = chunk.payload;
-            if (findProviderToolByName(stepTools, payload.toolName)) {
-              toolResultMap.set(payload.toolCallId, payload.result);
-            }
-          }
-        }
-
         for (const toolCall of toolCalls) {
-          // Infer providerExecuted for provider tools when the response doesn't set it
           const tool = findProviderToolByName(stepTools, toolCall.toolName);
           const inferred = inferProviderExecuted(toolCall.providerExecuted, tool);
           if (inferred !== undefined) {
             toolCall.providerExecuted = inferred;
           }
 
-          // Merge the provider-executed tool result as output on the tool call
-          // so the tool-call-step can skip execution and return the actual result
-          if (toolCall.providerExecuted && toolResultMap.has(toolCall.toolCallId)) {
-            toolCall.output = toolResultMap.get(toolCall.toolCallId);
+          if (toolCall.providerExecuted) {
+            const match = streamToolResults?.find(r => r.payload.toolCallId === toolCall.toolCallId);
+            if (match) {
+              toolCall.output = match.payload.result;
+            }
           }
         }
       }

@@ -2,28 +2,48 @@ import { describe, expect, it } from 'vitest';
 import { findProviderToolByName, inferProviderExecuted } from './provider-tool-utils';
 
 describe('inferProviderExecuted', () => {
-  it('should return existing value when providerExecuted is defined', () => {
+  it('should preserve true when providerExecuted is already true', () => {
     const tool = { type: 'provider', id: 'openai.web_search' };
 
-    const result = inferProviderExecuted(true, tool);
+    expect(inferProviderExecuted(true, tool)).toBe(true);
+  });
 
-    expect(result).toBe(true);
+  it('should preserve false when providerExecuted is already false', () => {
+    const tool = { type: 'provider', id: 'openai.web_search' };
+
+    expect(inferProviderExecuted(false, tool)).toBe(false);
+  });
+
+  it('should preserve false even for non-provider tools', () => {
+    const tool = { type: 'function', description: 'test' };
+
+    expect(inferProviderExecuted(false, tool)).toBe(false);
   });
 
   it('should infer true for provider-defined tools when providerExecuted is undefined', () => {
     const tool = { type: 'provider', id: 'openai.web_search' };
 
-    const result = inferProviderExecuted(undefined, tool);
+    expect(inferProviderExecuted(undefined, tool)).toBe(true);
+  });
 
-    expect(result).toBe(true);
+  it('should infer true for AI SDK v5 provider-defined tools', () => {
+    const tool = { type: 'provider-defined', id: 'openai.web_search' };
+
+    expect(inferProviderExecuted(undefined, tool)).toBe(true);
   });
 
   it('should return undefined for regular function tools when providerExecuted is undefined', () => {
     const tool = { type: 'function', description: 'test' };
 
-    const result = inferProviderExecuted(undefined, tool);
+    expect(inferProviderExecuted(undefined, tool)).toBeUndefined();
+  });
 
-    expect(result).toBeUndefined();
+  it('should return undefined when tool is null', () => {
+    expect(inferProviderExecuted(undefined, null)).toBeUndefined();
+  });
+
+  it('should return undefined when tool is undefined', () => {
+    expect(inferProviderExecuted(undefined, undefined)).toBeUndefined();
   });
 });
 
@@ -34,34 +54,52 @@ describe('findProviderToolByName', () => {
     calculator: { type: 'function' as const, description: 'A calculator' },
   } as any;
 
-  it('should find provider tool by model-facing name (suffix after provider prefix)', () => {
-    // The LLM stream reports toolName as 'perplexity_search' (without gateway. prefix)
-    const result = findProviderToolByName(tools, 'perplexity_search');
-
-    expect(result).toBe(tools.perplexitySearch);
+  it('should find a gateway provider tool by its model-facing name', () => {
+    expect(findProviderToolByName(tools, 'perplexity_search')).toBe(tools.perplexitySearch);
   });
 
-  it('should find openai provider tool by suffix', () => {
-    const result = findProviderToolByName(tools, 'web_search');
-
-    expect(result).toBe(tools.webSearch);
+  it('should find an openai provider tool by its model-facing name', () => {
+    expect(findProviderToolByName(tools, 'web_search')).toBe(tools.webSearch);
   });
 
-  it('should return undefined for non-provider tool', () => {
-    const result = findProviderToolByName(tools, 'calculator');
-
-    expect(result).toBeUndefined();
+  it('should return undefined for a non-provider tool name', () => {
+    expect(findProviderToolByName(tools, 'calculator')).toBeUndefined();
   });
 
-  it('should return undefined when tool is not found', () => {
-    const result = findProviderToolByName(tools, 'unknown_tool');
-
-    expect(result).toBeUndefined();
+  it('should return undefined when no tool matches the name', () => {
+    expect(findProviderToolByName(tools, 'unknown_tool')).toBeUndefined();
   });
 
   it('should return undefined when tools is undefined', () => {
-    const result = findProviderToolByName(undefined, 'perplexity_search');
+    expect(findProviderToolByName(undefined, 'perplexity_search')).toBeUndefined();
+  });
 
-    expect(result).toBeUndefined();
+  it('should return undefined when tools is an empty object', () => {
+    expect(findProviderToolByName({} as any, 'web_search')).toBeUndefined();
+  });
+
+  it('should not match by the full qualified provider id', () => {
+    // The LLM reports just the suffix (e.g. 'web_search'), not the full id ('openai.web_search')
+    expect(findProviderToolByName(tools, 'openai.web_search')).toBeUndefined();
+  });
+
+  it('should handle tools with multi-segment provider ids', () => {
+    const multiDotTools = {
+      deepSearch: { type: 'provider' as const, id: 'gateway.deep.search', args: {} },
+    } as any;
+
+    expect(findProviderToolByName(multiDotTools, 'deep.search')).toBe(multiDotTools.deepSearch);
+  });
+
+  it('should return the first match when multiple tools share the same model-facing name', () => {
+    const duplicateTools = {
+      searchA: { type: 'provider' as const, id: 'openai.web_search', args: {} },
+      searchB: { type: 'provider' as const, id: 'gateway.web_search', args: {} },
+    } as any;
+
+    const result = findProviderToolByName(duplicateTools, 'web_search');
+
+    expect(result).toBeDefined();
+    expect(result === duplicateTools.searchA || result === duplicateTools.searchB).toBe(true);
   });
 });
