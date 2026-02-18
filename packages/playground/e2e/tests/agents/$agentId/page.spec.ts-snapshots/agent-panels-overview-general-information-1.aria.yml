@@ -14,7 +14,7 @@
     - list:
         - listitem:
             - link "Sub Agent":
-                - /url: /agents/subAgent
+                - /url: /agents/subAgent/chat/new
                 - img
                 - text: ''
     - heading "Tools" [level=3]:
@@ -25,12 +25,12 @@
     - list:
         - listitem:
             - link "weatherInfo":
-                - /url: /agents/weatherAgent/tools/weatherInfo
+                - /url: /agents/weather-agent/tools/weatherInfo
                 - img
                 - text: ''
         - listitem:
             - link "simpleMcpTool":
-                - /url: /agents/weatherAgent/tools/simpleMcpTool
+                - /url: /agents/weather-agent/tools/simpleMcpTool
                 - img
                 - text: ''
     - heading "Workflows" [level=3]:
