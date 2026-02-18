@@ -1,0 +1,91 @@
+---
+title: "Reference: DatasetsManager | Datasets"
+description: "Documentation for the `DatasetsManager` class in Mastra, which provides the public API for managing datasets."
+packages:
+  - "@mastra/core"
+---
+
+# DatasetsManager
+
+**Added in:** `@mastra/core@1.4.0`
+
+The `DatasetsManager` class provides the public API for managing datasets, including CRUD operations and cross-dataset experiment comparisons. Access it via `mastra.datasets`.
+
+## Usage examples
+
+### Create and list datasets
+
+```typescript title="src/mastra/datasets/manage.ts"
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+// Create a dataset
+const dataset = await mastra.datasets.create({
+  name: "QA pairs",
+  description: "Question-answer evaluation set",
+});
+
+// List all datasets
+const { datasets } = await mastra.datasets.list();
+```
+
+### Get and delete a dataset
+
+```typescript title="src/mastra/datasets/get-delete.ts"
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+// Get by ID
+const dataset = await mastra.datasets.get({ id: "dataset-id" });
+
+// Delete by ID
+await mastra.datasets.delete({ id: "dataset-id" });
+```
+
+### Get experiment
+
+Retrieves a specific experiment (run) by ID. Unlike `dataset.getExperiment()`, this works across all datasets without needing a dataset reference first.
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+// Get experiment directly without knowing the dataset
+const experiment = await mastra.datasets.getExperiment({
+  experimentId: "exp-id",
+});
+
+console.log(`Dataset: ${experiment.datasetId}`);
+console.log(`Status: ${experiment.status}`);
+```
+
+### Compare experiments
+
+```typescript title="src/mastra/datasets/compare.ts"
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({ /* storage config */ });
+
+const comparison = await mastra.datasets.compareExperiments({
+  experimentIds: ["exp-1", "exp-2"],
+  baselineId: "exp-1",
+});
+```
+
+## Access
+
+`DatasetsManager` is not instantiated directly. Access it from a `Mastra` instance:
+
+```typescript
+const mastra = new Mastra({ /* storage config */ });
+const datasetsManager = mastra.datasets;
+```
+
+## Related
+
+- [Dataset class](/reference/datasets/dataset)
+- [DatasetsManager.create()](/reference/datasets/create)
+- [DatasetsManager.compareExperiments()](/reference/datasets/compareExperiments)

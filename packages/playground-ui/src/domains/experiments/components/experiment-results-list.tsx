@@ -52,6 +52,9 @@ export function ExperimentResultsList({
                   onClick={() => onResultClick(result.id)}
                 >
                   <ItemList.TextCell>{result.itemId.slice(0, 8)}</ItemList.TextCell>
+                  {columns.some(col => col.name === 'input') && (
+                    <ItemList.TextCell>{truncate(formatValue(result.input), 200)}</ItemList.TextCell>
+                  )}
                   {columns.some(col => col.name === 'output') && (
                     <ItemList.TextCell>{truncate(formatValue(result.output), 200)}</ItemList.TextCell>
                   )}
