@@ -350,6 +350,11 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
           tools.push(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
         }
       }
+
+      // Grep tool (filesystem-based, not BM25/vector)
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+      }
     }
 
     // Search tools (available if BM25 or vector search is enabled)
