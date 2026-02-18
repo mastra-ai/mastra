@@ -1,32 +1,35 @@
-# Getting a Smithery GitHub MCP URL
+# Getting a GitHub MCP Server
 
-First, you'll need to get a Smithery GitHub MCP URL. This typically requires:
+For this course, we'll use the **Smithery CLI**. On first use, it opens a browser to complete OAuth consent. Alternatively, you can use the official GitHub MCP server directly.
 
-1. Setting up a Smithery account
-2. Creating a personal access token with your GitHub account
-3. Getting your unique MCP URL via the Smithery packages
+## Option 1: Using Smithery CLI (Recommended for this course)
 
-For this example, we'll use an environment variable to store the Smithery API key and profile name which can be found in the Smithery interface.
+The Smithery CLI manages OAuth authentication interactively. When you first connect, it will prompt you to authenticate via your browser.
+
+```bash
+# No installation needed - we'll use npx to run it
+# On first use, the CLI opens a browser window for OAuth consent
+```
+
+We'll configure the MCP client to use Smithery's GitHub server via their CLI in the next step.
+
+## Option 2: Using the Official GitHub MCP Server
+
+Alternatively, you can use the official GitHub MCP server directly:
+
+```bash
+pnpm install @modelcontextprotocol/server-github
+```
+
+This requires a GitHub Personal Access Token:
 
 ```bash
 # Add this to your .env file
-SMITHERY_API_KEY=your_smithery_api_key
-SMITHERY_PROFILE=your_smithery_profile_name
+GITHUB_PERSONAL_ACCESS_TOKEN=your_github_token
 ```
 
-Using an environment variable keeps your configuration secure and flexible. It also prevents sensitive information from being committed to your repository.
+You can create a token at [GitHub Settings > Developer settings > Personal access tokens](https://github.com/settings/tokens).
 
-We will use the Smithery packages to authenticate and create a streamable HTTP URL for the MCP server configuration
+## What We'll Use
 
-```bash
-pnpm install @smithery/sdk
-```
-
-```ts
-import { createSmitheryUrl } from '@smithery/sdk'
-
-const smitheryGithubMCPServerUrl = createSmitheryUrl('https://server.smithery.ai/@smithery-ai/github', {
-  apiKey: process.env.SMITHERY_API_KEY,
-  profile: process.env.SMITHERY_PROFILE,
-})
-```
+For this course, we'll proceed with **Option 1 (Smithery CLI)**. The CLI prompts you to authenticate via browser on first use, eliminating the need to manually create and manage GitHub tokens.
