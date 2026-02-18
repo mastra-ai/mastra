@@ -13,8 +13,11 @@ export * from './config';
 
 // Export all implementations
 export * from './bus';
+export * from './context';
 export * from './instances';
+export * from './metrics';
 export * from './spans';
+export * from './traces';
 export * from './exporters';
 export * from './span_processors';
 export * from './model-tracing';

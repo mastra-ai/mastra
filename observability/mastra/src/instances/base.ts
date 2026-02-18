@@ -25,12 +25,19 @@ import type {
   AnyExportedSpan,
   TraceState,
   TracingOptions,
+  TracingContext,
+  LoggerContext,
+  MetricsContext,
+  LogLevel,
   ObservabilityEvent,
 } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
+import { LoggerContextImpl } from '../context/logger';
+import { MetricsContextImpl } from '../context/metrics';
+import { CardinalityFilter } from '../metrics/cardinality';
 import { NoOpSpan } from '../spans';
 
 // ============================================================================
@@ -49,6 +56,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected observabilityBus: ObservabilityBus;
 
+  /**
+   * Cardinality filter for metrics label protection.
+   */
+  protected cardinalityFilter: CardinalityFilter;
+
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
@@ -65,11 +77,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       serializationOptions: config.serializationOptions,
     };
 
+    // Initialize cardinality filter for metrics
+    this.cardinalityFilter = new CardinalityFilter();
+
     // Initialize the unified ObservabilityBus and register all exporters
     this.observabilityBus = new ObservabilityBus();
     for (const exporter of this.exporters) {
       this.observabilityBus.registerExporter(exporter);
     }
+
+    // Enable auto-extracted metrics (TracingEvent → MetricEvent cross-emission)
+    this.observabilityBus.enableAutoExtractedMetrics();
 
     // Initialize bridge if present
     if (this.config.bridge?.init) {
@@ -302,6 +320,68 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getObservabilityBus(): ObservabilityBus {
     return this.observabilityBus;
+  }
+
+  /**
+   * Create a LoggerContext for a given TracingContext.
+   * Logs emitted through this context are automatically correlated with
+   * the current span's traceId, spanId, tags, and metadata.
+   */
+  createLoggerContext(tracingContext: TracingContext, minLevel?: LogLevel): LoggerContext {
+    return new LoggerContextImpl({
+      currentSpan: tracingContext.currentSpan,
+      observabilityBus: this.observabilityBus,
+      minLevel,
+    });
+  }
+
+  /**
+   * Create a LoggerContext without trace correlation.
+   * Use for logging outside of any span/trace context (e.g., startup, background tasks).
+   */
+  createDirectLoggerContext(minLevel?: LogLevel): LoggerContext {
+    return new LoggerContextImpl({
+      currentSpan: undefined,
+      observabilityBus: this.observabilityBus,
+      minLevel,
+    });
+  }
+
+  /**
+   * Create a MetricsContext with optional entity labels.
+   * Metrics emitted through this context are filtered by the cardinality filter
+   * and include base labels for the entity.
+   */
+  createMetricsContext(entityContext?: { entityType?: string; entityName?: string }): MetricsContext {
+    const baseLabels: Record<string, string> = {};
+    if (entityContext?.entityType) baseLabels.entity_type = entityContext.entityType;
+    if (entityContext?.entityName) baseLabels.entity_name = entityContext.entityName;
+
+    const context: Record<string, unknown> = {};
+    if (this.config.serviceName) context.serviceName = this.config.serviceName;
+
+    return new MetricsContextImpl({
+      baseLabels,
+      observabilityBus: this.observabilityBus,
+      cardinalityFilter: this.cardinalityFilter,
+      context,
+    });
+  }
+
+  /**
+   * Create a MetricsContext without entity labels.
+   * Use for emitting metrics outside of any entity context (e.g., custom application metrics).
+   */
+  createDirectMetricsContext(): MetricsContext {
+    const context: Record<string, unknown> = {};
+    if (this.config.serviceName) context.serviceName = this.config.serviceName;
+
+    return new MetricsContextImpl({
+      baseLabels: {},
+      observabilityBus: this.observabilityBus,
+      cardinalityFilter: this.cardinalityFilter,
+      context,
+    });
   }
 
   /**
