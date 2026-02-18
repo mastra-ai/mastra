@@ -316,7 +316,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
     }, 500000);
 
     describe(`stream`, () => {
-      it(`should stream from LLM`, async () => {
+      it(`should stream from LLM`, { timeout: 30_000 }, async () => {
         const agent = new Agent({
           id: 'test-agent',
           name: 'Test Agent',
@@ -425,7 +425,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
         }
       });
 
-      it(`should show correct request input for multi-turn inputs with memory`, async () => {
+      it(`should show correct request input for multi-turn inputs with memory`, { timeout: 30_000 }, async () => {
         const threadId = '1';
         const resourceId = '2';
 

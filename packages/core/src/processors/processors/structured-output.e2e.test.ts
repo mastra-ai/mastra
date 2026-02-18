@@ -117,10 +117,6 @@ describe('Structured Output with Tool Execution', () => {
       },
     });
 
-    console.log('Stream properties:', Object.keys(stream));
-    console.log('Has partialObjectStream?', 'partialObjectStream' in stream);
-    console.log('Has object?', 'object' in stream);
-
     // Don't consume fullStream first - get the object while consuming
     const fullStreamChunks: any[] = [];
 
@@ -212,7 +208,6 @@ describe('Structured Output with Tool Execution', () => {
     await stream.consumeStream();
 
     const finalObject = await stream.object;
-    console.log('Final object with multiple tools:', finalObject);
 
     // Verify the structured output was generated correctly
     expect(finalObject).toBeDefined();
