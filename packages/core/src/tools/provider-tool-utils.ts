@@ -1,13 +1,12 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
-import { getProviderToolName } from '../stream/aisdk/v5/compat/prepare-tools';
-import { isProviderDefinedTool } from './toolchecks';
+import type { Tool, ToolSet } from '@internal/ai-sdk-v5';
+import { getProviderToolName, isProviderTool } from './toolchecks';
 
 /**
  * Find a provider-defined tool by its model-facing name.
  */
-export function findProviderToolByName(tools: ToolSet | undefined, toolName: string) {
+export function findProviderToolByName(tools: ToolSet | undefined, toolName: string): Tool | undefined {
   if (!tools) return undefined;
-  return Object.values(tools).find(t => isProviderDefinedTool(t) && getProviderToolName(t.id) === toolName);
+  return Object.values(tools).find(t => isProviderTool(t) && getProviderToolName(t.id) === toolName);
 }
 
 /**
@@ -20,5 +19,5 @@ export function findProviderToolByName(tools: ToolSet | undefined, toolName: str
  */
 export function inferProviderExecuted(providerExecuted: boolean | undefined, tool: unknown): boolean | undefined {
   if (providerExecuted !== undefined) return providerExecuted;
-  return isProviderDefinedTool(tool) ? true : undefined;
+  return isProviderTool(tool) ? true : undefined;
 }

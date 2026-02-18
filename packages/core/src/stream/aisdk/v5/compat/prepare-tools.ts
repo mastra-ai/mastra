@@ -10,6 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+import { isProviderTool, getProviderToolName } from '../../../../tools/toolchecks';
 
 /** Model specification version for tool type conversion */
 export type ModelSpecVersion = 'v2' | 'v3';
@@ -22,30 +23,6 @@ type PreparedTool =
   | LanguageModelV3ProviderTool;
 
 type PreparedToolChoice = LanguageModelV2ToolChoice | LanguageModelV3ToolChoice;
-
-/**
- * Checks if a tool is a provider-defined tool from the AI SDK.
- * Provider tools (like openai.tools.webSearch()) are created by the AI SDK with:
- * - type: "provider-defined" (AI SDK v5) or "provider" (AI SDK v6)
- * - id: in format 'provider.tool_name' (e.g., 'openai.web_search')
- */
-function isProviderTool(tool: unknown): tool is { id: string; args?: Record<string, unknown> } {
-  if (typeof tool !== 'object' || tool === null) return false;
-  const t = tool as Record<string, unknown>;
-
-  // Provider tools have type: "provider-defined" (v5) or "provider" (v6)
-  // This is the reliable marker set by the AI SDK's createProviderDefinedToolFactory
-  const isProviderType = t.type === 'provider-defined' || t.type === 'provider';
-  return isProviderType && typeof t.id === 'string';
-}
-
-/**
- * Extracts the model-facing tool name from a provider tool id.
- * e.g., 'openai.web_search' -> 'web_search'
- */
-export function getProviderToolName(providerId: string): string {
-  return providerId.split('.').slice(1).join('.');
-}
 
 export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools,
