@@ -464,7 +464,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
         format: 'JSONEachRow',
       });
 
-      const countRows = await countResult.json<{ count: string }[]>();
+      const countRows = (await countResult.json()) as { count: string }[];
       const deletedCount = parseInt(countRows[0]?.count || '0', 10);
 
       if (deletedCount === 0) {
@@ -472,6 +472,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       }
 
       // Delete the records
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE ${whereClause}`,
+        query_params: params,
+      });
+
+      return { deletedCount };
     } catch (error) {
       throw new MastraError(
         {

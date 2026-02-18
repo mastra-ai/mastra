@@ -14,8 +14,6 @@ import type {
   WorkflowRuns,
   UpdateWorkflowStateOptions,
   CreateIndexOptions,
-  DeleteWorkflowRunsOlderThanArgs,
-  DeleteWorkflowRunsOlderThanResponse,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';

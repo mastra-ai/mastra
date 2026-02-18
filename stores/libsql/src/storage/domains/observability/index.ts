@@ -1,3 +1,4 @@
+import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
@@ -34,10 +35,12 @@ import { transformFromSqlRow } from '../../db/utils';
 
 export class ObservabilityLibSQL extends ObservabilityStorage {
   #db: LibSQLDB;
+  #client: Client;
 
   constructor(config: LibSQLDomainConfig) {
     super();
     const client = resolveClient(config);
+    this.#client = client;
     this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
   }
 
@@ -577,9 +580,9 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async deleteTracesOlderThan(args: DeleteTracesOlderThanArgs): Promise<DeleteTracesOlderThanResponse> {
     try {
-      // Build WHERE clause conditions
+      // Build WHERE clause conditions for finding root spans
       const conditions: string[] = [];
-      const sqlArgs: any[] = [];
+      const sqlArgs: InValue[] = [];
 
       // Date filter - delete traces where root span was created before this date
       conditions.push('createdAt < ?');
@@ -607,24 +610,24 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       }
 
       const whereClause = conditions.join(' AND ');
+      const tableName = parseSqlIdentifier(TABLE_SPANS);
 
-      // First, find trace IDs of root spans matching the criteria
-      const traceIdsResult = await this.#db.selectMany<{ traceId: string }>({
-        tableName: TABLE_SPANS,
-        columns: ['DISTINCT traceId'],
-        whereClause: { sql: ` WHERE ${whereClause}`, args: sqlArgs },
+      // Find trace IDs of root spans matching the criteria
+      const traceIdsResult = await this.#client.execute({
+        sql: `SELECT DISTINCT traceId FROM ${tableName} WHERE ${whereClause}`,
+        args: sqlArgs,
       });
 
-      if (traceIdsResult.length === 0) {
+      const traceIds = (traceIdsResult.rows ?? []).map(row => row.traceId as string);
+
+      if (traceIds.length === 0) {
         return { deletedCount: 0 };
       }
 
-      const traceIds = traceIdsResult.map(row => row.traceId);
-
       // Delete all spans belonging to those traces
       const placeholders = traceIds.map(() => '?').join(', ');
-      await this.#db.execute({
-        sql: `DELETE FROM ${parseSqlIdentifier(TABLE_SPANS)} WHERE traceId IN (${placeholders})`,
+      await this.#client.execute({
+        sql: `DELETE FROM ${tableName} WHERE traceId IN (${placeholders})`,
         args: traceIds,
       });
 

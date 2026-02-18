@@ -335,11 +335,11 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     it('should filter by status', async () => {
       const oldDate = new Date('2023-01-01T00:00:00Z');
 
-      const completedRun = createSampleWorkflowSnapshot('completed');
+      const successRun = createSampleWorkflowSnapshot('success');
       await workflowsStorage.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: completedRun.runId,
-        snapshot: completedRun.snapshot,
+        runId: successRun.runId,
+        snapshot: successRun.snapshot,
         createdAt: oldDate,
       });
 
@@ -353,12 +353,12 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
 
       const result = await workflowsStorage.deleteWorkflowRunsOlderThan({
         beforeDate: new Date('2024-01-01T00:00:00Z'),
-        filters: { status: 'completed' },
+        filters: { status: 'success' },
       });
 
       expect(result.deletedCount).toBe(1);
       expect(
-        await workflowsStorage.getWorkflowRunById({ runId: completedRun.runId, workflowName: 'test-workflow' }),
+        await workflowsStorage.getWorkflowRunById({ runId: successRun.runId, workflowName: 'test-workflow' }),
       ).toBeNull();
       expect(
         await workflowsStorage.getWorkflowRunById({ runId: failedRun.runId, workflowName: 'test-workflow' }),

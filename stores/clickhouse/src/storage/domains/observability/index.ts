@@ -827,7 +827,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         format: 'JSONEachRow',
       });
 
-      const traceIds = (await traceIdsResult.json<{ traceId: string }[]>()).map(row => row.traceId);
+      const traceIds = ((await traceIdsResult.json()) as { traceId: string }[]).map(row => row.traceId);
 
       if (traceIds.length === 0) {
         return { deletedCount: 0 };
