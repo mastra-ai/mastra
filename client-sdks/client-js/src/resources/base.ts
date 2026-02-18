@@ -82,6 +82,12 @@ export class BaseResource {
       } catch (error) {
         lastError = error as Error;
 
+        // Don't retry 4xx client errors - they won't resolve with retries
+        const status = (error as Error & { status?: number }).status;
+        if (status !== undefined && status >= 400 && status < 500) {
+          throw error;
+        }
+
         if (attempt === retries) {
           break;
         }

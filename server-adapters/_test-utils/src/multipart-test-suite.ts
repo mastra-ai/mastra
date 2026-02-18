@@ -244,6 +244,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
           receivedBody = params;
           return {
             success: true,
+            // Filter out all system-injected params to get only body fields
             bodyKeys: Object.keys(params).filter(
               k =>
                 ![
@@ -254,6 +255,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
                   'abortSignal',
                   'registeredTools',
                   'routePrefix',
+                  'request',
                 ].includes(k),
             ),
           };

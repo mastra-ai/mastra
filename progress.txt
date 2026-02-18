@@ -1,0 +1,36 @@
+## Progress Log
+
+### 2026-01-29: CRIT-1 Fixed - JWT Expiration Not Validated in auth/cloud
+
+**Issue:** `decodeJwt()` from `jose` only decodes the JWT payload without verifying expiration. Attackers with expired tokens could still authenticate.
+
+**Affected Methods:**
+- `getCurrentUser()` (line 96)
+- `getRoles()` (line 211)
+- `hasRole()` (line 221)
+- `getPermissions()` (line 230)
+
+**Fix Applied:**
+1. Added private helper method `isTokenExpired(claims)` that checks if the `exp` claim is in the past
+2. Updated `getCurrentUser()` to return `null` when token is expired
+3. Updated `getRoles()` to return empty array when token is expired
+4. Updated `hasRole()` to return `false` when token is expired
+5. Updated `getPermissions()` to throw `CloudApiError` with code `token_expired` when token is expired
+
+**Tests Added:**
+- `getCurrentUser > returns null when JWT is expired`
+- `getRoles > returns empty array when JWT is expired`
+- `hasRole > returns false when JWT is expired`
+- `getPermissions > throws CloudApiError when JWT is expired`
+
+**Files Modified:**
+- `auth/cloud/src/index.ts` - Added expiration checks to all affected methods
+- `auth/cloud/src/index.test.ts` - Added 4 new test cases for expired JWT handling
+
+**Verification:**
+- All 48 tests pass in auth/cloud package
+- TypeScript compilation successful with no errors
+
+**Next Steps for Future Sessions:**
+- Continue with remaining CRITICAL issues (CRIT-2 through CRIT-6)
+- CRIT-2 (Dev Mode Auth Bypass Logic Flaw) should be next highest priority

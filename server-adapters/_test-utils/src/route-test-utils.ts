@@ -47,6 +47,9 @@ export function generateContextualValue(fieldName?: string): string {
   // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
   if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
 
+  // Email fields need valid email format
+  if (field === 'email' || field.includes('email')) return 'test@example.com';
+
   // Version comparison query params (from/to are version IDs)
   // Both use the same known version ID - comparing a version to itself returns empty diffs,
   // which is valid for route integration tests that verify the endpoint responds correctly

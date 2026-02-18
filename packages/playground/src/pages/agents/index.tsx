@@ -13,12 +13,16 @@ import {
   AgentsTable,
   AgentIcon,
   useIsCmsAvailable,
+  usePermissions,
 } from '@mastra/playground-ui';
 
 function Agents() {
   const { Link, navigate } = useLinkComponent();
-  const { data: agents = {}, isLoading } = useAgents();
+  const { data: agents = {}, isLoading, error } = useAgents();
   const { isCmsAvailable } = useIsCmsAvailable();
+  const { canEdit } = usePermissions();
+
+  const canCreateAgent = isCmsAvailable && canEdit('stored-agents');
 
   const handleCreateClick = () => {
     navigate('/cms/agents/create');
@@ -35,7 +39,7 @@ function Agents() {
         </HeaderTitle>
 
         <HeaderAction>
-          {isCmsAvailable && (
+          {canCreateAgent && (
             <Button variant="light" as={Link} to="/cms/agents/create">
               <Icon>
                 <Plus />
@@ -56,7 +60,8 @@ function Agents() {
         <AgentsTable
           agents={agents}
           isLoading={isLoading}
-          onCreateClick={isCmsAvailable ? handleCreateClick : undefined}
+          error={error}
+          onCreateClick={canCreateAgent ? handleCreateClick : undefined}
         />
       </MainContentContent>
     </MainContentLayout>

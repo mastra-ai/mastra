@@ -33,6 +33,7 @@
   "keywords": [],
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/auth-cloud": "workspace:*",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:*",
     "execa": "^9.6.1",

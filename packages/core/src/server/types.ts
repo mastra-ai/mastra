@@ -1,6 +1,7 @@
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
+import type { IRBACProvider } from '../auth/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
@@ -146,9 +147,60 @@ export type ServerConfig = {
   bodySizeLimit?: number;
 
   /**
-   * Authentication configuration for the server
+   * Authentication configuration for the server.
+   *
+   * Handles WHO the user is (authentication only).
+   * For authorization (WHAT the user can do), use the `rbac` option.
    */
   auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * Role-based access control (RBAC) provider for EE (Enterprise Edition).
+   *
+   * Handles WHAT the user can do (authorization).
+   * Use this to enable permission-based access control in Studio.
+   *
+   * RBAC is separate from authentication:
+   * - `auth` handles WHO the user is (authentication)
+   * - `rbac` handles WHAT the user can do (authorization)
+   *
+   * You can mix providers - e.g., use Better Auth for authentication
+   * and StaticRBACProvider for authorization.
+   *
+   * @example Using StaticRBACProvider with role definitions
+   * ```typescript
+   * import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth';
+   *
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: myAuthProvider,
+   *     rbac: new StaticRBACProvider({
+   *       roles: DEFAULT_ROLES,
+   *       getUserRoles: (user) => [user.role],
+   *     }),
+   *   },
+   * });
+   * ```
+   *
+   * @example Using MastraRBACClerk with role mapping
+   * ```typescript
+   * import { MastraAuthClerk, MastraRBACClerk } from '@mastra/auth-clerk';
+   *
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: new MastraAuthClerk({ clerk }),
+   *     rbac: new MastraRBACClerk({
+   *       clerk,
+   *       roleMapping: {
+   *         "org:admin": ["*"],
+   *         "org:member": ["agents:read", "workflows:read"],
+   *       },
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  rbac?: IRBACProvider<any>;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
