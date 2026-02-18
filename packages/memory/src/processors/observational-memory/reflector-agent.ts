@@ -127,7 +127,7 @@ export const REFLECTOR_SYSTEM_PROMPT = buildReflectorSystemPrompt();
  * - Level 1: Gentle compression guidance (original wording — "slightly more" goes a long way for LLMs)
  * - Level 2: Aggressive compression guidance (stronger push when level 1 didn't work)
  */
-export const COMPRESSION_GUIDANCE: Record<0 | 1 | 2, string> = {
+export const COMPRESSION_GUIDANCE: Record<0 | 1 | 2 | 3, string> = {
   0: '',
   1: `
 ## COMPRESSION REQUIRED
@@ -158,6 +158,21 @@ Please re-process with much more aggressive compression:
 
 Your current detail level was a 10/10, lets aim for a 6/10 detail level.
 `,
+  3: `
+## CRITICAL COMPRESSION REQUIRED
+
+Your previous reflections have failed to compress sufficiently after multiple attempts.
+
+Please re-process with maximum compression:
+- Summarize the oldest observations (first 50-70%) into brief high-level paragraphs — only key facts, decisions, and outcomes
+- For the most recent observations (last 30-50%), retain important details but still use a condensed style
+- Ruthlessly merge related observations — if 10 observations are about the same topic, combine into 1-2 lines
+- Drop procedural details (tool calls, retries, intermediate steps) — keep only final outcomes
+- Drop observations that are no longer relevant or have been superseded by newer information
+- Preserve: names, dates, decisions, errors, user preferences, and architectural choices
+
+Your current detail level was a 10/10, lets aim for a 4/10 detail level.
+`,
 };
 
 /**
@@ -171,11 +186,11 @@ export const COMPRESSION_RETRY_PROMPT = COMPRESSION_GUIDANCE[1];
 export function buildReflectorPrompt(
   observations: string,
   manualPrompt?: string,
-  compressionLevel?: boolean | 0 | 1 | 2,
+  compressionLevel?: boolean | 0 | 1 | 2 | 3,
   skipContinuationHints?: boolean,
 ): string {
   // Normalize: boolean `true` maps to level 1 for backwards compat
-  const level: 0 | 1 | 2 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
+  const level: 0 | 1 | 2 | 3 = typeof compressionLevel === 'number' ? compressionLevel : compressionLevel ? 1 : 0;
 
   let prompt = `## OBSERVATIONS TO REFLECT ON
 

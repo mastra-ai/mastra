@@ -6,4 +6,9 @@ export type {
   IEditorMCPNamespace,
   IEditorPromptNamespace,
   IEditorScorerNamespace,
+  IEditorWorkspaceNamespace,
+  IEditorSkillNamespace,
+  FilesystemProvider,
+  SandboxProvider,
+  BlobStoreProvider,
 } from './types';

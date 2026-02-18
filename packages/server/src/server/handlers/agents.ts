@@ -159,6 +159,9 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
   source?: 'code' | 'stored';
+  status?: 'draft' | 'published' | 'archived';
+  activeVersionId?: string;
+  hasDraft?: boolean;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -506,6 +509,17 @@ async function formatAgentList({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
+    ...(agent.toRawConfig()?.activeVersionId
+      ? { activeVersionId: agent.toRawConfig()!.activeVersionId as string }
+      : {}),
+    hasDraft: !!(
+      agent.toRawConfig()?.resolvedVersionId &&
+      agent.toRawConfig()?.activeVersionId &&
+      agent.toRawConfig()!.resolvedVersionId !== agent.toRawConfig()!.activeVersionId
+    ),
   };
 }
 
@@ -707,6 +721,9 @@ async function formatAgent({
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    ...(agent.toRawConfig()?.status
+      ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
+      : {}),
   };
 }
 
@@ -763,7 +780,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
             try {
-              const agent = await editor?.agent.getById(storedAgentConfig.id);
+              const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
 
               const serialized = await formatAgentList({

@@ -27,20 +27,6 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
-/**
- * Config fields that live on version rows (from StorageScorerDefinitionSnapshotType).
- */
-const SNAPSHOT_FIELDS = [
-  'name',
-  'description',
-  'type',
-  'model',
-  'instructions',
-  'scoreRange',
-  'presetConfig',
-  'defaultSampling',
-] as const;
-
 export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
   #db: LibSQLDB;
   #client: Client;
@@ -156,10 +142,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         throw new Error(`Scorer definition with id ${id} not found`);
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-
-      const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
-      const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Build update data for the scorer definition record
       const updateData: Record<string, unknown> = {
@@ -167,12 +150,7 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
       };
 
       if (authorId !== undefined) updateData.authorId = authorId;
-      if (activeVersionId !== undefined) {
-        updateData.activeVersionId = activeVersionId;
-        if (status === undefined) {
-          updateData.status = 'published';
-        }
-      }
+      if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
       if (status !== undefined) updateData.status = status;
       if (metadata !== undefined) {
         updateData.metadata = { ...existing.metadata, ...metadata };
@@ -183,42 +161,6 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
         keys: { id },
         data: updateData,
       });
-
-      // If config fields changed, create a new version
-      if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new Error(`No versions found for scorer definition ${id}`);
-        }
-
-        const {
-          id: _versionId,
-          scorerDefinitionId: _scorerDefinitionId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        const newConfig = { ...latestConfig, ...configFields };
-        const changedFields = configFieldNames.filter(
-          field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
-
-        const newVersionId = crypto.randomUUID();
-        await this.createVersion({
-          id: newVersionId,
-          scorerDefinitionId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
-      }
 
       // Fetch and return updated scorer definition
       const updated = await this.getById(id);
@@ -267,11 +209,16 @@ export class ScorerDefinitionsLibSQL extends ScorerDefinitionsStorage {
 
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
+
+      if (status) {
+        conditions.push('status = ?');
+        queryParams.push(status);
+      }
 
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
