@@ -7,7 +7,7 @@ packages:
 
 # dataset.startExperiment()
 
-Runs an experiment on the dataset and waits for completion. Executes all items against a target (agent, workflow, or inline task function) with optional scoring.
+Runs an experiment on the dataset and waits for completion. Executes all items against a target (agent, workflow, or scorer) with optional scoring.
 
 ## Usage example
 
@@ -30,18 +30,6 @@ console.log(`${summary.succeededCount}/${summary.totalItems} succeeded`);
 console.log(`Status: ${summary.status}`);
 ```
 
-```typescript
-// Run with an inline task function
-const summary = await dataset.startExperiment({
-  task: async ({ input, mastra }) => {
-    const agent = mastra.getAgent("my-agent");
-    const result = await agent.generate(input.question);
-    return { answer: result.text };
-  },
-  scorers: ["accuracy"],
-});
-```
-
 ## Parameters
 
 <PropertiesTable
@@ -57,12 +45,6 @@ const summary = await dataset.startExperiment({
       type: "string",
       isOptional: true,
       description: "ID of the registered target. Use with `targetType`.",
-    },
-    {
-      name: "task",
-      type: "(args: { input: I; mastra: Mastra; groundTruth?: E; metadata?: Record<string, unknown>; signal?: AbortSignal }) => O | Promise<O>",
-      isOptional: true,
-      description: "Inline task function. Use instead of `targetType`/`targetId`.",
     },
     {
       name: "scorers",
