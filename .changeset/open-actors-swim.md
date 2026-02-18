@@ -1,5 +1,5 @@
 ---
-'@mastra/koa': patch
+'@mastra/koa': minor
 ---
 
 Added `onError` hook support to the Koa adapter. When `server.onError` is configured, errors from route handlers and middleware are routed through the custom handler, giving you control over error response format and status codes. Unhandled errors fall back to a default JSON response.
@@ -14,4 +14,3 @@ const mastra = new Mastra({
 });
 ```
 
-Also fixed pre-existing failures in internal test infrastructure for recently added routes (stored MCP clients, prompt blocks, workspaces, skills, scorer versions, tool providers).
