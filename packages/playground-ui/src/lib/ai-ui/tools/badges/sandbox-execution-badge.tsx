@@ -152,7 +152,6 @@ export const SandboxExecutionBadge = ({
 }: SandboxExecutionBadgeProps) => {
   // Get sandbox streaming data parts from the message
   const message = useAuiState(s => s.message);
-  console.log(message);
   const dataParts = useMemo(() => {
     const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
     return content.filter(part => part.type === 'data');
