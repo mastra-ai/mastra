@@ -102,11 +102,12 @@ describe('MastraModelOutput', () => {
       );
 
       // This is the key assertion: with isLLMExecutionStep=true, the finish handler
-      // deliberately doesn't resolve text (it defers to the outer MastraModelOutput).
-      // But if nobody resolves it, flush() rejects it with:
+      // previously skipped resolving text (deferring to the outer MastraModelOutput).
+      // But the outer output has its own separate promises, so nobody resolved the
+      // inner output's text promise. flush() then rejected it with:
       //   "promise 'text' was not resolved or rejected when stream finished"
-      // The fix ensures text is resolved with the buffered value in flush() for
-      // isLLMExecutionStep outputs.
+      // The fix ensures text is resolved in the finish chunk handler's else branch
+      // for all outputs, so flush() never rejects it.
       const text = await output.text;
       expect(text).toBe('Hello world');
     });

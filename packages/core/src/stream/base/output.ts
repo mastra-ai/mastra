@@ -956,7 +956,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         text: `Attempted to resolve invalid promise key '${key}' with value '${typeof value === 'object' ? JSON.stringify(value, null, 2) : value}'`,
       });
     }
-    this.#delayedPromises[key].resolve(value);
+    if (this.#delayedPromises[key].status.type === 'pending') {
+      this.#delayedPromises[key].resolve(value);
+    }
   }
 
   private resolvePromises(data: Partial<PromiseResults<OUTPUT>>) {
