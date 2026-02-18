@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import type { ToolExecutionContext } from '../../../tools/types';
+import { WORKSPACE_TOOLS } from '../../constants';
 import { Workspace } from '../../workspace';
 import { emitWorkspaceMetadata, requireWorkspace, requireFilesystem, requireSandbox } from '../helpers';
 
@@ -32,12 +33,12 @@ describe('emitWorkspaceMetadata', () => {
       writer: { custom: writerCustom } as any,
     };
 
-    await emitWorkspaceMetadata(context, 'mastra_workspace_read_file');
+    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
 
     expect(writerCustom).toHaveBeenCalledTimes(1);
     const call = writerCustom.mock.calls[0][0];
     expect(call.type).toBe('data-workspace-metadata');
-    expect(call.data.toolName).toBe('mastra_workspace_read_file');
+    expect(call.data.toolName).toBe(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
     expect(call.data.id).toBe('ws-test');
     expect(call.data.name).toBe('Test Workspace');
   });
