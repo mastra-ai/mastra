@@ -180,8 +180,10 @@ export const SandboxExecutionBadge = ({
       (chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr') && chunk.data?.toolCallId === toolCallId,
   );
 
-  // Workspace metadata emitted first — contains workspace/sandbox info
-  const workspaceMetaPart = dataParts.find(chunk => chunk.name === 'workspace-metadata');
+  // Workspace metadata emitted first — scoped to this tool call
+  const workspaceMetaPart = dataParts.find(
+    chunk => chunk.name === 'workspace-metadata' && chunk.data?.toolCallId === toolCallId,
+  );
   const execMeta = workspaceMetaPart?.data as WorkspaceMetadata | undefined;
 
   // Exit chunk scoped to this tool call

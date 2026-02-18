@@ -58,8 +58,9 @@ export function requireSandbox(context: ToolExecutionContext): {
 export async function emitWorkspaceMetadata(context: ToolExecutionContext, toolName: string) {
   const workspace = requireWorkspace(context);
   const info = await workspace.getInfo();
+  const toolCallId = context?.agent?.toolCallId;
   await context?.writer?.custom({
     type: 'data-workspace-metadata',
-    data: { toolName, ...info },
+    data: { toolName, toolCallId, ...info },
   });
 }

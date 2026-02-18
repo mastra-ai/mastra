@@ -111,12 +111,14 @@ export const FileTreeBadge = ({
   const hasResult = !!treeOutput;
   const toolCalled = toolCalledProp ?? hasResult;
 
-  // Extract filesystem metadata from message data parts (via writer.custom)
+  // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
   const message = useAuiState(s => s.message);
   const workspaceMetadata = useMemo(() => {
     const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.find(part => part.type === 'data' && part.name === 'workspace-metadata');
-  }, [message.content]);
+    return content.find(
+      part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
+    );
+  }, [message.content, toolCallId]);
 
   const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 
