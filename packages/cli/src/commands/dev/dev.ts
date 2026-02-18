@@ -367,7 +367,7 @@ export async function dev({
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
-  const bundler = new DevBundler(env);
+  const bundler = new DevBundler(env, mastraDir);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   // Use the bundler's getAllToolPaths method to prepare tools paths
