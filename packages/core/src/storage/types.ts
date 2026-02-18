@@ -1843,8 +1843,8 @@ export interface DatasetRecord {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
   version: number;
   createdAt: Date;
   updatedAt: Date;

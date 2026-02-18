@@ -1817,8 +1817,8 @@ export interface DatasetRecord {
   name: string;
   description?: string | null;
   metadata?: Record<string, unknown> | null;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
