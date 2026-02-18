@@ -1,10 +1,125 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
+import { z } from 'zod';
 import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
+import { createTool } from '../../../tools';
 import { ToolStream } from '../../../tools/stream';
+import { CoreToolBuilder } from '../../../tools/tool-builder/builder';
+import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { createToolCallStep } from './tool-call-step';
+
+describe('createToolCallStep tool execution error handling', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+
+  const makeInputData = () => ({
+    toolCallId: 'test-call-id',
+    toolName: 'failing-tool',
+    args: { param: 'test' },
+  });
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    runId: 'test-run-id',
+    workflowId: 'test-workflow-id',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend,
+    bail: vi.fn(),
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'failing-tool',
+      runId: 'test-run-id',
+    }),
+    validateSchemas: false,
+    inputData: makeInputData(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    suspend = vi.fn();
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [] },
+      },
+    } as unknown as MessageList;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should return error field (not result) when a CoreToolBuilder-built tool throws', async () => {
+    // Arrange: Build a tool through CoreToolBuilder whose execute throws
+    // This is the exact path used in production — CoreToolBuilder wraps the execute function
+    const failingTool = createTool({
+      id: 'failing-tool',
+      description: 'A tool that throws',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        throw new Error('External API error: 503 Service Unavailable');
+      },
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: failingTool,
+      options: {
+        name: 'failing-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'A tool that throws',
+        requestContext: new RequestContext(),
+      },
+    });
+
+    const builtTool = builder.build();
+
+    const tools = { 'failing-tool': builtTool };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    const inputData = makeInputData();
+
+    // Act: Execute the tool call step
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData }));
+
+    // Assert: The result should have an 'error' field, NOT a 'result' field containing a MastraError.
+    // When the result has a 'result' field (even if it contains a MastraError), the llm-mapping-step
+    // emits 'tool-result' instead of 'tool-error', preventing consumers from distinguishing
+    // errors from successful results by chunk type.
+    expect(result).toHaveProperty('error');
+    expect(result).not.toHaveProperty('result');
+    expect(result.error).toBeInstanceOf(Error);
+  });
+});
 
 describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
@@ -182,5 +297,132 @@ describe('createToolCallStep tool approval workflow', () => {
       result: toolResult,
       ...inputData,
     });
+  });
+});
+
+describe('createToolCallStep requestContext forwarding', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+
+  const makeInputData = () => ({
+    toolCallId: 'ctx-call-id',
+    toolName: 'ctx-tool',
+    args: { key: 'value' },
+  });
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    runId: 'ctx-run-id',
+    workflowId: 'ctx-workflow-id',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult: vi.fn(),
+    suspend,
+    bail: vi.fn(),
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'ctx-call-id',
+      name: 'ctx-tool',
+      runId: 'ctx-run-id',
+    }),
+    validateSchemas: false,
+    inputData: makeInputData(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    suspend = vi.fn();
+    streamState = { serialize: vi.fn().mockReturnValue('serialized') };
+    messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [] },
+        all: { db: () => [] },
+      },
+    } as unknown as MessageList;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('forwards requestContext to tool.execute in toolOptions', async () => {
+    // Arrange: create a requestContext with a custom value
+    const requestContext = new RequestContext();
+    requestContext.set('testKey', 'testValue');
+    requestContext.set('apiClient', { fetch: () => 'mocked' });
+
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn((_args: any, opts: MastraToolInvocationOptions) => {
+          capturedOptions = opts;
+          return Promise.resolve({ ok: true });
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'ctx-run',
+      streamState,
+    });
+
+    const inputData = makeInputData();
+
+    // Act
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData, requestContext }));
+
+    // Assert: tool was called and requestContext was forwarded
+    expect(tools['ctx-tool'].execute).toHaveBeenCalledTimes(1);
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions!.requestContext).toBe(requestContext);
+    expect(capturedOptions!.requestContext!.get('testKey')).toBe('testValue');
+    expect(capturedOptions!.requestContext!.get('apiClient')).toEqual({ fetch: expect.any(Function) });
+    expect(result).toEqual({ result: { ok: true }, ...inputData });
+  });
+
+  it('forwards an empty requestContext when no values are set', async () => {
+    const requestContext = new RequestContext();
+
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn((_args: any, opts: MastraToolInvocationOptions) => {
+          capturedOptions = opts;
+          return Promise.resolve('done');
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'ctx-run',
+      streamState,
+    });
+
+    const inputData = makeInputData();
+
+    // Act
+    await toolCallStep.execute(makeExecuteParams({ inputData, requestContext }));
+
+    // Assert: requestContext is forwarded even when empty
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions!.requestContext).toBe(requestContext);
   });
 });
