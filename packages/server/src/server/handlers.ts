@@ -7,6 +7,7 @@ export * as memory from './handlers/memory';
 export * as observability from './handlers/observability';
 export * as scores from './handlers/scores';
 export * as tools from './handlers/tools';
+export * as workspace from './handlers/workspace';
 export * as vector from './handlers/vector';
 export * as voice from './handlers/voice';
 export * as workflows from './handlers/workflows';

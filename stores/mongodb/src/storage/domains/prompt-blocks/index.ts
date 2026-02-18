@@ -113,7 +113,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
   // Prompt Block CRUD
   // ==========================================================================
 
-  async getPromptBlockById({ id }: { id: string }): Promise<StoragePromptBlockType | null> {
+  async getById(id: string): Promise<StoragePromptBlockType | null> {
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
       const result = await collection.findOne<any>({ id });
@@ -136,11 +136,8 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async createPromptBlock({
-    promptBlock,
-  }: {
-    promptBlock: StorageCreatePromptBlockInput;
-  }): Promise<StoragePromptBlockType> {
+  async create(input: { promptBlock: StorageCreatePromptBlockInput }): Promise<StoragePromptBlockType> {
+    const { promptBlock } = input;
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
 
@@ -207,7 +204,8 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async updatePromptBlock({ id, ...updates }: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+  async update(input: StorageUpdatePromptBlockInput): Promise<StoragePromptBlockType> {
+    const { id, ...updates } = input;
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
 
@@ -234,50 +232,10 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
         status: updates.status,
       };
 
-      // Extract config fields
-      const configFields: Record<string, any> = {};
-      for (const field of SNAPSHOT_FIELDS) {
-        if ((updates as any)[field] !== undefined) {
-          configFields[field] = (updates as any)[field];
-        }
-      }
-
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        const latestVersion = await this.getLatestVersion(id);
-
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('MONGODB', 'UPDATE_PROMPT_BLOCK', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for prompt block ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Extract existing snapshot and merge with updates
-        const existingSnapshot = this.extractSnapshotFields(latestVersion);
-
-        await this.createVersion({
-          id: randomUUID(),
-          blockId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...existingSnapshot,
-          ...configFields,
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreatePromptBlockVersionInput);
-      }
-
       // Handle metadata-level updates
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
       if (metadataFields.activeVersionId !== undefined) {
         updateDoc.activeVersionId = metadataFields.activeVersionId;
-        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
-        if (metadataFields.status === undefined) {
-          updateDoc.status = 'published';
-        }
       }
       if (metadataFields.status !== undefined) {
         updateDoc.status = metadataFields.status;
@@ -318,10 +276,10 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async deletePromptBlock({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       // Delete all versions first
-      await this.deleteVersionsByBlockId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the block
       const collection = await this.getCollection(TABLE_PROMPT_BLOCKS);
@@ -339,9 +297,9 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async listPromptBlocks(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
+  async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -363,6 +321,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
 
       // Build filter
       const filter: Record<string, any> = {};
+      filter.status = status;
       if (authorId) {
         filter.authorId = authorId;
       }
@@ -618,7 +577,7 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
   }
 
-  async deleteVersionsByBlockId(blockId: string): Promise<void> {
+  async deleteVersionsByParentId(blockId: string): Promise<void> {
     try {
       const collection = await this.getCollection(TABLE_PROMPT_BLOCK_VERSIONS);
       await collection.deleteMany({ blockId });
@@ -701,15 +660,5 @@ export class MongoDBPromptBlocksStorage extends PromptBlocksStorage {
     }
 
     return result as PromptBlockVersion;
-  }
-
-  private extractSnapshotFields(version: PromptBlockVersion): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const field of SNAPSHOT_FIELDS) {
-      if ((version as any)[field] !== undefined) {
-        result[field] = (version as any)[field];
-      }
-    }
-    return result;
   }
 }

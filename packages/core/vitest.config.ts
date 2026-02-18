@@ -10,7 +10,6 @@ export default defineConfig({
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts'],
           testTimeout: 120000,
-          isolate: false,
         },
       },
       {
@@ -25,6 +24,7 @@ export default defineConfig({
         test: {
           name: 'typecheck:packages/core',
           environment: 'node',
+          include: [],
           typecheck: {
             enabled: true,
             include: ['src/**/*.test-d.ts'],

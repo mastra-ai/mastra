@@ -1,5 +1,35 @@
 # create-mastra
 
+## 1.3.1
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
+## 1.3.0
+
+### Patch Changes
+
+- Supporting work to enable workflow step metadata ([#12508](https://github.com/mastra-ai/mastra/pull/12508))
+
+## 1.3.0-alpha.3
+
+## 1.3.0-alpha.2
+
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- Supporting work to enable workflow step metadata ([#12508](https://github.com/mastra-ai/mastra/pull/12508))
+
 ## 1.2.1-alpha.0
 
 ## 1.2.0

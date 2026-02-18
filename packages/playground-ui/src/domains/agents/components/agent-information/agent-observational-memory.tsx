@@ -249,27 +249,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const record = omData?.record;
   const history = omData?.history ?? [];
 
-  // DEBUG: trace OM sidebar data flow
-  console.log('[OM Sidebar Debug]', {
-    isStatusLoading,
-    isOMLoading,
-    isEnabled,
-    statusData: statusData?.observationalMemory,
-    omData: omData ? { record: !!omData.record, historyLen: omData.history?.length } : null,
-    record: record
-      ? {
-          id: record.id,
-          hasActiveObservations: !!record.activeObservations,
-          activeObservationsLen: record.activeObservations?.length,
-          observationTokenCount: record.observationTokenCount,
-          pendingMessageTokens: record.pendingMessageTokens,
-          generationCount: record.generationCount,
-          config: record.config,
-        }
-      : null,
-    streamProgress,
-  });
-
   // Extract threshold values - try multiple sources in priority order:
   // 1. Stream progress (real-time during streaming)
   // 2. Record config (from OM processor when added via input/output processors)
@@ -330,7 +309,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // Priority: streamProgress > recordConfig > agentConfig > defaults
   // For messages bar: use stream threshold (real-time effective) or total budget (max available)
   const messageTokensThreshold =
-    streamProgress?.messageTokens ??
+    streamProgress?.windows?.active?.messages?.threshold ??
     recordConfig?.observation?.messageTokens ??
     getThresholdValue(omAgentConfig?.messageTokens, 10000);
 
@@ -338,13 +317,14 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
   const configObservationTokens = getThresholdValue(omAgentConfig?.observationTokens, 30000);
   const observationTokensThreshold =
-    streamProgress?.observationTokensThreshold ??
+    streamProgress?.windows?.active?.observations?.threshold ??
     recordConfig?.reflection?.observationTokens ??
     configObservationTokens;
 
   // Use stream progress token counts when available (real-time), fallback to record
-  const pendingMessageTokens = streamProgress?.pendingTokens ?? record?.pendingMessageTokens ?? 0;
-  const observationTokenCount = streamProgress?.observationTokens ?? record?.observationTokenCount ?? 0;
+  const pendingMessageTokens = streamProgress?.windows?.active?.messages?.tokens ?? record?.pendingMessageTokens ?? 0;
+  const observationTokenCount =
+    streamProgress?.windows?.active?.observations?.tokens ?? record?.observationTokenCount ?? 0;
 
   // Show all previous observation records (exclude current active record), oldest first
   const previousObservations = useMemo(() => {
@@ -599,6 +579,49 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
           )}
         </div>
       )}
+
+      {/* Async Buffering Status — shown below observations as a subtle footer */}
+      {streamProgress &&
+        ((streamProgress.windows?.buffered?.observations?.chunks ?? 0) > 0 ||
+          streamProgress.windows?.buffered?.reflection?.status === 'running' ||
+          streamProgress.windows?.buffered?.reflection?.status === 'complete') && (
+          <div className="mt-3 border border-border1 rounded-lg bg-surface3 overflow-hidden">
+            <div className="px-3 py-2 space-y-1.5">
+              <div className="text-[9px] text-neutral4 uppercase tracking-wider font-normal">Background Processing</div>
+              {(streamProgress.windows?.buffered?.observations?.chunks ?? 0) > 0 && (
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${streamProgress.windows.buffered.observations.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}
+                  />
+                  <span className="text-[10px] text-neutral5">
+                    {streamProgress.windows.buffered.observations.chunks} buffered chunk
+                    {streamProgress.windows.buffered.observations.chunks !== 1 ? 's' : ''}
+                  </span>
+                  <span className="text-[10px] text-neutral3">
+                    ↓{formatTokens(streamProgress.windows.buffered.observations.projectedMessageRemoval ?? 0)} msg on
+                    activate → {formatTokens(streamProgress.windows.buffered.observations.observationTokens)} obs
+                  </span>
+                </div>
+              )}
+              {streamProgress.windows?.buffered?.reflection?.status === 'running' && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-purple-400 animate-pulse" />
+                  <span className="text-[10px] text-neutral5">Buffering reflection…</span>
+                </div>
+              )}
+              {streamProgress.windows?.buffered?.reflection?.status === 'complete' && (
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 bg-green-500" />
+                  <span className="text-[10px] text-neutral5">Reflection buffered</span>
+                  <span className="text-[10px] text-neutral3">
+                    {formatTokens(streamProgress.windows.buffered.reflection.inputObservationTokens)} →{' '}
+                    {formatTokens(streamProgress.windows.buffered.reflection.observationTokens)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
     </div>
   );
 };

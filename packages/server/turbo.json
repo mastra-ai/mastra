@@ -20,13 +20,8 @@
       "dependsOn": ["build:lib"],
       "outputs": ["./**/*.d.ts"]
     },
-    "build:docs": {
-      "dependsOn": ["build:lib", "mastra-docs#build"],
-      "inputs": ["src/**", "package.json", "!**/*.md"],
-      "outputs": ["dist/docs/**"]
-    },
     "build": {
-      "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"],
+      "dependsOn": ["build:patch-commonjs", "build:lib"],
       "inputs": ["package.json"]
     },
     "test": {

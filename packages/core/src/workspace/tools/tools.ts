@@ -357,7 +357,10 @@ Examples:
 - List root: { path: "/" }
 - Deep listing: { path: "/src", maxDepth: 5 }
 - Directories only: { path: "/", dirsOnly: true }
-- Exclude node_modules: { path: "/", exclude: "node_modules" }`,
+- Exclude node_modules: { path: "/", exclude: "node_modules" }
+- Find TypeScript files: { path: "/src", pattern: "**/*.ts" }
+- Find config files: { path: "/", pattern: "*.config.{js,ts}" }
+- Multiple patterns: { path: "/", pattern: ["**/*.ts", "**/*.tsx"] }`,
         requireApproval: listFilesConfig.requireApproval,
         inputSchema: z.object({
           path: z.string().default('/').describe('Directory path to list'),
@@ -381,6 +384,12 @@ Examples:
             .optional()
             .describe('Pattern to exclude (e.g., "node_modules"). Similar to tree -I flag.'),
           extension: z.string().optional().describe('Filter by file extension (e.g., ".ts"). Similar to tree -P flag.'),
+          pattern: z
+            .union([z.string(), z.array(z.string())])
+            .optional()
+            .describe(
+              'Glob pattern(s) to filter files. Examples: "**/*.ts", "src/**/*.test.ts", "*.config.{js,ts}". Directories always pass through.',
+            ),
         }),
         outputSchema: z.object({
           tree: z.string().describe('Tree-style directory listing'),
@@ -404,13 +413,14 @@ Examples:
             .optional()
             .describe('Metadata about the workspace and filesystem'),
         }),
-        execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension }) => {
+        execute: async ({ path = '/', maxDepth = 3, showHidden, dirsOnly, exclude, extension, pattern }) => {
           const result = await formatAsTree(workspace.filesystem!, path, {
             maxDepth,
             showHidden,
             dirsOnly,
             exclude: exclude || undefined,
             extension: extension || undefined,
+            pattern: pattern || undefined,
           });
 
           // Include workspace/filesystem metadata for UI display
@@ -633,7 +643,7 @@ Examples:
 Usage:
 - Verify parent directories exist before running commands that create files or directories.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
-- Commands timeout after 30 seconds by default. Use the timeout parameter for longer operations.
+- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
 - Use cwd to set the working directory, or commands run from the sandbox default.`,
         requireApproval: executeCommandConfig.requireApproval,
         inputSchema: z.object({
@@ -642,10 +652,7 @@ Usage:
           timeout: z
             .number()
             .nullish()
-            .default(30000)
-            .describe(
-              'Maximum execution time in milliseconds. Default is 30000 (30 seconds). Example: 60000 for 1 minute.',
-            ),
+            .describe('Maximum execution time in milliseconds. Example: 60000 for 1 minute.'),
           cwd: z.string().nullish().describe('Working directory for the command'),
         }),
         outputSchema: z.object({
@@ -672,7 +679,7 @@ Usage:
           const startedAt = Date.now();
           try {
             const result = await workspace.sandbox!.executeCommand!(command, args ?? [], {
-              timeout: timeout ?? 30000,
+              timeout: timeout ?? undefined,
               cwd: cwd ?? undefined,
               // Stream stdout/stderr as tool-output chunks for proper UI integration
               onStdout: async (data: string) => {

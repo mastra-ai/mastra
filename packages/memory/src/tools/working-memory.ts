@@ -101,22 +101,32 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
       // or context.memory (when agent is standalone with memory passed directly)
       const memory = (context as any)?.memory;
 
-      if (!threadId || !memory || !resourceId) {
-        throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
+      if (!memory) {
+        throw new Error('Memory instance is required for working memory updates');
       }
 
-      let thread = await memory.getThreadById({ threadId });
-
-      if (!thread) {
-        thread = await memory.createThread({
-          threadId,
-          resourceId,
-          memoryConfig,
-        });
+      const scope = memoryConfig?.workingMemory?.scope || 'resource';
+      if (scope === 'thread' && !threadId) {
+        throw new Error('Thread ID is required for thread-scoped working memory updates');
+      }
+      if (scope === 'resource' && !resourceId) {
+        throw new Error('Resource ID is required for resource-scoped working memory updates');
       }
 
-      if (thread.resourceId && thread.resourceId !== resourceId) {
-        throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
+      if (threadId) {
+        let thread = await memory.getThreadById({ threadId });
+
+        if (!thread) {
+          thread = await memory.createThread({
+            threadId,
+            resourceId,
+            memoryConfig,
+          });
+        }
+
+        if (thread.resourceId && resourceId && thread.resourceId !== resourceId) {
+          throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
+        }
       }
 
       let workingMemory: string;
@@ -212,22 +222,32 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
       // or context.memory (when agent is standalone with memory passed directly)
       const memory = (context as any)?.memory;
 
-      if (!threadId || !memory || !resourceId) {
-        throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
+      if (!memory) {
+        throw new Error('Memory instance is required for working memory updates');
       }
 
-      let thread = await memory.getThreadById({ threadId });
-
-      if (!thread) {
-        thread = await memory.createThread({
-          threadId,
-          resourceId,
-          memoryConfig: config,
-        });
+      const scope = config.workingMemory?.scope || 'resource';
+      if (scope === 'thread' && !threadId) {
+        throw new Error('Thread ID is required for thread-scoped working memory updates');
+      }
+      if (scope === 'resource' && !resourceId) {
+        throw new Error('Resource ID is required for resource-scoped working memory updates');
       }
 
-      if (thread.resourceId && thread.resourceId !== resourceId) {
-        throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
+      if (threadId) {
+        let thread = await memory.getThreadById({ threadId });
+
+        if (!thread) {
+          thread = await memory.createThread({
+            threadId,
+            resourceId,
+            memoryConfig: config,
+          });
+        }
+
+        if (thread.resourceId && resourceId && thread.resourceId !== resourceId) {
+          throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
+        }
       }
 
       const workingMemory = inputData.newMemory || '';

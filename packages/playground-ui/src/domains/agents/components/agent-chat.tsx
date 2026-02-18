@@ -5,7 +5,7 @@ import { ChatProps } from '@/types';
 import { useAgentSettings } from '../context/agent-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
@@ -46,12 +46,14 @@ export const AgentChat = ({
     }
   }, [messageId, data, isMessagesLoading]);
 
-  if (isMessagesLoading) {
-    return null;
-  }
+  // Stable empty array per thread: stays the same reference across re-renders
+  // (preventing useChat from wiping streamed messages), but changes when threadId
+  // changes (allowing useChat to reset when switching threads).
+  const emptyMessages = useMemo(() => [] as never[], [threadId]);
 
-  const v5Messages = data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : [];
-  const v4Messages = data?.messages ? toAISdkV4Messages(data.messages) : [];
+  const messages = data?.messages ?? emptyMessages;
+  const v5Messages = useMemo(() => toAISdkV5Messages(messages) as MastraUIMessage[], [messages]);
+  const v4Messages = useMemo(() => toAISdkV4Messages(messages), [messages]);
 
   return (
     <MastraRuntimeProvider

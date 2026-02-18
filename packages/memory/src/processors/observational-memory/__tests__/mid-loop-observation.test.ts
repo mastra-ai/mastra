@@ -119,6 +119,7 @@ describe('Mid-Loop Observation', () => {
       observation: {
         model: createMockObserverModel(),
         messageTokens: 500, // Low threshold for testing
+        bufferTokens: false, // Disable async buffering — test expects synchronous observation
       },
       reflection: {
         model: createMockObserverModel(),

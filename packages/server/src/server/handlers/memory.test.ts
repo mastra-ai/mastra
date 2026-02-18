@@ -1476,6 +1476,202 @@ describe('Memory Handlers', () => {
       });
     });
 
+    /**
+     * Regression test for GitHub Issue #12816
+     *
+     * The API should return messages in DESC order (newest first) when
+     * orderBy: { direction: 'DESC' } is passed, but currently the sort
+     * direction is ignored and messages always come back in ASC order.
+     */
+    describe('LIST_MESSAGES_ROUTE - sort direction (#12816)', () => {
+      it('should return messages in DESC order when orderBy direction is DESC', async () => {
+        const threadId = 'sort-test-thread';
+        const resourceId = 'sort-test-resource';
+
+        const mastra = new Mastra({
+          logger: false,
+          agents: {
+            'test-agent': mockAgent,
+          },
+          storage,
+        });
+
+        // Create thread
+        await mockMemory.createThread({ threadId, resourceId });
+
+        // Save messages with distinct timestamps (oldest first)
+        const now = Date.now();
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-oldest',
+            role: 'user',
+            createdAt: new Date(now - 3000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'oldest message' }],
+              content: 'oldest message',
+            },
+          },
+          {
+            id: 'msg-middle',
+            role: 'assistant',
+            createdAt: new Date(now - 2000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'middle message' }],
+              content: 'middle message',
+            },
+          },
+          {
+            id: 'msg-newest',
+            role: 'user',
+            createdAt: new Date(now - 1000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'newest message' }],
+              content: 'newest message',
+            },
+          },
+        ];
+
+        await mockMemory.saveMessages({ messages });
+
+        vi.spyOn(mockMemory, 'getThreadById');
+        vi.spyOn(mockMemory, 'recall');
+
+        // Request messages sorted DESC (newest first)
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId,
+          resourceId,
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          include: undefined,
+          filter: undefined,
+        });
+
+        expect(result.messages).toHaveLength(3);
+        // With DESC order, newest message should be first
+        expect(result.messages[0].id).toBe('msg-newest');
+        expect(result.messages[1].id).toBe('msg-middle');
+        expect(result.messages[2].id).toBe('msg-oldest');
+      });
+
+      it('should return messages in ASC order when orderBy direction is ASC', async () => {
+        const threadId = 'sort-asc-test-thread';
+        const resourceId = 'sort-asc-test-resource';
+
+        const mastra = new Mastra({
+          logger: false,
+          agents: {
+            'test-agent': mockAgent,
+          },
+          storage,
+        });
+
+        // Create thread
+        await mockMemory.createThread({ threadId, resourceId });
+
+        // Save messages with distinct timestamps
+        const now = Date.now();
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-oldest',
+            role: 'user',
+            createdAt: new Date(now - 3000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'oldest message' }],
+              content: 'oldest message',
+            },
+          },
+          {
+            id: 'msg-newest',
+            role: 'user',
+            createdAt: new Date(now - 1000),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'newest message' }],
+              content: 'newest message',
+            },
+          },
+        ];
+
+        await mockMemory.saveMessages({ messages });
+
+        vi.spyOn(mockMemory, 'getThreadById');
+        vi.spyOn(mockMemory, 'recall');
+
+        // Request messages sorted ASC (oldest first)
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId,
+          resourceId,
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          include: undefined,
+          filter: undefined,
+        });
+
+        expect(result.messages).toHaveLength(2);
+        // With ASC order, oldest message should be first
+        expect(result.messages[0].id).toBe('msg-oldest');
+        expect(result.messages[1].id).toBe('msg-newest');
+      });
+
+      it('should pass orderBy to recall when direction is DESC', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: {
+            'test-agent': mockAgent,
+          },
+          storage,
+        });
+
+        vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+        const recallSpy = vi.spyOn(mockMemory, 'recall').mockResolvedValue({
+          messages: [],
+          total: 0,
+          page: 0,
+          perPage: 10,
+          hasMore: false,
+        });
+
+        await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'test-thread',
+          resourceId: 'test-resource',
+          agentId: 'test-agent',
+          page: 0,
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          include: undefined,
+          filter: undefined,
+        });
+
+        // Verify orderBy is passed through to recall with the DESC direction
+        expect(recallSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            orderBy: { field: 'createdAt', direction: 'DESC' },
+          }),
+        );
+      });
+    });
+
     describe('LIST_MESSAGES_ROUTE - ownership validation', () => {
       it('should return 403 when accessing messages from thread owned by different resource', async () => {
         const mastra = new Mastra({

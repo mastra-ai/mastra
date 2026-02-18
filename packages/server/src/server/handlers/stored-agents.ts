@@ -1,6 +1,9 @@
+import type { StorageCreateAgentInput, StorageUpdateAgentInput } from '@mastra/core/storage';
+
 import { HTTPException } from '../http-exception';
 import {
   storedAgentIdPathParams,
+  statusQuerySchema,
   listStoredAgentsQuerySchema,
   createStoredAgentBodySchema,
   updateStoredAgentBodySchema,
@@ -15,8 +18,27 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { toSlug } from '../utils';
 
-import { handleAutoVersioning } from './agent-versions';
 import { handleError } from './error';
+import { handleAutoVersioning } from './version-helpers';
+import type { VersionedStoreInterface } from './version-helpers';
+
+const AGENT_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+  'requestContextSchema',
+  'mcpClients',
+] as const;
 
 // ============================================================================
 // Route Definitions
@@ -35,7 +57,7 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -48,10 +70,11 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const result = await agentsStore.listAgentsResolved({
+      const result = await agentsStore.listResolved({
         page,
         perPage,
         orderBy,
+        status,
         authorId,
         metadata,
       });
@@ -71,12 +94,14 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
   path: '/stored/agents/:storedAgentId',
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
+  queryParamSchema: statusQuerySchema,
   responseSchema: getStoredAgentResponseSchema,
   summary: 'Get stored agent by ID',
-  description: 'Returns a specific agent from storage by its unique identifier (resolved with active version config)',
+  description:
+    'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
-  handler: async ({ mastra, storedAgentId }) => {
+  handler: async ({ mastra, storedAgentId, status }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -89,9 +114,7 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      // Use getAgentByIdResolved to automatically resolve from active version
-      // Returns StorageResolvedAgentType (thin record + version config)
-      const agent = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
+      const agent = await agentsStore.getByIdResolved(storedAgentId, { status });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
@@ -131,10 +154,12 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
     workflows,
     agents,
     integrationTools,
+    mcpClients,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
+    requestContextSchema,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -158,17 +183,14 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Check if agent with this ID already exists
-      const existing = await agentsStore.getAgentById({ id });
+      const existing = await agentsStore.getById(id);
       if (existing) {
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
 
-      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
-      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
-      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
-
       // Create agent with flat StorageCreateAgentInput
-      await agentsStore.createAgent({
+      // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
+      await agentsStore.create({
         agent: {
           id,
           authorId,
@@ -177,26 +199,26 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
           description,
           instructions,
           model,
-          tools: toolsFromBody,
+          tools,
           defaultOptions,
           workflows,
           agents,
-          integrationTools: integrationToolsFromBody,
+          integrationTools,
+          mcpClients,
           inputProcessors,
           outputProcessors,
           memory,
           scorers,
-        },
+          requestContextSchema,
+        } as StorageCreateAgentInput,
       });
 
       // Return the resolved agent (thin record + version config)
-      const resolved = await agentsStore.getAgentByIdResolved({ id });
+      // Use draft status since newly created entities start as drafts
+      const resolved = await agentsStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve created agent' });
       }
-
-      // TODO: The storage layer should set activeVersionId during agent creation
-      // For now, the agent might have null activeVersionId until the first update
 
       return resolved;
     } catch (error) {
@@ -235,10 +257,12 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     workflows,
     agents,
     integrationTools,
+    mcpClients,
     inputProcessors,
     outputProcessors,
     memory,
     scorers,
+    requestContextSchema,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -253,19 +277,15 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Check if agent exists
-      const existing = await agentsStore.getAgentById({ id: storedAgentId });
+      const existing = await agentsStore.getById(storedAgentId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      // Only include tools/integrationTools if they're actually arrays from the body (not {} from adapter)
-      const toolsFromBody = Array.isArray(tools) ? tools : undefined;
-      const integrationToolsFromBody = Array.isArray(integrationTools) ? integrationTools : undefined;
-
       // Update the agent with both metadata-level and config-level fields
       // The storage layer handles separating these into agent-record updates vs new-version creation
-
-      const updatedAgent = await agentsStore.updateAgent({
+      // Cast needed because Zod's passthrough() output types don't exactly match the handwritten TS interfaces
+      const updatedAgent = await agentsStore.update({
         id: storedAgentId,
         authorId,
         metadata,
@@ -273,16 +293,18 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         description,
         instructions,
         model,
-        tools: toolsFromBody,
+        tools,
         defaultOptions,
         workflows,
         agents,
-        integrationTools: integrationToolsFromBody,
+        integrationTools,
+        mcpClients,
         inputProcessors,
         outputProcessors,
         memory,
         scorers,
-      });
+        requestContextSchema,
+      } as StorageUpdateAgentInput);
 
       // Build the snapshot config for auto-versioning comparison
       const configFields = {
@@ -290,25 +312,30 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         description,
         instructions,
         model,
-        tools: toolsFromBody,
+        tools,
         defaultOptions,
         workflows,
         agents,
-        integrationTools: integrationToolsFromBody,
+        integrationTools,
+        mcpClients,
         inputProcessors,
         outputProcessors,
         memory,
         scorers,
+        requestContextSchema,
       };
 
       // Filter out undefined values to get only the config fields that were provided
       const providedConfigFields = Object.fromEntries(Object.entries(configFields).filter(([_, v]) => v !== undefined));
 
       // Handle auto-versioning with retry logic for race conditions
-      // This creates a version if there are meaningful config changes and DOES update activeVersionId
+      // This creates a new version if there are meaningful config changes.
+      // It does NOT update activeVersionId — the version stays as a draft until explicitly published.
       const autoVersionResult = await handleAutoVersioning(
-        agentsStore,
+        agentsStore as unknown as VersionedStoreInterface,
         storedAgentId,
+        'agentId',
+        AGENT_SNAPSHOT_CONFIG_FIELDS,
         existing,
         updatedAgent,
         providedConfigFields,
@@ -321,11 +348,11 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       // Clear the cached agent instance so the next request gets the updated config
       const editor = mastra.getEditor();
       if (editor) {
-        editor.clearStoredAgentCache(storedAgentId);
+        editor.agent.clearCache(storedAgentId);
       }
 
-      // Return the resolved agent with the updated activeVersionId
-      const resolved = await agentsStore.getAgentByIdResolved({ id: storedAgentId });
+      // Return the resolved agent with the latest (draft) version so the UI sees its edits
+      const resolved = await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' });
       if (!resolved) {
         throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
       }
@@ -364,15 +391,15 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       }
 
       // Check if agent exists
-      const existing = await agentsStore.getAgentById({ id: storedAgentId });
+      const existing = await agentsStore.getById(storedAgentId);
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      await agentsStore.deleteAgent({ id: storedAgentId });
+      await agentsStore.delete(storedAgentId);
 
       // Clear the cached agent instance
-      mastra.getEditor()?.clearStoredAgentCache(storedAgentId);
+      mastra.getEditor()?.agent.clearCache(storedAgentId);
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {
@@ -402,7 +429,7 @@ export const PREVIEW_INSTRUCTIONS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Editor is not configured' });
       }
 
-      const result = await editor.previewInstructions(blocks, context ?? {});
+      const result = await editor.prompt.preview(blocks, context ?? {});
 
       return { result };
     } catch (error) {

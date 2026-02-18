@@ -2,7 +2,6 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { IS_DEFAULT } from '@mastra/deployer/bundler';
 import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -25,10 +24,12 @@ export class CloudDeployer extends Deployer {
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
 
-    if (!bundlerOptions?.[IS_DEFAULT]) {
-      return bundlerOptions;
-    }
-
+    // Always force externals: true for cloud deployments.
+    // The cloud deployer installs all dependencies from npm into node_modules,
+    // so bundling them inline serves no purpose. Bundling inline can also cause
+    // circular module evaluation deadlocks when dynamic imports (e.g. in
+    // MemoryLibSQL.init()) reference chunks that depend back on the entry module,
+    // resulting in "Detected unsettled top-level await" warnings.
     return {
       ...bundlerOptions,
       externals: true,

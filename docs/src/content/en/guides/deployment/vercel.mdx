@@ -1,0 +1,116 @@
+---
+title: "Deploy Mastra to Vercel | Deployment"
+description: "Learn how to deploy a Mastra application to Vercel"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Deploy Mastra to Vercel
+
+Use `@mastra/deployer-vercel` to deploy your Mastra server as serverless functions on Vercel. The deployer bundles your code and generates a `.vercel/output` directory conforming to Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), ready to deploy with no additional configuration.
+
+:::info
+This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+:::
+
+## Before you begin
+
+You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Vercel](https://vercel.com/) account.
+
+Vercel Functions use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+
+## Installation
+
+Add the `@mastra/deployer-vercel` package to your project:
+
+```bash npm2yarn
+npm install @mastra/deployer-vercel@latest
+```
+
+Import [`VercelDeployer`](/reference/deployer/vercel) and set it as the deployer in your Mastra configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+// highlight-next-line
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  deployer: new VercelDeployer(),
+});
+```
+
+## Deploy
+
+<Steps>
+<StepItem>
+
+Push your project to a remote Git provider (e.g. GitHub) and connect your repository to Vercel.
+
+By default, Vercel runs `npm run build`, which triggers `mastra build`. If you don't have a build script, add `"build": "mastra build"` to your `package.json`.
+
+:::note
+
+Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
+
+:::
+
+</StepItem>
+<StepItem>
+
+Once you're ready, click **Deploy** and wait for the first deployment to complete.
+
+</StepItem>
+<StepItem>
+
+Verify your deployment at `https://<your-project>.vercel.app/api/agents`, which should return a JSON list of your agents.
+
+Since the Mastra server prefixes every endpoint with `/api`, you have to add it to your URLs when making requests.
+
+</StepItem>
+<StepItem>
+
+You can now call your Mastra endpoints over HTTP.
+
+:::warning
+Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+:::
+
+</StepItem>
+</Steps>
+
+## Optional overrides
+
+The Vercel deployer supports configuration options that are written to the Vercel Output API function config. See the [`VercelDeployer` reference](/reference/deployer/vercel#constructor-options) for available options like `maxDuration`, `memory`, and `regions`.
+
+## Observability
+
+Serverless functions can terminate immediately after returning a response. Any pending async work - like sending telemetry - may get killed before completing. Awaiting `flush()` ensures all traces are sent before the function exits.
+
+```typescript title="api/chat.ts"
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { mastra } from "../src/mastra";
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const { message } = req.body;
+  const agent = mastra.getAgent("myAgent");
+  const result = await agent.generate([{ role: "user", content: message }]);
+
+  const observability = mastra.getObservability();
+  await observability?.flush();
+
+  return res.json(result);
+}
+```
+
+:::warning
+The Vercel deployer doesn't include `flush` calls. If you need this, you'll need to wrap the handler yourself to add the logic before returning the response. Alternatively, deploy to a long-running server like a [virtual machine](/guides/deployment/digital-ocean) where this isn't an issue.
+:::
+
+## Related
+
+- [VercelDeployer reference](/reference/deployer/vercel)
+- [Deployment overview](/docs/deployment/overview)
+- [Server adapters](/docs/server/server-adapters)
+- [Web framework integration](/docs/deployment/web-framework)

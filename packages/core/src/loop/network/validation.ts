@@ -132,6 +132,15 @@ export interface CompletionConfig {
    * Called after scorers run with results
    */
   onComplete?: (results: CompletionRunResult) => void | Promise<void>;
+
+  /**
+   * Suppress the completion feedback message from being saved to memory.
+   * When true, the "#### Completion Check Results" message will not be
+   * persisted, preventing it from appearing in subsequent iterations or
+   * history. Useful for cleaner conversation threads.
+   * Default: false
+   */
+  suppressFeedback?: boolean;
 }
 
 /**

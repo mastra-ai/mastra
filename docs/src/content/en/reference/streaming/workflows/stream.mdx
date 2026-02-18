@@ -198,6 +198,7 @@ The stream emits various event types during workflow execution. Each event has a
 - **`workflow-start`**: Workflow execution begins
 - **`workflow-step-start`**: A step begins execution
 - **`workflow-step-output`**: Custom output from a step
+- **`workflow-step-progress`**: A foreach step reports per-iteration progress (includes `completedCount`, `totalCount`, `currentIndex`, `iterationStatus`, and optional `iterationOutput`)
 - **`workflow-step-result`**: A step completes with results
 - **`workflow-finish`**: Workflow execution completes with usage statistics
 

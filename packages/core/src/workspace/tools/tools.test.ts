@@ -487,6 +487,48 @@ describe('createWorkspaceTools', () => {
     });
   });
 
+  describe('workspace_list_files with pattern', () => {
+    it('should filter files by glob pattern', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'style.css'), '');
+      await fs.writeFile(path.join(tempDir, 'README.md'), '');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
+        path: '/',
+        maxDepth: 5,
+        pattern: '**/*.ts',
+      });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('style.css');
+      expect(result.tree).not.toContain('README.md');
+    });
+
+    it('should support multiple glob patterns', async () => {
+      await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'App.tsx'), '');
+      await fs.writeFile(path.join(tempDir, 'style.css'), '');
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({
+        path: '/',
+        pattern: ['**/*.ts', '**/*.tsx'],
+      });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).toContain('App.tsx');
+      expect(result.tree).not.toContain('style.css');
+    });
+  });
+
   describe('workspace_delete', () => {
     it('should delete file', async () => {
       await fs.writeFile(path.join(tempDir, 'test.txt'), 'content');

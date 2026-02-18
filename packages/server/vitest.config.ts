@@ -5,6 +5,5 @@ export default defineConfig({
     name: 'unit:packages/server',
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    isolate: false,
   },
 });

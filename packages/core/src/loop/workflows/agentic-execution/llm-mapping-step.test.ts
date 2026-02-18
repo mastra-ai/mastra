@@ -242,4 +242,151 @@ describe('createLLMMappingStep HITL behavior', () => {
     );
     expect(bail).toHaveBeenCalled();
   });
+
+  it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {
+    // Arrange: Tool call with ToolNotFoundError (set by tool-call-step when tool name is hallucinated)
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError(
+          'Tool "creating:view" not found. Available tools: view, list. Call tools by their exact name only.',
+        ),
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should NOT bail — the agentic loop should continue so the model can self-correct
+    expect(bail).not.toHaveBeenCalled();
+    // Should still emit tool-error chunk so the error is visible in the stream
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          error: expect.any(Error),
+        }),
+      }),
+    );
+    // Should add the error message to the messageList so the model can see it
+    expect(messageList.add).toHaveBeenCalled();
+    // isContinued should be true to keep the loop going
+    expect(result.stepResult.isContinued).toBe(true);
+  });
+
+  it('should emit successful tool results alongside tool-not-found errors in the same turn', async () => {
+    // Arrange: One valid tool with result + one hallucinated tool-not-found error
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'existingTool',
+        args: { param: 'test' },
+        result: { success: true },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError(
+          'Tool "creating:view" not found. Available tools: existingTool. Call tools by their exact name only.',
+        ),
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should NOT bail — this is a tool-not-found scenario
+    expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
+
+    // Should emit tool-error for the hallucinated tool
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: 'call-2',
+          toolName: 'creating:view',
+        }),
+      }),
+    );
+
+    // Should also emit tool-result for the successful tool
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          toolName: 'existingTool',
+          result: { success: true },
+        }),
+      }),
+    );
+
+    // Should add both error and result messages to the messageList
+    expect(messageList.add).toHaveBeenCalledTimes(2);
+  });
+
+  it('should bail when tool-not-found errors are mixed with pending HITL tools', async () => {
+    // Arrange: One hallucinated tool (ToolNotFoundError) + one HITL tool (no result, no error)
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError('Tool "creating:view" not found.'),
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'updateSummary',
+        args: { summary: 'test' },
+        result: undefined, // No result (HITL, no execute function)
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should bail (suspend) because HITL tool needs human input,
+    // even though the other error is a tool-not-found
+    expect(bail).toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('should bail when errors are a mix of tool-not-found and other errors', async () => {
+    // Arrange: One tool-not-found error and one execution error
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError('Tool "creating:view" not found.'),
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'existingTool',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error('Execution timeout'),
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should bail because not all errors are tool-not-found
+    expect(bail).toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(false);
+  });
 });

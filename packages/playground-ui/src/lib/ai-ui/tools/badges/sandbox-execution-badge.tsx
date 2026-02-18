@@ -71,6 +71,7 @@ const useElapsedTime = (isRunning: boolean, startTime?: number) => {
 
   useEffect(() => {
     if (isRunning) {
+      setElapsed(0);
       startRef.current = startTime || Date.now();
       const interval = setInterval(() => {
         if (startRef.current) {
@@ -110,7 +111,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       {command && (
         <div className="px-3 py-2 bg-surface3 border-b border-border1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-icon6 text-xs shrink-0">$</span>
+            <span className="text-neutral6 text-xs shrink-0">$</span>
             <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
           </div>
           {onCopy && (
@@ -139,10 +140,36 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
         style={{ maxHeight }}
         className="overflow-x-auto overflow-y-auto p-3 text-sm text-neutral-300 font-mono whitespace-pre-wrap bg-black"
       >
-        {content || <span className="text-icon6 italic">No output</span>}
+        {content || <span className="text-neutral6 italic">No output</span>}
       </pre>
     </div>
   );
+};
+
+// Extract error message from various possible locations
+// Priority: error.message > error (string) > message > stderr (for failed commands)
+const extractErrorMessage = (result: any): string | null => {
+  if (!result || Array.isArray(result)) return null;
+
+  // Direct error property
+  if (result.error?.message) return result.error.message;
+  if (typeof result.error === 'string') return result.error;
+  // Only treat result.message as an error when there's an explicit failure signal
+  if (result.message && (result.success === false || (typeof result.exitCode === 'number' && result.exitCode !== 0))) {
+    return result.message;
+  }
+
+  // If command failed (non-zero exit, success=false) and has stderr but no stdout
+  if (result.success === false && result.stderr && !result.stdout) {
+    return result.stderr;
+  }
+
+  // If exitCode is non-zero/negative and no other output, indicate failure
+  if (typeof result.exitCode === 'number' && result.exitCode !== 0 && !result.stdout && !result.stderr) {
+    return `Command failed with exit code ${result.exitCode}`;
+  }
+
+  return null;
 };
 
 export const SandboxExecutionBadge = ({
@@ -195,8 +222,11 @@ export const SandboxExecutionBadge = ({
   const hasFinalResult = result && !Array.isArray(result) && typeof result.exitCode === 'number';
   const finalResult = hasFinalResult ? result : null;
 
-  // Streaming is complete if we have exit chunk or final result
-  const isStreamingComplete = !!exitChunk || hasFinalResult;
+  const errorMessage = extractErrorMessage(result);
+  const hasError = !!errorMessage;
+
+  // Streaming is complete if we have exit chunk, final result, or error
+  const isStreamingComplete = !!exitChunk || hasFinalResult || hasError;
 
   const hasStreamingOutput = sandboxChunks.length > 0;
   const isRunning = hasStreamingOutput && !isStreamingComplete;
@@ -206,15 +236,21 @@ export const SandboxExecutionBadge = ({
   const streamingContent = sandboxChunks.map(chunk => chunk.data || '').join('');
 
   // Get output content for display
-  const outputContent = hasStreamingOutput
-    ? streamingContent
-    : finalResult
-      ? [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n')
-      : '';
+  // Priority: error > final result > streaming output
+  // Once we have a final result or error, prefer that over incomplete streaming
+  let outputContent = '';
+  if (errorMessage) {
+    const extra = [finalResult?.stdout, finalResult?.stderr].filter(Boolean).join('\n');
+    outputContent = `Error: ${errorMessage}${extra ? '\n\n' + extra : ''}`;
+  } else if (finalResult) {
+    outputContent = [finalResult.stdout, finalResult.stderr].filter(Boolean).join('\n');
+  } else if (hasStreamingOutput) {
+    outputContent = streamingContent;
+  }
 
-  // Get exit info
-  const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode;
-  const exitSuccess = exitChunk?.success ?? finalResult?.success;
+  // Get exit info - treat errors as failures
+  const exitCode = exitChunk?.exitCode ?? finalResult?.exitCode ?? (hasError ? 1 : undefined);
+  const exitSuccess = hasError ? false : (exitChunk?.success ?? finalResult?.success);
   const executionTime = exitChunk?.executionTimeMs ?? finalResult?.executionTimeMs;
 
   const displayName = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ? 'Execute Command' : toolName;
@@ -239,17 +275,14 @@ export const SandboxExecutionBadge = ({
           <Badge icon={<TerminalSquare className="text-accent6" size={16} />}>{displayName}</Badge>
           {execMeta?.sandbox?.name && (
             <Link
-              href={`/workspace?${new URLSearchParams({
-                ...(execMeta.workspace?.id && { workspaceId: execMeta.workspace.id }),
-                ...(execMeta.sandbox.id && { sandboxId: execMeta.sandbox.id }),
-              }).toString()}`}
-              className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
+              href={execMeta.workspace?.id ? `/workspaces/${execMeta.workspace.id}` : '/workspaces'}
+              className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
               <span>{execMeta.sandbox.name}</span>
               {execMeta.sandbox.id && (
-                <span className="text-icon4 text-[10px]">({execMeta.sandbox.id.slice(0, 8)})</span>
+                <span className="text-neutral4 text-[10px]">({execMeta.sandbox.id.slice(0, 8)})</span>
               )}
             </Link>
           )}
@@ -263,7 +296,7 @@ export const SandboxExecutionBadge = ({
                 <span className="w-1.5 h-1.5 bg-accent6 rounded-full animate-pulse" />
                 <span className="animate-pulse">running</span>
               </span>
-              <span className="text-icon6 text-xs tabular-nums">{elapsedTime}ms</span>
+              <span className="text-neutral6 text-xs tabular-nums">{elapsedTime}ms</span>
             </>
           ) : (
             <>
@@ -275,7 +308,7 @@ export const SandboxExecutionBadge = ({
                     exit {exitCode}
                   </span>
                 ))}
-              {executionTime !== undefined && <span className="text-icon6 text-xs">{executionTime}ms</span>}
+              {executionTime !== undefined && <span className="text-neutral6 text-xs">{executionTime}ms</span>}
             </>
           )}
         </div>

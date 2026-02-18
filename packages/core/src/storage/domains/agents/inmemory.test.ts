@@ -11,10 +11,10 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
     storage = new InMemoryAgentsStorage({ db });
   });
 
-  describe('createAgent', () => {
+  describe('create', () => {
     it('should create agent with status=draft and activeVersionId=undefined', async () => {
       const agentId = 'test-agent-1';
-      const result = await storage.createAgent({
+      const result = await storage.create({
         agent: {
           id: agentId,
           authorId: 'user-123',
@@ -37,18 +37,18 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       expect(versionCount).toBe(1);
 
       // Verify config is accessible via resolved method
-      const resolved = await storage.getAgentByIdResolved({ id: agentId });
+      const resolved = await storage.getByIdResolved(agentId);
       expect(resolved?.name).toBe('Test Agent');
       expect(resolved?.instructions).toBe('You are a helpful assistant');
     });
   });
 
-  describe('updateAgent', () => {
+  describe('update', () => {
     let agentId: string;
 
     beforeEach(async () => {
       agentId = 'test-agent-update';
-      await storage.createAgent({
+      await storage.create({
         agent: {
           id: agentId,
           authorId: 'user-123',
@@ -64,7 +64,7 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       const versionCountBefore = await storage.countVersions(agentId);
       expect(versionCountBefore).toBe(1);
 
-      const result = await storage.updateAgent({
+      const result = await storage.update({
         id: agentId,
         metadata: { key2: 'updated', key3: 'value3' },
       });
@@ -81,11 +81,11 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       expect(versionCountAfter).toBe(1);
     });
 
-    it('should create new version when updating config fields', async () => {
+    it('should not create version when updating config fields (handler responsibility)', async () => {
       const versionCountBefore = await storage.countVersions(agentId);
       expect(versionCountBefore).toBe(1);
 
-      const result = await storage.updateAgent({
+      const result = await storage.update({
         id: agentId,
         name: 'Updated Name',
         instructions: 'Updated instructions',
@@ -95,44 +95,41 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       expect(result.status).toBe('draft');
       expect(result.activeVersionId).toBeUndefined();
 
-      // New version created
+      // No new version created — update() only handles metadata fields
       const versionCountAfter = await storage.countVersions(agentId);
-      expect(versionCountAfter).toBe(2);
+      expect(versionCountAfter).toBe(1);
 
-      // Verify config via resolved method
-      const resolved = await storage.getAgentByIdResolved({ id: agentId });
-      expect(resolved?.name).toBe('Updated Name');
-      expect(resolved?.instructions).toBe('Updated instructions');
+      // Config still shows original values since no version was created
+      const resolved = await storage.getByIdResolved(agentId);
+      expect(resolved?.name).toBe('Original Name');
+      expect(resolved?.instructions).toBe('Original instructions');
     });
 
-    it('should handle mixed metadata and config updates', async () => {
+    it('should handle mixed metadata and config updates (config fields ignored)', async () => {
       const versionCountBefore = await storage.countVersions(agentId);
       expect(versionCountBefore).toBe(1);
 
-      await storage.updateAgent({
+      await storage.update({
         id: agentId,
         metadata: { key3: 'value3' }, // metadata update
-        name: 'Mixed Update Name', // config update
-        model: { provider: 'anthropic', name: 'claude-3' }, // config update
+        name: 'Mixed Update Name', // config update — ignored by update()
+        model: { provider: 'anthropic', name: 'claude-3' }, // config update — ignored by update()
       });
 
-      // Should create new version for config changes
+      // No new version created — config fields are ignored by update()
       const versionCountAfter = await storage.countVersions(agentId);
-      expect(versionCountAfter).toBe(2);
+      expect(versionCountAfter).toBe(1);
 
-      const agent = await storage.getAgentById({ id: agentId });
+      // Metadata should still be merged
+      const agent = await storage.getById(agentId);
       expect(agent?.metadata).toEqual({
         key1: 'value1',
         key2: 'value2',
         key3: 'value3',
       });
-
-      const resolved = await storage.getAgentByIdResolved({ id: agentId });
-      expect(resolved?.name).toBe('Mixed Update Name');
-      expect(resolved?.model).toEqual({ provider: 'anthropic', name: 'claude-3' });
     });
 
-    it('should set status=published when activeVersionId is updated', async () => {
+    it('should not auto-publish when activeVersionId is updated', async () => {
       // Create a second version
       const versionId = 'version-2';
       await storage.createVersion({
@@ -146,20 +143,21 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
         changeMessage: 'Updated to v2',
       });
 
-      const result = await storage.updateAgent({
+      const result = await storage.update({
         id: agentId,
         activeVersionId: versionId,
       });
 
-      expect(result.status).toBe('published');
+      // Auto-publish was removed — status stays as 'draft'
+      expect(result.status).toBe('draft');
       expect(result.activeVersionId).toBe(versionId);
     });
   });
 
-  describe('getAgentByIdResolved', () => {
+  describe('getByIdResolved', () => {
     it('should fall back to latest version when activeVersionId is undefined', async () => {
       const agentId = 'test-fallback';
-      await storage.createAgent({
+      await storage.create({
         agent: {
           id: agentId,
           authorId: 'user-123',
@@ -192,14 +190,14 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
         changeMessage: 'v3',
       });
 
-      const resolved = await storage.getAgentByIdResolved({ id: agentId });
+      const resolved = await storage.getByIdResolved(agentId);
       expect(resolved?.name).toBe('Latest Version Name');
       expect(resolved?.model.name).toBe('gpt-4');
     });
 
     it('should use active version when set', async () => {
       const agentId = 'test-active';
-      await storage.createAgent({
+      await storage.create({
         agent: {
           id: agentId,
           authorId: 'user-123',
@@ -222,21 +220,114 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
         changeMessage: 'Active version',
       });
 
-      await storage.updateAgent({
+      await storage.update({
         id: agentId,
         activeVersionId,
       });
 
-      const resolved = await storage.getAgentByIdResolved({ id: agentId });
+      const resolved = await storage.getByIdResolved(agentId);
       expect(resolved?.name).toBe('Active Version');
       expect(resolved?.instructions).toBe('Active instructions');
     });
   });
 
-  describe('deleteAgent', () => {
+  describe('requestContextSchema persistence', () => {
+    it('should persist requestContextSchema through create and resolve', async () => {
+      const agentId = 'test-rcs-create';
+      const schema = {
+        type: 'object',
+        properties: {
+          tenantId: { type: 'string' },
+          role: { type: 'string', enum: ['admin', 'user'] },
+        },
+        required: ['tenantId'],
+      };
+
+      await storage.create({
+        agent: {
+          id: agentId,
+          name: 'RCS Agent',
+          instructions: 'You are a helpful assistant',
+          model: { provider: 'openai', name: 'gpt-4' },
+          requestContextSchema: schema,
+        },
+      });
+
+      const resolved = await storage.getByIdResolved(agentId);
+      expect(resolved?.requestContextSchema).toEqual(schema);
+    });
+
+    it('should persist requestContextSchema through createVersion and getVersion', async () => {
+      const agentId = 'test-rcs-version';
+      await storage.create({
+        agent: {
+          id: agentId,
+          name: 'RCS Agent',
+          instructions: 'You are a helpful assistant',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const schema = {
+        type: 'object',
+        properties: { userId: { type: 'string' } },
+      };
+
+      const versionId = 'rcs-version-2';
+      await storage.createVersion({
+        id: versionId,
+        agentId,
+        versionNumber: 2,
+        name: 'RCS Agent',
+        instructions: 'Updated instructions',
+        model: { provider: 'openai', name: 'gpt-4' },
+        requestContextSchema: schema,
+        changedFields: ['instructions', 'requestContextSchema'],
+        changeMessage: 'Added requestContextSchema',
+      });
+
+      const version = await storage.getVersion(versionId);
+      expect(version?.requestContextSchema).toEqual(schema);
+    });
+
+    it('should not create version for requestContextSchema in update (handler responsibility)', async () => {
+      const agentId = 'test-rcs-update';
+      await storage.create({
+        agent: {
+          id: agentId,
+          name: 'RCS Agent',
+          instructions: 'You are a helpful assistant',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const versionCountBefore = await storage.countVersions(agentId);
+      expect(versionCountBefore).toBe(1);
+
+      const schema = {
+        type: 'object',
+        properties: { tenantId: { type: 'string' } },
+      };
+
+      await storage.update({
+        id: agentId,
+        requestContextSchema: schema,
+      });
+
+      // No new version created — update() only handles metadata fields
+      const versionCountAfter = await storage.countVersions(agentId);
+      expect(versionCountAfter).toBe(1);
+
+      // requestContextSchema is a config field, so it's not reflected without a new version
+      const resolved = await storage.getByIdResolved(agentId);
+      expect(resolved?.requestContextSchema).toBeUndefined();
+    });
+  });
+
+  describe('delete', () => {
     it('should cascade delete all versions', async () => {
       const agentId = 'test-delete';
-      await storage.createAgent({
+      await storage.create({
         agent: {
           id: agentId,
           authorId: 'user-123',
@@ -261,16 +352,16 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       }
 
       // Verify agent and versions exist
-      const beforeDelete = await storage.getAgentById({ id: agentId });
+      const beforeDelete = await storage.getById(agentId);
       expect(beforeDelete).toBeDefined();
       const versionsBefore = await storage.countVersions(agentId);
       expect(versionsBefore).toBe(3);
 
       // Delete
-      await storage.deleteAgent({ id: agentId });
+      await storage.delete(agentId);
 
       // Verify all deleted
-      const afterDelete = await storage.getAgentById({ id: agentId });
+      const afterDelete = await storage.getById(agentId);
       expect(afterDelete).toBeNull();
       const versionsAfter = await storage.countVersions(agentId);
       expect(versionsAfter).toBe(0);

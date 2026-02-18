@@ -1,4 +1,4 @@
-import { Brain, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Brain, CheckCircle2, XCircle, Loader2, CloudCog } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
 
@@ -48,7 +48,52 @@ export interface DataOmObservationFailedPart {
   };
 }
 
-export type DataOmObservationPart = DataOmObservationStartPart | DataOmObservationEndPart | DataOmObservationFailedPart;
+/**
+ * Async buffering marker types - non-blocking background observation/reflection.
+ */
+export interface DataOmBufferingStartPart {
+  type: 'data-om-buffering-start';
+  data: {
+    startedAt: string;
+    tokensToObserve: number;
+    recordId: string;
+    cycleId: string;
+    threadId?: string;
+    resourceId?: string;
+    operationType: 'observation' | 'reflection';
+  };
+}
+
+export interface DataOmBufferingEndPart {
+  type: 'data-om-buffering-end';
+  data: {
+    completedAt: string;
+    durationMs: number;
+    tokensObserved: number;
+    observationTokens: number;
+    recordId: string;
+    cycleId: string;
+  };
+}
+
+export interface DataOmBufferingFailedPart {
+  type: 'data-om-buffering-failed';
+  data: {
+    failedAt: string;
+    durationMs: number;
+    error: string;
+    recordId: string;
+    cycleId: string;
+  };
+}
+
+export type DataOmBufferingPart = DataOmBufferingStartPart | DataOmBufferingEndPart | DataOmBufferingFailedPart;
+
+export type DataOmObservationPart =
+  | DataOmObservationStartPart
+  | DataOmObservationEndPart
+  | DataOmObservationFailedPart
+  | DataOmBufferingPart;
 
 /**
  * Check if a part is an OM observation marker.
@@ -57,7 +102,10 @@ export function isObservationMarker(part: { type: string }): part is DataOmObser
   return (
     part.type === 'data-om-observation-start' ||
     part.type === 'data-om-observation-end' ||
-    part.type === 'data-om-observation-failed'
+    part.type === 'data-om-observation-failed' ||
+    part.type === 'data-om-buffering-start' ||
+    part.type === 'data-om-buffering-end' ||
+    part.type === 'data-om-buffering-failed'
   );
 }
 
@@ -94,6 +142,19 @@ export const ObservationMarker = ({ part, onObservationComplete, onObservationFa
 
   if (part.type === 'data-om-observation-failed') {
     return <ObservationFailedMarker data={part.data} />;
+  }
+
+  // Buffering markers
+  if (part.type === 'data-om-buffering-start') {
+    return <BufferingStartMarker data={part.data} />;
+  }
+
+  if (part.type === 'data-om-buffering-end') {
+    return <BufferingEndMarker data={part.data} />;
+  }
+
+  if (part.type === 'data-om-buffering-failed') {
+    return <BufferingFailedMarker data={part.data} />;
   }
 
   return null;
@@ -164,6 +225,77 @@ const ObservationFailedMarker = ({ data }: { data: DataOmObservationFailedPart['
     >
       <XCircle className="h-3 w-3" />
       <span>Observation failed ({tokensK}k tokens)</span>
+    </div>
+  );
+};
+
+/**
+ * Shows async buffering in progress.
+ */
+const BufferingStartMarker = ({ data }: { data: DataOmBufferingStartPart['data'] }) => {
+  const tokensK = (data.tokensToObserve / 1000).toFixed(1);
+  const label = data.operationType === 'reflection' ? 'Buffering reflection' : 'Buffering observations';
+
+  return (
+    <div
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
+        'bg-purple-500/10 border border-dashed border-purple-500/40 text-purple-600 dark:text-purple-400',
+        'text-ui-xs leading-ui-xs',
+      )}
+      data-testid="om-buffering-start"
+    >
+      <Loader2 className="h-3 w-3 animate-spin" />
+      <CloudCog className="h-3 w-3" />
+      <span>
+        {label} ~{tokensK}k tokens...
+      </span>
+    </div>
+  );
+};
+
+/**
+ * Shows async buffering completed.
+ */
+const BufferingEndMarker = ({ data }: { data: DataOmBufferingEndPart['data'] }) => {
+  const tokensK = (data.tokensObserved / 1000).toFixed(1);
+  const compressionRatio =
+    data.tokensObserved > 0 ? ((1 - data.observationTokens / data.tokensObserved) * 100).toFixed(0) : 0;
+  const durationSec = (data.durationMs / 1000).toFixed(1);
+
+  return (
+    <div
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
+        'bg-purple-500/10 border border-dashed border-purple-500/40 text-purple-600 dark:text-purple-400',
+        'text-ui-xs leading-ui-xs',
+      )}
+      data-testid="om-buffering-end"
+    >
+      <CloudCog className="h-3 w-3" />
+      <span>
+        Buffered {tokensK}k tokens → {compressionRatio}% compression ({durationSec}s)
+      </span>
+    </div>
+  );
+};
+
+/**
+ * Shows async buffering failed.
+ */
+const BufferingFailedMarker = ({ data }: { data: DataOmBufferingFailedPart['data'] }) => {
+  return (
+    <div
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
+        'bg-red-500/10 border border-dashed border-red-500/40 text-red-600 dark:text-red-400',
+        'text-ui-xs leading-ui-xs',
+      )}
+      data-testid="om-buffering-failed"
+      title={data.error}
+    >
+      <XCircle className="h-3 w-3" />
+      <span>Buffering failed</span>
     </div>
   );
 };

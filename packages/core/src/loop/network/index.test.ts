@@ -110,6 +110,7 @@ describe('getRoutingAgent', () => {
         getInputProcessors: vi.fn().mockResolvedValue([]),
         getOutputProcessors: vi.fn().mockResolvedValue([]),
       }),
+      getDefaultOptions: vi.fn().mockResolvedValue({}),
       // New methods for configured-only processors
       listConfiguredInputProcessors: vi.fn().mockResolvedValue(configuredInputProcessors),
       listConfiguredOutputProcessors: vi.fn().mockResolvedValue(configuredOutputProcessors),

@@ -102,7 +102,7 @@ export function mapVariable<TStep extends Step<string, any, any, any, any, any>>
   step: TStep;
   path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
 };
-export function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any, any>>({
+export function mapVariable<TWorkflow extends AnyWorkflow>({
   initData: TWorkflow,
   path,
 }: {
@@ -1222,6 +1222,13 @@ export function isProcessor(obj: unknown): obj is Processor {
   );
 }
 
+/**
+ * A Workflow with all type parameters erased.
+ * Use this instead of manually specifying `Workflow<any, any, ...>` so that
+ * adding or removing type parameters only requires updating one place.
+ */
+export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
+
 export function createWorkflow<
   TWorkflowId extends string = string,
   TState = unknown,
@@ -1813,7 +1820,7 @@ export class Workflow<
 
   dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
     step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: LoopConditionFunction<TState, any, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',
@@ -1850,7 +1857,7 @@ export class Workflow<
 
   dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut>(
     step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    condition: LoopConditionFunction<TState, any, any, any, any, TEngineType>,
+    condition: LoopConditionFunction<TState, TSchemaOut, any, any, any, TEngineType>,
   ) {
     this.stepFlow.push({
       type: 'loop',

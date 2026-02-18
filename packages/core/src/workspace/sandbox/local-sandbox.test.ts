@@ -4,9 +4,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import { IsolationUnavailableError } from './errors';
 import { LocalSandbox } from './local-sandbox';
 import { detectIsolation, isIsolationAvailable, isSeatbeltAvailable, isBwrapAvailable } from './native-sandbox';
-import { IsolationUnavailableError } from './sandbox';
 
 describe('LocalSandbox', () => {
   let tempDir: string;
@@ -22,7 +22,7 @@ describe('LocalSandbox', () => {
   afterEach(async () => {
     // Clean up
     try {
-      await sandbox.destroy();
+      await sandbox._destroy();
     } catch {
       // Ignore
     }
@@ -43,7 +43,7 @@ describe('LocalSandbox', () => {
       expect(defaultSandbox.provider).toBe('local');
       expect(defaultSandbox.name).toBe('LocalSandbox');
       expect(defaultSandbox.id).toBeDefined();
-      expect(defaultSandbox.status).toBe('stopped');
+      expect(defaultSandbox.status).toBe('pending');
       // Default working directory is .sandbox/ in cwd
       expect(defaultSandbox.workingDirectory).toBe(path.join(process.cwd(), '.sandbox'));
     });
@@ -65,31 +65,31 @@ describe('LocalSandbox', () => {
   // ===========================================================================
   describe('lifecycle', () => {
     it('should start successfully', async () => {
-      expect(sandbox.status).toBe('stopped');
+      expect(sandbox.status).toBe('pending');
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(sandbox.status).toBe('running');
     });
 
     it('should stop successfully', async () => {
-      await sandbox.start();
-      await sandbox.stop();
+      await sandbox._start();
+      await sandbox._stop();
 
       expect(sandbox.status).toBe('stopped');
     });
 
     it('should destroy successfully', async () => {
-      await sandbox.start();
-      await sandbox.destroy();
+      await sandbox._start();
+      await sandbox._destroy();
 
-      expect(sandbox.status).toBe('stopped');
+      expect(sandbox.status).toBe('destroyed');
     });
 
     it('should report ready status', async () => {
       expect(await sandbox.isReady()).toBe(false);
 
-      await sandbox.start();
+      await sandbox._start();
 
       expect(await sandbox.isReady()).toBe(true);
     });
@@ -100,7 +100,7 @@ describe('LocalSandbox', () => {
   // ===========================================================================
   describe('getInfo', () => {
     it('should return sandbox info', async () => {
-      await sandbox.start();
+      await sandbox._start();
 
       const info = await sandbox.getInfo();
 
@@ -120,7 +120,7 @@ describe('LocalSandbox', () => {
   // ===========================================================================
   describe('executeCommand', () => {
     beforeEach(async () => {
-      await sandbox.start();
+      await sandbox._start();
     });
 
     it('should execute command successfully', async () => {
@@ -185,7 +185,7 @@ describe('LocalSandbox', () => {
       expect(result.stdout.trim()).toBe('test');
       expect(newSandbox.status).toBe('running');
 
-      await newSandbox.destroy();
+      await newSandbox._destroy();
     });
   });
 
@@ -194,7 +194,7 @@ describe('LocalSandbox', () => {
   // ===========================================================================
   describe('timeout handling', () => {
     beforeEach(async () => {
-      await sandbox.start();
+      await sandbox._start();
     });
 
     it('should respect custom timeout for command execution', async () => {
@@ -217,17 +217,17 @@ describe('LocalSandbox', () => {
       const newDir = path.join(tempDir, 'new-sandbox-dir');
       const newSandbox = new LocalSandbox({ workingDirectory: newDir });
 
-      await newSandbox.start();
+      await newSandbox._start();
 
       const stats = await fs.stat(newDir);
       expect(stats.isDirectory()).toBe(true);
 
-      await newSandbox.destroy();
+      await newSandbox._destroy();
     });
 
     it('should execute command in working directory', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
-      await sandbox.start();
+      await sandbox._start();
 
       // Create a file in the working directory
       await fs.writeFile(path.join(tempDir, 'data.txt'), 'file-content');
@@ -251,14 +251,14 @@ describe('LocalSandbox', () => {
         env: { PATH: process.env.PATH!, CONFIGURED_VAR: 'configured-value' },
       });
 
-      await envSandbox.start();
+      await envSandbox._start();
 
       const result = await envSandbox.executeCommand('printenv', ['CONFIGURED_VAR']);
 
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('configured-value');
 
-      await envSandbox.destroy();
+      await envSandbox._destroy();
     });
 
     it('should override configured env with execution env', async () => {
@@ -268,7 +268,7 @@ describe('LocalSandbox', () => {
         env: { PATH: process.env.PATH!, OVERRIDE_VAR: 'original' },
       });
 
-      await envSandbox.start();
+      await envSandbox._start();
 
       const result = await envSandbox.executeCommand('printenv', ['OVERRIDE_VAR'], {
         env: { OVERRIDE_VAR: 'overridden' },
@@ -277,7 +277,7 @@ describe('LocalSandbox', () => {
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('overridden');
 
-      await envSandbox.destroy();
+      await envSandbox._destroy();
     });
 
     it('should not inherit process.env by default', async () => {
@@ -293,7 +293,7 @@ describe('LocalSandbox', () => {
           env: { PATH: process.env.PATH! },
         });
 
-        await isolatedSandbox.start();
+        await isolatedSandbox._start();
 
         // Try to print the env var - should not be found
         const result = await isolatedSandbox.executeCommand('printenv', [testVarName]);
@@ -301,7 +301,7 @@ describe('LocalSandbox', () => {
         // printenv returns exit code 1 when var is not found
         expect(result.success).toBe(false);
 
-        await isolatedSandbox.destroy();
+        await isolatedSandbox._destroy();
       } finally {
         delete process.env[testVarName];
       }
@@ -319,14 +319,14 @@ describe('LocalSandbox', () => {
           env: { ...process.env },
         });
 
-        await fullEnvSandbox.start();
+        await fullEnvSandbox._start();
 
         const result = await fullEnvSandbox.executeCommand('printenv', [testVarName]);
 
         expect(result.success).toBe(true);
         expect(result.stdout.trim()).toBe('should-be-included');
 
-        await fullEnvSandbox.destroy();
+        await fullEnvSandbox._destroy();
       } finally {
         delete process.env[testVarName];
       }
@@ -411,7 +411,7 @@ describe('LocalSandbox', () => {
       });
 
       expect(sandboxedSandbox.isolation).toBe(detection.backend);
-      await sandboxedSandbox.destroy();
+      await sandboxedSandbox._destroy();
     });
 
     it('should throw error when unavailable backend requested', () => {
@@ -428,7 +428,7 @@ describe('LocalSandbox', () => {
     });
 
     it('should include isolation in getInfo', async () => {
-      await sandbox.start();
+      await sandbox._start();
       const info = await sandbox.getInfo();
 
       expect(info.metadata?.isolation).toBe('none');
@@ -455,7 +455,7 @@ describe('LocalSandbox', () => {
         isolation: 'seatbelt',
       });
 
-      await seatbeltSandbox.start();
+      await seatbeltSandbox._start();
 
       // Check that profile file was created in .sandbox-profiles folder (outside working directory)
       // Filename is based on hash of workspace path and config
@@ -479,7 +479,7 @@ describe('LocalSandbox', () => {
       expect(profileContent).toContain('(allow file-read*)');
       expect(profileContent).toContain('(allow file-write* (subpath');
 
-      await seatbeltSandbox.destroy();
+      await seatbeltSandbox._destroy();
     });
 
     it('should execute commands in seatbelt sandbox', async () => {
@@ -492,13 +492,13 @@ describe('LocalSandbox', () => {
         isolation: 'seatbelt',
       });
 
-      await seatbeltSandbox.start();
+      await seatbeltSandbox._start();
 
       const result = await seatbeltSandbox.executeCommand('echo', ['Hello from sandbox']);
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('Hello from sandbox');
 
-      await seatbeltSandbox.destroy();
+      await seatbeltSandbox._destroy();
     });
 
     it('should allow file operations within workspace', async () => {
@@ -511,7 +511,7 @@ describe('LocalSandbox', () => {
         isolation: 'seatbelt',
       });
 
-      await seatbeltSandbox.start();
+      await seatbeltSandbox._start();
 
       // Write a file inside the workspace
       const result = await seatbeltSandbox.executeCommand('sh', [
@@ -525,7 +525,7 @@ describe('LocalSandbox', () => {
       expect(readResult.success).toBe(true);
       expect(readResult.stdout.trim()).toBe('test content');
 
-      await seatbeltSandbox.destroy();
+      await seatbeltSandbox._destroy();
     });
 
     it('should block file writes outside workspace', async () => {
@@ -538,7 +538,7 @@ describe('LocalSandbox', () => {
         isolation: 'seatbelt',
       });
 
-      await seatbeltSandbox.start();
+      await seatbeltSandbox._start();
 
       // Try to write to user's home directory (not in allowed paths)
       // Note: /tmp and /var/folders are allowed for temp files, so we test elsewhere
@@ -553,7 +553,7 @@ describe('LocalSandbox', () => {
       // Clean up just in case (shouldn't exist)
       await fs.unlink(blockedPath).catch(() => {});
 
-      await seatbeltSandbox.destroy();
+      await seatbeltSandbox._destroy();
     });
 
     it('should block network access by default', async () => {
@@ -569,7 +569,7 @@ describe('LocalSandbox', () => {
         },
       });
 
-      await seatbeltSandbox.start();
+      await seatbeltSandbox._start();
 
       // Try to make a network request - should fail
       const result = await seatbeltSandbox.executeCommand('curl', ['-s', '--max-time', '2', 'http://httpbin.org/get']);
@@ -577,7 +577,7 @@ describe('LocalSandbox', () => {
       // Should fail due to network isolation
       expect(result.success).toBe(false);
 
-      await seatbeltSandbox.destroy();
+      await seatbeltSandbox._destroy();
     });
 
     it('should allow network access when configured', async () => {
@@ -593,7 +593,7 @@ describe('LocalSandbox', () => {
         },
       });
 
-      await seatbeltSandbox.start();
+      await seatbeltSandbox._start();
 
       // DNS lookup should work with network enabled
       const result = await seatbeltSandbox.executeCommand('sh', [
@@ -604,7 +604,7 @@ describe('LocalSandbox', () => {
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('ok');
 
-      await seatbeltSandbox.destroy();
+      await seatbeltSandbox._destroy();
     });
 
     it('should clean up seatbelt profile on destroy', async () => {
@@ -617,7 +617,7 @@ describe('LocalSandbox', () => {
         isolation: 'seatbelt',
       });
 
-      await seatbeltSandbox.start();
+      await seatbeltSandbox._start();
       // Profile uses hash-based filename in .sandbox-profiles folder (outside working directory)
       const configHash = crypto
         .createHash('sha256')
@@ -635,7 +635,7 @@ describe('LocalSandbox', () => {
           .catch(() => false),
       ).toBe(true);
 
-      await seatbeltSandbox.destroy();
+      await seatbeltSandbox._destroy();
 
       // Profile should be cleaned up
       expect(
@@ -661,13 +661,13 @@ describe('LocalSandbox', () => {
         isolation: 'bwrap',
       });
 
-      await bwrapSandbox.start();
+      await bwrapSandbox._start();
 
       const result = await bwrapSandbox.executeCommand('echo', ['Hello from bwrap']);
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('Hello from bwrap');
 
-      await bwrapSandbox.destroy();
+      await bwrapSandbox._destroy();
     });
 
     it('should allow file operations within workspace', async () => {
@@ -680,7 +680,7 @@ describe('LocalSandbox', () => {
         isolation: 'bwrap',
       });
 
-      await bwrapSandbox.start();
+      await bwrapSandbox._start();
 
       // Write a file inside the workspace using Node.js
       const writeResult = await bwrapSandbox.executeCommand('node', [
@@ -694,7 +694,7 @@ describe('LocalSandbox', () => {
       expect(readResult.success).toBe(true);
       expect(readResult.stdout.trim()).toBe('bwrap content');
 
-      await bwrapSandbox.destroy();
+      await bwrapSandbox._destroy();
     });
 
     it('should isolate network by default', async () => {
@@ -710,7 +710,7 @@ describe('LocalSandbox', () => {
         },
       });
 
-      await bwrapSandbox.start();
+      await bwrapSandbox._start();
 
       // This should fail due to network isolation
       const result = await bwrapSandbox.executeCommand('node', [
@@ -721,7 +721,7 @@ describe('LocalSandbox', () => {
       // Should fail (network unreachable)
       expect(result.success).toBe(false);
 
-      await bwrapSandbox.destroy();
+      await bwrapSandbox._destroy();
     });
 
     it('should allow network when configured', async () => {
@@ -737,7 +737,7 @@ describe('LocalSandbox', () => {
         },
       });
 
-      await bwrapSandbox.start();
+      await bwrapSandbox._start();
 
       // This should work with network enabled
       // Use a simple DNS lookup as it's faster than HTTP
@@ -748,7 +748,7 @@ describe('LocalSandbox', () => {
 
       expect(result.success).toBe(true);
 
-      await bwrapSandbox.destroy();
+      await bwrapSandbox._destroy();
     });
   });
 });

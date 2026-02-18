@@ -45,7 +45,8 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
 }
 
 /**
- * Sanitizes AIV5 UI messages by filtering out streaming states, data-* parts, and optionally incomplete tool calls.
+ * Sanitizes AIV5 UI messages by filtering out streaming states, data-* parts, empty text parts, and optionally incomplete tool calls.
+ * Handles legacy data by filtering empty text parts that may exist in pre-existing DB records.
  */
 export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
@@ -62,6 +63,15 @@ export function sanitizeV5UIMessages(
         // which causes some models to fail with "must include at least one parts field"
         if (typeof p.type === 'string' && p.type.startsWith('data-')) {
           return false;
+        }
+
+        // Filter out empty text parts to handle legacy data from before this filtering was implemented
+        // But preserve them if they are the only parts (legitimate placeholder messages)
+        if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
+          const hasNonEmptyParts = m.parts.some(
+            part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
+          );
+          if (hasNonEmptyParts) return false;
         }
 
         if (!AIV5.isToolUIPart(p)) return true;

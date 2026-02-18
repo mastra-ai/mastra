@@ -1,10 +1,10 @@
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { Processor } from '../processors/index';
+import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { RequestContext } from '../request-context';
 import { createStep, createWorkflow } from '../workflows';
@@ -2136,6 +2136,159 @@ describe('New Processor Features', () => {
       // Should return tripwire since max retries exceeded
       expect(result.tripwire).toBeDefined();
       expect(result.tripwire?.reason).toBe('Never satisfied');
+    });
+
+    it('should not include rejected assistant response in messages sent to LLM on retry', async () => {
+      let callCount = 0;
+      const receivedPrompts: LanguageModelV2Prompt[] = [];
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          callCount++;
+          receivedPrompts.push([...prompt]);
+
+          if (callCount === 1) {
+            return {
+              content: [{ type: 'text', text: 'fabricated response that should be rejected' }],
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          } else {
+            return {
+              content: [{ type: 'text', text: 'corrected response' }],
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          }
+        },
+      });
+
+      // Capture the rejected text dynamically from the processor, mirroring how
+      // a real processor inspects the response at runtime (not hardcoded).
+      let firstResponseText = '';
+
+      const fabricationDetector = {
+        id: 'fabrication-detector',
+        processOutputStep: async ({ text, abort, retryCount }: ProcessOutputStepArgs) => {
+          if (retryCount === 0) {
+            firstResponseText = text || '';
+            abort('Fabrication detected, please regenerate without fabricating', { retry: true });
+          }
+          return [];
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'retry-no-rejected-response-agent',
+        name: 'Retry No Rejected Response Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        outputProcessors: [fabricationDetector],
+        maxProcessorRetries: 3,
+      });
+
+      const result = await agent.generate('What is the capital of France?');
+
+      // Sanity: processor saw the rejected text
+      expect(firstResponseText).toBe('fabricated response that should be rejected');
+      expect(callCount).toBe(2);
+
+      // The retry call's prompt should NOT contain the rejected assistant response.
+      // This is the core of the bug: on retry, the full message thread is sent to the LLM
+      // including the rejected response, which confuses the model and causes empty responses.
+      const retryPrompt = receivedPrompts[1]!;
+      const hasRejectedResponse = retryPrompt.some(msg => {
+        if (msg.role !== 'assistant') return false;
+        return msg.content.some(part => part.type === 'text' && part.text.includes(firstResponseText));
+      });
+      expect(hasRejectedResponse).toBe(false);
+
+      // The retry feedback should be present as a system message
+      const hasRetryFeedback = retryPrompt.some(
+        msg => msg.role === 'system' && msg.content.includes('Fabrication detected'),
+      );
+      expect(hasRetryFeedback).toBe(true);
+
+      // Final result should be the corrected response
+      expect(result.text).toBe('corrected response');
+    });
+
+    it('should not include rejected assistant response in messages on retry when streaming', async () => {
+      let callCount = 0;
+      const receivedPrompts: LanguageModelV2Prompt[] = [];
+
+      const mockModel = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          callCount++;
+          receivedPrompts.push([...prompt]);
+
+          const responseText = callCount === 1 ? 'fabricated response that should be rejected' : 'corrected response';
+
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: responseText },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          };
+        },
+      });
+
+      // Capture the rejected text dynamically from the processor
+      let firstResponseText = '';
+
+      const fabricationDetector = {
+        id: 'fabrication-detector-stream',
+        processOutputStep: async ({ text, abort, retryCount }: ProcessOutputStepArgs) => {
+          if (retryCount === 0) {
+            firstResponseText = text || '';
+            abort('Fabrication detected, please regenerate', { retry: true });
+          }
+          return [];
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'retry-no-rejected-response-stream-agent',
+        name: 'Retry No Rejected Response Stream Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        outputProcessors: [fabricationDetector],
+        maxProcessorRetries: 3,
+      });
+
+      const stream = await agent.stream('What is the capital of France?');
+      // Consume the stream
+      for await (const _ of stream.fullStream) {
+      }
+      const result = await stream.getFullOutput();
+
+      // Sanity: processor saw the rejected text
+      expect(firstResponseText).toBe('fabricated response that should be rejected');
+      expect(callCount).toBe(2);
+
+      // The retry prompt should NOT contain the rejected assistant response
+      const retryPrompt = receivedPrompts[1]!;
+      const hasRejectedResponse = retryPrompt.some(msg => {
+        if (msg.role !== 'assistant') return false;
+        return msg.content.some(part => part.type === 'text' && part.text.includes(firstResponseText));
+      });
+      expect(hasRejectedResponse).toBe(false);
+
+      // Final text should be the corrected response
+      expect(result?.text).toBe('corrected response');
     });
   });
 

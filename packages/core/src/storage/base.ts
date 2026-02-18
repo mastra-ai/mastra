@@ -3,10 +3,14 @@ import { MastraBase } from '../base';
 import type {
   AgentsStorage,
   PromptBlocksStorage,
+  ScorerDefinitionsStorage,
+  MCPClientsStorage,
   ScoresStorage,
   WorkflowsStorage,
   MemoryStorage,
   ObservabilityStorage,
+  DatasetsStorage,
+  ExperimentsStorage,
 } from './domains';
 
 export type StorageDomains = {
@@ -15,7 +19,11 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
+  datasets?: DatasetsStorage;
+  experiments?: ExperimentsStorage;
   promptBlocks?: PromptBlocksStorage;
+  scorerDefinitions?: ScorerDefinitionsStorage;
+  mcpClients?: MCPClientsStorage;
 };
 
 /**
@@ -206,7 +214,11 @@ export class MastraCompositeStore extends MastraBase {
         scores: domainOverrides.scores ?? defaultStores?.scores,
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
+        datasets: domainOverrides.datasets ?? defaultStores?.datasets,
+        experiments: domainOverrides.experiments ?? defaultStores?.experiments,
         promptBlocks: domainOverrides.promptBlocks ?? defaultStores?.promptBlocks,
+        scorerDefinitions: domainOverrides.scorerDefinitions ?? defaultStores?.scorerDefinitions,
+        mcpClients: domainOverrides.mcpClients ?? defaultStores?.mcpClients,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -263,8 +275,24 @@ export class MastraCompositeStore extends MastraBase {
       initTasks.push(this.stores.agents.init());
     }
 
+    if (this.stores?.datasets) {
+      initTasks.push(this.stores.datasets.init());
+    }
+
+    if (this.stores?.experiments) {
+      initTasks.push(this.stores.experiments.init());
+    }
+
     if (this.stores?.promptBlocks) {
       initTasks.push(this.stores.promptBlocks.init());
+    }
+
+    if (this.stores?.scorerDefinitions) {
+      initTasks.push(this.stores.scorerDefinitions.init());
+    }
+
+    if (this.stores?.mcpClients) {
+      initTasks.push(this.stores.mcpClients.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);

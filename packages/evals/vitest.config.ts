@@ -12,6 +12,7 @@ export default defineConfig({
           maxConcurrency: 1,
           fileParallelism: false,
           isolate: false,
+          sequence: { groupOrder: 100 },
         },
       },
       {
@@ -23,6 +24,7 @@ export default defineConfig({
           maxConcurrency: 1,
           fileParallelism: false,
           setupFiles: ['dotenv/config'],
+          sequence: { groupOrder: 101 },
         },
       },
     ],

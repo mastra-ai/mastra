@@ -1,5 +1,5 @@
 ---
-title: "Nebius Token Factory | Models | Mastra"
+title: "Nebius Token Factory | Models"
 description: "Use Nebius Token Factory models with Mastra. 46 models available."
 ---
 
@@ -214,7 +214,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nebius/meta-llama/llama-3.3-70b-instruct-base",
+    "model": "nebius/meta-llama/Llama-3.3-70B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -307,6 +307,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 128000,
     "maxOutput": 16384,
     "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "nebius/moonshotai/Kimi-K2.5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.5,
     "outputCost": 2.5
   },
   {
@@ -572,18 +584,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 0.2,
     "outputCost": 1.2
-  },
-  {
-    "model": "nebius/zai-org/glm-4.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.4,
-    "outputCost": 2
   },
   {
     "model": "nebius/zai-org/glm-4.7-fp8",

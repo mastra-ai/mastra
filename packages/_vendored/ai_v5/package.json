@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-sdk-v5",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "",
   "type": "module",
   "private": true,
@@ -37,9 +37,9 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "2.0.18",
+    "@ai-sdk/gateway": "2.0.35",
     "@ai-sdk/provider": "2.0.0",
-    "@ai-sdk/provider-utils": "3.0.18",
+    "@ai-sdk/provider-utils": "3.0.20",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.56.0",
@@ -50,7 +50,7 @@
     "ai": "^5.0.97",
     "eslint": "^9.36.0",
     "json-schema": "^0.4.0",
-    "msw": "^2.12.7",
+    "msw": "^2.12.10",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.1",

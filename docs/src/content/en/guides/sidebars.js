@@ -53,6 +53,11 @@ const sidebars = {
           id: 'getting-started/hono',
           label: 'Hono',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/electron',
+          label: 'Electron',
+        },
       ],
     },
     {
@@ -111,7 +116,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/cloudflare-deployer',
+          id: 'deployment/cloudflare',
           label: 'Cloudflare',
         },
         {
@@ -121,12 +126,12 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/netlify-deployer',
+          id: 'deployment/netlify',
           label: 'Netlify',
         },
         {
           type: 'doc',
-          id: 'deployment/vercel-deployer',
+          id: 'deployment/vercel',
           label: 'Vercel',
         },
         {
@@ -166,6 +171,11 @@ const sidebars = {
               label: 'Client SDK',
             },
             {
+              id: 'migrations/upgrade-to-v1/deployment',
+              type: 'doc',
+              label: 'Deployment',
+            },
+            {
               id: 'migrations/upgrade-to-v1/evals',
               type: 'doc',
               label: 'Evals',
@@ -189,6 +199,11 @@ const sidebars = {
               id: 'migrations/upgrade-to-v1/processors',
               type: 'doc',
               label: 'Processors',
+            },
+            {
+              id: 'migrations/upgrade-to-v1/rag',
+              type: 'doc',
+              label: 'RAG',
             },
             {
               id: 'migrations/upgrade-to-v1/storage',
@@ -283,6 +298,21 @@ const sidebars = {
           type: 'doc',
           id: 'guide/github-actions-pr-description',
           label: 'GitHub Actions: PR Description',
+        },
+        {
+          type: 'doc',
+          id: 'guide/code-review-bot',
+          label: 'Skills: Code Review Bot',
+        },
+        {
+          type: 'doc',
+          id: 'guide/docs-manager',
+          label: 'Filesystem: Docs Manager',
+        },
+        {
+          type: 'doc',
+          id: 'guide/dev-assistant',
+          label: 'Workspace: Dev Assistant',
         },
       ],
     },

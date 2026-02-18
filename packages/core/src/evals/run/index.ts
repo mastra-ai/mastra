@@ -6,7 +6,7 @@ import { validateAndSaveScore } from '../../mastra/hooks';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
-import type { WorkflowResult, StepResult } from '../../workflows';
+import type { AnyWorkflow, WorkflowResult, StepResult } from '../../workflows';
 import type { MastraScorer } from '../base';
 import { ScoreAccumulator } from './scorerAccumulator';
 
@@ -47,7 +47,7 @@ export function runEvals<TAgent extends Agent>(config: {
 }): Promise<RunEvalsResult>;
 
 // Workflow with scorers array
-export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
+export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: MastraScorer<any, any, any, any>[];
   target: TWorkflow;
@@ -60,7 +60,7 @@ export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any
 }): Promise<RunEvalsResult>;
 
 // Workflow with workflow configuration
-export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
+export function runEvals<TWorkflow extends AnyWorkflow>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: WorkflowScorerConfig;
   target: TWorkflow;

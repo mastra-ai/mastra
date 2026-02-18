@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -16,8 +16,6 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-  StorageListAgentsResolvedOutput,
-  StorageResolvedAgentType,
   AgentVersion,
   CreateVersionInput,
   ListVersionsInput,
@@ -26,26 +24,6 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-
-/**
- * The set of fields from StorageAgentSnapshotType that live on version rows.
- * Used to determine which updates create new versions vs update agent metadata.
- */
-const SNAPSHOT_FIELDS = [
-  'name',
-  'description',
-  'instructions',
-  'model',
-  'tools',
-  'defaultOptions',
-  'workflows',
-  'agents',
-  'integrationTools',
-  'inputProcessors',
-  'outputProcessors',
-  'memory',
-  'scorers',
-] as const;
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
@@ -71,6 +49,9 @@ export class AgentsLibSQL extends AgentsStorage {
       schema: AGENTS_SCHEMA,
       ifNotExists: ['status', 'authorId'],
     });
+
+    // Migrate tools field from string[] to JSONB format
+    await this.#migrateToolsToJsonbFormat();
 
     // Clean up any stale draft records from previously failed createAgent calls
     await this.#cleanupStaleDrafts();
@@ -199,6 +180,66 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
+  /**
+   * Migrates the tools field from string[] format to JSONB format { "tool-key": { "description": "..." } }.
+   * This handles the transition from the old format where tools were stored as an array of string keys
+   * to the new format where tools can have per-agent description overrides.
+   */
+  async #migrateToolsToJsonbFormat(): Promise<void> {
+    try {
+      // Check if any records have tools stored as a JSON array
+      const result = await this.#client.execute({
+        sql: `SELECT id, tools FROM "${TABLE_AGENT_VERSIONS}" WHERE tools IS NOT NULL`,
+      });
+
+      if (!result.rows || result.rows.length === 0) {
+        return; // No records to migrate
+      }
+
+      for (const row of result.rows) {
+        const toolsValue = row.tools;
+
+        // Parse the JSON value
+        let parsedTools: any;
+        try {
+          if (typeof toolsValue === 'string') {
+            parsedTools = JSON.parse(toolsValue);
+          } else if (toolsValue instanceof ArrayBuffer) {
+            const decoder = new TextDecoder();
+            parsedTools = JSON.parse(decoder.decode(toolsValue));
+          } else {
+            parsedTools = toolsValue;
+          }
+        } catch {
+          continue; // Skip invalid JSON
+        }
+
+        // Check if tools is an array (needs migration)
+        if (Array.isArray(parsedTools)) {
+          const toolsObject: Record<string, { description?: string }> = {};
+
+          // Convert each tool string to an object key with empty config
+          for (const toolKey of parsedTools) {
+            if (typeof toolKey === 'string') {
+              toolsObject[toolKey] = {};
+            }
+          }
+
+          // Update the record with the new format
+          await this.#client.execute({
+            sql: `UPDATE "${TABLE_AGENT_VERSIONS}" SET tools = ? WHERE id = ?`,
+            args: [JSON.stringify(toolsObject), row.id as string],
+          });
+        }
+      }
+
+      this.logger?.info?.(`Migrated agent version tools from array to object format`);
+    } catch (error) {
+      // Log but don't fail - this is a non-breaking migration
+      this.logger?.warn?.('Failed to migrate tools to JSONB format:', error);
+    }
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_AGENT_VERSIONS });
     await this.#db.deleteData({ tableName: TABLE_AGENTS });
@@ -247,7 +288,7 @@ export class AgentsLibSQL extends AgentsStorage {
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
-      status: row.status as string,
+      status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
@@ -256,7 +297,7 @@ export class AgentsLibSQL extends AgentsStorage {
     };
   }
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getById(id: string): Promise<StorageAgentType | null> {
     try {
       const result = await this.#db.select<Record<string, any>>({
         tableName: TABLE_AGENTS,
@@ -265,6 +306,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return result ? this.parseRow(result) : null;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_AGENT_BY_ID', 'FAILED'),
@@ -277,7 +319,8 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
     try {
       const now = new Date();
 
@@ -310,7 +353,7 @@ export class AgentsLibSQL extends AgentsStorage {
       });
 
       // 3. Return the thin agent record (activeVersionId remains null, status remains 'draft')
-      const created = await this.getAgentById({ id: agent.id });
+      const created = await this.getById(agent.id);
       if (!created) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'CREATE_AGENT', 'NOT_FOUND_AFTER_CREATE'),
@@ -338,11 +381,11 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
     try {
-      // First, get the existing agent
-      const existingAgent = await this.getAgentById({ id });
-      if (!existingAgent) {
+      const existing = await this.getById(id);
+      if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -352,91 +395,28 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
-      // Separate metadata-level fields from config fields
-      const metadataFields = {
-        authorId: updates.authorId,
-        activeVersionId: updates.activeVersionId,
-        metadata: updates.metadata,
+      const { authorId, activeVersionId, metadata, status } = updates;
+
+      // Build update data for the agent record
+      const updateData: Record<string, unknown> = {
+        updatedAt: new Date().toISOString(),
       };
 
-      // Extract config fields (anything that's part of StorageAgentSnapshotType)
-      const configFields: Record<string, any> = {};
-      for (const field of SNAPSHOT_FIELDS) {
-        if ((updates as any)[field] !== undefined) {
-          configFields[field] = (updates as any)[field];
-        }
+      if (authorId !== undefined) updateData.authorId = authorId;
+      if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
+      if (status !== undefined) updateData.status = status;
+      if (metadata !== undefined) {
+        updateData.metadata = { ...existing.metadata, ...metadata };
       }
 
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        // Get the latest version number
-        const latestVersion = await this.getLatestVersion(id);
-        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+      await this.#db.update({
+        tableName: TABLE_AGENTS,
+        keys: { id },
+        data: updateData,
+      });
 
-        // If we have a latest version, start from its config, otherwise error
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for agent ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Extract snapshot fields from latest version
-        const latestSnapshot: Record<string, any> = {};
-        for (const field of SNAPSHOT_FIELDS) {
-          if ((latestVersion as any)[field] !== undefined) {
-            latestSnapshot[field] = (latestVersion as any)[field];
-          }
-        }
-
-        // Convert null values to undefined (null means "remove this field")
-        const sanitizedConfigFields = Object.fromEntries(
-          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-        );
-
-        // Create new version with the config updates
-        const versionInput: CreateVersionInput = {
-          id: crypto.randomUUID(),
-          agentId: id,
-          versionNumber: nextVersionNumber,
-          ...latestSnapshot, // Start from latest version
-          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateVersionInput;
-
-        await this.createVersion(versionInput);
-      }
-
-      // Build the data object with only metadata-level fields
-      const data: Record<string, any> = {
-        updatedAt: new Date(),
-      };
-
-      if (metadataFields.authorId !== undefined) data.authorId = metadataFields.authorId;
-      if (metadataFields.activeVersionId !== undefined) {
-        data.activeVersionId = metadataFields.activeVersionId;
-        // Do NOT automatically set status='published' when activeVersionId is updated
-      }
-      if (metadataFields.metadata !== undefined) {
-        // LibSQL uses REPLACE semantics for metadata
-        data.metadata = metadataFields.metadata;
-      }
-
-      // Only update if there's more than just updatedAt
-      if (Object.keys(data).length > 1) {
-        await this.#db.update({
-          tableName: TABLE_AGENTS,
-          keys: { id },
-          data,
-        });
-      }
-
-      // Return the updated agent
-      const updatedAgent = await this.getAgentById({ id });
+      // Fetch and return updated agent
+      const updatedAgent = await this.getById(id);
       if (!updatedAgent) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
@@ -464,10 +444,10 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
       // Delete all versions for this agent first
-      await this.deleteVersionsByAgentId(id);
+      await this.deleteVersionsByParentId(id);
 
       // Then delete the agent
       await this.#db.delete({
@@ -475,6 +455,7 @@ export class AgentsLibSQL extends AgentsStorage {
         keys: { id },
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_AGENT', 'FAILED'),
@@ -487,8 +468,8 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -507,8 +488,42 @@ export class AgentsLibSQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+
+      conditions.push('status = ?');
+      queryParams.push(status);
+
+      if (authorId !== undefined) {
+        conditions.push('authorId = ?');
+        queryParams.push(authorId);
+      }
+
+      if (metadata && Object.keys(metadata).length > 0) {
+        for (const [key, value] of Object.entries(metadata)) {
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_AGENTS', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}. Keys must be alphanumeric with underscores.`,
+              details: { key },
+            });
+          }
+          conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
+        }
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       // Get total count
-      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
+      const countResult = await this.#client.execute({
+        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}" ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -522,12 +537,12 @@ export class AgentsLibSQL extends AgentsStorage {
 
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
-      const rows = await this.#db.selectMany<Record<string, any>>({
-        tableName: TABLE_AGENTS,
-        orderBy: `"${field}" ${direction}`,
-        limit: limitValue,
-        offset,
+      const result = await this.#client.execute({
+        sql: `SELECT * FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, offset],
       });
+
+      const rows = result.rows ?? [];
 
       const agents = rows.map(row => this.parseRow(row));
 
@@ -539,110 +554,10 @@ export class AgentsLibSQL extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_AGENTS', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  async listAgentsResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
-    const { field, direction } = this.parseOrderBy(orderBy);
-
-    if (page < 0) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'LIST_AGENTS_RESOLVED', 'INVALID_PAGE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { page },
-        },
-        new Error('page must be >= 0'),
-      );
-    }
-
-    const perPage = normalizePerPage(perPageInput, 100);
-    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
-
-    try {
-      // Get total count
-      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
-
-      if (total === 0) {
-        return {
-          agents: [],
-          total: 0,
-          page,
-          perPage: perPageForResponse,
-          hasMore: false,
-        };
-      }
-
-      // Get paginated agents using selectMany (which handles JSONB columns correctly)
-      const limitValue = perPageInput === false ? total : perPage;
-      const agents = await this.#db.selectMany<StorageAgentType>({
-        tableName: TABLE_AGENTS,
-        orderBy: `"${field}" ${direction}`,
-        limit: limitValue,
-        offset,
-      });
-
-      // For each agent, resolve the version configuration
-      const resolvedAgents = await Promise.all(
-        agents.map(async agent => {
-          let version: AgentVersion | null = null;
-
-          // Get the active version if set
-          if (agent.activeVersionId) {
-            version = await this.getVersion(agent.activeVersionId);
-          }
-
-          // If no active version, get the latest version
-          if (!version) {
-            version = await this.getLatestVersion(agent.id);
-          }
-
-          // If no version found, return thin agent
-          if (!version) {
-            return agent as StorageResolvedAgentType;
-          }
-
-          // Return fully resolved agent with version data
-          return {
-            ...agent,
-            name: version.name,
-            description: version.description,
-            instructions: version.instructions,
-            model: version.model,
-            tools: version.tools,
-            defaultOptions: version.defaultOptions,
-            workflows: version.workflows,
-            agents: version.agents,
-            integrationTools: version.integrationTools,
-            inputProcessors: version.inputProcessors,
-            outputProcessors: version.outputProcessors,
-            memory: version.memory,
-            scorers: version.scorers,
-          } as StorageResolvedAgentType;
-        }),
-      );
-
-      return {
-        agents: resolvedAgents,
-        total,
-        page,
-        perPage: perPageForResponse,
-        hasMore: perPageInput === false ? false : offset + perPage < total,
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'LIST_AGENTS_RESOLVED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -678,6 +593,8 @@ export class AgentsLibSQL extends AgentsStorage {
           outputProcessors: input.outputProcessors ?? null,
           memory: input.memory ?? null,
           scorers: input.scorers ?? null,
+          mcpClients: input.mcpClients ?? null,
+          requestContextSchema: input.requestContextSchema ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -689,6 +606,7 @@ export class AgentsLibSQL extends AgentsStorage {
         createdAt: now,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_VERSION', 'FAILED'),
@@ -714,6 +632,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return this.parseVersionRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_VERSION', 'FAILED'),
@@ -743,6 +662,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return this.parseVersionRow(rows[0]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_VERSION_BY_NUMBER', 'FAILED'),
@@ -773,6 +693,7 @@ export class AgentsLibSQL extends AgentsStorage {
 
       return this.parseVersionRow(rows[0]);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_LATEST_VERSION', 'FAILED'),
@@ -848,6 +769,7 @@ export class AgentsLibSQL extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_VERSIONS', 'FAILED'),
@@ -867,6 +789,7 @@ export class AgentsLibSQL extends AgentsStorage {
         keys: { id },
       });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_VERSION', 'FAILED'),
@@ -879,14 +802,14 @@ export class AgentsLibSQL extends AgentsStorage {
     }
   }
 
-  async deleteVersionsByAgentId(agentId: string): Promise<void> {
+  async deleteVersionsByParentId(entityId: string): Promise<void> {
     try {
       // Get all version IDs for this agent
       const versions = await this.#db.selectMany<{ id: string }>({
         tableName: TABLE_AGENT_VERSIONS,
         whereClause: {
           sql: 'WHERE agentId = ?',
-          args: [agentId],
+          args: [entityId],
         },
       });
 
@@ -898,12 +821,13 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'DELETE_VERSIONS_BY_AGENT_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { agentId },
+          details: { agentId: entityId },
         },
         error,
       );
@@ -921,6 +845,7 @@ export class AgentsLibSQL extends AgentsStorage {
       });
       return count;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'COUNT_VERSIONS', 'FAILED'),
@@ -970,6 +895,8 @@ export class AgentsLibSQL extends AgentsStorage {
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
       scorers: this.parseJson(row.scorers, 'scorers'),
+      mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAt as string),

@@ -71,14 +71,39 @@ async function listScorersFromSystem({
 
   // Process stored agents (database-backed agents)
   try {
-    const storedAgentsResult = await mastra.getEditor()?.listStoredAgents();
+    const editor = mastra.getEditor();
+    const storedAgentsResult = await editor?.agent.list({ status: 'draft' });
     if (storedAgentsResult?.agents) {
-      for (const storedAgent of storedAgentsResult.agents) {
-        await processAgentScorers(storedAgent);
+      for (const storedAgentConfig of storedAgentsResult.agents) {
+        try {
+          const agent = await editor?.agent.getById(storedAgentConfig.id);
+          if (agent) {
+            await processAgentScorers(agent);
+          }
+        } catch {
+          // Skip individual agents that fail to hydrate
+        }
       }
     }
   } catch {
     // Silently ignore if storage is not configured - not all setups have storage
+  }
+
+  // Process stored scorers (standalone CMS-created scorers)
+  try {
+    const editor = mastra.getEditor();
+    const storedScorersResult = await editor?.scorer.list({ status: 'draft' });
+    if (storedScorersResult?.scorerDefinitions) {
+      for (const storedScorerConfig of storedScorersResult.scorerDefinitions) {
+        try {
+          await editor?.scorer.getById(storedScorerConfig.id);
+        } catch {
+          // Skip individual scorers that fail to hydrate
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured
   }
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {

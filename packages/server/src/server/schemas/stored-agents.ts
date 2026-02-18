@@ -1,7 +1,8 @@
 import z from 'zod';
-import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
+import { ruleGroupSchema } from './rule-group';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -26,11 +27,18 @@ const storageOrderBySchema = z.object({
   direction: z.enum(['ASC', 'DESC']).optional(),
 });
 
+export { statusQuerySchema };
+
 /**
  * GET /stored/agents - List stored agents
  */
 export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Filter agents by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter agents by author identifier'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
 });
@@ -40,48 +48,18 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
 // ============================================================================
 
 /**
- * Scorer config schema with optional sampling
+ * Scorer config schema with optional sampling and rules
  */
 const scorerConfigSchema = z.object({
+  description: z.string().optional(),
   sampling: z
     .union([
       z.object({ type: z.literal('none') }),
       z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
     ])
     .optional(),
+  rules: ruleGroupSchema.optional(),
 });
-
-/**
- * Rule and RuleGroup schemas for conditional prompt block evaluation.
- */
-const ruleSchema = z.object({
-  field: z.string(),
-  operator: z.enum([
-    'equals',
-    'not_equals',
-    'contains',
-    'not_contains',
-    'greater_than',
-    'less_than',
-    'greater_than_or_equal',
-    'less_than_or_equal',
-    'in',
-    'not_in',
-    'exists',
-    'not_exists',
-  ]),
-  value: z.unknown(),
-});
-
-type RuleGroupZod = z.ZodType<{ operator: 'AND' | 'OR'; conditions: (z.infer<typeof ruleSchema> | RuleGroupInput)[] }>;
-type RuleGroupInput = z.infer<RuleGroupZod>;
-
-const ruleGroupSchema: RuleGroupZod = z.lazy(() =>
-  z.object({
-    operator: z.enum(['AND', 'OR']),
-    conditions: z.array(z.union([ruleSchema, ruleGroupSchema])),
-  }),
-);
 
 /**
  * Agent instruction block schema for prompt-block-based instructions.
@@ -93,39 +71,91 @@ const agentInstructionBlockSchema = z.discriminatedUnion('type', [
 ]);
 
 /**
+ * Creates a schema for a field that can be either a static value or an array of conditional variants.
+ * Each variant has a `value` and an optional `rules` (RuleGroup) that determines when it applies.
+ */
+function conditionalFieldSchema<T extends z.ZodTypeAny>(valueSchema: T) {
+  const variantSchema = z.object({
+    value: valueSchema,
+    rules: ruleGroupSchema.optional(),
+  });
+  return z.union([valueSchema, z.array(variantSchema)]);
+}
+
+/**
  * Instructions can be a plain string or an array of instruction blocks (text + prompt_block references).
  */
 export const instructionsSchema = z
   .union([z.string(), z.array(agentInstructionBlockSchema)])
   .describe('System instructions for the agent (string or array of instruction blocks)');
 
+/** Base model config schema (reused across snapshot and response schemas) */
+const modelConfigSchema = z
+  .object({
+    provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
+    name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
+  })
+  .passthrough();
+
+/** Per-tool config schema */
+const toolConfigSchema = z.object({ description: z.string().optional(), rules: ruleGroupSchema.optional() });
+
+/** Base tools config schema */
+const toolsConfigSchema = z.record(z.string(), toolConfigSchema);
+
+/** MCP client tools config schema — specifies which tools to use from an MCP client/server */
+const mcpClientToolsConfigSchema = z.object({
+  tools: z.record(z.string(), toolConfigSchema).optional(),
+});
+
 /**
  * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
  * These live in version snapshots, not on the thin agent record.
+ *
+ * Fields that support conditional variants (StorageConditionalField) can be either
+ * a static value OR an array of { value, rules? } variants evaluated at request time.
  */
 const snapshotConfigSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: instructionsSchema,
-  model: z
-    .object({
-      provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
-      name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
-    })
-    .passthrough()
-    .describe('Model configuration (provider, name, and optional params)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
-  workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
-  agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
-  integrationTools: z
-    .array(z.string())
+  model: conditionalFieldSchema(modelConfigSchema).describe(
+    'Model configuration — static value or array of conditional variants',
+  ),
+  tools: conditionalFieldSchema(toolsConfigSchema)
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
-  scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
+    .describe('Tool keys mapped to per-tool config — static or conditional'),
+  defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
+    .optional()
+    .describe('Default options for generate/stream calls — static or conditional'),
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Agent keys with optional per-agent config — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
+  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+    .optional()
+    .describe('Memory configuration — static or conditional'),
+  scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
+    .optional()
+    .describe('Scorer keys with optional sampling config — static or conditional'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining valid request context variables for conditional rule evaluation'),
 });
 
 /**
@@ -154,9 +184,9 @@ export const createStoredAgentBodySchema = z
  */
 const snapshotConfigUpdateSchema = snapshotConfigSchema.extend({
   memory: z
-    .union([serializedMemoryConfigSchema, z.null()])
+    .union([conditionalFieldSchema(serializedMemoryConfigSchema), z.null()])
     .optional()
-    .describe('Memory configuration object (SerializedMemoryConfig), or null to disable memory'),
+    .describe('Memory configuration — static, conditional, or null to disable memory'),
 });
 
 /**
@@ -186,25 +216,43 @@ export const storedAgentSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: instructionsSchema,
-  model: z
-    .object({
-      provider: z.string().describe('Model provider (e.g., openai, anthropic)'),
-      name: z.string().describe('Model name (e.g., gpt-4o, claude-3-opus)'),
-    })
-    .passthrough()
-    .describe('Model configuration (provider, name, and optional params)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
-  workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
-  agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
-  integrationTools: z
-    .array(z.string())
+  model: conditionalFieldSchema(modelConfigSchema).describe(
+    'Model configuration — static value or array of conditional variants',
+  ),
+  tools: conditionalFieldSchema(toolsConfigSchema)
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
-  scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
+    .describe('Tool keys mapped to per-tool config — static or conditional'),
+  defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
+    .optional()
+    .describe('Default options for generate/stream calls — static or conditional'),
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Agent keys with optional per-agent config — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
+  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+    .optional()
+    .describe('Memory configuration — static or conditional'),
+  scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
+    .optional()
+    .describe('Scorer keys with optional sampling config — static or conditional'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining valid request context variables'),
 });
 
 /**
@@ -282,4 +330,11 @@ export const previewInstructionsResponseSchema = z.object({
 /**
  * Exported for use in agent-versions.ts schemas
  */
-export { snapshotConfigSchema, scorerConfigSchema };
+export {
+  snapshotConfigSchema,
+  scorerConfigSchema,
+  conditionalFieldSchema,
+  modelConfigSchema,
+  toolConfigSchema,
+  toolsConfigSchema,
+};

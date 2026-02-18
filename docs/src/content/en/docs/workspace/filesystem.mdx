@@ -24,10 +24,12 @@ A filesystem provider handles all file operations for a workspace:
 Available providers:
 
 - [`LocalFilesystem`](/reference/workspace/local-filesystem) - Stores files in a directory on disk
+- [`S3Filesystem`](/reference/workspace/s3-filesystem) - Stores files in Amazon S3 or S3-compatible storage (R2, MinIO)
+- [`GCSFilesystem`](/reference/workspace/gcs-filesystem) - Stores files in Google Cloud Storage
 
 :::tip
 
-`LocalFilesystem` is the simplest way to get started as it requires no external services.
+`LocalFilesystem` is the simplest way to get started as it requires no external services. For cloud storage, use `S3Filesystem` or `GCSFilesystem`.
 
 :::
 
@@ -56,6 +58,26 @@ const agent = new Agent({
 const response = await agent.generate('List all files in the workspace');
 ```
 
+## Containment
+
+By default, `LocalFilesystem` runs in **contained mode** — all file operations are restricted to stay within `basePath`. This prevents path traversal attacks and symlink escapes.
+
+In contained mode, absolute paths that fall within `basePath` are used as-is, while other absolute paths are treated as virtual paths relative to `basePath` (e.g. `/file.txt` resolves to `basePath/file.txt`). Any resolved path that escapes `basePath` throws a `PermissionError`.
+
+If your agent needs to access paths outside `basePath` (for example, global skills directories or user home folders), disable containment:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: './workspace',
+    // highlight-next-line
+    contained: false,
+  }),
+});
+```
+
+When `contained` is `false`, absolute paths are treated as real filesystem paths with no restriction.
+
 ## Read-only mode
 
 To prevent agents from modifying files, enable read-only mode:
@@ -72,6 +94,54 @@ const workspace = new Workspace({
 
 When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset. The agent can still read and list files.
 
+## Mounts and CompositeFilesystem
+
+When you use the `mounts` option on a workspace, Mastra creates a `CompositeFilesystem` that routes file operations to the correct provider based on path prefix.
+
+```typescript
+import { Workspace } from '@mastra/core/workspace';
+import { S3Filesystem } from '@mastra/s3';
+import { GCSFilesystem } from '@mastra/gcs';
+import { E2BSandbox } from '@mastra/e2b';
+
+const workspace = new Workspace({
+  mounts: {
+    '/data': new S3Filesystem({
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }),
+    '/skills': new GCSFilesystem({
+      bucket: 'agent-skills',
+    }),
+  },
+  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+});
+```
+
+With this configuration:
+
+- `read_file('/data/input.csv')` reads from the S3 bucket
+- `write_file('/skills/guide.md', content)` writes to the GCS bucket
+- `list_directory('/')` returns virtual entries for `/data` and `/skills`
+- Commands in the sandbox can access files at `/data` and `/skills` via FUSE mounts
+
+### Path routing
+
+All file paths must start with a mount prefix. Operations on paths that don't match any mount will fail. Listing the root directory (`/`) returns virtual directory entries for each mount point.
+
+Mount paths cannot be nested — for example, you cannot mount at both `/data` and `/data/sub`.
+
+### `filesystem` vs `mounts`
+
+`filesystem` and `mounts` are mutually exclusive options on a workspace:
+
+- Use **`filesystem`** when you have a single storage provider and don't need to mount it into a sandbox. The agent gets file tools that operate directly against the provider.
+- Use **`mounts`** when you need cloud storage accessible inside a sandbox, or when you want to combine multiple providers. The workspace creates a CompositeFilesystem for file tools and FUSE-mounts the storage into the sandbox.
+
+For local development, you typically don't need `mounts` — a `LocalFilesystem` and `LocalSandbox` pointed at the same directory gives you both file tools and command execution on the same files. See [configuration patterns](/docs/workspace/overview#configuration-patterns) for more detail.
+
 ## Agent tools
 
 When you configure a filesystem on a workspace, agents receive tools for reading, writing, listing, and deleting files. See [workspace class reference](/reference/workspace/workspace-class#filesystem-tools) for details.
@@ -79,5 +149,7 @@ When you configure a filesystem on a workspace, agents receive tools for reading
 ## Related
 
 - [LocalFilesystem reference](/reference/workspace/local-filesystem)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
 - [Workspace overview](/docs/workspace/overview)
 - [Sandbox](/docs/workspace/sandbox)

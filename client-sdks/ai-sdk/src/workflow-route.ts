@@ -10,6 +10,7 @@ export type WorkflowStreamHandlerParams = {
   runId?: string;
   resourceId?: string;
   inputData?: Record<string, any>;
+  initialState?: Record<string, any>;
   resumeData?: Record<string, any>;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
@@ -55,7 +56,7 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
   sendReasoning = false,
   sendSources = false,
 }: WorkflowStreamHandlerOptions): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
-  const { runId, resourceId, inputData, resumeData, requestContext, ...rest } = params;
+  const { runId, resourceId, inputData, initialState, resumeData, requestContext, ...rest } = params;
 
   const workflowObj = mastra.getWorkflowById(workflowId);
   if (!workflowObj) {
@@ -66,7 +67,7 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
 
   const stream = resumeData
     ? run.resumeStream({ resumeData, ...rest, requestContext })
-    : run.stream({ inputData, ...rest, requestContext });
+    : run.stream({ inputData, initialState, ...rest, requestContext });
 
   return createUIMessageStream<UI_MESSAGE>({
     execute: async ({ writer }) => {

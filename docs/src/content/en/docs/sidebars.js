@@ -220,6 +220,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/working-memory',
           label: 'Working Memory',
         },
@@ -227,14 +235,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/semantic-recall',
           label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -368,6 +368,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/clerk',
               label: 'Clerk',
             },
@@ -418,6 +423,11 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/mastra-server',
           label: 'Mastra Server',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/studio',
+          label: 'Studio',
         },
         {
           type: 'doc',
@@ -582,6 +592,22 @@ const sidebars = {
                   label: 'SensitiveDataFilter',
                 },
               ],
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
             },
           ],
         },

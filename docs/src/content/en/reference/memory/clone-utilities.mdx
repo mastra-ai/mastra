@@ -1,11 +1,11 @@
 ---
-title: "Reference: Clone Utility Methods | Memory"
+title: "Reference: Cloned Thread Utilities | Memory"
 description: "Documentation for utility methods to work with cloned threads in Mastra Memory."
 packages:
   - "@mastra/memory"
 ---
 
-# Clone Utility Methods
+# Cloned Thread Utilities
 
 The Memory class provides utility methods for working with cloned threads. These methods help you check clone status, retrieve clone metadata, navigate clone relationships, and track clone history.
 
@@ -32,18 +32,6 @@ const isClonedThread = memory.isClone(thread);
   ]}
 />
 
-### Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "isClone",
-      type: "boolean",
-      description: "True if the thread is a clone, false otherwise.",
-    },
-  ]}
-/>
-
 ### Example
 
 ```typescript
@@ -55,8 +43,6 @@ if (memory.isClone(thread)) {
   console.log("This is an original thread");
 }
 ```
-
----
 
 ## getCloneMetadata()
 
@@ -81,32 +67,6 @@ const metadata = memory.getCloneMetadata(thread);
   ]}
 />
 
-### Returns
-
-Returns `ThreadCloneMetadata | null`:
-
-<PropertiesTable
-  content={[
-    {
-      name: "sourceThreadId",
-      type: "string",
-      description: "The ID of the original thread that was cloned.",
-    },
-    {
-      name: "clonedAt",
-      type: "Date",
-      description: "Timestamp when the clone was created.",
-    },
-    {
-      name: "lastMessageId",
-      type: "string",
-      description:
-        "The ID of the last message in the source thread at the time of cloning.",
-      isOptional: true,
-    },
-  ]}
-/>
-
 ### Example
 
 ```typescript
@@ -118,8 +78,6 @@ if (cloneInfo) {
   console.log(`Cloned at: ${cloneInfo.clonedAt}`);
 }
 ```
-
----
 
 ## getSourceThread()
 
@@ -144,19 +102,6 @@ const sourceThread = await memory.getSourceThread(threadId);
   ]}
 />
 
-### Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "sourceThread",
-      type: "StorageThreadType | null",
-      description:
-        "The source thread if found, or null if the thread is not a clone or the source no longer exists.",
-    },
-  ]}
-/>
-
 ### Example
 
 ```typescript
@@ -167,8 +112,6 @@ if (sourceThread) {
   console.log(`Original thread created: ${sourceThread.createdAt}`);
 }
 ```
-
----
 
 ## listClones()
 
@@ -193,19 +136,6 @@ const clones = await memory.listClones(sourceThreadId);
   ]}
 />
 
-### Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "clones",
-      type: "StorageThreadType[]",
-      description:
-        "Array of threads that were cloned from the specified source thread.",
-    },
-  ]}
-/>
-
 ### Example
 
 ```typescript
@@ -216,8 +146,6 @@ for (const clone of clones) {
   console.log(`- ${clone.id}: ${clone.title}`);
 }
 ```
-
----
 
 ## getCloneHistory()
 
@@ -242,19 +170,6 @@ const history = await memory.getCloneHistory(threadId);
   ]}
 />
 
-### Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "history",
-      type: "StorageThreadType[]",
-      description:
-        "Array of threads representing the clone chain, ordered from the original root thread to the current thread.",
-    },
-  ]}
-/>
-
 ### Example
 
 ```typescript
@@ -272,8 +187,6 @@ for (let i = 0; i < history.length; i++) {
   console.log(`${prefix}: ${history[i].title}`);
 }
 ```
-
----
 
 ## Complete Example
 
@@ -336,10 +249,3 @@ async function manageClones() {
   console.log(`Clone depth: ${history.length - 1}`); // 2
 }
 ```
-
-### Related
-
-- [cloneThread](/reference/memory/cloneThread)
-- [Memory Class Reference](/reference/memory/memory-class)
-- [getThreadById](/reference/memory/getThreadById)
-- [listThreads](/reference/memory/listThreads)

@@ -126,7 +126,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         runId,
       });
 
-      const requestContext = new RequestContext();
+      const requestContext = rest.requestContext ?? new RequestContext();
 
       if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);
@@ -136,6 +136,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         ? await run.resume({
             resumeData: resumeContext.resumeData,
             tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            requestContext,
             label: toolCallId,
           })
         : await run.start({

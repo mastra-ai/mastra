@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
 import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
+import { loadAndValidatePresets, escapeJsonForHtml } from '../../utils/validate-presets.js';
 
 interface StudioOptions {
   env?: string;
@@ -13,6 +14,7 @@ interface StudioOptions {
   serverPort?: string | number;
   serverProtocol?: string;
   serverApiPrefix?: string;
+  requestContextPresets?: string;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,7 +28,18 @@ export async function studio(
   },
 ) {
   // Load environment variables from .env files
-  config({ path: [options.env || '.env.production', '.env'] });
+  config({ path: [options.env || '.env.production', '.env'], quiet: true });
+
+  // Load and validate request context presets if provided
+  let requestContextPresetsJson = '';
+  if (options.requestContextPresets) {
+    try {
+      requestContextPresetsJson = await loadAndValidatePresets(options.requestContextPresets);
+    } catch (error: any) {
+      logger.error(`Failed to load request context presets: ${error.message}`);
+      process.exit(1);
+    }
+  }
 
   try {
     const distPath = join(__dirname, 'studio');
@@ -40,7 +53,7 @@ export async function studio(
 
     // Start the server using the installed serve binary
     // Start the server using node
-    const server = createServer(distPath, options);
+    const server = createServer(distPath, options, requestContextPresetsJson);
 
     server.listen(port, () => {
       logger.info(`Mastra Studio running on http://localhost:${port}`);
@@ -63,7 +76,7 @@ export async function studio(
   }
 }
 
-const createServer = (builtStudioPath: string, options: StudioOptions) => {
+const createServer = (builtStudioPath: string, options: StudioOptions, requestContextPresetsJson: string) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
   const basePath = '';
 
@@ -78,17 +91,14 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
     .replaceAll('%%MASTRA_EXPERIMENTAL_FEATURES%%', experimentalFeatures)
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
-    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '');
+    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
+    .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson));
 
   const server = http.createServer((req, res) => {
     const url = req.url || basePath;
 
     // Let static assets be served by serve-handler
-    const isStaticAsset =
-      url.includes('/assets/') ||
-      url.includes('/dist/assets/') ||
-      url.includes('/mastra.svg') ||
-      url.includes('/favicon.ico');
+    const isStaticAsset = url.includes('/assets/') || url.includes('/dist/assets/') || url.includes('/mastra.svg');
 
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {

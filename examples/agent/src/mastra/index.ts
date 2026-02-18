@@ -4,6 +4,7 @@ import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';
+import { ComposioToolProvider } from '@mastra/editor/composio';
 
 import {
   agentThatHarassesYou,
@@ -13,6 +14,7 @@ import {
   evalAgent,
   dynamicToolsAgent,
   schemaValidatedAgent,
+  requestContextDemoAgent,
 } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
@@ -64,6 +66,7 @@ const config = {
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
+    requestContextDemoAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
@@ -219,5 +222,9 @@ const config = {
 
 export const mastra = new Mastra({
   ...config,
-  editor: new MastraEditor(),
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+  }),
 });

@@ -12,7 +12,7 @@
 
 import type { TracingEvent, AnyExportedSpan, SpanErrorInfo } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TrackingExporter } from './tracking';
 import type { TraceData, TrackingExporterConfig } from './tracking';
 
@@ -405,23 +405,18 @@ async function sendWithDelays(
 // ============================================================================
 
 /**
- * Flush async processing (setImmediate callbacks) with fake timers.
- * Uses advanceTimersToNextTimerAsync to run each scheduled timer one at a time.
- * For tests that don't want cleanup timers to fire, use long cleanup delays.
+ * Wait for setImmediate-based async queue processing to cascade through.
+ * With real timers, setImmediate callbacks fire on the next event loop iteration,
+ * so a short real delay is sufficient for any depth of cascading.
  */
-async function flushAsync(times: number = 1): Promise<void> {
-  for (let i = 0; i < times; i++) {
-    // advanceTimersToNextTimer runs the next scheduled timer/immediate
-    // This includes both setImmediate and setTimeout callbacks
-    await vi.advanceTimersToNextTimerAsync();
-  }
+async function flushAsync(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 50));
 }
 
 describe('TrackingExporter', () => {
   let exporter: TestTrackingExporter;
 
   beforeEach(() => {
-    vi.useFakeTimers();
     // Reset spanCounter for deterministic IDs across test runs
     spanCounter = 0;
   });
@@ -430,7 +425,6 @@ describe('TrackingExporter', () => {
     if (exporter) {
       await exporter.shutdown();
     }
-    vi.useRealTimers();
   });
 
   describe('Root span processing', () => {
@@ -444,7 +438,7 @@ describe('TrackingExporter', () => {
       const rootEvent = events.find(e => e.type === 'span_started' && e.exportedSpan.isRootSpan)!;
 
       await exporter.exportTracingEvent(rootEvent);
-      await flushAsync(3);
+      await flushAsync();
 
       expect(exporter.builtRoots.size).toBe(1);
       expect(exporter.wasMethodCalledForSpan('_buildRoot', rootEvent.exportedSpan.id)).toBe(true);
@@ -458,14 +452,14 @@ describe('TrackingExporter', () => {
 
       // Send child first
       await exporter.exportTracingEvent(childStarts[0]);
-      await flushAsync(3);
+      await flushAsync();
 
       // Child should be queued, not built
       expect(exporter.builtSpans.size).toBe(0);
 
       // Now send root
       await exporter.exportTracingEvent(rootStart);
-      await flushAsync(5);
+      await flushAsync();
 
       // Root should be built (in both builtRoots and builtSpans) and child should be processed
       // Root goes through _buildRoot (builtRoots) AND _buildSpan (builtSpans)
@@ -483,14 +477,14 @@ describe('TrackingExporter', () => {
       for (const child of childStarts) {
         await exporter.exportTracingEvent(child);
       }
-      await flushAsync(3);
+      await flushAsync();
 
       // No children should be built yet
       expect(exporter.builtSpans.size).toBe(0);
 
       // Send root
       await exporter.exportTracingEvent(rootStart);
-      await flushAsync(10);
+      await flushAsync();
 
       // All should now be built
       // Root goes through _buildRoot (builtRoots) AND _buildSpan (builtSpans)
@@ -572,7 +566,7 @@ describe('TrackingExporter', () => {
       await exporter.exportTracingEvent(spanA);
 
       // Allow cascading: A enables B, B enables C, C enables D
-      await flushAsync(15);
+      await flushAsync();
 
       // All should be built
       expect(exporter.builtRoots.has('span-A')).toBe(true);
@@ -647,7 +641,7 @@ describe('TrackingExporter', () => {
       await exporter.exportTracingEvent(spanA);
 
       // Allow cascading
-      await flushAsync(15);
+      await flushAsync();
 
       // All should be built
       expect(exporter.builtRoots.has('span-A')).toBe(true);
@@ -668,7 +662,7 @@ describe('TrackingExporter', () => {
       const reversedEvents = reverseHierarchyOrder(events);
 
       await sendWithDelays(exporter, reversedEvents);
-      await flushAsync(15);
+      await flushAsync();
 
       // All spans should eventually be processed
       expect(exporter.builtRoots.size).toBe(1);
@@ -679,7 +673,7 @@ describe('TrackingExporter', () => {
   describe('TTL and max attempts limits', () => {
     it('should drop events after TTL expiry', async () => {
       exporter = new TestTrackingExporter({
-        earlyQueueTTLMs: 1000, // 1 second TTL
+        earlyQueueTTLMs: 50, // Short TTL for testing with real timers
         earlyQueueMaxAttempts: 100, // High max attempts so TTL is the limiting factor
         traceCleanupDelayMs: 60 * 60 * 1000, // Long cleanup delay
       });
@@ -715,11 +709,11 @@ describe('TrackingExporter', () => {
 
       await exporter.exportTracingEvent(rootSpan);
       await exporter.exportTracingEvent(orphanSpan);
-      await flushAsync(3);
+      await flushAsync();
 
-      // Advance time past TTL
-      vi.advanceTimersByTime(2000);
-      await flushAsync(5);
+      // Wait past TTL with real timers
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await flushAsync();
 
       // The orphan span should NOT be built (parent never arrives)
       expect(exporter.builtSpans.has('orphan-span')).toBe(false);
@@ -764,11 +758,8 @@ describe('TrackingExporter', () => {
       await exporter.exportTracingEvent(rootSpan);
       await exporter.exportTracingEvent(orphanSpan);
 
-      // Trigger multiple processing attempts
-      for (let i = 0; i < 5; i++) {
-        await flushAsync(3);
-        vi.advanceTimersByTime(100);
-      }
+      // Wait for processing attempts to complete
+      await flushAsync();
 
       // The orphan span should NOT be built
       expect(exporter.builtSpans.has('orphan-span')).toBe(false);
@@ -776,13 +767,7 @@ describe('TrackingExporter', () => {
   });
 
   describe('Delayed cleanup', () => {
-    // These tests use real timers with short delays to test actual timer behavior
-    // We restore real timers specifically for these tests
-
     it('should schedule cleanup after all spans end', async () => {
-      // Use real timers for this test
-      vi.useRealTimers();
-
       exporter = new TestTrackingExporter({
         traceCleanupDelayMs: 100, // Short delay for testing
       });
@@ -801,15 +786,9 @@ describe('TrackingExporter', () => {
 
       // Trace should be cleaned up
       expect(exporter.getTraceMapSize()).toBe(0);
-
-      // Restore fake timers for afterEach cleanup
-      vi.useFakeTimers();
     });
 
     it('should reset cleanup timer on new data arrival', async () => {
-      // Use real timers for this test
-      vi.useRealTimers();
-
       exporter = new TestTrackingExporter({
         traceCleanupDelayMs: 100, // Short delay for testing
       });
@@ -857,9 +836,6 @@ describe('TrackingExporter', () => {
 
       // Now trace should be cleaned up
       expect(exporter.getTraceMapSize()).toBe(0);
-
-      // Restore fake timers for afterEach cleanup
-      vi.useFakeTimers();
     });
   });
 
@@ -895,7 +871,7 @@ describe('TrackingExporter', () => {
 
         await exporter.exportTracingEvent(rootStart);
         await exporter.exportTracingEvent(rootEnd);
-        await flushAsync(3);
+        await flushAsync();
       }
 
       // Soft cap is 3, so oldest 2 should be cleaned up immediately
@@ -925,7 +901,7 @@ describe('TrackingExporter', () => {
         };
 
         await exporter.exportTracingEvent(rootStart);
-        await flushAsync(3);
+        await flushAsync();
       }
 
       // Hard cap is 3, so oldest traces should be killed
@@ -935,9 +911,6 @@ describe('TrackingExporter', () => {
 
   describe('Shutdown behavior', () => {
     it('should cancel pending cleanups on shutdown', async () => {
-      // Use real timers for this test
-      vi.useRealTimers();
-
       exporter = new TestTrackingExporter({
         traceCleanupDelayMs: 1000, // 1 second - enough time to shutdown before cleanup fires
       });
@@ -955,9 +928,6 @@ describe('TrackingExporter', () => {
 
       // Trace should be cleaned up immediately by shutdown
       expect(exporter.getTraceMapSize()).toBe(0);
-
-      // Restore fake timers for afterEach cleanup
-      vi.useFakeTimers();
     });
 
     it('should stop processing after shutdown starts', async () => {
@@ -969,7 +939,7 @@ describe('TrackingExporter', () => {
       // Try to send an event
       const events = generateTrace({ depth: 1, breadth: 1, includeEvents: false });
       await exporter.exportTracingEvent(events[0]);
-      await flushAsync(3);
+      await flushAsync();
 
       // Nothing should be built
       expect(exporter.builtRoots.size).toBe(0);
@@ -985,7 +955,7 @@ describe('TrackingExporter', () => {
       const rootStart = events.find(e => e.type === 'span_started' && e.exportedSpan.isRootSpan)!;
 
       await exporter.exportTracingEvent(rootStart);
-      await flushAsync(3);
+      await flushAsync();
 
       // Root should be built as a span, not as root
       expect(exporter.builtRoots.size).toBe(0);
@@ -993,9 +963,6 @@ describe('TrackingExporter', () => {
     });
 
     it('should still trigger queue processing when root marked processed via _buildSpan', async () => {
-      // Use real timers for this test to ensure setImmediate callbacks run properly
-      vi.useRealTimers();
-
       exporter = new TestTrackingExporter({ skipRoot: true, traceCleanupDelayMs: 60 * 60 * 1000 });
 
       const events = generateTrace({ depth: 2, breadth: 1, includeEvents: false });
@@ -1019,9 +986,6 @@ describe('TrackingExporter', () => {
       // Both should now be built
       expect(exporter.builtSpans.has(rootStart.exportedSpan.id)).toBe(true);
       expect(exporter.builtSpans.has(childStarts[0].exportedSpan.id)).toBe(true);
-
-      // Restore fake timers for afterEach cleanup
-      vi.useFakeTimers();
     });
   });
 });

@@ -1,6 +1,9 @@
 import { openai as openai_v4 } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
+import type { LanguageModelV1 } from '@ai-sdk/provider-v4';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -9,7 +12,7 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 
-export function getOpenAIModel(version: 'v1' | 'v2' | 'v3') {
+export function getOpenAIModel(version: 'v1' | 'v2' | 'v3'): LanguageModelV1 | LanguageModelV2 | LanguageModelV3 {
   if (version === 'v1') {
     return openai_v4('gpt-4o-mini');
   }

@@ -66,7 +66,7 @@ describe('tree-formatter', () => {
 
       const result = await formatAsTree(filesystem, '/');
 
-      // Directories first, then files, all alphabetical (ASCII order: uppercase before lowercase)
+      // Directories first, then files, all ASCII alphabetical (to match native tree's strcmp)
       expect(result.tree).toBe(
         `.
 ├── src
@@ -514,6 +514,137 @@ describe('tree-formatter', () => {
   });
 
   // ===========================================================================
+  // formatAsTree - Glob Pattern Filter
+  // ===========================================================================
+  describe('pattern (glob filter)', () => {
+    it('should filter files by glob pattern', async () => {
+      await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'style.css'), '');
+      await fs.writeFile(path.join(tempDir, 'utils.ts'), '');
+
+      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).toContain('utils.ts');
+      expect(result.tree).not.toContain('style.css');
+      expect(result.fileCount).toBe(2);
+    });
+
+    it('should match files at any depth with **', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'src', 'utils'));
+      await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'app.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'style.css'), '');
+
+      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).toContain('app.ts');
+      expect(result.tree).toContain('helpers.ts');
+      expect(result.tree).not.toContain('style.css');
+      expect(result.fileCount).toBe(3);
+    });
+
+    it('should support brace expansion', async () => {
+      await fs.writeFile(path.join(tempDir, 'vitest.config.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'eslint.config.js'), '');
+      await fs.writeFile(path.join(tempDir, 'README.md'), '');
+
+      const result = await formatAsTree(filesystem, '/', { pattern: '*.config.{js,ts}' });
+
+      expect(result.tree).toContain('vitest.config.ts');
+      expect(result.tree).toContain('eslint.config.js');
+      expect(result.tree).not.toContain('README.md');
+      expect(result.fileCount).toBe(2);
+    });
+
+    it('should support multiple patterns', async () => {
+      await fs.writeFile(path.join(tempDir, 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'App.tsx'), '');
+      await fs.writeFile(path.join(tempDir, 'style.css'), '');
+
+      const result = await formatAsTree(filesystem, '/', { pattern: ['**/*.ts', '**/*.tsx'] });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).toContain('App.tsx');
+      expect(result.tree).not.toContain('style.css');
+      expect(result.fileCount).toBe(2);
+    });
+
+    it('should preserve directories so their contents can be checked', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'README.md'), '');
+
+      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+
+      // Directory 'src' should still be present because it contains matching files
+      expect(result.tree).toContain('src');
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('README.md');
+      expect(result.dirCount).toBe(1);
+      expect(result.fileCount).toBe(1);
+    });
+
+    it('should work with pattern combined with exclude', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.mkdir(path.join(tempDir, 'node_modules'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'node_modules', 'lib.ts'), '');
+
+      const result = await formatAsTree(filesystem, '/', {
+        pattern: '**/*.ts',
+        exclude: 'node_modules',
+      });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('node_modules');
+      expect(result.tree).not.toContain('lib.ts');
+    });
+
+    it('should work with pattern combined with maxDepth', async () => {
+      await fs.mkdir(path.join(tempDir, 'a'));
+      await fs.mkdir(path.join(tempDir, 'a', 'b'));
+      await fs.writeFile(path.join(tempDir, 'a', 'shallow.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'a', 'b', 'deep.ts'), '');
+
+      const result = await formatAsTree(filesystem, '/', {
+        pattern: '**/*.ts',
+        maxDepth: 2,
+      });
+
+      expect(result.tree).toContain('shallow.ts');
+      // b/ is visible at depth 2 but its contents (depth 3) are truncated
+      expect(result.tree).not.toContain('deep.ts');
+      expect(result.truncated).toBe(true);
+    });
+
+    it('should produce empty tree when no files match', async () => {
+      await fs.writeFile(path.join(tempDir, 'style.css'), '');
+      await fs.writeFile(path.join(tempDir, 'README.md'), '');
+
+      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+
+      expect(result.tree).toBe('.');
+      expect(result.fileCount).toBe(0);
+    });
+
+    it('should work when listing a subdirectory', async () => {
+      await fs.mkdir(path.join(tempDir, 'src'));
+      await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
+      await fs.writeFile(path.join(tempDir, 'src', 'style.css'), '');
+
+      const result = await formatAsTree(filesystem, '/src', { pattern: '**/*.ts' });
+
+      expect(result.tree).toContain('index.ts');
+      expect(result.tree).not.toContain('style.css');
+      expect(result.fileCount).toBe(1);
+    });
+  });
+
+  // ===========================================================================
   // formatEntriesAsTree - Direct Entry Formatting
   // ===========================================================================
   describe('formatEntriesAsTree', () => {
@@ -650,6 +781,8 @@ describe('tree-formatter', () => {
      * Cached at describe-time for use with it.skipIf.
      */
     const treeAvailable = (() => {
+      // Only run native tree comparison in CI (Linux) to avoid macOS sort-order differences
+      if (!process.env.CI) return false;
       try {
         execSync('which tree', { encoding: 'utf-8' });
         return true;

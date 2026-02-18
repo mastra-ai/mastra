@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
+import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -23,15 +24,16 @@ import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
+import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
-import type { Workflow } from '../workflows';
+import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -40,7 +42,17 @@ import { createOnScorerHook } from './hooks';
  * object had getters or non-enumerable properties.
  */
 function createUndefinedPrimitiveError(
-  type: 'agent' | 'tool' | 'processor' | 'vector' | 'scorer' | 'workflow' | 'mcp-server' | 'gateway' | 'memory',
+  type:
+    | 'agent'
+    | 'tool'
+    | 'processor'
+    | 'vector'
+    | 'scorer'
+    | 'workflow'
+    | 'mcp-server'
+    | 'gateway'
+    | 'memory'
+    | 'workspace',
   value: null | undefined,
   key?: string,
 ): MastraError {
@@ -88,10 +100,7 @@ function createUndefinedPrimitiveError(
  */
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
-    string,
-    Workflow<any, any, any, any, any, any, any>
-  >,
+  TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -221,7 +230,7 @@ export interface Config<
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
    */
-  workspace?: Workspace;
+  workspace?: AnyWorkspace;
 
   /**
    * Custom model router gateways for accessing LLM providers.
@@ -282,10 +291,7 @@ export interface Config<
  */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TWorkflows extends Record<string, Workflow<any, any, any, any, any, any, any>> = Record<
-    string,
-    Workflow<any, any, any, any, any, any, any>
-  >,
+  TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
   TVectors extends Record<string, MastraVector<any>> = Record<string, MastraVector<any>>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends IMastraLogger = IMastraLogger,
@@ -318,6 +324,7 @@ export class Mastra<
     new Map();
   #memory?: TMemory;
   #workspace?: Workspace;
+  #workspaces: Record<string, Workspace> = {};
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -333,11 +340,23 @@ export class Mastra<
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
+  // Cache for stored scorers to allow in-memory modifications to persist across requests
+  #storedScorersCache: Map<string, MastraScorer<any, any, any, any>> = new Map();
+  // Registry for prompt blocks (stored or code-defined)
+  #promptBlocks: Record<string, StorageResolvedPromptBlockType> = {};
   // Editor instance for handling agent instantiation and configuration
   #editor?: IMastraEditor;
+  #datasets?: DatasetsManager;
 
   get pubsub() {
     return this.#pubsub;
+  }
+
+  get datasets(): DatasetsManager {
+    if (!this.#datasets) {
+      this.#datasets = new DatasetsManager(this);
+    }
+    return this.#datasets;
   }
 
   /**
@@ -378,6 +397,14 @@ export class Mastra<
    */
   public getStoredAgentCache() {
     return this.#storedAgentsCache;
+  }
+
+  /**
+   * Gets the stored scorers cache
+   * @internal
+   */
+  public getStoredScorerCache() {
+    return this.#storedScorersCache;
   }
 
   /**
@@ -604,6 +631,8 @@ export class Mastra<
 
     if (config?.workspace) {
       this.#workspace = config.workspace;
+      // Also register in the workspaces registry for direct lookup by ID
+      this.addWorkspace(config.workspace);
     }
 
     if (config?.scorers) {
@@ -865,6 +894,21 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register processor workflows for agent ${agentKey}:`, err);
       });
+
+    // Register agent workspace in the workspaces registry for direct lookup.
+    // Dynamic workspace functions may return undefined without request context — that's fine,
+    // the if (workspace) guard below will skip registration and they'll register lazily later.
+    if (mastraAgent.hasOwnWorkspace?.()) {
+      Promise.resolve(mastraAgent.getWorkspace?.())
+        .then(workspace => {
+          if (workspace) {
+            this.addWorkspace(workspace);
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register workspace for agent ${agentKey}:`, err);
+        });
+    }
 
     // Register scorers from the agent to the Mastra instance
     // This makes agent-level scorers discoverable via mastra.getScorer()/getScorerById()
@@ -1144,6 +1188,82 @@ export class Mastra<
   }
 
   /**
+   * Retrieves a registered workspace by its ID.
+   *
+   * @throws {MastraError} When the workspace with the specified ID is not found
+   *
+   * @example
+   * ```typescript
+   * const workspace = mastra.getWorkspaceById('workspace-123');
+   * const files = await workspace.filesystem.readdir('/');
+   * ```
+   */
+  public getWorkspaceById(id: string): Workspace {
+    const workspace = this.#workspaces[id];
+    if (!workspace) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Workspace with id ${id} not found`,
+        details: {
+          status: 404,
+          workspaceId: id,
+          availableIds: Object.keys(this.#workspaces).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return workspace;
+  }
+
+  /**
+   * Returns all registered workspaces as a record keyed by their IDs.
+   *
+   * @example
+   * ```typescript
+   * const workspaces = mastra.listWorkspaces();
+   * for (const [id, workspace] of Object.entries(workspaces)) {
+   *   console.log(`Workspace ${id}: ${workspace.name}`);
+   * }
+   * ```
+   */
+  public listWorkspaces(): Record<string, Workspace> {
+    return { ...this.#workspaces };
+  }
+
+  /**
+   * Adds a new workspace to the Mastra instance.
+   *
+   * This method allows dynamic registration of workspaces after the Mastra instance
+   * has been created. Workspaces are keyed by their ID.
+   *
+   * @example
+   * ```typescript
+   * const workspace = new Workspace({
+   *   id: 'project-workspace',
+   *   name: 'Project Workspace',
+   *   filesystem: new LocalFilesystem({ rootPath: './workspace' })
+   * });
+   * mastra.addWorkspace(workspace);
+   * ```
+   */
+  public addWorkspace(workspace: AnyWorkspace, key?: string): void {
+    if (!workspace) {
+      throw createUndefinedPrimitiveError('workspace', workspace, key);
+    }
+    const workspaceKey = key || workspace.id;
+    if (this.#workspaces[workspaceKey]) {
+      const logger = this.getLogger();
+      logger.debug(`Workspace with key ${workspaceKey} already exists. Skipping addition.`);
+      return;
+    }
+
+    this.#workspaces[workspaceKey] = workspace;
+  }
+
+  /**
    * Retrieves a registered workflow by its ID.
    *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
@@ -1384,7 +1504,11 @@ export class Mastra<
    * mastra.addScorer(newScorer, 'customKey'); // Uses custom key
    * ```
    */
-  public addScorer<S extends MastraScorer<any, any, any, any>>(scorer: S, key?: string): void {
+  public addScorer<S extends MastraScorer<any, any, any, any>>(
+    scorer: S,
+    key?: string,
+    options?: { source?: 'code' | 'stored' },
+  ): void {
     if (!scorer) {
       throw createUndefinedPrimitiveError('scorer', scorer, key);
     }
@@ -1398,6 +1522,11 @@ export class Mastra<
 
     // Register Mastra instance with scorer to enable custom gateway access
     scorer.__registerMastra(this);
+
+    // Set the source if provided
+    if (options?.source) {
+      scorer.source = options.source;
+    }
 
     scorers[scorerKey] = scorer;
   }
@@ -1497,55 +1626,127 @@ export class Mastra<
     throw error;
   }
 
-  // NOTE: Stored scorer methods are commented out until the storage infrastructure is added in PR2
-  // /**
-  //  * Retrieves a stored scorer by its ID from the database.
-  //  */
-  // public async getStoredScorerById(id: string): Promise<StoredScorerType | null> {
-  //   // Implementation will be added in PR2
-  //   throw new Error('Stored scorers not yet implemented');
-  // }
+  /**
+   * Removes a scorer from the Mastra instance by its key or ID.
+   *
+   * @param keyOrId - The scorer key or ID to remove
+   * @returns true if a scorer was removed, false if no scorer was found
+   */
+  public removeScorer(keyOrId: string): boolean {
+    const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>> | undefined;
+    if (!scorers) return false;
 
-  // /**
-  //  * Lists all stored scorers from the database with optional pagination.
-  //  */
-  // public async listStoredScorers(args?: {
-  //   page?: number;
-  //   perPage?: number | false;
-  //   orderBy?: { field: 'createdAt' | 'updatedAt'; direction: 'ASC' | 'DESC' };
-  // }): Promise<{
-  //   scorers: StoredScorerType[];
-  //   total: number;
-  //   page: number;
-  //   perPage: number | false;
-  //   hasMore: boolean;
-  // }> {
-  //   // Implementation will be added in PR2
-  //   throw new Error('Stored scorers not yet implemented');
-  // }
+    // Try direct key lookup first
+    if (scorers[keyOrId]) {
+      const scorerId = scorers[keyOrId]?.id;
+      delete scorers[keyOrId];
+      // Clear from stored scorers cache to prevent stale data
+      if (scorerId) {
+        this.#storedScorersCache.delete(scorerId);
+      }
+      return true;
+    }
 
-  // /**
-  //  * Retrieves and resolves a stored scorer from the database into an executable MastraScorer.
-  //  */
-  // public async resolveStoredScorer(id: string): Promise<MastraScorer | null> {
-  //   // Implementation will be added in PR2
-  //   return null;
-  // }
+    // Try finding by ID or name
+    const key = Object.keys(scorers).find(k => scorers[k]?.id === keyOrId || scorers[k]?.name === keyOrId);
+    if (key) {
+      const scorerId = scorers[key]?.id;
+      delete scorers[key];
+      // Clear from stored scorers cache to prevent stale data
+      if (scorerId) {
+        this.#storedScorersCache.delete(scorerId);
+      }
+      return true;
+    }
 
-  // /**
-  //  * Unified method to get a scorer by ID, checking code-defined scorers first,
-  //  * then falling back to stored scorers from the database.
-  //  */
-  // public async getScorerUnified(id: string): Promise<MastraScorer | null> {
-  //   // First, try to find in code-defined scorers
-  //   try {
-  //     const scorer = this.getScorerById(id);
-  //     return scorer;
-  //   } catch {
-  //     // Stored scorers will be added in PR2
-  //     return null;
-  //   }
-  // }
+    return false;
+  }
+
+  // =========================================================================
+  // Prompt Blocks
+  // =========================================================================
+
+  /**
+   * Returns all registered prompt blocks.
+   */
+  public listPromptBlocks(): Record<string, StorageResolvedPromptBlockType> {
+    return this.#promptBlocks;
+  }
+
+  /**
+   * Registers a prompt block in the Mastra instance's runtime registry.
+   *
+   * @param promptBlock - The resolved prompt block to register
+   * @param key - Optional registration key (defaults to promptBlock.id)
+   */
+  public addPromptBlock(promptBlock: StorageResolvedPromptBlockType, key?: string): void {
+    const blockKey = key || promptBlock.id;
+    if (this.#promptBlocks[blockKey]) {
+      const logger = this.getLogger();
+      logger.debug(`Prompt block with key ${blockKey} already exists. Skipping addition.`);
+      return;
+    }
+    this.#promptBlocks[blockKey] = promptBlock;
+  }
+
+  /**
+   * Retrieves a registered prompt block by its key.
+   *
+   * @throws {MastraError} When the prompt block with the specified key is not found
+   */
+  public getPromptBlock(key: string): StorageResolvedPromptBlockType {
+    const block = this.#promptBlocks[key];
+    if (!block) {
+      throw new MastraError({
+        id: 'MASTRA_GET_PROMPT_BLOCK_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Prompt block with key ${key} not found`,
+      });
+    }
+    return block;
+  }
+
+  /**
+   * Retrieves a registered prompt block by its ID.
+   *
+   * @throws {MastraError} When no prompt block is found with the specified ID
+   */
+  public getPromptBlockById(id: string): StorageResolvedPromptBlockType {
+    for (const [, block] of Object.entries(this.#promptBlocks)) {
+      if (block.id === id) {
+        return block;
+      }
+    }
+
+    throw new MastraError({
+      id: 'MASTRA_GET_PROMPT_BLOCK_BY_ID_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Prompt block with id ${id} not found`,
+    });
+  }
+
+  /**
+   * Removes a prompt block from the Mastra instance by its key or ID.
+   *
+   * @param keyOrId - The prompt block key or ID to remove
+   * @returns true if a prompt block was removed, false if not found
+   */
+  public removePromptBlock(keyOrId: string): boolean {
+    if (this.#promptBlocks[keyOrId]) {
+      delete this.#promptBlocks[keyOrId];
+      return true;
+    }
+
+    const key = Object.keys(this.#promptBlocks).find(k => this.#promptBlocks[k]?.id === keyOrId);
+    if (key) {
+      delete this.#promptBlocks[key];
+      return true;
+    }
+
+    return false;
+  }
 
   /**
    * Retrieves a specific tool by registration key.
@@ -2085,12 +2286,12 @@ export class Mastra<
    * mastra.addWorkflow(newWorkflow, 'customKey'); // Uses custom key
    * ```
    */
-  public addWorkflow(workflow: Workflow<any, any, any, any, any, any, any>, key?: string): void {
+  public addWorkflow(workflow: AnyWorkflow, key?: string): void {
     if (!workflow) {
       throw createUndefinedPrimitiveError('workflow', workflow, key);
     }
     const workflowKey = key || workflow.id;
-    const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any, any>>;
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
     if (workflows[workflowKey]) {
       const logger = this.getLogger();
       logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);
@@ -2168,12 +2369,24 @@ export class Mastra<
       });
     }
 
+    if (this.#workflows) {
+      Object.keys(this.#workflows).forEach(key => {
+        this.#workflows?.[key]?.__setLogger(this.#logger);
+      });
+    }
+
     if (this.#serverAdapter) {
       this.#serverAdapter.__setLogger(this.#logger);
     }
 
     if (this.#workspace) {
       this.#workspace.__setLogger(this.#logger);
+    }
+
+    if (this.#memory) {
+      Object.keys(this.#memory).forEach(key => {
+        this.#memory?.[key]?.__setLogger(this.#logger);
+      });
     }
 
     this.#observability.setLogger({ logger: this.#logger });

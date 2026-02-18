@@ -71,7 +71,9 @@ export const authenticationMiddleware = async (req: Request, res: Response, next
 
     return next();
   } catch (err) {
-    console.error(err);
+    mastra.getLogger()?.error('Authentication error', {
+      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    });
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
@@ -116,7 +118,9 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
 
       return res.status(403).json({ error: 'Access denied' });
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorizeUser', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
       return res.status(500).json({ error: 'Authorization error' });
     }
   }
@@ -146,7 +150,11 @@ export const authorizationMiddleware = async (req: Request, res: Response, next:
 
       return res.status(403).json({ error: 'Access denied' });
     } catch (err) {
-      console.error(err);
+      mastra.getLogger()?.error('Authorization error in authorize', {
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        path,
+        method,
+      });
       return res.status(500).json({ error: 'Authorization error' });
     }
   }

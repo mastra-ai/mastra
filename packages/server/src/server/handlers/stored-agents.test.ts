@@ -51,12 +51,12 @@ interface MockStoredAgent {
 
 // Define the mock agents store interface
 interface MockAgentsStore {
-  createAgent: ReturnType<typeof vi.fn>;
-  getAgentById: ReturnType<typeof vi.fn>;
-  getAgentByIdResolved: ReturnType<typeof vi.fn>;
-  listAgentsResolved: ReturnType<typeof vi.fn>;
-  updateAgent: ReturnType<typeof vi.fn>;
-  deleteAgent: ReturnType<typeof vi.fn>;
+  create: ReturnType<typeof vi.fn>;
+  getById: ReturnType<typeof vi.fn>;
+  getByIdResolved: ReturnType<typeof vi.fn>;
+  listResolved: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
   getLatestVersion: ReturnType<typeof vi.fn>;
   getVersion: ReturnType<typeof vi.fn>;
   createVersion: ReturnType<typeof vi.fn>;
@@ -65,20 +65,20 @@ interface MockAgentsStore {
 
 function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Map()): MockAgentsStore {
   return {
-    createAgent: vi.fn().mockImplementation(async ({ agent }: { agent: MockStoredAgent }) => {
+    create: vi.fn().mockImplementation(async ({ agent }: { agent: MockStoredAgent }) => {
       if (agentsData.has(agent.id)) {
         throw new Error('Agent already exists');
       }
       agentsData.set(agent.id, agent);
       return agent;
     }),
-    getAgentById: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    getById: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.get(id) || null;
     }),
-    getAgentByIdResolved: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    getByIdResolved: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.get(id) || null;
     }),
-    listAgentsResolved: vi.fn().mockImplementation(
+    listResolved: vi.fn().mockImplementation(
       async ({
         page = 1,
         perPage = 20,
@@ -118,7 +118,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
         };
       },
     ),
-    updateAgent: vi.fn().mockImplementation(async (updates: Partial<MockStoredAgent> & { id: string }) => {
+    update: vi.fn().mockImplementation(async (updates: Partial<MockStoredAgent> & { id: string }) => {
       const existing = agentsData.get(updates.id);
       if (!existing) return null;
 
@@ -133,7 +133,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
       agentsData.set(updates.id, updated);
       return updated;
     }),
-    deleteAgent: vi.fn().mockImplementation(async ({ id }: { id: string }) => {
+    delete: vi.fn().mockImplementation(async (id: string) => {
       return agentsData.delete(id);
     }),
     getLatestVersion: vi.fn().mockImplementation(async (agentId: string) => {
@@ -211,14 +211,22 @@ function createMockStorage(agentsStore?: MockAgentsStore): MockStorage {
 }
 
 interface MockEditor {
-  clearStoredAgentCache: ReturnType<typeof vi.fn>;
-  previewInstructions: ReturnType<typeof vi.fn>;
+  agent: {
+    clearCache: ReturnType<typeof vi.fn>;
+  };
+  prompt: {
+    preview: ReturnType<typeof vi.fn>;
+  };
 }
 
 function createMockEditor(): MockEditor {
   return {
-    clearStoredAgentCache: vi.fn(),
-    previewInstructions: vi.fn().mockResolvedValue('resolved instructions'),
+    agent: {
+      clearCache: vi.fn(),
+    },
+    prompt: {
+      preview: vi.fn().mockResolvedValue('resolved instructions'),
+    },
   };
 }
 
@@ -451,7 +459,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toMatchObject(agentData);
-      expect(mockAgentsStore.createAgent).toHaveBeenCalledWith({
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'new-agent',
           name: 'New Agent',
@@ -472,7 +480,7 @@ describe('Stored Agents Handlers', () => {
         id: 'my-cool-agent',
         name: 'My Cool Agent',
       });
-      expect(mockAgentsStore.createAgent).toHaveBeenCalledWith({
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'my-cool-agent',
           name: 'My Cool Agent',
@@ -548,7 +556,7 @@ describe('Stored Agents Handlers', () => {
         authorId: 'original-author', // Should remain unchanged
       });
 
-      expect(mockEditor.clearStoredAgentCache).toHaveBeenCalledWith('update-test');
+      expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('update-test');
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -595,7 +603,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       // Verify the storage update was called with null memory
-      expect(mockAgentsStore.updateAgent).toHaveBeenCalledWith(
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'memory-test',
           memory: null,
@@ -655,9 +663,9 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
-      expect(mockAgentsStore.deleteAgent).toHaveBeenCalledWith({ id: 'delete-test' });
+      expect(mockAgentsStore.delete).toHaveBeenCalledWith('delete-test');
       expect(mockAgentsData.has('delete-test')).toBe(false);
-      expect(mockEditor.clearStoredAgentCache).toHaveBeenCalledWith('delete-test');
+      expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -683,7 +691,7 @@ describe('Stored Agents Handlers', () => {
       ];
       const context = { name: 'World' };
 
-      mockEditor.previewInstructions.mockResolvedValue('Hello World\n\nResolved block content');
+      mockEditor.prompt.preview.mockResolvedValue('Hello World\n\nResolved block content');
 
       const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
         ...createTestContext(mockMastra),
@@ -692,13 +700,13 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ result: 'Hello World\n\nResolved block content' });
-      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, context);
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, context);
     });
 
     it('should pass empty context when none provided', async () => {
       const blocks = [{ type: 'text' as const, content: 'Static content' }];
 
-      mockEditor.previewInstructions.mockResolvedValue('Static content');
+      mockEditor.prompt.preview.mockResolvedValue('Static content');
 
       const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
         ...createTestContext(mockMastra),
@@ -707,7 +715,7 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ result: 'Static content' });
-      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, {});
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, {});
     });
 
     it('should throw 500 when editor is not configured', async () => {
@@ -741,7 +749,7 @@ describe('Stored Agents Handlers', () => {
       ];
       const context = { user: { role: 'admin' } };
 
-      mockEditor.previewInstructions.mockResolvedValue('You are an admin assistant');
+      mockEditor.prompt.preview.mockResolvedValue('You are an admin assistant');
 
       const result = await PREVIEW_INSTRUCTIONS_ROUTE.handler({
         ...createTestContext(mockMastra),
@@ -750,12 +758,12 @@ describe('Stored Agents Handlers', () => {
       });
 
       expect(result).toEqual({ result: 'You are an admin assistant' });
-      expect(mockEditor.previewInstructions).toHaveBeenCalledWith(blocks, context);
+      expect(mockEditor.prompt.preview).toHaveBeenCalledWith(blocks, context);
     });
 
     it('should handle editor errors gracefully', async () => {
       const blocks = [{ type: 'text' as const, content: 'Hello' }];
-      mockEditor.previewInstructions.mockRejectedValue(new Error('Block resolution failed'));
+      mockEditor.prompt.preview.mockRejectedValue(new Error('Block resolution failed'));
 
       try {
         await PREVIEW_INSTRUCTIONS_ROUTE.handler({

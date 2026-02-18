@@ -611,8 +611,8 @@ export function formatMessagesForObserver(messages: MastraDBMessage[], options?:
               const argsStr = JSON.stringify(inv.args, null, 2);
               return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
             }
-            // Skip observation marker parts
-            if (part.type?.startsWith('data-om-observation-')) return '';
+            // Skip all data-* parts (observation markers, activation markers, buffering markers, etc.)
+            if (part.type?.startsWith('data-')) return '';
             return '';
           })
           .filter(Boolean)
@@ -773,6 +773,7 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
 export function buildObserverPrompt(
   existingObservations: string | undefined,
   messagesToObserve: MastraDBMessage[],
+  options?: { skipContinuationHints?: boolean },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
 
@@ -788,6 +789,10 @@ export function buildObserverPrompt(
 
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
+
+  if (options?.skipContinuationHints) {
+    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>.`;
+  }
 
   return prompt;
 }

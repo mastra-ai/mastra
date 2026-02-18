@@ -45,13 +45,7 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
-import type {
-  StorageCreateAgentInput,
-  StorageDefaultOptions,
-  StorageModelConfig,
-  StorageResolvedAgentType,
-  StorageScorerConfig,
-} from '../storage/types';
+
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -62,8 +56,8 @@ import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
-import type { Workspace } from '../workspace';
+import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
+import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -150,7 +144,7 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
   #skillsFormat?: SkillFormat;
-  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any>>>;
+  #workflows?: DynamicArgument<Record<string, AnyWorkflow>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>>;
@@ -159,7 +153,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<Workspace>;
+  #workspace?: DynamicArgument<AnyWorkspace | undefined>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -190,7 +184,7 @@ export class Agent<
    * ```
    */
   constructor(config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext>) {
-    super({ component: RegisteredLogger.AGENT });
+    super({ component: RegisteredLogger.AGENT, rawConfig: config.rawConfig });
 
     this.name = config.name;
     this.id = config.id ?? config.name;
@@ -694,6 +688,37 @@ export class Agent<
   }
 
   /**
+   * Returns the IDs of the raw configured input and output processors,
+   * without combining them into workflows. Used by the editor to clone
+   * agent processor configuration to storage.
+   */
+  public async getConfiguredProcessorIds(
+    requestContext?: RequestContext,
+  ): Promise<{ inputProcessorIds: string[]; outputProcessorIds: string[] }> {
+    const ctx = requestContext || new RequestContext();
+
+    let inputProcessorIds: string[] = [];
+    if (this.#inputProcessors) {
+      const processors =
+        typeof this.#inputProcessors === 'function'
+          ? await this.#inputProcessors({ requestContext: ctx })
+          : this.#inputProcessors;
+      inputProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    let outputProcessorIds: string[] = [];
+    if (this.#outputProcessors) {
+      const processors =
+        typeof this.#outputProcessors === 'function'
+          ? await this.#outputProcessors({ requestContext: ctx })
+          : this.#outputProcessors;
+      outputProcessorIds = processors.map(p => p.id).filter(Boolean);
+    }
+
+    return { inputProcessorIds, outputProcessorIds };
+  }
+
+  /**
    * Returns configured processor workflows for registration with Mastra.
    * This excludes memory-derived processors to avoid triggering memory factory functions.
    * @internal
@@ -834,31 +859,26 @@ export class Agent<
    */
   public async getWorkspace({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
+  }: { requestContext?: RequestContext } = {}): Promise<AnyWorkspace | undefined> {
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
-      let resolvedWorkspace: Workspace;
-
       if (typeof this.#workspace !== 'function') {
-        resolvedWorkspace = this.#workspace;
-      } else {
-        const result = this.#workspace({ requestContext, mastra: this.#mastra });
-        resolvedWorkspace = await Promise.resolve(result);
+        return this.#workspace;
+      }
 
-        if (!resolvedWorkspace) {
-          const mastraError = new MastraError({
-            id: 'AGENT_GET_WORKSPACE_FUNCTION_EMPTY_RETURN',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-            details: {
-              agentName: this.name,
-            },
-            text: `[Agent:${this.name}] - Function-based workspace returned empty value`,
-          });
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
+      const result = this.#workspace({ requestContext, mastra: this.#mastra });
+      const resolvedWorkspace = await Promise.resolve(result);
+
+      if (!resolvedWorkspace) {
+        return undefined;
+      }
+
+      // Propagate logger to factory-resolved workspace
+      resolvedWorkspace.__setLogger(this.logger);
+
+      // Auto-register dynamically created workspace with Mastra for lookup via listWorkspaces()/getWorkspaceById()
+      if (this.#mastra) {
+        this.#mastra.addWorkspace(resolvedWorkspace);
       }
 
       return resolvedWorkspace;
@@ -907,7 +927,7 @@ export class Agent<
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext } = {}): Promise<Record<string, AnyWorkflow>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
@@ -1468,233 +1488,6 @@ export class Agent<
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
   }
 
-  /**
-   * Clones this agent's configuration to storage, creating a stored agent that behaves identically.
-   * The cloned agent will have source='stored' when loaded from storage.
-   *
-   * @param options - Options for the clone operation
-   * @param options.newId - The ID for the cloned stored agent. Required.
-   * @param options.newName - Optional new name. Defaults to "{originalName} (Clone)".
-   * @param options.metadata - Optional metadata for the stored agent.
-   * @param options.authorId - Optional author ID for the stored agent.
-   * @returns The StorageResolvedAgentType of the created stored agent.
-   *
-   * @example
-   * ```typescript
-   * const cloned = await agent.cloneAgent({
-   *   newId: 'my-agent-clone',
-   *   newName: 'My Agent Clone',
-   * });
-   * console.log(cloned.id); // 'my-agent-clone'
-   * ```
-   */
-  public async cloneAgent(options: {
-    newId: string;
-    newName?: string;
-    metadata?: Record<string, unknown>;
-    authorId?: string;
-    requestContext?: RequestContext;
-  }): Promise<StorageResolvedAgentType> {
-    const requestContext = options.requestContext ?? new RequestContext();
-
-    // 1. Get the mastra instance
-    const mastra = this.getMastraInstance();
-    if (!mastra) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_MISSING_MASTRA',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: `[Agent:${this.name}] - Cannot clone agent without a registered Mastra instance.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    // 2. Get storage and agents store
-    const storage = mastra.getStorage();
-    if (!storage) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_MISSING_STORAGE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: `[Agent:${this.name}] - Cannot clone agent without storage configured on the Mastra instance.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    const agentsStore = await storage.getStore('agents');
-    if (!agentsStore) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_MISSING_AGENTS_STORE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-        },
-        text: `[Agent:${this.name}] - Cannot clone agent: agents storage domain is not available.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    // 3. Extract model config via getLLM (resolve dynamic model with requestContext)
-    const llm = await this.getLLM({ requestContext });
-    const provider = llm.getProvider();
-    const modelId = llm.getModelId();
-
-    // Extract model settings from default options (resolve dynamic defaultOptions with requestContext)
-    const defaultOptions = await this.getDefaultOptions({ requestContext });
-    const modelSettings = (defaultOptions as Record<string, any>)?.modelSettings;
-
-    const model: StorageModelConfig = {
-      provider,
-      name: modelId,
-      ...(modelSettings?.temperature !== undefined && { temperature: modelSettings.temperature }),
-      ...(modelSettings?.topP !== undefined && { topP: modelSettings.topP }),
-      ...(modelSettings?.frequencyPenalty !== undefined && { frequencyPenalty: modelSettings.frequencyPenalty }),
-      ...(modelSettings?.presencePenalty !== undefined && { presencePenalty: modelSettings.presencePenalty }),
-      ...(modelSettings?.maxOutputTokens !== undefined && { maxCompletionTokens: modelSettings.maxOutputTokens }),
-    };
-
-    // 4. Extract instructions as string (resolve dynamic instructions with requestContext)
-    const instructions = await this.getInstructions({ requestContext });
-    let instructionsStr: string;
-    if (typeof instructions === 'string') {
-      instructionsStr = instructions;
-    } else if (Array.isArray(instructions)) {
-      instructionsStr = instructions
-        .map(msg => {
-          if (typeof msg === 'string') {
-            return msg;
-          }
-          return typeof msg.content === 'string' ? msg.content : '';
-        })
-        .filter(Boolean)
-        .join('\n\n');
-    } else if (instructions && typeof instructions === 'object' && 'content' in instructions) {
-      instructionsStr = typeof instructions.content === 'string' ? instructions.content : '';
-    } else {
-      instructionsStr = '';
-    }
-
-    // 5. Extract tool keys (resolve dynamic tools with requestContext)
-    const tools = await this.listTools({ requestContext });
-    const toolKeys = Object.keys(tools || {});
-
-    // 6. Extract workflow keys (resolve dynamic workflows with requestContext)
-    const workflows = await this.listWorkflows({ requestContext });
-    const workflowKeys = Object.keys(workflows || {});
-
-    // 7. Extract sub-agent keys (resolve dynamic agents with requestContext)
-    const agents = await this.listAgents({ requestContext });
-    const agentKeys = Object.keys(agents || {});
-
-    // 8. Extract memory config (resolve dynamic memory with requestContext)
-    const memory = await this.getMemory({ requestContext });
-    const memoryConfig = memory?.getConfig();
-
-    // 9. Extract input/output processor keys (resolve dynamic processors with requestContext)
-    let inputProcessorKeys: string[] | undefined;
-    if (this.#inputProcessors) {
-      const configuredInputProcessors =
-        typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext })
-          : this.#inputProcessors;
-      const ids = configuredInputProcessors.map(p => p.id).filter(Boolean);
-      if (ids.length > 0) inputProcessorKeys = ids;
-    }
-
-    let outputProcessorKeys: string[] | undefined;
-    if (this.#outputProcessors) {
-      const configuredOutputProcessors =
-        typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext })
-          : this.#outputProcessors;
-      const ids = configuredOutputProcessors.map(p => p.id).filter(Boolean);
-      if (ids.length > 0) outputProcessorKeys = ids;
-    }
-
-    // 10. Extract scorer keys with sampling config (resolve dynamic scorers with requestContext)
-    let storedScorers: Record<string, StorageScorerConfig> | undefined;
-    const resolvedScorers = await this.listScorers({ requestContext });
-    if (resolvedScorers && Object.keys(resolvedScorers).length > 0) {
-      storedScorers = {};
-      for (const [key, entry] of Object.entries(resolvedScorers)) {
-        storedScorers[key] = {
-          ...(entry.sampling && { sampling: entry.sampling }),
-        };
-      }
-    }
-
-    // 11. Extract default options (serializable parts only)
-    const storageDefaultOptions: StorageDefaultOptions | undefined = defaultOptions
-      ? {
-          maxSteps: (defaultOptions as Record<string, any>)?.maxSteps,
-          runId: (defaultOptions as Record<string, any>)?.runId,
-          savePerStep: (defaultOptions as Record<string, any>)?.savePerStep,
-          activeTools: (defaultOptions as Record<string, any>)?.activeTools,
-          toolChoice: (defaultOptions as Record<string, any>)?.toolChoice,
-          modelSettings: (defaultOptions as Record<string, any>)?.modelSettings,
-          returnScorerData: (defaultOptions as Record<string, any>)?.returnScorerData,
-          requireToolApproval: (defaultOptions as Record<string, any>)?.requireToolApproval,
-          autoResumeSuspendedTools: (defaultOptions as Record<string, any>)?.autoResumeSuspendedTools,
-          toolCallConcurrency: (defaultOptions as Record<string, any>)?.toolCallConcurrency,
-          maxProcessorRetries: (defaultOptions as Record<string, any>)?.maxProcessorRetries,
-          includeRawChunks: (defaultOptions as Record<string, any>)?.includeRawChunks,
-        }
-      : undefined;
-
-    // 12. Create the stored agent
-    const createInput: StorageCreateAgentInput = {
-      id: options.newId,
-      name: options.newName || `${this.name} (Clone)`,
-      description: this.getDescription() || undefined,
-      instructions: instructionsStr,
-      model,
-      tools: toolKeys.length > 0 ? toolKeys : undefined,
-      workflows: workflowKeys.length > 0 ? workflowKeys : undefined,
-      agents: agentKeys.length > 0 ? agentKeys : undefined,
-      memory: memoryConfig,
-      inputProcessors: inputProcessorKeys,
-      outputProcessors: outputProcessorKeys,
-      scorers: storedScorers,
-      defaultOptions: storageDefaultOptions,
-      metadata: options.metadata,
-      authorId: options.authorId,
-    };
-
-    await agentsStore.createAgent({ agent: createInput });
-
-    const resolved = await agentsStore.getAgentByIdResolved({ id: options.newId });
-    if (!resolved) {
-      const mastraError = new MastraError({
-        id: 'AGENT_CLONE_FAILED_TO_RESOLVE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: {
-          agentName: this.name,
-          cloneId: options.newId,
-        },
-        text: `[Agent:${this.name}] - Failed to resolve cloned agent '${options.newId}' after creation.`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    return resolved;
-  }
-
   reorderModels(modelIds: string[]) {
     if (!Array.isArray(this.model)) {
       this.logger.warn(`[Agents:${this.name}] model is not an array`);
@@ -1768,6 +1561,11 @@ export class Agent<
    */
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
+
+    // Propagate logger to workspace if it's a direct instance (not a factory function)
+    if (this.#workspace && typeof this.#workspace !== 'function') {
+      this.#workspace.__setLogger(this.logger);
+    }
     // Mastra will be passed to the LLM when it's created in getLLM()
 
     // Auto-register tools with the Mastra instance
@@ -1999,6 +1797,13 @@ export class Agent<
 
     // Get memory tools if available
     const memory = await this.getMemory({ requestContext });
+
+    // Skip memory tools if there's no usable context — thread-scoped needs threadId, resource-scoped needs resourceId
+    if (!threadId && !resourceId) {
+      this.logger.debug(`[Agent:${this.name}] - Skipping memory tools (no thread or resource context)`, { runId });
+      return convertedMemoryTools;
+    }
+
     const memoryTools = memory?.listTools?.(memoryConfig);
 
     if (memoryTools) {
@@ -2493,6 +2298,12 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            // Save the parent agent's MastraMemory before the sub-agent runs.
+            // The sub-agent's prepare-memory-step will overwrite this key with
+            // its own thread/resource identity. We restore it after the sub-agent
+            // returns so the parent's processors (OM, working memory, etc.) still
+            // see the correct context on subsequent steps.
+            const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
@@ -2533,14 +2344,6 @@ export class Agent<
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
-
-                // const x = agent.generate(' yo', [
-                //   structuredOutput: {
-                //     schema: z.object({
-                //       text: z.string(),
-                //     }),
-                //   },
-                // ]);
 
                 const generateResult = resumeData
                   ? await agent.resumeGenerate(resumeData, {
@@ -2694,8 +2497,19 @@ export class Agent<
                 result = { text: fullText };
               }
 
+              // Restore the parent agent's MastraMemory after sub-agent execution
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               return result;
             } catch (err) {
+              // Restore even on error so the parent's retry/fallback logic
+              // sees the correct memory context
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
@@ -2774,7 +2588,7 @@ export class Agent<
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
           // @ts-expect-error - zod types mismatch between v3 and v4
-          inputData: workflow.inputSchema,
+          inputData: workflow.inputSchema ?? z.object({}).passthrough(),
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
 
@@ -3478,6 +3292,7 @@ export class Agent<
     });
 
     const memory = await this.getMemory({ requestContext });
+    const workspace = await this.getWorkspace({ requestContext });
 
     const saveQueueManager = new SaveQueueManager({
       logger: this.logger,
@@ -3542,6 +3357,7 @@ export class Agent<
       agentId: this.id,
       agentName: this.name,
       toolCallId: options.toolCallId,
+      workspace,
     });
 
     const run = await executionWorkflow.createRun();
@@ -3637,8 +3453,8 @@ export class Agent<
 
         // Generate title if needed
         // Note: Message saving is now handled by MessageHistory output processor
-        // Check if this is the first user message by looking at remembered (historical) messages
-        // This works automatically for pre-created threads without requiring any metadata flags
+        // Use threadExists to determine if this is the first turn - it's reliable regardless
+        // of whether MessageHistory processor is loaded (e.g., when lastMessages is disabled)
         const config = memory.getMergedThreadConfig(memoryConfig);
         const {
           shouldGenerate,
@@ -3646,11 +3462,7 @@ export class Agent<
           instructions: titleInstructions,
         } = this.resolveTitleGenerationConfig(config.generateTitle);
 
-        // Check for existing user messages from memory - if none, this is the first user message
-        const rememberedUserMessages = messageList.get.remembered.db().filter(m => m.role === 'user');
-        const isFirstUserMessage = rememberedUserMessages.length === 0;
-
-        if (shouldGenerate && isFirstUserMessage) {
+        if (shouldGenerate && !threadExists) {
           const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
           if (userMessage) {
             const title = await this.genTitle(
@@ -3965,17 +3777,21 @@ export class Agent<
     if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
+      const specVersion = modelInfo.specificationVersion;
 
       throw new MastraError({
         id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text:
+          specVersion === 'v1'
+            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
+            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
         details: {
           agentName: this.name,
           modelId,
           provider,
-          specificationVersion: modelInfo.specificationVersion,
+          specificationVersion: specVersion,
         },
       });
     }
@@ -4058,17 +3874,21 @@ export class Agent<
     if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
+      const specVersion = modelInfo.specificationVersion;
 
       throw new MastraError({
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text:
+          specVersion === 'v1'
+            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
+            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
         details: {
           agentName: this.name,
           modelId,
           provider,
-          specificationVersion: modelInfo.specificationVersion,
+          specificationVersion: specVersion,
         },
       });
     }
@@ -4155,11 +3975,21 @@ export class Agent<
     });
 
     if (!isSupportedLanguageModel(llm.getModel())) {
+      const modelInfo = llm.getModel();
+      const specVersion = modelInfo.specificationVersion;
       throw new MastraError({
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: 'V1 models are not supported for stream. Please use streamLegacy instead.',
+        text:
+          specVersion === 'v1'
+            ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
+            : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+        details: {
+          modelId: modelInfo.modelId,
+          provider: modelInfo.provider,
+          specificationVersion: specVersion,
+        },
       });
     }
 
@@ -4237,16 +4067,20 @@ export class Agent<
     if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
+      const specVersion = modelInfo.specificationVersion;
       throw new MastraError({
         id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text:
+          specVersion === 'v1'
+            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
+            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
         details: {
           agentName: this.name,
           modelId,
           provider,
-          specificationVersion: modelInfo.specificationVersion,
+          specificationVersion: specVersion,
         },
       });
     }

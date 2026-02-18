@@ -16,23 +16,40 @@ export const isWorkspaceV1Supported = (client: MastraClient) => {
 };
 
 /**
+ * Gets the HTTP status code from an error if present.
+ * Supports MastraClientError, fetch Response, and other HTTP client error formats.
+ */
+const getStatusCode = (error: unknown): number | undefined => {
+  if (!error || typeof error !== 'object') return undefined;
+
+  // Check for status property (MastraClientError, fetch Response, etc.)
+  if ('status' in error && typeof (error as { status: unknown }).status === 'number') {
+    return (error as { status: number }).status;
+  }
+
+  // Check for statusCode property (from some HTTP clients)
+  if ('statusCode' in error && typeof (error as { statusCode: unknown }).statusCode === 'number') {
+    return (error as { statusCode: number }).statusCode;
+  }
+
+  return undefined;
+};
+
+/**
  * Checks if an error has a specific HTTP status code.
  * Supports MastraClientError, fetch Response, and other HTTP client error formats.
  */
 const hasStatusCode = (error: unknown, statusCode: number): boolean => {
-  if (!error || typeof error !== 'object') return false;
+  return getStatusCode(error) === statusCode;
+};
 
-  // Check for status property (MastraClientError, fetch Response, etc.)
-  if ('status' in error && (error as { status: number }).status === statusCode) {
-    return true;
-  }
-
-  // Check for statusCode property (from some HTTP clients)
-  if ('statusCode' in error && (error as { statusCode: number }).statusCode === statusCode) {
-    return true;
-  }
-
-  return false;
+/**
+ * Checks if an error is a 4xx client error (e.g., 400, 401, 403, 404).
+ * Client errors won't resolve with retries.
+ */
+const isClientError = (error: unknown): boolean => {
+  const status = getStatusCode(error);
+  return status !== undefined && status >= 400 && status < 500;
 };
 
 /**
@@ -72,12 +89,12 @@ export const isNotFoundError = (error: unknown): boolean => {
 };
 
 /**
- * React Query retry function that doesn't retry on 404 or 501 errors.
- * Use this to prevent infinite retries when resources don't exist or workspaces aren't supported.
+ * React Query retry function that doesn't retry on client errors (4xx) or 501 errors.
+ * Use this to prevent infinite retries when resources don't exist, access is denied, or workspaces aren't supported.
  */
 export const shouldRetryWorkspaceQuery = (failureCount: number, error: unknown): boolean => {
-  // Don't retry 404 "Not Found" errors - the resource doesn't exist
-  if (isNotFoundError(error)) {
+  // Don't retry 4xx client errors (400, 401, 403, 404, etc.) - these won't resolve with retries
+  if (isClientError(error)) {
     return false;
   }
   // Don't retry 501 "Not Implemented" errors - they won't resolve with retries

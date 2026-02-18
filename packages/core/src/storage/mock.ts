@@ -2,9 +2,11 @@ import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
+import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
 /**
@@ -52,6 +54,8 @@ export class InMemoryStore extends MastraCompositeStore {
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
       promptBlocks: new InMemoryPromptBlocksStorage({ db: this.#db }),
+      scorerDefinitions: new InMemoryScorerDefinitionsStorage({ db: this.#db }),
+      mcpClients: new InMemoryMCPClientsStorage({ db: this.#db }),
     };
   }
 

@@ -1,17 +1,31 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
-/** Progress data streamed from OM in real-time */
+/** Progress data streamed from OM in real-time (maps to DataOmStatusPart) */
 export interface OmProgressData {
-  pendingTokens: number;
-  messageTokens: number;
-  messageTokensPercent: number;
-  observationTokens: number;
-  observationTokensThreshold: number;
-  observationTokensPercent: number;
-  willObserve: boolean;
+  windows: {
+    active: {
+      messages: { tokens: number; threshold: number };
+      observations: { tokens: number; threshold: number };
+    };
+    buffered: {
+      observations: {
+        chunks: number;
+        messageTokens: number;
+        projectedMessageRemoval: number;
+        observationTokens: number;
+        status: 'idle' | 'running' | 'complete';
+      };
+      reflection: {
+        inputObservationTokens: number;
+        observationTokens: number;
+        status: 'idle' | 'running' | 'complete';
+      };
+    };
+  };
   recordId: string;
   threadId: string;
   stepNumber: number;
+  generationCount: number;
 }
 
 interface ObservationalMemoryContextValue {
@@ -31,6 +45,10 @@ interface ObservationalMemoryContextValue {
   streamProgress: OmProgressData | null;
   /** Update progress data from stream */
   setStreamProgress: (data: OmProgressData | null) => void;
+  /** Set of cycleIds that have been activated (for updating buffering badges) */
+  activatedCycleIds: Set<string>;
+  /** Mark a cycleId as activated */
+  markCycleIdActivated: (cycleId: string) => void;
   /** Clear all progress state (e.g., on thread change) */
   clearProgress: () => void;
 }
@@ -42,15 +60,21 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
   const [isReflectingFromStream, setIsReflectingFromStream] = useState(false);
   const [observationsUpdatedAt, setObservationsUpdatedAt] = useState(0);
   const [streamProgress, setStreamProgress] = useState<OmProgressData | null>(null);
+  const [activatedCycleIds, setActivatedCycleIds] = useState<Set<string>>(new Set());
 
   const signalObservationsUpdated = useCallback(() => {
     setObservationsUpdatedAt(Date.now());
   }, []);
 
+  const markCycleIdActivated = useCallback((cycleId: string) => {
+    setActivatedCycleIds(prev => new Set([...prev, cycleId]));
+  }, []);
+
   const clearProgress = useCallback(() => {
-    setStreamProgress(null);
+    // Don't clear streamProgress — keep last known values for sidebar display on reload
     setIsObservingFromStream(false);
     setIsReflectingFromStream(false);
+    setActivatedCycleIds(new Set());
   }, []);
 
   return (
@@ -64,6 +88,8 @@ export function ObservationalMemoryProvider({ children }: { children: ReactNode 
         signalObservationsUpdated,
         streamProgress,
         setStreamProgress,
+        activatedCycleIds,
+        markCycleIdActivated,
         clearProgress,
       }}
     >
@@ -85,6 +111,8 @@ export function useObservationalMemoryContext() {
       signalObservationsUpdated: () => {},
       streamProgress: null,
       setStreamProgress: () => {},
+      activatedCycleIds: new Set<string>(),
+      markCycleIdActivated: () => {},
       clearProgress: () => {},
     };
   }

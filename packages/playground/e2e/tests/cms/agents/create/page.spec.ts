@@ -6,61 +6,101 @@ function uniqueAgentName(prefix = 'Test Agent') {
   return `${prefix} ${Date.now().toString(36)}`;
 }
 
-// Helper to fill identity form fields
+// Sidebar link paths for each page
+const SIDEBAR_PATHS: Record<string, string> = {
+  Identity: '',
+  Instructions: '/instruction-blocks',
+  Tools: '/tools',
+  Agents: '/agents',
+  Scorers: '/scorers',
+  Workflows: '/workflows',
+  Memory: '/memory',
+  Variables: '/variables',
+};
+
+// Navigate to a create sub-page via sidebar link (client-side, preserves form state).
+// Uses exact href matching to avoid ambiguity with top nav links.
+async function clickSidebarLink(page: Page, linkName: string) {
+  const pathSuffix = SIDEBAR_PATHS[linkName];
+  if (pathSuffix === undefined) throw new Error(`Unknown sidebar link: ${linkName}`);
+  const href = `/cms/agents/create${pathSuffix}`;
+  const link = page.locator(`a[href="${href}"]`);
+  await link.click();
+  await page.waitForTimeout(500);
+}
+
+// Fill the identity fields on the create page (assumes page is at /cms/agents/create)
 async function fillIdentityFields(
   page: Page,
-  options: {
-    name?: string;
-    description?: string;
-    provider?: string;
-    model?: string;
-    instructions?: string;
-  },
+  options: { name: string; description?: string; provider?: string; model?: string },
 ) {
-  if (options.name !== undefined) {
-    const nameInput = page.getByLabel('Name');
-    await nameInput.clear();
-    await nameInput.fill(options.name);
-  }
+  const nameInput = page.locator('#agent-name');
+  await nameInput.clear();
+  await nameInput.fill(options.name);
 
-  if (options.description !== undefined) {
-    const descInput = page.getByLabel('Description');
+  if (options.description) {
+    const descInput = page.locator('#agent-description');
     await descInput.clear();
     await descInput.fill(options.description);
   }
 
-  if (options.provider !== undefined) {
-    // Provider uses BaseUI Combobox - find the first combobox after the Provider label
-    const providerCombobox = page.getByRole('combobox').nth(0);
-    await providerCombobox.click();
-    await page.getByRole('option', { name: options.provider }).click();
-  }
+  // On create page: nth(0) = provider, nth(1) = model
+  const providerCombobox = page.getByRole('combobox').nth(0);
+  await providerCombobox.click();
+  await page.getByRole('option', { name: options.provider ?? 'OpenAI' }).click();
 
-  if (options.model !== undefined) {
-    // Model combobox - the second combobox on the page
-    const modelCombobox = page.getByRole('combobox').nth(1);
-    await modelCombobox.click();
-    await page.getByRole('option', { name: options.model }).click();
-  }
-
-  if (options.instructions !== undefined) {
-    // Instructions uses a CodeMirror editor
-    const editor = page.locator('.cm-content');
-    await editor.click();
-    // Clear existing content with keyboard
-    await page.keyboard.press('Meta+a');
-    await page.keyboard.type(options.instructions);
-  }
+  const modelCombobox = page.getByRole('combobox').nth(1);
+  await modelCombobox.click();
+  await page.getByRole('option', { name: options.model ?? 'gpt-4o-mini' }).click();
 }
 
-// Helper to fill all required fields with valid data
+// Fill required fields (identity + minimal instruction block) using sidebar navigation
 async function fillRequiredFields(page: Page, agentName?: string) {
-  await fillIdentityFields(page, {
-    name: agentName || uniqueAgentName(),
-    provider: 'OpenAI',
-    model: 'gpt-4o-mini',
-    instructions: 'You are a helpful assistant.',
-  });
+  const name = agentName || uniqueAgentName();
+
+  await fillIdentityFields(page, { name });
+
+  // Navigate to instruction blocks via sidebar and add content
+  await clickSidebarLink(page, 'Instructions');
+  const editor = page.locator('.cm-content').first();
+  await editor.click();
+  await page.keyboard.type('You are a helpful test agent.');
+}
+
+// Create agent and extract ID from redirect URL
+async function createAgentAndGetId(page: Page): Promise<string> {
+  await page.getByRole('button', { name: 'Create agent' }).click();
+
+  // Wait for redirect to agent chat page — this confirms creation succeeded
+  await expect(page).toHaveURL(/\/agents\/[a-zA-Z0-9-]+\/chat/, { timeout: 30000 });
+
+  const url = page.url();
+  const agentId = url.split('/agents/')[1]?.split('/')[0];
+  if (!agentId) throw new Error('Could not extract agent ID from URL: ' + url);
+  return agentId;
+}
+
+// Navigate directly to an edit sub-page (full page load, for verification).
+// On edit page, combobox nth(0) = version, nth(1) = provider, nth(2) = model.
+async function goToEditSubPage(page: Page, agentId: string, subPage = '') {
+  await page.goto(`/cms/agents/${agentId}/edit${subPage}`);
+  await page.locator('#agent-name').waitFor({ state: 'visible', timeout: 15000 });
+}
+
+// Navigate to an edit sub-page via sidebar link (client-side navigation).
+// This first loads the edit identity page and waits for data, then clicks the sidebar link.
+// Needed for pages like Variables whose JSONSchemaForm.Root only reads defaultValue on mount.
+async function goToEditSubPageViaSidebar(page: Page, agentId: string, linkName: string) {
+  await goToEditSubPage(page, agentId);
+  // Wait for agent name to be populated (data loaded and form.reset happened)
+  await expect(page.locator('#agent-name')).not.toHaveValue('', { timeout: 15000 });
+  // Click sidebar link for client-side navigation
+  const pathSuffix = SIDEBAR_PATHS[linkName];
+  if (pathSuffix === undefined) throw new Error(`Unknown sidebar link: ${linkName}`);
+  const href = `/cms/agents/${agentId}/edit${pathSuffix}`;
+  const link = page.locator(`a[href="${href}"]`);
+  await link.click();
+  await page.waitForTimeout(1000);
 }
 
 test.afterEach(async () => {
@@ -68,7 +108,6 @@ test.afterEach(async () => {
 });
 
 test.describe('Page Structure & Initial State', () => {
-  // Behavior: Page displays correct title and navigation elements
   test('displays page title and header correctly', async ({ page }) => {
     await page.goto('/cms/agents/create');
 
@@ -76,410 +115,585 @@ test.describe('Page Structure & Initial State', () => {
     await expect(page.locator('h1')).toHaveText('Create an agent');
   });
 
-  // Behavior: Identity and Capabilities tabs are visible for form organization
-  test('displays Identity and Capabilities tabs', async ({ page }) => {
-    await page.goto('/cms/agents/create');
-
-    const identityTab = page.getByRole('tab', { name: 'Identity' });
-    const capabilitiesTab = page.getByRole('tab', { name: 'Capabilities' });
-
-    await expect(identityTab).toBeVisible();
-    await expect(capabilitiesTab).toBeVisible();
-  });
-
-  // Behavior: Create agent button is visible and accessible
-  test('displays Create agent button', async ({ page }) => {
+  test('displays Create agent button disabled until required fields are filled', async ({ page }) => {
     await page.goto('/cms/agents/create');
 
     const createButton = page.getByRole('button', { name: 'Create agent' });
     await expect(createButton).toBeVisible();
-    await expect(createButton).toBeEnabled();
+    // Button should be disabled when form is empty
+    await expect(createButton).toBeDisabled();
+  });
+
+  test('displays sidebar navigation with all pages', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    // Verify each sidebar link exists by exact href
+    for (const [, suffix] of Object.entries(SIDEBAR_PATHS)) {
+      const href = `/cms/agents/create${suffix}`;
+      await expect(page.locator(`a[href="${href}"]`)).toBeVisible();
+    }
   });
 });
 
-test.describe('Required Field Validation', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/cms/agents/create');
-  });
-
-  // Behavior: Form validates that name is required before submission
-  test('shows validation error when name is empty', async ({ page }) => {
-    // Fill all fields except name
-    await fillIdentityFields(page, {
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-      instructions: 'Test instructions',
-    });
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Should show validation error for name
-    await expect(page.getByText('Name is required')).toBeVisible();
-  });
-
-  // Behavior: Form validates that instructions are required before submission
-  test('shows validation error when instructions are empty', async ({ page }) => {
-    await fillIdentityFields(page, {
-      name: uniqueAgentName(),
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-    });
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Should show validation error for instructions
-    await expect(page.getByText('Instructions are required')).toBeVisible();
-  });
-
-  // Behavior: Form validates that provider is required before submission
-  test('shows validation error when provider is not selected', async ({ page }) => {
-    await fillIdentityFields(page, {
-      name: uniqueAgentName(),
-      instructions: 'Test instructions',
-    });
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Should show validation error - either inline or as toast
-    // The form requires provider, so submission should fail
-    await expect(page.getByText(/provider is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
-      timeout: 5000,
-    });
-  });
-
-  // Behavior: Form validates that model is required before submission
-  test('shows validation error when model is not selected', async ({ page }) => {
-    await fillIdentityFields(page, {
-      name: uniqueAgentName(),
-      provider: 'OpenAI',
-      instructions: 'Test instructions',
-    });
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Should show validation error - either inline or as toast
-    await expect(page.getByText(/model is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
-      timeout: 5000,
-    });
-  });
-
-  // Behavior: Error toast appears when trying to submit invalid form
-  test('shows error toast when submitting invalid form', async ({ page }) => {
-    // Submit with empty form
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Should show error toast
-    await expect(page.getByText('Please fill in all required fields')).toBeVisible();
-  });
-});
-
-test.describe('Agent Creation Persistence', () => {
-  // Behavior: Creating agent with valid data persists to storage and redirects to chat
-  test('creates agent and redirects to chat page', async ({ page }) => {
+test.describe('Create Button Enable/Disable Behavior', () => {
+  test('button stays disabled when only partial identity fields are filled', async ({ page }) => {
     await page.goto('/cms/agents/create');
 
-    const agentName = uniqueAgentName('Persistence Test');
-    await fillRequiredFields(page, agentName);
+    const createButton = page.getByRole('button', { name: 'Create agent' });
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
+    // Fill only name — missing provider, model, and instructions
+    const nameInput = page.locator('#agent-name');
+    await nameInput.fill('Test Agent');
 
-    // Wait for redirect to chat page
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(createButton).toBeDisabled();
 
-    // Verify success toast
-    await expect(page.getByText('Agent created successfully')).toBeVisible();
-  });
-
-  // Behavior: Created agent appears in agents list and persists across page reload
-  test('created agent appears in agents list after navigation', async ({ page }) => {
-    await page.goto('/cms/agents/create');
-
-    const agentName = uniqueAgentName('List Test');
-    await fillRequiredFields(page, agentName);
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Wait for redirect
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
-
-    // Navigate to agents list
-    await page.goto('/agents');
-
-    // Verify agent appears in list
-    await expect(page.getByText(agentName)).toBeVisible();
-  });
-
-  // Behavior: Agent data survives page reload (persistence verification)
-  test('agent data persists across page reload', async ({ page }) => {
-    await page.goto('/cms/agents/create');
-
-    const agentName = uniqueAgentName('Reload Test');
-    await fillRequiredFields(page, agentName);
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Wait for redirect
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
-
-    // Reload the page
-    await page.reload();
-
-    // Verify agent name is still visible in header
-    await expect(page.getByRole('heading', { name: agentName })).toBeVisible({ timeout: 10000 });
-  });
-});
-
-test.describe('Identity Tab Configuration', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/cms/agents/create');
-  });
-
-  // Behavior: Agent name and description are persisted correctly
-  test('persists agent name and description', async ({ page }) => {
-    const agentName = uniqueAgentName('Identity Test');
-    const description = 'A test agent for verifying identity persistence';
-
-    await fillIdentityFields(page, {
-      name: agentName,
-      description,
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-      instructions: 'You are helpful.',
-    });
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
-
-    // Navigate to agents list
-    await page.goto('/agents');
-
-    // Verify agent appears with correct name
-    await expect(page.getByText(agentName)).toBeVisible();
-  });
-
-  // Behavior: Provider selection updates available models dynamically
-  test('provider selection updates available models', async ({ page }) => {
-    // Select OpenAI provider - first combobox on the page
+    // Fill provider but not model
     const providerCombobox = page.getByRole('combobox').nth(0);
     await providerCombobox.click();
     await page.getByRole('option', { name: 'OpenAI' }).click();
 
-    // Open model dropdown - second combobox on the page
-    const modelCombobox = page.getByRole('combobox').nth(1);
-    await modelCombobox.click();
+    await expect(createButton).toBeDisabled();
+  });
 
-    // Should have GPT models
-    await expect(page.getByRole('option', { name: /gpt-4/i }).first()).toBeVisible();
+  test('button stays disabled when identity is complete but instructions are empty', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const createButton = page.getByRole('button', { name: 'Create agent' });
+
+    // Fill all identity fields
+    await fillIdentityFields(page, { name: 'Test Agent' });
+
+    // Button should still be disabled because instructions are empty
+    await expect(createButton).toBeDisabled();
+  });
+
+  test('button becomes enabled when all required fields are filled', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const createButton = page.getByRole('button', { name: 'Create agent' });
+
+    // Initially disabled
+    await expect(createButton).toBeDisabled();
+
+    // Fill all required fields
+    await fillRequiredFields(page);
+
+    // Now enabled
+    await expect(createButton).toBeEnabled();
+  });
+
+  test('button becomes disabled again when required field is cleared', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const createButton = page.getByRole('button', { name: 'Create agent' });
+
+    // Fill all required fields
+    await fillRequiredFields(page);
+    await expect(createButton).toBeEnabled();
+
+    // Go back to identity and clear the name
+    await clickSidebarLink(page, 'Identity');
+    const nameInput = page.locator('#agent-name');
+    await nameInput.clear();
+
+    // Button should be disabled again
+    await expect(createButton).toBeDisabled();
   });
 });
 
-test.describe('Capabilities Tab - Tools Section', () => {
-  test.beforeEach(async ({ page }) => {
+test.describe('Agent Creation Persistence - Identity', () => {
+  test('creates agent with minimal required fields and verifies on edit page', async ({ page }) => {
     await page.goto('/cms/agents/create');
-    // Navigate to Capabilities tab
-    await page.getByRole('tab', { name: 'Capabilities' }).click();
-  });
 
-  // Behavior: Adding tools to agent configuration persists with created agent
-  test('persists selected tools with created agent', async ({ page }) => {
-    // Expand Tools section (collapsible trigger)
-    await page.getByRole('button', { name: /Tools/i }).click();
-
-    // Select a tool using the combobox (button with "Select tools..." text)
-    const toolsCombobox = page.getByRole('combobox').filter({ hasText: /Select tools/ });
-    await toolsCombobox.click();
-    await page.getByRole('option', { name: /weatherInfo/i }).click();
-    // Close the dropdown by clicking elsewhere
-    await page.keyboard.press('Escape');
-
-    // Verify tool is selected (shows in list below combobox)
-    await expect(page.locator('text=weatherInfo').first()).toBeVisible();
-
-    // Switch to Identity tab and fill required fields
-    await page.getByRole('tab', { name: 'Identity' }).click();
-    const agentName = uniqueAgentName('Tools Test');
+    const agentName = uniqueAgentName('Minimal');
     await fillRequiredFields(page, agentName);
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    const agentId = await createAgentAndGetId(page);
 
-    // Verify tool is associated with the agent in the Overview panel
+    // On edit page: nth(0) = version combobox, nth(1) = provider, nth(2) = model
+    await goToEditSubPage(page, agentId);
+
+    await expect(page.locator('#agent-name')).toHaveValue(agentName);
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+  });
+
+  test('persists all identity fields (name, description, provider, model)', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Full Identity');
+    const description = 'A comprehensive test agent for E2E testing';
+
+    await fillIdentityFields(page, { name: agentName, description });
+
+    // Add instruction block via sidebar
+    await clickSidebarLink(page, 'Instructions');
+    const editor = page.locator('.cm-content').first();
+    await editor.click();
+    await page.keyboard.type('You are a test agent.');
+
+    const agentId = await createAgentAndGetId(page);
+
+    await goToEditSubPage(page, agentId);
+
+    await expect(page.locator('#agent-name')).toHaveValue(agentName);
+    await expect(page.locator('#agent-description')).toHaveValue(description);
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+  });
+});
+
+test.describe('Agent Creation Persistence - Instruction Blocks', () => {
+  test('persists single instruction block with content', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Single Block');
+    const instructionContent = 'You are a helpful assistant that answers questions accurately.';
+
+    await fillIdentityFields(page, { name: agentName });
+
+    // Navigate to instruction blocks via sidebar
+    await clickSidebarLink(page, 'Instructions');
+    const editor = page.locator('.cm-content').first();
+    await editor.click();
+    await page.keyboard.type(instructionContent);
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/instruction-blocks`);
+    await page.waitForTimeout(2000);
+
+    await expect(page.locator('.cm-content').first()).toContainText(instructionContent, { timeout: 10000 });
+  });
+
+  test('persists multiple instruction blocks in order', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Multi Block');
+    const block1Content = 'You are a helpful assistant.';
+    const block2Content = 'Always be polite and concise.';
+
+    await fillIdentityFields(page, { name: agentName });
+
+    // Navigate to instruction blocks via sidebar
+    await clickSidebarLink(page, 'Instructions');
+
+    // Fill first block
+    const editor1 = page.locator('.cm-content').first();
+    await editor1.click();
+    await page.keyboard.type(block1Content);
+
+    // Add second block
+    await page.getByRole('button', { name: 'Add Instruction block' }).click();
+    await page.waitForTimeout(500);
+
+    // Fill second block
+    const editor2 = page.locator('.cm-content').nth(1);
+    await editor2.click();
+    await page.keyboard.type(block2Content);
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/instruction-blocks`);
+    await page.waitForTimeout(2000);
+
+    await expect(page.locator('.cm-content').first()).toContainText(block1Content, { timeout: 10000 });
+    await expect(page.locator('.cm-content').nth(1)).toContainText(block2Content, { timeout: 10000 });
+  });
+});
+
+test.describe('Agent Creation Persistence - Tools', () => {
+  test('persists selected tools', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Tools');
+    await fillRequiredFields(page, agentName);
+
+    // Navigate to tools page via sidebar
+    await clickSidebarLink(page, 'Tools');
+
+    // Wait for tools to load
     await expect(page.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
+
+    // Toggle the first tool switch
+    const firstSwitch = page.getByRole('switch').first();
+    await firstSwitch.click();
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/tools`);
+    await page.waitForTimeout(2000);
+
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
   });
 });
 
-test.describe('Capabilities Tab - Workflows Section', () => {
-  test.beforeEach(async ({ page }) => {
+test.describe('Agent Creation Persistence - Sub-Agents', () => {
+  test('persists selected sub-agents', async ({ page }) => {
     await page.goto('/cms/agents/create');
-    // Navigate to Capabilities tab
-    await page.getByRole('tab', { name: 'Capabilities' }).click();
-  });
 
-  // Behavior: Adding workflows to agent configuration persists with created agent
-  test('persists selected workflows with created agent', async ({ page }) => {
-    // Expand Workflows section (collapsible trigger)
-    await page.getByRole('button', { name: /Workflows/i }).click();
-
-    // Select a workflow
-    const workflowsCombobox = page.getByRole('combobox').filter({ hasText: /Select workflows/ });
-    await workflowsCombobox.click();
-    await page.getByRole('option', { name: /lessComplexWorkflow/i }).click();
-    await page.keyboard.press('Escape');
-
-    // Verify workflow is selected
-    await expect(page.locator('text=lessComplexWorkflow').first()).toBeVisible();
-
-    // Switch to Identity tab and fill required fields
-    await page.getByRole('tab', { name: 'Identity' }).click();
-    const agentName = uniqueAgentName('Workflows Test');
+    const agentName = uniqueAgentName('SubAgents');
     await fillRequiredFields(page, agentName);
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    // Navigate to agents page via sidebar
+    await clickSidebarLink(page, 'Agents');
 
-    // Verify workflow is associated with the agent
-    await expect(page.getByText('lessComplexWorkflow')).toBeVisible({ timeout: 10000 });
+    // Wait for agents list to load
+    await page.waitForTimeout(1000);
+
+    // Toggle first available agent
+    const agentSwitch = page.getByRole('switch').first();
+    await expect(agentSwitch).toBeVisible({ timeout: 10000 });
+    await agentSwitch.click();
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/agents`);
+    await page.waitForTimeout(2000);
+
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
   });
 });
 
-test.describe('Capabilities Tab - Sub-Agents Section', () => {
-  test.beforeEach(async ({ page }) => {
+test.describe('Agent Creation Persistence - Scorers', () => {
+  test('persists selected scorers with sampling configuration', async ({ page }) => {
     await page.goto('/cms/agents/create');
-    // Navigate to Capabilities tab
-    await page.getByRole('tab', { name: 'Capabilities' }).click();
-  });
 
-  // Behavior: Adding sub-agents to agent configuration persists with created agent
-  test('persists selected sub-agents with created agent', async ({ page }) => {
-    // Expand Sub-Agents section (collapsible trigger)
-    await page.getByRole('button', { name: /Sub-Agents/i }).click();
-
-    // Select a sub-agent
-    const agentsCombobox = page.getByRole('combobox').filter({ hasText: /Select sub-agents/ });
-    await agentsCombobox.click();
-    await page.getByRole('option', { name: /Weather Agent/i }).click();
-    await page.keyboard.press('Escape');
-
-    // Verify agent is selected
-    await expect(page.locator('text=Weather Agent').first()).toBeVisible();
-
-    // Switch to Identity tab and fill required fields
-    await page.getByRole('tab', { name: 'Identity' }).click();
-    const agentName = uniqueAgentName('SubAgents Test');
+    const agentName = uniqueAgentName('Scorers');
     await fillRequiredFields(page, agentName);
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    // Navigate to scorers page via sidebar
+    await clickSidebarLink(page, 'Scorers');
 
-    // Verify sub-agent is associated with the created agent
-    await expect(page.getByText('Weather Agent')).toBeVisible({ timeout: 10000 });
+    // Wait for scorers to load
+    await page.waitForTimeout(1000);
+
+    // Toggle first scorer
+    const scorerSwitch = page.getByRole('switch').first();
+    await expect(scorerSwitch).toBeVisible({ timeout: 10000 });
+    await scorerSwitch.click();
+
+    // Configure sampling to ratio
+    const ratioLabel = page.getByText('Ratio (percentage)').first();
+    await expect(ratioLabel).toBeVisible({ timeout: 5000 });
+    await ratioLabel.click();
+
+    // Set sample rate
+    const rateInput = page.locator('input[type="number"]').first();
+    await rateInput.clear();
+    await rateInput.fill('0.5');
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/scorers`);
+    await page.waitForTimeout(2000);
+
+    // Scorer switch should be checked
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+
+    // Ratio radio should be selected
+    await expect(page.getByRole('radio', { name: /ratio/i }).first()).toBeChecked();
+
+    // Sample rate should be 0.5
+    await expect(page.locator('input[type="number"]').first()).toHaveValue('0.5');
   });
 });
 
-test.describe('Capabilities Tab - Scorers Section', () => {
-  test.beforeEach(async ({ page }) => {
+test.describe('Agent Creation Persistence - Workflows', () => {
+  test('persists selected workflows', async ({ page }) => {
     await page.goto('/cms/agents/create');
-    // Navigate to Capabilities tab
-    await page.getByRole('tab', { name: 'Capabilities' }).click();
-  });
 
-  // Behavior: Adding scorers with sampling configuration persists with created agent
-  test('persists selected scorers with created agent', async ({ page }) => {
-    // Expand Scorers section (collapsible trigger)
-    await page.getByRole('button', { name: /Scorers/i }).click();
-
-    // Select a scorer
-    const scorersCombobox = page.getByRole('combobox').filter({ hasText: /Select scorers/ });
-    await scorersCombobox.click();
-    await page.getByRole('option', { name: /Response Quality/i }).click();
-    await page.keyboard.press('Escape');
-
-    // Verify scorer is selected
-    await expect(page.locator('text=Response Quality Scorer').first()).toBeVisible();
-
-    // Switch to Identity tab and fill required fields
-    await page.getByRole('tab', { name: 'Identity' }).click();
-    const agentName = uniqueAgentName('Scorers Test');
+    const agentName = uniqueAgentName('Workflows');
     await fillRequiredFields(page, agentName);
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    // Navigate to workflows page via sidebar
+    await clickSidebarLink(page, 'Workflows');
 
-    // Verify scorer is associated with the agent in Overview
-    await expect(page.getByText(/response.*quality/i).first()).toBeVisible({ timeout: 10000 });
-  });
+    // Wait for workflows to load
+    await page.waitForTimeout(1000);
 
-  // Behavior: Scorer sampling configuration (ratio) persists correctly
-  test('persists scorer with ratio sampling configuration', async ({ page }) => {
-    // Expand Scorers section (collapsible trigger)
-    await page.getByRole('button', { name: /Scorers/i }).click();
+    // Toggle first workflow
+    const workflowSwitch = page.getByRole('switch').first();
+    await expect(workflowSwitch).toBeVisible({ timeout: 10000 });
+    await workflowSwitch.click();
 
-    // Select a scorer
-    const scorersCombobox = page.getByRole('combobox').filter({ hasText: /Select scorers/ });
-    await scorersCombobox.click();
-    await page.getByRole('option', { name: /Response Quality/i }).click();
-    await page.keyboard.press('Escape');
+    const agentId = await createAgentAndGetId(page);
 
-    // Configure sampling to Ratio
-    await page.getByLabel('Ratio (percentage)').click();
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/workflows`);
+    await page.waitForTimeout(2000);
 
-    // Verify sample rate input appears
-    await expect(page.getByLabel('Sample Rate (0-1)')).toBeVisible();
-
-    // Switch to Identity tab and fill required fields
-    await page.getByRole('tab', { name: 'Identity' }).click();
-    const agentName = uniqueAgentName('Scorers Ratio Test');
-    await fillRequiredFields(page, agentName);
-
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
   });
 });
 
-test.describe('Capabilities Tab - Memory Section', () => {
-  test.beforeEach(async ({ page }) => {
+test.describe('Agent Creation Persistence - Memory', () => {
+  test('persists memory enabled with lastMessages', async ({ page }) => {
     await page.goto('/cms/agents/create');
-    // Navigate to Capabilities tab
-    await page.getByRole('tab', { name: 'Capabilities' }).click();
-  });
 
-  // Behavior: Enabling memory configuration persists with created agent
-  test('persists memory configuration with created agent', async ({ page }) => {
-    // Expand Memory section (collapsible trigger)
-    await page.getByRole('button', { name: /Memory/i }).click();
+    const agentName = uniqueAgentName('Memory');
+    await fillRequiredFields(page, agentName);
 
-    // Enable memory
-    const memorySwitch = page.getByRole('switch', { name: /Enable Memory/i });
-    await memorySwitch.click();
+    // Navigate to memory page via sidebar
+    await clickSidebarLink(page, 'Memory');
 
-    // Verify memory is enabled (shows additional options)
-    await expect(page.getByLabel('Last Messages')).toBeVisible();
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
 
-    // Configure lastMessages
-    const lastMessagesInput = page.getByLabel('Last Messages');
+    // Wait for memory fields to appear
+    await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
+
+    // Set lastMessages
+    const lastMessagesInput = page.locator('#memory-last-messages');
     await lastMessagesInput.clear();
     await lastMessagesInput.fill('20');
 
-    // Switch to Identity tab and fill required fields
-    await page.getByRole('tab', { name: 'Identity' }).click();
-    const agentName = uniqueAgentName('Memory Test');
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/memory`);
+    await page.waitForTimeout(2000);
+
+    // Memory should be enabled
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+
+    // lastMessages should have value 20
+    await expect(page.locator('#memory-last-messages')).toHaveValue('20');
+  });
+
+  test('persists memory with readOnly enabled', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('ReadOnly Memory');
     await fillRequiredFields(page, agentName);
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    // Navigate to memory page via sidebar
+    await clickSidebarLink(page, 'Memory');
 
-    // Verify memory is enabled - should see Memory tab in agent panel
-    await expect(page.getByRole('tab', { name: 'Memory' })).toBeVisible({ timeout: 10000 });
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
+    await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
+
+    // The switches after memory enabled are: Semantic Recall, Read Only, Observational Memory
+    // Main toggle = 0, Semantic Recall = 1, Read Only = 2, OM = 3
+    const readOnlySwitch = page.getByRole('switch').nth(2);
+    await readOnlySwitch.click();
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/memory`);
+    await page.waitForTimeout(2000);
+
+    // Memory enabled
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+
+    // Read Only should be checked (3rd switch)
+    await expect(page.getByRole('switch').nth(2)).toBeChecked();
+  });
+
+  test('persists observational memory settings', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('OM Memory');
+    await fillRequiredFields(page, agentName);
+
+    // Navigate to memory page via sidebar
+    await clickSidebarLink(page, 'Memory');
+
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
+    await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
+
+    // Enable Observational Memory (4th switch: main=0, semantic=1, readOnly=2, OM=3)
+    const omSwitch = page.getByRole('switch').nth(3);
+    await omSwitch.click();
+
+    // Wait for OM fields to appear
+    await expect(page.locator('#memory-om-scope')).toBeVisible({ timeout: 5000 });
+
+    // Set scope to resource
+    const scopeSelect = page.locator('#memory-om-scope');
+    await scopeSelect.click();
+    await page.getByRole('option', { name: 'Resource' }).click();
+
+    // Enable share token budget
+    const shareBudgetSwitch = page.locator('#memory-om-share-budget');
+    await shareBudgetSwitch.click();
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page
+    await page.goto(`/cms/agents/${agentId}/edit/memory`);
+    await page.waitForTimeout(2000);
+
+    // Memory should be enabled
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+
+    // OM should be enabled (4th switch)
+    await expect(page.getByRole('switch').nth(3)).toBeChecked();
+
+    // Scope should be resource
+    await expect(page.locator('#memory-om-scope')).toContainText('Resource');
+
+    // Share budget should be on
+    await expect(page.locator('#memory-om-share-budget')).toBeChecked();
+  });
+});
+
+test.describe('Agent Creation Persistence - Variables', () => {
+  test('persists single variable definition', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Variables');
+    await fillRequiredFields(page, agentName);
+
+    // Navigate to variables page via sidebar
+    await clickSidebarLink(page, 'Variables');
+
+    // Add a variable
+    await page.getByRole('button', { name: 'Add variable' }).click();
+    await page.waitForTimeout(500);
+
+    const nameInput = page.getByPlaceholder('Variable name').first();
+    await expect(nameInput).toBeVisible({ timeout: 5000 });
+    await nameInput.fill('userName');
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page - navigate via sidebar so VariablesPage mounts after data is loaded
+    await goToEditSubPageViaSidebar(page, agentId, 'Variables');
+
+    await expect(page.getByPlaceholder('Variable name').first()).toHaveValue('userName', { timeout: 10000 });
+  });
+
+  test('persists multiple variables', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Multi Vars');
+    await fillRequiredFields(page, agentName);
+
+    // Navigate to variables page via sidebar
+    await clickSidebarLink(page, 'Variables');
+
+    // Add first variable
+    await page.getByRole('button', { name: 'Add variable' }).click();
+    await page.waitForTimeout(500);
+    await page.getByPlaceholder('Variable name').first().fill('firstName');
+
+    // Add second variable
+    await page.getByRole('button', { name: 'Add variable' }).click();
+    await page.waitForTimeout(500);
+    await page.getByPlaceholder('Variable name').nth(1).fill('age');
+
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page - navigate via sidebar so VariablesPage mounts after data is loaded
+    await goToEditSubPageViaSidebar(page, agentId, 'Variables');
+
+    await expect(page.getByPlaceholder('Variable name').first()).toHaveValue('firstName', { timeout: 10000 });
+    await expect(page.getByPlaceholder('Variable name').nth(1)).toHaveValue('age');
+  });
+});
+
+test.describe('Comprehensive Persistence Test', () => {
+  test('persists all fields across all pages', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('Comprehensive');
+    const description = 'A comprehensive agent with all fields configured';
+
+    // === Identity Page ===
+    await fillIdentityFields(page, { name: agentName, description });
+
+    // === Instruction Blocks ===
+    await clickSidebarLink(page, 'Instructions');
+    const editor = page.locator('.cm-content').first();
+    await editor.click();
+    await page.keyboard.type('You are a comprehensive test agent.');
+
+    // === Tools ===
+    await clickSidebarLink(page, 'Tools');
+    await page.waitForTimeout(1000);
+    const toolSwitches = page.getByRole('switch');
+    if ((await toolSwitches.count()) > 0) {
+      await toolSwitches.first().click();
+    }
+
+    // === Workflows ===
+    await clickSidebarLink(page, 'Workflows');
+    await page.waitForTimeout(1000);
+    const wfSwitches = page.getByRole('switch');
+    if ((await wfSwitches.count()) > 0) {
+      await wfSwitches.first().click();
+    }
+
+    // === Memory ===
+    await clickSidebarLink(page, 'Memory');
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
+    await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
+    const lastMsgInput = page.locator('#memory-last-messages');
+    await lastMsgInput.clear();
+    await lastMsgInput.fill('25');
+
+    // === Variables ===
+    await clickSidebarLink(page, 'Variables');
+    await page.getByRole('button', { name: 'Add variable' }).click();
+    await page.waitForTimeout(500);
+    await page.getByPlaceholder('Variable name').first().fill('context');
+
+    // === Create ===
+    const agentId = await createAgentAndGetId(page);
+
+    // === Verify Identity ===
+    await goToEditSubPage(page, agentId);
+    await expect(page.locator('#agent-name')).toHaveValue(agentName);
+    await expect(page.locator('#agent-description')).toHaveValue(description);
+    // On edit page: nth(0) = version, nth(1) = provider, nth(2) = model
+    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+
+    // === Verify Instructions ===
+    await page.goto(`/cms/agents/${agentId}/edit/instruction-blocks`);
+    await page.waitForTimeout(2000);
+    await expect(page.locator('.cm-content').first()).toContainText('You are a comprehensive test agent.', {
+      timeout: 10000,
+    });
+
+    // === Verify Tools ===
+    await page.goto(`/cms/agents/${agentId}/edit/tools`);
+    await page.waitForTimeout(2000);
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+
+    // === Verify Workflows ===
+    await page.goto(`/cms/agents/${agentId}/edit/workflows`);
+    await page.waitForTimeout(2000);
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+
+    // === Verify Memory ===
+    await page.goto(`/cms/agents/${agentId}/edit/memory`);
+    await page.waitForTimeout(2000);
+    await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
+    await expect(page.locator('#memory-last-messages')).toHaveValue('25');
+
+    // === Verify Variables (via sidebar so VariablesPage mounts after data is loaded) ===
+    await goToEditSubPageViaSidebar(page, agentId, 'Variables');
+    await expect(page.getByPlaceholder('Variable name').first()).toHaveValue('context', { timeout: 10000 });
   });
 });
 
 test.describe('Error Handling', () => {
-  // Behavior: Error toast is shown and form remains editable on API failure
   test('shows error toast and allows retry on creation failure', async ({ page }) => {
-    // Set up route interception BEFORE navigating to the page
-    // Only intercept POST requests to the stored agents endpoint
-    await page.route('**/stored/agents', route => {
-      if (route.request().method() === 'POST') {
+    // Intercept stored agent creation requests
+    await page.route('**/*', route => {
+      const url = route.request().url();
+      if (url.includes('/api/stored/agents') && route.request().method() === 'POST') {
         route.fulfill({
           status: 500,
           contentType: 'application/json',
@@ -492,144 +706,32 @@ test.describe('Error Handling', () => {
 
     await page.goto('/cms/agents/create');
 
-    // Fill required fields
     await fillRequiredFields(page, uniqueAgentName('Error Test'));
 
     await page.getByRole('button', { name: 'Create agent' }).click();
 
-    // Should show error toast
     await expect(page.getByText(/Failed to create agent/i)).toBeVisible({ timeout: 10000 });
 
-    // Form should still be editable (not reset) - still on create page
+    // Should stay on create sub-page with button still enabled
     await expect(page).toHaveURL(/\/cms\/agents\/create/);
     await expect(page.getByRole('button', { name: 'Create agent' })).toBeEnabled();
   });
 });
 
 test.describe('Form Reset After Creation', () => {
-  // Behavior: Navigating back to create page shows clean form after successful creation
   test('shows clean form when navigating back to create page', async ({ page }) => {
     await page.goto('/cms/agents/create');
 
     const agentName = uniqueAgentName('Reset Test');
     await fillRequiredFields(page, agentName);
 
-    await page.getByRole('button', { name: 'Create agent' }).click();
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 15000 });
+    await createAgentAndGetId(page);
 
     // Navigate back to create page
     await page.goto('/cms/agents/create');
 
-    // Form should be empty/reset
-    const nameInput = page.getByLabel('Name');
-    await expect(nameInput).toHaveValue('');
-  });
-});
-
-test.describe('Full Agent Creation Flow', () => {
-  /**
-   * FEATURE: Agent Creation with All Capabilities
-   * USER STORY: As a user, I want to create an agent with tools, workflows, sub-agents,
-   *             scorers, and memory so that the agent has all capabilities configured.
-   * BEHAVIOR UNDER TEST: All configured capabilities are persisted and displayed in the
-   *                      agent overview side panel after creation.
-   */
-  test('creates agent with all capabilities and verifies them in overview side panel', async ({ page }) => {
-    await page.goto('/cms/agents/create');
-
-    const agentName = uniqueAgentName('Full Flow Test');
-
-    // Fill Identity fields first
-    await fillIdentityFields(page, {
-      name: agentName,
-      description: 'A comprehensive test agent',
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-      instructions: 'You are a comprehensive test assistant with various capabilities.',
-    });
-
-    // Navigate to Capabilities tab
-    await page.getByRole('tab', { name: 'Capabilities' }).click();
-
-    // Add Tools
-    await page.getByRole('button', { name: /Tools/i }).click();
-    const toolsCombobox = page.getByRole('combobox').filter({ hasText: /Select tools/ });
-    await toolsCombobox.click();
-    await page.getByRole('option', { name: /weatherInfo/i }).click();
-    await page.keyboard.press('Escape');
-
-    // Add Workflows
-    await page.getByRole('button', { name: /Workflows/i }).click();
-    const workflowsCombobox = page.getByRole('combobox').filter({ hasText: /Select workflows/ });
-    await workflowsCombobox.click();
-    await page.getByRole('option', { name: /lessComplexWorkflow/i }).click();
-    await page.keyboard.press('Escape');
-
-    // Add Sub-Agents
-    await page.getByRole('button', { name: /Sub-Agents/i }).click();
-    const agentsCombobox = page.getByRole('combobox').filter({ hasText: /Select sub-agents/ });
-    await agentsCombobox.click();
-    await page.getByRole('option', { name: /Weather Agent/i }).click();
-    await page.keyboard.press('Escape');
-
-    // Add Scorers
-    await page.getByRole('button', { name: /Scorers/i }).click();
-    const scorersCombobox = page.getByRole('combobox').filter({ hasText: /Select scorers/ });
-    await scorersCombobox.click();
-    await page.getByRole('option', { name: /Response Quality/i }).click();
-    await page.keyboard.press('Escape');
-
-    // Enable Memory
-    await page.getByRole('button', { name: /Memory/i }).click();
-    const memorySwitch = page.getByRole('switch', { name: /Enable Memory/i });
-    await memorySwitch.click();
-
-    // Create the agent
-    await page.getByRole('button', { name: 'Create agent' }).click();
-
-    // Wait for redirect to chat page
-    await expect(page).toHaveURL(/\/agents\/[a-f0-9-]+\/chat/, { timeout: 20000 });
-
-    // Verify success toast
-    await expect(page.getByText('Agent created successfully')).toBeVisible();
-
-    // Verify agent name is visible in the overview header
-    await expect(page.getByRole('heading', { name: agentName })).toBeVisible({ timeout: 10000 });
-
-    // Verify Overview tab is selected (default tab)
-    await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
-
-    // ========================================
-    // VERIFY ALL CAPABILITIES IN OVERVIEW SIDE PANEL
-    // ========================================
-
-    // 1. Memory: Badge should show "On" when memory is enabled
-    const memorySection = page.locator('h3:has-text("Memory")').locator('..');
-    await expect(memorySection.getByText('On')).toBeVisible({ timeout: 10000 });
-
-    // 2. Memory tab should be visible (additional verification)
-    await expect(page.getByRole('tab', { name: 'Memory' })).toBeVisible();
-
-    // 3. Tools: weatherInfo should be visible in the Tools section
-    const toolsSection = page.locator('h3:has-text("Tools")').locator('..');
-    await expect(toolsSection.getByText('weatherInfo')).toBeVisible({ timeout: 10000 });
-
-    // 4. Workflows: lessComplexWorkflow should be visible in the Workflows section
-    const workflowsSection = page.locator('h3:has-text("Workflows")').locator('..');
-    await expect(workflowsSection.getByText('lessComplexWorkflow')).toBeVisible({ timeout: 10000 });
-
-    // 5. Agents (Sub-Agents): Weather Agent should be visible in the Agents section
-    const agentsSection = page.locator('h3:has-text("Agents")').locator('..');
-    await expect(agentsSection.getByText('Weather Agent')).toBeVisible({ timeout: 10000 });
-
-    // 6. Scorers: Response Quality Scorer should be visible in the Scorers section
-    const scorersSection = page.locator('h3:has-text("Scorers")').locator('..');
-    await expect(scorersSection.getByText(/Response Quality/i)).toBeVisible({ timeout: 10000 });
-
-    // 7. System Prompt: Verify the instructions are displayed
-    const systemPromptSection = page.locator('h3:has-text("System Prompt")').locator('..');
-    await expect(systemPromptSection.getByText('You are a comprehensive test assistant')).toBeVisible({
-      timeout: 10000,
-    });
+    // Form should be empty
+    await expect(page.locator('#agent-name')).toHaveValue('');
+    await expect(page.locator('#agent-description')).toHaveValue('');
   });
 });

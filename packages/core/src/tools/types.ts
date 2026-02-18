@@ -16,6 +16,7 @@ import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
+import type { Workspace } from '../workspace/workspace';
 import type { ToolStream } from './stream';
 import type { ValidationError } from './validation';
 
@@ -89,6 +90,18 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
    * This is populated by the MCP server and passed through to the tool's execution context.
    */
   mcp?: MCPToolExecutionContext;
+  /**
+   * Workspace for tool execution. When provided at execution time, this overrides
+   * any workspace configured at tool build time. Allows dynamic workspace selection
+   * per-step via prepareStep.
+   */
+  workspace?: Workspace;
+  /**
+   * Request context for tool execution. When provided at execution time, this overrides
+   * any requestContext configured at tool build time. Allows workflow steps to forward
+   * their requestContext (e.g., authenticated API clients, feature flags) to tools.
+   */
+  requestContext?: RequestContext;
 };
 
 /**
@@ -243,6 +256,15 @@ export interface ToolExecutionContext<
   requestContext?: RequestContext<TRequestContext>;
   tracingContext?: TracingContext;
   abortSignal?: AbortSignal;
+
+  /**
+   * Workspace available for tool execution. When provided, tools can access:
+   * - workspace.filesystem - for file operations (read, write, list, etc.)
+   * - workspace.sandbox - for command execution
+   *
+   * This allows tools to work with the agent's configured workspace.
+   */
+  workspace?: Workspace;
 
   // Writer is created by Mastra for ALL contexts (agent, workflow, direct execution)
   // Wraps chunks with metadata (toolCallId, toolName, runId) before passing to underlying stream

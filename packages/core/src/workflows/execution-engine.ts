@@ -59,6 +59,10 @@ export abstract class ExecutionEngine extends MastraBase {
 
   __registerMastra(mastra: Mastra) {
     this.mastra = mastra;
+    const logger = mastra?.getLogger();
+    if (logger) {
+      this.__setLogger(logger);
+    }
   }
 
   public getLogger(): IMastraLogger {

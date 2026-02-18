@@ -26,6 +26,24 @@ function filterDataParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
   return parts.filter((part): part is UIMessageV4Part => !part.type.startsWith('data-'));
 }
 
+/**
+ * Filter out empty text parts from message parts array.
+ * Empty text blocks are not allowed by Anthropic's API and cause request failures.
+ * This can happen during streaming when text-start/text-end events occur without actual content.
+ * However, if the only part is an empty text part, it is preserved as a legitimate placeholder
+ * (e.g. empty assistant messages between tool results and user messages).
+ */
+function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
+  const hasNonEmptyParts = parts.some(part => !(part.type === 'text' && part.text === ''));
+  if (!hasNonEmptyParts) return parts;
+  return parts.filter(part => {
+    if (part.type === 'text') {
+      return part.text !== '';
+    }
+    return true;
+  });
+}
+
 // Re-export for backward compatibility
 export type { UIMessageWithMetadata };
 
@@ -224,9 +242,12 @@ export class AIV4Adapter {
     ctx: AIV4AdapterContext,
     messageSource: MessageSource,
   ): MastraDBMessage {
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredParts = message.parts ? filterEmptyTextParts(message.parts) : [];
+
     const content: MastraMessageContentV2 = {
       format: 2,
-      parts: message.parts,
+      parts: filteredParts,
     };
 
     if (message.toolInvocations) content.toolInvocations = message.toolInvocations;
@@ -458,9 +479,12 @@ export class AIV4Adapter {
       }
     }
 
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredParts = filterEmptyTextParts(parts);
+
     const content: MastraDBMessage['content'] = {
       format: 2,
-      parts,
+      parts: filteredParts,
     };
 
     if (toolInvocations.length) content.toolInvocations = toolInvocations;

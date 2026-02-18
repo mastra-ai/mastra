@@ -16,7 +16,12 @@ const agentFormResolver: Resolver<AgentFormValues> = async values => {
     errors.description = { type: 'maxLength', message: 'Description must be 500 characters or less' };
   }
 
-  if (!values.instructions || values.instructions.trim() === '') {
+  // Validate instructions: check blocks if present, otherwise check plain instructions string
+  const blocks = values.instructionBlocks;
+  const hasBlockContent = blocks && blocks.some(b => b.content.trim() !== '');
+  const hasPlainInstructions = values.instructions && values.instructions.trim() !== '';
+
+  if (!hasBlockContent && !hasPlainInstructions) {
     errors.instructions = { type: 'required', message: 'Instructions are required' };
   }
 
@@ -49,11 +54,14 @@ export function useAgentEditForm(options: UseAgentEditFormOptions = {}) {
       instructions: initialValues?.instructions ?? '',
       model: initialValues?.model ?? { provider: '', name: '' },
       tools: initialValues?.tools ?? {},
+      integrationTools: initialValues?.integrationTools ?? {},
       workflows: initialValues?.workflows ?? {},
       agents: initialValues?.agents ?? {},
       scorers: initialValues?.scorers ?? {},
       variables: initialValues?.variables ?? {},
       instructionBlocks: initialValues?.instructionBlocks ?? [createInstructionBlock()],
+      mcpClients: initialValues?.mcpClients ?? [],
+      mcpClientsToDelete: [],
     },
   });
 

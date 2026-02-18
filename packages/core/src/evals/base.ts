@@ -188,6 +188,13 @@ class MastraScorer<
   TAccumulatedResults extends Record<string, any> = {},
 > {
   #mastra?: Mastra;
+  #rawConfig?: Record<string, unknown>;
+
+  /**
+   * Tracks whether this scorer was defined in code or loaded from storage.
+   * Set by `Mastra.addScorer()` when the `source` option is provided.
+   */
+  public source?: 'code' | 'stored';
 
   constructor(
     public config: ScorerConfig<TID, TInput, TRunOutput>,
@@ -218,6 +225,22 @@ class MastraScorer<
    */
   __registerMastra(mastra: Mastra): void {
     this.#mastra = mastra;
+  }
+
+  /**
+   * Returns the raw storage configuration this scorer was created from,
+   * or undefined if it was created from code.
+   */
+  toRawConfig(): Record<string, unknown> | undefined {
+    return this.#rawConfig;
+  }
+
+  /**
+   * Sets the raw storage configuration for this scorer.
+   * @internal
+   */
+  __setRawConfig(rawConfig: Record<string, unknown>): void {
+    this.#rawConfig = rawConfig;
   }
 
   get type() {

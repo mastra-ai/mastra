@@ -82,31 +82,92 @@ export const myAgent = new Agent({
 });
 ```
 
-## Initialization
+## Configuration patterns
 
-Calling `init()` is optional in most cases—some providers initialize on first operation. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.
+Workspaces support several configuration patterns depending on what capabilities your agent needs. The two main building blocks are `filesystem` (file tools) and `sandbox` (command execution), with `mounts` as the way to bridge cloud storage into sandboxes.
 
-```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+### Filesystem + sandbox (local)
 
+For local development, pair a `LocalFilesystem` and `LocalSandbox` pointed at the same directory. Since both operate on the local machine, files written through the filesystem are immediately available to commands in the sandbox:
+
+```typescript
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
 });
-
-// Optional: pre-create directories and sandbox before first use
-await workspace.init();
 ```
 
-### What init() does
+The agent receives both file tools and `execute_command`. This is the simplest full-featured setup.
 
-Initialization runs setup logic for each configured provider:
+### Mounts + sandbox (cloud storage)
 
-- `LocalFilesystem`: Creates the base directory if it doesn't exist
-- `LocalSandbox`: Creates the working directory
-- `Search` (if configured): Indexes files from `autoIndexPaths`, see [Search and Indexing](/docs/workspace/search)
+When you need cloud storage accessible inside a sandbox, use `mounts`. This FUSE-mounts the cloud filesystem into the sandbox so commands can read and write files at the mount path:
 
-External providers may perform additional setup like establishing connections or authenticating.
+```typescript
+const workspace = new Workspace({
+  mounts: {
+    '/data': new S3Filesystem({
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }),
+    '/skills': new GCSFilesystem({
+      bucket: 'agent-skills',
+    }),
+  },
+  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+});
+```
+
+Under the hood, `mounts` creates a [CompositeFilesystem](/docs/workspace/filesystem#mounts-and-compositefilesystem) that routes file tool operations to the correct provider based on path prefix. Commands in the sandbox access the mounted paths directly (e.g., `ls /data`).
+
+You can mount multiple providers at different paths. Each mount path must be unique and non-overlapping.
+
+:::note
+
+`filesystem` and `mounts` are mutually exclusive — you cannot use both in the same workspace. Use `filesystem` for a single provider without a sandbox, or `mounts` when you need to combine cloud storage with a sandbox.
+
+:::
+
+### Filesystem only
+
+Use a single `filesystem` when agents only need to read and write files. No command execution is available.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new S3Filesystem({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  }),
+});
+```
+
+The agent receives file tools (`read_file`, `write_file`, `list_directory`, etc.) that operate directly against the storage provider.
+
+### Sandbox only
+
+Use a single `sandbox` when agents only need to execute commands. No file tools are added.
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+});
+```
+
+The agent receives the `execute_command` tool.
+
+### Which pattern should I use?
+
+| Scenario | Pattern |
+|---|---|
+| Local development with files and commands | `filesystem` + `sandbox` (both local, same directory) |
+| Cloud storage accessible inside a cloud sandbox | `mounts` + `sandbox` |
+| Multiple cloud providers in one sandbox | `mounts` + `sandbox` (one mount per provider) |
+| Agent reads/writes files, no command execution needed | `filesystem` only |
+| Agent runs commands, no file tools needed | `sandbox` only |
 
 ## Tool configuration
 
@@ -153,6 +214,32 @@ When `requireReadBeforeWrite` is enabled on write tools, agents must read a file
 - **New files**: Can be written without reading (they don't exist yet)
 - **Existing files**: Must be read first
 - **Externally modified files**: If a file changed since the agent read it, the write fails
+
+## Initialization
+
+Calling `init()` is optional in most cases—some providers initialize on first operation. Call `init()` manually when using a workspace outside of Mastra (standalone scripts, tests) or when you need to pre-provision resources before the first agent interaction.
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+});
+
+// Optional: pre-create directories and sandbox before first use
+await workspace.init();
+```
+
+### What init() does
+
+Initialization runs setup logic for each configured provider:
+
+- `LocalFilesystem`: Creates the base directory if it doesn't exist
+- `LocalSandbox`: Creates the working directory
+- `Search` (if configured): Indexes files from `autoIndexPaths`, see [Search and Indexing](/docs/workspace/search)
+
+External providers may perform additional setup like establishing connections or authenticating.
 
 ## Related
 

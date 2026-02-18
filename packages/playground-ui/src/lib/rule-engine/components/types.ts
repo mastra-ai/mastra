@@ -1,4 +1,4 @@
-import type { ConditionOperator, Rule } from '../types';
+import type { ConditionOperator, Rule, RuleGroup } from '../types';
 import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
 export type { JsonSchema, JsonSchemaProperty };
@@ -27,12 +27,32 @@ export type FieldOption = {
 export type RuleBuilderProps = {
   /** JSON Schema defining available fields */
   schema: JsonSchema;
-  /** Current rules */
-  rules: Rule[];
-  /** Callback when rules change */
-  onChange: (rules: Rule[]) => void;
+  /** Current rule group (recursive, supports nested groups) */
+  ruleGroup: RuleGroup | undefined;
+  /** Callback when rule group changes */
+  onChange: (ruleGroup: RuleGroup | undefined) => void;
+  /** Maximum nesting depth (default: 3) */
+  maxDepth?: number;
   /** Optional class name */
   className?: string;
+};
+
+/**
+ * Internal props for the recursive RuleGroupView component
+ */
+export type RuleGroupViewProps = {
+  /** JSON Schema defining available fields */
+  schema: JsonSchema;
+  /** The rule group to render */
+  group: RuleGroup;
+  /** Callback when this group changes */
+  onChange: (group: RuleGroup) => void;
+  /** Callback to remove this group (undefined for root) */
+  onRemove?: () => void;
+  /** Current nesting depth (0 = root) */
+  depth: number;
+  /** Maximum nesting depth */
+  maxDepth: number;
 };
 
 /**
@@ -107,8 +127,12 @@ export const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   not_contains: 'not contains',
   greater_than: 'greater than',
   less_than: 'less than',
+  greater_than_or_equal: 'greater than or equal',
+  less_than_or_equal: 'less than or equal',
   in: 'in',
   not_in: 'not in',
+  exists: 'exists',
+  not_exists: 'not exists',
 };
 
 /**
@@ -121,6 +145,10 @@ export const OPERATORS: ConditionOperator[] = [
   'not_contains',
   'greater_than',
   'less_than',
+  'greater_than_or_equal',
+  'less_than_or_equal',
   'in',
   'not_in',
+  'exists',
+  'not_exists',
 ];

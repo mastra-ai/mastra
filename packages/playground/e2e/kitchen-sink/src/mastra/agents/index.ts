@@ -101,6 +101,7 @@ const omAdaptiveMemory = new Memory({
       observation: {
         model: mockObserverModel,
         messageTokens: 20, // Very low threshold for E2E tests
+        bufferTokens: false, // Required: shareTokenBudget is not yet compatible with async buffering
       },
       reflection: {
         model: mockReflectorModel,

@@ -144,3 +144,13 @@ export class FileReadRequiredError extends FilesystemError {
     this.name = 'FileReadRequiredError';
   }
 }
+
+/**
+ * Error thrown when a filesystem operation is attempted before initialization.
+ */
+export class FilesystemNotReadyError extends FilesystemError {
+  constructor(id: string) {
+    super(`Filesystem "${id}" is not ready. Call init() first or use ensureReady().`, 'ENOTREADY', id);
+    this.name = 'FilesystemNotReadyError';
+  }
+}

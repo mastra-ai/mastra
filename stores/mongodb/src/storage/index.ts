@@ -4,9 +4,11 @@ import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
+import { MongoDBMCPClientsStorage } from './domains/mcp-clients';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { MongoDBPromptBlocksStorage } from './domains/prompt-blocks';
+import { MongoDBScorerDefinitionsStorage } from './domains/scorer-definitions';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
@@ -14,8 +16,10 @@ import type { MongoDBConfig } from './types';
 // Export domain classes for direct use with MastraStorage composition
 export {
   MongoDBAgentsStorage,
+  MongoDBMCPClientsStorage,
   MemoryStorageMongoDB,
   MongoDBPromptBlocksStorage,
+  MongoDBScorerDefinitionsStorage,
   ObservabilityMongoDB,
   ScoresStorageMongoDB,
   WorkflowsStorageMongoDB,
@@ -68,6 +72,10 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const promptBlocks = new MongoDBPromptBlocksStorage(domainConfig);
 
+    const scorerDefinitions = new MongoDBScorerDefinitionsStorage(domainConfig);
+
+    const mcpClients = new MongoDBMCPClientsStorage(domainConfig);
+
     this.stores = {
       memory,
       scores,
@@ -75,6 +83,8 @@ export class MongoDBStore extends MastraCompositeStore {
       observability,
       agents,
       promptBlocks,
+      scorerDefinitions,
+      mcpClients,
     };
   }
 

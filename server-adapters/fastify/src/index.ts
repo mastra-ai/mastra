@@ -146,7 +146,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
     } catch (error) {
-      console.error(error);
+      this.mastra.getLogger()?.error('Error in stream processing', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
     } finally {
       reply.raw.end();
     }
@@ -159,7 +161,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = request.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -167,7 +169,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
           body = await this.parseMultipartFormData(request, maxFileSize);
         } catch (error) {
-          console.error('Failed to parse multipart form data:', error);
+          this.mastra.getLogger()?.error('Failed to parse multipart form data', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Re-throw size limit errors, let others fall through to validation
           if (error instanceof Error && error.message.toLowerCase().includes('size')) {
             throw error;
@@ -402,7 +406,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         try {
           params.queryParams = await this.parseQueryParams(route, params.queryParams);
         } catch (error) {
-          console.error('Error parsing query params', error);
+          this.mastra.getLogger()?.error('Error parsing query params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
             return reply.status(400).send(formatZodError(error, 'query parameters'));
@@ -418,7 +424,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         try {
           params.body = await this.parseBody(route, params.body);
         } catch (error) {
-          console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
+          this.mastra.getLogger()?.error('Error parsing body', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
           // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
             return reply.status(400).send(formatZodError(error, 'request body'));
@@ -446,7 +454,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         const result = await route.handler(handlerParams);
         await this.sendResponse(route, reply, result, request, prefix);
       } catch (error) {
-        console.error('Error calling handler', error);
+        this.mastra.getLogger()?.error('Error calling handler', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          path: route.path,
+          method: route.method,
+        });
         // Check if it's an HTTPException or MastraError with a status code
         let status = 500;
         if (error && typeof error === 'object') {
@@ -503,6 +515,43 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         handler,
         config,
       });
+    }
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
+
+    for (const route of routes) {
+      const fastifyHandler: RouteHandlerMethod = async (request: FastifyRequest, reply: FastifyReply) => {
+        const response = await this.handleCustomRouteRequest(
+          `http://${request.headers.host}${request.url}`,
+          request.method,
+          request.headers as Record<string, string | string[] | undefined>,
+          request.body,
+          request.requestContext,
+        );
+        if (!response) {
+          reply.status(404).send({ error: 'Not Found' });
+          return;
+        }
+        reply.hijack();
+        await this.writeCustomRouteResponse(response, reply.raw);
+      };
+
+      if (route.method === 'ALL') {
+        const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
+        for (const method of methods) {
+          this.app.route({ method, url: route.path, handler: fastifyHandler });
+        }
+      } else {
+        this.app.route({
+          method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+          url: route.path,
+          handler: fastifyHandler,
+        });
+      }
     }
   }
 

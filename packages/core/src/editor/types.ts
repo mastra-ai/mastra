@@ -1,15 +1,125 @@
 import type { Agent } from '../agent';
+import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AgentInstructionBlock, StorageResolvedAgentType } from '../storage/types';
+import type { RequestContext } from '../request-context';
+import type {
+  AgentInstructionBlock,
+  StorageCreateAgentInput,
+  StorageUpdateAgentInput,
+  StorageListAgentsInput,
+  StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput,
+  StorageResolvedAgentType,
+  StorageCreatePromptBlockInput,
+  StorageUpdatePromptBlockInput,
+  StorageListPromptBlocksInput,
+  StorageListPromptBlocksOutput,
+  StorageResolvedPromptBlockType,
+  StorageListPromptBlocksResolvedOutput,
+  StorageCreateScorerDefinitionInput,
+  StorageUpdateScorerDefinitionInput,
+  StorageListScorerDefinitionsInput,
+  StorageListScorerDefinitionsOutput,
+  StorageResolvedScorerDefinitionType,
+  StorageListScorerDefinitionsResolvedOutput,
+  StorageCreateMCPClientInput,
+  StorageUpdateMCPClientInput,
+  StorageListMCPClientsInput,
+  StorageListMCPClientsOutput,
+  StorageResolvedMCPClientType,
+  StorageListMCPClientsResolvedOutput,
+} from '../storage/types';
+import type { ToolProvider } from '../tool-provider';
 
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
+  /** Tool providers for integration tools (e.g., Composio) */
+  toolProviders?: Record<string, ToolProvider>;
 }
 
+export interface GetByIdOptions {
+  /** Retrieve a specific version by ID. */
+  versionId?: string;
+  /** Retrieve a specific version by number. */
+  versionNumber?: number;
+}
+
+// ============================================================================
+// Agent Namespace Interface
+// ============================================================================
+
+export interface IEditorAgentNamespace {
+  create(input: StorageCreateAgentInput): Promise<Agent>;
+  getById(id: string, options?: GetByIdOptions): Promise<Agent | null>;
+  update(input: StorageUpdateAgentInput): Promise<Agent>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput>;
+  listResolved(args?: StorageListAgentsInput): Promise<StorageListAgentsResolvedOutput>;
+  clearCache(agentId?: string): void;
+  clone(
+    agent: Agent,
+    options: {
+      newId: string;
+      newName?: string;
+      metadata?: Record<string, unknown>;
+      authorId?: string;
+      requestContext?: RequestContext;
+    },
+  ): Promise<StorageResolvedAgentType>;
+}
+
+// ============================================================================
+// Prompt Namespace Interface
+// ============================================================================
+
+export interface IEditorPromptNamespace {
+  create(input: StorageCreatePromptBlockInput): Promise<StorageResolvedPromptBlockType>;
+  getById(id: string, options?: GetByIdOptions): Promise<StorageResolvedPromptBlockType | null>;
+  update(input: StorageUpdatePromptBlockInput): Promise<StorageResolvedPromptBlockType>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput>;
+  listResolved(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksResolvedOutput>;
+  clearCache(id?: string): void;
+  preview(blocks: AgentInstructionBlock[], context: Record<string, unknown>): Promise<string>;
+}
+
+// ============================================================================
+// Scorer Namespace Interface
+// ============================================================================
+
+export interface IEditorScorerNamespace {
+  create(input: StorageCreateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType>;
+  getById(id: string, options?: GetByIdOptions): Promise<StorageResolvedScorerDefinitionType | null>;
+  update(input: StorageUpdateScorerDefinitionInput): Promise<StorageResolvedScorerDefinitionType>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput>;
+  listResolved(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsResolvedOutput>;
+  clearCache(id?: string): void;
+  resolve(storedScorer: StorageResolvedScorerDefinitionType): MastraScorer<any, any, any, any> | null;
+}
+
+// ============================================================================
+// MCP Config Namespace Interface
+// ============================================================================
+
+export interface IEditorMCPNamespace {
+  create(input: StorageCreateMCPClientInput): Promise<StorageResolvedMCPClientType>;
+  getById(id: string, options?: GetByIdOptions): Promise<StorageResolvedMCPClientType | null>;
+  update(input: StorageUpdateMCPClientInput): Promise<StorageResolvedMCPClientType>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput>;
+  listResolved(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsResolvedOutput>;
+  clearCache(id?: string): void;
+}
+
+// ============================================================================
+// Main Editor Interface
+// ============================================================================
+
 /**
- * Interface for the Mastra Editor, which handles agent instantiation
- * and configuration from stored data.
+ * Interface for the Mastra Editor, which handles agent, prompt, scorer,
+ * and MCP config management from stored data.
  */
 export interface IMastraEditor {
   /**
@@ -18,57 +128,20 @@ export interface IMastraEditor {
    */
   registerWithMastra(mastra: Mastra): void;
 
-  /**
-   * Get a stored agent by its ID.
-   * Returns null when agent is not found. Returns an Agent instance by default,
-   * or raw StorageResolvedAgentType when returnRaw option is true.
-   */
-  getStoredAgentById(
-    id: string,
-    options?: {
-      returnRaw?: false;
-      versionId?: string;
-      versionNumber?: number;
-    },
-  ): Promise<Agent | null>;
+  /** Agent management namespace */
+  readonly agent: IEditorAgentNamespace;
 
-  getStoredAgentById(
-    id: string,
-    options: {
-      returnRaw: true;
-      versionId?: string;
-      versionNumber?: number;
-    },
-  ): Promise<StorageResolvedAgentType | null>;
+  /** MCP config management namespace */
+  readonly mcp: IEditorMCPNamespace;
 
-  /**
-   * List all stored agents with pagination.
-   * Returns Agent instances by default, or raw StorageResolvedAgentType when returnRaw is true.
-   */
-  listStoredAgents(options?: { returnRaw?: false; page?: number; pageSize?: number }): Promise<{
-    agents: Agent[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
+  /** Prompt block management namespace */
+  readonly prompt: IEditorPromptNamespace;
 
-  listStoredAgents(options: { returnRaw: true; page?: number; pageSize?: number }): Promise<{
-    agents: StorageResolvedAgentType[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
+  /** Scorer definition management namespace */
+  readonly scorer: IEditorScorerNamespace;
 
-  /**
-   * Clear the stored agent cache for a specific agent ID, or all cached agents.
-   */
-  clearStoredAgentCache(agentId?: string): void;
-
-  /**
-   * Preview the resolved instructions for a given set of instruction blocks and context.
-   * Resolves prompt_block_ref references, evaluates rules, and renders template variables.
-   */
-  previewInstructions(blocks: AgentInstructionBlock[], context: Record<string, unknown>): Promise<string>;
+  /** Registered tool providers */
+  getToolProvider(id: string): ToolProvider | undefined;
+  /** List all registered tool providers */
+  getToolProviders(): Record<string, ToolProvider>;
 }

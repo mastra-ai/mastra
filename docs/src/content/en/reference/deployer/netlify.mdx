@@ -2,21 +2,70 @@
 title: "Reference: NetlifyDeployer | Deployer"
 description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions."
 packages:
-  - "@mastra/core"
   - "@mastra/deployer-netlify"
 ---
 
 # NetlifyDeployer
 
-The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Netlify specific functionality.
+The `NetlifyDeployer` class handles packaging, configuration, and deployment by adapting Mastra's output to create an optimized version of your server. It extends the base [`Deployer`](/reference/deployer/) class with Netlify specific functionality. It enables you to run Mastra within Netlify functions.
+
+## Installation
+
+In order to use `NetlifyDeployer`, you need to install the `@mastra/deployer-netlify` package:
+
+```bash npm2yarn
+npm install @mastra/deployer-netlify@latest
+```
 
 ## Usage example
 
+Import `NetlifyDeployer` and set it as the deployer in your Mastra configuration:
+
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+// highlight-next-line
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 export const mastra = new Mastra({
+  // highlight-next-line
   deployer: new NetlifyDeployer(),
 });
+```
+
+## Output
+
+After running `mastra build`, the deployer generates a `.netlify` folder. The build output includes all agents, tools, and workflows of your project, alongside a special `config.json` file. The `config.json` file configures the behavior of Netlify functions.
+
+```bash
+your-project/
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.mjs
+                ├── package.json
+                └── node_modules/
+```
+
+The `config.json` file contains:
+
+```json
+{
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [
+      ".netlify/v1/functions/**"
+    ]
+  },
+  "redirects": [
+    {
+      "force": true,
+      "from": "/*",
+      "to": "/.netlify/functions/api/:splat",
+      "status": 200
+    }
+  ]
+}
 ```

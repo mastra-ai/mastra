@@ -93,6 +93,26 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
+  if (chunk.type === 'workflow-step-progress') {
+    const progressSteps = {
+      ...prev?.steps,
+      [chunk.payload.id]: {
+        ...prev?.steps?.[chunk.payload.id],
+        foreachProgress: {
+          completedCount: chunk.payload.completedCount,
+          totalCount: chunk.payload.totalCount,
+          currentIndex: chunk.payload.currentIndex,
+          iterationStatus: chunk.payload.iterationStatus,
+          iterationOutput: chunk.payload.iterationOutput,
+        },
+      },
+    };
+    return {
+      ...prev,
+      steps: progressSteps,
+    };
+  }
+
   if (chunk.type === 'workflow-step-result') {
     return {
       ...prev,

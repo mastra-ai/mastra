@@ -55,6 +55,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
+    let threadCreatedByStep = false;
+
     const result = {
       ...options,
       agentId,
@@ -69,7 +71,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
         if (options.savePerStep && !memoryConfig?.readOnly) {
-          if (!memoryData.threadExists && memory && memoryData.thread) {
+          if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
               title: memoryData.thread?.title,
@@ -78,7 +80,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
               memoryConfig,
             });
 
-            memoryData.threadExists = true;
+            threadCreatedByStep = true;
           }
 
           await capabilities.saveStepMessages({

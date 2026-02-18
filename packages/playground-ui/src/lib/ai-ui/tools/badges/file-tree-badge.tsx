@@ -93,8 +93,20 @@ export const FileTreeBadge = ({
   // Get tree output from result
   const treeOutput = result?.tree || '';
   const summary = result?.summary || '';
-  const hasResult = !!treeOutput;
+  // Check for error - could be result.error (tool error) or result itself being an Error-like object
+  const rawError =
+    result?.error?.message ?? result?.error ?? (result?.message && !result?.tree ? result.message : null);
+  const errorMessage = rawError != null ? (typeof rawError === 'string' ? rawError : JSON.stringify(rawError)) : null;
+  const hasError = !!errorMessage;
+  const hasResult = !!treeOutput || hasError;
   const toolCalled = toolCalledProp ?? hasResult;
+
+  // Expand when there's an error so user can see it
+  useEffect(() => {
+    if (hasError) {
+      setIsCollapsed(false);
+    }
+  }, [hasError]);
 
   // Extract filesystem metadata from result (if provided by the tool)
   const fsMeta: FilesystemMetadata | undefined = result?.metadata;
@@ -113,18 +125,22 @@ export const FileTreeBadge = ({
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
           <Badge icon={<FolderTree className="text-accent6" size={16} />}>
-            List Files <span className="text-icon6 font-normal ml-1">{path}</span>
-            {argsDisplay.length > 0 && <span className="text-icon4 font-normal ml-1">({argsDisplay.join(', ')})</span>}
+            List Files <span className="text-neutral6 font-normal ml-1">{path}</span>
+            {argsDisplay.length > 0 && (
+              <span className="text-neutral4 font-normal ml-1">({argsDisplay.join(', ')})</span>
+            )}
           </Badge>
         </button>
 
         {/* Filesystem badge - outside button to prevent overlap */}
         {fsMeta?.filesystem?.name && (
           <Link
-            href={`/workspace?${new URLSearchParams({
-              ...(fsMeta.workspace?.id && { workspaceId: fsMeta.workspace.id }),
-            }).toString()}`}
-            className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
+            href={
+              fsMeta.workspace?.id
+                ? `/workspaces/${fsMeta.workspace.id}?path=${encodeURIComponent(path)}`
+                : '/workspaces'
+            }
+            className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
           >
             <HardDrive className="size-3" />
             <span>{fsMeta.filesystem.name}</span>
@@ -132,7 +148,7 @@ export const FileTreeBadge = ({
         )}
 
         {/* Summary - show in header when collapsed */}
-        {isCollapsed && hasResult && summary && <span className="text-icon6 text-xs">{summary}</span>}
+        {isCollapsed && hasResult && summary && <span className="text-neutral6 text-xs">{summary}</span>}
       </div>
 
       {/* Content area */}
@@ -155,12 +171,19 @@ export const FileTreeBadge = ({
             </div>
           )}
 
+          {/* Error state */}
+          {toolCalled && hasError && (
+            <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
+              <span className="text-xs text-red-400">{errorMessage}</span>
+            </div>
+          )}
+
           {/* Tree output panel - custom UI after tool has been called */}
-          {toolCalled && hasResult && (
+          {toolCalled && !hasError && treeOutput && (
             <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
-                {summary && <span className="text-icon6 text-xs">{summary}</span>}
+                {summary && <span className="text-neutral6 text-xs">{summary}</span>}
                 <IconButton variant="light" size="sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
@@ -187,9 +210,9 @@ export const FileTreeBadge = ({
           )}
 
           {/* Loading state */}
-          {toolCalled && !hasResult && (
+          {toolCalled && !hasResult && !hasError && (
             <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
-              <span className="text-xs text-icon6">Loading...</span>
+              <span className="text-xs text-neutral6">Loading...</span>
             </div>
           )}
         </div>

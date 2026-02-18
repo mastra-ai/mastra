@@ -6,6 +6,7 @@ packages:
   - stores/*
   - voice/*
   - workflows/*
+  - workspaces/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
@@ -20,7 +21,7 @@ packages:
   - e2e-tests/workspace-compat
 
 catalog:
-  '@microsoft/api-extractor': '^7.56.0'
+  '@microsoft/api-extractor': '^7.56.3'
   '@vitest/coverage-v8': 4.0.12
   '@vitest/ui': 4.0.12
   vitest: 4.0.16

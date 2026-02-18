@@ -1,0 +1,28 @@
+{
+  "name": "@internal/workspace-test-utils",
+  "version": "0.0.3",
+  "description": "Test utilities for workspace providers (filesystems and sandboxes)",
+  "type": "module",
+  "main": "src/index.ts",
+  "private": true,
+  "scripts": {},
+  "exports": {
+    ".": "./src/index.ts",
+    "./filesystem": "./src/filesystem/index.ts",
+    "./sandbox": "./src/sandbox/index.ts",
+    "./integration": "./src/integration/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@mastra/core": "*",
+    "vitest": "*"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "vitest": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:"
+  }
+}

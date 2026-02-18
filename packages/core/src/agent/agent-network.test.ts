@@ -1072,6 +1072,91 @@ describe('Agent - network - text streaming', () => {
     const textContent = textDeltaEvents.map(e => e.payload?.text || '').join('');
     expect(textContent).toContain('I am a helpful assistant');
   });
+
+  it('should not emit selectionReason as text-delta when routing agent handles request directly', async () => {
+    const memory = new MockMemory();
+
+    // The selectionReason is internal routing logic, distinct from the actual answer
+    const routingReason =
+      'The user is asking a simple question that can be answered directly. No sub-agent is needed because the answer is available in context.';
+
+    const selfHandleResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: routingReason,
+    });
+
+    const completionCheckResponse = JSON.stringify({
+      isComplete: true,
+      completionReason: 'The routing agent provided a direct answer.',
+      finalResult: 'The answer is 42.',
+    });
+
+    let callCount = 0;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: response }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: response },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'no-reason-text-agent',
+      name: 'No Reason Text Agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('What is the answer?', {
+      memory: {
+        thread: 'test-thread-no-reason-text',
+        resource: 'test-resource-no-reason-text',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    const routingAgentEndEvents = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingAgentEndEvents.length).toBeGreaterThan(0);
+
+    const endEvent = routingAgentEndEvents[0];
+    expect(endEvent.payload.primitiveType).toBe('none');
+    expect(endEvent.payload.primitiveId).toBe('none');
+
+    // The selectionReason is internal routing logic and should appear
+    // in the routing-agent-end payload (as metadata), but NOT as text-delta events
+    expect(endEvent.payload.selectionReason).toBe(routingReason);
+
+    // routing-agent-text-delta events should NOT contain the selectionReason
+    const textDeltaEvents = chunks.filter(c => c.type === 'routing-agent-text-delta');
+    const textContent = textDeltaEvents.map(e => e.payload?.text || '').join('');
+    expect(textContent).not.toContain(routingReason);
+  });
 });
 
 describe('Agent - network - tool context validation', () => {
@@ -1839,6 +1924,160 @@ describe('Agent - network - completion validation', () => {
     expect(iterationCallbacks[0].iteration).toBe(0);
     expect(iterationCallbacks[1].iteration).toBe(1);
     expect(iterationCallbacks[2].iteration).toBe(2);
+  });
+
+  it('should suppress feedback message when suppressFeedback is true', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that fails to trigger feedback
+    const mockScorer = {
+      id: 'suppress-test-scorer',
+      name: 'Suppress Test Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Test failure to trigger feedback' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Testing suppression',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'suppress-feedback-network',
+      name: 'Suppress Feedback Network',
+      instructions: 'Test network for suppressFeedback option',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+        suppressFeedback: true, // Enable feedback suppression
+      },
+      maxSteps: 1, // Limit iterations to reduce test time
+      memory: {
+        thread: 'suppress-feedback-thread',
+        resource: 'suppress-feedback-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Filter for completion feedback messages (marked with completionResult metadata)
+    const feedbackMessages = savedMessages.filter(msg => msg.content?.metadata?.completionResult !== undefined);
+
+    // Verify no feedback messages were saved
+    expect(feedbackMessages.length).toBe(0);
+  });
+
+  it('should save feedback message when suppressFeedback is false (default)', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that fails to trigger feedback
+    const mockScorer = {
+      id: 'feedback-default-scorer',
+      name: 'Feedback Default Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Test failure to trigger feedback' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Testing default behavior',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'default-feedback-network',
+      name: 'Default Feedback Network',
+      instructions: 'Test network for default feedback behavior',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+        // suppressFeedback not set (defaults to false)
+      },
+      maxSteps: 1, // Limit iterations to reduce test time
+      memory: {
+        thread: 'default-feedback-thread',
+        resource: 'default-feedback-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Filter for completion feedback messages (marked with completionResult metadata)
+    const feedbackMessages = savedMessages.filter(msg => msg.content?.metadata?.completionResult !== undefined);
+
+    // Verify feedback messages were saved (default behavior)
+    expect(feedbackMessages.length).toBeGreaterThan(0);
+
+    // Verify feedback contains expected content
+    const feedbackText = feedbackMessages[0].content.parts[0].text;
+    expect(feedbackText).toContain('Completion Check Results');
   });
 });
 
@@ -6530,5 +6769,383 @@ describe('Agent - network - invalid tool input handling (issue #12477)', () => {
 
     // Verify the routing agent was called multiple times (retry happened)
     expect(callCount).toBeGreaterThan(1);
+  });
+});
+
+describe('Agent - network - client tools in defaultOptions', () => {
+  it('should use client tools from main agent defaultOptions during network execution', async () => {
+    const memory = new MockMemory();
+
+    // Create mock responses for the routing agent
+    // First call: select the client tool
+    const routingSelectTool = JSON.stringify({
+      primitiveId: 'changeColor',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ color: 'blue' }),
+      selectionReason: 'Using client tool to change color',
+    });
+
+    // Second call: completion check - mark as complete
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Color has been changed to blue',
+      completionReason: 'The client tool successfully changed the color',
+    });
+
+    // Track how many times the model is called
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Create agent with clientTools in defaultOptions
+    const networkAgent = new Agent({
+      id: 'client-tools-default-options-test',
+      name: 'Client Tools Test Network',
+      instructions: 'Use the available tools to change colors',
+      model: mockModel,
+      memory,
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({
+              color: z.string().describe('The color to change to'),
+            }),
+            outputSchema: z.object({
+              success: z.boolean(),
+              message: z.string(),
+            }),
+            execute: async ({ color }) => {
+              return {
+                success: true,
+                message: `Color changed to ${color}`,
+              };
+            },
+          },
+        },
+      },
+    });
+
+    // Execute the network - should use client tools from defaultOptions
+    const anStream = await networkAgent.network('Change the color to blue', {
+      memory: {
+        thread: 'client-tools-test-thread',
+        resource: 'client-tools-test-resource',
+      },
+    });
+
+    // Collect all chunks
+    const chunks: any[] = [];
+    let toolCallExecuted = false;
+
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+      // Check if the client tool was called
+      if (chunk.type === 'tool-execution-end') {
+        const result = chunk.payload?.result as any;
+        if (result?.success === true && result?.message === 'Color changed to blue') {
+          toolCallExecuted = true;
+        }
+      }
+    }
+
+    // Verify the network completed successfully
+    const status = await anStream.status;
+    expect(status).toBe('success');
+
+    // Verify the client tool was executed
+    expect(toolCallExecuted).toBe(true);
+
+    // Verify the routing agent was called exactly twice (routing decision + completion check)
+    expect(callCount).toBe(2);
+  });
+});
+
+describe('Agent - network - metadata on forwarded messages (issue #13106)', () => {
+  it('should tag isNetwork result messages with metadata.mode = network', async () => {
+    // Issue #13106: Network-internal messages (isNetwork JSON results containing
+    // sub-agent responses) are stored without metadata.mode = 'network'.
+    // This makes it impossible for consumers to reliably filter internal network
+    // messages from user-facing ones without parsing JSON content.
+    //
+    // The isNetwork result JSON already has isNetwork: true in the JSON body,
+    // but it should ALSO have metadata.mode = 'network' in the message's
+    // content.metadata for consistent filtering.
+
+    const savedMessages: any[] = [];
+    const memory = new MockMemory();
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Sub-agent mock that returns a simple response
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Sub-agent completed the research.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Sub-agent completed the research.' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-metadata-test',
+      name: 'Sub Agent Metadata Test',
+      description: 'A sub-agent for testing metadata tagging',
+      instructions: 'Complete research tasks.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    // Routing agent: first call selects sub-agent
+    const routingResponse = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Research the topic of quantum computing',
+      selectionReason: 'Delegating research to sub-agent',
+    });
+
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-metadata-test',
+      name: 'Network Metadata Test Agent',
+      instructions: 'Delegate research to sub-agents.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const threadId = 'test-thread-13106';
+    const resourceId = 'test-resource-13106';
+
+    const anStream = await networkAgent.network('Tell me about quantum computing', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Find isNetwork result messages - these contain the sub-agent's forwarded input
+    // and response, embedded in JSON. They should have metadata.mode = 'network'.
+    const networkResultMessages = savedMessages.filter(msg => {
+      if (msg.role !== 'assistant') return false;
+      try {
+        const text = msg.content?.parts?.[0]?.text;
+        const parsed = JSON.parse(text);
+        return parsed.isNetwork === true;
+      } catch {
+        return false;
+      }
+    });
+
+    expect(networkResultMessages.length).toBeGreaterThan(0);
+
+    // Each isNetwork result message should have metadata.mode = 'network'
+    // so consumers can filter them without parsing JSON content
+    for (const msg of networkResultMessages) {
+      expect(msg.content?.metadata?.mode).toBe('network');
+    }
+
+    // The original user message should NOT have mode: 'network'
+    const originalUserMessage = savedMessages.find(
+      (msg: any) =>
+        msg.role === 'user' &&
+        msg.content?.parts?.some((p: any) => p.type === 'text' && p.text === 'Tell me about quantum computing'),
+    );
+    expect(originalUserMessage).toBeDefined();
+    expect(originalUserMessage?.content?.metadata?.mode).not.toBe('network');
+  });
+
+  it('should tag sub-agent messages with metadata.mode = network when sub-agent persists to shared thread', async () => {
+    // Issue #13106: When a sub-agent has its own memory and persists messages
+    // to the shared network thread, those forwarded user messages and sub-agent
+    // responses should have metadata.mode = 'network' to distinguish them
+    // from genuine user/assistant messages.
+    //
+    // This test uses a storage that captures all saved messages (including those
+    // from the sub-agent's MessageHistory processor) by intercepting at the
+    // storage layer.
+
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+
+    // Sub-agent mock that returns a simple response
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Sub-agent completed the research.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Sub-agent completed the research.' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-metadata-test',
+      name: 'Sub Agent Metadata Test',
+      description: 'A sub-agent for testing metadata tagging',
+      instructions: 'Complete research tasks.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    // Routing agent: first call selects sub-agent
+    const routingResponse = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Research the topic of quantum computing',
+      selectionReason: 'Delegating research to sub-agent',
+    });
+
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-metadata-test',
+      name: 'Network Metadata Test Agent',
+      instructions: 'Delegate research to sub-agents.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const threadId = 'test-thread-13106-sub';
+    const resourceId = 'test-resource-13106-sub';
+
+    const anStream = await networkAgent.network('Tell me about quantum computing', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Retrieve all messages from storage (captures messages from ALL code paths)
+    const memoryStore = await storage.getStore('memory');
+    const result = await memoryStore!.listMessages({
+      threadId,
+      page: 0,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const threadMessages = result.messages;
+
+    // All assistant messages with isNetwork JSON or routing decisions should have
+    // metadata.mode = 'network', making them filterable without JSON parsing
+    for (const msg of threadMessages) {
+      if ((msg as any).role === 'assistant') {
+        const parts = (msg as any).content?.parts || [];
+        for (const part of parts) {
+          if (part?.type === 'text' && part?.text) {
+            try {
+              const parsed = JSON.parse(part.text);
+              if (parsed.isNetwork || (parsed.primitiveId && parsed.selectionReason)) {
+                // This is a network-internal message - it MUST have metadata.mode = 'network'
+                expect(
+                  (msg as any).content?.metadata?.mode,
+                  `Network-internal assistant message should have metadata.mode = 'network' but doesn't. Content: ${part.text.substring(0, 100)}`,
+                ).toBe('network');
+              }
+            } catch {
+              // Not JSON, skip
+            }
+          }
+        }
+      }
+    }
   });
 });

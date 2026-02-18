@@ -1,9 +1,12 @@
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import type { MastraVector } from '@mastra/core/vector';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Memory } from './index';
 
-// Expose protected method for testing
+// Expose protected methods for testing
 class TestableMemory extends Memory {
   public testUpdateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     return this.updateMessageToHideWorkingMemoryV2(message);
@@ -468,6 +471,69 @@ describe('Memory', () => {
       expect(clonedThread.metadata?.anotherField).toBe(123);
       expect(clonedThread.metadata?.clone).toBeDefined();
     });
+
+    it('should clone thread-scoped working memory to the cloned thread', async () => {
+      const wmMemory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: {
+            enabled: true,
+            scope: 'thread',
+          },
+        },
+      });
+
+      // Create source thread
+      const sourceThread = await wmMemory.saveThread({
+        thread: {
+          id: 'source-thread-wm',
+          resourceId,
+          title: 'Thread with Working Memory',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Save a message to the source thread
+      await wmMemory.saveMessages({
+        messages: [
+          {
+            id: 'msg-wm-1',
+            threadId: sourceThread.id,
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2024-01-01T10:00:00Z'),
+          },
+        ],
+      });
+
+      // Set working memory on the source thread
+      await wmMemory.updateWorkingMemory({
+        threadId: sourceThread.id,
+        resourceId,
+        workingMemory: 'User name is Alice. Lives in New York.',
+      });
+
+      // Verify source thread has working memory
+      const sourceWm = await wmMemory.getWorkingMemory({
+        threadId: sourceThread.id,
+        resourceId,
+      });
+      expect(sourceWm).toBe('User name is Alice. Lives in New York.');
+
+      // Clone the thread
+      const { thread: clonedThread } = await wmMemory.cloneThread({
+        sourceThreadId: sourceThread.id,
+      });
+
+      // The cloned thread should have the working memory from the source
+      const clonedWm = await wmMemory.getWorkingMemory({
+        threadId: clonedThread.id,
+        resourceId,
+      });
+      expect(clonedWm).toBe('User name is Alice. Lives in New York.');
+    });
   });
 
   describe('clone utility methods', () => {
@@ -927,6 +993,114 @@ describe('Memory', () => {
         const page2Ids = page2.threads.map(t => t.id);
         expect(page1Ids).not.toEqual(page2Ids);
       });
+    });
+  });
+
+  describe('semantic recall index naming', () => {
+    it('should use the same vector index for processor writes and recall reads with non-default embedding dimensions', async () => {
+      // 384-dim embeddings (like fastembed) — NOT the default 1536
+      const embeddingDim = 384;
+      const fakeEmbedding = new Array(embeddingDim).fill(0.1);
+
+      const mockVector: MastraVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([]),
+        listIndexes: vi.fn().mockResolvedValue([]),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: embeddingDim }),
+        id: 'mock-vector',
+      } as any;
+
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [fakeEmbedding],
+        }),
+        modelId: 'mock-384-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: {
+          semanticRecall: { scope: 'thread' },
+          lastMessages: 10,
+          generateTitle: false,
+        },
+      });
+
+      // Create a thread
+      await memory.saveThread({
+        thread: {
+          id: 'sr-thread-1',
+          resourceId: 'sr-resource-1',
+          title: 'Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // --- WRITE PATH: SemanticRecall output processor (used by agent) ---
+      const outputProcessors = await memory.getOutputProcessors();
+      const semanticProcessor = outputProcessors.find(p => p.id === 'semantic-recall');
+      expect(semanticProcessor).toBeDefined();
+
+      const testMessage: MastraDBMessage = {
+        id: 'sr-msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'What is machine learning?' }],
+          content: 'What is machine learning?',
+        },
+        createdAt: new Date(),
+        threadId: 'sr-thread-1',
+        resourceId: 'sr-resource-1',
+      };
+
+      const messageList = new MessageList();
+      messageList.add([testMessage], 'input');
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'sr-thread-1', resourceId: 'sr-resource-1' },
+        resourceId: 'sr-resource-1',
+      });
+
+      await semanticProcessor!.processOutputResult!({
+        messages: [testMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      // Capture the index name used for the write (upsert)
+      expect(mockVector.upsert).toHaveBeenCalled();
+      const writeIndexName = vi.mocked(mockVector.upsert).mock.calls[0]![0].indexName;
+
+      // Clear mocks for the read path
+      vi.mocked(mockVector.createIndex).mockClear();
+      vi.mocked(mockVector.query).mockClear();
+
+      // --- READ PATH: memory.recall() (used by Studio's Semantic Recall search) ---
+      await memory.recall({
+        threadId: 'sr-thread-1',
+        resourceId: 'sr-resource-1',
+        vectorSearchString: 'machine learning',
+      });
+
+      // Capture the index name used for the read (query)
+      expect(mockVector.query).toHaveBeenCalled();
+      const readIndexName = vi.mocked(mockVector.query).mock.calls[0]![0].indexName;
+
+      // The write and read paths MUST use the same index name.
+      // With a 384-dim embedder, the processor writes to one index
+      // while recall() searches a different one — causing search to return nothing.
+      expect(writeIndexName).toBe(readIndexName);
+      expect(writeIndexName).toContain('384');
     });
   });
 });

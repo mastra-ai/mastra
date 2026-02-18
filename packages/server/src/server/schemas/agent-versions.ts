@@ -1,8 +1,38 @@
 import z from 'zod';
-import { paginationInfoSchema, createPagePaginationSchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
-import { scorerConfigSchema, instructionsSchema } from './stored-agents';
+import {
+  scorerConfigSchema,
+  instructionsSchema,
+  conditionalFieldSchema,
+  modelConfigSchema,
+  toolConfigSchema,
+  toolsConfigSchema,
+} from './stored-agents';
+import {
+  listVersionsQuerySchema,
+  compareVersionsQuerySchema,
+  createVersionBodySchema,
+  activateVersionResponseSchema,
+  deleteVersionResponseSchema,
+  versionDiffEntrySchema,
+  createListVersionsResponseSchema,
+  createCompareVersionsResponseSchema,
+} from './version-common';
+
+const mcpClientToolsConfigSchema = z.object({
+  tools: z.record(z.string(), toolConfigSchema).optional(),
+});
+
+// Re-export shared schemas for backwards compat
+export {
+  listVersionsQuerySchema,
+  compareVersionsQuerySchema,
+  createVersionBodySchema,
+  activateVersionResponseSchema,
+  deleteVersionResponseSchema,
+  versionDiffEntrySchema,
+};
 
 // ============================================================================
 // Path Parameter Schemas
@@ -24,45 +54,6 @@ export const versionIdPathParams = z.object({
 });
 
 // ============================================================================
-// Query Parameter Schemas
-// ============================================================================
-
-/**
- * Version order by configuration
- */
-const versionOrderBySchema = z.object({
-  field: z.enum(['versionNumber', 'createdAt']).optional(),
-  direction: z.enum(['ASC', 'DESC']).optional(),
-});
-
-/**
- * GET /stored/agents/:agentId/versions - List versions query params
- */
-export const listVersionsQuerySchema = createPagePaginationSchema(20).extend({
-  orderBy: versionOrderBySchema.optional(),
-});
-
-/**
- * GET /stored/agents/:agentId/versions/compare - Compare versions query params
- */
-export const compareVersionsQuerySchema = z.object({
-  from: z.string().describe('Version ID (UUID) to compare from'),
-  to: z.string().describe('Version ID (UUID) to compare to'),
-});
-
-// ============================================================================
-// Body Parameter Schemas
-// ============================================================================
-
-/**
- * POST /stored/agents/:agentId/versions - Create version body
- * No vanity name -- the config `name` is part of the snapshot config fields.
- */
-export const createVersionBodySchema = z.object({
-  changeMessage: z.string().max(500).optional().describe('Optional message describing the changes'),
-});
-
-// ============================================================================
 // Response Schemas
 // ============================================================================
 
@@ -79,19 +70,43 @@ export const agentVersionSchema = z.object({
   name: z.string().describe('Name of the agent'),
   description: z.string().optional().describe('Description of the agent'),
   instructions: instructionsSchema,
-  model: z.record(z.string(), z.unknown()).describe('Model configuration (provider, name, etc.)'),
-  tools: z.array(z.string()).optional().describe('Array of tool keys to resolve from Mastra registry'),
-  defaultOptions: defaultOptionsSchema.optional().describe('Default options for generate/stream calls'),
-  workflows: z.array(z.string()).optional().describe('Array of workflow keys to resolve from Mastra registry'),
-  agents: z.array(z.string()).optional().describe('Array of agent keys to resolve from Mastra registry'),
-  integrationTools: z
-    .array(z.string())
+  model: conditionalFieldSchema(modelConfigSchema).describe(
+    'Model configuration — static value or array of conditional variants',
+  ),
+  tools: conditionalFieldSchema(toolsConfigSchema)
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
-  inputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  outputProcessors: z.array(z.string()).optional().describe('Array of processor keys to resolve from Mastra registry'),
-  memory: serializedMemoryConfigSchema.optional().describe('Memory configuration object (SerializedMemoryConfig)'),
-  scorers: z.record(z.string(), scorerConfigSchema).optional().describe('Scorer keys with optional sampling config'),
+    .describe('Tool keys mapped to per-tool config — static or conditional'),
+  defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
+    .optional()
+    .describe('Default options for generate/stream calls — static or conditional'),
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
+    .optional()
+    .describe('Agent keys with optional per-agent config — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
+  inputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  outputProcessors: conditionalFieldSchema(z.array(z.string()))
+    .optional()
+    .describe('Array of processor keys — static or conditional'),
+  memory: conditionalFieldSchema(serializedMemoryConfigSchema)
+    .optional()
+    .describe('Memory configuration — static or conditional'),
+  scorers: conditionalFieldSchema(z.record(z.string(), scorerConfigSchema))
+    .optional()
+    .describe('Scorer keys with optional sampling config — static or conditional'),
+  requestContextSchema: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('JSON Schema defining valid request context variables'),
   // Version metadata fields
   changedFields: z.array(z.string()).optional().describe('Array of field names that changed from the previous version'),
   changeMessage: z.string().optional().describe('Optional message describing the changes'),
@@ -101,9 +116,7 @@ export const agentVersionSchema = z.object({
 /**
  * Response for GET /stored/agents/:agentId/versions
  */
-export const listVersionsResponseSchema = paginationInfoSchema.extend({
-  versions: z.array(agentVersionSchema),
-});
+export const listVersionsResponseSchema = createListVersionsResponseSchema(agentVersionSchema);
 
 /**
  * Response for GET /stored/agents/:agentId/versions/:versionId
@@ -124,15 +137,6 @@ export const createVersionResponseSchema = agentVersionSchema.partial().merge(
 );
 
 /**
- * Response for POST /stored/agents/:agentId/versions/:versionId/activate
- */
-export const activateVersionResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-  activeVersionId: z.string(),
-});
-
-/**
  * Response for POST /stored/agents/:agentId/versions/:versionId/restore
  */
 export const restoreVersionResponseSchema = agentVersionSchema.describe(
@@ -140,27 +144,6 @@ export const restoreVersionResponseSchema = agentVersionSchema.describe(
 );
 
 /**
- * Response for DELETE /stored/agents/:agentId/versions/:versionId
- */
-export const deleteVersionResponseSchema = z.object({
-  success: z.boolean(),
-  message: z.string(),
-});
-
-/**
- * Single diff entry for version comparison
- */
-export const versionDiffEntrySchema = z.object({
-  field: z.string().describe('The field path that changed'),
-  previousValue: z.unknown().describe('The value in the "from" version'),
-  currentValue: z.unknown().describe('The value in the "to" version'),
-});
-
-/**
  * Response for GET /stored/agents/:agentId/versions/compare
  */
-export const compareVersionsResponseSchema = z.object({
-  diffs: z.array(versionDiffEntrySchema).describe('List of differences between versions'),
-  fromVersion: agentVersionSchema.describe('The source version'),
-  toVersion: agentVersionSchema.describe('The target version'),
-});
+export const compareVersionsResponseSchema = createCompareVersionsResponseSchema(agentVersionSchema);

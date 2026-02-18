@@ -80,6 +80,7 @@ jobs:
         run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'
 
   # ===========================================
   # STABLE RELEASE: Manual trigger only
@@ -169,6 +170,7 @@ jobs:
         run: pnpm publish -r --access public --no-git-checks
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'
 
       - name: Updated alpha versions
         if: ${{ !inputs.dry_run }}
@@ -341,3 +343,4 @@ jobs:
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
+          REQUIRE_PACKAGE_DOCS: 'true'

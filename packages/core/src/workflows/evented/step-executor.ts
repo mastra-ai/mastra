@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -26,6 +27,10 @@ export class StepExecutor extends MastraBase {
 
   __registerMastra(mastra: Mastra) {
     this.mastra = mastra;
+    const logger = mastra?.getLogger();
+    if (logger) {
+      this.__setLogger(logger);
+    }
   }
 
   /**
@@ -255,6 +260,20 @@ export class StepExecutor extends MastraBase {
         serializeStack: false,
         fallbackMessage: 'Unknown step execution error',
       });
+
+      // Log the error for observability (matching default engine behavior)
+      const stepId = params.step.id;
+      const mastraError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_INVOKE_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          details: { workflowId: params.workflowId, runId: params.runId, stepId },
+        },
+        errorInstance,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
       return {
         ...stepInfo,

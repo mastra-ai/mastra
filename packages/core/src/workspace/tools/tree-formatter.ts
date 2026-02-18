@@ -22,6 +22,8 @@
  */
 
 import type { WorkspaceFilesystem, FileEntry } from '../filesystem';
+import { createGlobMatcher } from '../glob';
+import type { GlobMatcher } from '../glob';
 
 // =============================================================================
 // Types
@@ -38,6 +40,8 @@ export interface TreeOptions {
   exclude?: string | string[];
   /** Filter by file extension (e.g., '.ts'). Similar to tree's -P flag. */
   extension?: string | string[];
+  /** Glob pattern(s) to filter files. Matches against paths relative to the listed directory. Directories always pass through so their contents can be checked. */
+  pattern?: string | string[];
 }
 
 export interface TreeResult {
@@ -80,6 +84,14 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
   const dirsOnly = options?.dirsOnly ?? false;
   const exclude = options?.exclude;
   const extension = options?.extension;
+  const pattern = options?.pattern;
+
+  // Compile glob matcher once before the walk (if pattern provided)
+  let globMatcher: GlobMatcher | undefined;
+  if (pattern) {
+    const patterns = Array.isArray(pattern) ? pattern : [pattern];
+    globMatcher = createGlobMatcher(patterns, { dot: showHidden });
+  }
 
   const lines: string[] = ['.'];
   let dirCount = 0;
@@ -98,8 +110,12 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     let entries: FileEntry[];
     try {
       entries = await fs.readdir(currentPath);
-    } catch {
-      // Directory not readable, skip
+    } catch (error) {
+      // At root level (depth 0), propagate errors so users see auth/access issues
+      // For subdirectories, silently skip (permission issues on nested dirs are common)
+      if (depth === 0) {
+        throw error;
+      }
       return;
     }
 
@@ -134,6 +150,25 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
           const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
           return e.name.endsWith(normalizedExt);
         });
+      });
+    }
+
+    // Filter by glob pattern (only affects files, directories always pass)
+    if (globMatcher && !dirsOnly) {
+      filtered = filtered.filter(e => {
+        if (e.type === 'directory') return true;
+        // Build relative path from the root of the tree walk
+        const entryPath = currentPath === path ? e.name : `${currentPath === '/' ? '' : currentPath}/${e.name}`;
+        // Strip the root path prefix to make it relative
+        let relativePath: string;
+        if (path === '/' || path === '') {
+          relativePath = entryPath.startsWith('/') ? entryPath.slice(1) : entryPath;
+        } else {
+          relativePath = entryPath.startsWith(path + '/') ? entryPath.slice(path.length + 1) : entryPath;
+          // If entryPath starts with path but no slash (shouldn't happen), fall back
+          if (!relativePath) relativePath = entryPath;
+        }
+        return globMatcher!(relativePath);
       });
     }
 

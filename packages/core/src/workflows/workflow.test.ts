@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { z as zv4 } from 'zod/v4';
@@ -19161,7 +19162,6 @@ describe('Workflow', () => {
         step: resumedResult.suspended[0],
         resumeData: new Date('2024-12-31'),
       });
-
       expect(finalResult.status).toBe('success');
       expect(secondItemDateAction).toHaveBeenCalledTimes(2);
 
@@ -19185,6 +19185,114 @@ describe('Workflow', () => {
         processed: 'second',
         date: new Date('2024-12-31'),
       });
+    });
+
+    it('should pass correct inputData to branch condition when resuming after map', async () => {
+      const localTestStorage = new MockStore();
+
+      const conditionSpy = vi.fn();
+
+      // Helper to build the workflow (simulates reconstruction after server restart)
+      const buildWorkflow = () => {
+        const suspendingStep = createStep({
+          id: 'suspending-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async ({ inputData, suspend, resumeData }) => {
+            if (!resumeData) {
+              await suspend({ prompt: 'Please provide an answer' });
+              return { result: '' };
+            }
+            return { result: `processed: ${inputData.mappedValue}, answer: ${resumeData.answer}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-wf-with-suspend',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .then(suspendingStep)
+          .commit();
+
+        const fallbackStep = createStep({
+          id: 'fallback-step',
+          inputSchema: z.object({ mappedValue: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData }) => {
+            return { result: `fallback: ${inputData.mappedValue}` };
+          },
+        });
+
+        const mainWorkflow = createWorkflow({
+          id: 'map-branch-suspend-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+        })
+          .map(async ({ inputData }) => {
+            return { mappedValue: inputData.value * 2 };
+          })
+          .branch([
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue > 10;
+              },
+              nestedWorkflow,
+            ],
+            [
+              async ({ inputData }) => {
+                conditionSpy(inputData);
+                return inputData.mappedValue <= 10;
+              },
+              fallbackStep,
+            ],
+          ])
+          .commit();
+
+        return { mainWorkflow, nestedWorkflow };
+      };
+
+      // First construction: start the workflow
+      const { mainWorkflow: wf1, nestedWorkflow: nwf1 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf1, 'nested-wf-with-suspend': nwf1 },
+      });
+
+      const run1 = await wf1.createRun();
+      const initialResult = await run1.start({ inputData: { value: 10 } });
+
+      expect(initialResult.status).toBe('suspended');
+      expect(conditionSpy).toHaveBeenCalledWith({ mappedValue: 20 });
+      conditionSpy.mockClear();
+
+      // Second construction: simulate server restart (new workflow objects, new map step UUIDs)
+      const { mainWorkflow: wf2, nestedWorkflow: nwf2 } = buildWorkflow();
+      new Mastra({
+        logger: false,
+        storage: localTestStorage,
+        workflows: { 'map-branch-suspend-workflow': wf2, 'nested-wf-with-suspend': nwf2 },
+      });
+
+      // Resume using the NEW workflow instance (simulating server restart)
+      const run2 = await wf2.createRun({ runId: run1.runId });
+      const resumedResult = await run2.resume({
+        step: initialResult.suspended[0],
+        resumeData: { answer: 'hello' },
+      });
+
+      // Branch conditions should NOT be re-evaluated during resume.
+      // The resume path from suspendedPaths already identifies the correct branch.
+      // Re-evaluating conditions was the cause of issue #12982: the map step output
+      // uses a non-deterministic UUID as key, so after workflow reconstruction the
+      // condition would receive undefined inputData.
+      expect(conditionSpy).not.toHaveBeenCalled();
+
+      expect(resumedResult.status).toBe('success');
+      expect(resumedResult.steps['nested-wf-with-suspend'].status).toBe('success');
     });
 
     it('should maintain correct step status after resuming in branching workflows - #6419', async () => {
@@ -21568,6 +21676,235 @@ describe('Workflow', () => {
 
       expect(receivedState).toBeDefined();
       expect(receivedState?.counter).toBe(10);
+    });
+
+    it('should log step execution errors via the Mastra logger', async () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+        level: 'debug',
+      };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error('Step error for logger test');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-step-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-logger-step-error-workflow': workflow },
+        storage: testStorage,
+        logger: mockLogger as any,
+      });
+
+      const run = await mastra.getWorkflow('test-logger-step-error-workflow').createRun();
+      await run.start({ inputData: {} });
+
+      // Step execution errors should be logged via the Mastra logger
+      expect(mockLogger.error).toHaveBeenCalled();
+      const errorCalls = mockLogger.error.mock.calls;
+      const hasStepErrorLog = errorCalls.some(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('failing-step'),
+      );
+      expect(hasStepErrorLog).toBe(true);
+    });
+  });
+
+  describe('Workflow as agent tool', () => {
+    function createWorkflowToolMockModel({
+      toolName,
+      provider,
+      modelId,
+    }: {
+      toolName: string;
+      provider?: string;
+      modelId?: string;
+    }) {
+      return new MockLanguageModelV2({
+        ...(provider ? { provider: provider as any } : {}),
+        ...(modelId ? { modelId: modelId as any } : {}),
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'tool-calls' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call-1',
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: modelId ?? 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolCallType: 'function',
+              toolName,
+              input: JSON.stringify({ inputData: { taskId: 'test-task-123' } }),
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+    }
+
+    async function streamAndCollectToolResults(agent: Agent) {
+      const stream = await agent.stream('Fetch task test-task-123');
+      for await (const _chunk of stream.fullStream) {
+        // consume stream to drive execution
+      }
+    }
+
+    it('should pass workflow input to the first step when called as agent tool via stream', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      const taskWorkflow = createWorkflow({
+        id: 'task-workflow',
+        description: 'A workflow that fetches a task',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
+    });
+
+    it('should pass workflow input to step when workflow has no inputSchema', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      // No inputSchema on the workflow - previously this caused a TypeError because
+      // z.object({ inputData: undefined }) was created
+      const taskWorkflow = createWorkflow({
+        id: 'task-workflow',
+        description: 'A workflow that fetches a task',
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({ toolName: 'workflow-taskWorkflow' });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
+    });
+
+    it('should pass workflow input to step when using OpenAI-compatible model', async () => {
+      const executeAction = vi.fn().mockImplementation(async ({ inputData }: { inputData: { taskId: string } }) => {
+        return { result: `processed-${inputData.taskId}` };
+      });
+
+      const fetchTaskStep = createStep({
+        id: 'fetch-task',
+        description: 'Fetches a task by ID',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: executeAction,
+      });
+
+      const taskWorkflow = createWorkflow({
+        id: 'wait-task-workflow',
+        description: 'A workflow that fetches a task',
+        inputSchema: z.object({ taskId: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        options: { validateInputs: true },
+      })
+        .then(fetchTaskStep)
+        .commit();
+
+      const mockModel = createWorkflowToolMockModel({
+        toolName: 'workflow-waitTaskWorkflow',
+        provider: 'openai.chat',
+        modelId: 'gpt-4o',
+      });
+
+      const agent = new Agent({
+        id: 'task-agent',
+        name: 'Task Agent',
+        instructions: 'You are an agent that can fetch tasks.',
+        model: mockModel,
+        workflows: { waitTaskWorkflow: taskWorkflow },
+      });
+
+      new Mastra({ agents: { taskAgent: agent }, logger: false, storage: testStorage });
+      await streamAndCollectToolResults(agent);
+
+      expect(executeAction).toHaveBeenCalled();
+      expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
     });
   });
 });
