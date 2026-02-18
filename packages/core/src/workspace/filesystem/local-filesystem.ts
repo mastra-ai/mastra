@@ -19,6 +19,7 @@ import {
   WorkspaceReadOnlyError,
 } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
+import type { LSPConfig } from '../lsp/types';
 import type {
   FilesystemInfo,
   FileContent,
@@ -30,7 +31,7 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
+import { fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 
@@ -83,6 +84,24 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * ```
    */
   allowedPaths?: string[];
+  /**
+   * Enable LSP diagnostics for edit tools.
+   *
+   * When enabled, edit tools (edit_file, write_file, ast_edit) will append
+   * type errors, warnings, and other diagnostics from language servers after edits.
+   *
+   * LSP is local-only — it spawns language server processes (e.g. typescript-language-server)
+   * that read from the local filesystem. External/remote filesystem providers cannot use this.
+   *
+   * Requires optional peer dependencies: `vscode-jsonrpc`, `vscode-languageserver-protocol`,
+   * and the relevant language server (e.g. `typescript-language-server` for TypeScript).
+   *
+   * - `true` — Enable with defaults
+   * - `LSPConfig` object — Enable with custom timeouts/settings
+   *
+   * @default undefined (disabled)
+   */
+  lsp?: boolean | LSPConfig;
 }
 
 /**
@@ -114,6 +133,8 @@ export class LocalFilesystem extends MastraFilesystem {
   private readonly _basePath: string;
   private readonly _contained: boolean;
   private _allowedPaths: string[];
+  private _lsp?: any; // LSPManager — typed as any to avoid importing Node-only code at module level
+  private _lspConfig?: LSPConfig;
 
   /**
    * The absolute base path on disk where files are stored.
@@ -129,6 +150,14 @@ export class LocalFilesystem extends MastraFilesystem {
    */
   get allowedPaths(): readonly string[] {
     return this._allowedPaths;
+  }
+
+  /**
+   * The LSP manager (if configured and initialized).
+   * Returns undefined if LSP is not configured or init() hasn't been called.
+   */
+  get lsp(): any {
+    return this._lsp;
   }
 
   /**
@@ -156,6 +185,10 @@ export class LocalFilesystem extends MastraFilesystem {
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
     this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(p));
+
+    if (options.lsp) {
+      this._lspConfig = options.lsp === true ? {} : options.lsp;
+    }
   }
 
   private generateId(): string {
@@ -193,13 +226,10 @@ export class LocalFilesystem extends MastraFilesystem {
       if (this._isWithinAnyRoot(normalized)) {
         absolutePath = normalized;
       } else {
-        const cleanedPath = inputPath.replace(/^\/+/, '');
-        absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+        absolutePath = resolveWorkspacePath(this._basePath, inputPath);
       }
     } else {
-      // Relative path — resolve against basePath
-      const cleanedPath = inputPath.replace(/^\/+/, '');
-      absolutePath = nodePath.resolve(this._basePath, nodePath.normalize(cleanedPath));
+      absolutePath = resolveWorkspacePath(this._basePath, inputPath);
     }
 
     if (this._contained) {
@@ -676,6 +706,19 @@ export class LocalFilesystem extends MastraFilesystem {
   async init(): Promise<void> {
     this.logger.debug('Initializing filesystem', { basePath: this._basePath });
     await fs.mkdir(this._basePath, { recursive: true });
+
+    // Initialize LSP if configured
+    if (this._lspConfig) {
+      try {
+        const { isLSPAvailable, LSPManager } = await import('../lsp/index');
+        if (isLSPAvailable()) {
+          this._lsp = new LSPManager(this._lspConfig);
+        }
+      } catch {
+        // LSP deps not available — silently skip
+      }
+    }
+
     this.logger.debug('Filesystem initialized', { basePath: this._basePath });
   }
 
@@ -685,7 +728,15 @@ export class LocalFilesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    // LocalFilesystem doesn't clean up files on destroy by default
+    // Shutdown LSP servers
+    if (this._lsp) {
+      try {
+        await this._lsp.shutdownAll();
+      } catch {
+        // LSP shutdown errors are non-blocking
+      }
+      this._lsp = undefined;
+    }
   }
 
   getInfo(): FilesystemInfo<{ basePath: string; contained: boolean; allowedPaths?: string[] }> {

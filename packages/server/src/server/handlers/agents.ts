@@ -286,8 +286,11 @@ export async function getSerializedSkillsFromAgent(
 
 /**
  * Get the list of available workspace tools for an agent.
- * Returns tool names based on workspace configuration (filesystem, sandbox, search)
- * and respects per-tool enabled settings.
+ *
+ * Tries to use core's `createWorkspaceTools` for an accurate tool list that
+ * respects runtime availability (e.g. `@ast-grep/napi` for ast_edit).
+ * Falls back to inlined config-based logic for older core versions that don't
+ * export `createWorkspaceTools`.
  */
 export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: RequestContext): Promise<string[]> {
   try {
@@ -296,6 +299,17 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
       return [];
     }
 
+    // Try core's createWorkspaceTools — it checks runtime dep availability
+    try {
+      const mod = await import('@mastra/core/workspace');
+      if (typeof mod.createWorkspaceTools === 'function') {
+        return Object.keys(mod.createWorkspaceTools(workspace));
+      }
+    } catch {
+      // Older core version without workspace module — fall through
+    }
+
+    // Fallback: inlined logic for older core versions
     const tools: string[] = [];
     const isReadOnly = workspace.filesystem?.readOnly ?? false;
     const toolsConfig = workspace.getToolsConfig();

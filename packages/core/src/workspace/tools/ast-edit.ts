@@ -349,7 +349,7 @@ Examples:
       .describe('Import specification for add-import transform'),
   }),
   execute: async ({ path, pattern, replacement, transform, targetName, newName, importSpec }, context) => {
-    const { workspace, filesystem } = requireFilesystem(context);
+    const { filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
 
     if (filesystem.readOnly) {
@@ -437,7 +437,7 @@ Examples:
     }
 
     let output = `${path}: ${changes.join('; ')}`;
-    output += await getEditDiagnosticsText(workspace, path, modifiedContent);
+    output += await getEditDiagnosticsText(filesystem, path, modifiedContent);
     return output;
   },
 });

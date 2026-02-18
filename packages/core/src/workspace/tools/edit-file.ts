@@ -25,7 +25,7 @@ Usage:
       .describe('If true, replace all occurrences. If false (default), old_string must be unique.'),
   }),
   execute: async ({ path, old_string, new_string, replace_all }, context) => {
-    const { workspace, filesystem } = requireFilesystem(context);
+    const { filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
 
     if (filesystem.readOnly) {
@@ -43,7 +43,7 @@ Usage:
       await filesystem.writeFile(path, result.content, { overwrite: true });
 
       let output = `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
-      output += await getEditDiagnosticsText(workspace, path, result.content);
+      output += await getEditDiagnosticsText(filesystem, path, result.content);
       return output;
     } catch (error) {
       if (error instanceof StringNotFoundError) {
