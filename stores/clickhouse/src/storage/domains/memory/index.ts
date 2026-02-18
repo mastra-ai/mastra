@@ -129,37 +129,49 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         query_params: { messageIds },
       });
 
-      // Update thread timestamps and recompute lastMessageAt
-      if (threadIds.length > 0) {
-        const now = new Date().toISOString().replace('Z', '');
-        for (const threadId of threadIds) {
-          // Query max createdAt from remaining messages for this thread
-          const maxResult = await this.client.query({
-            query: `SELECT MAX(createdAt) as maxCreatedAt FROM ${TABLE_MESSAGES} WHERE thread_id = {threadId:String}`,
-            query_params: { threadId },
-            clickhouse_settings: {
-              date_time_input_format: 'best_effort',
-              date_time_output_format: 'iso',
-              use_client_time_zone: 1,
-              output_format_json_quote_64bit_integers: 0,
-            },
-          });
-          const maxRows = await maxResult.json();
-          const maxCreatedAt = (maxRows.data as any[])[0]?.maxCreatedAt || null;
+      // Recompute lastMessageAt by inserting new rows (ReplacingMergeTree pattern)
+      // ALTER TABLE UPDATE is async in ClickHouse; INSERT is immediate and deduped by ReplacingMergeTree
+      const uniqueThreadIds = [...new Set(threadIds)];
+      for (const threadId of uniqueThreadIds) {
+        const existingThread = await this.getThreadById({ threadId });
+        if (!existingThread) continue;
 
-          const lastMessageAt = maxCreatedAt ? new Date(maxCreatedAt).toISOString().replace('Z', '') : null;
-          if (lastMessageAt) {
-            await this.client.command({
-              query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)}, lastMessageAt = {lma:DateTime64(3)} WHERE id = {threadId:String}`,
-              query_params: { now, lma: lastMessageAt, threadId },
-            });
-          } else {
-            await this.client.command({
-              query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)}, lastMessageAt = {lma:Nullable(DateTime64(3))} WHERE id = {threadId:String}`,
-              query_params: { now, lma: null, threadId },
-            });
-          }
-        }
+        // Query max createdAt from remaining messages for this thread
+        const maxResult = await this.client.query({
+          query: `SELECT MAX(createdAt) as maxCreatedAt FROM ${TABLE_MESSAGES} WHERE thread_id = {threadId:String}`,
+          query_params: { threadId },
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            date_time_output_format: 'iso',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        });
+        const maxRows = await maxResult.json();
+        const maxCreatedAt = (maxRows.data as any[])[0]?.maxCreatedAt || null;
+
+        const lastMessageAt = maxCreatedAt ? new Date(maxCreatedAt).toISOString() : null;
+
+        await this.client.insert({
+          table: TABLE_THREADS,
+          format: 'JSONEachRow',
+          values: [
+            {
+              id: existingThread.id,
+              resourceId: existingThread.resourceId,
+              title: existingThread.title,
+              metadata: serializeMetadata(existingThread.metadata),
+              createdAt: existingThread.createdAt,
+              updatedAt: new Date().toISOString(),
+              lastMessageAt,
+            },
+          ],
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        });
       }
     } catch (error) {
       throw new MastraError(
@@ -1071,7 +1083,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 lastMessageAt
               FROM ranked_threads
               WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
-              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
+              ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}${field === 'lastMessageAt' ? (direction === 'DESC' ? ' NULLS LAST' : ' NULLS FIRST') : ''}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
