@@ -142,6 +142,7 @@ export function DatasetItemsToolbar({
           variant="experimental"
           size="default"
           onReset={() => onSearchChange?.('')}
+          disabled={!hasItems && !searchQuery}
         />
 
         <div className="flex gap-5">
@@ -192,13 +193,14 @@ export function DatasetItemsToolbar({
         variant="experimental"
         size="default"
         onReset={() => onSearchChange?.('')}
+        disabled={!hasItems && !searchQuery}
       />
 
       <ButtonsGroup>
         {!isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
             <Button variant="standard" size="default" onClick={onAddClick}>
-              <Plus /> New Item
+              <Plus /> Add Item
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
