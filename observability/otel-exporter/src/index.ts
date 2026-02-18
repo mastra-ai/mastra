@@ -9,7 +9,6 @@ export type {
   NewRelicConfig,
   TraceloopConfig,
   LaminarConfig,
-  GrafanaCloudConfig,
   CustomConfig,
   ExportProtocol,
 } from './types.js';

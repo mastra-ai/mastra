@@ -41,12 +41,6 @@ export interface LaminarConfig {
   endpoint?: string;
 }
 
-export interface GrafanaCloudConfig {
-  instanceId?: string; // Required at runtime (Grafana Cloud instance ID, e.g. '1235678')
-  apiToken?: string; // Required at runtime (Grafana Cloud API token, e.g. 'glc_eyJ...')
-  endpoint?: string; // OTLP gateway endpoint (e.g. 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp')
-}
-
 export interface CustomConfig {
   endpoint?: string; // Required at runtime
   headers?: Record<string, string>;
@@ -60,7 +54,6 @@ export type ProviderConfig =
   | { newrelic: NewRelicConfig }
   | { traceloop: TraceloopConfig }
   | { laminar: LaminarConfig }
-  | { grafanaCloud: GrafanaCloudConfig }
   | { custom: CustomConfig };
 
 export interface OtelExporterConfig extends BaseExporterConfig {
