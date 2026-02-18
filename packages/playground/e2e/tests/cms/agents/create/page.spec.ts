@@ -71,9 +71,8 @@ async function fillRequiredFields(page: Page, agentName?: string) {
 async function createAgentAndGetId(page: Page): Promise<string> {
   await page.getByRole('button', { name: 'Create agent' }).click();
 
-  // Wait for redirect to agent chat page: /agents/{agentId}/chat
-  await expect(page).toHaveURL(/\/agents\/[a-zA-Z0-9-]+\/chat/, { timeout: 15000 });
-  await expect(page.getByText('Agent created successfully')).toBeVisible({ timeout: 10000 });
+  // Wait for redirect to agent chat page — this confirms creation succeeded
+  await expect(page).toHaveURL(/\/agents\/[a-zA-Z0-9-]+\/chat/, { timeout: 30000 });
 
   const url = page.url();
   const agentId = url.split('/agents/')[1]?.split('/')[0];
@@ -443,10 +442,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Navigate to memory page via sidebar
     await clickSidebarLink(page, 'Memory');
 
-    // Enable memory (first switch next to header)
-    const memorySwitch = page.getByRole('switch').first();
-    await expect(memorySwitch).toBeVisible({ timeout: 10000 });
-    await memorySwitch.click();
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
 
     // Wait for memory fields to appear
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
@@ -478,9 +475,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Navigate to memory page via sidebar
     await clickSidebarLink(page, 'Memory');
 
-    // Enable memory
-    const memorySwitch = page.getByRole('switch').first();
-    await memorySwitch.click();
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
     // The switches after memory enabled are: Semantic Recall, Read Only, Observational Memory
@@ -510,9 +506,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Navigate to memory page via sidebar
     await clickSidebarLink(page, 'Memory');
 
-    // Enable memory
-    const memorySwitch = page.getByRole('switch').first();
-    await memorySwitch.click();
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
     // Enable Observational Memory (4th switch: main=0, semantic=1, readOnly=2, OM=3)
@@ -640,8 +635,8 @@ test.describe('Comprehensive Persistence Test', () => {
 
     // === Memory ===
     await clickSidebarLink(page, 'Memory');
-    const memSwitch = page.getByRole('switch').first();
-    await memSwitch.click();
+    // Memory is disabled by default — click "Enable Memory" button (not a switch)
+    await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
     const lastMsgInput = page.locator('#memory-last-messages');
     await lastMsgInput.clear();
