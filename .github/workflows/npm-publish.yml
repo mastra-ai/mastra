@@ -50,23 +50,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          run_install: false
-
-      - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
-
-      - name: Install dependencies
-        run: pnpm install
 
       - name: Run build
         run: pnpm build
@@ -120,23 +111,14 @@ jobs:
         with:
           files: '.changeset/pre.json'
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          run_install: false
-
-      - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
-
-      - name: Install dependencies
-        run: pnpm install
 
       - name: Build packages
         run: pnpm build
@@ -212,20 +194,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          run_install: false
-
-      - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install
 
       - name: Enter prerelease mode
         run: |
@@ -276,23 +249,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          run_install: false
-
-      - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-          cache: 'pnpm'
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
-
-      - name: Install dependencies
-        run: pnpm install
 
       - name: Generate slugified branch name
         id: slugify
