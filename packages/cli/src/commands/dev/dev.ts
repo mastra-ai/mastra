@@ -307,6 +307,22 @@ async function rebundleAndRestart(
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
       currentServerProcess.kill('SIGINT');
+      // Wait for the process to exit before starting a new one
+      await new Promise<void>(resolve => {
+        const timeout = setTimeout(() => {
+          try {
+            currentServerProcess?.kill('SIGKILL');
+          } catch {
+            /* already exited */
+          }
+          resolve();
+        }, 5000);
+        currentServerProcess?.once('exit', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+      currentServerProcess = undefined;
     }
 
     const env = await bundler.loadEnvVars();
