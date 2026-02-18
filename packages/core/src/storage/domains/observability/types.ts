@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { scoreRowDataSchema } from '../../../evals/types';
 import { EntityType, SpanType } from '../../../observability/types';
+import type { AssertAssignable } from '../../../types/type-validation';
 import type { PaginationInfo } from '../../types';
 import {
   dateRangeSchema,
@@ -25,16 +26,6 @@ import {
 
 /** Strategy for how tracing data is persisted to storage */
 export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
-
-// ============================================================================
-// Type Validation Utilities
-// ============================================================================
-
-/**
- * Helper type for verifying that an explicit interface is assignable to another type.
- * Used to ensure explicit interfaces stay in sync with Zod schema inferences.
- */
-type AssertAssignable<T, U> = T extends U ? true : never;
 
 // ============================================================================
 // Helper utilities for creating omit key objects from schema shapes

@@ -5,18 +5,7 @@ import { SpanType } from '../observability';
 import type { TracingContext } from '../observability';
 import { dbTimestamps, paginationInfoSchema } from '../storage/domains/shared';
 import type { PaginationInfo } from '../storage/types';
-
-// ============================================================================
-// Type Validation Utilities
-// ============================================================================
-
-/**
- * Helper function to verify that an explicit interface is bidirectionally
- * assignable with a Zod-inferred type. This catches structural mismatches
- * while being more forgiving than strict type equality.
- */
-function assertTypeCompatibility<T, U>(_t: T extends U ? (U extends T ? true : never) : never): void {}
-type AssertAssignable<T, U> = T extends U ? true : never;
+import type { AssertAssignable } from '../types/type-validation';
 
 // ============================================================================
 // Sampling Config
