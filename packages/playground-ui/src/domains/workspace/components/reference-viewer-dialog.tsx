@@ -50,13 +50,13 @@ export function ReferenceViewerDialog({
         <div className="flex items-center justify-between px-6 py-4 border-b border-border1 bg-surface3">
           <div className="flex items-center gap-3">
             <div className="p-1.5 rounded bg-surface5">
-              <FileText className="h-4 w-4 text-icon4" />
+              <FileText className="h-4 w-4 text-neutral4" />
             </div>
             <div>
-              <h2 id="reference-viewer-title" className="text-base font-medium text-icon6">
+              <h2 id="reference-viewer-title" className="text-base font-medium text-neutral6">
                 {referencePath}
               </h2>
-              <p className="text-xs text-icon3">from {skillName}</p>
+              <p className="text-xs text-neutral3">from {skillName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -69,7 +69,7 @@ export function ReferenceViewerDialog({
             <button
               onClick={() => onOpenChange(false)}
               aria-label="Close reference viewer"
-              className="p-2 rounded-lg hover:bg-surface4 text-icon3 hover:text-icon5 transition-colors"
+              className="p-2 rounded-lg hover:bg-surface4 text-neutral3 hover:text-neutral5 transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
@@ -85,14 +85,14 @@ export function ReferenceViewerDialog({
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <p className="text-red-400 mb-2">Failed to load reference</p>
-              <p className="text-sm text-icon3">{error}</p>
+              <p className="text-sm text-neutral3">{error}</p>
             </div>
           ) : content ? (
-            <pre className="whitespace-pre-wrap text-sm text-icon5 font-mono bg-surface3 p-4 rounded-lg overflow-auto">
+            <pre className="whitespace-pre-wrap text-sm text-neutral5 font-mono bg-surface3 p-4 rounded-lg overflow-auto">
               {content}
             </pre>
           ) : (
-            <div className="flex items-center justify-center py-12 text-icon3">No content available</div>
+            <div className="flex items-center justify-center py-12 text-neutral3">No content available</div>
           )}
         </div>
       </div>
