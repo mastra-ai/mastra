@@ -108,7 +108,7 @@ describe('Provider Configurations', () => {
   describe('Grafana Cloud', () => {
     it('should configure Grafana Cloud with basic auth', () => {
       const config = resolveProviderConfig({
-        'grafana-cloud': {
+        grafanaCloud: {
           instanceId: '1235678',
           apiToken: 'glc_eyJvIjoiM',
           endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
@@ -123,7 +123,7 @@ describe('Provider Configurations', () => {
 
     it('should strip trailing slash from endpoint before appending path', () => {
       const config = resolveProviderConfig({
-        'grafana-cloud': {
+        grafanaCloud: {
           instanceId: '1235678',
           apiToken: 'glc_eyJvIjoiM',
           endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp/',
@@ -135,7 +135,7 @@ describe('Provider Configurations', () => {
 
     it('should not append /v1/traces if already present', () => {
       const config = resolveProviderConfig({
-        'grafana-cloud': {
+        grafanaCloud: {
           instanceId: '1235678',
           apiToken: 'glc_eyJvIjoiM',
           endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp/v1/traces',
@@ -150,7 +150,7 @@ describe('Provider Configurations', () => {
       delete process.env.GRAFANA_CLOUD_INSTANCE_ID;
       try {
         const config = resolveProviderConfig({
-          'grafana-cloud': {
+          grafanaCloud: {
             apiToken: 'glc_eyJvIjoiM',
             endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
           },
@@ -166,7 +166,7 @@ describe('Provider Configurations', () => {
       delete process.env.GRAFANA_CLOUD_API_TOKEN;
       try {
         const config = resolveProviderConfig({
-          'grafana-cloud': {
+          grafanaCloud: {
             instanceId: '1235678',
             endpoint: 'https://otlp-gateway-prod-us-east-3.grafana.net/otlp',
           },
@@ -182,7 +182,7 @@ describe('Provider Configurations', () => {
       delete process.env.GRAFANA_CLOUD_OTLP_ENDPOINT;
       try {
         const config = resolveProviderConfig({
-          'grafana-cloud': {
+          grafanaCloud: {
             instanceId: '1235678',
             apiToken: 'glc_eyJvIjoiM',
           },

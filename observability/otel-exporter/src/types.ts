@@ -60,7 +60,7 @@ export type ProviderConfig =
   | { newrelic: NewRelicConfig }
   | { traceloop: TraceloopConfig }
   | { laminar: LaminarConfig }
-  | { 'grafana-cloud': GrafanaCloudConfig }
+  | { grafanaCloud: GrafanaCloudConfig }
   | { custom: CustomConfig };
 
 export interface OtelExporterConfig extends BaseExporterConfig {
