@@ -97,6 +97,15 @@ createWorkflowTestSuite({
     // Resume error tests - evented engine error behavior may differ
     resumeNotSuspendedWorkflow: true,
     resumeInvalidData: true,
+
+    // Deep nested suspend/resume not supported in evented engine
+    resumeDeepNested: true,
+    // Incorrect branches after resume in nested workflows - evented fails
+    resumeIncorrectBranches: true,
+    // Map-branch resume requires direct Mastra registration (server restart sim)
+    resumeMapBranchCondition: true,
+    // Abort propagation to nested workflows times out in evented engine
+    abortNestedPropagation: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -185,6 +194,9 @@ createWorkflowTestSuite({
         step: options.step as any,
         context: options.context as any,
         perStep: options.perStep,
+        inputData: options.inputData as any,
+        nestedStepsContext: options.nestedStepsContext as any,
+        resumeData: options.resumeData as any,
       });
 
       return result as WorkflowResult;

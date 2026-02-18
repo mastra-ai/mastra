@@ -86,6 +86,9 @@ createWorkflowTestSuite({
       step: options.step as any,
       context: options.context as any,
       perStep: options.perStep,
+      inputData: options.inputData as any,
+      nestedStepsContext: options.nestedStepsContext as any,
+      resumeData: options.resumeData as any,
     });
     return result as WorkflowResult;
   },

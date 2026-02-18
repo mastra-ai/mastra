@@ -2192,6 +2192,616 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should be able to suspend nested workflow step (with [wf, step] resume path)
+  {
+    const beginAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return inputData;
+    });
+    const startAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      const currentValue = inputData.startValue || 0;
+      const newValue = currentValue + 1;
+      return { newValue };
+    });
+    const otherAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend();
+      }
+      return { other: 26 };
+    });
+    const finalAction = vi.fn().mockImplementation(async ({ getStepResult }) => {
+      const startStep = { id: 'start' };
+      const otherStep = { id: 'other' };
+      const startVal = getStepResult(startStep)?.newValue ?? 0;
+      const otherVal = getStepResult(otherStep)?.other ?? 0;
+      return { finalValue: startVal + otherVal };
+    });
+    const lastAction = vi.fn().mockImplementation(async () => {
+      return { success: true };
+    });
+
+    const startStep = createStep({
+      id: 'start',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ newValue: z.number() }),
+      execute: startAction,
+    });
+
+    const otherStep = createStep({
+      id: 'other',
+      inputSchema: z.object({ newValue: z.number() }),
+      outputSchema: z.object({ newValue: z.number(), other: z.number() }),
+      execute: otherAction,
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
+      outputSchema: z.object({ finalValue: z.number() }),
+      execute: finalAction,
+    });
+
+    const beginStep = createStep({
+      id: 'begin-step',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ startValue: z.number() }),
+      execute: beginAction,
+    });
+
+    const lastStep = createStep({
+      id: 'last-step',
+      inputSchema: z.object({ finalValue: z.number() }),
+      outputSchema: z.object({ success: z.boolean() }),
+      execute: lastAction,
+    });
+
+    const nestedWorkflow = createWorkflow({
+      id: 'sr-nested-wf-suspend-step',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ finalValue: z.number() }),
+      options: { validateInputs: false },
+    })
+      .then(startStep)
+      .then(otherStep)
+      .then(finalStep)
+      .commit();
+
+    const mainWorkflow = createWorkflow({
+      id: 'sr-suspend-nested-step-workflow',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ success: z.boolean() }),
+      options: { validateInputs: false },
+    });
+
+    mainWorkflow.then(beginStep).then(nestedWorkflow).then(lastStep).commit();
+
+    workflows['sr-suspend-nested-step-workflow'] = {
+      workflow: mainWorkflow,
+      nestedWorkflowId: 'sr-nested-wf-suspend-step',
+      otherStep,
+      nestedWorkflow,
+      mocks: { beginAction, startAction, otherAction, finalAction, lastAction },
+      resetMocks: () => {
+        beginAction.mockClear();
+        startAction.mockClear();
+        otherAction.mockClear();
+        finalAction.mockClear();
+        lastAction.mockClear();
+      },
+    };
+  }
+
+  // Test: should preserve request context in nested workflows after suspend/resume
+  {
+    const setupStepAction = vi.fn().mockImplementation(async ({ requestContext }) => {
+      requestContext.set('test-key', 'test-context-value');
+      return { setup: true };
+    });
+
+    const suspendStepAction = vi.fn().mockImplementation(async ({ resumeData, suspend, requestContext }) => {
+      expect(requestContext.get('test-key')).toBe('test-context-value');
+      if (!resumeData?.confirmed) {
+        return await suspend({ message: 'Workflow suspended for testing' });
+      }
+      return { resumed: true };
+    });
+
+    const verifyContextAction = vi.fn().mockImplementation(async ({ requestContext, mastra, getInitData, inputData }) => {
+      const testData = requestContext.get('test-key');
+      const initData = getInitData();
+
+      expect(testData).toBe('test-context-value');
+      expect(mastra).toBeDefined();
+      expect(requestContext).toBeDefined();
+      expect(inputData).toEqual({ resumed: true });
+      expect(initData).toEqual({ resumed: true });
+
+      return { success: true, hasTestData: !!testData };
+    });
+
+    const setupStep = createStep({
+      id: 'setup-step',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ setup: z.boolean() }),
+      execute: setupStepAction,
+    });
+
+    const suspendStep = createStep({
+      id: 'suspend-step',
+      inputSchema: z.object({ setup: z.boolean() }),
+      outputSchema: z.object({ resumed: z.boolean() }),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: suspendStepAction,
+    });
+
+    const verifyContextStep = createStep({
+      id: 'verify-context-step',
+      inputSchema: z.object({ resumed: z.boolean() }),
+      outputSchema: z.object({ success: z.boolean(), hasTestData: z.boolean() }),
+      execute: verifyContextAction,
+    });
+
+    const nestedWorkflow = createWorkflow({
+      id: 'sr-nested-wf-after-suspend',
+      inputSchema: z.object({ resumed: z.boolean() }),
+      outputSchema: z.object({ success: z.boolean(), hasTestData: z.boolean() }),
+    })
+      .then(verifyContextStep)
+      .commit();
+
+    const mainWorkflow = createWorkflow({
+      id: 'sr-request-context-nested-suspend-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ success: z.boolean(), hasTestData: z.boolean() }),
+    })
+      .then(setupStep)
+      .then(suspendStep)
+      .then(nestedWorkflow)
+      .commit();
+
+    workflows['sr-request-context-nested-suspend-workflow'] = {
+      workflow: mainWorkflow,
+      nestedWorkflowId: 'sr-nested-wf-after-suspend',
+      mocks: { setupStepAction, suspendStepAction, verifyContextAction },
+      resetMocks: () => {
+        setupStepAction.mockClear();
+        suspendStepAction.mockClear();
+        verifyContextAction.mockClear();
+      },
+    };
+  }
+
+  // Test: should be able to suspend nested workflow step in a nested workflow step (deep nesting)
+  {
+    const startAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      const currentValue = inputData.startValue || 0;
+      const newValue = currentValue + 1;
+      return { newValue };
+    });
+
+    const otherAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend();
+      }
+      return { other: 26 };
+    });
+
+    const finalAction = vi.fn().mockImplementation(async ({ getStepResult }) => {
+      const startStep = { id: 'start' };
+      const otherStep = { id: 'other' };
+      const startVal = getStepResult(startStep)?.newValue ?? 0;
+      const otherVal = getStepResult(otherStep)?.other ?? 0;
+      return { finalValue: startVal + otherVal };
+    });
+
+    const lastAction = vi.fn().mockImplementation(async () => {
+      return { success: true };
+    });
+
+    const beginAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return inputData;
+    });
+
+    const passthroughAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return inputData;
+    });
+
+    const startStep = createStep({
+      id: 'start',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ newValue: z.number() }),
+      execute: startAction,
+    });
+
+    const otherStep = createStep({
+      id: 'other',
+      inputSchema: z.object({ newValue: z.number() }),
+      outputSchema: z.object({ newValue: z.number(), other: z.number() }),
+      execute: otherAction,
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      inputSchema: z.object({ newValue: z.number().optional(), other: z.number().optional() }),
+      outputSchema: z.object({ finalValue: z.number() }),
+      execute: finalAction,
+    });
+
+    const counterInputSchema = z.object({ startValue: z.number() });
+    const counterOutputSchema = z.object({ finalValue: z.number() });
+
+    const passthroughStep = createStep({
+      id: 'passthrough',
+      inputSchema: counterInputSchema,
+      outputSchema: counterInputSchema,
+      execute: passthroughAction,
+    });
+
+    const wfA = createWorkflow({
+      id: 'sr-deep-nested-wf-a',
+      inputSchema: counterInputSchema,
+      outputSchema: finalStep.outputSchema,
+      options: { validateInputs: false },
+    })
+      .then(startStep)
+      .then(otherStep)
+      .then(finalStep)
+      .commit();
+
+    const wfB = createWorkflow({
+      id: 'sr-deep-nested-wf-b',
+      inputSchema: counterInputSchema,
+      outputSchema: finalStep.outputSchema,
+      options: { validateInputs: false },
+    })
+      .then(passthroughStep)
+      .then(wfA)
+      .commit();
+
+    const wfC = createWorkflow({
+      id: 'sr-deep-nested-wf-c',
+      inputSchema: counterInputSchema,
+      outputSchema: finalStep.outputSchema,
+      options: { validateInputs: false },
+    })
+      .then(passthroughStep)
+      .then(wfB)
+      .commit();
+
+    const beginStep = createStep({
+      id: 'begin-step',
+      inputSchema: counterInputSchema,
+      outputSchema: counterInputSchema,
+      execute: beginAction,
+    });
+
+    const lastStep = createStep({
+      id: 'last-step',
+      inputSchema: wfA.outputSchema,
+      outputSchema: z.object({ success: z.boolean() }),
+      execute: lastAction,
+    });
+
+    const counterWorkflow = createWorkflow({
+      id: 'sr-deep-nested-suspend-workflow',
+      inputSchema: counterInputSchema,
+      outputSchema: counterOutputSchema,
+      steps: [wfC, passthroughStep],
+      options: { validateInputs: false },
+    });
+
+    counterWorkflow
+      .then(beginStep)
+      .then(wfC)
+      .then(lastStep)
+      .commit();
+
+    workflows['sr-deep-nested-suspend-workflow'] = {
+      workflow: counterWorkflow,
+      nestedWorkflowId: 'sr-deep-nested-wf-c',
+      mocks: { startAction, otherAction, finalAction, lastAction, beginAction, passthroughAction },
+      resetMocks: () => {
+        startAction.mockClear();
+        otherAction.mockClear();
+        finalAction.mockClear();
+        lastAction.mockClear();
+        beginAction.mockClear();
+        passthroughAction.mockClear();
+      },
+    };
+  }
+
+  // Test: should not execute incorrect branches after resuming from suspended nested workflow
+  {
+    const fetchItemsAction = vi.fn().mockResolvedValue([
+      { id: '1', name: 'Item 1', type: 'first' },
+      { id: '2', name: 'Item 2', type: 'second' },
+      { id: '3', name: 'Item 3', type: 'third' },
+    ]);
+
+    const selectItemAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend({ message: 'Select an item' });
+      }
+      return resumeData;
+    });
+
+    const firstItemAction = vi.fn().mockResolvedValue({ processed: 'first' });
+    const thirdItemAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend({ message: 'Select date for third item' });
+      }
+      return { processed: 'third', date: resumeData };
+    });
+
+    const secondItemDateAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend({ message: 'Select date for second item' });
+      }
+      return { processed: 'second', date: resumeData };
+    });
+
+    const finalProcessingAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return { result: 'processed', input: inputData };
+    });
+
+    const fetchItems = createStep({
+      id: 'fetch-items',
+      inputSchema: z.object({}),
+      outputSchema: z.array(z.object({ id: z.string(), name: z.string(), type: z.string() })),
+      execute: fetchItemsAction,
+    });
+
+    const selectItem = createStep({
+      id: 'select-item',
+      inputSchema: z.array(z.object({ id: z.string(), name: z.string(), type: z.string() })),
+      outputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+      execute: selectItemAction,
+    });
+
+    const firstItemStep = createStep({
+      id: 'first-item-step',
+      inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+      outputSchema: z.object({ processed: z.string() }),
+      execute: firstItemAction,
+    });
+
+    const thirdItemStep = createStep({
+      id: 'third-item-step',
+      inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+      outputSchema: z.object({ processed: z.string(), date: z.date() }),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.date(),
+      execute: thirdItemAction,
+    });
+
+    const secondItemDateStep = createStep({
+      id: 'second-item-date-step',
+      inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+      outputSchema: z.object({ processed: z.string(), date: z.date() }),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.date(),
+      execute: secondItemDateAction,
+    });
+
+    const finalProcessingStep = createStep({
+      id: 'final-processing',
+      inputSchema: z.object({
+        processed: z.string(),
+        date: z.date().optional(),
+      }),
+      outputSchema: z.object({ result: z.string(), input: z.any() }),
+      execute: finalProcessingAction,
+    });
+
+    // Create nested workflow for second item
+    const secondItemWorkflow = createWorkflow({
+      id: 'sr-second-item-workflow',
+      inputSchema: z.object({ id: z.string(), name: z.string(), type: z.string() }),
+      outputSchema: z.object({ processed: z.string(), date: z.date() }),
+    })
+      .then(secondItemDateStep)
+      .commit();
+
+    // Create main workflow with conditional branching
+    const mainWorkflow = createWorkflow({
+      id: 'sr-incorrect-branches-resume-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string(), input: z.any() }),
+    })
+      .then(fetchItems)
+      .then(selectItem)
+      .branch([
+        [async ({ inputData }) => inputData.type === 'first', firstItemStep],
+        [async ({ inputData }) => inputData.type === 'second', secondItemWorkflow],
+        [async ({ inputData }) => inputData.type === 'third', thirdItemStep],
+      ])
+      .map(async ({ inputData }) => {
+        if (inputData['first-item-step']) {
+          return inputData['first-item-step'];
+        } else if (inputData['sr-second-item-workflow']) {
+          return inputData['sr-second-item-workflow'];
+        } else if (inputData['third-item-step']) {
+          return inputData['third-item-step'];
+        }
+        throw new Error('No valid branch result found');
+      })
+      .then(finalProcessingStep)
+      .commit();
+
+    workflows['sr-incorrect-branches-resume-workflow'] = {
+      workflow: mainWorkflow,
+      nestedWorkflowId: 'sr-second-item-workflow',
+      mocks: {
+        fetchItemsAction,
+        selectItemAction,
+        firstItemAction,
+        thirdItemAction,
+        secondItemDateAction,
+        finalProcessingAction,
+      },
+      resetMocks: () => {
+        fetchItemsAction.mockClear();
+        selectItemAction.mockClear();
+        firstItemAction.mockClear();
+        thirdItemAction.mockClear();
+        secondItemDateAction.mockClear();
+        finalProcessingAction.mockClear();
+      },
+    };
+  }
+
+  // Test: should pass correct inputData to branch condition when resuming after map
+  {
+    const conditionSpy = vi.fn();
+
+    const suspendingStepAction = vi.fn().mockImplementation(async ({ inputData, suspend, resumeData }) => {
+      if (!resumeData) {
+        await suspend({ prompt: 'Please provide an answer' });
+        return { result: '' };
+      }
+      return { result: `processed: ${inputData.mappedValue}, answer: ${(resumeData as any).answer}` };
+    });
+
+    const fallbackStepAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return { result: `fallback: ${inputData.mappedValue}` };
+    });
+
+    // Helper to build the workflow (simulates reconstruction after server restart)
+    const buildWorkflow = () => {
+      const suspendingStep = createStep({
+        id: 'suspending-step',
+        inputSchema: z.object({ mappedValue: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        resumeSchema: z.object({ answer: z.string() }),
+        execute: suspendingStepAction,
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'sr-nested-wf-with-suspend',
+        inputSchema: z.object({ mappedValue: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .then(suspendingStep)
+        .commit();
+
+      const fallbackStep = createStep({
+        id: 'fallback-step',
+        inputSchema: z.object({ mappedValue: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: fallbackStepAction,
+      });
+
+      const mainWorkflow = createWorkflow({
+        id: 'sr-map-branch-suspend-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .map(async ({ inputData }) => {
+          return { mappedValue: inputData.value * 2 };
+        })
+        .branch([
+          [
+            async ({ inputData }) => {
+              conditionSpy(inputData);
+              return inputData.mappedValue > 10;
+            },
+            nestedWorkflow,
+          ],
+          [
+            async ({ inputData }) => {
+              conditionSpy(inputData);
+              return inputData.mappedValue <= 10;
+            },
+            fallbackStep,
+          ],
+        ])
+        .commit();
+
+      return { mainWorkflow, nestedWorkflow };
+    };
+
+    const { mainWorkflow, nestedWorkflow } = buildWorkflow();
+
+    workflows['sr-map-branch-suspend-workflow'] = {
+      workflow: mainWorkflow,
+      nestedWorkflowId: 'sr-nested-wf-with-suspend',
+      buildWorkflow,
+      mocks: { suspendingStepAction, fallbackStepAction, conditionSpy },
+      resetMocks: () => {
+        suspendingStepAction.mockClear();
+        fallbackStepAction.mockClear();
+        conditionSpy.mockClear();
+      },
+    };
+  }
+
+  // Test: should provide access to suspendData in workflow step on resume
+  {
+    const suspendDataAccessStep = createStep({
+      id: 'suspend-data-access-test',
+      inputSchema: z.object({
+        value: z.string(),
+      }),
+      resumeSchema: z.object({
+        confirm: z.boolean(),
+      }),
+      suspendSchema: z.object({
+        reason: z.string(),
+        originalValue: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+        wasResumed: z.boolean(),
+        suspendReason: z.string().optional(),
+      }),
+      execute: async ({ inputData, resumeData, suspend, suspendData }: any) => {
+        const { value } = inputData;
+        const { confirm } = resumeData ?? {};
+
+        // On first execution, suspend with context
+        if (!confirm) {
+          return await suspend({
+            reason: 'User confirmation required',
+            originalValue: value,
+          });
+        }
+
+        // On resume, we can now access the suspend data!
+        const suspendReason = suspendData?.reason || 'Unknown';
+        const originalValue = suspendData?.originalValue || 'Unknown';
+
+        return {
+          result: `Processed ${originalValue} after ${suspendReason}`,
+          wasResumed: true,
+          suspendReason,
+        };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'suspend-data-access-workflow',
+      inputSchema: z.object({
+        value: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+        wasResumed: z.boolean(),
+        suspendReason: z.string().optional(),
+      }),
+    });
+
+    workflow.then(suspendDataAccessStep).commit();
+
+    workflows['suspend-data-access-workflow'] = {
+      workflow,
+      suspendDataAccessStep,
+      mocks: {},
+    };
+  }
+
   return workflows;
 }
 
@@ -3563,6 +4173,295 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         expect(correctResult.status).toBe('success');
         if (correctResult.status === 'success') {
           expect((correctResult.result as any).value).toBe(22);
+        }
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeNestedWithPath || !ctx.resume)(
+      'should be able to suspend nested workflow step',
+      async () => {
+        const { workflow, nestedWorkflow, otherStep, mocks, resetMocks } =
+          registry!['sr-suspend-nested-step-workflow'];
+        resetMocks?.();
+
+        const runId = `suspend-nested-step-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - should suspend at nested workflow's 'other' step
+        const result = await execute(workflow, { startValue: 0 }, { runId });
+        expect(mocks.beginAction).toHaveBeenCalledTimes(1);
+        expect(mocks.startAction).toHaveBeenCalledTimes(1);
+        expect(mocks.otherAction).toHaveBeenCalledTimes(1);
+        expect(mocks.finalAction).toHaveBeenCalledTimes(0);
+        expect(mocks.lastAction).toHaveBeenCalledTimes(0);
+        expect(result.steps['sr-nested-wf-suspend-step']).toMatchObject({
+          status: 'suspended',
+        });
+        expect(result.steps['last-step']).toEqual(undefined);
+
+        // Resume nested workflow by specifying [nestedWorkflow, otherStep] path
+        const resumedResults = await ctx.resume!(workflow, {
+          runId,
+          step: [nestedWorkflow, otherStep],
+          resumeData: { newValue: 0 },
+        });
+
+        expect(resumedResults.steps['sr-nested-wf-suspend-step']).toMatchObject({
+          status: 'success',
+          output: { finalValue: 26 + 1 },
+        });
+
+        expect(mocks.startAction).toHaveBeenCalledTimes(1);
+        expect(mocks.otherAction).toHaveBeenCalledTimes(2);
+        expect(mocks.finalAction).toHaveBeenCalledTimes(1);
+        expect(mocks.lastAction).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeNestedOnlyWfStep || !ctx.resume)(
+      'should be able to resume suspended nested workflow step with only nested workflow step provided',
+      async () => {
+        const { workflow, nestedWorkflowId, mocks, resetMocks } =
+          registry!['sr-suspend-nested-step-workflow'];
+        resetMocks?.();
+
+        const runId = `resume-nested-only-wf-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - should suspend at nested workflow's 'other' step
+        const result = await execute(workflow, { startValue: 0 }, { runId });
+        expect(mocks.beginAction).toHaveBeenCalledTimes(1);
+        expect(mocks.startAction).toHaveBeenCalledTimes(1);
+        expect(mocks.otherAction).toHaveBeenCalledTimes(1);
+        expect(mocks.finalAction).toHaveBeenCalledTimes(0);
+        expect(mocks.lastAction).toHaveBeenCalledTimes(0);
+        expect(result.steps[nestedWorkflowId]).toMatchObject({
+          status: 'suspended',
+        });
+        expect(result.steps['last-step']).toEqual(undefined);
+
+        // Resume nested workflow by specifying only the nested workflow step ID (string)
+        const resumedResults = await ctx.resume!(workflow, {
+          runId,
+          step: nestedWorkflowId,
+          resumeData: { newValue: 0 },
+        });
+
+        expect(resumedResults.steps[nestedWorkflowId]).toMatchObject({
+          status: 'success',
+          output: { finalValue: 26 + 1 },
+        });
+
+        expect(mocks.startAction).toHaveBeenCalledTimes(1);
+        expect(mocks.otherAction).toHaveBeenCalledTimes(2);
+        expect(mocks.finalAction).toHaveBeenCalledTimes(1);
+        expect(mocks.lastAction).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeNestedRequestContext || !ctx.resume)(
+      'should preserve request context in nested workflows after suspend/resume',
+      async () => {
+        const { workflow, mocks, resetMocks } =
+          registry!['sr-request-context-nested-suspend-workflow'];
+        resetMocks?.();
+
+        const runId = `request-context-nested-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow (should suspend)
+        const suspendResult = await execute(workflow, {}, { runId });
+        expect(suspendResult.status).toBe('suspended');
+
+        // Resume workflow
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'suspend-step',
+          resumeData: { confirmed: true },
+        });
+
+        expect(resumeResult.status).toBe('success');
+        if (resumeResult.status === 'success') {
+          expect((resumeResult.result as any).success).toBe(true);
+          expect((resumeResult.result as any).hasTestData).toBe(true);
+        }
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeDeepNested || !ctx.resume)(
+      'should be able to suspend nested workflow step in a nested workflow step',
+      async () => {
+        const { workflow, mocks, resetMocks } =
+          registry!['sr-deep-nested-suspend-workflow'];
+        resetMocks?.();
+
+        const runId = `deep-nested-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const result = await execute(workflow, { startValue: 0 }, { runId });
+        expect(mocks.passthroughAction).toHaveBeenCalledTimes(2);
+        expect(result.steps['sr-deep-nested-wf-c']).toMatchObject({
+          status: 'suspended',
+          suspendPayload: {
+            __workflow_meta: {
+              path: ['sr-deep-nested-wf-b', 'sr-deep-nested-wf-a', 'other'],
+            },
+          },
+        });
+
+        expect(result.steps['last-step']).toEqual(undefined);
+
+        if (result.status !== 'suspended') {
+          expect.fail('Workflow should be suspended');
+        }
+        expect((result as any).suspended[0]).toEqual([
+          'sr-deep-nested-wf-c',
+          'sr-deep-nested-wf-b',
+          'sr-deep-nested-wf-a',
+          'other',
+        ]);
+        const resumedResults = await ctx.resume!(workflow, {
+          runId,
+          step: (result as any).suspended[0],
+          resumeData: { newValue: 0 },
+        });
+
+        expect(resumedResults.steps['sr-deep-nested-wf-c']).toMatchObject({
+          status: 'success',
+          output: { finalValue: 26 + 1 },
+        });
+
+        expect(mocks.startAction).toHaveBeenCalledTimes(1);
+        expect(mocks.otherAction).toHaveBeenCalledTimes(2);
+        expect(mocks.finalAction).toHaveBeenCalledTimes(1);
+        expect(mocks.lastAction).toHaveBeenCalledTimes(1);
+        expect(mocks.passthroughAction).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeIncorrectBranches || !ctx.resume)(
+      'should not execute incorrect branches after resuming from suspended nested workflow',
+      async () => {
+        const { workflow, mocks, resetMocks } =
+          registry!['sr-incorrect-branches-resume-workflow'];
+        resetMocks?.();
+
+        const runId = `incorrect-branches-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - should suspend at select-item
+        const initialResult = await execute(workflow, {}, { runId });
+        expect(initialResult.status).toBe('suspended');
+        expect(mocks.selectItemAction).toHaveBeenCalledTimes(1);
+
+        if (initialResult.status !== 'suspended') {
+          expect.fail('Expected workflow to be suspended');
+        }
+
+        // Resume with "second" item selection
+        const resumedResult = await ctx.resume!(workflow, {
+          runId,
+          step: (initialResult as any).suspended[0],
+          resumeData: { id: '2', name: 'Item 2', type: 'second' },
+        });
+
+        expect(resumedResult.status).toBe('suspended');
+        expect(mocks.selectItemAction).toHaveBeenCalledTimes(2);
+        expect(mocks.secondItemDateAction).toHaveBeenCalledTimes(1);
+
+        if (resumedResult.status !== 'suspended') {
+          expect.fail('Expected workflow to be suspended');
+        }
+
+        // Resume with date for second item
+        const finalResult = await ctx.resume!(workflow, {
+          runId,
+          step: (resumedResult as any).suspended[0],
+          resumeData: new Date('2024-12-31'),
+        });
+        expect(finalResult.status).toBe('success');
+        expect(mocks.secondItemDateAction).toHaveBeenCalledTimes(2);
+
+        // BUG CHECK: Only the second workflow should have executed
+        expect(mocks.firstItemAction).not.toHaveBeenCalled();
+        expect(mocks.thirdItemAction).not.toHaveBeenCalled();
+
+        // Only the correct steps should be present in the result
+        expect(finalResult.steps['first-item-step']).toBeUndefined();
+        expect(finalResult.steps['third-item-step']).toBeUndefined();
+        expect(finalResult.steps['sr-second-item-workflow']).toBeDefined();
+        expect(finalResult.steps['sr-second-item-workflow'].status).toBe('success');
+
+        // The final processing step should have been called exactly once
+        expect(mocks.finalProcessingAction).toHaveBeenCalledTimes(1);
+
+        // The final processing should only receive the result from the second workflow
+        const finalProcessingCall = mocks.finalProcessingAction.mock.calls[0][0];
+        expect(finalProcessingCall.inputData).toEqual({
+          processed: 'second',
+          date: new Date('2024-12-31'),
+        });
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeMapBranchCondition || !ctx.resume)(
+      'should pass correct inputData to branch condition when resuming after map',
+      async () => {
+        const { workflow, buildWorkflow, mocks, resetMocks } =
+          registry!['sr-map-branch-suspend-workflow'];
+        resetMocks?.();
+
+        const runId = `map-branch-condition-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow with value=10 (mapped to mappedValue=20, which is > 10, triggers nested wf)
+        const initialResult = await execute(workflow, { value: 10 }, { runId });
+
+        expect(initialResult.status).toBe('suspended');
+        expect(mocks.conditionSpy).toHaveBeenCalledWith({ mappedValue: 20 });
+        mocks.conditionSpy.mockClear();
+
+        // Simulate server restart by building a new workflow
+        // (this tests that branch conditions are not re-evaluated with stale map UUIDs)
+        const { mainWorkflow: wf2 } = buildWorkflow();
+
+        // Resume using the suspended path from initial result
+        if (initialResult.status !== 'suspended') {
+          expect.fail('Expected workflow to be suspended');
+        }
+        const resumedResult = await ctx.resume!(wf2, {
+          runId,
+          step: (initialResult as any).suspended[0],
+          resumeData: { answer: 'hello' },
+        });
+
+        // Branch conditions should NOT be re-evaluated during resume
+        expect(mocks.conditionSpy).not.toHaveBeenCalled();
+
+        expect(resumedResult.status).toBe('success');
+        expect(resumedResult.steps['sr-nested-wf-with-suspend'].status).toBe('success');
+      },
+    );
+
+    it.skipIf(ctx.skipTests.suspendDataAccess || !ctx.resume)(
+      'should provide access to suspendData in workflow step on resume',
+      async () => {
+        const { workflow, suspendDataAccessStep } = registry!['suspend-data-access-workflow'];
+
+        const runId = `suspend-data-access-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start the workflow - should suspend
+        const initialResult = await execute(workflow, { value: 'test-value' }, { runId });
+
+        expect(initialResult.status).toBe('suspended');
+
+        // Resume the workflow with confirmation
+        const resumedResult = await ctx.resume!(workflow, {
+          runId,
+          step: suspendDataAccessStep,
+          resumeData: { confirm: true },
+        });
+
+        expect(resumedResult.status).toBe('success');
+        if (resumedResult.status === 'success') {
+          expect((resumedResult.result as any).suspendReason).toBe('User confirmation required');
+          expect((resumedResult.result as any).result).toBe(
+            'Processed test-value after User confirmation required',
+          );
         }
       },
     );

@@ -108,6 +108,8 @@ export interface InstallSkillParams {
   repository: string;
   /** Skill name within the repo */
   skillName: string;
+  /** Mount path to install into (for CompositeFilesystem) */
+  mount?: string;
 }
 
 /**
@@ -126,10 +128,14 @@ export const useInstallSkill = () => {
 
       const baseUrl = client.options.baseUrl || '';
       const url = `${baseUrl}/api/workspaces/${params.workspaceId}/skills-sh/install`;
+      const body: Record<string, string> = { owner, repo, skillName: params.skillName };
+      if (params.mount) {
+        body.mount = params.mount;
+      }
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner, repo, skillName: params.skillName }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

@@ -340,6 +340,58 @@ export class CustomOutputProcessor implements Processor {
 }
 ```
 
+#### Emitting custom stream events with writer
+
+Output processors receive a `writer` object that lets you emit custom data chunks back to the client during streaming. This is useful for use cases like streaming moderation results or sending UI update signals without blocking the original stream.
+
+```typescript title="src/mastra/processors/moderation-processor.ts" {6,18-25}
+import type { Processor, ChunkType, MastraDBMessage } from "@mastra/core";
+
+export class ModerationProcessor implements Processor {
+  id = "moderation";
+
+  async processOutputResult({ messages, writer }) {
+    // Run moderation on the final output
+    const text = messages
+      .filter((m) => m.role === "assistant")
+      .flatMap((m) => m.content.parts?.filter((p) => p.type === "text"))
+      .map((p) => p.text)
+      .join(" ");
+
+    const result = await runModeration(text);
+
+    if (result.requiresChange) {
+      // Emit a custom event to the client with the moderated text
+      await writer?.custom({
+        type: "data-moderation-update",
+        data: {
+          originalText: text,
+          moderatedText: result.moderatedText,
+          reason: result.reason,
+        },
+      });
+    }
+
+    return messages;
+  }
+}
+```
+
+On the client, listen for the custom chunk type in the stream:
+
+```typescript
+const stream = await agent.stream("Hello");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "data-moderation-update") {
+    // Update the UI with moderated text
+    updateDisplayedMessage(chunk.data.moderatedText);
+  }
+}
+```
+
+Custom chunk types must use the `data-` prefix (e.g., `data-moderation-update`, `data-status`).
+
 #### Adding metadata in output processors
 
 You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:

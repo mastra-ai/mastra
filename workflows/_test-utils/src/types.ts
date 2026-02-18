@@ -108,6 +108,8 @@ export type SkippableTest =
   | 'schemaValidationThrows'
   // Schema validation with .map() step
   | 'schemaMapValidation'
+  // Schema validation - structured output from agent step
+  | 'schemaStructuredOutput'
   // Schema validation in nested workflows
   | 'schemaNestedValidation'
   // ZodError cause preservation when validation fails
@@ -118,6 +120,8 @@ export type SkippableTest =
   | 'abortStatus'
   // Abort signal during step execution (requires 5s timeout, skipped by default)
   | 'abortDuringStep'
+  // Abort signal propagation to nested workflow (requires direct run access)
+  | 'abortNestedPropagation'
   // Empty array in foreach
   | 'emptyForeach'
   // Concurrent foreach timing (Inngest has network overhead per step)
@@ -189,6 +193,8 @@ export type SkippableTest =
   // Tracing tests
   | 'tracingContext'
   | 'tracingMultistep'
+  // Tracing TypeScript support (compile-time test)
+  | 'tracingTypeScript'
   // Resume tests (require explicit resume() support)
   | 'resumeBasic'
   | 'resumeWithLabel'
@@ -202,6 +208,18 @@ export type SkippableTest =
   | 'resumeLoopInput'
   | 'resumeMapStep'
   | 'resumeForeach'
+  // Resume nested workflow with [workflow, step] path reference
+  | 'resumeNestedWithPath'
+  // Resume nested workflow with only nested workflow step ID (string)
+  | 'resumeNestedOnlyWfStep'
+  // Preserve request context in nested workflows after suspend/resume
+  | 'resumeNestedRequestContext'
+  // Deep nesting: suspend nested workflow step inside a nested workflow step
+  | 'resumeDeepNested'
+  // Incorrect branches should not execute after resuming from suspended nested workflow
+  | 'resumeIncorrectBranches'
+  // Correct inputData to branch condition when resuming after map step
+  | 'resumeMapBranchCondition'
   // Storage tests (require storage to be configured)
   | 'storageListRuns'
   | 'storageGetDelete'
@@ -225,6 +243,10 @@ export type SkippableTest =
   | 'timeTravelPreviousRunPerStep'
   | 'timeTravelParallelPerStep'
   | 'timeTravelConditionalPerStep'
+  // Time travel error: workflow still running
+  | 'timeTravelErrorRunning'
+  // Time travel error: invalid inputData with validateInputs
+  | 'timeTravelErrorInvalidInput'
   // Callback property tests
   | 'callbackRunId'
   | 'callbackWorkflowId'
@@ -252,6 +274,8 @@ export type SkippableTest =
   | 'executionFlowNotDefined'
   | 'executionGraphNotCommitted'
   | 'missingSuspendData'
+  // Suspend data access on resume
+  | 'suspendDataAccess'
   // Parallel suspend tests
   | 'resumeMultiSuspendError'
   // Foreach suspend tests
@@ -262,10 +286,20 @@ export type SkippableTest =
   | 'storageWithNestedWorkflows'
   // Agent step tests
   | 'agentStepDeepNested'
+  // Agent step via mastra instance (requires Mastra registration with agents)
+  | 'agentStepMastraInstance'
+  // Agent step in nested workflow via mastra instance
+  | 'agentStepNestedMastraInstance'
   // Streaming suspend/resume tests
   | 'streamingSuspendResume'
   // Streaming error property preservation
   | 'streamingErrorPreservation'
+  // Streaming tripwire from agent input processor
+  | 'streamingTripwireInput'
+  // Streaming tripwire status when streaming agent
+  | 'streamingTripwireStreaming'
+  // Streaming tripwire from output stream processor
+  | 'streamingTripwireOutputStream'
   // Streaming detailed event structure (exact event count/structure assertions)
   | 'streamingDetailedEvents'
   // Streaming suspend/resume with streamLegacy API
@@ -307,6 +341,8 @@ export type SkippableTest =
   | 'diResumeRequestContext'
   // DI - requestContext values set before suspension should persist after resume
   | 'diRequestContextBeforeSuspension'
+  // Storage - resourceId preservation on resume
+  | 'storageResourceIdResume'
   // Storage - shouldPersistSnapshot option
   | 'storageShouldPersistSnapshot'
   // Time travel to a non-existent step should fail
@@ -498,11 +534,17 @@ export interface TimeTravelWorkflowOptions {
   /** The step to time travel to (ID string or step reference) */
   step: string | unknown;
   /** The context to provide (step results from previous execution) */
-  context: Record<string, StepResult>;
+  context?: Record<string, StepResult>;
   /** Optional run ID to use */
   runId?: string;
   /** Whether to run only one step (perStep mode) */
   perStep?: boolean;
+  /** Input data for the step being time-traveled to (shorthand alternative to context) */
+  inputData?: unknown;
+  /** Nested steps context for nested workflows */
+  nestedStepsContext?: Record<string, Record<string, StepResult>>;
+  /** Resume data to pass to the step (for suspended workflow time travel) */
+  resumeData?: unknown;
 }
 
 /**

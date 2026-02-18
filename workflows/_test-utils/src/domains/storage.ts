@@ -174,6 +174,46 @@ export function createStorageWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should preserve resourceId when resuming a suspended workflow
+  {
+    const suspendingStepAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
+      if (!resumeData) {
+        return suspend({});
+      }
+      return { resumed: true, data: resumeData };
+    });
+
+    const finalStepAction = vi.fn().mockResolvedValue({ completed: true });
+
+    const suspendingStep = createStep({
+      id: 'suspendingStep',
+      execute: suspendingStepAction,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ resumed: z.boolean(), data: z.any() }),
+      resumeSchema: z.object({ message: z.string() }),
+    });
+
+    const finalStep = createStep({
+      id: 'finalStep',
+      execute: finalStepAction,
+      inputSchema: z.object({ resumed: z.boolean(), data: z.any() }),
+      outputSchema: z.object({ completed: z.boolean() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'storage-resourceid-resume-workflow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    workflow.then(suspendingStep).then(finalStep).commit();
+
+    workflows['storage-resourceid-resume-workflow'] = {
+      workflow,
+      mocks: { suspendingStepAction, finalStepAction },
+    };
+  }
+
   // Test: should use shouldPersistSnapshot option
   {
     const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
@@ -297,6 +337,40 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
       const runById = await (workflow as any).getWorkflowRunById(runId);
       expect(runById?.resourceId).toBe(resourceId);
     });
+
+    it.skipIf(skipTests.storageResourceIdResume || !ctx.resume)(
+      'should preserve resourceId when resuming a suspended workflow',
+      async () => {
+        const { workflow } = registry!['storage-resourceid-resume-workflow'];
+
+        const runId = `storage-resourceid-resume-test-${Date.now()}`;
+        const resourceId = 'user-789';
+
+        // Execute with resourceId - should suspend
+        const initialResult = await execute(workflow, {}, { runId, resourceId });
+        expect(initialResult.status).toBe('suspended');
+
+        // Verify resourceId before resume
+        const runBeforeResume = await (workflow as any).getWorkflowRunById(runId);
+        expect(runBeforeResume?.resourceId).toBe(resourceId);
+
+        // Resume the workflow
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          step: 'suspendingStep',
+          resumeData: { message: 'resumed with data' },
+        });
+        expect(resumeResult.status).toBe('success');
+
+        // After resume, resourceId should be preserved in storage
+        const runAfterResume = await (workflow as any).getWorkflowRunById(runId);
+        expect(runAfterResume?.resourceId).toBe(resourceId);
+
+        const { runs } = await (workflow as any).listWorkflowRuns({ resourceId });
+        expect(runs).toHaveLength(1);
+        expect(runs[0]?.resourceId).toBe(resourceId);
+      },
+    );
 
     it.skipIf(skipTests.storageFieldsFilter)(
       'should return only requested fields when fields option is specified',

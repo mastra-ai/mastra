@@ -142,6 +142,24 @@ export function createTracingTests(ctx: WorkflowTestContext, registry?: Workflow
       expect(typeof tracingContext).toBe('object');
     });
 
+    it.skipIf(skipTests.tracingTypeScript)('should provide full TypeScript support for tracingContext', () => {
+      const { createStep } = ctx;
+
+      const typedStep = createStep({
+        id: 'typed-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          expect(tracingContext).toBeDefined();
+          expect(typeof tracingContext.currentSpan).toBeDefined();
+
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      expect(typedStep).toBeDefined();
+    });
+
     it.skipIf(skipTests.tracingMultistep)('should provide tracingContext to all steps in workflow', async () => {
       const { workflow, getCapturedContexts } = registry!['tracing-multistep'];
       const result = await execute(workflow, { input: 'test' });

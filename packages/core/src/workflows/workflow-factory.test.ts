@@ -82,6 +82,10 @@ createWorkflowTestSuite({
     errorStorageRoundtrip: false,
     errorPersistWithoutStack: false,
     errorPersistMastraError: false,
+    // This test rebuilds workflow instances to simulate server restart,
+    // requiring direct Mastra registration which the shared suite can't do.
+    // The test remains in workflow.test.ts as a default-engine-specific test.
+    resumeMapBranchCondition: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -133,6 +137,9 @@ createWorkflowTestSuite({
       step: options.step as any,
       context: options.context as any,
       perStep: options.perStep,
+      inputData: options.inputData as any,
+      nestedStepsContext: options.nestedStepsContext as any,
+      resumeData: options.resumeData as any,
     });
 
     return result as WorkflowResult;

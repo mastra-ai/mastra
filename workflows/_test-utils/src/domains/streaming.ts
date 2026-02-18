@@ -1878,7 +1878,9 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
       });
 
-      it('should bubble up tripwire from agent input processor to workflow result', async () => {
+      it.skipIf(skipTests.streamingTripwireInput)(
+        'should bubble up tripwire from agent input processor to workflow result',
+        async () => {
         const { createWorkflow, createStep, Agent } = ctx;
 
         if (!Agent) {
@@ -1954,9 +1956,183 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           expect(result.tripwire.retry).toBe(true);
           expect(result.tripwire.processorId).toBe('tripwire-processor');
         }
-      });
+      },
+      );
 
-      it('should pass structured output from agent step to next step with correct types', async () => {
+      it.skipIf(skipTests.streamingTripwireStreaming)(
+        'should return tripwire status when streaming agent in workflow',
+        async () => {
+          const { createWorkflow, createStep, Agent } = ctx;
+
+          if (!Agent) {
+            return;
+          }
+
+          const tripwireProcessor = {
+            id: 'stream-tripwire-processor',
+            name: 'Stream Tripwire Processor',
+            processInput: async ({ messages, abort }: any) => {
+              const hasBlockedContent = messages.some((msg: any) =>
+                msg.content?.parts?.some((part: any) => part.type === 'text' && part.text?.includes('forbidden')),
+              );
+
+              if (hasBlockedContent) {
+                abort('Forbidden content detected', { retry: false, metadata: { type: 'forbidden' } });
+              }
+              return messages;
+            },
+          };
+
+          const mockModel = new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  controller.enqueue({
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  });
+                  controller.enqueue({ type: 'text-start', id: '1' });
+                  controller.enqueue({ type: 'text-delta', id: '1', delta: 'Hello' });
+                  controller.enqueue({ type: 'text-end', id: '1' });
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  });
+                  controller.close();
+                },
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            name: 'Stream Tripwire Agent',
+            instructions: 'You are helpful',
+            model: mockModel,
+            inputProcessors: [tripwireProcessor],
+          });
+
+          const workflow = createWorkflow({
+            id: 'stream-tripwire-workflow',
+            inputSchema: z.object({ prompt: z.string() }),
+            outputSchema: z.object({ text: z.string() }),
+          });
+
+          const agentStep = createStep(agent);
+          workflow.then(agentStep).commit();
+
+          const run = await workflow.createRun();
+
+          // Use streaming to verify workflow returns tripwire status
+          const chunks: any[] = [];
+          const streamResult = run.stream({ inputData: { prompt: 'This has forbidden content' } });
+
+          // Collect all chunks
+          for await (const chunk of streamResult.fullStream) {
+            chunks.push(chunk);
+          }
+
+          const result = await streamResult.result;
+
+          // Workflow should return tripwire status even when streaming
+          expect(result.status).toBe('tripwire');
+          if (result.status === 'tripwire') {
+            expect(result.tripwire.reason).toBe('Forbidden content detected');
+            expect(result.tripwire.retry).toBe(false);
+            expect(result.tripwire.metadata).toEqual({ type: 'forbidden' });
+            expect(result.tripwire.processorId).toBe('stream-tripwire-processor');
+          }
+        },
+      );
+
+      it.skipIf(skipTests.streamingTripwireOutputStream)(
+        'should handle tripwire from output stream processor in agent within workflow',
+        async () => {
+          const { createWorkflow, createStep, Agent } = ctx;
+
+          if (!Agent) {
+            return;
+          }
+
+          const outputStreamTripwireProcessor = {
+            id: 'output-stream-tripwire-processor',
+            name: 'Output Stream Tripwire Processor',
+            processOutputStream: async ({ part, abort }: any) => {
+              // Check if the text delta contains inappropriate content
+              if (part?.type === 'text-delta' && part?.payload?.text?.includes('inappropriate')) {
+                abort('Output contains inappropriate content', { retry: true });
+              }
+              return part;
+            },
+          };
+
+          const mockModel = new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  controller.enqueue({
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  });
+                  controller.enqueue({ type: 'text-start', id: '1' });
+                  controller.enqueue({ type: 'text-delta', id: '1', delta: 'This is inappropriate content' });
+                  controller.enqueue({ type: 'text-end', id: '1' });
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  });
+                  controller.close();
+                },
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            name: 'Output Tripwire Agent',
+            instructions: 'You are helpful',
+            model: mockModel,
+            outputProcessors: [outputStreamTripwireProcessor],
+          });
+
+          const workflow = createWorkflow({
+            id: 'output-tripwire-workflow',
+            inputSchema: z.object({ prompt: z.string() }),
+            outputSchema: z.object({ text: z.string() }),
+          });
+
+          const agentStep = createStep(agent);
+          workflow.then(agentStep).commit();
+
+          const run = await workflow.createRun();
+
+          const result = await run.start({
+            inputData: { prompt: 'Tell me something' },
+          });
+
+          // Workflow should return tripwire status
+          expect(result.status).toBe('tripwire');
+          if (result.status === 'tripwire') {
+            expect(result.tripwire.reason).toBe('Output contains inappropriate content');
+            expect(result.tripwire.retry).toBe(true);
+            expect(result.tripwire.processorId).toBe('output-stream-tripwire-processor');
+          }
+        },
+      );
+
+      it.skipIf(skipTests.schemaStructuredOutput)(
+        'should pass structured output from agent step to next step with correct types',
+        async () => {
         const { createWorkflow, createStep, Agent } = ctx;
 
         if (!Agent) {
@@ -2051,7 +2227,8 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         if (result.status === 'success') {
           expect(result.result).toEqual({ processed: true, tagCount: 2 });
         }
-      });
+      },
+      );
     });
   });
 }

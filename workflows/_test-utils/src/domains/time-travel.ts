@@ -848,6 +848,247 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should throw error if trying to timetravel a workflow execution that is still running
+  {
+    mockRegistry.register('timetravel-error-running:step1', () => vi.fn().mockResolvedValue({ step1Result: 2 }));
+    mockRegistry.register('timetravel-error-running:step2', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => ({ step2Result: inputData.step1Result + 1 })),
+    );
+    mockRegistry.register('timetravel-error-running:step3', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => ({ final: inputData.step2Result + 1 })),
+    );
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: async ctx => mockRegistry.get('timetravel-error-running:step1')(ctx),
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ step1Result: z.number() }),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      execute: async ctx => mockRegistry.get('timetravel-error-running:step2')(ctx),
+      inputSchema: z.object({ step1Result: z.number() }),
+      outputSchema: z.object({ step2Result: z.number() }),
+    });
+
+    const step3 = createStep({
+      id: 'step3',
+      execute: async ctx => mockRegistry.get('timetravel-error-running:step3')(ctx),
+      inputSchema: z.object({ step2Result: z.number() }),
+      outputSchema: z.object({ final: z.number() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'tt-error-running-workflow',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ final: z.number() }),
+      steps: [step1, step2, step3],
+    });
+
+    workflow.then(step1).then(step2).then(step3).commit();
+
+    workflows['tt-error-running-workflow'] = {
+      workflow,
+      step1,
+      step2,
+      step3,
+      mocks: {
+        get step1() {
+          return mockRegistry.get('timetravel-error-running:step1');
+        },
+        get step2() {
+          return mockRegistry.get('timetravel-error-running:step2');
+        },
+        get step3() {
+          return mockRegistry.get('timetravel-error-running:step3');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should throw error if validateInputs is true and trying to timetravel with invalid inputData
+  {
+    mockRegistry.register('timetravel-error-invalid:step1', () => vi.fn().mockResolvedValue({ step1Result: 2 }));
+    mockRegistry.register('timetravel-error-invalid:step2', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => ({ step2Result: inputData.step1Result + 1 })),
+    );
+    mockRegistry.register('timetravel-error-invalid:step3', () =>
+      vi.fn().mockImplementation(async ({ inputData }) => ({ final: inputData.step2Result + 1 })),
+    );
+
+    const step1 = createStep({
+      id: 'step1',
+      execute: async ctx => mockRegistry.get('timetravel-error-invalid:step1')(ctx),
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ step1Result: z.number() }),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      execute: async ctx => mockRegistry.get('timetravel-error-invalid:step2')(ctx),
+      inputSchema: z.object({ step1Result: z.number() }),
+      outputSchema: z.object({ step2Result: z.number() }),
+    });
+
+    const step3 = createStep({
+      id: 'step3',
+      execute: async ctx => mockRegistry.get('timetravel-error-invalid:step3')(ctx),
+      inputSchema: z.object({ step2Result: z.number() }),
+      outputSchema: z.object({ final: z.number() }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'tt-error-invalid-input-workflow',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ final: z.number() }),
+      steps: [step1, step2, step3],
+      options: {
+        validateInputs: true,
+      },
+    });
+
+    workflow.then(step1).then(step2).then(step3).commit();
+
+    workflows['tt-error-invalid-input-workflow'] = {
+      workflow,
+      step1,
+      step2,
+      step3,
+      mocks: {
+        get step1() {
+          return mockRegistry.get('timetravel-error-invalid:step1');
+        },
+        get step2() {
+          return mockRegistry.get('timetravel-error-invalid:step2');
+        },
+        get step3() {
+          return mockRegistry.get('timetravel-error-invalid:step3');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: should timetravel a suspended workflow execution
+  {
+    mockRegistry.register('timetravel-suspended-wf:getUserInput', () =>
+      vi.fn().mockResolvedValue({ userInput: 'test input' }),
+    );
+    mockRegistry.register('timetravel-suspended-wf:promptAgent', () =>
+      vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }: any) => {
+          return suspend({ testPayload: 'hello' });
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' })),
+    );
+    mockRegistry.register('timetravel-suspended-wf:evaluateTone', () =>
+      vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      }),
+    );
+    mockRegistry.register('timetravel-suspended-wf:improveResponse', () =>
+      vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }: any) => {
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ improvedOutput: 'improved output' })),
+    );
+    mockRegistry.register('timetravel-suspended-wf:evaluateImproved', () =>
+      vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      }),
+    );
+
+    const getUserInput = createStep({
+      id: 'getUserInput',
+      execute: async ctx => mockRegistry.get('timetravel-suspended-wf:getUserInput')(ctx),
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ userInput: z.string() }),
+    });
+
+    const promptAgent = createStep({
+      id: 'promptAgent',
+      execute: async ctx => mockRegistry.get('timetravel-suspended-wf:promptAgent')(ctx),
+      inputSchema: z.object({ userInput: z.string() }),
+      outputSchema: z.object({ modelOutput: z.string() }),
+      suspendSchema: z.object({ testPayload: z.string() }),
+      resumeSchema: z.object({ userInput: z.string() }),
+    });
+
+    const evaluateTone = createStep({
+      id: 'evaluateToneConsistency',
+      execute: async ctx => mockRegistry.get('timetravel-suspended-wf:evaluateTone')(ctx),
+      inputSchema: z.object({ modelOutput: z.string() }),
+      outputSchema: z.object({
+        toneScore: z.any(),
+        completenessScore: z.any(),
+      }),
+    });
+
+    const improveResponse = createStep({
+      id: 'improveResponse',
+      execute: async ctx => mockRegistry.get('timetravel-suspended-wf:improveResponse')(ctx),
+      resumeSchema: z.object({
+        toneScore: z.object({ score: z.number() }),
+        completenessScore: z.object({ score: z.number() }),
+      }),
+      inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+      outputSchema: z.object({ improvedOutput: z.string() }),
+    });
+
+    const evaluateImproved = createStep({
+      id: 'evaluateImprovedResponse',
+      execute: async ctx => mockRegistry.get('timetravel-suspended-wf:evaluateImproved')(ctx),
+      inputSchema: z.object({ improvedOutput: z.string() }),
+      outputSchema: z.object({
+        toneScore: z.any(),
+        completenessScore: z.any(),
+      }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'tt-suspended-workflow',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({}),
+    });
+
+    workflow.then(getUserInput).then(promptAgent).then(evaluateTone).then(improveResponse).then(evaluateImproved).commit();
+
+    workflows['tt-suspended-workflow'] = {
+      workflow,
+      getUserInput,
+      promptAgent,
+      evaluateTone,
+      improveResponse,
+      evaluateImproved,
+      mocks: {
+        get getUserInput() {
+          return mockRegistry.get('timetravel-suspended-wf:getUserInput');
+        },
+        get promptAgent() {
+          return mockRegistry.get('timetravel-suspended-wf:promptAgent');
+        },
+        get evaluateTone() {
+          return mockRegistry.get('timetravel-suspended-wf:evaluateTone');
+        },
+        get improveResponse() {
+          return mockRegistry.get('timetravel-suspended-wf:improveResponse');
+        },
+        get evaluateImproved() {
+          return mockRegistry.get('timetravel-suspended-wf:evaluateImproved');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -1374,6 +1615,122 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
           // Some engines throw instead
           expect(error.message).toContain('nonExistent');
         }
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelErrorRunning || !timeTravel || !ctx.getStorage)(
+      'should throw error if trying to timetravel a workflow execution that is still running',
+      async () => {
+        const { workflow, resetMocks } = registry!['tt-error-running-workflow'];
+        resetMocks?.();
+
+        const storage = ctx.getStorage!();
+        if (!storage) {
+          return;
+        }
+
+        const runId = 'tt-error-running-test-run-id';
+        const workflowsStore = await storage.getStore('workflows');
+        expect(workflowsStore).toBeDefined();
+
+        // Persist a snapshot that indicates the workflow is still running
+        await workflowsStore?.persistWorkflowSnapshot({
+          workflowName: 'tt-error-running-workflow',
+          runId,
+          snapshot: {
+            runId,
+            status: 'running',
+            activePaths: [1],
+            activeStepsPath: { step2: [1] },
+            value: {},
+            context: {
+              input: { value: 0 },
+              step1: {
+                payload: { value: 0 },
+                startedAt: Date.now(),
+                status: 'success',
+                output: { step1Result: 2 },
+                endedAt: Date.now(),
+              },
+              step2: {
+                payload: { step1Result: 2 },
+                startedAt: Date.now(),
+                status: 'running',
+              },
+            } as any,
+            serializedStepGraph: (workflow as any).serializedStepGraph as any,
+            suspendedPaths: {},
+            waitingPaths: {},
+            resumeLabels: {},
+            timestamp: Date.now(),
+          },
+        });
+
+        try {
+          const result = await timeTravel!(workflow, {
+            step: 'step2',
+            runId,
+            inputData: { step1Result: 2 },
+          });
+          // If it doesn't throw, expect failed status
+          expect(result.status).toBe('failed');
+        } catch (error: any) {
+          // Expect the error about still running
+          expect(error.message).toContain('still running');
+        }
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelErrorInvalidInput || !timeTravel)(
+      'should throw error if validateInputs is true and trying to timetravel with invalid inputData',
+      async () => {
+        const { workflow, resetMocks } = registry!['tt-error-invalid-input-workflow'];
+        resetMocks?.();
+
+        try {
+          const result = await timeTravel!(workflow, {
+            step: 'step2',
+            inputData: { invalidPayload: 2 },
+          });
+          // If it doesn't throw, expect failed status
+          expect(result.status).toBe('failed');
+        } catch (error: any) {
+          // Expect validation error about missing step1Result
+          expect(error.message).toContain('step1Result');
+        }
+      },
+    );
+
+    it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
+      'should timetravel a suspended workflow execution',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['tt-suspended-workflow'];
+        resetMocks?.();
+
+        const runId = `tt-suspended-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // First, run the workflow normally - it should suspend at promptAgent
+        const result1 = await ctx.execute(workflow, { input: 'test input' }, { runId });
+        expect(result1.steps['promptAgent']?.status).toBe('suspended');
+        expect(mocks.promptAgent).toHaveBeenCalledTimes(1);
+
+        // Now time travel from getUserInput step on the SAME run - this should re-run from that point
+        const timeTravelResult = await timeTravel!(workflow, {
+          step: 'getUserInput',
+          runId,
+          resumeData: {
+            userInput: 'test input for resumption',
+          },
+        });
+
+        // The workflow should hit the second suspend (improveResponse) after successfully
+        // resuming promptAgent via time travel
+        expect(['paused', 'suspended']).toContain(timeTravelResult.status);
+
+        // getUserInput should have been called again (we're time-traveling from that step)
+        expect(mocks.getUserInput).toHaveBeenCalledTimes(2);
+        // promptAgent should have been called again
+        expect(mocks.promptAgent).toHaveBeenCalledTimes(2);
       },
     );
   });
