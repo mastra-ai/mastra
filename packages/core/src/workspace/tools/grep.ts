@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { isTextFile } from '../filesystem/fs-utils';
 import type { GlobMatcher } from '../glob';
-import { createGlobMatcher } from '../glob';
+import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 
 export const grepTool = createTool({
@@ -13,7 +13,9 @@ export const grepTool = createTool({
 Usage:
 - Basic search: { pattern: "TODO" }
 - Case-insensitive: { pattern: "error", caseSensitive: false }
-- Filter by glob: { pattern: "import", glob: "**/*.ts" }
+- Search in directory: { pattern: "import", path: "./src" }
+- Filter by glob: { pattern: "import", path: "**/*.ts" }
+- Combined path + glob: { pattern: "import", path: "src/**/*.ts" }
 - With context: { pattern: "function", contextLines: 2 }
 - Use contextLines to see surrounding code for each match`,
   inputSchema: z.object({
@@ -21,22 +23,23 @@ Usage:
     path: z
       .string()
       .optional()
-      .default('/')
-      .describe('File or directory to search within (default: "/"). If a file path, searches that file only.'),
-    glob: z
-      .string()
-      .optional()
-      .describe('Glob pattern to filter files (e.g., "**/*.ts", "*.{js,jsx}", "src/**/*.test.ts")'),
+      .default('./')
+      .describe(
+        'File, directory, or glob pattern to search within (default: "./"). ' +
+          'A plain path searches that file or directory. ' +
+          'A glob pattern (e.g., "**/*.ts", "src/**/*.test.ts") filters which files to search.',
+      ),
     contextLines: z
       .number()
       .optional()
       .default(0)
       .describe('Number of lines of context to include before and after each match (default: 0)'),
-    maxResults: z
+    maxCount: z
       .number()
       .optional()
-      .default(100)
-      .describe('Maximum number of matching lines to return (default: 100)'),
+      .describe(
+        'Maximum matches per file. Moves on to the next file after this many matches. Similar to grep -m flag.',
+      ),
     caseSensitive: z
       .boolean()
       .optional()
@@ -49,15 +52,7 @@ Usage:
       .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
   }),
   execute: async (
-    {
-      pattern,
-      path: searchPath = '/',
-      glob: globPattern,
-      contextLines = 0,
-      maxResults = 100,
-      caseSensitive = true,
-      includeHidden = false,
-    },
+    { pattern, path: inputPath = './', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
     context,
   ) => {
     const { filesystem } = requireFilesystem(context);
@@ -77,10 +72,16 @@ Usage:
       return `Error: Invalid regex pattern: ${(e as Error).message}`;
     }
 
-    // Compile glob matcher if provided
+    // Determine search root and glob filter from the combined path parameter
+    let searchPath: string;
     let globMatcher: GlobMatcher | undefined;
-    if (globPattern) {
-      globMatcher = createGlobMatcher(globPattern, { dot: includeHidden });
+
+    if (isGlobPattern(inputPath)) {
+      // Path contains glob characters — extract the static base as search root
+      searchPath = extractGlobBase(inputPath);
+      globMatcher = createGlobMatcher(inputPath, { dot: includeHidden });
+    } else {
+      searchPath = inputPath;
     }
 
     // Collect files to search
@@ -129,9 +130,10 @@ Usage:
 
     const outputLines: string[] = [];
     const filesWithMatches = new Set<string>();
-    let matchCount = 0;
+    let totalMatchCount = 0;
     let truncated = false;
     const MAX_LINE_LENGTH = 500;
+    const GLOBAL_CAP = 1000;
 
     for (const filePath of filePaths) {
       if (truncated) break;
@@ -146,6 +148,7 @@ Usage:
       }
 
       const lines = content.split('\n');
+      let fileMatchCount = 0;
 
       for (let i = 0; i < lines.length; i++) {
         const currentLine = lines[i]!;
@@ -182,9 +185,14 @@ Usage:
           outputLines.push('--');
         }
 
-        matchCount++;
+        totalMatchCount++;
+        fileMatchCount++;
 
-        if (matchCount >= maxResults) {
+        // Per-file limit (like grep -m)
+        if (maxCount !== undefined && fileMatchCount >= maxCount) break;
+
+        // Global cap to protect context window
+        if (totalMatchCount >= GLOBAL_CAP) {
           truncated = true;
           break;
         }
@@ -193,10 +201,10 @@ Usage:
 
     // Summary line
     outputLines.push('---');
-    const parts = [`${matchCount} match${matchCount !== 1 ? 'es' : ''}`];
+    const parts = [`${totalMatchCount} match${totalMatchCount !== 1 ? 'es' : ''}`];
     parts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
     if (truncated) {
-      parts.push(`(truncated at ${maxResults})`);
+      parts.push(`(truncated at ${GLOBAL_CAP})`);
     }
     outputLines.push(parts.join(' '));
 

@@ -86,7 +86,7 @@ describe('workspace_grep', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match',
-      glob: '*.ts',
+      path: '*.ts',
     });
 
     expect(result).toContain('1 match across 1 file');
@@ -114,7 +114,7 @@ describe('workspace_grep', () => {
     expect(result).toContain('ctx.ts:5- line5');
   });
 
-  it('should truncate at maxResults', async () => {
+  it('should limit matches per file with maxCount', async () => {
     const lines = Array.from({ length: 200 }, (_, i) => `match_${i}`).join('\n');
     await fs.writeFile(path.join(tempDir, 'big.ts'), lines);
     const workspace = new Workspace({
@@ -124,11 +124,27 @@ describe('workspace_grep', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match_',
-      maxResults: 10,
+      maxCount: 10,
     });
 
     expect(result).toContain('10 matches across 1 file');
-    expect(result).toContain('(truncated at 10)');
+  });
+
+  it('should apply maxCount per file not globally', async () => {
+    await fs.writeFile(path.join(tempDir, 'a.ts'), 'hit\nhit\nhit\nhit\nhit');
+    await fs.writeFile(path.join(tempDir, 'b.ts'), 'hit\nhit\nhit\nhit\nhit');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
+      pattern: 'hit',
+      maxCount: 2,
+    });
+
+    // 2 per file × 2 files = 4 total
+    expect(result).toContain('4 matches across 2 files');
   });
 
   it('should return error for invalid regex', async () => {
@@ -169,7 +185,7 @@ describe('workspace_grep', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match',
-      glob: '**/*.ts',
+      path: '**/*.ts',
     });
 
     expect(result).toContain('2 matches across 2 files');
@@ -187,7 +203,7 @@ describe('workspace_grep', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match',
-      glob: '*.{ts,js}',
+      path: '*.{ts,js}',
     });
 
     expect(result).toContain('2 matches across 2 files');
@@ -320,7 +336,7 @@ describe('workspace_grep', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'hidden',
-      glob: '.*rc.json',
+      path: '.*rc.json',
       includeHidden: true,
     });
 
