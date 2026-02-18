@@ -1,5 +1,5 @@
 import type { HonoRequest } from 'hono';
-import type { EEUser, IUserProvider, ICredentialsProvider, CredentialsResult } from '../auth';
+import type { CredentialsResult } from '../auth';
 import type { MastraAuthProviderOptions } from './auth';
 import { MastraAuthProvider } from './auth';
 
@@ -19,10 +19,7 @@ export interface SimpleAuthOptions<TUser> extends MastraAuthProviderOptions<TUse
   headers?: string | string[];
 }
 
-export class SimpleAuth<TUser extends EEUser>
-  extends MastraAuthProvider<TUser>
-  implements IUserProvider<TUser>, ICredentialsProvider<TUser>
-{
+export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
   /**
    * Marker to exempt SimpleAuth from EE license requirement.
    * SimpleAuth is for development/testing and should work without a license.
@@ -39,7 +36,7 @@ export class SimpleAuth<TUser extends EEUser>
     this.tokens = options.tokens;
     this.users = Object.values(this.tokens);
     this.headers = [...DEFAULT_HEADERS].concat(options.headers || []);
-    this.userById = new Map(this.users.map(u => [u.id, u]));
+    this.userById = new Map(this.users.map(u => [String((u as any)?.id), u]));
   }
 
   async authenticateToken(token: string, request: HonoRequest): Promise<TUser | null> {
@@ -74,10 +71,7 @@ export class SimpleAuth<TUser extends EEUser>
     return this.users.includes(user);
   }
 
-  /**
-   * Get current user from request headers or cookie.
-   * Implements IUserProvider for EE user awareness.
-   */
+  /** Get current user from request headers or cookie. */
   async getCurrentUser(request: Request): Promise<TUser | null> {
     // Check headers first
     for (const headerName of this.headers) {
@@ -109,10 +103,7 @@ export class SimpleAuth<TUser extends EEUser>
     return null;
   }
 
-  /**
-   * Get user by ID.
-   * Implements IUserProvider for EE user awareness.
-   */
+  /** Get user by ID. */
   async getUser(userId: string): Promise<TUser | null> {
     return this.userById.get(userId) ?? null;
   }
@@ -120,7 +111,6 @@ export class SimpleAuth<TUser extends EEUser>
   /**
    * Sign in with token (passed as password field).
    * The email field is ignored - only the token matters.
-   * Implements ICredentialsProvider.
    */
   async signIn(_email: string, password: string, _request: Request): Promise<CredentialsResult<TUser>> {
     const token = password;
@@ -140,18 +130,10 @@ export class SimpleAuth<TUser extends EEUser>
     };
   }
 
-  /**
-   * Sign up is disabled for SimpleAuth.
-   * Implements ICredentialsProvider.
-   */
   async signUp(): Promise<CredentialsResult<TUser>> {
     throw new Error('Sign up is not supported with SimpleAuth. Use pre-configured tokens.');
   }
 
-  /**
-   * Sign up is disabled for SimpleAuth.
-   * Implements ICredentialsProvider.
-   */
   isSignUpEnabled(): boolean {
     return false;
   }
