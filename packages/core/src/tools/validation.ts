@@ -137,8 +137,8 @@ export function validateToolSuspendData<T = unknown>(
   suspendData: unknown,
   toolId?: string,
 ): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
-  // If no schema, return suspend data as-is
-  if (!schema) {
+  // If no schema, or schema is not a Standard Schema, return suspend data as-is
+  if (!schema || !('~standard' in schema)) {
     return { data: suspendData as T };
   }
 
@@ -380,8 +380,9 @@ export function validateToolInput<T = unknown>(
   input: unknown,
   toolId?: string,
 ): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
-  // If no schema, return input as-is
-  if (!schema) {
+  // If no schema, or schema is not a Standard Schema (e.g. plain JSON Schema from Vercel tools),
+  // return input as-is. Only validate when we have a proper Standard Schema with ~standard.validate.
+  if (!schema || !('~standard' in schema)) {
     return { data: input as T };
   }
 
@@ -469,8 +470,8 @@ export function validateToolOutput<T = unknown>(
   toolId?: string,
   suspendCalled?: boolean,
 ): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
-  // If no schema, return output as-is
-  if (!schema || suspendCalled) {
+  // If no schema, not a Standard Schema, or suspend was called, return output as-is
+  if (!schema || !('~standard' in schema) || suspendCalled) {
     return { data: output as T };
   }
 
