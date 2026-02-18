@@ -203,32 +203,62 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               await processAndEnqueueChunk(chunk);
             }
 
-            const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
-            const successMessage: MastraDBMessage = {
-              id: successMessageId || '',
-              role: 'assistant' as const,
-              content: {
-                format: 2,
-                parts: await Promise.all(
-                  successfulResults.map(async toolCall => {
-                    const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
-                    return {
-                      type: 'tool-invocation' as const,
-                      toolInvocation: {
-                        state: 'result' as const,
-                        toolCallId: toolCall.toolCallId,
-                        toolName: toolCall.toolName,
-                        args: toolCall.args,
-                        result: toolCall.result,
-                      },
-                      ...(providerMetadata ? { providerMetadata } : {}),
-                    };
-                  }),
-                ),
-              },
-              createdAt: new Date(),
-            };
-            rest.messageList.add(successMessage, 'response');
+            // Split client-executed and provider-executed tools the same way as the main path
+            const clientResults = successfulResults.filter(tc => !tc.providerExecuted);
+            if (clientResults.length > 0) {
+              const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+              const successMessage: MastraDBMessage = {
+                id: successMessageId || '',
+                role: 'assistant' as const,
+                content: {
+                  format: 2,
+                  parts: await Promise.all(
+                    clientResults.map(async toolCall => {
+                      const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
+                      return {
+                        type: 'tool-invocation' as const,
+                        toolInvocation: {
+                          state: 'result' as const,
+                          toolCallId: toolCall.toolCallId,
+                          toolName: toolCall.toolName,
+                          args: toolCall.args,
+                          result: toolCall.result,
+                        },
+                        ...(providerMetadata ? { providerMetadata } : {}),
+                      };
+                    }),
+                  ),
+                },
+                createdAt: new Date(),
+              };
+              rest.messageList.add(successMessage, 'response');
+            }
+
+            if (successfulResults.some(tc => tc.providerExecuted)) {
+              const providerResults = successfulResults.filter(tc => tc.providerExecuted);
+              const providerMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
+              const providerMessage: MastraDBMessage = {
+                id: providerMessageId || '',
+                role: 'assistant' as const,
+                content: {
+                  format: 2,
+                  parts: providerResults.map(toolCall => ({
+                    type: 'tool-invocation' as const,
+                    toolInvocation: {
+                      state: 'result' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      args: toolCall.args,
+                      result: toolCall.result,
+                    },
+                    ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                    providerExecuted: true as const,
+                  })),
+                },
+                createdAt: new Date(),
+              };
+              rest.messageList.add(providerMessage, 'response');
+            }
           }
 
           // Continue the loop — the error messages are already in the messageList,
