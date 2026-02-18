@@ -3,7 +3,8 @@ import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
 import { validateAndSaveScore } from '../../mastra/hooks';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
 import type { AnyWorkflow, WorkflowResult, StepResult } from '../../workflows';
@@ -18,8 +19,7 @@ type RunEvalsDataItem<TTarget = unknown> = {
       : unknown;
   groundTruth?: any;
   requestContext?: RequestContext;
-  tracingContext?: TracingContext;
-};
+} & Partial<ObservabilityContext>;
 
 type WorkflowScorerConfig = {
   workflow?: MastraScorer<any, any, any, any>[];
@@ -227,10 +227,12 @@ async function executeTarget(target: Agent | Workflow, item: RunEvalsDataItem<an
 }
 
 async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
+  const observabilityContext = resolveObservabilityContext(item);
   const run = await target.createRun({ disableScorers: true });
   const workflowResult = await run.start({
     inputData: item.input,
     requestContext: item.requestContext,
+    ...observabilityContext,
   });
 
   return {
@@ -243,18 +245,21 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
 }
 
 async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
+  const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
   if (isSupportedLanguageModel(model)) {
     return await agent.generate(item.input as any, {
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
+      ...observabilityContext,
     });
   } else {
     return await agent.generateLegacy(item.input as any, {
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
+      ...observabilityContext,
     });
   }
 }
@@ -274,7 +279,7 @@ async function runScorers(
           output: targetResult.scoringData?.output,
           groundTruth: item.groundTruth,
           requestContext: item.requestContext,
-          tracingContext: item.tracingContext,
+          ...resolveObservabilityContext(item),
         });
 
         scorerResults[scorer.id] = score;
@@ -304,7 +309,7 @@ async function runScorers(
           output: targetResult.scoringData.output,
           groundTruth: item.groundTruth,
           requestContext: item.requestContext,
-          tracingContext: item.tracingContext,
+          ...resolveObservabilityContext(item),
         });
         workflowScorerResults[scorer.id] = score;
       }
@@ -326,7 +331,7 @@ async function runScorers(
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
                 requestContext: item.requestContext,
-                tracingContext: item.tracingContext,
+                ...resolveObservabilityContext(item),
               });
               stepResults[scorer.id] = score;
             } catch (error) {

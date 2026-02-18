@@ -6,7 +6,7 @@ import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
 import type { DataChunkType } from '../stream/types';
@@ -30,15 +30,13 @@ export interface ProcessorStreamWriter {
 /**
  * Base context shared by all processor methods
  */
-export interface ProcessorContext<TTripwireMetadata = unknown> {
+export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<ObservabilityContext> {
   /**
    * Function to abort processing with an optional reason and options.
    * @param reason - The reason for aborting
    * @param options - Options including retry flag and metadata
    */
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
-  /** Optional tracing context for observability */
-  tracingContext?: TracingContext;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
   /**
