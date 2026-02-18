@@ -1,4 +1,5 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -6,6 +7,7 @@ import { RequestContext } from '../../request-context';
 import { MockProvider } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { makeCoreTool } from '../../utils';
+import { MastraLLMV1 } from './model';
 
 describe('MastraLLM', () => {
   const mockMastra = {
@@ -743,6 +745,79 @@ describe('MastraLLM', () => {
       });
 
       expect(streamSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('error logging', () => {
+    const errorLogger = {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    } as any;
+
+    function createErrorLLM() {
+      const errorModel = new MockLanguageModelV1({
+        doGenerate: async () => {
+          throw new Error('input too long');
+        },
+        doStream: async () => {
+          throw new Error('input too long');
+        },
+      });
+
+      const llm = new MastraLLMV1({ model: errorModel });
+      llm.__registerPrimitives({ logger: errorLogger } as any);
+      return llm;
+    }
+
+    it('should log errors through Mastra logger when generateText fails', async () => {
+      errorLogger.error.mockClear();
+      const llm = createErrorLLM();
+      const messages: CoreMessage[] = [{ role: 'user', content: 'test' }];
+
+      await expect(
+        llm.__text({
+          messages,
+          requestContext: new RequestContext(),
+          tracingContext: {},
+        }),
+      ).rejects.toThrow();
+
+      expect(errorLogger.error).toHaveBeenCalledWith(
+        '[LLM] - Generate text failed',
+        expect.objectContaining({
+          runId: undefined,
+          modelId: expect.any(String),
+          modelProvider: expect.any(String),
+        }),
+      );
+    });
+
+    it('should log errors through Mastra logger when generateObject fails', async () => {
+      errorLogger.error.mockClear();
+      const llm = createErrorLLM();
+      const messages: CoreMessage[] = [{ role: 'user', content: 'test' }];
+      const schema = z.object({ content: z.string() }) as z.ZodType<any>;
+
+      await expect(
+        llm.__textObject({
+          messages,
+          structuredOutput: schema,
+          requestContext: new RequestContext(),
+          tracingContext: {},
+        }),
+      ).rejects.toThrow();
+
+      expect(errorLogger.error).toHaveBeenCalledWith(
+        '[LLM] - Generate object failed',
+        expect.objectContaining({
+          runId: undefined,
+          modelId: expect.any(String),
+          modelProvider: expect.any(String),
+        }),
+      );
     });
   });
 });
