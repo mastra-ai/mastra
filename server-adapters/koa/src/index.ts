@@ -108,7 +108,11 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       req: {
         path: ctx.path,
         method: ctx.method,
-        header: (name: string) => ctx.headers[name.toLowerCase()] as string | undefined,
+        header: (name: string) => {
+          const value = ctx.headers[name.toLowerCase()];
+          if (Array.isArray(value)) return value.join(', ');
+          return value;
+        },
         url: ctx.url,
       },
     };
