@@ -177,8 +177,7 @@ export const SandboxExecutionBadge = ({
   // Sandbox stdout/stderr chunks scoped to this tool call
   const sandboxChunks = dataParts.filter(
     chunk =>
-      (chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr') &&
-      chunk.data?.toolCallId === toolCallId,
+      (chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr') && chunk.data?.toolCallId === toolCallId,
   );
 
   // Workspace metadata emitted first — contains workspace/sandbox info
@@ -186,9 +185,9 @@ export const SandboxExecutionBadge = ({
   const execMeta = workspaceMetaPart?.data as WorkspaceMetadata | undefined;
 
   // Exit chunk scoped to this tool call
-  const exitChunk = dataParts.find(
-    chunk => chunk.name === 'sandbox-exit' && chunk.data?.toolCallId === toolCallId,
-  ) as { name: string; data: { exitCode: number; success: boolean; executionTimeMs: number } } | undefined;
+  const exitChunk = dataParts.find(chunk => chunk.name === 'sandbox-exit' && chunk.data?.toolCallId === toolCallId) as
+    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs: number } }
+    | undefined;
 
   // Streaming is complete if we have exit chunk or a final result
   const isStreamingComplete = !!exitChunk || typeof result === 'string';
