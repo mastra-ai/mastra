@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Show Datasets nav link without requiring EXPERIMENTAL_FEATURES flag
+Removed experimental gate that hid the Datasets navigation link in the studio sidebar
