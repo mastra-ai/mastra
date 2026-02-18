@@ -75,6 +75,10 @@ export class OtelExporter extends BaseExporter {
   // Provider config resolution (shared across all signals)
   // ===========================================================================
 
+  private get isDebug(): boolean {
+    return this.config.logLevel === 'debug';
+  }
+
   private resolveProvider(): ResolvedProviderConfig | null {
     if (this.resolvedConfig !== undefined) {
       return this.resolvedConfig;
@@ -89,7 +93,7 @@ export class OtelExporter extends BaseExporter {
     }
 
     this.providerName = Object.keys(this.config.provider)[0];
-    const resolved = resolveProviderConfig(this.config.provider);
+    const resolved = resolveProviderConfig(this.config.provider, this.isDebug);
     if (!resolved) {
       this.setDisabled('[OtelExporter] Provider configuration validation failed.');
       this.resolvedConfig = null;
@@ -148,6 +152,10 @@ export class OtelExporter extends BaseExporter {
     const headers = resolved.headers;
     const protocol = resolved.protocol;
 
+    if (this.isDebug) {
+      this.logger.debug(`[OtelExporter] Setting up trace exporter: protocol=${protocol}, endpoint=${endpoint}`);
+    }
+
     // Load and create the appropriate exporter based on protocol
     const ExporterClass = await loadExporter(protocol, this.providerName);
 
@@ -202,6 +210,12 @@ export class OtelExporter extends BaseExporter {
       this.logger.error('[OtelExporter] Exporter creation error details:', error);
       this.isSetup = true;
       return;
+    }
+
+    if (this.isDebug) {
+      this.logger.debug(
+        `[OtelExporter] Trace exporter created successfully: ${this.exporter?.constructor?.name ?? 'unknown'} -> ${endpoint}`,
+      );
     }
   }
 
@@ -276,6 +290,10 @@ export class OtelExporter extends BaseExporter {
 
       const logEndpoint = this.getSignalEndpoint(resolved, 'logs');
       const headers = resolved.headers;
+
+      if (this.isDebug) {
+        this.logger.debug(`[OtelExporter] Setting up log exporter: protocol=${protocol}, endpoint=${logEndpoint}`);
+      }
 
       // Create the log exporter
       let logExporter: any;
@@ -373,6 +391,12 @@ export class OtelExporter extends BaseExporter {
 
       const metricEndpoint = this.getSignalEndpoint(resolved, 'metrics');
       const headers = resolved.headers;
+
+      if (this.isDebug) {
+        this.logger.debug(
+          `[OtelExporter] Setting up metric exporter: protocol=${protocol}, endpoint=${metricEndpoint}`,
+        );
+      }
 
       // Create the metric exporter
       let metricExporter: any;
@@ -549,20 +573,29 @@ export class OtelExporter extends BaseExporter {
    */
   async flush(): Promise<void> {
     const flushPromises: Promise<void>[] = [];
+    const signals: string[] = [];
 
     if (this.processor) {
       flushPromises.push(this.processor.forceFlush());
+      signals.push('traces');
     }
     if (this.loggerProvider) {
       flushPromises.push(this.loggerProvider.forceFlush());
+      signals.push('logs');
     }
     if (this.meterProvider) {
       flushPromises.push(this.meterProvider.forceFlush());
+      signals.push('metrics');
     }
 
     if (flushPromises.length > 0) {
+      if (this.isDebug) {
+        this.logger.debug(`[OtelExporter] Flushing signals: ${signals.join(', ')}...`);
+      }
       await Promise.all(flushPromises);
       this.logger.debug('[OtelExporter] Flushed all pending data');
+    } else if (this.isDebug) {
+      this.logger.debug('[OtelExporter] Flush called but no active exporters');
     }
   }
 
