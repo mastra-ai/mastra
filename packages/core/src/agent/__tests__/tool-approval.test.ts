@@ -3,9 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
+import { SkillsProcessor } from '../../processors/processors/skills';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
+import type { Workspace } from '../../workspace';
+import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import { Agent } from '../agent';
 import { convertArrayToReadableStream, getOpenAIModel, MockLanguageModelV2 } from './mock-model';
 
@@ -528,6 +531,124 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(mockFindUser).toHaveBeenCalled();
         expect((toolCall?.result as any)?.name).toBe('Dero Israel');
       }, 500000);
+
+      it('should not require approval for skill tools when requireToolApproval is true', async () => {
+        const mockSkill: Skill = {
+          name: 'test-skill',
+          description: 'A test skill',
+          instructions: '# Test Skill\n\nTest instructions.',
+          path: '/skills/test-skill',
+          source: { type: 'local', projectPath: '/skills/test-skill' },
+          references: [],
+          scripts: [],
+          assets: [],
+        };
+        const mockSkillMetadata: SkillMetadata = {
+          name: mockSkill.name,
+          description: mockSkill.description,
+        };
+        const mockWorkspaceSkills: WorkspaceSkills = {
+          list: vi.fn().mockResolvedValue([mockSkillMetadata]),
+          get: vi.fn().mockResolvedValue(mockSkill),
+          has: vi.fn().mockResolvedValue(true),
+          refresh: vi.fn().mockResolvedValue(undefined),
+          maybeRefresh: vi.fn().mockResolvedValue(undefined),
+          search: vi.fn().mockResolvedValue([]),
+          create: vi.fn(),
+          update: vi.fn(),
+          delete: vi.fn(),
+          getReference: vi.fn().mockResolvedValue(null),
+          getScript: vi.fn().mockResolvedValue(null),
+          getAsset: vi.fn().mockResolvedValue(null),
+          listReferences: vi.fn().mockResolvedValue([]),
+          listScripts: vi.fn().mockResolvedValue([]),
+          listAssets: vi.fn().mockResolvedValue([]),
+        };
+        const mockWorkspace = { skills: mockWorkspaceSkills } as unknown as Workspace;
+
+        let callCount = 0;
+        const mockModel = new MockLanguageModelV2({
+          doStream: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-skill-1',
+                    toolName: 'skill-activate',
+                    input: '{"name":"test-skill"}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Skill activated successfully' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          },
+        });
+
+        const skillsProcessor = new SkillsProcessor({ workspace: mockWorkspace });
+
+        const userAgent = new Agent({
+          id: 'skill-approval-agent',
+          name: 'Skill Approval Agent',
+          instructions: 'You are an agent with skills.',
+          model: mockModel,
+          inputProcessors: [skillsProcessor],
+        });
+
+        const mastra = new Mastra({
+          agents: { userAgent },
+          logger: false,
+          storage: mockStorage,
+        });
+
+        const agentOne = mastra.getAgent('userAgent');
+
+        const stream = await agentOne.stream('Activate the test skill', {
+          requireToolApproval: true,
+        });
+
+        let hasApprovalChunk = false;
+        let hasToolResult = false;
+        for await (const chunk of stream.fullStream) {
+          if (chunk.type === 'tool-call-approval') {
+            hasApprovalChunk = true;
+          }
+          if (chunk.type === 'tool-result') {
+            hasToolResult = true;
+          }
+        }
+
+        // Skill tools should NOT trigger approval
+        expect(hasApprovalChunk).toBe(false);
+        // Skill tool should execute directly
+        expect(hasToolResult).toBe(true);
+      }, 15000);
 
       it('should call findUserTool with requireToolApproval and decline via generate', async () => {
         mockFindUser.mockClear();

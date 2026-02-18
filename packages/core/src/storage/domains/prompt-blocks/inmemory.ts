@@ -92,13 +92,7 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
     }
 
     // Separate metadata fields from config fields
-    const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-
-    // Config field names from StoragePromptBlockSnapshotType
-    const configFieldNames = ['name', 'description', 'content', 'rules'];
-
-    // Check if any config fields are present in the update
-    const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+    const { authorId, activeVersionId, metadata, status } = updates;
 
     // Update metadata fields on the block record
     const updatedBlock: StoragePromptBlockType = {
@@ -111,60 +105,6 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
       }),
       updatedAt: new Date(),
     };
-
-    // If activeVersionId is set, mark as published
-    if (activeVersionId !== undefined) {
-      updatedBlock.status = 'published';
-    }
-
-    // If config fields are being updated, create a new version
-    if (hasConfigUpdate) {
-      // Get the latest version to use as base
-      const latestVersion = await this.getLatestVersion(id);
-      if (!latestVersion) {
-        throw new Error(`No versions found for prompt block ${id}`);
-      }
-
-      // Extract config from latest version
-      const {
-        id: _versionId,
-        blockId: _blockId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...latestConfig
-      } = latestVersion;
-
-      // Merge updates into latest config
-      const newConfig = {
-        ...latestConfig,
-        ...configFields,
-      };
-
-      // Identify which fields changed
-      const changedFields = configFieldNames.filter(
-        field =>
-          field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-      );
-
-      // Only create a new version if something actually changed
-      if (changedFields.length > 0) {
-        const newVersionId = crypto.randomUUID();
-        const newVersionNumber = latestVersion.versionNumber + 1;
-
-        await this.createVersion({
-          id: newVersionId,
-          blockId: id,
-          versionNumber: newVersionNumber,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
-      }
-    }
 
     // Save the updated block record
     this.db.promptBlocks.set(id, updatedBlock);
@@ -180,7 +120,7 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
   }
 
   async list(args?: StorageListPromptBlocksInput): Promise<StorageListPromptBlocksOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryPromptBlocksStorage: list called`);
@@ -200,6 +140,9 @@ export class InMemoryPromptBlocksStorage extends PromptBlocksStorage {
 
     // Get all blocks and apply filters
     let blocks = Array.from(this.db.promptBlocks.values());
+
+    // Filter by status
+    blocks = blocks.filter(block => block.status === status);
 
     // Filter by authorId if provided
     if (authorId !== undefined) {
