@@ -1,11 +1,12 @@
 /**
  * Glob tool — fast file pattern matching.
  */
+import * as fs from "node:fs"
+import * as path from "node:path"
+
 import { createTool } from "@mastra/core/tools"
-import { z } from "zod/v3"
 import { execa } from "execa"
-import * as path from "path"
-import * as fs from "fs"
+import { z } from "zod/v3"
 import { truncateStringForTokenEstimate } from "../utils/token-estimator.js"
 import { assertPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 

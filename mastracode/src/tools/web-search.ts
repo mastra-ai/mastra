@@ -1,6 +1,6 @@
 import { createTool } from "@mastra/core/tools"
-import { z } from "zod"
 import { tavily } from "@tavily/core"
+import { z } from "zod"
 
 const MIN_RELEVANCE_SCORE = 0.25
 
@@ -90,7 +90,7 @@ export function createWebSearchTool() {
 						.filter(Boolean),
 					answer: response.answer,
 				}
-			} catch (error) {
+			} catch {
 				return {
 					results: [],
 					images: [],

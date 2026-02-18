@@ -7,16 +7,17 @@
 import {
 	Box,
 	Container,
-	type Focusable,
+	
 	getEditorKeybindings,
 	Input,
 	Markdown,
 	SelectList,
-	type SelectItem,
+	
 	Spacer,
-	Text,
-	type TUI,
+	Text
+	
 } from "@mariozechner/pi-tui"
+import type {Focusable, SelectItem, TUI} from "@mariozechner/pi-tui";
 import { theme, getSelectListTheme, getMarkdownTheme } from "../theme.js"
 
 export interface PlanApprovalInlineOptions {

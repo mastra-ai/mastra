@@ -1,8 +1,8 @@
+import { readFileSync, writeFileSync } from "node:fs"
+import { resolve } from "node:path"
+import { parse, Lang } from "@ast-grep/napi"
 import { createTool } from "@mastra/core/tools"
 import { z } from "zod/v3"
-import { parse, Lang } from "@ast-grep/napi"
-import { readFileSync, writeFileSync } from "fs"
-import { resolve } from "path"
 import { assertPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 
 // Get the project root from the working directory
@@ -487,7 +487,7 @@ function patternReplace(
 			modifiedContent =
 				modifiedContent.slice(0, start) + text + modifiedContent.slice(end)
 		}
-	} catch (error) {
+	} catch {
 		// Fallback to simple string replacement if pattern matching fails
 		const regex = new RegExp(pattern.replace(/\$\w+/g, "(.+)"), "g")
 		modifiedContent = content.replace(regex, replacement)

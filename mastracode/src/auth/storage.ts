@@ -10,13 +10,16 @@ import {
 	readFileSync,
 	writeFileSync,
 	chmodSync,
-} from "fs"
-import { dirname, join } from "path"
+} from "node:fs"
+import { dirname, join } from "node:path"
 import { getAppDataDir } from "../utils/project.js"
+
+// Provider registry
+import { anthropicOAuthProvider } from "./providers/anthropic.js"
+import { openaiCodexOAuthProvider } from "./providers/openai-codex.js"
 import type {
 	AuthCredential,
 	AuthStorageData,
-	OAuthCredentials,
 	OAuthLoginCallbacks,
 	OAuthProviderId,
 	OAuthProviderInterface,
@@ -30,10 +33,6 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
 	anthropic: "anthropic/claude-opus-4-6",
 	"openai-codex": "openai/gpt-5.3-codex",
 }
-
-// Provider registry
-import { anthropicOAuthProvider } from "./providers/anthropic.js"
-import { openaiCodexOAuthProvider } from "./providers/openai-codex.js"
 
 const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
 	[anthropicOAuthProvider.id, anthropicOAuthProvider],

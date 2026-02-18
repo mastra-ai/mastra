@@ -7,6 +7,26 @@ import { Workspace } from "@mastra/core/workspace"
 import type { WorkspaceConfig } from "@mastra/core/workspace"
 import type { z } from "zod"
 
+import {
+	AuthStorage,
+	getOAuthProviders
+	
+	
+} from "../auth/index.js"
+import type {OAuthProviderInterface, OAuthLoginCallbacks} from "../auth/index.js";
+import type { HookManager } from "../hooks/index.js"
+import type { MCPManager } from "../mcp/index.js"
+import {
+
+
+	SessionGrants,
+	resolveApproval,
+	createDefaultRules,
+	getToolCategory
+} from "../permissions.js"
+import type {PermissionRules, ToolCategory} from "../permissions.js";
+import { parseError  } from "../utils/errors.js"
+import { acquireThreadLock, releaseThreadLock } from "../utils/thread-lock.js"
 import type {
 	HarnessConfig,
 	HarnessEvent,
@@ -19,22 +39,6 @@ import type {
 	HarnessStateSchema,
 	HarnessThread,
 } from "./types"
-import {
-	AuthStorage,
-	getOAuthProviders,
-	type OAuthProviderInterface,
-	type OAuthLoginCallbacks,
-} from "../auth/index.js"
-import { parseError, type ParsedError } from "../utils/errors.js"
-import { acquireThreadLock, releaseThreadLock } from "../utils/thread-lock.js"
-import {
-	type PermissionRules,
-	type ToolCategory,
-	SessionGrants,
-	resolveApproval,
-	createDefaultRules,
-	getToolCategory,
-} from "../permissions.js"
 
 // =============================================================================
 /**
@@ -132,8 +136,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		| null = null
 	private workspace: Workspace | undefined = undefined
 	private workspaceInitialized = false
-	private hookManager: import("../hooks/index.js").HookManager | undefined
-	private mcpManager: import("../mcp/index.js").MCPManager | undefined
+	private hookManager: HookManager | undefined
+	private mcpManager: MCPManager | undefined
 	private sessionGrants = new SessionGrants()
 	private streamDebug = !!process.env.MASTRA_STREAM_DEBUG
 	private pendingQuestions = new Map<string, (answer: string) => void>()
@@ -185,7 +189,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			const lastModelId = config.authStorage?.getLastModelId()
 			const seedModel = lastModelId || defaultMode.defaultModelId
 			if (seedModel) {
-				this.setState({ currentModelId: seedModel } as Partial<z.infer<TState>>)
+				void this.setState({ currentModelId: seedModel } as Partial<z.infer<TState>>)
 			}
 		}
 	}
@@ -217,7 +221,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					)
 				}
 
-				this.emit({
+				void this.emit({
 					type: "workspace_status_changed",
 					status: "initializing",
 				})
@@ -225,11 +229,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				await this.workspace.init()
 				this.workspaceInitialized = true
 
-				this.emit({
+				void this.emit({
 					type: "workspace_status_changed",
 					status: "ready",
 				})
-				this.emit({
+				void this.emit({
 					type: "workspace_ready",
 					workspaceId: this.workspace.id,
 					workspaceName: this.workspace.name,
@@ -240,12 +244,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				this.workspace = undefined
 				this.workspaceInitialized = false
 
-				this.emit({
+				void this.emit({
 					type: "workspace_status_changed",
 					status: "error",
 					error: err,
 				})
-				this.emit({
+				void this.emit({
 					type: "workspace_error",
 					error: err,
 				})
@@ -334,7 +338,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			}
 		}
 
-		this.emit({
+		void this.emit({
 			type: "state_changed",
 			state: this.state,
 			changedKeys,
@@ -375,14 +379,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	/**
 	 * Get the hook manager (if configured).
 	 */
-	getHookManager(): import("../hooks/index.js").HookManager | undefined {
+	getHookManager(): HookManager | undefined {
 		return this.hookManager
 	}
 
 	/**
 	 * Get the MCP manager (if configured).
 	 */
-	getMcpManager(): import("../mcp/index.js").MCPManager | undefined {
+	getMcpManager(): MCPManager | undefined {
 		return this.mcpManager
 	}
 
@@ -497,11 +501,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		// Load the incoming mode's model
 		const modeModelId = await this.loadModeModelId(modeId)
 		if (modeModelId) {
-			this.setState({ currentModelId: modeModelId } as Partial<z.infer<TState>>)
-			this.emit({ type: "model_changed", modelId: modeModelId } as HarnessEvent)
+			void this.setState({ currentModelId: modeModelId } as Partial<z.infer<TState>>)
+			void this.emit({ type: "model_changed", modelId: modeModelId } as HarnessEvent)
 		}
 
-		this.emit({
+		void this.emit({
 			type: "mode_changed",
 			modeId,
 			previousModeId,
@@ -715,7 +719,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 		// Update current state for immediate effect if this is the current mode
 		if (targetModeId === this.currentModeId) {
-			this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>)
+			void this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>)
 		}
 
 		// Persist based on scope
@@ -731,7 +735,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		this.config.authStorage?.incrementModelUseCount(modelId)
 
 		// Emit event so TUI can update status line
-		this.emit({
+		void this.emit({
 			type: "model_changed",
 			modelId,
 			scope,
@@ -778,10 +782,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * @param modelId Full model ID (e.g., "google/gemini-2.5-flash")
 	 */
 	async switchObserverModel(modelId: string): Promise<void> {
-		this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>)
+		void this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("observerModelId", modelId)
 
-		this.emit({
+		void this.emit({
 			type: "om_model_changed",
 			role: "observer",
 			modelId,
@@ -793,10 +797,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * @param modelId Full model ID (e.g., "google/gemini-2.5-flash")
 	 */
 	async switchReflectorModel(modelId: string): Promise<void> {
-		this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>)
+		void this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("reflectorModelId", modelId)
 
-		this.emit({
+		void this.emit({
 			type: "om_model_changed",
 			role: "reflector",
 			modelId,
@@ -865,7 +869,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			await this.persistThreadSetting(`subagentModelId_${agentType}`, modelId)
 		}
 
-		this.emit({
+		void this.emit({
 			type: "subagent_model_changed",
 			modelId,
 			scope,
@@ -883,8 +887,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Toggle YOLO mode (auto-approve all tool calls).
 	 */
 	setYoloMode(enabled: boolean): void {
-		this.setState({ yolo: enabled } as Partial<z.infer<TState>>)
-		this.persistThreadSetting("yolo", enabled).catch(() => {})
+		void this.setState({ yolo: enabled } as Partial<z.infer<TState>>)
+		void this.persistThreadSetting("yolo", enabled).catch(() => {})
 		// When toggling YOLO off, reset session grants so user starts fresh
 		if (!enabled) {
 			this.sessionGrants.reset()
@@ -963,7 +967,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	): void {
 		const rules = this.getPermissionRules()
 		rules.categories[category] = policy
-		this.setState({ permissionRules: rules } as Partial<z.infer<TState>>)
+		void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>)
 	}
 
 	/**
@@ -972,7 +976,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	setPermissionTool(toolName: string, policy: "allow" | "ask" | "deny"): void {
 		const rules = this.getPermissionRules()
 		rules.tools[toolName] = policy
-		this.setState({ permissionRules: rules } as Partial<z.infer<TState>>)
+		void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>)
 	}
 
 	/**
@@ -999,7 +1003,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * @param level One of: "off", "minimal", "low", "medium", "high"
 	 */
 	async setThinkingLevel(level: string): Promise<void> {
-		this.setState({ thinkingLevel: level } as Partial<z.infer<TState>>)
+		void this.setState({ thinkingLevel: level } as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("thinkingLevel", level)
 	}
 
@@ -1028,7 +1032,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Note: Takes effect on next restart since OM thresholds are set at construction time.
 	 */
 	async setObservationThreshold(value: number): Promise<void> {
-		this.setState({ observationThreshold: value } as Partial<z.infer<TState>>)
+		void this.setState({ observationThreshold: value } as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("observationThreshold", value)
 	}
 
@@ -1037,7 +1041,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Note: Takes effect on next restart since OM thresholds are set at construction time.
 	 */
 	async setReflectionThreshold(value: number): Promise<void> {
-		this.setState({ reflectionThreshold: value } as Partial<z.infer<TState>>)
+		void this.setState({ reflectionThreshold: value } as Partial<z.infer<TState>>)
 		await this.persistThreadSetting("reflectionThreshold", value)
 	}
 
@@ -1075,7 +1079,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - token persistence is not critical
 		}
 	}
@@ -1102,7 +1106,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - settings persistence is not critical
 		}
 	}
@@ -1129,7 +1133,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - settings removal is not critical
 		}
 	}
@@ -1216,7 +1220,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					if (meta[modeModelKey]) {
 						updates.currentModelId = meta[modeModelKey]
 					}
-					this.emit({
+					void this.emit({
 						type: "mode_changed",
 						modeId: savedModeId,
 						previousModeId:
@@ -1227,12 +1231,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			}
 
 			if (Object.keys(updates).length > 0) {
-				this.setState(updates as Partial<z.infer<TState>>)
+				void this.setState(updates as Partial<z.infer<TState>>)
 			}
 
 			// Load OM progress from storage record
 			await this.loadOMProgress()
-		} catch (error) {
+		} catch {
 			this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 		}
 	}
@@ -1356,7 +1360,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				if (foundStatus) break
 			}
 
-			this.emit({
+			void this.emit({
 				type: "om_status",
 				windows: {
 					active: {
@@ -1488,11 +1492,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				if (prevMeta) {
 					if (typeof prevMeta.yolo === "boolean") {
 						metadata.yolo = prevMeta.yolo
-						this.setState({ yolo: prevMeta.yolo } as Partial<z.infer<TState>>)
+						void this.setState({ yolo: prevMeta.yolo } as Partial<z.infer<TState>>)
 					}
 					if (typeof prevMeta.escapeAsCancel === "boolean") {
 						metadata.escapeAsCancel = prevMeta.escapeAsCancel
-						this.setState({
+						void this.setState({
 							escapeAsCancel: prevMeta.escapeAsCancel,
 						} as Partial<z.infer<TState>>)
 					}
@@ -1536,13 +1540,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 		// Set the model in state (only if not already set)
 		if (modelId && !currentStateModel) {
-			this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>)
+			void this.setState({ currentModelId: modelId } as Partial<z.infer<TState>>)
 		}
 
 		// Reset token usage for new thread
 		this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 
-		this.emit({ type: "thread_created", thread })
+		void this.emit({ type: "thread_created", thread })
 
 		return thread
 	}
@@ -1593,7 +1597,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		// Load token usage and model ID for this thread
 		await this.loadThreadMetadata()
 
-		this.emit({
+		void this.emit({
 			type: "thread_changed",
 			threadId,
 			previousThreadId,
@@ -1674,10 +1678,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		if (this.hookManager) {
 			const hookResult = await this.hookManager.runUserPromptSubmit(content)
 			for (const warning of hookResult.warnings) {
-				this.emit({ type: "error", error: new Error(`[hook] ${warning}`) })
+				void this.emit({ type: "error", error: new Error(`[hook] ${warning}`) })
 			}
 			if (!hookResult.allowed) {
-				this.emit({
+				void this.emit({
 					type: "error",
 					error: new Error(
 						`Message blocked by hook: ${hookResult.blockReason || "Policy violation"}`,
@@ -1700,7 +1704,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		this.abortController = new AbortController()
 		const agent = this.getCurrentAgent()
 
-		this.emit({ type: "agent_start" })
+		void this.emit({ type: "agent_start" })
 
 		try {
 			// Build request context for tools
@@ -1770,7 +1774,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					"complete",
 				)
 				for (const warning of stopResult.warnings) {
-					this.emit({ type: "error", error: new Error(`[hook] ${warning}`) })
+					void this.emit({ type: "error", error: new Error(`[hook] ${warning}`) })
 				}
 				if (!stopResult.allowed) {
 					// Hook says agent should keep working
@@ -1786,7 +1790,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			if (this.currentOperationId === operationId) {
 				// Check if abort was requested - stream may complete gracefully even after abort
 				const reason = this.abortRequested ? "aborted" : "complete"
-				this.emit({ type: "agent_end", reason })
+				void this.emit({ type: "agent_end", reason })
 			}
 		} catch (error) {
 			// If superseded by steer, silently exit
@@ -1794,7 +1798,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 			if (error instanceof Error && error.name === "AbortError") {
 				// Aborted - emit end event with aborted status
-				this.emit({ type: "agent_end", reason: "aborted" })
+				void this.emit({ type: "agent_end", reason: "aborted" })
 			} else if (
 				error instanceof Error &&
 				error.message.match(/^Tool .+ not found$/)
@@ -1804,7 +1808,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				const badTool = error.message
 					.replace("Tool ", "")
 					.replace(" not found", "")
-				this.emit({
+				void this.emit({
 					type: "error",
 					error: new Error(
 						`Unknown tool "${badTool}". Shell commands must be run via execute_command.`,
@@ -1816,7 +1820,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						`Shell commands like git, npm, etc. must be run via the execute_command tool. ` +
 						`Please retry with the correct tool name.`,
 				)
-				this.emit({ type: "agent_end", reason: "error" })
+				void this.emit({ type: "agent_end", reason: "error" })
 			} else if (
 				errorContains(error, "must end with a user message") ||
 				errorContains(error, "assistant message prefill")
@@ -1825,23 +1829,23 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				// OM activation) — inject a synthetic user message
 				// and retry so the model can continue.
 				this.followUpQueue.unshift("<continue>")
-				this.emit({
+				void this.emit({
 					type: "error",
 					error: new Error("Prefill rejection — patching chat and retrying"),
 					retryable: true,
 				})
-				this.emit({ type: "agent_end", reason: "error" })
+				void this.emit({ type: "agent_end", reason: "error" })
 			} else {
 				// Parse the error for better user feedback
 				const parsed = parseError(error)
-				this.emit({
+				void this.emit({
 					type: "error",
 					error: parsed.originalError,
 					errorType: parsed.type,
 					retryable: parsed.retryable,
 					retryDelay: parsed.retryDelay,
 				})
-				this.emit({ type: "agent_end", reason: "error" })
+				void this.emit({ type: "agent_end", reason: "error" })
 			}
 		} finally {
 			// Only clean up if this is still the current operation
@@ -2106,7 +2110,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	async followUp(content: string): Promise<void> {
 		if (this.isRunning()) {
 			this.followUpQueue.push(content)
-			this.emit({
+			void this.emit({
 				type: "follow_up_queued",
 				count: this.followUpQueue.length,
 			})
@@ -2255,7 +2259,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					const textIndex = currentMessage.content.length
 					currentMessage.content.push({ type: "text", text: "" })
 					textContentById.set(chunk.payload.id, { index: textIndex, text: "" })
-					this.emit({ type: "message_start", message: { ...currentMessage } })
+					void this.emit({ type: "message_start", message: { ...currentMessage } })
 					break
 				}
 
@@ -2267,7 +2271,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						if (textContent && textContent.type === "text") {
 							textContent.text = textState.text
 						}
-						this.emit({
+						void this.emit({
 							type: "message_update",
 							message: { ...currentMessage },
 						})
@@ -2282,7 +2286,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						index: thinkingIndex,
 						text: "",
 					})
-					this.emit({ type: "message_update", message: { ...currentMessage } })
+					void this.emit({ type: "message_update", message: { ...currentMessage } })
 					break
 				}
 
@@ -2294,7 +2298,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						if (thinkingContent && thinkingContent.type === "thinking") {
 							thinkingContent.thinking = thinkingState.text
 						}
-						this.emit({
+						void this.emit({
 							type: "message_update",
 							message: { ...currentMessage },
 						})
@@ -2310,13 +2314,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						name: toolCall.toolName,
 						args: toolCall.args,
 					})
-					this.emit({
+					void this.emit({
 						type: "tool_start",
 						toolCallId: toolCall.toolCallId,
 						toolName: toolCall.toolName,
 						args: toolCall.args,
 					})
-					this.emit({ type: "message_update", message: { ...currentMessage } })
+					void this.emit({ type: "message_update", message: { ...currentMessage } })
 					break
 				}
 
@@ -2329,13 +2333,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						result: toolResult.result,
 						isError: toolResult.isError ?? false,
 					})
-					this.emit({
+					void this.emit({
 						type: "tool_end",
 						toolCallId: toolResult.toolCallId,
 						result: toolResult.result,
 						isError: toolResult.isError ?? false,
 					})
-					this.emit({ type: "message_update", message: { ...currentMessage } })
+					void this.emit({ type: "message_update", message: { ...currentMessage } })
 
 					// PostToolUse hooks (fire and forget)
 					if (this.hookManager) {
@@ -2358,7 +2362,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 				case "tool-error": {
 					const toolError = chunk.payload
-					this.emit({
+					void this.emit({
 						type: "tool_end",
 						toolCallId: toolError.toolCallId,
 						result: toolError.error,
@@ -2382,7 +2386,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 							toolArgs,
 						)
 						for (const warning of hookResult.warnings) {
-							this.emit({
+							void this.emit({
 								type: "error",
 								error: new Error(`[hook] ${warning}`),
 							})
@@ -2411,7 +2415,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						// Ask the user — emit event and wait for decision
 						const category = getToolCategory(toolName)
 
-						this.emit({
+						void this.emit({
 							type: "tool_approval_required",
 							toolCallId,
 							toolName,
@@ -2455,7 +2459,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					) {
 						// Prefill error from stream — inject synthetic user message and retry
 						this.followUpQueue.unshift("<continue>")
-						this.emit({
+						void this.emit({
 							type: "error",
 							error: new Error(
 								"Prefill rejection — patching chat and retrying",
@@ -2465,7 +2469,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						break
 					}
 
-					this.emit({
+					void this.emit({
 						type: "error",
 						error: streamError,
 					})
@@ -2485,9 +2489,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						this.tokenUsage.totalTokens += totalTokens
 
 						// Persist to thread metadata (fire and forget)
-						this.persistTokenUsage().catch(() => {})
+						void this.persistTokenUsage().catch(() => {})
 
-						this.emit({
+						void this.emit({
 							type: "usage_update",
 							usage: {
 								promptTokens,
@@ -2507,7 +2511,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					} else {
 						currentMessage.stopReason = "complete"
 					}
-					this.emit({ type: "info", message: `finish reason: ${finishReason}` })
+					void this.emit({ type: "info", message: `finish reason: ${finishReason}` })
 					break
 				}
 				// Observational Memory data parts
@@ -2523,7 +2527,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 						const buffRef = w.buffered?.reflection ?? {}
 
 						// Emit new om_status event
-						this.emit({
+						void this.emit({
 							type: "om_status",
 							windows: {
 								active: {
@@ -2564,14 +2568,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					const payload = (chunk as any).data as Record<string, any> | undefined
 					if (payload && payload.cycleId) {
 						if (payload.operationType === "observation") {
-							this.emit({
+							void this.emit({
 								type: "om_observation_start",
 								cycleId: payload.cycleId,
 								operationType: payload.operationType,
 								tokensToObserve: payload.tokensToObserve ?? 0,
 							})
 						} else if (payload.operationType === "reflection") {
-							this.emit({
+							void this.emit({
 								type: "om_reflection_start",
 								cycleId: payload.cycleId,
 								tokensToReflect: payload.tokensToObserve ?? 0,
@@ -2585,7 +2589,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					if (payload && payload.cycleId) {
 						// Use operationType to distinguish reflection from observation
 						if (payload.operationType === "reflection") {
-							this.emit({
+							void this.emit({
 								type: "om_reflection_end",
 								cycleId: payload.cycleId,
 								durationMs: payload.durationMs ?? 0,
@@ -2593,7 +2597,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 								observations: payload.observations,
 							})
 						} else {
-							this.emit({
+							void this.emit({
 								type: "om_observation_end",
 								cycleId: payload.cycleId,
 								durationMs: payload.durationMs ?? 0,
@@ -2612,14 +2616,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					const payload = (chunk as any).data as Record<string, any> | undefined
 					if (payload) {
 						if (payload.operationType === "reflection") {
-							this.emit({
+							void this.emit({
 								type: "om_reflection_failed",
 								cycleId: payload.cycleId ?? "unknown",
 								error: payload.error ?? "Unknown error",
 								durationMs: payload.durationMs ?? 0,
 							})
 						} else {
-							this.emit({
+							void this.emit({
 								type: "om_observation_failed",
 								cycleId: payload.cycleId ?? "unknown",
 								error: payload.error ?? "Unknown error",
@@ -2633,7 +2637,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				case "data-om-buffering-start": {
 					const payload = (chunk as any).data as Record<string, any> | undefined
 					if (payload && payload.cycleId) {
-						this.emit({
+						void this.emit({
 							type: "om_buffering_start",
 							cycleId: payload.cycleId,
 							operationType: payload.operationType ?? "observation",
@@ -2646,7 +2650,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				case "data-om-buffering-end": {
 					const payload = (chunk as any).data as Record<string, any> | undefined
 					if (payload && payload.cycleId) {
-						this.emit({
+						void this.emit({
 							type: "om_buffering_end",
 							cycleId: payload.cycleId,
 							operationType: payload.operationType ?? "observation",
@@ -2661,7 +2665,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				case "data-om-buffering-failed": {
 					const payload = (chunk as any).data as Record<string, any> | undefined
 					if (payload && payload.cycleId) {
-						this.emit({
+						void this.emit({
 							type: "om_buffering_failed",
 							cycleId: payload.cycleId,
 							operationType: payload.operationType ?? "observation",
@@ -2674,7 +2678,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				case "data-om-activation": {
 					const payload = (chunk as any).data as Record<string, any> | undefined
 					if (payload && payload.cycleId) {
-						this.emit({
+						void this.emit({
 							type: "om_activation",
 							cycleId: payload.cycleId,
 							operationType: payload.operationType ?? "observation",
@@ -2693,7 +2697,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			}
 		}
 
-		this.emit({ type: "message_end", message: currentMessage })
+		void this.emit({ type: "message_end", message: currentMessage })
 		return { message: currentMessage }
 	}
 
@@ -2871,12 +2875,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	async destroyWorkspace(): Promise<void> {
 		if (this.workspace && this.workspaceInitialized) {
 			try {
-				this.emit({
+				void this.emit({
 					type: "workspace_status_changed",
 					status: "destroying",
 				})
 				await this.workspace.destroy()
-				this.emit({
+				void this.emit({
 					type: "workspace_status_changed",
 					status: "destroyed",
 				})

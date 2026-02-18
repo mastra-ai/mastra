@@ -3,7 +3,8 @@
  * Provides clear, actionable feedback when tool inputs are invalid.
  */
 
-import { Container, Text, type TUI } from "@mariozechner/pi-tui"
+import { Container, Text  } from "@mariozechner/pi-tui"
+import type {TUI} from "@mariozechner/pi-tui";
 import { theme } from "../theme.js"
 
 export interface ValidationError {

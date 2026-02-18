@@ -2,10 +2,15 @@
  * Main entry point for Mastra Code TUI.
  * This is an example of how to wire up the Harness and TUI together.
  */
+import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { Mastra } from "@mastra/core"
 import { Agent } from "@mastra/core/agent"
+import { ModelRouterLanguageModel } from "@mastra/core/llm"
 import { noopLogger } from "@mastra/core/logger"
 import type { RequestContext } from "@mastra/core/request-context"
-import { ModelRouterLanguageModel } from "@mastra/core/llm"
 import {
 	Workspace,
 	LocalFilesystem,
@@ -14,13 +19,13 @@ import {
 import { LibSQLStore } from "@mastra/libsql"
 import { Memory } from "@mastra/memory"
 import { z } from "zod"
-import * as path from "path"
-import * as os from "os"
-import * as fs from "fs"
+import { AuthStorage } from "./auth/storage.js"
 import { Harness } from "./harness/harness.js"
 import type { HarnessRuntimeContext } from "./harness/types.js"
-import { MastraTUI } from "./tui/index.js"
-import { mastra } from "./tui/theme.js"
+import { HookManager } from "./hooks/index.js"
+import { MCPManager } from "./mcp/index.js"
+import { buildFullPrompt  } from "./prompts/index.js"
+import type {PromptContext} from "./prompts/index.js";
 import {
 	opencodeClaudeMaxProvider,
 	setAuthStorage,
@@ -29,19 +34,6 @@ import {
 	openaiCodexProvider,
 	setAuthStorage as setOpenAIAuthStorage,
 } from "./providers/openai-codex.js"
-import { AuthStorage } from "./auth/storage.js"
-import { HookManager } from "./hooks/index.js"
-import { MCPManager } from "./mcp/index.js"
-import {
-	detectProject,
-	getStorageConfig,
-	getUserId,
-	getOmScope,
-	getResourceIdOverride,
-	getAppDataDir,
-} from "./utils/project.js"
-import { startGatewaySync } from "./utils/gateway-sync.js"
-import { releaseAllThreadLocks } from "./utils/thread-lock.js"
 import {
 	createViewTool,
 	createExecuteCommandTool,
@@ -60,8 +52,18 @@ import {
 	submitPlanTool,
 	requestSandboxAccessTool,
 } from "./tools/index.js"
-import { buildFullPrompt, type PromptContext } from "./prompts/index.js"
-import { createAnthropic } from "@ai-sdk/anthropic"
+import { MastraTUI } from "./tui/index.js"
+import { mastra } from "./tui/theme.js"
+import { startGatewaySync } from "./utils/gateway-sync.js"
+import {
+	detectProject,
+	getStorageConfig,
+	getUserId,
+	getOmScope,
+	getResourceIdOverride,
+	getAppDataDir,
+} from "./utils/project.js"
+import { releaseAllThreadLocks } from "./utils/thread-lock.js"
 
 // =============================================================================
 // Start Gateway Sync (keeps model registry up to date)
@@ -95,16 +97,16 @@ if (resourceIdOverride) {
 	project.resourceIdOverride = true
 }
 
-console.log(`Project: ${project.name}`)
-console.log(
+console.info(`Project: ${project.name}`)
+console.info(
 	`Resource ID: ${project.resourceId}${project.resourceIdOverride ? " (override)" : ""}`,
 )
-if (project.gitBranch) console.log(`Branch: ${project.gitBranch}`)
-if (project.isWorktree) console.log(`Worktree of: ${project.mainRepoPath}`)
+if (project.gitBranch) console.info(`Branch: ${project.gitBranch}`)
+if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`)
 
 const userId = getUserId(project.rootPath)
-console.log(`User: ${userId}`)
-console.log()
+console.info(`User: ${userId}`)
+console.info()
 
 // =============================================================================
 // Configuration
@@ -462,9 +464,9 @@ const workspace = new Workspace({
 })
 
 if (skillPaths.length > 0) {
-	console.log(`Skills loaded from:`)
+	console.info(`Skills loaded from:`)
 	for (const p of skillPaths) {
-		console.log(`  - ${p}`)
+		console.info(`  - ${p}`)
 	}
 }
 
@@ -568,7 +570,6 @@ const codeAgent = new Agent({
 // Register the agent with a Mastra instance so that workflow snapshot storage
 // is available. This is required for requireToolApproval (approveToolCall /
 // declineToolCall use resumeStream which loads snapshots from storage).
-import { Mastra } from "@mastra/core"
 const mastraInstance = new Mastra({
 	agents: { codeAgent },
 	storage,
@@ -613,7 +614,7 @@ if (hookManager.hasHooks()) {
 		(sum, hooks) => sum + (hooks?.length ?? 0),
 		0,
 	)
-	console.log(`Hooks: ${hookCount} hook(s) configured`)
+	console.info(`Hooks: ${hookCount} hook(s) configured`)
 }
 
 // =============================================================================
@@ -706,18 +707,18 @@ const tui = new MastraTUI({
 })
 
 	// Initialize MCP connections, then run the TUI
-	; (async () => {
+	; void (async () => {
 		if (mcpManager.hasServers()) {
 			await mcpManager.init()
 			const statuses = mcpManager.getServerStatuses()
 			const connected = statuses.filter((s) => s.connected)
 			const failed = statuses.filter((s) => !s.connected)
 			const totalTools = connected.reduce((sum, s) => sum + s.toolCount, 0)
-			console.log(
+			console.info(
 				`MCP: ${connected.length} server(s) connected, ${totalTools} tool(s)`,
 			)
 			for (const s of failed) {
-				console.log(`MCP: Failed to connect to "${s.name}": ${s.error}`)
+				console.error(`MCP: Failed to connect to "${s.name}": ${s.error}`)
 			}
 		}
 		// Redirect console.error/warn to a log file once the TUI owns the terminal.

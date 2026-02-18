@@ -1,11 +1,13 @@
-import { z } from "zod/v3"
+import * as path from "node:path"
+
+import { createTool } from "@mastra/core/tools"
 import { execa, ExecaError } from "execa"
 import stripAnsi from "strip-ansi"
-import { truncateStringForTokenEstimate } from "../utils/token-estimator"
 import treeKill from "tree-kill"
+import { z } from "zod/v3"
+
 import { ipcReporter } from "../ipc/ipc-reporter.js"
-import { createTool } from "@mastra/core/tools"
-import * as path from "path"
+import { truncateStringForTokenEstimate } from "../utils/token-estimator"
 import { isPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 
 
@@ -169,7 +171,7 @@ Usage notes:
 				const { getGlobalConfirmationId } =
 					await import("./wrap-with-confirmation.js")
 
-				const confirmationId = getGlobalConfirmationId()
+				const _confirmationId = getGlobalConfirmationId()
 
 				try {
 					// Use execa to run the command with streaming
@@ -329,8 +331,8 @@ Usage notes:
 								// Kill the entire process group by using negative PID
 								// This works because we set detached: true
 								process.kill(-subprocess.pid, "SIGKILL")
-							} catch (err) {
-								// console.error(`Failed to kill process group: ${err}`)
+							} catch {
+								// console.error(`Failed to kill process group`)
 								// Fallback to tree-kill
 								treeKill(subprocess.pid, "SIGKILL")
 							}

@@ -4,9 +4,9 @@
  * Global hooks run first, project hooks append.
  */
 
-import * as fs from "fs"
-import * as path from "path"
-import * as os from "os"
+import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
 import type { HooksConfig, HookDefinition, HookEventName } from "./types.js"
 
 const VALID_EVENTS: HookEventName[] = [

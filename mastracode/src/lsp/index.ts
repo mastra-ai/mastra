@@ -1,8 +1,8 @@
-import { readFile } from "fs/promises"
+import { readFile } from "node:fs/promises"
 import { LSPClient } from "./client"
-import { getServersForFile } from "./server"
 import { getLanguageId } from "./language"
 import { lspManager } from "./manager"
+import { getServersForFile } from "./server"
 
 // Re-export for external use
 export { LSPClient, getServersForFile }
@@ -58,7 +58,7 @@ class LSPWrapper {
 					await client.waitForDiagnostics(filePath)
 				}
 			}
-		} catch (error) {
+		} catch {
 			// File might not exist or be readable
 			// That's ok - we'll handle it in the tools
 		}

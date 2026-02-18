@@ -8,15 +8,17 @@
 
 import {
 	Box,
-	type Focusable,
+	
 	SelectList,
-	type SelectItem,
-	type SettingItem,
+	
+	
 	SettingsList,
 	Spacer,
-	Text,
-	type TUI,
+	Text
+	
 } from "@mariozechner/pi-tui"
+import type {Focusable, SelectItem, SettingItem, TUI as _TUI} from "@mariozechner/pi-tui";
+import type { NotificationMode } from "../notify.js"
 import {
 	fg,
 	bg,
@@ -24,7 +26,6 @@ import {
 	getSettingsListTheme,
 	getSelectListTheme,
 } from "../theme.js"
-import type { NotificationMode } from "../notify.js"
 
 // =============================================================================
 // Types

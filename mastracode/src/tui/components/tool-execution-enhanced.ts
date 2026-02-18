@@ -4,16 +4,17 @@
  */
 
 import * as os from "node:os"
-import { Box, Container, Spacer, Text, type TUI } from "@mariozechner/pi-tui"
+import { Box, Container, Spacer, Text  } from "@mariozechner/pi-tui"
+import type {TUI} from "@mariozechner/pi-tui";
 import chalk from "chalk"
 import { highlight } from "cli-highlight"
 import { theme, mastra } from "../theme.js"
 import { CollapsibleComponent } from "./collapsible.js"
+import { ErrorDisplayComponent } from "./error-display.js"
 import type {
 	IToolExecutionComponent,
 	ToolResult,
 } from "./tool-execution-interface.js"
-import { ErrorDisplayComponent } from "./error-display.js"
 import {
 	ToolValidationErrorComponent,
 	parseValidationErrors,
@@ -1031,7 +1032,7 @@ function highlightCode(
  *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
  */
 function truncateAnsi(str: string, maxWidth: number): string {
-	// eslint-disable-next-line no-control-regex
+	 
 	const ansiRegex = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g
 	let visibleLength = 0
 	let result = ""

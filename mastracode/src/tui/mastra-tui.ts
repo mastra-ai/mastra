@@ -2,22 +2,23 @@
  * Main TUI class for Mastra Code.
  * Wires the Harness to pi-tui components for a full interactive experience.
  */
+import fs from "node:fs"
+import path from "node:path"
 import {
 	CombinedAutocompleteProvider,
-	type Component,
+
 	Container,
-	Markdown,
 	Spacer,
 	Text,
 	TUI,
 	ProcessTerminal,
-	visibleWidth,
-	type EditorTheme,
-	type SlashCommand,
+	visibleWidth
+
+
 } from "@mariozechner/pi-tui"
+import type {Component, SlashCommand} from "@mariozechner/pi-tui";
+import type { Workspace } from "@mastra/core/workspace"
 import chalk from "chalk"
-import path from "path"
-import fs from "fs"
 import type { Harness } from "../harness/harness.js"
 import type {
 	HarnessEvent,
@@ -26,83 +27,87 @@ import type {
 	HarnessEventListener,
 	TokenUsage,
 } from "../harness/types.js"
-import type { Workspace } from "@mastra/core/workspace"
-import { detectProject, type ProjectInfo } from "../utils/project.js"
-import { ThreadLockError } from "../utils/thread-lock.js"
+import { getToolCategory, TOOL_CATEGORIES } from "../permissions.js"
+import { parseSubagentMeta } from "../tools/subagent.js"
 import { parseError } from "../utils/errors.js"
+import { detectProject  } from "../utils/project.js"
+import type {ProjectInfo} from "../utils/project.js";
 import {
-	loadCustomCommands,
-	type SlashCommandMetadata,
+	loadCustomCommands
+	
 } from "../utils/slash-command-loader.js"
+import type {SlashCommandMetadata} from "../utils/slash-command-loader.js";
 import { processSlashCommand } from "../utils/slash-command-processor.js"
+import { ThreadLockError } from "../utils/thread-lock.js"
+import { AskQuestionDialogComponent } from "./components/ask-question-dialog.js"
+import { AskQuestionInlineComponent } from "./components/ask-question-inline.js"
 import { AssistantMessageComponent } from "./components/assistant-message.js"
+import { CustomEditor } from "./components/custom-editor.js"
+import { DiffOutputComponent } from "./components/diff-output.js"
+import { LoginDialogComponent } from "./components/login-dialog.js"
+import {
+	ModelSelectorComponent
+
+} from "./components/model-selector.js"
+import type {ModelItem} from "./components/model-selector.js";
 import {
 	GradientAnimator,
 	applyGradientSweep,
 } from "./components/obi-loader.js"
-import { CustomEditor } from "./components/custom-editor.js"
-import { LoginDialogComponent } from "./components/login-dialog.js"
-
-import {
-	ModelSelectorComponent,
-	type ModelItem,
-} from "./components/model-selector.js"
-import { ThreadSelectorComponent } from "./components/thread-selector.js"
-import { OMMarkerComponent, type OMMarkerData } from "./components/om-marker.js"
+import { OMMarkerComponent  } from "./components/om-marker.js"
+import type {OMMarkerData} from "./components/om-marker.js";
 import { OMOutputComponent } from "./components/om-output.js"
-import { OMSettingsComponent } from "./components/om-settings.js"
-import { SettingsComponent } from "./components/settings.js"
-
+import type {
+	OMProgressComponent,OMProgressState} from "./components/om-progress.js";
 import {
-	OMProgressComponent,
-	type OMProgressState,
+
 	defaultOMProgressState,
 	formatObservationStatus,
-	formatReflectionStatus,
+	formatReflectionStatus
 } from "./components/om-progress.js"
-import { AskQuestionDialogComponent } from "./components/ask-question-dialog.js"
-import { AskQuestionInlineComponent } from "./components/ask-question-inline.js"
+import { OMSettingsComponent } from "./components/om-settings.js"
 import {
 	PlanApprovalInlineComponent,
 	PlanResultComponent,
 } from "./components/plan-approval-inline.js"
-import {
-	ToolApprovalDialogComponent,
-	type ApprovalAction,
-} from "./components/tool-approval-dialog.js"
-import {
-	ToolExecutionComponentEnhanced,
-	type ToolResult,
-} from "./components/tool-execution-enhanced.js"
-import type { IToolExecutionComponent } from "./components/tool-execution-interface.js"
-import { SubagentExecutionComponent } from "./components/subagent-execution.js"
-import { parseSubagentMeta } from "../tools/subagent.js"
-import {
-	TodoProgressComponent,
-	type TodoItem,
-} from "./components/todo-progress.js"
-import { UserMessageComponent } from "./components/user-message.js"
-import { SlashCommandComponent } from "./components/slash-command.js"
-import { SystemReminderComponent } from "./components/system-reminder.js"
+import { SettingsComponent } from "./components/settings.js"
 import { ShellOutputComponent } from "./components/shell-output.js"
-import { DiffOutputComponent } from "./components/diff-output.js"
+import { SlashCommandComponent } from "./components/slash-command.js"
+import { SubagentExecutionComponent } from "./components/subagent-execution.js"
+import { SystemReminderComponent } from "./components/system-reminder.js"
+import { ThreadSelectorComponent } from "./components/thread-selector.js"
+import {
+	TodoProgressComponent
+
+} from "./components/todo-progress.js"
+import type {TodoItem} from "./components/todo-progress.js";
+import {
+	ToolApprovalDialogComponent
+
+} from "./components/tool-approval-dialog.js"
+import type {ApprovalAction} from "./components/tool-approval-dialog.js";
+import {
+	ToolExecutionComponentEnhanced
+
+} from "./components/tool-execution-enhanced.js"
+import type {ToolResult} from "./components/tool-execution-enhanced.js";
+import type { IToolExecutionComponent } from "./components/tool-execution-interface.js"
+import { UserMessageComponent } from "./components/user-message.js"
+import {
+	sendNotification
+	
+	
+} from "./notify.js"
+import type {NotificationMode, NotificationReason} from "./notify.js";
 import {
 	getEditorTheme,
 	getMarkdownTheme,
-	getTheme,
 	fg,
 	bold,
-	getContrastText,
 	theme,
 	mastra,
 	tintHex,
 } from "./theme.js"
-import {
-	sendNotification,
-	type NotificationMode,
-	type NotificationReason,
-} from "./notify.js"
-import { getToolCategory, TOOL_CATEGORIES } from "../permissions.js"
 
 // =============================================================================
 // Types
@@ -618,7 +623,7 @@ export class MastraTUI {
 				this.todoProgress.updateTodos(todos)
 				this.ui.requestRender()
 			}
-		} catch (error) {
+		} catch {
 			// Silently ignore todo rendering errors
 		}
 	}
@@ -721,7 +726,7 @@ ${instructions}`,
 		this.footer.addChild(this.memoryStatusLine)
 		this.ui.addChild(this.footer)
 		this.updateStatusLine()
-		this.refreshModelAuthStatus()
+		void this.refreshModelAuthStatus()
 
 		// Set focus to editor
 		this.ui.setFocus(this.editor)
@@ -2456,7 +2461,7 @@ ${instructions}`,
 					},
 					onReject: async (feedback?: string) => {
 						this.activeInlinePlanApproval = undefined
-						this.harness.respondToPlanApproval(planId, {
+						void this.harness.respondToPlanApproval(planId, {
 							action: "rejected",
 							feedback,
 						})
@@ -3080,7 +3085,7 @@ ${instructions}`,
 			return
 		}
 		const updated = [...currentPaths, resolved]
-		this.harness.setState({ sandboxAllowedPaths: updated } as any)
+		void this.harness.setState({ sandboxAllowedPaths: updated } as any)
 		await this.harness.persistThreadSetting("sandboxAllowedPaths", updated)
 		this.showInfo(`Added to sandbox: ${resolved}`)
 	}
@@ -3096,7 +3101,7 @@ ${instructions}`,
 			return
 		}
 		const updated = currentPaths.filter((p) => p !== match)
-		this.harness.setState({ sandboxAllowedPaths: updated } as any)
+		void this.harness.setState({ sandboxAllowedPaths: updated } as any)
 		await this.harness.persistThreadSetting("sandboxAllowedPaths", updated)
 		this.showInfo(`Removed from sandbox: ${match}`)
 	}
@@ -3518,14 +3523,14 @@ ${instructions}`,
 						this.showInfo(`Reflector model → ${modelId}`)
 					},
 					onObservationThresholdChange: (value) => {
-						this.harness.setObservationThreshold(value)
+						void this.harness.setObservationThreshold(value)
 						this.omProgress.threshold = value
 						this.omProgress.thresholdPercent =
 							value > 0 ? (this.omProgress.pendingTokens / value) * 100 : 0
 						this.updateStatusLine()
 					},
 					onReflectionThresholdChange: (value) => {
-						this.harness.setReflectionThreshold(value)
+						void this.harness.setReflectionThreshold(value)
 						this.omProgress.reflectionThreshold = value
 						this.omProgress.reflectionThresholdPercent =
 							value > 0 ? (this.omProgress.observationTokens / value) * 100 : 0

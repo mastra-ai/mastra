@@ -1,6 +1,6 @@
-import { promises as fs } from "fs"
-import { execSync } from "child_process"
-import * as path from "path"
+import { execSync } from "node:child_process"
+import { promises as fs } from "node:fs"
+import * as path from "node:path"
 import type { SlashCommandMetadata } from "./slash-command-loader.js"
 
 /**
