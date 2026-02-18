@@ -1,7 +1,6 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1Prompt, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type * as AIV4Type from '@internal/ai-sdk-v4';
-import type { ToolSet } from '@internal/ai-sdk-v5';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
@@ -366,15 +365,14 @@ export class MessageList {
           downloadConcurrency?: number;
           downloadRetries?: number;
           supportedUrls?: Record<string, RegExp[]>;
-          tools?: ToolSet;
         } = {
           downloadConcurrency: 10,
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
         // Filter incomplete tool calls when sending messages TO the LLM
-        // Pass tools so convertToModelMessages can apply toModelOutput transformations
-        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true, options?.tools);
+        // Stored toModelOutput results from providerMetadata are applied automatically
+        const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,

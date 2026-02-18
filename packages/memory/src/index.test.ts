@@ -1105,7 +1105,7 @@ describe('Memory', () => {
   });
 
   describe('toModelOutput persistence', () => {
-    it('should preserve raw tool result in storage and apply toModelOutput when building prompt', async () => {
+    it('should preserve raw tool result and stored modelOutput through save/load cycle', async () => {
       const memory = new Memory({
         storage: new InMemoryStore(),
       });
@@ -1123,7 +1123,8 @@ describe('Memory', () => {
         },
       });
 
-      // Save messages with a tool result
+      // Save messages with a tool result that has stored modelOutput on providerMetadata
+      // (this simulates what llm-mapping-step.ts does at creation time)
       const messages: MastraDBMessage[] = [
         {
           id: 'tmo-msg-1',
@@ -1159,6 +1160,11 @@ describe('Memory', () => {
                     ],
                   },
                 },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: { type: 'text', value: '72°F, sunny' },
+                  },
+                },
               },
             ],
           },
@@ -1191,30 +1197,20 @@ describe('Memory', () => {
         ],
       });
 
-      // Create a MessageList from loaded messages and call llmPrompt with tools
+      // Verify stored modelOutput is also preserved
+      expect(parts[0].providerMetadata?.mastra?.modelOutput).toEqual({
+        type: 'text',
+        value: '72°F, sunny',
+      });
+
+      // Create a MessageList from loaded messages and call llmPrompt
       const list = new MessageList({ threadId, resourceId }).add(loadedMessages, 'memory');
 
-      // Without tools — no toModelOutput applied, result is default json
-      const promptWithout = await list.get.all.aiV5.llmPrompt();
-      const toolResultWithout = promptWithout.flatMap((m: any) => m.content).find((p: any) => p.type === 'tool-result');
-      expect(toolResultWithout).toBeDefined();
-      expect(toolResultWithout.output.type).toBe('json');
-
-      // With tools + toModelOutput — transformed output
-      const promptWith = await list.get.all.aiV5.llmPrompt({
-        tools: {
-          getWeather: {
-            execute: async () => ({}),
-            toModelOutput: (output: any) => ({
-              type: 'text',
-              value: `${output.temperature}°F, ${output.conditions}`,
-            }),
-          },
-        } as any,
-      });
-      const toolResultWith = promptWith.flatMap((m: any) => m.content).find((p: any) => p.type === 'tool-result');
-      expect(toolResultWith).toBeDefined();
-      expect(toolResultWith.output).toEqual({
+      // llmPrompt should use the stored modelOutput — no tools needed
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolResult = prompt.flatMap((m: any) => m.content).find((p: any) => p.type === 'tool-result');
+      expect(toolResult).toBeDefined();
+      expect(toolResult.output).toEqual({
         type: 'text',
         value: '72°F, sunny',
       });
