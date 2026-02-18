@@ -88,3 +88,15 @@ export type {
   SkillsResolver,
   SkillsContext,
 } from './skills';
+
+// Skill Publishing
+export type { SkillPublishResult } from './skills';
+export { collectSkillForPublish, publishSkillFromSource } from './skills';
+
+// Skill Source
+export type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skills';
+export { LocalSkillSource } from './skills';
+
+// Versioned Skill Sources
+export { VersionedSkillSource } from './skills';
+export { CompositeVersionedSkillSource, type VersionedSkillEntry } from './skills';

@@ -15,8 +15,9 @@ The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and 
 ### Prerequisites
 
 1. **Mastra Cloud Account**: Sign up at [cloud.mastra.ai](https://cloud.mastra.ai)
-2. **Access Token**: Generate in Mastra Cloud → Settings → API Tokens
-3. **Environment Variables**: Set your credentials:
+2. **Mastra Cloud Project**: Create a project in Mastra Cloud. Traces are scoped per project, so even if you only want observability, you need a project to act as the destination for your traces.
+3. **Access Token**: Generate in your project's sidebar under **Project Settings → Access Tokens**
+4. **Environment Variables**: Set your credentials:
 
 ```bash title=".env"
 MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
@@ -97,13 +98,17 @@ new CloudExporter({
 ### Mastra Cloud Dashboard
 
 1. Navigate to [cloud.mastra.ai](https://cloud.mastra.ai)
-2. Select your project
-3. Go to Observability → Traces
+2. Select the project associated with your access token
+3. Go to **Observability → Traces**
 4. Use filters to find specific traces:
    - Service name
    - Time range
    - Trace ID
    - Error status
+
+:::note
+Traces are scoped to the project that issued the access token. To view traces, make sure you're viewing the same project you generated the token from.
+:::
 
 ### Features
 
