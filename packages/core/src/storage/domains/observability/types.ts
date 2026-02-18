@@ -257,8 +257,21 @@ export const traceSpanSchema = spanRecordSchema
   })
   .describe('Trace span with computed status (root spans only)');
 
-/** Trace span (root span with computed status) */
-export type TraceSpan = z.infer<typeof traceSpanSchema>;
+/**
+ * Trace span: a root span with a computed status field.
+ *
+ * This is an explicit interface definition to ensure consistent type
+ * resolution across package boundaries.
+ */
+export interface TraceSpan extends SpanRecord {
+  status: TraceStatus;
+}
+
+// Type validation: ensures TraceSpan interface matches z.infer<typeof traceSpanSchema>
+type _InferredTraceSpan = z.infer<typeof traceSpanSchema>;
+type _TraceSpanToInferred = AssertAssignable<TraceSpan, _InferredTraceSpan>;
+type _InferredToTraceSpan = AssertAssignable<_InferredTraceSpan, TraceSpan>;
+const _traceSpanTypeCheck: [_TraceSpanToInferred, _InferredToTraceSpan] = [true, true];
 
 /**
  * Converts a SpanRecord to a TraceSpan by adding computed status.
