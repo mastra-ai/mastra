@@ -200,7 +200,7 @@ export type CoreTool = {
    * Receives the raw tool output and returns a transformed representation.
    * Passed through from the original tool definition.
    */
-  toModelOutput?: (output: unknown) => unknown | PromiseLike<unknown>;
+  toModelOutput?: (output: unknown) => unknown;
 } & (
   | {
       type?: 'function' | undefined;
@@ -238,7 +238,7 @@ export type InternalCoreTool = {
    * Receives the raw tool output and returns a transformed representation.
    * Passed through from the original tool definition.
    */
-  toModelOutput?: (output: unknown) => unknown | PromiseLike<unknown>;
+  toModelOutput?: (output: unknown) => unknown;
 } & (
   | {
       type?: 'function' | undefined;
@@ -319,7 +319,7 @@ export interface ToolAction<
    * Receives the raw tool output and returns a transformed representation.
    * Passed through from the original tool definition.
    */
-  toModelOutput?: (output: unknown) => unknown | PromiseLike<unknown>;
+  toModelOutput?: (output: unknown) => unknown;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata

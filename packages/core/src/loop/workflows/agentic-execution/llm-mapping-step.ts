@@ -106,18 +106,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         result?: unknown;
         providerMetadata?: Record<string, unknown>;
       }) {
-        const tool = rest.tools?.[toolCall.toolName];
-        const toModelOutput = (tool as any)?.toModelOutput;
+        const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
         let modelOutput: unknown;
-        if (toModelOutput && toolCall.result !== undefined) {
-          modelOutput = await toModelOutput(toolCall.result);
+        if (tool?.toModelOutput && toolCall.result != null) {
+          modelOutput = await tool.toModelOutput(toolCall.result);
         }
 
+        const existingMastra = (toolCall.providerMetadata as any)?.mastra;
         const providerMetadata = {
           ...toolCall.providerMetadata,
-          ...(modelOutput !== undefined
-            ? { mastra: { ...(toolCall.providerMetadata as any)?.mastra, modelOutput } }
-            : {}),
+          ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
         };
         const hasMetadata = Object.keys(providerMetadata).length > 0;
         return hasMetadata ? providerMetadata : undefined;
