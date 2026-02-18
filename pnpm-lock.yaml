@@ -1157,6 +1157,9 @@ importers:
       '@mariozechner/pi-tui':
         specifier: latest
         version: 0.53.0
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../stores/libsql
@@ -1209,9 +1212,6 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../packages/core
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9

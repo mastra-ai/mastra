@@ -3,22 +3,11 @@ import { execa, ExecaError } from "execa"
 import stripAnsi from "strip-ansi"
 import { truncateStringForTokenEstimate } from "../utils/token-estimator"
 import treeKill from "tree-kill"
-import type { TerminalManager } from "../acp/terminal-manager.js"
 import { ipcReporter } from "../ipc/ipc-reporter.js"
 import { createTool } from "@mastra/core/tools"
 import * as path from "path"
 import { isPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 
-// Global registry for terminal managers (used in ACP mode)
-let globalTerminalManager: TerminalManager | null = null
-
-export function setGlobalTerminalManager(manager: TerminalManager | null) {
-	globalTerminalManager = manager
-}
-
-export function getGlobalTerminalManager(): TerminalManager | null {
-	return globalTerminalManager
-}
 
 // Global registry for pending terminal IDs (keyed by confirmationId)
 const pendingTerminalIds = new Map<string, string>()
@@ -177,7 +166,6 @@ Usage notes:
 			// Check if we're in ACP mode - stream output via tool_call_update notifications
 			const isACPMode = process.argv.includes("--acp-internal")
 			if (isACPMode) {
-				const { acpEventBus } = await import("../acp/event-bus.js")
 				const { getGlobalConfirmationId } =
 					await import("./wrap-with-confirmation.js")
 
@@ -208,13 +196,6 @@ Usage notes:
 							ipcReporter.send(`shell-output`, { output: text, type: `stdout` })
 							stdout += text
 							combined += text
-
-							// Emit output event for streaming
-							acpEventBus.emit("command-output", {
-								confirmationId,
-								output: text,
-								stream: "stdout",
-							})
 						})
 					}
 
@@ -226,13 +207,6 @@ Usage notes:
 
 							stderr += text
 							combined += text
-
-							// Emit output event for streaming
-							acpEventBus.emit("command-output", {
-								confirmationId,
-								output: text,
-								stream: "stderr",
-							})
 						})
 					}
 
@@ -287,11 +261,11 @@ Usage notes:
 			const abortSignal = harnessCtx?.abortSignal as AbortSignal | undefined
 			const emitEvent = harnessCtx?.emitEvent as
 				| ((event: {
-						type: "shell_output"
-						toolCallId: string
-						output: string
-						stream: "stdout" | "stderr"
-				  }) => void)
+					type: "shell_output"
+					toolCallId: string
+					output: string
+					stream: "stdout" | "stderr"
+				}) => void)
 				| undefined
 			const toolCallId = (toolContext as any)?.agent?.toolCallId as
 				| string
@@ -304,7 +278,7 @@ Usage notes:
 					try {
 						process.kill(-subprocess.pid, "SIGKILL")
 					} catch {
-						treeKill(subprocess.pid, "SIGKILL", () => {})
+						treeKill(subprocess.pid, "SIGKILL", () => { })
 					}
 				}
 			}
