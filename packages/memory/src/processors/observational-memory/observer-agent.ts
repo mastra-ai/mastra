@@ -1,62 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 /**
- * Legacy extraction instructions from Jan 7, 2026.
- * Used for A/B testing prompt size impact on accuracy.
- * Enable with OM_USE_LEGACY_PROMPT=1
- */
-const LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
-
-When the user TELLS you something about themselves, mark it as an assertion:
-- "I have two kids" → 🔴 (14:30) User stated has two kids
-- "I work at Acme Corp" → 🔴 (14:31) User stated works at Acme Corp
-- "I graduated in 2019" → 🔴 (14:32) User stated graduated in 2019
-
-When the user ASKS about something, mark it as a question/request:
-- "Can you help me with X?" → 🟡 (15:00) User asked help with X
-- "What's the best way to do Y?" → 🟡 (15:01) User asked best way to do Y
-
-USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
-If a user previously stated something and later asks a question about the same topic,
-the assertion is the answer - the question doesn't invalidate what they already told you.
-
-TEMPORAL ANCHORING:
-Convert relative times to estimated dates based on the message timestamp.
-Include the user's original phrasing in quotes, then add an estimated date or range.
-Ranges may span multiple months - e.g., "within the last month" on July 15th could mean anytime in June to early July.
-
-BAD: User was given X by their friend last month.
-GOOD: User was given X by their friend "last month" (estimated mid-June to early July 202X).
-
-PRESERVE UNUSUAL PHRASING:
-When the user uses unexpected or non-standard terminology, quote their exact words.
-
-BAD: User exercised.
-GOOD: User stated they did a "movement session" (their term for exercise).
-
-CONVERSATION CONTEXT:
-- What the user is working on or asking about
-- Previous topics and their outcomes
-- What user understands or needs clarification on
-- Specific requirements or constraints mentioned
-- Contents of assistant learnings and summaries
-- Answers to users questions including full context to remember detailed summaries and explanations
-- Assistant explanations, especially complex ones. observe the fine details so that the assistant does not forget what they explained
-- Relevant code snippets
-- User preferences (like favourites, dislikes, preferences, etc)
-- Any specifically formatted text or ascii that would need to be reproduced or referenced in later interactions (preserve these verbatim in memory)
-- Any blocks of any text which the user and assistant are iteratively collaborating back and forth on should be preserved verbatim
-- When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
-
-ACTIONABLE INSIGHTS:
-- What worked well in explanations
-- What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
-
-/**
  * Check which prompt variant to use (for A/B testing)
  */
-const USE_LEGACY_PROMPT = process.env.OM_USE_LEGACY_PROMPT === '1' || process.env.OM_USE_LEGACY_PROMPT === 'true';
 const USE_CONDENSED_PROMPT =
   process.env.OM_USE_CONDENSED_PROMPT === '1' || process.env.OM_USE_CONDENSED_PROMPT === 'true';
 
@@ -314,14 +260,11 @@ ACTIONABLE INSIGHTS:
 
 /**
  * Select which extraction instructions to use based on environment variable.
- * Set OM_USE_LEGACY_PROMPT=1 to use the smaller Jan 7 prompt for A/B testing.
  * Set OM_USE_CONDENSED_PROMPT=1 to use the new condensed V3 prompt.
  */
 export const OBSERVER_EXTRACTION_INSTRUCTIONS = USE_CONDENSED_PROMPT
   ? CONDENSED_OBSERVER_EXTRACTION_INSTRUCTIONS
-  : USE_LEGACY_PROMPT
-    ? LEGACY_OBSERVER_EXTRACTION_INSTRUCTIONS
-    : CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS;
+  : CURRENT_OBSERVER_EXTRACTION_INSTRUCTIONS;
 
 /**
  * The output format instructions for the Observer.
@@ -450,8 +393,9 @@ export const OBSERVER_GUIDELINES = USE_CONDENSED_PROMPT
 /**
  * Build the complete observer system prompt.
  * @param multiThread - Whether this is for multi-thread batched observation (default: false)
+ * @param instruction - Optional custom instructions to append to the prompt
  */
-export function buildObserverSystemPrompt(multiThread: boolean = false): string {
+export function buildObserverSystemPrompt(multiThread: boolean = false, instruction?: string): string {
   // Use condensed output format when condensed prompt is enabled
   // Otherwise, use the base output format
   const outputFormat = USE_CONDENSED_PROMPT ? CONDENSED_OBSERVER_OUTPUT_FORMAT : OBSERVER_OUTPUT_FORMAT_BASE;
@@ -512,7 +456,7 @@ ${OBSERVER_GUIDELINES}
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
   }
 
   return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
@@ -539,7 +483,7 @@ Simply output your observations without any thread-related markup.
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.${instruction ? `\n\n=== CUSTOM INSTRUCTIONS ===\n\n${instruction}` : ''}`;
 }
 
 /**

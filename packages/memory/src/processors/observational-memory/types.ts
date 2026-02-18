@@ -134,6 +134,12 @@ export interface ObservationConfig {
    * If not set, synchronous observation is never used when async buffering is enabled.
    */
   blockAfter?: number;
+
+  /**
+   * Custom instructions to append to the Observer's system prompt.
+   * Use this to customize observation behavior for specific use cases.
+   */
+  instruction?: string;
 }
 
 /**
@@ -197,6 +203,12 @@ export interface ReflectionConfig {
    * Requires `observation.bufferTokens` to also be set.
    */
   bufferActivation?: number;
+
+  /**
+   * Custom instructions to append to the Reflector's system prompt.
+   * Use this to customize reflection behavior for specific use cases.
+   */
+  instruction?: string;
 }
 
 /**
