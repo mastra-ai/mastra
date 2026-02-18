@@ -246,6 +246,12 @@ export function generateTableSQL({
                 ADD CONSTRAINT ${workflowSnapshotConstraint}
                 UNIQUE (workflow_name, run_id);
               END IF;
+              IF EXISTS (
+                SELECT 1 FROM pg_indexes WHERE indexname = lower('${workflowSnapshotConstraint}') AND schemaname = '${schemaFilter}'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
+                REPLICA IDENTITY USING INDEX ${workflowSnapshotConstraint};
+              END IF;
             END $$;
             `
                 : ''
