@@ -201,6 +201,12 @@ export type CoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to convert tool output into multi-modal content blocks for the model.
+   */
+  experimental_toToolResultContent?: (
+    result: any,
+  ) => Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType?: string }>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -233,6 +239,12 @@ export type InternalCoreTool = {
    * Only populated when the tool is being used in an MCP context.
    */
   mcp?: MCPToolProperties;
+  /**
+   * Optional function to convert tool output into multi-modal content blocks for the model.
+   */
+  experimental_toToolResultContent?: (
+    result: any,
+  ) => Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType?: string }>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -331,6 +343,22 @@ export interface ToolAction<
    * ```
    */
   providerOptions?: Record<string, Record<string, unknown>>;
+  /**
+   * Optional function to convert tool output into multi-modal content blocks
+   * for the model (e.g., images, files). When provided, the AI SDK uses this
+   * to set `experimental_content` on tool result message parts.
+   *
+   * @example
+   * ```typescript
+   * experimental_toToolResultContent: (result) => [
+   *   { type: 'text', text: result.text },
+   *   { type: 'image', data: result.base64, mimeType: 'image/png' },
+   * ]
+   * ```
+   */
+  experimental_toToolResultContent?: (
+    result: TSchemaOut,
+  ) => Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType?: string }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {

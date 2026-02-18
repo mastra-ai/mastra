@@ -158,6 +158,15 @@ export class Tool<
   mcp?: MCPToolProperties;
 
   /**
+   * Optional function to convert tool output into multi-modal content blocks
+   * for the model (e.g., images, files). When provided, the AI SDK uses this
+   * to set `experimental_content` on tool result message parts.
+   */
+  experimental_toToolResultContent?: (
+    result: TSchemaOut,
+  ) => Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType?: string }>;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -184,6 +193,7 @@ export class Tool<
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
     this.mcp = opts.mcp;
+    this.experimental_toToolResultContent = opts.experimental_toToolResultContent;
 
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
