@@ -2263,7 +2263,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
     skipContinuationHints?: boolean,
-    compressionStartLevel?: 0 | 1 | 2,
+    compressionStartLevel?: 0 | 1 | 2 | 3,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -2279,84 +2279,99 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Track total usage across attempts
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-    // First attempt — use the provided start level (0 for regular reflection, 1 for buffered)
-    const firstLevel = compressionStartLevel ?? 0;
-    const retryLevel = Math.min(firstLevel + 1, 2) as 0 | 1 | 2;
-    let prompt = buildReflectorPrompt(observations, manualPrompt, firstLevel, skipContinuationHints);
-    omDebug(
-      `[OM:callReflector] starting first attempt: originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
-    );
+    // Attempt reflection with escalating compression levels.
+    // Start at the provided level and retry up to level 3 if compression fails.
+    let currentLevel: 0 | 1 | 2 | 3 = compressionStartLevel ?? 0;
+    const maxLevel: 0 | 1 | 2 | 3 = 3;
+    let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
+    let reflectedTokens = 0;
+    let attemptNumber = 0;
 
-    let chunkCount = 0;
-    const generatePromise = agent.generate(prompt, {
-      modelSettings: {
-        ...this.reflectionConfig.modelSettings,
-      },
-      providerOptions: this.reflectionConfig.providerOptions as any,
-      ...(abortSignal ? { abortSignal } : {}),
-      onChunk(chunk) {
-        chunkCount++;
-        if (chunkCount === 1 || chunkCount % 50 === 0) {
-          const preview =
-            chunk.type === 'text-delta'
-              ? ` text="${(chunk as any).textDelta?.slice(0, 80)}..."`
-              : chunk.type === 'tool-call'
-                ? ` tool=${(chunk as any).toolName}`
-                : '';
-          omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-        }
-      },
-      onFinish(event) {
-        omDebug(
-          `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-        );
-      },
-      onAbort(event) {
-        omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-      },
-      onError({ error }) {
-        omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-      },
-    });
+    while (currentLevel <= maxLevel) {
+      attemptNumber++;
+      const isRetry = attemptNumber > 1;
 
-    let result = await this.withAbortCheck(async () => {
-      return await generatePromise;
-    }, abortSignal);
+      const prompt = buildReflectorPrompt(observations, manualPrompt, currentLevel, skipContinuationHints);
+      omDebug(
+        `[OM:callReflector] ${isRetry ? `retry #${attemptNumber - 1}` : 'first attempt'}: level=${currentLevel}, originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
+      );
 
-    omDebug(
-      `[OM:callReflector] first attempt returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}, keys=${Object.keys(result).join(',')}`,
-    );
+      let chunkCount = 0;
+      const result = await this.withAbortCheck(
+        () =>
+          agent.generate(prompt, {
+            modelSettings: {
+              ...this.reflectionConfig.modelSettings,
+            },
+            providerOptions: this.reflectionConfig.providerOptions as any,
+            ...(abortSignal ? { abortSignal } : {}),
+            ...(attemptNumber === 1
+              ? {
+                  onChunk(chunk: any) {
+                    chunkCount++;
+                    if (chunkCount === 1 || chunkCount % 50 === 0) {
+                      const preview =
+                        chunk.type === 'text-delta'
+                          ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                          : chunk.type === 'tool-call'
+                            ? ` tool=${chunk.toolName}`
+                            : '';
+                      omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                    }
+                  },
+                  onFinish(event: any) {
+                    omDebug(
+                      `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                    );
+                  },
+                  onAbort(event: any) {
+                    omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                  },
+                  onError({ error }: { error: unknown }) {
+                    omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                  },
+                }
+              : {}),
+          }),
+        abortSignal,
+      );
 
-    // Accumulate usage from first attempt
-    const firstUsage = result.totalUsage ?? result.usage;
-    if (firstUsage) {
-      totalUsage.inputTokens += firstUsage.inputTokens ?? 0;
-      totalUsage.outputTokens += firstUsage.outputTokens ?? 0;
-      totalUsage.totalTokens += firstUsage.totalTokens ?? 0;
-    }
+      omDebug(
+        `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
+      );
 
-    let parsed = parseReflectorOutput(result.text);
-    let reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
-    omDebug(
-      `[OM:callReflector] first attempt parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}`,
-    );
+      // Accumulate usage
+      const usage = result.totalUsage ?? result.usage;
+      if (usage) {
+        totalUsage.inputTokens += usage.inputTokens ?? 0;
+        totalUsage.outputTokens += usage.outputTokens ?? 0;
+        totalUsage.totalTokens += usage.totalTokens ?? 0;
+      }
 
-    // Check if compression was successful (reflected tokens should be below target threshold)
-    if (!validateCompression(reflectedTokens, targetThreshold)) {
-      // Emit failed marker for first attempt, then start marker for retry
+      parsed = parseReflectorOutput(result.text);
+      reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+      omDebug(
+        `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}`,
+      );
+
+      // If compression succeeded or we've exhausted all levels, stop
+      if (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel) {
+        break;
+      }
+
+      // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
         const failedMarker = this.createObservationFailedMarker({
           cycleId: streamContext.cycleId,
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
-          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying with compression guidance`,
+          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
         await streamContext.writer.custom(failedMarker).catch(() => {});
 
-        // Generate new cycleId for retry
         const retryCycleId = crypto.randomUUID();
         streamContext.cycleId = retryCycleId;
 
@@ -2368,42 +2383,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           threadId: streamContext.threadId,
           threadIds: [streamContext.threadId],
         });
-        // Update startedAt from the marker that was just created
         streamContext.startedAt = startMarker.data.startedAt;
         await streamContext.writer.custom(startMarker).catch(() => {});
       }
 
-      // Retry with next compression level
-      prompt = buildReflectorPrompt(observations, manualPrompt, retryLevel, skipContinuationHints);
-      omDebug(`[OM:callReflector] starting retry: promptLen=${prompt.length}`);
-      result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.reflectionConfig.modelSettings,
-            },
-            providerOptions: this.reflectionConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-          }),
-        abortSignal,
-      );
-      omDebug(
-        `[OM:callReflector] retry returned: textLen=${result.text?.length}, inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
-      );
-
-      // Accumulate usage from retry attempt
-      const retryUsage = result.totalUsage ?? result.usage;
-      if (retryUsage) {
-        totalUsage.inputTokens += retryUsage.inputTokens ?? 0;
-        totalUsage.outputTokens += retryUsage.outputTokens ?? 0;
-        totalUsage.totalTokens += retryUsage.totalTokens ?? 0;
-      }
-
-      parsed = parseReflectorOutput(result.text);
-      reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
-      omDebug(
-        `[OM:callReflector] retry parsed: reflectedTokens=${reflectedTokens}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}`,
-      );
+      // Escalate to next compression level
+      currentLevel = Math.min(currentLevel + 1, maxLevel) as 0 | 1 | 2 | 3;
     }
 
     return {
@@ -4690,8 +4675,10 @@ ${formattedMessages}
     const activeObservations = allLines.slice(0, linesToReflect).join('\n');
     const reflectedObservationLineCount = linesToReflect;
     const sliceTokenEstimate = Math.round(avgTokensPerLine * linesToReflect);
-    // Compression target is the slice size × activation ratio, capped at the reflection threshold.
-    const compressionTarget = Math.min(sliceTokenEstimate * bufferActivation, reflectThreshold);
+    // Compression target: ask for 75% of the slice size. This is a modest reduction
+    // that LLMs can reliably achieve on dense observation text, unlike the more
+    // aggressive bufferActivation ratio which often fails on already-compressed content.
+    const compressionTarget = Math.round(sliceTokenEstimate * 0.75);
 
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
@@ -4749,7 +4736,7 @@ ${formattedMessages}
         cycleId,
         operationType: 'reflection',
         startedAt,
-        tokensBuffered: observationTokens,
+        tokensBuffered: sliceTokenEstimate,
         bufferedTokens: reflectionTokenCount,
         recordId: currentRecord.id,
         threadId: currentRecord.threadId ?? '',
