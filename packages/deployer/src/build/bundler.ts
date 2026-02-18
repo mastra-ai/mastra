@@ -125,15 +125,20 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      externalsPreset
-        ? null
-        : commonjs({
-            extensions: ['.js', '.ts'],
-            transformMixedEsModules: true,
-            esmExternals(id) {
-              return externals.includes(id);
-            },
-          }),
+      commonjs({
+        extensions: ['.js', '.ts'],
+        transformMixedEsModules: true,
+        esmExternals(id) {
+          if (externalsPreset) {
+            // With externals preset, all unresolved bare imports are external.
+            // Treat them as ESM so the plugin emits namespace imports (import * as ...)
+            // instead of default imports (import x from ...) which break for ESM
+            // packages without a default export (e.g. @prisma/client-runtime-utils).
+            return true;
+          }
+          return externals.includes(id);
+        },
+      }),
       enableEsmShim ? esmShim() : undefined,
       externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging

@@ -10,5 +10,6 @@ export const GLOBAL_EXTERNALS = [
   'typescript',
   'undici',
   'readable-stream',
+  '@prisma/client',
 ];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];

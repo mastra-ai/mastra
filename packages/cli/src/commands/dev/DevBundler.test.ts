@@ -99,7 +99,14 @@ describe('DevBundler', () => {
           {
             'process.env.NODE_ENV': JSON.stringify('test-env'),
           },
-          expect.objectContaining({ sourcemap: false }),
+          expect.objectContaining({
+            sourcemap: false,
+            bundlerOptions: expect.objectContaining({
+              enableSourcemap: false,
+              enableEsmShim: true,
+              externals: true,
+            }),
+          }),
         );
       } finally {
         await remove(tmpDir);
@@ -123,7 +130,14 @@ describe('DevBundler', () => {
           {
             'process.env.NODE_ENV': JSON.stringify('development'),
           },
-          expect.objectContaining({ sourcemap: false }),
+          expect.objectContaining({
+            sourcemap: false,
+            bundlerOptions: expect.objectContaining({
+              enableSourcemap: false,
+              enableEsmShim: true,
+              externals: true,
+            }),
+          }),
         );
       } finally {
         await remove(tmpDir);
