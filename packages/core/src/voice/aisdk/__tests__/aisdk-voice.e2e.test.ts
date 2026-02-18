@@ -137,19 +137,13 @@ describe('AI SDK Voice Integration Tests', () => {
     }, 15000);
 
     it('should transcribe audio file', async () => {
-      // Path from packages/core to voice/openai
-      try {
-        const speechStream = await speech.speak('This is a transcription test');
-        const text = await transcription.listen(speechStream);
+      const speechStream = await speech.speak('This is a transcription test');
+      const text = await transcription.listen(speechStream);
 
-        expect(text).toBeTruthy();
-        expect(typeof text).toBe('string');
-        expect(text.length).toBeGreaterThan(0);
-        console.log('Transcribed fixture:', text);
-      } catch (err) {
-        // If the fixture file doesn't exist or format detection fails, skip
-        console.log('Fixture file test skipped:', err);
-      }
+      expect(text).toBeTruthy();
+      expect(typeof text).toBe('string');
+      expect(text.length).toBeGreaterThan(0);
+      console.log('Transcribed fixture:', text);
     }, 15000);
 
     it('should handle provider-specific options', async () => {
