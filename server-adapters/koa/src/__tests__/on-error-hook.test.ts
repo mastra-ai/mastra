@@ -398,5 +398,54 @@ describe('Koa onError hook integration tests', () => {
       expect(onErrorCalled).toBe(true);
       expect(result).toEqual({ handled: true, message: 'Error via init' });
     });
+
+    it('should fall back to default error response when onError itself throws', async () => {
+      let onErrorCallCount = 0;
+
+      const mastra = new Mastra({
+        server: {
+          onError: () => {
+            onErrorCallCount++;
+            throw new Error('onError handler crashed');
+          },
+        },
+      });
+
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+      });
+
+      await adapter.init();
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/onerror-throws',
+        responseType: 'json',
+        handler: async () => {
+          throw new Error('Original error');
+        },
+      };
+
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/test/onerror-throws`);
+
+      expect(response.status).toBe(500);
+      const result = await response.json();
+      // Should fall back to default error response
+      expect(result).toEqual({ error: 'Original error' });
+      // onError should only be called once (guard prevents double invocation)
+      expect(onErrorCallCount).toBe(1);
+    });
   });
 });
