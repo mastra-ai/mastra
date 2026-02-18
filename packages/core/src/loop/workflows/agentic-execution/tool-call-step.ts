@@ -227,6 +227,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         return {
+          result: undefined,
           error: new ToolNotFoundError(
             `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
           ),

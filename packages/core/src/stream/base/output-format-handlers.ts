@@ -207,15 +207,15 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
 
     // For non-Zod schemas: plain JSONSchema7 or AI SDK Schema
     try {
-      if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
+      if (typeof this.schema === 'object' && !('jsonSchema' in this.schema)) {
         // Plain JSONSchema7 object - wrap it using jsonSchema()
         const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
         return result as ValidationResult<OUTPUT>;
-      } else if ((this.schema as Schema<any>).jsonSchema) {
+      } else if (typeof this.schema === 'object' && 'jsonSchema' in this.schema) {
         // Already an AI SDK Schema - use it directly
         const result = await safeValidateTypes({
           value,
-          schema: this.schema as Schema<OUTPUT>,
+          schema: this.schema as unknown as Schema<OUTPUT>,
         });
         return result;
       } else {
