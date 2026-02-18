@@ -20,14 +20,33 @@ import type {
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 
+import { AutoExtractedMetrics } from '../metrics/auto-extract';
 import { BaseObservabilityEventBus } from './base';
 import type { BaseObservabilityEventBusOptions } from './base';
 
+function isTracingEvent(event: ObservabilityEvent): event is TracingEvent {
+  return (
+    event.type === TracingEventType.SPAN_STARTED ||
+    event.type === TracingEventType.SPAN_UPDATED ||
+    event.type === TracingEventType.SPAN_ENDED
+  );
+}
+
 export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEvent> {
   private exporters: ObservabilityExporter[] = [];
+  private autoExtractor?: AutoExtractedMetrics;
 
   constructor(options?: BaseObservabilityEventBusOptions) {
     super(options);
+  }
+
+  /**
+   * Enable auto-extraction of metrics from tracing, score, and feedback events.
+   * When enabled, span lifecycle events automatically generate counter/histogram
+   * metrics (e.g., mastra_agent_runs_started, mastra_model_duration_ms).
+   */
+  enableAutoExtractedMetrics(): void {
+    this.autoExtractor = new AutoExtractedMetrics(this);
   }
 
   /**
@@ -66,6 +85,17 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     // Route to appropriate handler on each registered exporter
     for (const exporter of this.exporters) {
       this.routeToHandler(exporter, event);
+    }
+
+    // Auto-extract metrics from tracing, score, and feedback events
+    if (this.autoExtractor) {
+      if (isTracingEvent(event)) {
+        this.autoExtractor.processTracingEvent(event);
+      } else if (event.type === 'score') {
+        this.autoExtractor.processScoreEvent(event as ScoreEvent);
+      } else if (event.type === 'feedback') {
+        this.autoExtractor.processFeedbackEvent(event as FeedbackEvent);
+      }
     }
 
     // Also buffer for subscriber-based batch processing
