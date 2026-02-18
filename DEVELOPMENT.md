@@ -8,9 +8,9 @@ This guide provides instructions for developers who want to contribute to or wor
 - **pnpm** (v10.18.0 or later) - Mastra uses pnpm for package management
 - **Docker** (for local development services) - Only needed for a subset of tests, not required for general development
 
-## Getting Started
+## Getting started
 
-### Setting Up Your Development Environment
+### Setting up your development environment
 
 1. **Clone the repository**:
 
@@ -33,7 +33,7 @@ This guide provides instructions for developers who want to contribute to or wor
 
    This command installs all dependencies and builds the CLI package, which is required for other packages.
 
-### Building Packages
+### Building packages
 
 If you run into the following error during a build:
 
@@ -74,7 +74,7 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm build
   pnpm build:docs-mcp         # MCP documentation server
   ```
 
-## Testing Local Changes
+## Testing local changes
 
 Testing local changes to Mastra follows a simple three-step pattern:
 
@@ -82,11 +82,11 @@ Testing local changes to Mastra follows a simple three-step pattern:
 2. Build the packages
 3. Test your changes inside the `examples/agent` project
 
-### Step 1: Make Your Changes
+### Step 1: Make your changes
 
 Edit the necessary source files. Take note of the affected packages so that you can filter by them in the next step.
 
-### Step 2: Build the Packages
+### Step 2: Build the packages
 
 From the monorepo root, build the packages you modified:
 
@@ -195,6 +195,6 @@ pnpm run dev:services:up
 
 The documentation site is built from the `docs/` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on contributing to the docs.
 
-## Need Help?
+## Need help?
 
 Join the [Mastra Discord community](https://discord.gg/BTYqqHKUrf) for support and discussions.

@@ -2,11 +2,11 @@
 
 This file provides guidance to coding agents when working with code in this repository.
 
-## Scope Guidelines
+## Scope guidelines
 
 **IMPORTANT**: Unless explicitly mentioned in the user's prompt, do NOT check, search, read, or reference files in the `examples/` folder. Only include examples when the user specifically asks about them.
 
-## Monorepo Structure
+## Monorepo structure
 
 - This directory is a Git monorepo containing a `pnpm` workspace. pnpm is used for package management, and Turborepo is used for build orchestration.
 - The monorepo spans multiple folders:
@@ -26,7 +26,7 @@ This file provides guidance to coding agents when working with code in this repo
 - All packages use TypeScript with strict type checking
 - Vitest is used for testing, with test files co-located with source code
 
-## Development Commands
+## Development commands
 
 ### Build
 
@@ -46,7 +46,7 @@ This file provides guidance to coding agents when working with code in this repo
 - For faster iteration: build from root first, then `cd` into a package and run `pnpm test` there
 - Core tests take a long time to run, for targetted changes, run the appropriate individual test suites.
 
-### Linting and Formatting
+### Linting and formatting
 
 - `pnpm typecheck` - TypeScript checks across all packages
 - `pnpm prettier:format` - Format code with Prettier
@@ -58,17 +58,17 @@ The `@docs/` directory contains the source code and contents of the documentatio
 
 Whenever you change or add code, you MUST update/add related documentation for those changes.
 
-Follow `@docs/CONTRIBUTING.md` to learn more about required styleguides.
+Read `@docs/CONTRIBUTING.md` to learn more about the general setup and technical instructions. Read `@docs/styleguides/STYLEGUIDE.md` to adhere to the documentation styleguide. Read other relevant styleguides in `@docs/styleguides/` for specific types of documentation.
 
 ## Changelogs
 
 After making changes to the codebase, you MUST create a changeset. Follow `@.claude/commands/changeset.md` for guidelines on how to create a changeset and write effective changelog messages.
 
-## Architecture Overview
+## Architecture overview
 
 Mastra is a modular AI framework built around central orchestration with pluggable components.
 
-### Core Components (`packages/core/src/`)
+### Core components (`packages/core/src/`)
 
 - **Mastra Class** (`mastra/`) - Central configuration hub with dependency injection
 - **Agents** (`agent/`) - AI interaction abstraction with tools, memory, and voice
@@ -77,7 +77,7 @@ Mastra is a modular AI framework built around central orchestration with pluggab
 - **Workflows** (`workflows/`) - Step-based execution with suspend/resume
 - **Storage** (`storage/`) - Pluggable backends with standardized interfaces
 
-### Key Patterns
+### Key patterns
 
 1. **Dependency Injection** - Components register with central Mastra instance
 2. **Plugin Architecture** - Pluggable storage, vectors, memory, deployers
