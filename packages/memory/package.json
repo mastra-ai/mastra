@@ -50,7 +50,7 @@
     "async-mutex": "^0.5.0",
     "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
-    "lru-cache": "^11.2.2",
+    "lru-cache": "^11.2.6",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
