@@ -72,7 +72,7 @@ export abstract class CrudEditorNamespace<
   TResolved,
   THydrated = TResolved,
 > extends EditorNamespace {
-  private _cache = new Map<string, THydrated>();
+  protected _cache = new Map<string, THydrated>();
 
   /**
    * Each subclass must provide a storage adapter that maps

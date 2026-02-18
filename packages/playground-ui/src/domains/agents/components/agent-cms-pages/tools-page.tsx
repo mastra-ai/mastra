@@ -1,24 +1,28 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { EntityAccordionItem, SectionHeader } from '@/domains/cms';
+import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { ToolsIcon } from '@/ds/icons';
 import { Section } from '@/ds/components/Section';
-import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
 import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
 import type { RuleGroup } from '@/lib/rule-engine';
-import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/lib/utils';
+import { Searchbar } from '@/ds/components/Searchbar';
 
 export function ToolsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
   const { data: tools, isLoading: isLoadingTools } = useTools();
-
+  const [search, setSearch] = useState('');
   const selectedTools = useWatch({ control, name: 'tools' });
   const selectedIntegrationTools = useWatch({ control, name: 'integrationTools' });
   const variables = useWatch({ control, name: 'variables' });
@@ -48,14 +52,18 @@ export function ToolsPage() {
     return option?.description || '';
   };
 
-  const handleValueChange = (newIds: string[]) => {
-    const newTools: Record<string, EntityConfig> = {};
-
-    for (const id of newIds) {
-      newTools[id] = selectedTools?.[id] || { description: getOriginalDescription(id) };
+  const handleValueChange = (toolId: string) => {
+    const isSet = selectedTools?.[toolId] !== undefined;
+    if (isSet) {
+      const next = { ...selectedTools };
+      delete next[toolId];
+      form.setValue('tools', next);
+    } else {
+      form.setValue('tools', {
+        ...selectedTools,
+        [toolId]: { ...selectedTools?.[toolId], description: getOriginalDescription(toolId) },
+      });
     }
-
-    form.setValue('tools', newTools);
   };
 
   const handleDescriptionChange = (toolId: string, description: string) => {
@@ -63,12 +71,6 @@ export function ToolsPage() {
       ...selectedTools,
       [toolId]: { ...selectedTools?.[toolId], description },
     });
-  };
-
-  const handleRemove = (toolId: string) => {
-    const next = { ...selectedTools };
-    delete next[toolId];
-    form.setValue('tools', next);
   };
 
   const handleRulesChange = (toolId: string, rules: RuleGroup | undefined) => {
@@ -99,15 +101,16 @@ export function ToolsPage() {
     [form, selectedIntegrationTools],
   );
 
-  const selectedOptions = options.filter(opt => selectedToolIds.includes(opt.value));
+  const filteredOptions = useMemo(() => {
+    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 p-4">
+      <div className="flex flex-col gap-6">
         <SectionHeader
           title="Tools"
           subtitle={`Select the tools this agent can use.${totalCount > 0 ? ` (${totalCount} selected)` : ''}`}
-          icon={<ToolsIcon className="text-accent6" />}
         />
 
         <MCPClientList />
@@ -117,45 +120,63 @@ export function ToolsPage() {
           onSubmitTools={readOnly ? undefined : handleIntegrationToolsSubmit}
         />
 
-        <Section>
+        <SubSectionRoot>
           <Section.Header>
-            <Section.Heading>
-              <ToolsIcon />
-              Available Tools
-            </Section.Heading>
+            <SubSectionHeader title="Available Tools" icon={<ToolsIcon />} />
           </Section.Header>
 
-          <div className="flex flex-col gap-2">
-            <MultiCombobox
-              options={options}
-              value={selectedToolIds}
-              onValueChange={handleValueChange}
-              placeholder="Select tools..."
-              searchPlaceholder="Search tools..."
-              emptyText="No tools available"
-              disabled={isLoadingTools || readOnly}
-              variant="light"
-            />
-            {selectedOptions.length > 0 && (
-              <div className="flex flex-col gap-3 mt-2">
-                {selectedOptions.map(tool => (
-                  <EntityAccordionItem
-                    key={tool.value}
-                    id={tool.value}
-                    name={tool.label}
-                    icon={<ToolsIcon className="text-accent6" />}
-                    description={selectedTools?.[tool.value]?.description || ''}
-                    onDescriptionChange={readOnly ? undefined : desc => handleDescriptionChange(tool.value, desc)}
-                    onRemove={readOnly ? undefined : () => handleRemove(tool.value)}
-                    schema={variables}
-                    rules={selectedTools?.[tool.value]?.rules || undefined}
-                    onRulesChange={readOnly ? undefined : rules => handleRulesChange(tool.value, rules)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </Section>
+          <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
+
+          {filteredOptions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {filteredOptions.map(tool => {
+                const isSelected = selectedToolIds.includes(tool.value);
+
+                const isDisabled = readOnly || !isSelected;
+
+                return (
+                  <Entity key={tool.value} className="bg-surface2">
+                    <EntityContent>
+                      <EntityName>{tool.label}</EntityName>
+                      <EntityDescription>
+                        <input
+                          type="text"
+                          disabled={isDisabled}
+                          className={cn(
+                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                            !isDisabled && 'border-border1 border-dashed ',
+                          )}
+                          value={
+                            isSelected
+                              ? (selectedTools?.[tool.value]?.description ?? tool.description)
+                              : tool.description
+                          }
+                          onChange={e => handleDescriptionChange(tool.value, e.target.value)}
+                        />
+                      </EntityDescription>
+                    </EntityContent>
+
+                    {isSelected && !readOnly && (
+                      <DisplayConditionsDialog
+                        entityName={tool.label}
+                        schema={variables}
+                        rules={selectedTools?.[tool.value]?.rules}
+                        onRulesChange={rules => handleRulesChange(tool.value, rules)}
+                      />
+                    )}
+
+                    {!readOnly && (
+                      <Switch
+                        checked={selectedToolIds.includes(tool.value)}
+                        onCheckedChange={() => handleValueChange(tool.value)}
+                      />
+                    )}
+                  </Entity>
+                );
+              })}
+            </div>
+          )}
+        </SubSectionRoot>
       </div>
     </ScrollArea>
   );

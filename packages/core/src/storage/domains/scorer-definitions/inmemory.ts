@@ -92,22 +92,7 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     }
 
     // Separate metadata fields from config fields
-    const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-
-    // Config field names from StorageScorerDefinitionSnapshotType
-    const configFieldNames = [
-      'name',
-      'description',
-      'type',
-      'model',
-      'instructions',
-      'scoreRange',
-      'presetConfig',
-      'defaultSampling',
-    ];
-
-    // Check if any config fields are present in the update
-    const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+    const { authorId, activeVersionId, metadata, status } = updates;
 
     // Update metadata fields on the scorer record
     const updatedScorer: StorageScorerDefinitionType = {
@@ -120,60 +105,6 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
       }),
       updatedAt: new Date(),
     };
-
-    // If activeVersionId is set, mark as published
-    if (activeVersionId !== undefined) {
-      updatedScorer.status = 'published';
-    }
-
-    // If config fields are being updated, create a new version
-    if (hasConfigUpdate) {
-      // Get the latest version to use as base
-      const latestVersion = await this.getLatestVersion(id);
-      if (!latestVersion) {
-        throw new Error(`No versions found for scorer definition ${id}`);
-      }
-
-      // Extract config from latest version
-      const {
-        id: _versionId,
-        scorerDefinitionId: _scorerDefinitionId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...latestConfig
-      } = latestVersion;
-
-      // Merge updates into latest config
-      const newConfig = {
-        ...latestConfig,
-        ...configFields,
-      };
-
-      // Identify which fields changed
-      const changedFields = configFieldNames.filter(
-        field =>
-          field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-      );
-
-      // Only create a new version if something actually changed
-      if (changedFields.length > 0) {
-        const newVersionId = crypto.randomUUID();
-        const newVersionNumber = latestVersion.versionNumber + 1;
-
-        await this.createVersion({
-          id: newVersionId,
-          scorerDefinitionId: id,
-          versionNumber: newVersionNumber,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
-      }
-    }
 
     // Save the updated scorer record
     this.db.scorerDefinitions.set(id, updatedScorer);
@@ -189,7 +120,7 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryScorerDefinitionsStorage: list called`);
@@ -209,6 +140,9 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
 
     // Get all scorer definitions and apply filters
     let scorers = Array.from(this.db.scorerDefinitions.values());
+
+    // Filter by status
+    scorers = scorers.filter(scorer => scorer.status === status);
 
     // Filter by authorId if provided
     if (authorId !== undefined) {

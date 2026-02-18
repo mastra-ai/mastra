@@ -753,7 +753,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.agent.list();
+          storedAgentsResult = await editor?.agent.list({ status: 'draft' });
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;
