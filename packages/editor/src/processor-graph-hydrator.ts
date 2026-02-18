@@ -21,6 +21,8 @@ import type { Mastra } from '@mastra/core';
 
 import { evaluateRuleGroup } from './rule-evaluator';
 
+const PASSTHROUGH_STEP_PREFIX = 'passthrough-';
+
 interface HydrationContext {
   providers: Record<string, ProcessorProvider>;
   mastra?: Mastra;
@@ -39,11 +41,6 @@ function resolveStep(step: ProcessorGraphStep, ctx: HydrationContext): Processor
 
   const processor = provider.createProcessor(step.config);
 
-  // Register Mastra on the processor if it supports it
-  if (ctx.mastra && processor.__registerMastra) {
-    processor.__registerMastra(ctx.mastra as any);
-  }
-
   // Wrap with phase filtering if only a subset of phases are enabled
   const allProviderPhases = provider.availablePhases;
   const enabledSet = new Set(step.enabledPhases);
@@ -51,10 +48,16 @@ function resolveStep(step: ProcessorGraphStep, ctx: HydrationContext): Processor
 
   if (needsFiltering) {
     const filtered = new PhaseFilteredProcessor(processor, step.enabledPhases);
+    // Register Mastra on the filtered wrapper (which delegates to the inner processor)
     if (ctx.mastra) {
       filtered.__registerMastra(ctx.mastra as any);
     }
     return filtered;
+  }
+
+  // Register Mastra directly on the processor when no filtering is needed
+  if (ctx.mastra && processor.__registerMastra) {
+    processor.__registerMastra(ctx.mastra as any);
   }
 
   return processor;
@@ -95,8 +98,8 @@ async function mergeBranchOutputs({ inputData }: { inputData: Record<string, any
   // Find the first branch result with processor-compatible shape.
   // Prefer non-passthrough branches (real processor output) over passthrough fallback.
   const keys = Object.keys(inputData).sort((a, b) => {
-    const aPass = a.includes('passthrough') ? 1 : 0;
-    const bPass = b.includes('passthrough') ? 1 : 0;
+    const aPass = a.startsWith(PASSTHROUGH_STEP_PREFIX) ? 1 : 0;
+    const bPass = b.startsWith(PASSTHROUGH_STEP_PREFIX) ? 1 : 0;
     return aPass - bPass;
   });
   for (const key of keys) {
@@ -151,7 +154,7 @@ function buildWorkflow(
     } else if (entry.type === 'parallel') {
       // Build parallel branches: each branch is an array of entries
       const branchSteps = entry.branches
-        .map(branchEntries => {
+        .map((branchEntries, branchIdx) => {
           // Each branch must be a single step (or sub-workflow) for the parallel API
           // For multi-step branches, wrap in a sub-workflow
           if (branchEntries.length === 1 && branchEntries[0]!.type === 'step') {
@@ -162,7 +165,7 @@ function buildWorkflow(
           // Multi-step branch: build a sub-workflow
           const subWorkflow = buildWorkflow(
             branchEntries,
-            `${workflowId}-parallel-branch-${Math.random().toString(36).slice(2, 8)}`,
+            `${workflowId}-parallel-branch-${branchIdx}`,
             ctx,
           );
           return subWorkflow;
@@ -211,7 +214,7 @@ function buildWorkflow(
         // when no user-defined condition matches (e.g. during inputStep/outputStep phases
         // where conditions only target 'input' or 'outputResult' phase).
         const passthroughStep = createStep({
-          id: `passthrough-${workflowId}`,
+          id: `${PASSTHROUGH_STEP_PREFIX}${workflowId}`,
           inputSchema: ProcessorStepSchema,
           outputSchema: ProcessorStepSchema,
           execute: async ({ inputData }) => inputData,
@@ -243,7 +246,17 @@ export function hydrateProcessorGraph(
   mode: 'input' | 'output',
   ctx: HydrationContext,
 ): InputProcessorOrWorkflow[] | OutputProcessorOrWorkflow[] | undefined {
-  if (!graph || !Array.isArray(graph.steps) || graph.steps.length === 0) return undefined;
+  if (!graph) return undefined;
+
+  // Backward compat: old storage format used string[] of processor IDs.
+  // These can't be coerced to the new StoredProcessorGraph format since they
+  // reference Mastra.processors by ID, not ProcessorProvider configs.
+  if (Array.isArray(graph)) {
+    ctx.logger?.warn('Processor graph is in legacy string[] format and cannot be hydrated. Re-save the agent to migrate.');
+    return undefined;
+  }
+
+  if (!Array.isArray(graph.steps) || graph.steps.length === 0) return undefined;
 
   // Simple sequential graph: return flat processor array
   if (isSequentialOnly(graph.steps)) {

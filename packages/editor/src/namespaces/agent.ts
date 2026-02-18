@@ -350,7 +350,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       : await this.resolveStoredScorers(storedAgent.scorers as Record<string, StorageScorerConfig> | undefined);
 
     // Input processors (graph): first-match from conditional variants, then hydrate
-    const processorProviders = this.editor.listProcessorProviders();
+    const processorProviders = this.editor.getProcessorProviders();
     const hydrationCtx = { providers: processorProviders, mastra: this.mastra, logger: this.logger };
 
     const inputProcessors = hasConditionalInputProcessors

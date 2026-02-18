@@ -1827,27 +1827,34 @@ export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
 // Processor Provider Types
 // ============================================================================
 
+/**
+ * Provider phase names as returned by the server (prefixed form).
+ * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
+ */
+export type ProcessorProviderPhase =
+  | 'processInput'
+  | 'processInputStep'
+  | 'processOutputStream'
+  | 'processOutputResult'
+  | 'processOutputStep';
+
 export interface ProcessorProviderInfo {
   id: string;
   name: string;
   description?: string;
+  availablePhases: ProcessorProviderPhase[];
 }
 
-export interface ProcessorProviderProcessorInfo {
-  slug: string;
-  name: string;
-  description?: string;
-  availablePhases: ProcessorPhase[];
-  configSchema?: Record<string, unknown>;
-}
-
-export interface ListProcessorProvidersResponse {
+export interface GetProcessorProvidersResponse {
   providers: ProcessorProviderInfo[];
 }
 
 export interface GetProcessorProviderResponse {
-  provider: ProcessorProviderInfo;
-  processors: ProcessorProviderProcessorInfo[];
+  id: string;
+  name: string;
+  description?: string;
+  availablePhases: ProcessorProviderPhase[];
+  configSchema: Record<string, unknown>;
 }
 
 // ============================================================================

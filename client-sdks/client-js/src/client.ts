@@ -93,7 +93,7 @@ import type {
   DatasetItemVersionResponse,
   DatasetVersionResponse,
   ListToolProvidersResponse,
-  ListProcessorProvidersResponse,
+  GetProcessorProvidersResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -1041,7 +1041,7 @@ export class MastraClient extends BaseResource {
    * Lists all registered processor providers
    * @returns Promise containing list of processor provider info
    */
-  public listProcessorProviders(): Promise<ListProcessorProvidersResponse> {
+  public getProcessorProviders(): Promise<GetProcessorProvidersResponse> {
     return this.request('/processor-providers');
   }
 

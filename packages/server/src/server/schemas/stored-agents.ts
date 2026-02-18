@@ -126,7 +126,7 @@ const processorGraphStepSchema = z.object({
   id: z.string().describe('Unique ID for this step within the graph'),
   providerId: z.string().describe('ProcessorProvider ID that creates this processor'),
   config: z.record(z.string(), z.unknown()).describe('Configuration matching the provider configSchema'),
-  enabledPhases: z.array(processorPhaseSchema).describe('Which processor phases to enable'),
+  enabledPhases: z.array(processorPhaseSchema).min(1).describe('Which processor phases to enable'),
 });
 
 /**

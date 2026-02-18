@@ -20,7 +20,7 @@ const processorPhaseSchema = z.enum([
   'processOutputStep',
 ]);
 
-export const listProcessorProvidersResponseSchema = z.object({
+export const getProcessorProvidersResponseSchema = z.object({
   providers: z.array(
     z.object({
       id: z.string(),

@@ -138,7 +138,7 @@ export class MastraEditor implements IMastraEditor {
   }
 
   /** List all registered processor providers */
-  listProcessorProviders(): Record<string, ProcessorProvider> {
+  getProcessorProviders(): Record<string, ProcessorProvider> {
     return this.__processorProviders;
   }
   /** List all registered filesystem providers */

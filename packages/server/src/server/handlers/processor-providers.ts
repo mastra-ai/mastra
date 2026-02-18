@@ -3,7 +3,7 @@ import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { HTTPException } from '../http-exception';
 import {
   processorProviderIdPathParams,
-  listProcessorProvidersResponseSchema,
+  getProcessorProvidersResponseSchema,
   getProcessorProviderResponseSchema,
 } from '../schemas/processor-providers';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -21,7 +21,7 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
   method: 'GET',
   path: '/processor-providers',
   responseType: 'json',
-  responseSchema: listProcessorProvidersResponseSchema,
+  responseSchema: getProcessorProvidersResponseSchema,
   summary: 'List processor providers',
   description: 'Returns a list of all registered processor providers with their info and available phases',
   tags: ['Processor Providers'],
@@ -34,7 +34,7 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Editor is not configured' });
       }
 
-      const providers = editor.listProcessorProviders();
+      const providers = editor.getProcessorProviders();
 
       return {
         providers: Object.values(providers).map(provider => ({

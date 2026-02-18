@@ -288,5 +288,5 @@ export interface IMastraEditor {
   /** Get a processor provider by ID */
   getProcessorProvider(id: string): ProcessorProvider | undefined;
   /** List all registered processor providers */
-  listProcessorProviders(): Record<string, ProcessorProvider>;
+  getProcessorProviders(): Record<string, ProcessorProvider>;
 }

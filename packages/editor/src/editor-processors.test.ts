@@ -829,7 +829,7 @@ describe('Stored Agents with Processor Providers', () => {
         processorProviders: { tagger, suffixer },
       });
 
-      const providers = editor.listProcessorProviders();
+      const providers = editor.getProcessorProviders();
       // Custom providers are present
       expect(providers['tagger']).toBe(tagger);
       expect(providers['suffixer']).toBe(suffixer);
@@ -863,7 +863,7 @@ describe('Stored Agents with Processor Providers', () => {
         processorProviders: { 'unicode-normalizer': customUnicode },
       });
 
-      const providers = editor.listProcessorProviders();
+      const providers = editor.getProcessorProviders();
       // Custom provider overrides the built-in one
       expect(providers['unicode-normalizer']).toBe(customUnicode);
     });
