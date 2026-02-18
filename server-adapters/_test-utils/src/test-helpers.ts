@@ -483,7 +483,9 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       clearCache: vi.fn(),
     },
     getToolProviders: vi.fn().mockReturnValue({ 'test-provider': mockToolProvider }),
-    getToolProvider: vi.fn().mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getToolProvider: vi
+      .fn()
+      .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
   } as any);
 
   await mockWorkflowRun(workflow);
