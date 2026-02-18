@@ -128,10 +128,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     };
   }
   async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
-    res.header('Content-Type', 'text/plain');
-    res.header('Transfer-Encoding', 'chunked');
-
     const streamFormat = route.streamFormat || 'stream';
+
+    if (streamFormat === 'sse') {
+      res.header('Content-Type', 'text/event-stream');
+      res.header('Cache-Control', 'no-cache');
+      res.header('Connection', 'keep-alive');
+      res.header('X-Accel-Buffering', 'no');
+    } else {
+      res.header('Content-Type', 'text/plain');
+    }
+    res.header('Transfer-Encoding', 'chunked');
 
     return stream(
       res,
@@ -160,7 +167,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
 
-          await stream.write('data: [DONE]\n\n');
+          if (streamFormat === 'sse') {
+            await stream.write('data: [DONE]\n\n');
+          }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
