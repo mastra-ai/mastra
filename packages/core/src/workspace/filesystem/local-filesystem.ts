@@ -19,7 +19,8 @@ import {
   WorkspaceReadOnlyError,
 } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
-import type { LSPConfig } from '../lsp/types';
+import { isLSPAvailable, LSPManager } from '../lsp';
+import type { LSPConfig } from '../lsp';
 import type {
   FilesystemInfo,
   FileContent,
@@ -133,7 +134,7 @@ export class LocalFilesystem extends MastraFilesystem {
   private readonly _basePath: string;
   private readonly _contained: boolean;
   private _allowedPaths: string[];
-  private _lsp?: any; // LSPManager — typed as any to avoid importing Node-only code at module level
+  private _lsp?: LSPManager;
   private _lspConfig?: LSPConfig;
 
   /**
@@ -156,7 +157,7 @@ export class LocalFilesystem extends MastraFilesystem {
    * The LSP manager (if configured and initialized).
    * Returns undefined if LSP is not configured or init() hasn't been called.
    */
-  get lsp(): any {
+  get lsp(): LSPManager | undefined {
     return this._lsp;
   }
 
@@ -708,15 +709,8 @@ export class LocalFilesystem extends MastraFilesystem {
     await fs.mkdir(this._basePath, { recursive: true });
 
     // Initialize LSP if configured
-    if (this._lspConfig) {
-      try {
-        const { isLSPAvailable, LSPManager } = await import('../lsp/index');
-        if (isLSPAvailable()) {
-          this._lsp = new LSPManager(this._lspConfig);
-        }
-      } catch {
-        // LSP deps not available — silently skip
-      }
+    if (this._lspConfig && isLSPAvailable()) {
+      this._lsp = new LSPManager(this._lspConfig);
     }
 
     this.logger.debug('Filesystem initialized', { basePath: this._basePath });
