@@ -16,8 +16,10 @@ import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 
+import type { ExportResult } from '@opentelemetry/core';
+import { ExportResultCode } from '@opentelemetry/core';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter, ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 import { loadExporter, loadSignalExporter } from './loadExporter.js';
 import { convertLog } from './log-converter.js';
@@ -26,6 +28,38 @@ import { resolveProviderConfig } from './provider-configs.js';
 import type { ResolvedProviderConfig } from './provider-configs.js';
 import { SpanConverter } from './span-converter.js';
 import type { OtelExporterConfig } from './types.js';
+
+/**
+ * Wrapper around a SpanExporter that logs export results when debug mode is enabled.
+ * The OTel SDK intentionally does not log on success, making debugging difficult.
+ * This wrapper adds visibility into each batch export's outcome.
+ */
+class DebugSpanExporterWrapper implements SpanExporter {
+  constructor(
+    private inner: SpanExporter,
+    private debugLog: (msg: string) => void,
+  ) {}
+
+  export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
+    const count = spans.length;
+    this.inner.export(spans, (result: ExportResult) => {
+      if (result.code === ExportResultCode.SUCCESS) {
+        this.debugLog(`[OtelExporter] Export completed: ${count} spans sent successfully`);
+      } else {
+        this.debugLog(`[OtelExporter] Export FAILED: ${count} spans, error: ${result.error?.message ?? 'unknown'}`);
+      }
+      resultCallback(result);
+    });
+  }
+
+  async shutdown(): Promise<void> {
+    return this.inner.shutdown();
+  }
+
+  async forceFlush(): Promise<void> {
+    return this.inner.forceFlush?.();
+  }
+}
 
 export class OtelExporter extends BaseExporter {
   private config: OtelExporterConfig;
@@ -229,9 +263,14 @@ export class OtelExporter extends BaseExporter {
       format: 'GenAI_v1_38_0',
     });
 
+    // Wrap exporter with debug logging when enabled
+    const exporterForProcessor = this.isDebug
+      ? new DebugSpanExporterWrapper(this.exporter!, msg => this.logger.debug(msg))
+      : this.exporter!;
+
     // Always use BatchSpanProcessor for production
     // It queues spans and exports them in batches for better performance
-    this.processor = new BatchSpanProcessor(this.exporter!, {
+    this.processor = new BatchSpanProcessor(exporterForProcessor, {
       maxExportBatchSize: this.config.batchSize || 512, // Default batch size
       maxQueueSize: 2048, // Maximum spans to queue
       scheduledDelayMillis: 5000, // Export every 5 seconds
