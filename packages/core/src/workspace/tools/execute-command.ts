@@ -12,7 +12,7 @@ Usage:
 - Verify parent directories exist before running commands that create files or directories.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
 - Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Use cwd to set the working directory, or commands run from the sandbox default.`,
+- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`,
   inputSchema: z.object({
     command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
     args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
