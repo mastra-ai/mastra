@@ -60,7 +60,7 @@ Add H2 sections for cross-cutting concerns that apply to the whole category (e.g
 4. **No deep dives** — Keep individual sections short. If you're writing more than two paragraphs about a single sub-topic, move that content to a standard page and link to it instead.
 5. **Close with "Next steps"** — List links to the standard pages and the API reference. This replaces the "Related" section used on standard pages.
 
-### Example: memory overview
+### Example: Memory overview
 
 ```mdx
 ---
@@ -194,7 +194,7 @@ Use Tabs when the reader can choose between multiple approaches.
 9. **Close with "Related"** — Always end with a "Related" section that links to related pages and the API reference.
 10. **One concept per page** — If a section grows beyond three H2-level subsections, consider splitting it into its own page.
 
-### Example: standard page
+### Example: Standard page
 
 ````mdx
 ---
@@ -238,7 +238,6 @@ const response = await testAgent.generate('Help me plan my day.', {
 
 console.log(response.object)
 ```
-````
 
   </TabItem>
   <TabItem value="json-schema" label="JSON Schema">
@@ -278,7 +277,4 @@ Visit [.generate()](/reference/agents/generate) for a full list of configuration
 
 - [Using tools](/docs/agents/using-tools)
 - [Agent memory](/docs/agents/agent-memory)
-
-```
-
-```
+````
