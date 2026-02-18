@@ -95,7 +95,13 @@ export async function getEditDiagnosticsText(
 
     const absolutePath = resolveWorkspacePath(basePath, filePath);
 
-    const diagnostics: LSPDiagnostic[] = await lspManager.getDiagnostics(absolutePath, content, basePath);
+    const DIAG_TIMEOUT_MS = 10_000;
+    const diagnostics: LSPDiagnostic[] = await Promise.race([
+      lspManager.getDiagnostics(absolutePath, content, basePath),
+      new Promise<LSPDiagnostic[]>((_, reject) =>
+        setTimeout(() => reject(new Error('LSP diagnostics timeout')), DIAG_TIMEOUT_MS),
+      ),
+    ]);
     if (diagnostics.length === 0) return '';
 
     // Deduplicate by severity + location + message

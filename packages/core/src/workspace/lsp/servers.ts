@@ -103,7 +103,7 @@ export const BUILTIN_SERVERS: Record<string, LSPServerDef> = {
         'eslint.config.cjs',
       ]),
     spawn: (root: string) => {
-      const binaryPath = join(process.cwd(), 'node_modules', '.bin', 'eslint-lsp');
+      const binaryPath = join(process.cwd(), 'node_modules', '.bin', 'vscode-eslint-language-server');
       return spawn(binaryPath, ['--stdio'], {
         cwd: root,
         stdio: ['pipe', 'pipe', 'pipe'],

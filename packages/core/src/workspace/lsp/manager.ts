@@ -68,13 +68,20 @@ export class LSPManager {
 
     // Create and initialize
     const initTimeout = this.config.initTimeout ?? 15000;
+    let timedOut = false;
     const initPromise = (async () => {
       const client = new LSPClient(serverDef, workspaceRoot);
       await client.initialize(initTimeout);
+      if (timedOut) {
+        // Timeout already fired — don't leak the client
+        await client.shutdown().catch(() => {});
+        return;
+      }
       this.clients.set(key, client);
     })();
 
     this.initPromises.set(key, initPromise);
+    initPromise.catch(() => {}); // prevent unhandled rejection if timeout wins
 
     try {
       await Promise.race([
@@ -85,6 +92,7 @@ export class LSPManager {
       ]);
       return this.clients.get(key) || null;
     } catch {
+      timedOut = true;
       this.clients.delete(key);
       return null;
     } finally {
@@ -109,10 +117,12 @@ export class LSPManager {
       client.notifyChange(filePath, content, 1);
 
       const diagnosticTimeout = this.config.diagnosticTimeout ?? 5000;
-      const rawDiagnostics = await client.waitForDiagnostics(filePath, diagnosticTimeout);
-
-      // Close the document after collecting diagnostics
-      client.notifyClose(filePath);
+      let rawDiagnostics: any[];
+      try {
+        rawDiagnostics = await client.waitForDiagnostics(filePath, diagnosticTimeout);
+      } finally {
+        client.notifyClose(filePath);
+      }
 
       return rawDiagnostics.map((d: any) => ({
         severity: mapSeverity(d.severity),
@@ -130,8 +140,7 @@ export class LSPManager {
    * Shutdown all managed LSP clients.
    */
   async shutdownAll(): Promise<void> {
-    const shutdowns = Array.from(this.clients.values()).map(client => client.shutdown());
-    await Promise.all(shutdowns);
+    await Promise.allSettled(Array.from(this.clients.values()).map(client => client.shutdown()));
     this.clients.clear();
     this.initPromises.clear();
   }

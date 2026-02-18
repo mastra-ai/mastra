@@ -184,8 +184,13 @@ export function isTextFile(filename: string): boolean {
  * @returns The absolute OS filesystem path
  */
 export function resolveWorkspacePath(basePath: string, filePath: string): string {
-  if (path.isAbsolute(filePath) && path.normalize(filePath).startsWith(path.normalize(basePath))) {
-    return path.normalize(filePath);
+  if (path.isAbsolute(filePath)) {
+    const normalizedBase = path.normalize(basePath);
+    const normalizedFile = path.normalize(filePath);
+    const rel = path.relative(normalizedBase, normalizedFile);
+    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return normalizedFile;
+    }
   }
   return path.join(basePath, filePath.replace(/^\/+/, ''));
 }

@@ -104,8 +104,52 @@ export function getLanguageFromPath(filePath: string, Lang: any): any {
     case 'css':
       return Lang.Css;
     default:
-      return Lang.TypeScript;
+      return null;
   }
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/** Escape regex metacharacters in a string. */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Rename all identifier occurrences matching `oldName` to `newName`.
+ * Not scope-aware: renames all occurrences regardless of scope.
+ */
+function renameIdentifiers(content: string, root: any, oldName: string, newName: string): TransformResult {
+  let modifiedContent = content;
+  let count = 0;
+
+  const identifiers = root.findAll({
+    rule: {
+      kind: 'identifier',
+      regex: `^${escapeRegex(oldName)}$`,
+    },
+  });
+
+  const replacements: Replacement[] = [];
+  const seen = new Set<number>();
+
+  for (const id of identifiers) {
+    const range = id.range();
+    if (seen.has(range.start.index)) continue;
+    seen.add(range.start.index);
+    replacements.push({ start: range.start.index, end: range.end.index, text: newName });
+    count++;
+  }
+
+  replacements.sort((a, b) => b.start - a.start);
+
+  for (const { start, end, text } of replacements) {
+    modifiedContent = modifiedContent.slice(0, start) + text + modifiedContent.slice(end);
+  }
+
+  return { content: modifiedContent, count };
 }
 
 // =============================================================================
@@ -250,44 +294,9 @@ export function removeImport(content: string, root: any, targetName: string): st
 /**
  * Rename a function — updates declarations, expressions, arrow functions, and call sites.
  * Not scope-aware: renames all occurrences regardless of scope.
- *
- * Uses ast-grep's rule API to find all identifier nodes matching the target name,
- * which reliably handles declarations, call sites, and references across all syntax forms.
  */
 export function renameFunction(content: string, root: any, oldName: string, newName: string): TransformResult {
-  let modifiedContent = content;
-  let count = 0;
-
-  // Find all identifier nodes that exactly match the old name.
-  // This covers function declarations, named function expressions, arrow function bindings,
-  // call sites, and any other references.
-  const identifiers = root.findAll({
-    rule: {
-      kind: 'identifier',
-      regex: `^${oldName}$`,
-    },
-  });
-
-  const replacements: Replacement[] = [];
-  const seen = new Set<number>();
-
-  for (const id of identifiers) {
-    const range = id.range();
-    // Deduplicate by start position (ast-grep can return overlapping matches)
-    if (seen.has(range.start.index)) continue;
-    seen.add(range.start.index);
-    replacements.push({ start: range.start.index, end: range.end.index, text: newName });
-    count++;
-  }
-
-  // Sort reverse to preserve positions during replacement
-  replacements.sort((a, b) => b.start - a.start);
-
-  for (const { start, end, text } of replacements) {
-    modifiedContent = modifiedContent.slice(0, start) + text + modifiedContent.slice(end);
-  }
-
-  return { content: modifiedContent, count };
+  return renameIdentifiers(content, root, oldName, newName);
 }
 
 /**
@@ -295,34 +304,7 @@ export function renameFunction(content: string, root: any, oldName: string, newN
  * Not scope-aware: renames all occurrences regardless of scope.
  */
 export function renameVariable(content: string, root: any, oldName: string, newName: string): TransformResult {
-  let modifiedContent = content;
-  let count = 0;
-
-  const identifiers = root.findAll({
-    rule: {
-      kind: 'identifier',
-      regex: `^${oldName}$`,
-    },
-  });
-
-  const replacements: Replacement[] = [];
-  const seen = new Set<number>();
-
-  for (const id of identifiers) {
-    const range = id.range();
-    if (seen.has(range.start.index)) continue;
-    seen.add(range.start.index);
-    replacements.push({ start: range.start.index, end: range.end.index, text: newName });
-    count++;
-  }
-
-  replacements.sort((a, b) => b.start - a.start);
-
-  for (const { start, end, text } of replacements) {
-    modifiedContent = modifiedContent.slice(0, start) + text + modifiedContent.slice(end);
-  }
-
-  return { content: modifiedContent, count };
+  return renameIdentifiers(content, root, oldName, newName);
 }
 
 /**
@@ -451,6 +433,9 @@ Pattern replace (for everything else):
 
     // Parse AST
     const lang = getLanguageFromPath(path, Lang);
+    if (!lang) {
+      return `Unsupported file type for AST editing: ${path}`;
+    }
     const ast = parse(lang, content);
     const root = ast.root();
 

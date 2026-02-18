@@ -186,7 +186,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
         path: '/test.ts',
         transform: 'add-import',
-        importSpec: { module: 'react', names: ['useEffect'] },
+        importSpec: { module: 'react', names: ['useState'] },
       });
 
       expect(result).toContain('No changes');

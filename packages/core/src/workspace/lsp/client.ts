@@ -8,6 +8,7 @@
 
 import type { ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 import type { LSPServerDef } from './types';
 
@@ -88,6 +89,15 @@ export async function loadLSPDeps(): Promise<{
 }
 
 // =============================================================================
+// URI Helpers
+// =============================================================================
+
+/** Convert a filesystem path to a properly encoded file:// URI. */
+function toFileUri(fsPath: string): string {
+  return pathToFileURL(fsPath).toString();
+}
+
+// =============================================================================
 // LSP Client
 // =============================================================================
 
@@ -159,11 +169,11 @@ export class LSPClient {
     // Build initialize params
     const initParams: any = {
       processId: process.pid,
-      rootUri: `file://${this.workspaceRoot}`,
+      rootUri: toFileUri(this.workspaceRoot),
       workspaceFolders: [
         {
           name: 'workspace',
-          uri: `file://${this.workspaceRoot}`,
+          uri: toFileUri(this.workspaceRoot),
         },
       ],
       capabilities: {
@@ -252,7 +262,7 @@ export class LSPClient {
    */
   notifyOpen(filePath: string, content: string, languageId: string): void {
     if (!this.connection) return;
-    const uri = `file://${filePath}`;
+    const uri = toFileUri(filePath);
     this.diagnostics.delete(uri);
     this.connection.sendNotification('textDocument/didOpen', {
       textDocument: { uri, languageId, version: 0, text: content },
@@ -265,7 +275,7 @@ export class LSPClient {
   notifyChange(filePath: string, content: string, version: number): void {
     if (!this.connection) return;
     this.connection.sendNotification('textDocument/didChange', {
-      textDocument: { uri: `file://${filePath}`, version },
+      textDocument: { uri: toFileUri(filePath), version },
       contentChanges: [{ text: content }],
     });
   }
@@ -275,17 +285,16 @@ export class LSPClient {
    */
   async waitForDiagnostics(filePath: string, timeoutMs: number = 5000, waitForChange: boolean = false): Promise<any[]> {
     if (!this.connection) return [];
-    const uri = `file://${filePath}`;
+    const uri = toFileUri(filePath);
     const startTime = Date.now();
     const initialDiagnostics = this.diagnostics.get(uri);
-    const initialCount = initialDiagnostics?.length || 0;
 
     while (Date.now() - startTime < timeoutMs) {
       const currentDiagnostics = this.diagnostics.get(uri);
-      const currentCount = currentDiagnostics?.length || 0;
 
       if (waitForChange) {
-        if (currentDiagnostics !== undefined && currentCount !== initialCount) {
+        // Compare by reference — the notification handler sets a new array each time
+        if (currentDiagnostics !== undefined && currentDiagnostics !== initialDiagnostics) {
           return currentDiagnostics;
         }
       } else {
@@ -305,7 +314,7 @@ export class LSPClient {
    */
   notifyClose(filePath: string): void {
     if (!this.connection) return;
-    const uri = `file://${filePath}`;
+    const uri = toFileUri(filePath);
     this.diagnostics.delete(uri);
     this.connection.sendNotification('textDocument/didClose', {
       textDocument: { uri },
