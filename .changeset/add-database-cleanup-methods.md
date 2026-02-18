@@ -9,14 +9,12 @@
 '@mastra/upstash': minor
 ---
 
-Added database cleanup methods for data retention
+Added `deleteTracesOlderThan` and `deleteWorkflowRunsOlderThan` methods for database cleanup and data retention
 
-New methods `deleteTracesOlderThan` and `deleteWorkflowRunsOlderThan` allow periodic cleanup of old traces and workflow snapshots. Both methods support optional filters to scope deletion:
+These methods allow periodic cleanup of old traces and workflow run snapshots, helping manage database growth over time. Both support optional filters to scope deletion:
 
-- **Traces**: Filter by entityType, entityId, organizationId, environment
-- **Workflow runs**: Filter by workflowName, status, resourceId
-
-This helps manage database growth by implementing retention policies.
+- **`deleteTracesOlderThan`** - Delete traces created before a given date, optionally filtered by `entityType`, `entityId`, `organizationId`, or `environment`
+- **`deleteWorkflowRunsOlderThan`** - Delete workflow runs created before a given date, optionally filtered by `workflowName`, `status`, or `resourceId`
 
 ```typescript
 // Clean up traces older than 30 days
@@ -25,9 +23,7 @@ thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
 const result = await storage.observability.deleteTracesOlderThan({
   beforeDate: thirtyDaysAgo,
-  filters: {
-    environment: 'production',
-  },
+  filters: { environment: "production" },
 });
 console.log(`Deleted ${result.deletedCount} traces`);
 
@@ -37,9 +33,7 @@ sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
 const result2 = await storage.workflows.deleteWorkflowRunsOlderThan({
   beforeDate: sevenDaysAgo,
-  filters: {
-    status: 'completed',
-  },
+  filters: { status: "completed" },
 });
 console.log(`Deleted ${result2.deletedCount} workflow runs`);
 ```
