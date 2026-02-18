@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SelectField } from './select-field';
 
 const meta: Meta<typeof SelectField> = {
-  title: 'Elements/SelectField',
+  title: 'Elements/FormFields/SelectField',
   component: SelectField,
   parameters: {
     layout: 'centered',
@@ -43,6 +43,31 @@ export const Default: Story = {
     options: sampleOptions,
     placeholder: 'Choose an option...',
     onValueChange: (value: string) => console.log('Selected:', value),
+  },
+};
+
+export const ExperimentalStyle: Story = {
+  render: () => {
+    return (
+      <div className="grid gap-3">
+        <SelectField
+          name="example"
+          label="Select an Option"
+          options={sampleOptions}
+          placeholder="Choose an option..."
+          onValueChange={(value: string) => console.log('Selected:', value)}
+        />
+        <SelectField
+          name="example"
+          label="Select an Option"
+          options={sampleOptions}
+          placeholder="Choose an option..."
+          onValueChange={(value: string) => console.log('Selected:', value)}
+          size="default"
+          variant="new"
+        />
+      </div>
+    );
   },
 };
 

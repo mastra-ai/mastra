@@ -20,8 +20,8 @@ import {
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Badge } from '@/ds/components/Badge';
-import { Input } from '@/ds/components/Input';
 import { Column } from '@/ds/components/Columns/column';
+import { SearchField } from '@/ds/components/FormFields/search-field';
 
 interface ActionsMenuProps {
   onExportClick: () => void;
@@ -135,18 +135,15 @@ export function DatasetItemsToolbar({
   if (isSelectionActive) {
     return (
       <Column.Toolbar>
-        {/* Search input - always visible */}
-        <div className="relative flex-1 max-w-xs">
-          <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
-            <Search className="w-4 h-4" />
-          </Icon>
-          <Input
-            placeholder="Search items..."
-            value={searchQuery ?? ''}
-            onChange={e => onSearchChange?.(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchField
+          label="Search"
+          placeholder="Search items..."
+          value={searchQuery ?? ''}
+          onChange={e => onSearchChange?.(e.target.value)}
+          variant="new"
+          size="default"
+          onReset={() => onSearchChange?.('')}
+        />
 
         <div className="flex gap-5">
           <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
@@ -188,18 +185,14 @@ export function DatasetItemsToolbar({
 
   return (
     <div className="flex items-center justify-between gap-4 w-full">
-      {/* Search input */}
-      <div className="relative flex-1 max-w-xs">
-        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
-          <Search className="w-4 h-4" />
-        </Icon>
-        <Input
-          placeholder="Search items..."
-          value={searchQuery ?? ''}
-          onChange={e => onSearchChange?.(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+      <SearchField
+        placeholder="Search items..."
+        value={searchQuery ?? ''}
+        onChange={e => onSearchChange?.(e.target.value)}
+        variant="new"
+        size="default"
+        onReset={() => onSearchChange?.('')}
+      />
 
       <ButtonsGroup>
         {!isItemPanelOpen && !isViewingOldVersion && (

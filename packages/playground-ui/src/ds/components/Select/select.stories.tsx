@@ -28,6 +28,33 @@ export const Default: Story = {
   ),
 };
 
+export const Experimental: Story = {
+  render: () => (
+    <div className="grid gap-3">
+      <Select>
+        <SelectTrigger className="w-[180px]">
+          <SelectValue placeholder="Select option" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="option1">Option 1</SelectItem>
+          <SelectItem value="option2">Option 2</SelectItem>
+          <SelectItem value="option3">Option 3</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select>
+        <SelectTrigger className="w-[180px]" variant="new" size="default">
+          <SelectValue placeholder="Select option" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="option1">Option 1</SelectItem>
+          <SelectItem value="option2">Option 2</SelectItem>
+          <SelectItem value="option3">Option 3</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  ),
+};
+
 export const WithValue: Story = {
   render: () => (
     <Select defaultValue="option2">
