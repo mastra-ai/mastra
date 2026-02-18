@@ -8,6 +8,7 @@ import type { WorkspaceConfig } from "@mastra/core/workspace"
 import type { z } from "zod"
 
 import type {
+	HeartbeatHandler,
 	HarnessConfig,
 	HarnessEvent,
 	HarnessEventListener,
@@ -131,11 +132,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		| ((decision: "approve" | "decline" | "always_allow_category") => void)
 		| null = null
 	private workspace: Workspace | undefined = undefined
+	private workspaceFn:
+		| ((ctx: {
+				requestContext: RequestContext
+		  }) => Promise<Workspace | undefined> | Workspace | undefined)
+		| undefined = undefined
 	private workspaceInitialized = false
 	private hookManager: import("../hooks/index.js").HookManager | undefined
 	private mcpManager: import("../mcp/index.js").MCPManager | undefined
 	private sessionGrants = new SessionGrants()
 	private streamDebug = !!process.env.MASTRA_STREAM_DEBUG
+	private heartbeatTimers = new Map<
+		string,
+		{ timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }
+	>()
 	private pendingQuestions = new Map<string, (answer: string) => void>()
 	private pendingPlanApprovals = new Map<
 		string,
@@ -170,9 +180,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		}
 		this.currentModeId = defaultMode.id
 
-		// Store pre-built workspace (config-based workspace is constructed in init())
+		// Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
 		if (config.workspace instanceof Workspace) {
 			this.workspace = config.workspace
+		} else if (typeof config.workspace === "function") {
+			this.workspaceFn = config.workspace
 		}
 
 		// Store hook manager and MCP manager
@@ -207,8 +219,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		// For now, we use the initial state from config
 		// TODO: Add state persistence via storage.getStore('agents') or custom domain
 
-		// Initialize workspace if configured
-		if (this.config.workspace && !this.workspaceInitialized) {
+		// Initialize workspace if configured (skip for dynamic factory — resolved per-request)
+		if (this.config.workspace && !this.workspaceInitialized && !this.workspaceFn) {
 			try {
 				// Construct workspace from config if not already a Workspace instance
 				if (!this.workspace) {
@@ -251,6 +263,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 				})
 			}
 		}
+
+		// Start heartbeat handlers
+		this.startHeartbeats()
 	}
 
 	/**
@@ -1704,7 +1719,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 		try {
 			// Build request context for tools
-			const requestContext = this.buildRequestContext()
+			const requestContext = await this.buildRequestContext()
 			// Stream the response
 			const streamOptions: Record<string, unknown> = {
 				memory: {
@@ -2180,7 +2195,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					}
 				: undefined,
 			abortSignal: this.abortController.signal,
-			requestContext: this.buildRequestContext(),
+			requestContext: await this.buildRequestContext(),
 		})
 
 		return await this.processStream(response)
@@ -2212,7 +2227,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					}
 				: undefined,
 			abortSignal: this.abortController.signal,
-			requestContext: this.buildRequestContext(),
+			requestContext: await this.buildRequestContext(),
 		})
 
 		return await this.processStream(response)
@@ -2733,7 +2748,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	 * Build request context for agent execution.
 	 * Tools can access harness state via requestContext.get('harness').
 	 */
-	private buildRequestContext(): RequestContext {
+	private async buildRequestContext(): Promise<RequestContext> {
 		const harnessContext: HarnessRuntimeContext<TState> = {
 			harnessId: this.id,
 			state: this.getState(),
@@ -2752,7 +2767,17 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 			getSubagentModelId: (agentType?: string) =>
 				this.getSubagentModelId(agentType),
 		}
-		return new RequestContext([["harness", harnessContext]])
+
+		const requestContext = new RequestContext([["harness", harnessContext]])
+
+		// Resolve dynamic workspace factory with the built request context
+		if (this.workspaceFn) {
+			harnessContext.workspace = await Promise.resolve(
+				this.workspaceFn({ requestContext }),
+			)
+		}
+
+		return requestContext
 	}
 
 	// ===========================================================================
@@ -2852,6 +2877,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 	/**
 	 * Check if a workspace is configured (regardless of init status).
+	 * Returns true for static workspaces, workspace configs, and dynamic factories.
 	 */
 	hasWorkspace(): boolean {
 		return this.config.workspace !== undefined
@@ -2859,16 +2885,111 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 	/**
 	 * Check if the workspace is initialized and ready.
+	 * Dynamic workspace factories are always considered ready since they
+	 * resolve per-request and don't require upfront initialization.
 	 */
 	isWorkspaceReady(): boolean {
+		if (this.workspaceFn) return true
 		return this.workspaceInitialized && this.workspace !== undefined
+	}
+
+	// ===========================================================================
+	// Heartbeat Handlers
+	// ===========================================================================
+
+	/**
+	 * Start all configured heartbeat handlers.
+	 * Called automatically during `init()`.
+	 */
+	private startHeartbeats(): void {
+		const handlers = this.config.heartbeatHandlers
+		if (!handlers?.length) return
+
+		for (const hb of handlers) {
+			if (this.heartbeatTimers.has(hb.id)) continue
+
+			const run = async () => {
+				try {
+					await hb.handler()
+				} catch (error) {
+					console.error(`[Heartbeat:${hb.id}] failed:`, error)
+				}
+			}
+
+			if (hb.immediate !== false) {
+				run()
+			}
+
+			const timer = setInterval(run, hb.intervalMs)
+			timer.unref()
+			this.heartbeatTimers.set(hb.id, { timer, shutdown: hb.shutdown })
+		}
+	}
+
+	/**
+	 * Register a heartbeat handler dynamically (after init).
+	 * If a handler with the same id already exists, it is replaced.
+	 */
+	registerHeartbeat(handler: HeartbeatHandler): void {
+		this.removeHeartbeat(handler.id)
+
+		const run = async () => {
+			try {
+				await handler.handler()
+			} catch (error) {
+				console.error(`[Heartbeat:${handler.id}] failed:`, error)
+			}
+		}
+
+		if (handler.immediate !== false) {
+			run()
+		}
+
+		const timer = setInterval(run, handler.intervalMs)
+		timer.unref()
+		this.heartbeatTimers.set(handler.id, { timer, shutdown: handler.shutdown })
+	}
+
+	/**
+	 * Remove a heartbeat handler by id. Calls its shutdown hook if present.
+	 */
+	async removeHeartbeat(id: string): Promise<void> {
+		const entry = this.heartbeatTimers.get(id)
+		if (entry) {
+			clearInterval(entry.timer)
+			this.heartbeatTimers.delete(id)
+			try {
+				await entry.shutdown?.()
+			} catch (error) {
+				console.error(`[Heartbeat:${id}] shutdown failed:`, error)
+			}
+		}
+	}
+
+	/**
+	 * Stop all heartbeat handlers and run their shutdown hooks. Call during shutdown.
+	 */
+	async stopHeartbeats(): Promise<void> {
+		const entries = [...this.heartbeatTimers.entries()]
+		this.heartbeatTimers.clear()
+
+		for (const [id, entry] of entries) {
+			clearInterval(entry.timer)
+			try {
+				await entry.shutdown?.()
+			} catch (error) {
+				console.error(`[Heartbeat:${id}] shutdown failed:`, error)
+			}
+		}
 	}
 
 	/**
 	 * Destroy the workspace and clean up resources.
 	 * Can be called during harness shutdown for proper cleanup.
+	 * No-op for dynamic workspace factories (they are ephemeral per-request).
 	 */
 	async destroyWorkspace(): Promise<void> {
+		if (this.workspaceFn) return
 		if (this.workspace && this.workspaceInitialized) {
 			try {
 				this.emit({

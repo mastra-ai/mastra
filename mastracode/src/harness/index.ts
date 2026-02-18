@@ -1,6 +1,7 @@
 // Export the Harness class and types
 export { Harness } from "./harness"
 export type {
+	HeartbeatHandler,
 	HarnessConfig,
 	HarnessEvent,
 	HarnessEventListener,

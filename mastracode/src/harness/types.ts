@@ -1,6 +1,7 @@
 import type { Agent } from "@mastra/core/agent"
 import type { MastraMemory } from "@mastra/core/memory"
 import type { MastraCompositeStore } from "@mastra/core/storage"
+import type { DynamicArgument } from "@mastra/core/types"
 import type {
 	Workspace,
 	WorkspaceConfig,
@@ -10,6 +11,27 @@ import type { z } from "zod"
 import type { AuthStorage } from "../auth/storage.js"
 import type { HookManager } from "../hooks/index.js"
 import type { MCPManager } from "../mcp/index.js"
+
+// =============================================================================
+// Heartbeat Handlers
+// =============================================================================
+
+/**
+ * A periodic task that the Harness runs on a timer.
+ * Heartbeat handlers start during `init()` and are cleaned up on `stopHeartbeats()`.
+ */
+export interface HeartbeatHandler {
+	/** Unique identifier for this handler (used for dedup and logging) */
+	id: string
+	/** Interval in milliseconds between invocations */
+	intervalMs: number
+	/** The function to run on each tick */
+	handler: () => void | Promise<void>
+	/** Whether to run the handler immediately on start (default: true) */
+	immediate?: boolean
+	/** Called when the handler is removed or all heartbeats are stopped */
+	shutdown?: () => void | Promise<void>
+}
 
 // =============================================================================
 // Harness Configuration
@@ -128,11 +150,15 @@ export interface HarnessConfig<
 
 	/**
 	 * Workspace configuration.
-	 * Accepts either a pre-constructed Workspace instance or a WorkspaceConfig
-	 * to have the Harness construct one internally.
+	 * Accepts a pre-constructed Workspace instance, a WorkspaceConfig for
+	 * Harness to construct internally, or a dynamic factory function that
+	 * receives the request context and returns a Workspace per-request.
 	 *
-	 * When provided, the Harness manages the workspace lifecycle (init/destroy)
-	 * and exposes it to agents via HarnessRuntimeContext.
+	 * When using a static Workspace or WorkspaceConfig, the Harness manages
+	 * the workspace lifecycle (init/destroy).
+	 *
+	 * When using a dynamic factory, the Harness calls it during each request
+	 * to resolve the workspace from current state (e.g., sandboxAllowedPaths).
 	 *
 	 * @example Pre-built workspace
 	 * ```typescript
@@ -150,8 +176,21 @@ export interface HarnessConfig<
 	 *   ...
 	 * });
 	 * ```
+	 *
+	 * @example Dynamic workspace (function, same as Agent)
+	 * ```typescript
+	 * const harness = new Harness({
+	 *   workspace: ({ requestContext }) => {
+	 *     const state = requestContext.get('harness')?.getState();
+	 *     return new Workspace({
+	 *       filesystem: new LocalFilesystem({ basePath: state.projectPath }),
+	 *     });
+	 *   },
+	 *   ...
+	 * });
+	 * ```
 	 */
-	workspace?: Workspace | WorkspaceConfig
+	workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig
 
 	/**
 	 * Hook manager for lifecycle event interception.
@@ -164,6 +203,12 @@ export interface HarnessConfig<
 	 * If provided, MCP-provided tools are available to agents.
 	 */
 	mcpManager?: MCPManager
+
+	/**
+	 * Periodic heartbeat handlers started during `init()`.
+	 * Use for background tasks like gateway sync, cache refresh, etc.
+	 */
+	heartbeatHandlers?: HeartbeatHandler[]
 }
 
 // =============================================================================
