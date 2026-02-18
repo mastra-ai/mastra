@@ -22,9 +22,7 @@ describe('ToolFallbackInner - Rules of Hooks (issue #12726)', () => {
 
   it('should not have hook calls after the early return for observation markers', () => {
     // Find the ToolFallbackInner component
-    const componentStartIdx = lines.findIndex(line =>
-      line.includes('const ToolFallbackInner'),
-    );
+    const componentStartIdx = lines.findIndex(line => line.includes('const ToolFallbackInner'));
     expect(componentStartIdx, 'Could not find ToolFallbackInner component').toBeGreaterThan(-1);
 
     // Find the early return for 'mastra-memory-om-observation'
@@ -81,9 +79,7 @@ describe('ToolFallbackInner - Rules of Hooks (issue #12726)', () => {
 
   it('should call hooks unconditionally at the top of ToolFallbackInner', () => {
     // Find ToolFallbackInner
-    const componentStartIdx = lines.findIndex(line =>
-      line.includes('const ToolFallbackInner'),
-    );
+    const componentStartIdx = lines.findIndex(line => line.includes('const ToolFallbackInner'));
 
     // Find the arrow function body start `=> {`
     let bodyStartIdx = -1;
