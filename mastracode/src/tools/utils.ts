@@ -1,7 +1,9 @@
-import { promises as fs } from "fs"
-import * as path from "path"
-import { ToolError } from "./types.js"
+import { promises as fs } from "node:fs"
+import * as path from "node:path"
+
 import { truncateStringForTokenEstimate } from "../utils/token-estimator.js"
+
+import { ToolError } from "./types.js"
 
 // Per-file write queue to serialize concurrent writes
 const fileWriteQueues = new Map<string, Promise<unknown>>()
@@ -39,7 +41,7 @@ async function withWriteLock<T>(
 	fileWriteQueues.set(normalizedPath, queuePromise)
 
 	// Clean up when our operation completes
-	queuePromise.finally(() => {
+	void queuePromise.finally(() => {
 		// Only delete if we're still the last in queue
 		if (fileWriteQueues.get(normalizedPath) === queuePromise) {
 			fileWriteQueues.delete(normalizedPath)
