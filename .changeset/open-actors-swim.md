@@ -14,4 +14,4 @@ const mastra = new Mastra({
 });
 ```
 
-Also fixed pre-existing failures in the shared server adapter test suite for recently added routes (stored MCP clients, prompt blocks, workspaces, skills, scorer versions, tool providers).
+Also fixed pre-existing failures in internal test infrastructure for recently added routes (stored MCP clients, prompt blocks, workspaces, skills, scorer versions, tool providers).
