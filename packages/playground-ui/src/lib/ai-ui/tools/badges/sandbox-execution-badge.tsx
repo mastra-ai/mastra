@@ -193,7 +193,6 @@ export const SandboxExecutionBadge = ({
   const isStreamingComplete = !!exitChunk || typeof result === 'string';
 
   const hasStarted = !!workspaceMetaPart; // metadata is emitted at tool start
-  const hasStreamingOutput = sandboxChunks.length > 0;
   const isRunning = hasStarted && !isStreamingComplete;
   const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStarted);
 
