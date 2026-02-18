@@ -2305,18 +2305,20 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       return { resumed: true };
     });
 
-    const verifyContextAction = vi.fn().mockImplementation(async ({ requestContext, mastra, getInitData, inputData }) => {
-      const testData = requestContext.get('test-key');
-      const initData = getInitData();
+    const verifyContextAction = vi
+      .fn()
+      .mockImplementation(async ({ requestContext, mastra, getInitData, inputData }) => {
+        const testData = requestContext.get('test-key');
+        const initData = getInitData();
 
-      expect(testData).toBe('test-context-value');
-      expect(mastra).toBeDefined();
-      expect(requestContext).toBeDefined();
-      expect(inputData).toEqual({ resumed: true });
-      expect(initData).toEqual({ resumed: true });
+        expect(testData).toBe('test-context-value');
+        expect(mastra).toBeDefined();
+        expect(requestContext).toBeDefined();
+        expect(inputData).toEqual({ resumed: true });
+        expect(initData).toEqual({ resumed: true });
 
-      return { success: true, hasTestData: !!testData };
-    });
+        return { success: true, hasTestData: !!testData };
+      });
 
     const setupStep = createStep({
       id: 'setup-step',
@@ -2490,11 +2492,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       options: { validateInputs: false },
     });
 
-    counterWorkflow
-      .then(beginStep)
-      .then(wfC)
-      .then(lastStep)
-      .commit();
+    counterWorkflow.then(beginStep).then(wfC).then(lastStep).commit();
 
     workflows['sr-deep-nested-suspend-workflow'] = {
       workflow: counterWorkflow,
@@ -4180,8 +4178,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNestedWithPath || !ctx.resume)(
       'should be able to suspend nested workflow step',
       async () => {
-        const { workflow, nestedWorkflow, otherStep, mocks, resetMocks } =
-          registry!['sr-suspend-nested-step-workflow'];
+        const { workflow, nestedWorkflow, otherStep, mocks, resetMocks } = registry!['sr-suspend-nested-step-workflow'];
         resetMocks?.();
 
         const runId = `suspend-nested-step-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4220,8 +4217,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNestedOnlyWfStep || !ctx.resume)(
       'should be able to resume suspended nested workflow step with only nested workflow step provided',
       async () => {
-        const { workflow, nestedWorkflowId, mocks, resetMocks } =
-          registry!['sr-suspend-nested-step-workflow'];
+        const { workflow, nestedWorkflowId, mocks, resetMocks } = registry!['sr-suspend-nested-step-workflow'];
         resetMocks?.();
 
         const runId = `resume-nested-only-wf-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4260,8 +4256,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNestedRequestContext || !ctx.resume)(
       'should preserve request context in nested workflows after suspend/resume',
       async () => {
-        const { workflow, mocks, resetMocks } =
-          registry!['sr-request-context-nested-suspend-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['sr-request-context-nested-suspend-workflow'];
         resetMocks?.();
 
         const runId = `request-context-nested-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4288,8 +4283,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeDeepNested || !ctx.resume)(
       'should be able to suspend nested workflow step in a nested workflow step',
       async () => {
-        const { workflow, mocks, resetMocks } =
-          registry!['sr-deep-nested-suspend-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['sr-deep-nested-suspend-workflow'];
         resetMocks?.();
 
         const runId = `deep-nested-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4338,8 +4332,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeIncorrectBranches || !ctx.resume)(
       'should not execute incorrect branches after resuming from suspended nested workflow',
       async () => {
-        const { workflow, mocks, resetMocks } =
-          registry!['sr-incorrect-branches-resume-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['sr-incorrect-branches-resume-workflow'];
         resetMocks?.();
 
         const runId = `incorrect-branches-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4402,8 +4395,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeMapBranchCondition || !ctx.resume)(
       'should pass correct inputData to branch condition when resuming after map',
       async () => {
-        const { workflow, buildWorkflow, mocks, resetMocks } =
-          registry!['sr-map-branch-suspend-workflow'];
+        const { workflow, buildWorkflow, mocks, resetMocks } = registry!['sr-map-branch-suspend-workflow'];
         resetMocks?.();
 
         const runId = `map-branch-condition-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4459,9 +4451,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         expect(resumedResult.status).toBe('success');
         if (resumedResult.status === 'success') {
           expect((resumedResult.result as any).suspendReason).toBe('User confirmation required');
-          expect((resumedResult.result as any).result).toBe(
-            'Processed test-value after User confirmation required',
-          );
+          expect((resumedResult.result as any).result).toBe('Processed test-value after User confirmation required');
         }
       },
     );

@@ -1881,82 +1881,82 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingTripwireInput)(
         'should bubble up tripwire from agent input processor to workflow result',
         async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+          const { createWorkflow, createStep, Agent } = ctx;
 
-        if (!Agent) {
-          return;
-        }
+          if (!Agent) {
+            return;
+          }
 
-        const tripwireProcessor = {
-          id: 'tripwire-processor',
-          name: 'Tripwire Processor',
-          processInput: async ({ messages, abort }: any) => {
-            const hasBlockedContent = messages.some((msg: any) =>
-              msg.content?.parts?.some((part: any) => part.type === 'text' && part.text?.includes('blocked')),
-            );
+          const tripwireProcessor = {
+            id: 'tripwire-processor',
+            name: 'Tripwire Processor',
+            processInput: async ({ messages, abort }: any) => {
+              const hasBlockedContent = messages.some((msg: any) =>
+                msg.content?.parts?.some((part: any) => part.type === 'text' && part.text?.includes('blocked')),
+              );
 
-            if (hasBlockedContent) {
-              abort('Content blocked by policy', { retry: true, metadata: { severity: 'high' } });
-            }
-            return messages;
-          },
-        };
+              if (hasBlockedContent) {
+                abort('Content blocked by policy', { retry: true, metadata: { severity: 'high' } });
+              }
+              return messages;
+            },
+          };
 
-        const mockModel = new MockLanguageModelV2({
-          doStream: async () => ({
-            stream: new ReadableStream({
-              start(controller) {
-                controller.enqueue({ type: 'stream-start', warnings: [] });
-                controller.enqueue({
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                });
-                controller.enqueue({ type: 'text-start', id: '1' });
-                controller.enqueue({ type: 'text-delta', id: '1', delta: 'Response' });
-                controller.enqueue({ type: 'text-end', id: '1' });
-                controller.enqueue({
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                });
-                controller.close();
-              },
+          const mockModel = new MockLanguageModelV2({
+            doStream: async () => ({
+              stream: new ReadableStream({
+                start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  controller.enqueue({
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  });
+                  controller.enqueue({ type: 'text-start', id: '1' });
+                  controller.enqueue({ type: 'text-delta', id: '1', delta: 'Response' });
+                  controller.enqueue({ type: 'text-end', id: '1' });
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  });
+                  controller.close();
+                },
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
             }),
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            warnings: [],
-          }),
-        });
+          });
 
-        const agent = new Agent({
-          name: 'Tripwire Test Agent',
-          instructions: 'You are helpful',
-          model: mockModel,
-          inputProcessors: [tripwireProcessor],
-        });
+          const agent = new Agent({
+            name: 'Tripwire Test Agent',
+            instructions: 'You are helpful',
+            model: mockModel,
+            inputProcessors: [tripwireProcessor],
+          });
 
-        const workflow = createWorkflow({
-          id: 'agent-tripwire-workflow',
-          inputSchema: z.object({ prompt: z.string() }),
-          outputSchema: z.object({ text: z.string() }),
-        });
+          const workflow = createWorkflow({
+            id: 'agent-tripwire-workflow',
+            inputSchema: z.object({ prompt: z.string() }),
+            outputSchema: z.object({ text: z.string() }),
+          });
 
-        const agentStep = createStep(agent);
-        workflow.then(agentStep).commit();
+          const agentStep = createStep(agent);
+          workflow.then(agentStep).commit();
 
-        const run = await workflow.createRun();
-        const result = await run.start({
-          inputData: { prompt: 'This message contains blocked content' },
-        });
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: { prompt: 'This message contains blocked content' },
+          });
 
-        expect(result.status).toBe('tripwire');
-        if (result.status === 'tripwire') {
-          expect(result.tripwire.reason).toBe('Content blocked by policy');
-          expect(result.tripwire.retry).toBe(true);
-          expect(result.tripwire.processorId).toBe('tripwire-processor');
-        }
-      },
+          expect(result.status).toBe('tripwire');
+          if (result.status === 'tripwire') {
+            expect(result.tripwire.reason).toBe('Content blocked by policy');
+            expect(result.tripwire.retry).toBe(true);
+            expect(result.tripwire.processorId).toBe('tripwire-processor');
+          }
+        },
       );
 
       it.skipIf(skipTests.streamingTripwireStreaming)(
@@ -2133,101 +2133,101 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.schemaStructuredOutput)(
         'should pass structured output from agent step to next step with correct types',
         async () => {
-        const { createWorkflow, createStep, Agent } = ctx;
+          const { createWorkflow, createStep, Agent } = ctx;
 
-        if (!Agent) {
-          return;
-        }
+          if (!Agent) {
+            return;
+          }
 
-        const articleSchema = z.object({
-          title: z.string(),
-          summary: z.string(),
-          tags: z.array(z.string()),
-        });
+          const articleSchema = z.object({
+            title: z.string(),
+            summary: z.string(),
+            tags: z.array(z.string()),
+          });
 
-        const articleJson = JSON.stringify({
-          title: 'Test Article',
-          summary: 'This is a test summary',
-          tags: ['test', 'article'],
-        });
+          const articleJson = JSON.stringify({
+            title: 'Test Article',
+            summary: 'This is a test summary',
+            tags: ['test', 'article'],
+          });
 
-        const agent = new Agent({
-          name: 'Article Generator',
-          instructions: 'Generate an article with title, summary, and tags',
-          model: new MockLanguageModelV2({
-            doGenerate: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              content: [{ type: 'text', text: articleJson }],
-              warnings: [],
-            }),
-            doStream: async () => ({
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: new ReadableStream({
-                start(controller) {
-                  controller.enqueue({ type: 'stream-start', warnings: [] });
-                  controller.enqueue({
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  });
-                  controller.enqueue({ type: 'text-start', id: 'text-1' });
-                  controller.enqueue({ type: 'text-delta', id: 'text-1', delta: articleJson });
-                  controller.enqueue({ type: 'text-end', id: 'text-1' });
-                  controller.enqueue({
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  });
-                  controller.close();
-                },
+          const agent = new Agent({
+            name: 'Article Generator',
+            instructions: 'Generate an article with title, summary, and tags',
+            model: new MockLanguageModelV2({
+              doGenerate: async () => ({
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                content: [{ type: 'text', text: articleJson }],
+                warnings: [],
+              }),
+              doStream: async () => ({
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: new ReadableStream({
+                  start(controller) {
+                    controller.enqueue({ type: 'stream-start', warnings: [] });
+                    controller.enqueue({
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    });
+                    controller.enqueue({ type: 'text-start', id: 'text-1' });
+                    controller.enqueue({ type: 'text-delta', id: 'text-1', delta: articleJson });
+                    controller.enqueue({ type: 'text-end', id: 'text-1' });
+                    controller.enqueue({
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    });
+                    controller.close();
+                  },
+                }),
               }),
             }),
-          }),
-        });
+          });
 
-        const agentStep = createStep(agent, {
-          structuredOutput: { schema: articleSchema },
-        });
+          const agentStep = createStep(agent, {
+            structuredOutput: { schema: articleSchema },
+          });
 
-        const processArticleStep = createStep({
-          id: 'process-article',
-          description: 'Process the generated article',
-          inputSchema: articleSchema,
-          outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
-          execute: async ({ inputData }: { inputData: { tags: string[] } }) => ({
-            processed: true,
-            tagCount: inputData.tags.length,
-          }),
-        });
+          const processArticleStep = createStep({
+            id: 'process-article',
+            description: 'Process the generated article',
+            inputSchema: articleSchema,
+            outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
+            execute: async ({ inputData }: { inputData: { tags: string[] } }) => ({
+              processed: true,
+              tagCount: inputData.tags.length,
+            }),
+          });
 
-        const workflow = createWorkflow({
-          id: 'article-workflow',
-          inputSchema: z.object({ prompt: z.string() }),
-          outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
-        });
+          const workflow = createWorkflow({
+            id: 'article-workflow',
+            inputSchema: z.object({ prompt: z.string() }),
+            outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
+          });
 
-        new Mastra({
-          workflows: { 'article-workflow': workflow },
-          agents: { 'article-generator': agent },
-          idGenerator: randomUUID,
-        });
+          new Mastra({
+            workflows: { 'article-workflow': workflow },
+            agents: { 'article-generator': agent },
+            idGenerator: randomUUID,
+          });
 
-        workflow.then(agentStep).then(processArticleStep).commit();
+          workflow.then(agentStep).then(processArticleStep).commit();
 
-        const run = await workflow.createRun({ runId: 'structured-output-test' });
-        const result = await run.start({
-          inputData: { prompt: 'Generate an article about testing' },
-        });
+          const run = await workflow.createRun({ runId: 'structured-output-test' });
+          const result = await run.start({
+            inputData: { prompt: 'Generate an article about testing' },
+          });
 
-        expect(result.status).toBe('success');
-        if (result.status === 'success') {
-          expect(result.result).toEqual({ processed: true, tagCount: 2 });
-        }
-      },
+          expect(result.status).toBe('success');
+          if (result.status === 'success') {
+            expect(result.result).toEqual({ processed: true, tagCount: 2 });
+          }
+        },
       );
     });
   });

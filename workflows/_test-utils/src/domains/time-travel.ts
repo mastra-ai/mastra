@@ -1059,7 +1059,13 @@ export function createTimeTravelWorkflows(ctx: WorkflowCreatorContext) {
       outputSchema: z.object({}),
     });
 
-    workflow.then(getUserInput).then(promptAgent).then(evaluateTone).then(improveResponse).then(evaluateImproved).commit();
+    workflow
+      .then(getUserInput)
+      .then(promptAgent)
+      .then(evaluateTone)
+      .then(improveResponse)
+      .then(evaluateImproved)
+      .commit();
 
     workflows['tt-suspended-workflow'] = {
       workflow,
