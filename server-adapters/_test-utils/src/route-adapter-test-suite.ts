@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 
 import {
   AdapterTestContext,
