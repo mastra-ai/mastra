@@ -405,6 +405,8 @@ export function MastraRuntimeProvider({
     approveNetworkToolCall,
     declineNetworkToolCall,
     networkToolCallApprovals,
+    resumeToolSuspension,
+    toolSuspensionResumes,
   } = useChat({
     agentId,
     initialMessages,
@@ -1284,6 +1286,8 @@ export function MastraRuntimeProvider({
           approveNetworkToolcall={approveNetworkToolCall}
           declineNetworkToolcall={declineNetworkToolCall}
           networkToolCallApprovals={networkToolCallApprovals}
+          resumeToolSuspension={resumeToolSuspension}
+          toolSuspensionResumes={toolSuspensionResumes}
         >
           {children}
         </ToolCallProvider>

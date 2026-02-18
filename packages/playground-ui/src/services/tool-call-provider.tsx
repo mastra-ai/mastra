@@ -7,9 +7,11 @@ interface ToolCallContextValue {
   declineToolcallGenerate: (toolCallId: string) => void;
   approveNetworkToolcall: (toolName: string, runId?: string) => void;
   declineNetworkToolcall: (toolName: string, runId?: string) => void;
+  resumeToolSuspension: (resumeData: Record<string, any>, toolCallId?: string) => void;
   isRunning: boolean;
   toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
   networkToolCallApprovals: { [toolName: string]: { status: 'approved' | 'declined' } };
+  toolSuspensionResumes: { [toolCallId: string]: { status: 'submitted' } };
 }
 
 const ToolCallContext = createContext<ToolCallContextValue | undefined>(undefined);
@@ -22,9 +24,11 @@ interface ToolCallProviderProps {
   declineToolcallGenerate: (toolCallId: string) => void;
   approveNetworkToolcall: (toolName: string, runId?: string) => void;
   declineNetworkToolcall: (toolName: string, runId?: string) => void;
+  resumeToolSuspension: (resumeData: Record<string, any>, toolCallId?: string) => void;
   isRunning: boolean;
   toolCallApprovals: { [toolCallId: string]: { status: 'approved' | 'declined' } };
   networkToolCallApprovals: { [toolName: string]: { status: 'approved' | 'declined' } };
+  toolSuspensionResumes: { [toolCallId: string]: { status: 'submitted' } };
 }
 
 export function ToolCallProvider({
@@ -35,9 +39,11 @@ export function ToolCallProvider({
   declineToolcallGenerate,
   approveNetworkToolcall,
   declineNetworkToolcall,
+  resumeToolSuspension,
   isRunning,
   toolCallApprovals,
   networkToolCallApprovals,
+  toolSuspensionResumes,
 }: ToolCallProviderProps) {
   return (
     <ToolCallContext.Provider
@@ -48,9 +54,11 @@ export function ToolCallProvider({
         declineToolcallGenerate,
         approveNetworkToolcall,
         declineNetworkToolcall,
+        resumeToolSuspension,
         isRunning,
         toolCallApprovals,
         networkToolCallApprovals,
+        toolSuspensionResumes,
       }}
     >
       {children}

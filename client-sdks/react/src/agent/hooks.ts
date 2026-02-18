@@ -72,6 +72,9 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
   const [networkToolCallApprovals, setNetworkToolCallApprovals] = useState<{
     [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
+  const [toolSuspensionResumes, setToolSuspensionResumes] = useState<{
+    [toolCallId: string]: { status: 'submitted' };
+  }>({});
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
@@ -424,6 +427,33 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setIsRunning(false);
   };
 
+  const resumeToolSuspension = async (resumeData: Record<string, any>, toolCallId?: string) => {
+    const onChunk = _onChunk.current;
+    const currentRunId = _currentRunId.current;
+
+    if (!currentRunId)
+      return console.info(
+        '[resumeToolSuspension] resumeToolSuspension can only be called after a stream has started',
+      );
+
+    setIsRunning(true);
+    if (toolCallId) {
+      setToolSuspensionResumes(prev => ({ ...prev, [toolCallId]: { status: 'submitted' } }));
+    }
+
+    const agent = baseClient.getAgent(agentId);
+    const response = await agent.resumeToolSuspension({ runId: currentRunId, toolCallId, resumeData });
+
+    await response.processDataStream({
+      onChunk: async (chunk: ChunkType) => {
+        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+        onChunk?.(chunk);
+      },
+    });
+    setIsRunning(false);
+  };
+
   const approveNetworkToolCall = async (toolName: string, runId?: string) => {
     const onNetworkChunk = _onNetworkChunk.current;
     const networkRunId = runId || _networkRunId.current;
@@ -518,5 +548,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     approveNetworkToolCall,
     declineNetworkToolCall,
     networkToolCallApprovals,
+    resumeToolSuspension,
+    toolSuspensionResumes,
   };
 };

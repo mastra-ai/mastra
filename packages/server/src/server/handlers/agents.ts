@@ -30,6 +30,7 @@ import {
   providersResponseSchema,
   approveToolCallBodySchema,
   declineToolCallBodySchema,
+  resumeToolSuspensionBodySchema,
   toolCallResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
@@ -1287,6 +1288,43 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error declining tool call');
+    }
+  },
+});
+
+export const RESUME_TOOL_SUSPENSION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/resume-tool-suspension',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: resumeToolSuspensionBodySchema,
+  responseSchema: toolCallResponseSchema,
+  summary: 'Resume suspended tool call',
+  description: 'Resumes a suspended tool call with user-provided data and continues agent execution',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, abortSignal, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const streamResult = await agent.resumeStream(params.resumeData, {
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        abortSignal,
+      });
+
+      return streamResult.fullStream;
+    } catch (error) {
+      return handleError(error, 'error resuming tool suspension');
     }
   },
 });

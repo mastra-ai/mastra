@@ -315,6 +315,16 @@ const networkToolCallActionBodySchema = z.object({
 });
 
 /**
+ * Body schema for resuming a suspended tool call
+ */
+export const resumeToolSuspensionBodySchema = z.object({
+  runId: z.string(),
+  toolCallId: z.string().optional(),
+  resumeData: z.record(z.string(), z.any()),
+  requestContext: z.record(z.string(), z.any()).optional(),
+});
+
+/**
  * Body schema for approving tool call
  */
 export const approveToolCallBodySchema = toolCallActionBodySchema;
