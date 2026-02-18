@@ -145,8 +145,10 @@ export class Workflow extends BaseResource {
   }> {
     const details = await this.details();
     return {
-      inputSchema: details.inputSchema ? parseSuperJsonString(details.inputSchema) : null,
-      outputSchema: details.outputSchema ? parseSuperJsonString(details.outputSchema) : null,
+      inputSchema: details.inputSchema ? (parseSuperJsonString(details.inputSchema) as Record<string, unknown>) : null,
+      outputSchema: details.outputSchema
+        ? (parseSuperJsonString(details.outputSchema) as Record<string, unknown>)
+        : null,
     };
   }
 
