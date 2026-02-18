@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach, inject } from 'vitest';
+import { describe, it, expect, beforeAll, inject } from 'vitest';
 import { MastraClient } from '@mastra/client-js';
 
 export interface MemoryTestConfig {
@@ -17,10 +17,9 @@ export function createMemoryTests(config: MemoryTestConfig = {}) {
     beforeAll(async () => {
       baseUrl = inject('baseUrl');
       client = new MastraClient({ baseUrl, retries: 0 });
-    });
 
-    beforeEach(async () => {
-      // Reset storage between tests for isolation
+      // Reset storage once before the suite to avoid interfering with
+      // other test suites (e.g., observability) that share the same server.
       try {
         await fetch(`${baseUrl}/e2e/reset-storage`, { method: 'POST' });
       } catch {
@@ -51,7 +50,7 @@ export function createMemoryTests(config: MemoryTestConfig = {}) {
         expect(thread).toBeDefined();
         expect(thread.id).toBeDefined();
         expect(thread.metadata).toBeDefined();
-        expect(thread.metadata?.key).toBe('value');
+        expect(thread.metadata).toEqual({ key: 'value' });
       });
     });
 
@@ -120,7 +119,7 @@ export function createMemoryTests(config: MemoryTestConfig = {}) {
         expect(response).toBeDefined();
         expect(response.threads).toBeDefined();
         expect(Array.isArray(response.threads)).toBe(true);
-        expect(response.threads.length).toBeGreaterThan(0);
+        expect(response.threads.length).toBe(1);
       });
     });
 

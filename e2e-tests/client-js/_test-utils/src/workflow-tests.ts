@@ -91,6 +91,13 @@ export function createWorkflowTests(config: WorkflowTestConfig = {}) {
         expect(runsResponse.runs).toBeDefined();
         expect(Array.isArray(runsResponse.runs)).toBe(true);
         expect(runsResponse.runs.length).toBeGreaterThan(0);
+        // Verify the most recent run has the expected snapshot
+        const latestRun = runsResponse.runs[0];
+        expect(latestRun).toBeDefined();
+        expect(latestRun.runId).toBeDefined();
+        const snapshot = typeof latestRun.snapshot === 'string' ? JSON.parse(latestRun.snapshot) : latestRun.snapshot;
+        expect(snapshot.status).toBe('success');
+        expect(snapshot.result).toEqual({ result: 3 });
       });
 
       it('should get a specific run by ID', async () => {
