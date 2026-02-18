@@ -23,7 +23,7 @@
     "@opentelemetry/instrumentation": "^0.208.0",
     "@opentelemetry/semantic-conventions": "1.38.0",
     "dotenv": "^17.2.3",
-    "hono": "^4.11.3",
+    "hono": "^4.11.7",
     "zod": "^4.1.13"
   },
   "devDependencies": {
