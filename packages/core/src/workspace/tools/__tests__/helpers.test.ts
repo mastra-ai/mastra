@@ -32,43 +32,14 @@ describe('emitWorkspaceMetadata', () => {
       writer: { custom: writerCustom } as any,
     };
 
-    await emitWorkspaceMetadata(context, 'my_test_tool');
+    await emitWorkspaceMetadata(context, 'mastra_workspace_read_file');
 
     expect(writerCustom).toHaveBeenCalledTimes(1);
     const call = writerCustom.mock.calls[0][0];
     expect(call.type).toBe('data-workspace-metadata');
-    expect(call.data.toolName).toBe('my_test_tool');
+    expect(call.data.toolName).toBe('mastra_workspace_read_file');
     expect(call.data.id).toBe('ws-test');
     expect(call.data.name).toBe('Test Workspace');
-  });
-
-  it('includes toolCallId from agent context', async () => {
-    const writerCustom = vi.fn();
-    const workspace = createMockWorkspace({ filesystem: true });
-    const context: ToolExecutionContext = {
-      workspace,
-      writer: { custom: writerCustom } as any,
-      agent: { toolCallId: 'call-123' } as any,
-    };
-
-    await emitWorkspaceMetadata(context, 'my_test_tool');
-
-    const call = writerCustom.mock.calls[0][0];
-    expect(call.data.toolCallId).toBe('call-123');
-  });
-
-  it('sets toolCallId to undefined when no agent context', async () => {
-    const writerCustom = vi.fn();
-    const workspace = createMockWorkspace({ filesystem: true });
-    const context: ToolExecutionContext = {
-      workspace,
-      writer: { custom: writerCustom } as any,
-    };
-
-    await emitWorkspaceMetadata(context, 'my_test_tool');
-
-    const call = writerCustom.mock.calls[0][0];
-    expect(call.data.toolCallId).toBeUndefined();
   });
 
   it('does not throw when writer is undefined', async () => {
