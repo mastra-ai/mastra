@@ -65,7 +65,7 @@ export function SelectField({
         </label>
       </LabelWrapper>
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger id="select-dataset" size={size} variant={variant}>
+        <SelectTrigger id={`select-${name}`} size={size} variant={variant}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

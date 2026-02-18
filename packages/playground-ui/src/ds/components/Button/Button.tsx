@@ -10,7 +10,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   prefetch?: boolean | null;
   children: React.ReactNode;
   // 'default' and 'large' are experimental sizes they are not fully finished yet
-  size?: FormElementSize | 'default' | 'large';
+  size?: FormElementSize | 'large';
   // 'cta' and 'standard' are experimental variants they are not fully finished yet
   variant?: 'default' | 'light' | 'outline' | 'ghost' | 'primary' | 'cta' | 'standard';
   target?: string;

@@ -87,7 +87,7 @@ export function InputField({
           isExperimentalVariant ? 'placeholder:text-neutral2' : 'placeholder:text-neutral3 placeholder:text-ui-sm',
           {
             'cursor-not-allowed opacity-50': disabled,
-            'border-red-800 focus:border-border1': error || errorMsg,
+            'border-red-800 focus:border-border1': !isExperimentalVariant && (error || errorMsg),
           },
         )}
         data-testid={testId}

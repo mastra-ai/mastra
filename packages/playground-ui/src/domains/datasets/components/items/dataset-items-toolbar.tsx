@@ -185,6 +185,7 @@ export function DatasetItemsToolbar({
   return (
     <div className="flex items-center justify-between gap-4 w-full">
       <SearchField
+        label="Search"
         placeholder="Search items..."
         value={searchQuery ?? ''}
         onChange={e => onSearchChange?.(e.target.value)}
