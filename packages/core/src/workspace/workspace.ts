@@ -39,6 +39,7 @@ import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
 import { isGlobPattern, extractGlobBase, createGlobMatcher } from './glob';
 import { callLifecycle } from './lifecycle';
+import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
@@ -256,6 +257,24 @@ export interface WorkspaceConfig<
   tools?: WorkspaceToolsConfig;
 
   // ---------------------------------------------------------------------------
+  // LSP Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Enable LSP diagnostics for edit tools.
+   * Pass `true` for defaults, or an `LSPConfig` object for fine-tuning.
+   *
+   * When enabled, edit tools (edit_file, write_file, ast_edit) will append
+   * language server diagnostics (type errors, warnings, lint issues) to
+   * their output. Requires a local filesystem with a basePath and
+   * `vscode-jsonrpc` + `vscode-languageserver-protocol` as optional deps.
+   *
+   * LSP failures are non-blocking — diagnostics are simply omitted if
+   * the language server is unavailable or errors out.
+   */
+  lsp?: boolean | LSPConfig;
+
+  // ---------------------------------------------------------------------------
   // Lifecycle Options
   // ---------------------------------------------------------------------------
 
@@ -359,6 +378,8 @@ export class Workspace<
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  private _lsp?: any; // LSPManager — typed as any to avoid importing Node-only code at module level
+  private _lspConfig?: LSPConfig;
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -436,6 +457,11 @@ export class Workspace<
       });
     }
 
+    // Store LSP config for lazy initialization in init()
+    if (config.lsp) {
+      this._lspConfig = config.lsp === true ? {} : config.lsp;
+    }
+
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
     if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
@@ -477,6 +503,14 @@ export class Workspace<
    */
   get sandbox(): TSandbox {
     return this._sandbox as any;
+  }
+
+  /**
+   * The LSP manager (if configured and initialized).
+   * Returns undefined if LSP is not configured or init() hasn't been called.
+   */
+  get lsp(): any {
+    return this._lsp;
   }
 
   /**
@@ -705,6 +739,18 @@ export class Workspace<
         await this.rebuildSearchIndex(this._config.autoIndexPaths ?? []);
       }
 
+      // Initialize LSP if configured and filesystem has a basePath
+      if (this._lspConfig && this._fs?.basePath) {
+        try {
+          const { isLSPAvailable, LSPManager } = await import('./lsp/index');
+          if (isLSPAvailable()) {
+            this._lsp = new LSPManager(this._lspConfig);
+          }
+        } catch {
+          // LSP deps not available — silently skip
+        }
+      }
+
       this._status = 'ready';
     } catch (error) {
       this._status = 'error';
@@ -719,6 +765,16 @@ export class Workspace<
     this._status = 'destroying';
 
     try {
+      // Shutdown LSP servers first (before filesystem goes away)
+      if (this._lsp) {
+        try {
+          await this._lsp.shutdownAll();
+        } catch {
+          // LSP shutdown errors are non-blocking
+        }
+        this._lsp = undefined;
+      }
+
       if (this._sandbox) {
         await callLifecycle(this._sandbox, 'destroy');
       }

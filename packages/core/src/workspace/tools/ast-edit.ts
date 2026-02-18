@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
-import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
 
 // =============================================================================
 // Types
@@ -349,7 +349,7 @@ Examples:
       .describe('Import specification for add-import transform'),
   }),
   execute: async ({ path, pattern, replacement, transform, targetName, newName, importSpec }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT);
 
     if (filesystem.readOnly) {
@@ -436,6 +436,8 @@ Examples:
       return `No changes made to ${path} (${changes.join('; ')})`;
     }
 
-    return `${path}: ${changes.join('; ')}`;
+    let output = `${path}: ${changes.join('; ')}`;
+    output += await getEditDiagnosticsText(workspace, path, modifiedContent);
+    return output;
   },
 });

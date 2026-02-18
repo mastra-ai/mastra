@@ -4,9 +4,12 @@
  * Runtime assertions for extracting workspace resources from tool execution context.
  */
 
+import { join, isAbsolute } from 'node:path';
+
 import type { ToolExecutionContext } from '../../tools/types';
 import { WorkspaceNotAvailableError, FilesystemNotAvailableError, SandboxNotAvailableError } from '../errors';
 import type { WorkspaceFilesystem } from '../filesystem';
+import type { LSPDiagnostic, DiagnosticSeverity } from '../lsp/types';
 import type { WorkspaceSandbox } from '../sandbox';
 import type { Workspace } from '../workspace';
 
@@ -62,4 +65,66 @@ export async function emitWorkspaceMetadata(context: ToolExecutionContext, toolN
     type: 'data-workspace-metadata',
     data: { toolName, ...info },
   });
+}
+
+/**
+ * Get LSP diagnostics text to append to edit tool results.
+ * Non-blocking — returns empty string on any failure.
+ *
+ * @param workspace - The workspace instance
+ * @param filePath - Relative path within the filesystem (as used by the tool)
+ * @param content - The file content after the edit
+ * @returns Formatted diagnostics text, or empty string if unavailable
+ */
+export async function getEditDiagnosticsText(workspace: Workspace, filePath: string, content: string): Promise<string> {
+  try {
+    const lspManager = workspace.lsp;
+    if (!lspManager) return '';
+
+    const basePath = workspace.filesystem?.basePath;
+    if (!basePath) return '';
+
+    // Resolve the file path to an absolute path
+    const absolutePath = isAbsolute(filePath)
+      ? filePath
+      : join(basePath, filePath.startsWith('/') ? filePath.slice(1) : filePath);
+
+    const diagnostics: LSPDiagnostic[] = await lspManager.getDiagnostics(absolutePath, content, basePath);
+    if (diagnostics.length === 0) return '';
+
+    // Group diagnostics by severity
+    const groups: Record<DiagnosticSeverity, LSPDiagnostic[]> = {
+      error: [],
+      warning: [],
+      info: [],
+      hint: [],
+    };
+
+    for (const d of diagnostics) {
+      groups[d.severity].push(d);
+    }
+
+    const lines: string[] = ['\n\nLSP Diagnostics:'];
+
+    const severityLabels: [DiagnosticSeverity, string][] = [
+      ['error', 'Errors'],
+      ['warning', 'Warnings'],
+      ['info', 'Info'],
+      ['hint', 'Hints'],
+    ];
+
+    for (const [severity, label] of severityLabels) {
+      const items = groups[severity];
+      if (items.length === 0) continue;
+      lines.push(`${label}:`);
+      for (const d of items) {
+        const source = d.source ? ` [${d.source}]` : '';
+        lines.push(`  ${d.line}:${d.character} - ${d.message}${source}`);
+      }
+    }
+
+    return lines.join('\n');
+  } catch {
+    return '';
+  }
 }

@@ -3,7 +3,7 @@ import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
 import { replaceString, StringNotFoundError, StringNotUniqueError } from '../line-utils';
-import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
 
 export const editFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
@@ -25,7 +25,7 @@ Usage:
       .describe('If true, replace all occurrences. If false (default), old_string must be unique.'),
   }),
   execute: async ({ path, old_string, new_string, replace_all }, context) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE);
 
     if (filesystem.readOnly) {
@@ -42,7 +42,9 @@ Usage:
       const result = replaceString(content, old_string, new_string, replace_all);
       await filesystem.writeFile(path, result.content, { overwrite: true });
 
-      return `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
+      let output = `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
+      output += await getEditDiagnosticsText(workspace, path, result.content);
+      return output;
     } catch (error) {
       if (error instanceof StringNotFoundError) {
         return error.message;
