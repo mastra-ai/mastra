@@ -7,6 +7,7 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
+import { createRequire } from 'node:module';
 
 import type { LSPServerDef } from './types';
 
@@ -41,8 +42,7 @@ export function isLSPAvailable(): boolean {
   }
 
   try {
-    const { createRequire } = require('node:module');
-    const req = createRequire(import.meta.url ?? __filename);
+    const req = createRequire(import.meta.url);
     req.resolve('vscode-jsonrpc/node');
     return true;
   } catch {

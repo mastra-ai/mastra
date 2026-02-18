@@ -7,6 +7,8 @@
  * Requires @ast-grep/napi as an optional peer dependency.
  */
 
+import { createRequire } from 'node:module';
+
 import { z } from 'zod';
 
 import { createTool } from '../../tools';
@@ -73,9 +75,7 @@ export function isAstGrepAvailable(): boolean {
   }
 
   try {
-    // Use createRequire for ESM compatibility
-    const { createRequire } = require('node:module');
-    const req = createRequire(import.meta.url ?? __filename);
+    const req = createRequire(import.meta.url);
     req.resolve('@ast-grep/napi');
     return true;
   } catch {
