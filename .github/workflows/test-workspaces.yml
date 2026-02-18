@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [e2b, s3, gcs]
+        package: [e2b, s3, gcs, daytona]
     steps:
       - uses: actions/checkout@v5
 
