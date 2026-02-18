@@ -126,6 +126,15 @@ export async function validatePath(
 		}
 	}
 }
+export async function isDirectory(filePath: string): Promise<boolean> {
+	try {
+		const stats = await fs.stat(filePath)
+		return stats.isDirectory()
+	} catch {
+		return false
+	}
+}
+
 export function truncateText(text: string, maxLength = 1000): string {
 	if (text.length <= maxLength) return text
 	return text.slice(0, maxLength) + "... (truncated)"

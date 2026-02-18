@@ -1,4 +1,3 @@
-import { promises as fs } from "fs"
 import { exec } from "child_process"
 import { promisify } from "util"
 import { distance } from "fastest-levenshtein"
@@ -31,7 +30,7 @@ import {
 	makeOutput,
 	validatePath,
 	withFileLock,
-	// truncateText
+	isDirectory,
 } from "./utils"
 const realExecAsync = promisify(exec)
 
@@ -67,7 +66,7 @@ export class FileEditor {
 
 	async view(args: ViewArgs) {
 		await validatePath("view", args.path)
-		if (await this.isDirectory(args.path)) {
+		if (await isDirectory(args.path)) {
 			if (args.view_range) {
 				return "The `view_range` parameter is not allowed when `path` points to a directory."
 			}
@@ -511,14 +510,6 @@ ${divergedMessage ? divergedMessage : ``}Try adjusting your input or the file co
 		return successMsg
 	}
 
-	async isDirectory(filePath: string) {
-		try {
-			const stats = await fs.stat(filePath)
-			return stats.isDirectory()
-		} catch {
-			return false
-		}
-	}
 }
 
 // Singleton instance of FileEditor

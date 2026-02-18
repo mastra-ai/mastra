@@ -1,12 +1,18 @@
-import { createTool } from "@mastra/core/tools"
-import { z } from "zod/v3"
-import { promises as fs } from "fs"
 import { exec } from "child_process"
 import { promisify } from "util"
 import * as path from "path"
 import { homedir } from "os"
+import { createTool } from "@mastra/core/tools"
+import { z } from "zod/v3"
 import { truncateStringForTokenEstimate } from "../utils/token-estimator"
-import { assertPathAllowed, getAllowedPathsFromContext } from "./utils.js"
+import {
+	assertPathAllowed,
+	getAllowedPathsFromContext,
+	isDirectory,
+	makeOutput,
+	readFile,
+	validatePath,
+} from "./utils.js"
 
 const execAsync = promisify(exec)
 
@@ -40,81 +46,20 @@ function shortenPath(absolutePath: string, cwd: string): string {
 }
 
 /**
- * Format file content with line numbers (like `cat -n`)
- */
-function makeOutput(
-	fileContent: string,
-	fileDescriptor: string,
-	initLine = 1,
-	expandTabs = true,
-): string {
-	if (expandTabs) {
-		fileContent = fileContent.replace(/\t/g, "    ")
-	}
-	const lines = fileContent.split("\n")
-	const numberedLines = lines
-		.map((line, i) => `${(i + initLine).toString().padStart(6)}\t${line}`)
-		.join("\n")
-	return `Here's the result of running \`cat -n\` on ${fileDescriptor}:\n${numberedLines}\n`
-}
-
-/**
- * Read file content
- */
-async function readFile(filePath: string): Promise<string> {
-	try {
-		return await fs.readFile(filePath, "utf8")
-	} catch (e) {
-		const error = e instanceof Error ? e : new Error("Unknown error")
-		throw new Error(`Failed to read ${filePath}: ${error.message}`)
-	}
-}
-
-/**
- * Check if path is a directory
- */
-async function isDirectory(filePath: string): Promise<boolean> {
-	try {
-		const stats = await fs.stat(filePath)
-		return stats.isDirectory()
-	} catch {
-		return false
-	}
-}
-
-/**
- * Validate path exists and is accessible
- */
-async function validatePath(command: string, filePath: string): Promise<void> {
-	const absolutePath = path.isAbsolute(filePath)
-		? filePath
-		: path.join(process.cwd(), filePath)
-
-	if (!path.isAbsolute(filePath)) {
-		filePath = absolutePath
-	}
-
-	try {
-		const stats = await fs.stat(filePath)
-		if (stats.isDirectory() && command !== "view") {
-			throw new Error(
-				`The path ${filePath} is a directory and only the \`view\` command can be used on directories`,
-			)
-		}
-	} catch (e) {
-		const error = e instanceof Error ? e : new Error("Unknown error")
-		if ("code" in error && error.code === "ENOENT") {
-			throw new Error(
-				`The path ${filePath} does not exist. Please provide a valid path.`,
-			)
-		}
-		throw error
-	}
-}
-
-/**
  * Create the view tool for viewing file contents or directory listings
  */
+
+const viewInputSchema = z.object({
+	path: z
+		.string()
+		.describe("Path to the file or directory (relative to project root)"),
+	view_range: z
+		.array(z.number())
+		.length(2)
+		.optional()
+		.describe("Optional range of lines to view [start, end]")
+});
+
 export function createViewTool(projectRoot?: string) {
 	return createTool({
 		id: "view",
@@ -127,29 +72,10 @@ Usage notes:
 - Output includes line numbers (like cat -n) for easy reference.
 - When NOT to use this tool: for searching file contents (use grep), for finding files by name (use glob).
 - Output is truncated if the file is very large. Use view_range to see specific sections.`,
-		inputSchema: z.object({
-			path: z
-				.string()
-				.describe("Path to the file or directory (relative to project root)"),
-			view_range: z
-				.array(z.number())
-				.length(2)
-				.optional()
-				.describe("Optional range of lines to view [start, end]"),
-		}),
-        execute: async (context, toolContext) => {
-            try {
-                const { path: filePath, view_range } = context
-                const root = projectRoot || process.cwd()
-
-                // Resolve relative to projectRoot if provided, otherwise relative to process.cwd()
-                const absolutePath = path.resolve(root, filePath)
-
-                // Security: ensure the path is within the project root or allowed paths
-                const allowedPaths = getAllowedPathsFromContext(toolContext)
-                assertPathAllowed(absolutePath, root, allowedPaths)
-
-                await validatePath("view", absolutePath)
+		inputSchema: viewInputSchema,
+		execute: async (input) => {
+			try {
+				const { path: filePath, view_range } = input
 
 				// Handle directory listing
 				if (await isDirectory(absolutePath)) {
@@ -246,7 +172,7 @@ Usage notes:
 				return {
 					content: wasTruncated
 						? truncated +
-							`\n\n... ${fileLines.length} total lines in file. Use view_range to see specific sections.`
+						`\n\n... ${fileLines.length} total lines in file. Use view_range to see specific sections.`
 						: truncated,
 					isError: false,
 				}
