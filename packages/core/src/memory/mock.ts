@@ -32,16 +32,18 @@ export class MockMemory extends MastraMemory {
     enableWorkingMemory = false,
     workingMemoryTemplate,
     enableMessageHistory = true,
+    options,
   }: {
     storage?: InMemoryStore;
     enableWorkingMemory?: boolean;
     enableMessageHistory?: boolean;
     workingMemoryTemplate?: string;
+    options?: MemoryConfig;
   } = {}) {
     super({
       name: 'mock',
       storage: storage || new InMemoryStore(),
-      options: {
+      options: options || {
         workingMemory: enableWorkingMemory
           ? ({ enabled: true, template: workingMemoryTemplate } as WorkingMemory)
           : undefined,

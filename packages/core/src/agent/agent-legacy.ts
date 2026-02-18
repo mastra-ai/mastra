@@ -333,6 +333,29 @@ export class AgentLegacyHandler {
           agentSpan?.error({ error: mastraError });
           throw mastraError;
         }
+
+        // Check if memory is disabled via the enabled flag
+        // Merge the provided memoryConfig with the Memory instance's config to get the effective config
+        const effectiveMemoryConfig = memory.getMergedThreadConfig(memoryConfig);
+        if (effectiveMemoryConfig.enabled === false) {
+          // Memory is disabled - skip thread creation and memory context setup
+          messageList.add(messages, 'user');
+          const { tripwire } = await this.capabilities.__runInputProcessors({
+            requestContext,
+            tracingContext: innerTracingContext,
+            messageList,
+          });
+          return {
+            messageObjects: tripwire ? [] : messageList.get.all.prompt(),
+            convertedTools,
+            threadExists: false,
+            thread: undefined,
+            messageList,
+            agentSpan,
+            tripwire,
+          };
+        }
+
         const store = memory.constructor.name;
         this.capabilities.logger.debug(
           `[Agent:${this.capabilities.name}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,

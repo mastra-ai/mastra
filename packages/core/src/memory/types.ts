@@ -719,6 +719,28 @@ export function isObservationalMemoryEnabled(
  */
 export type MemoryConfig = {
   /**
+   * When false, completely disables all memory functionality.
+   * No memory processors will run, and no data will be stored or retrieved.
+   * This provides a master switch to turn off memory entirely, including:
+   * - Conversation history (lastMessages)
+   * - Semantic recall (vector-based search)
+   * - Working memory (persistent user data)
+   *
+   * Useful for dynamically disabling memory via runtime context:
+   * ```typescript
+   * memory: ({ requestContext }) => {
+   *   const disableMemory = requestContext.get('memory')?.disabled;
+   *   return new Memory({
+   *     options: { enabled: !disableMemory }
+   *   });
+   * }
+   * ```
+   *
+   * @default true (enabled)
+   */
+  enabled?: boolean;
+
+  /**
    * When true, prevents memory from saving new messages.
    * Useful for internal agents (like routing agents) that should read memory but not modify it.
    *
