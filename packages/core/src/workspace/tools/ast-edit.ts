@@ -117,30 +117,103 @@ export function getLanguageFromPath(filePath: string, Lang: any): any {
  * Inserts after the last existing import, or at the beginning if none exist.
  * If the module is already imported, returns content unchanged.
  */
+/**
+ * Build an import statement string from its parts.
+ */
+function buildImportStatement(defaultName: string | null, namedImports: string[], moduleStr: string): string {
+  if (defaultName && namedImports.length > 0) {
+    return `import ${defaultName}, { ${namedImports.join(', ')} } from ${moduleStr};`;
+  } else if (defaultName) {
+    return `import ${defaultName} from ${moduleStr};`;
+  } else {
+    return `import { ${namedImports.join(', ')} } from ${moduleStr};`;
+  }
+}
+
+/**
+ * Merge new names into an existing import statement.
+ * Returns null if nothing needs to change.
+ */
+function mergeIntoExistingImport(
+  content: string,
+  existingImport: any,
+  names: string[],
+  isDefault?: boolean,
+): string | null {
+  const text = existingImport.text();
+
+  // Parse existing structure from the import text
+  // Matches: import [default] [, { named }] from 'module'
+  const defaultMatch = text.match(/^import\s+(?!type\s)(?!\{)(\w+)/);
+  const namedMatch = text.match(/\{([^}]*)\}/);
+  const moduleMatch = text.match(/(["'][^"']+["'])\s*;?\s*$/);
+
+  if (!moduleMatch) return null;
+  const moduleStr = moduleMatch[1];
+
+  let existingDefault = defaultMatch ? defaultMatch[1] : null;
+  const existingNamed = namedMatch
+    ? namedMatch[1]
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+    : [];
+
+  let newDefault = existingDefault;
+  const newNamed = [...existingNamed];
+
+  if (isDefault && names.length > 0) {
+    // First name is the default import
+    if (!existingDefault) {
+      newDefault = names[0];
+    }
+    // Remaining names are named imports
+    for (const name of names.slice(1)) {
+      if (!newNamed.includes(name)) {
+        newNamed.push(name);
+      }
+    }
+  } else {
+    for (const name of names) {
+      if (!newNamed.includes(name)) {
+        newNamed.push(name);
+      }
+    }
+  }
+
+  // Check if anything changed
+  const defaultChanged = newDefault !== existingDefault;
+  const namedChanged = newNamed.length !== existingNamed.length;
+  if (!defaultChanged && !namedChanged) return null;
+
+  const importStatement = buildImportStatement(newDefault, newNamed, moduleStr);
+  const range = existingImport.range();
+  return content.slice(0, range.start.index) + importStatement + content.slice(range.end.index);
+}
+
 export function addImport(content: string, root: any, importSpec: ImportSpec): string {
   const { module, names, isDefault } = importSpec;
 
   const imports = root.findAll({ rule: { kind: 'import_statement' } });
 
-  // Check if import from this module already exists by inspecting node text
+  // Check if import from this module already exists
   const existingImport = imports.find((imp: any) => {
     const text = imp.text();
     return text.includes(`'${module}'`) || text.includes(`"${module}"`);
   });
 
   if (existingImport) {
-    return content;
+    // Try to merge new names into the existing import
+    return mergeIntoExistingImport(content, existingImport, names, isDefault) ?? content;
   }
 
-  // Build import statement
-  let importStatement: string;
-  if (isDefault && names.length === 1) {
-    importStatement = `import ${names[0]} from '${module}';`;
-  } else if (isDefault && names.length > 1) {
-    importStatement = `import ${names[0]}, { ${names.slice(1).join(', ')} } from '${module}';`;
-  } else {
-    importStatement = `import { ${names.join(', ')} } from '${module}';`;
-  }
+  // Build new import statement
+  const moduleStr = `'${module}'`;
+  const importStatement = buildImportStatement(
+    isDefault ? names[0]! : null,
+    isDefault ? names.slice(1) : names,
+    moduleStr,
+  );
 
   // Insert after last import or at file start
   if (imports.length > 0) {
@@ -310,16 +383,22 @@ export const astEditTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT,
   description: `Edit code using AST-based analysis for intelligent transformations.
 
-Supports:
-- Pattern-based search and replace with syntax awareness (using $METAVAR placeholders)
-- Add/remove imports
-- Rename functions (declarations + call sites)
-- Rename variables (all identifier occurrences)
+Use \`transform\` for structured operations (imports, renames). Use \`pattern\`/\`replacement\` only for general find-and-replace.
 
-Examples:
-- Add import: { path: "src/app.ts", transform: "add-import", importSpec: { module: "react", names: ["useState"] } }
-- Rename function: { path: "src/utils.ts", transform: "rename-function", targetName: "oldFunc", newName: "newFunc" }
-- Pattern replace: { path: "src/utils.ts", pattern: "console.log($ARG)", replacement: "logger.debug($ARG)" }`,
+Transforms:
+- add-import: Add or merge imports. Skips duplicates. For default imports, put the default name first in \`names\`.
+  { transform: "add-import", importSpec: { module: "react", names: ["useState", "useEffect"] } }
+  { transform: "add-import", importSpec: { module: "express", names: ["express"], isDefault: true } }
+  { transform: "add-import", importSpec: { module: "express", names: ["express", "Router"], isDefault: true } } → import express, { Router } from 'express'
+- remove-import: Remove an import by module name.
+  { transform: "remove-import", targetName: "lodash" }
+- rename-function: Rename function declarations and all call sites.
+  { transform: "rename-function", targetName: "oldName", newName: "newName" }
+- rename-variable: Rename variable declarations and all references.
+  { transform: "rename-variable", targetName: "oldVar", newName: "newVar" }
+
+Pattern replace (for everything else):
+  { pattern: "console.log($ARG)", replacement: "logger.debug($ARG)" }`,
   inputSchema: z.object({
     path: z.string().describe('The path to the file to edit'),
     pattern: z
@@ -342,7 +421,7 @@ Examples:
     importSpec: z
       .object({
         module: z.string().describe('Module to import from'),
-        names: z.array(z.string()).describe('Names to import'),
+        names: z.array(z.string()).min(1).describe('Names to import'),
         isDefault: z.boolean().optional().describe('Whether the first name is a default import'),
       })
       .optional()
