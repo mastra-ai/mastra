@@ -5,15 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { coreAuthMiddleware } from '@mastra/server/auth';
-import { getEffectivePermission } from '@mastra/server/server-adapter';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -96,11 +93,25 @@ export async function createHonoServer(
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
+  // Pre-process routes: bake hono-openapi describeRoute into route middleware
+  // so the adapter handles it as normal middleware without needing to know about hono-openapi
+  const processedRoutes = routes?.map(route => {
+    if ('openapi' in route && route.openapi) {
+      const existingMiddleware = route.middleware
+        ? Array.isArray(route.middleware)
+          ? route.middleware
+          : [route.middleware]
+        : [];
+      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+    }
+    return route;
+  });
+
   // Store custom route auth configurations
   const customRouteAuthConfig = new Map<string, boolean>();
 
-  if (routes) {
-    for (const route of routes) {
+  if (processedRoutes) {
+    for (const route of processedRoutes) {
       // By default, routes require authentication unless explicitly set to false
       const requiresAuth = route.requiresAuth !== false;
       const routeKey = `${route.method}:${route.path}`;
@@ -132,7 +143,7 @@ export async function createHonoServer(
     bodyLimitOptions,
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
-    customApiRoutes: routes,
+    customApiRoutes: processedRoutes,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -222,80 +233,8 @@ export async function createHonoServer(
     }
   }
 
-  if (routes) {
-    const authConfig = server?.auth;
-
-    for (const route of routes) {
-      const middlewares: MiddlewareHandler[] = [];
-
-      // Add per-route auth check middleware
-      if (authConfig && route.requiresAuth !== false) {
-        middlewares.push(async (c: Context, next) => {
-          const currentAuthConfig = mastra.getServer()?.auth;
-          if (!currentAuthConfig) return next();
-
-          const authHeader = c.req.header('Authorization');
-          let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
-          if (!token) token = c.req.query('apiKey') || null;
-
-          const result = await coreAuthMiddleware({
-            path: c.req.path,
-            method: c.req.method,
-            getHeader: (name: string) => c.req.header(name),
-            mastra,
-            authConfig: currentAuthConfig,
-            customRouteAuthConfig,
-            requestContext: c.get('requestContext'),
-            rawRequest: c.req,
-            token,
-            buildAuthorizeContext: () => c,
-          });
-
-          if (result.action !== 'next') {
-            return c.json(result.body!, result.status as any);
-          }
-
-          // Permission check (RBAC)
-          const rbacProvider = mastra.getServer()?.rbac;
-          if (rbacProvider) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
-            const requiredPermission = getEffectivePermission({
-              method: route.method,
-              path: route.path,
-              requiresAuth: route.requiresAuth,
-            } as any);
-            if (requiredPermission && (!userPermissions || !hasPermission(userPermissions, requiredPermission))) {
-              return c.json(
-                { error: 'Forbidden', message: `Missing required permission: ${requiredPermission}` },
-                403 as any,
-              );
-            }
-          }
-
-          return next();
-        });
-      }
-
-      if (route.middleware) {
-        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
-      }
-      if (route.openapi) {
-        middlewares.push(describeRoute(route.openapi));
-      }
-
-      const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
-
-      // Register route using app.on() which supports dynamic method/path registration
-      // Hono's H type (Handler | MiddlewareHandler) is internal, so we use Handler
-      // which is compatible at runtime since both accept (context, next)
-      const allHandlers = [...middlewares, handler] as const;
-      if (route.method === 'ALL') {
-        app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      } else {
-        app.on(route.method, route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      }
-    }
-  }
+  // Register custom API routes via the adapter (auth + middleware handled uniformly)
+  await honoServerAdapter.registerCustomApiRoutes();
 
   if (server?.build?.apiReqLogs) {
     app.use(logger());

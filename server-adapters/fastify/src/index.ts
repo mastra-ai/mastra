@@ -411,6 +411,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         getQuery: name => (request.query as Record<string, string>)[name],
         requestContext: request.requestContext,
         request: toWebRequest(request),
+        buildAuthorizeContext: () => toWebRequest(request),
       });
 
       if (authError) {
@@ -583,6 +584,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           getQuery: name => (request.query as Record<string, string>)[name],
           requestContext: request.requestContext,
           request: toWebRequest(request),
+          buildAuthorizeContext: () => toWebRequest(request),
         });
 
         if (authError) {

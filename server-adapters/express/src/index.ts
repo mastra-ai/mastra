@@ -383,6 +383,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           getQuery: name => req.query[name] as string | undefined,
           requestContext: res.locals.requestContext,
           request: toWebRequest(req),
+          buildAuthorizeContext: () => toWebRequest(req),
         });
 
         if (authError) {
@@ -518,6 +519,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           getQuery: name => req.query[name] as string | undefined,
           requestContext: res.locals.requestContext,
           request: toWebRequest(req),
+          buildAuthorizeContext: () => toWebRequest(req),
         });
 
         if (authError) {

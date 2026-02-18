@@ -516,6 +516,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         getQuery: name => (ctx.query as Record<string, string>)[name],
         requestContext: ctx.state.requestContext,
         request: toWebRequest(ctx),
+        buildAuthorizeContext: () => toWebRequest(ctx),
       });
 
       if (authError) {
@@ -691,6 +692,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           getQuery: name => (ctx.query as Record<string, string>)[name],
           requestContext: ctx.state.requestContext,
           request: toWebRequest(ctx),
+          buildAuthorizeContext: () => toWebRequest(ctx),
         });
 
         if (authError) {

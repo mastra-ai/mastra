@@ -353,6 +353,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           getQuery: name => c.req.query(name),
           requestContext: c.get('requestContext'),
           request: c.req.raw,
+          buildAuthorizeContext: () => c,
         });
 
         if (authError) {
@@ -506,6 +507,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           getQuery: name => c.req.query(name),
           requestContext: c.get('requestContext'),
           request: c.req.raw,
+          buildAuthorizeContext: () => c,
         });
 
         if (authError) {
