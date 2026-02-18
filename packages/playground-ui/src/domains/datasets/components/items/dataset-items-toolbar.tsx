@@ -2,7 +2,6 @@
 
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Button, ButtonWithTooltip } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
 import {
   Plus,
   Upload,
@@ -140,7 +139,7 @@ export function DatasetItemsToolbar({
           placeholder="Search items..."
           value={searchQuery ?? ''}
           onChange={e => onSearchChange?.(e.target.value)}
-          variant="new"
+          variant="experimental"
           size="default"
           onReset={() => onSearchChange?.('')}
         />
@@ -189,7 +188,7 @@ export function DatasetItemsToolbar({
         placeholder="Search items..."
         value={searchQuery ?? ''}
         onChange={e => onSearchChange?.(e.target.value)}
-        variant="new"
+        variant="experimental"
         size="default"
         onReset={() => onSearchChange?.('')}
       />

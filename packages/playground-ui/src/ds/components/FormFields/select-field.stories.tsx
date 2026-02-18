@@ -46,28 +46,15 @@ export const Default: Story = {
   },
 };
 
-export const ExperimentalStyle: Story = {
-  render: () => {
-    return (
-      <div className="grid gap-3">
-        <SelectField
-          name="example"
-          label="Select an Option"
-          options={sampleOptions}
-          placeholder="Choose an option..."
-          onValueChange={(value: string) => console.log('Selected:', value)}
-        />
-        <SelectField
-          name="example"
-          label="Select an Option"
-          options={sampleOptions}
-          placeholder="Choose an option..."
-          onValueChange={(value: string) => console.log('Selected:', value)}
-          size="default"
-          variant="new"
-        />
-      </div>
-    );
+export const ExperimentalVariant: Story = {
+  args: {
+    name: 'example',
+    label: 'Select an Option',
+    options: sampleOptions,
+    placeholder: 'Choose an option...',
+    onValueChange: (value: string) => console.log('Selected:', value),
+    variant: 'experimental',
+    size: 'default',
   },
 };
 

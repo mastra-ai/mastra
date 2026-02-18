@@ -20,7 +20,7 @@ export function SearchField({ onReset, variant, ...props }: SearchFieldProps) {
 
       {onReset && props.value && (
         <>
-          {variant === 'new' ? (
+          {variant === 'experimental' ? (
             <Button
               type="button"
               onClick={onReset}

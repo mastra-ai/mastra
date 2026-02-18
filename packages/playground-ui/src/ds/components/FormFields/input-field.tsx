@@ -21,14 +21,14 @@ export type InputFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 
   error?: boolean;
   errorMsg?: string;
   size?: FormElementSize;
-  variant?: 'default' | 'new';
+  variant?: 'default' | 'experimental';
 };
 
 const inputFieldSizeClasses = {
   sm: `${formElementSizes.sm} px-2`,
   md: `${formElementSizes.md} px-3`,
   lg: `${formElementSizes.lg} px-3 py-2`,
-  default: `h-[2.25rem] text-[0.875rem] leading-[1]`,
+  default: `${formElementSizes.default} px-3`,
 };
 
 export function InputField({
@@ -51,7 +51,7 @@ export function InputField({
     return labelIsHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
   };
 
-  const isExperimentalVariant = variant === 'new';
+  const isExperimentalVariant = variant === 'experimental';
 
   return (
     <div

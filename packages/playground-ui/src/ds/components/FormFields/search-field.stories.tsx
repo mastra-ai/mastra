@@ -30,31 +30,14 @@ export const Default: Story = {
   },
 };
 
-export const ComingExperimentalStyle: Story = {
-  render: () => {
-    const [value, setValue] = useState('');
-    return (
-      <div className="grid gap-3">
-        <SearchField
-          name="search"
-          label="Search"
-          placeholder="Search items..."
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onReset={() => setValue('')}
-        />
-        <SearchField
-          name="search"
-          label="Search"
-          placeholder="Search items..."
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onReset={() => setValue('')}
-          variant="new"
-          size="default"
-        />
-      </div>
-    );
+export const ExperimentalVariant: Story = {
+  args: {
+    name: 'search',
+    label: 'Search',
+    placeholder: 'Search items...',
+    onReset: () => {},
+    variant: 'experimental',
+    size: 'default',
   },
 };
 
