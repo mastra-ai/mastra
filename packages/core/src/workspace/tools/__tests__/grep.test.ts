@@ -28,7 +28,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'foo' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'foo' });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('3 matches across 2 files');
@@ -43,13 +43,13 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const sensitive = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const sensitive = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'hello',
       caseSensitive: true,
     });
     expect(sensitive).toContain('1 match across 1 file');
 
-    const insensitive = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const insensitive = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'hello',
       caseSensitive: false,
     });
@@ -66,7 +66,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'target',
       path: '/a',
     });
@@ -84,7 +84,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match',
       glob: '*.ts',
     });
@@ -101,7 +101,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'TARGET',
       contextLines: 2,
     });
@@ -122,7 +122,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match_',
       maxResults: 10,
     });
@@ -137,7 +137,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: '[invalid',
     });
 
@@ -150,7 +150,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'a'.repeat(1001),
     });
 
@@ -167,7 +167,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match',
       glob: '**/*.ts',
     });
@@ -185,7 +185,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'match',
       glob: '*.{ts,js}',
     });
@@ -205,7 +205,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'findme' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' });
 
     expect(result).toContain('1 match across 1 file');
     expect(result).toContain('code.ts');
@@ -218,7 +218,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'anything',
       path: '/empty',
     });
@@ -234,7 +234,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: '^#',
       path: '/target.md',
     });
@@ -251,7 +251,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'findme' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' });
 
     // Format: file:line:column: content
     expect(result).toContain('col.ts:1:5:');
@@ -265,7 +265,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({ pattern: 'SECRET' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'SECRET' });
 
     expect(result).toContain('1 match across 1 file');
     expect(result).toContain('visible.ts');
@@ -280,7 +280,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'SECRET',
       includeHidden: true,
     });
@@ -299,7 +299,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'key',
       includeHidden: true,
     });
@@ -318,7 +318,7 @@ describe('workspace_grep', () => {
     });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.SEARCH.GREP].execute({
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
       pattern: 'hidden',
       glob: '.*rc.json',
       includeHidden: true,

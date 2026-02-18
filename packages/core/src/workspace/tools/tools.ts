@@ -195,7 +195,7 @@ export function createWorkspaceTools(workspace: Workspace) {
     addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, { requireWrite: true });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool);
     addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true });
-    addTool(WORKSPACE_TOOLS.SEARCH.GREP, grepTool);
+    addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool);
   }
 
   // Search tools

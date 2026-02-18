@@ -338,8 +338,8 @@ export async function getWorkspaceToolsFromAgent(agent: Agent, requestContext?: 
       }
 
       // Grep tool (filesystem-based, not BM25/vector)
-      if (isEnabled(WORKSPACE_TOOLS.SEARCH.GREP)) {
-        tools.push(WORKSPACE_TOOLS.SEARCH.GREP);
+      if (isEnabled(WORKSPACE_TOOLS.FILESYSTEM.GREP)) {
+        tools.push(WORKSPACE_TOOLS.FILESYSTEM.GREP);
       }
     }
 

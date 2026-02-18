@@ -7,7 +7,7 @@ import { createGlobMatcher } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 
 export const grepTool = createTool({
-  id: WORKSPACE_TOOLS.SEARCH.GREP,
+  id: WORKSPACE_TOOLS.FILESYSTEM.GREP,
   description: `Search file contents using a regex pattern. Walks the filesystem and returns matching lines with file paths and line numbers.
 
 Usage:
@@ -49,11 +49,19 @@ Usage:
       .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
   }),
   execute: async (
-    { pattern, path: searchPath = '/', glob: globPattern, contextLines = 0, maxResults = 100, caseSensitive = true, includeHidden = false },
+    {
+      pattern,
+      path: searchPath = '/',
+      glob: globPattern,
+      contextLines = 0,
+      maxResults = 100,
+      caseSensitive = true,
+      includeHidden = false,
+    },
     context,
   ) => {
     const { filesystem } = requireFilesystem(context);
-    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SEARCH.GREP);
+    await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
     // Guard against excessively long patterns as a cheap ReDoS heuristic
     const MAX_PATTERN_LENGTH = 1000;
