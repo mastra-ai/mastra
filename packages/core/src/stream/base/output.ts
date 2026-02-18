@@ -876,7 +876,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
               // Add partial assistant message to messageList so output processors can persist it
               const partialText = self.#bufferedText.join('');
-              if (partialText && self.messageList.get.response.db().length === 0) {
+              const alreadyHasMessage = self.messageList.get.response
+                .db()
+                .some(m => m.id === self.messageId && m.role === 'assistant');
+              if (partialText && !alreadyHasMessage) {
                 const partialMessage: MastraDBMessage = {
                   id: self.messageId,
                   role: 'assistant' as const,
@@ -930,38 +933,36 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               const abortStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-              if (abortStep) {
-                const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
-                  providerMetadata: abortStep.providerMetadata,
-                  text: self.#bufferedText.join(''),
-                  warnings: abortStep.warnings ?? [],
-                  finishReason: 'abort',
-                  content: messageList.get.response.aiV5.stepContent(),
-                  request: self.#request || {},
-                  error: undefined,
-                  reasoning: Object.values(self.#bufferedReasoningDetails || {}),
-                  reasoningText: abortReasoningText,
-                  sources: self.#bufferedSources,
-                  files: self.#bufferedFiles,
-                  steps: self.#bufferedSteps,
-                  response: {
-                    ...abortStep.response,
-                    messages: messageList.get.response.aiV5.model(),
-                  },
-                  usage: self.#usageCount,
-                  totalUsage: self.#getTotalUsage(),
-                  toolCalls: self.#toolCalls,
-                  toolResults: self.#toolResults,
-                  staticToolCalls: self.#toolCalls.filter(tc => tc?.payload?.dynamic === false),
-                  staticToolResults: self.#toolResults.filter(tr => tr?.payload?.dynamic === false),
-                  dynamicToolCalls: self.#toolCalls.filter(tc => tc?.payload?.dynamic === true),
-                  dynamicToolResults: self.#toolResults.filter(tr => tr?.payload?.dynamic === true),
-                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
-                  object: undefined,
-                };
+              const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
+                providerMetadata: abortStep?.providerMetadata,
+                text: self.#bufferedText.join(''),
+                warnings: abortStep?.warnings ?? [],
+                finishReason: 'abort',
+                content: messageList.get.response.aiV5.stepContent(),
+                request: self.#request || {},
+                error: undefined,
+                reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+                reasoningText: abortReasoningText,
+                sources: self.#bufferedSources,
+                files: self.#bufferedFiles,
+                steps: self.#bufferedSteps,
+                response: {
+                  ...(abortStep?.response ?? {}),
+                  messages: messageList.get.response.aiV5.model(),
+                },
+                usage: self.#usageCount,
+                totalUsage: self.#getTotalUsage(),
+                toolCalls: self.#toolCalls,
+                toolResults: self.#toolResults,
+                staticToolCalls: self.#toolCalls.filter(tc => tc?.payload?.dynamic === false),
+                staticToolResults: self.#toolResults.filter(tr => tr?.payload?.dynamic === false),
+                dynamicToolCalls: self.#toolCalls.filter(tc => tc?.payload?.dynamic === true),
+                dynamicToolResults: self.#toolResults.filter(tr => tr?.payload?.dynamic === true),
+                ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                object: undefined,
+              };
 
-                await options?.onFinish?.(onFinishPayload);
-              }
+              await options?.onFinish?.(onFinishPayload);
               break;
             }
 

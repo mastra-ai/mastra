@@ -889,12 +889,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           if (options?.abortSignal?.aborted) {
+            if (!isAbortError(error)) {
+              logger?.warn?.('Non-abort error swallowed due to active abort signal', { error, runId });
+            }
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });
 
             if (isControllerOpen(controller)) {
-              controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+              controller.enqueue({
+                type: 'abort',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  originalError: error instanceof Error ? { name: error.name, message: error.message } : undefined,
+                },
+              });
             }
 
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };

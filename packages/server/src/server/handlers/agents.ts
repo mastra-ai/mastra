@@ -1191,7 +1191,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       // Consume stream in background to ensure onFinish callbacks execute
       // even if the client disconnects mid-stream
-      streamResult.consumeStream?.().catch(console.error);
+      streamResult.consumeStream?.().catch(err => mastra.getLogger().error('Error consuming stream', { error: err }));
 
       return streamResult.fullStream;
     } catch (error) {
@@ -1250,7 +1250,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       // Consume stream in background to ensure onFinish callbacks execute
       // even if the client disconnects mid-stream
-      streamResult.consumeStream?.().catch(console.error);
+      streamResult.consumeStream?.().catch(err => mastra.getLogger().error('Error consuming stream', { error: err }));
 
       return streamResult.fullStream;
     } catch (error) {
@@ -1294,7 +1294,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       // Consume stream in background to ensure onFinish callbacks execute
       // even if the client disconnects mid-stream
-      streamResult.consumeStream?.().catch(console.error);
+      streamResult.consumeStream?.().catch(err => mastra.getLogger().error('Error consuming stream', { error: err }));
 
       return streamResult.fullStream;
     } catch (error) {
