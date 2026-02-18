@@ -12,23 +12,9 @@ import StepItem from "@site/src/components/StepItem";
 
 Datasets are collections of test cases that you run experiments against to measure how well your agents and workflows perform. Each mutation creates a new version, so you can reproduce past experiments exactly. Pair datasets with [scorers](/docs/evals/overview) to track quality across prompts, models, or code changes.
 
-## Setting up datasets
+## Usage
 
-### Installation
-
-<Steps>
-
-<StepItem>
-
-Install `@mastra/core`:
-
-```bash npm2yarn
-npm install @mastra/core@latest
-```
-
-</StepItem>
-
-<StepItem>
+### Configure storage
 
 Configure storage in your Mastra instance. Datasets require a storage adapter that provides the `datasets` domain:
 
@@ -43,10 +29,6 @@ export const mastra = new Mastra({
   }),
 });
 ```
-
-</StepItem>
-
-</Steps>
 
 ### Accessing the datasets API
 
@@ -67,13 +49,13 @@ const { datasets: all } = await datasets.list();
 
 :::info
 
-Visit the [DatasetsManager reference](/reference/datasets/datasets-manager) for the full list of methods.
+Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) for the full list of methods.
 
 :::
 
 ## Creating a dataset
 
-Call `mastra.datasets.create()` with a name and optional description:
+Call [`create()`](/reference/datasets/create) with a name and optional description:
 
 ```typescript title="src/mastra/datasets/create-dataset.ts"
 import { mastra } from "../index";
@@ -111,7 +93,7 @@ Items that don't match the schema are rejected at insert time.
 
 ## Adding items
 
-Use `addItem()` for a single item or `addItems()` to insert in bulk:
+Use [`addItem()`](/reference/datasets/addItem) for a single item or [`addItems()`](/reference/datasets/addItems) to insert in bulk:
 
 ```typescript title="src/mastra/datasets/add-items.ts"
 // Single item
@@ -137,23 +119,22 @@ await dataset.addItems({
 
 ## Updating and deleting items
 
+[`updateItem()`](/reference/datasets/updateItem), [`deleteItem()`](/reference/datasets/deleteItem), and [`deleteItems()`](/reference/datasets/deleteItems) let you modify or remove existing items by `itemId`:
+
 ```typescript title="src/mastra/datasets/update-delete.ts"
-// Update an item — this creates a new dataset version
 await dataset.updateItem({
   itemId: "item-abc-123",
   groundTruth: { translation: "¡Hola!" },
 });
 
-// Delete a single item
 await dataset.deleteItem({ itemId: "item-abc-123" });
 
-// Bulk delete
 await dataset.deleteItems({ itemIds: ["item-1", "item-2"] });
 ```
 
 ## Listing and searching items
 
-`listItems()` supports pagination and full-text search:
+[`listItems()`](/reference/datasets/listItems) supports pagination and full-text search:
 
 ```typescript title="src/mastra/datasets/list-items.ts"
 // Paginated list
@@ -173,9 +154,11 @@ const v2Items = await dataset.listItems({ version: 2 });
 
 ## Versioning
 
-Every mutation to a dataset's items — add, update, or delete — bumps the dataset version. This lets you pin experiments to a specific snapshot of the data.
+Every mutation to a dataset's items (add, update, or delete) bumps the dataset version. This lets you pin experiments to a specific snapshot of the data.
 
 ### Listing versions
+
+Use [`listVersions()`](/reference/datasets/listVersions) to see the paginated history of versions:
 
 ```typescript title="src/mastra/datasets/list-versions.ts"
 const { versions, pagination } = await dataset.listVersions();
@@ -187,7 +170,7 @@ for (const v of versions) {
 
 ### Viewing item history
 
-See how a specific item changed across versions:
+See how a specific item changed across versions by calling [`getItemHistory()`](/reference/datasets/getItemHistory) with the `itemId`:
 
 ```typescript title="src/mastra/datasets/item-history.ts"
 const history = await dataset.getItemHistory({ itemId: "item-abc-123" });
@@ -205,11 +188,11 @@ Fetch the exact items that existed at a past version:
 const items = await dataset.listItems({ version: 2 });
 ```
 
-You can also pin experiments to a version — see [Running experiments](/docs/datasets/running-experiments).
+You can also pin experiments to a version, see [running experiments](/docs/datasets/running-experiments).
 
 :::info
 
-Visit the [Dataset reference](/reference/datasets/dataset) for the full list of methods and parameters.
+Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
 
 :::
 

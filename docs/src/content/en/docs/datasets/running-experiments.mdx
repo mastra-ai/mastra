@@ -10,11 +10,11 @@ import TabItem from "@theme/TabItem";
 
 # Running Experiments
 
-An experiment runs every item in a dataset through a target — an agent, a workflow, or a scorer — then optionally scores the outputs. Use a scorer as the target when you want to evaluate an LLM judge itself. Results are persisted to storage so you can compare runs across different prompts, models, or code changes.
+An experiment runs every item in a dataset through a target (an agent, a workflow, or a scorer) and then optionally scores the outputs. Use a scorer as the target when you want to evaluate an LLM judge itself. Results are persisted to storage so you can compare runs across different prompts, models, or code changes.
 
 ## Basic experiment
 
-Call `dataset.startExperiment()` with a target and scorers:
+Call [`startExperiment()`](/reference/datasets/startExperiment) with a target and scorers:
 
 ```typescript title="src/mastra/experiments/basic.ts"
 import { mastra } from "../index";
@@ -33,11 +33,11 @@ console.log(summary.succeededCount);  // number of items that ran successfully
 console.log(summary.failedCount);     // number of items that failed
 ```
 
-`startExperiment()` blocks until all items finish. For fire-and-forget execution, see [Async experiments](#async-experiments).
+`startExperiment()` blocks until all items finish. For fire-and-forget execution, see [async experiments](#async-experiments).
 
 ## Experiment targets
 
-You can point an experiment at a registered agent, workflow, or scorer:
+You can point an experiment at a registered agent, workflow, or scorer.
 
 ### Registered agent
 
@@ -85,7 +85,7 @@ The scorer receives each item's `input` and `groundTruth`. LLM-based judges can 
 
 ## Scoring results
 
-Scorers run automatically after each item's target execution. Pass scorer instances or registered scorer IDs:
+Scorers automatically run after each item's target execution. Pass scorer instances or registered scorer IDs:
 
 <Tabs>
 <TabItem value="ids" label="Scorer IDs">
@@ -138,7 +138,7 @@ Visit the [Scorers overview](/docs/evals/overview) for details on available and 
 
 ## Async experiments
 
-`startExperiment()` blocks until every item completes. For long-running datasets, use `startExperimentAsync()` to start the experiment in the background:
+`startExperiment()` blocks until every item completes. For long-running datasets, use [`startExperimentAsync()`](/reference/datasets/startExperimentAsync) to start the experiment in the background:
 
 ```typescript title="src/mastra/experiments/async.ts"
 const { experimentId, status } = await dataset.startExperimentAsync({
@@ -152,7 +152,7 @@ console.log(experimentId); // UUID
 console.log(status);       // 'pending'
 ```
 
-Poll for completion using `getExperiment()`:
+Poll for completion using [`getExperiment()`](/reference/datasets/datasets-manager-getExperiment):
 
 ```typescript
 let experiment = await dataset.getExperiment({ experimentId });
@@ -270,40 +270,12 @@ for (const result of results) {
 
 `startExperiment()` returns an `ExperimentSummary` with counts and per-item results:
 
-```typescript
-interface ExperimentSummary {
-  experimentId: string;
-  status: "pending" | "running" | "completed" | "failed";
-  totalItems: number;
-  succeededCount: number;
-  failedCount: number;
-  skippedCount: number;
-  completedWithErrors: boolean;
-  startedAt: Date;
-  completedAt: Date;
-  results: Array<{
-    itemId: string;
-    input: unknown;
-    output: unknown | null;
-    groundTruth: unknown | null;
-    error: { message: string; stack?: string; code?: string } | null;
-    scores: Array<{
-      scorerId: string;
-      scorerName: string;
-      score: number | null;
-      reason: string | null;
-      error: string | null;
-    }>;
-  }>;
-}
-```
-
 - `completedWithErrors` is `true` when the experiment finished but some items failed.
 - Items cancelled via `signal` appear in `skippedCount`.
 
 :::info
 
-Visit the [startExperiment reference](/reference/datasets/startExperiment) for the full parameter and return type documentation.
+Visit the [`startExperiment` reference](/reference/datasets/startExperiment) for the full parameter and return type documentation.
 
 :::
 
@@ -311,5 +283,5 @@ Visit the [startExperiment reference](/reference/datasets/startExperiment) for t
 
 - [Datasets overview](/docs/datasets/overview)
 - [Scorers overview](/docs/evals/overview)
-- [startExperiment reference](/reference/datasets/startExperiment)
-- [listExperimentResults reference](/reference/datasets/listExperimentResults)
+- [`startExperiment` reference](/reference/datasets/startExperiment)
+- [`listExperimentResults` reference](/reference/datasets/listExperimentResults)
