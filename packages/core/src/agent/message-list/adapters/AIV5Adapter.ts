@@ -150,7 +150,7 @@ export class AIV5Adapter {
               output: inv.result,
               state: 'output-available',
               callProviderMetadata: part.providerMetadata,
-              ...((part as { providerExecuted?: boolean }).providerExecuted ? { providerExecuted: true } : {}),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           } else {
             parts.push({
@@ -159,7 +159,7 @@ export class AIV5Adapter {
               input: inv.args,
               state: 'input-available',
               callProviderMetadata: part.providerMetadata,
-              ...((part as { providerExecuted?: boolean }).providerExecuted ? { providerExecuted: true } : {}),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
           }
           continue;
