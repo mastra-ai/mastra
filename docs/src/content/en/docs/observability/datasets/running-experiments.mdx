@@ -1,5 +1,5 @@
 ---
-title: "Running experiments | Datasets"
+title: "Running Experiments | Datasets"
 description: "Run experiments against agents or workflows, with scoring and result tracking."
 packages:
   - "@mastra/core"
@@ -9,6 +9,8 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 # Running Experiments
+
+**Added in:** `@mastra/core@1.4.0`
 
 An experiment runs every item in a dataset through a target (an agent, a workflow, or a scorer) and then optionally scores the outputs. Use a scorer as the target when you want to evaluate an LLM judge itself. Results are persisted to storage so you can compare runs across different prompts, models, or code changes.
 
@@ -281,7 +283,7 @@ Visit the [`startExperiment` reference](/reference/datasets/startExperiment) for
 
 ## Related
 
-- [Datasets overview](/docs/datasets/overview)
+- [Datasets overview](/docs/observability/datasets/overview)
 - [Scorers overview](/docs/evals/overview)
 - [`startExperiment` reference](/reference/datasets/startExperiment)
 - [`listExperimentResults` reference](/reference/datasets/listExperimentResults)

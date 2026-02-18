@@ -601,12 +601,12 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'datasets/overview',
+              id: 'observability/datasets/overview',
               label: 'Overview',
             },
             {
               type: 'doc',
-              id: 'datasets/running-experiments',
+              id: 'observability/datasets/running-experiments',
               label: 'Running Experiments',
             },
           ],
