@@ -21,8 +21,10 @@ describe('PostgreSQL Storage Tests', () => {
     })`docker compose up -d postgres --wait`;
   });
 
+  // Pool cleanup is handled inside getPgStorageTests via its own afterAll.
+  // This afterAll runs last (vitest runs them in reverse registration order)
+  // so by this point all PG pools have been gracefully closed.
   afterAll(async () => {
-    await new Promise(resolve => setTimeout(resolve, 1000));
     return $({
       cwd: join(__dirname, '..'),
     })`docker compose down --volumes postgres`;

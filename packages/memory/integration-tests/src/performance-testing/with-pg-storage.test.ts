@@ -37,9 +37,9 @@ describe('Memory with PostgresStore Performance', () => {
   });
 
   afterAll(async () => {
-    // Close PG connections before tearing down Docker to avoid "terminating connection" errors
+    // Gracefully close all PG pools before tearing down Docker
     await Promise.allSettled([storage?.close(), vector?.disconnect()]);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+
     return $({
       cwd: join(__dirname, '..', '..'),
     })`docker compose down --volumes perf-postgres`;

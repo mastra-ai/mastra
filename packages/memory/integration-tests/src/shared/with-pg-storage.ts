@@ -52,13 +52,18 @@ export function getPgStorageTests(connectionString: string) {
   // Limit pool size to avoid "too many clients" errors in tests
   const poolLimits = { max: 2, idleTimeoutMillis: 5000 } as const;
 
-  // Track all stores/vectors created so we can close pools in afterAll
+  // Track all PG pools created during tests so they can be closed before Docker teardown
+  const allStorages: PostgresStore[] = [];
+  const allVectors: PgVector[] = [];
   const storesToClose: PostgresStore[] = [];
   const vectorsToClose: PgVector[] = [];
 
   afterAll(async () => {
-    await Promise.allSettled(storesToClose.map(s => s.close()));
-    await Promise.allSettled(vectorsToClose.map(v => v.disconnect()));
+    // Close every PG pool we opened so the container can shut down cleanly
+    await Promise.allSettled([
+      ...allStorages.map(s => s.close().catch(() => {})),
+      ...allVectors.map(v => v.disconnect().catch(() => {})),
+    ]);
   });
 
   describe('PostgresStore stores initialization', () => {
@@ -84,13 +89,18 @@ export function getPgStorageTests(connectionString: string) {
   });
 
   getResuableTests(() => {
+    const storage = new PostgresStore({
+      id: randomUUID(),
+      ...config,
+    });
+    const vector = new PgVector({ connectionString, id: 'test-vector' });
+    allStorages.push(storage);
+    allVectors.push(vector);
+
     return {
       memory: new Memory({
-        storage: new PostgresStore({
-          id: randomUUID(),
-          ...config,
-        }),
-        vector: new PgVector({ connectionString, id: 'test-vector' }),
+        storage,
+        vector,
         embedder: fastembed,
         options: {
           lastMessages: 10,
@@ -110,6 +120,14 @@ export function getPgStorageTests(connectionString: string) {
   vectorsToClose.push(integrationVector);
 
   describe('Memory with PostgresStore Integration', () => {
+    const integrationStorage = new PostgresStore({
+      id: randomUUID(),
+      ...config,
+    });
+    const integrationVector = new PgVector({ connectionString, id: 'test-vector' });
+    allStorages.push(integrationStorage);
+    allVectors.push(integrationVector);
+
     const memory = new Memory({
       storage: integrationStorage,
       vector: integrationVector,
@@ -125,10 +143,6 @@ export function getPgStorageTests(connectionString: string) {
     });
 
     const resourceId = 'test-resource';
-
-    afterAll(async () => {
-      await Promise.allSettled([(memory.storage as PostgresStore).close(), (memory.vector as PgVector).disconnect()]);
-    });
 
     // Clean up orphaned vector embeddings before tests
     beforeAll(async () => {

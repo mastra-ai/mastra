@@ -436,6 +436,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       if (isRecordMode) {
         console.log(`[llm-recorder] Recording: ${url}`);
 
+        const currentDate = Date.now();
         try {
           const realResponse = await fetch(bypass(request));
           const isStreaming = isStreamingResponse(realResponse.headers);
@@ -445,7 +446,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: Date.now() },
+              request: { url, method: 'POST', body, timestamp: currentDate },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
@@ -470,7 +471,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
             recordings.push({
               hash,
-              request: { url, method: 'POST', body, timestamp: Date.now() },
+              request: { url, method: 'POST', body, timestamp: currentDate },
               response: {
                 status: realResponse.status,
                 statusText: realResponse.statusText,
