@@ -1,5 +1,5 @@
 ---
-title: "Datasets overview | Datasets"
+title: "Datasets Overview | Datasets"
 description: "Manage versioned test data, run experiments against agents and workflows, and track results over time."
 packages:
   - "@mastra/core"
@@ -9,6 +9,8 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
 # Datasets Overview
+
+**Added in:** `@mastra/core@1.4.0`
 
 Datasets are collections of test cases that you run experiments against to measure how well your agents and workflows perform. Each mutation creates a new version, so you can reproduce past experiments exactly. Pair datasets with [scorers](/docs/evals/overview) to track quality across prompts, models, or code changes.
 
@@ -188,7 +190,7 @@ Fetch the exact items that existed at a past version:
 const items = await dataset.listItems({ version: 2 });
 ```
 
-You can also pin experiments to a version, see [running experiments](/docs/datasets/running-experiments).
+You can also pin experiments to a version, see [running experiments](/docs/observability/datasets/running-experiments).
 
 :::info
 
@@ -198,7 +200,7 @@ Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list o
 
 ## Related
 
-- [Running experiments](/docs/datasets/running-experiments)
+- [Running experiments](/docs/observability/datasets/running-experiments)
 - [Scorers overview](/docs/evals/overview)
 - [DatasetsManager reference](/reference/datasets/datasets-manager)
 - [Dataset reference](/reference/datasets/dataset)
