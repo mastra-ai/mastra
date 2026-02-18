@@ -1,6 +1,5 @@
 import { TransformStream } from 'node:stream/web';
-import { isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
-import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
@@ -8,8 +7,8 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { StandardSchemaWithJSON } from '../../schema/schema';
+import { isStandardSchemaWithJSON, toStandardSchema } from '../../schema/schema';
 import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
-import { safeValidateTypes } from '../aisdk/v5/compat';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -205,26 +204,33 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
       }
     }
 
-    // For non-Zod schemas: plain JSONSchema7 or AI SDK Schema
+    // For non-Zod StandardSchemaWithJSON schemas (JSON Schema, AI SDK Schema, ArkType, etc.)
+    // All schemas are wrapped via toStandardSchema() before reaching here,
+    // so we can use ~standard.validate() uniformly.
     try {
-      if (typeof this.schema === 'object' && !('jsonSchema' in this.schema)) {
-        // Plain JSONSchema7 object - wrap it using jsonSchema()
-        const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
-        return result as ValidationResult<OUTPUT>;
-      } else if (typeof this.schema === 'object' && 'jsonSchema' in this.schema) {
-        // Already an AI SDK Schema - use it directly
-        const result = await safeValidateTypes({
-          value,
-          schema: this.schema as unknown as Schema<OUTPUT>,
-        });
-        return result;
-      } else {
-        // Should not reach here, but handle as fallback
+      const ssResult = await this.schema['~standard'].validate(value);
+
+      if (!ssResult.issues) {
         return {
           success: true,
-          value: value as OUTPUT,
+          value: ssResult.value as OUTPUT,
         };
       }
+
+      const errorMessages = ssResult.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+
+      return {
+        success: false,
+        error: new MastraError({
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+          text: `Structured output validation failed: ${errorMessages}`,
+          details: {
+            value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+          },
+        }),
+      };
     } catch (error) {
       return {
         success: false,
@@ -542,15 +548,23 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @returns Handler instance for the detected format type
  */
 function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: StandardSchemaWithJSON<OUTPUT> }) {
-  const transformedSchema = getTransformedSchema(schema);
+  // Ensure the schema is a proper StandardSchemaWithJSON.
+  // Raw schemas (JSONSchema7, AI SDK Schema) may reach here when the handler is used
+  // outside the normal agent pipeline (e.g., direct createObjectStreamTransformer usage).
+  const normalizedSchema =
+    schema && !isStandardSchemaWithJSON(schema)
+      ? (toStandardSchema(schema as any) as StandardSchemaWithJSON<OUTPUT>)
+      : schema;
+
+  const transformedSchema = getTransformedSchema(normalizedSchema);
   switch (transformedSchema?.outputFormat) {
     case 'array':
-      return new ArrayFormatHandler(schema);
+      return new ArrayFormatHandler(normalizedSchema);
     case 'enum':
-      return new EnumFormatHandler(schema);
+      return new EnumFormatHandler(normalizedSchema);
     case 'object':
     default:
-      return new ObjectFormatHandler(schema);
+      return new ObjectFormatHandler(normalizedSchema);
   }
 }
 
