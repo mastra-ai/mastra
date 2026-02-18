@@ -1024,7 +1024,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -1034,7 +1034,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -1213,7 +1213,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -1224,7 +1224,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -1245,7 +1245,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -1256,7 +1256,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -1577,7 +1577,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1587,7 +1587,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1611,7 +1611,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1621,7 +1621,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1868,7 +1868,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1878,7 +1878,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2072,7 +2072,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -2083,7 +2083,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -2106,7 +2106,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -2117,7 +2117,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -2245,7 +2245,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2255,7 +2255,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2385,7 +2385,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2395,7 +2395,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2732,7 +2732,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2742,7 +2742,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2770,7 +2770,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2780,7 +2780,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });

@@ -1,6 +1,7 @@
 import type { Agent } from "@mastra/core/agent"
 import type { MastraMemory } from "@mastra/core/memory"
 import type { MastraCompositeStore } from "@mastra/core/storage"
+import type { DynamicArgument } from "@mastra/core/types"
 import type {
 	Workspace,
 	WorkspaceConfig,
@@ -128,11 +129,15 @@ export interface HarnessConfig<
 
 	/**
 	 * Workspace configuration.
-	 * Accepts either a pre-constructed Workspace instance or a WorkspaceConfig
-	 * to have the Harness construct one internally.
+	 * Accepts a pre-constructed Workspace instance, a WorkspaceConfig for
+	 * Harness to construct internally, or a dynamic factory function that
+	 * receives the request context and returns a Workspace per-request.
 	 *
-	 * When provided, the Harness manages the workspace lifecycle (init/destroy)
-	 * and exposes it to agents via HarnessRuntimeContext.
+	 * When using a static Workspace or WorkspaceConfig, the Harness manages
+	 * the workspace lifecycle (init/destroy).
+	 *
+	 * When using a dynamic factory, the Harness calls it during each request
+	 * to resolve the workspace from current state (e.g., sandboxAllowedPaths).
 	 *
 	 * @example Pre-built workspace
 	 * ```typescript
@@ -150,8 +155,21 @@ export interface HarnessConfig<
 	 *   ...
 	 * });
 	 * ```
+	 *
+	 * @example Dynamic workspace (function, same as Agent)
+	 * ```typescript
+	 * const harness = new Harness({
+	 *   workspace: ({ requestContext }) => {
+	 *     const state = requestContext.get('harness')?.getState();
+	 *     return new Workspace({
+	 *       filesystem: new LocalFilesystem({ basePath: state.projectPath }),
+	 *     });
+	 *   },
+	 *   ...
+	 * });
+	 * ```
 	 */
-	workspace?: Workspace | WorkspaceConfig
+	workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig
 
 	/**
 	 * Hook manager for lifecycle event interception.
