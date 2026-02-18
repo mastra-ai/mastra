@@ -5,11 +5,14 @@ import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
+import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { coreAuthMiddleware } from '@mastra/server/auth';
+import { getEffectivePermission } from '@mastra/server/server-adapter';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -220,8 +223,58 @@ export async function createHonoServer(
   }
 
   if (routes) {
+    const authConfig = server?.auth;
+
     for (const route of routes) {
       const middlewares: MiddlewareHandler[] = [];
+
+      // Add per-route auth check middleware
+      if (authConfig && route.requiresAuth !== false) {
+        middlewares.push(async (c: Context, next) => {
+          const currentAuthConfig = mastra.getServer()?.auth;
+          if (!currentAuthConfig) return next();
+
+          const authHeader = c.req.header('Authorization');
+          let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
+          if (!token) token = c.req.query('apiKey') || null;
+
+          const result = await coreAuthMiddleware({
+            path: c.req.path,
+            method: c.req.method,
+            getHeader: (name: string) => c.req.header(name),
+            mastra,
+            authConfig: currentAuthConfig,
+            customRouteAuthConfig,
+            requestContext: c.get('requestContext'),
+            rawRequest: c.req,
+            token,
+            buildAuthorizeContext: () => c,
+          });
+
+          if (result.action !== 'next') {
+            return c.json(result.body!, result.status as any);
+          }
+
+          // Permission check (RBAC)
+          const rbacProvider = mastra.getServer()?.rbac;
+          if (rbacProvider) {
+            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
+            const requiredPermission = getEffectivePermission({
+              method: route.method,
+              path: route.path,
+              requiresAuth: route.requiresAuth,
+            } as any);
+            if (requiredPermission && (!userPermissions || !hasPermission(userPermissions, requiredPermission))) {
+              return c.json(
+                { error: 'Forbidden', message: `Missing required permission: ${requiredPermission}` },
+                403 as any,
+              );
+            }
+          }
+
+          return next();
+        });
+      }
 
       if (route.middleware) {
         middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));

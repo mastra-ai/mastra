@@ -4,6 +4,7 @@ import { hasPermission } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { isProtectedCustomRoute } from '@mastra/server/auth';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
@@ -15,8 +16,6 @@ import {
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 import { ZodError } from 'zod';
-
-import { authMiddleware } from './auth-middleware';
 
 /**
  * Convert Koa context to Web API Request for cookie-based auth providers.
@@ -673,6 +672,48 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     if (!(await this.buildCustomRouteHandler())) return;
 
     this.app.use(async (ctx: Context, next: Next) => {
+      // Check if this request matches a protected custom route and run auth
+      const path = String(ctx.path || '/');
+      const method = String(ctx.method || 'GET');
+
+      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
+        const serverRoute: ServerRoute = {
+          method: method as any,
+          path,
+          responseType: 'json',
+          handler: async () => {},
+        };
+
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path,
+          method,
+          getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => (ctx.query as Record<string, string>)[name],
+          requestContext: ctx.state.requestContext,
+          request: toWebRequest(ctx),
+        });
+
+        if (authError) {
+          ctx.status = authError.status;
+          ctx.body = { error: authError.error };
+          return;
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+          if (permissionError) {
+            ctx.status = permissionError.status;
+            ctx.body = {
+              error: permissionError.error,
+              message: permissionError.message,
+            };
+            return;
+          }
+        }
+      }
+
       const response = await this.handleCustomRouteRequest(
         `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
         ctx.method,
@@ -691,12 +732,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
-      return;
-    }
-
-    this.app.use(authMiddleware);
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
   }
 }

@@ -1,4 +1,5 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import type { IRBACProvider, EEUser } from '@mastra/core/auth';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
@@ -7,7 +8,7 @@ import { Hono } from 'hono';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { defaultAuthConfig } from '../auth/defaults';
-import { canAccessPublicly, checkRules, isDevPlaygroundRequest } from '../auth/helpers';
+import { canAccessPublicly, checkRules } from '../auth/helpers';
 import { normalizeRoutePath } from '../utils';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import { SERVER_ROUTES, getEffectivePermission } from './routes';
@@ -265,8 +266,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return null; // Route explicitly opts out of auth
     }
 
-    // Dev playground bypass
-    if (isDevPlaygroundRequest(context.path, context.method, context.getHeader, authConfig)) {
+    // Dev playground bypass — only the header check is needed here because
+    // checkRouteAuth() is only called for API routes (built-in + custom).
+    // Studio assets and other non-API paths never reach this method.
+    if (process.env.MASTRA_DEV === 'true' && context.getHeader('x-mastra-dev-playground') === 'true') {
       return null;
     }
 
@@ -298,6 +301,19 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       }
 
       context.requestContext.set('user', user);
+
+      // Resolve RBAC permissions and roles for the authenticated user
+      try {
+        const rbacProvider = this.mastra.getServer()?.rbac as IRBACProvider<EEUser> | undefined;
+        if (rbacProvider) {
+          const permissions = await rbacProvider.getPermissions(user as EEUser);
+          context.requestContext.set('userPermissions', permissions);
+          const roles = await rbacProvider.getRoles(user as EEUser);
+          context.requestContext.set('userRoles', roles);
+        }
+      } catch {
+        // RBAC not available or failed, continue without permissions
+      }
     } catch (err) {
       this.mastra.getLogger()?.error('Authentication error', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
