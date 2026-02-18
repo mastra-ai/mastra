@@ -142,6 +142,7 @@ export function DatasetItemsToolbar({
           variant="experimental"
           size="default"
           onReset={() => onSearchChange?.('')}
+          disabled={!hasItems && !searchQuery}
         />
 
         <div className="flex gap-5">
@@ -192,6 +193,7 @@ export function DatasetItemsToolbar({
         variant="experimental"
         size="default"
         onReset={() => onSearchChange?.('')}
+        disabled={!hasItems && !searchQuery}
       />
 
       <ButtonsGroup>
