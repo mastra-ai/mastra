@@ -34,7 +34,7 @@
   "scripts": {
     "cli": "tsx src/main.ts",
     "check": "tsc --noEmit",
-    "build": "pnpm check && tsup --silent --config tsup.config.ts",
+    "build": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
