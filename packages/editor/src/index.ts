@@ -140,6 +140,7 @@ export class MastraEditor implements IMastraEditor {
   /** List all registered processor providers */
   listProcessorProviders(): Record<string, ProcessorProvider> {
     return this.__processorProviders;
+  }
   /** List all registered filesystem providers */
   getFilesystemProviders(): FilesystemProvider[] {
     return Array.from(this.__filesystems.values());

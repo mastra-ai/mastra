@@ -246,7 +246,7 @@ export function hydrateProcessorGraph(
   mode: 'input' | 'output',
   ctx: HydrationContext,
 ): InputProcessorOrWorkflow[] | OutputProcessorOrWorkflow[] | undefined {
-  if (!graph || graph.steps.length === 0) return undefined;
+  if (!graph || !Array.isArray(graph.steps) || graph.steps.length === 0) return undefined;
 
   // Simple sequential graph: return flat processor array
   if (isSequentialOnly(graph.steps)) {

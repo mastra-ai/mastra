@@ -165,6 +165,24 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   /**
+   * Accumulate all matching variants for an array-typed field.
+   * Each matching variant's value (an array) is concatenated in order.
+   * Variants with no rules are treated as unconditional (always included).
+   */
+    private accumulateArrayVariants<T>(
+      variants: StorageConditionalVariant<T[]>[],
+      context: Record<string, unknown>,
+    ): T[] {
+      const result: T[] = [];
+      for (const variant of variants) {
+        if (!variant.rules || evaluateRuleGroup(variant.rules, context)) {
+          result.push(...variant.value);
+        }
+      }
+      return result;
+  }
+
+  /**
    * Accumulate all matching variants for an object/record-typed field.
    * Each matching variant's value is shallow-merged in order, so later
    * matches override keys from earlier ones.
