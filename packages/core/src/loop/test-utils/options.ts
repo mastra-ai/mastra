@@ -71,7 +71,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       expect(toolExecuteMock).toHaveBeenCalledWith(
         { value: 'value' },
-        {
+        expect.objectContaining({
           abortSignal: abortController.signal,
           toolCallId: 'call-1',
           messages: expect.any(Array),

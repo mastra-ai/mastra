@@ -90,6 +90,10 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       const processors1 = await memory.getInputProcessors();
       const semanticRecall1 = processors1.find(p => p.id === 'semantic-recall') as SemanticRecall;
 
+      // Clear mock call counts from the dimension probe that happens inside getInputProcessors()
+      // (getEmbeddingDimension() calls doEmbed({ values: ['a'] }) to discover the embedding dimension)
+      vi.mocked(mockEmbedder.doEmbed).mockClear();
+
       // Set up request context
       const requestContext = new RequestContext();
       requestContext.set('MastraMemory', {
@@ -179,6 +183,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       const inputProcessors = await memory.getInputProcessors();
       const inputSemanticRecall = inputProcessors.find(p => p.id === 'semantic-recall') as SemanticRecall;
 
+      // Clear mock call counts from the dimension probe that happens inside getInputProcessors()
+      vi.mocked(mockEmbedder.doEmbed).mockClear();
+
       const messageList1 = new MessageList();
       messageList1.add([message], 'input');
 
@@ -264,6 +271,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       const processors1 = await memory1.getInputProcessors();
       const semanticRecall1 = processors1.find(p => p.id === 'semantic-recall') as SemanticRecall;
 
+      // Clear mock call counts from the dimension probe that happens inside getInputProcessors()
+      vi.mocked(mockEmbedder.doEmbed).mockClear();
+
       const messageList1 = new MessageList();
       messageList1.add([message], 'input');
 
@@ -281,6 +291,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       // Process with second memory instance - should use global cache
       const processors2 = await memory2.getInputProcessors();
       const semanticRecall2 = processors2.find(p => p.id === 'semantic-recall') as SemanticRecall;
+
+      // Record call count before second processInput (dimension probes may have added calls)
+      const callCountBeforeSecondProcess = vi.mocked(mockEmbedder.doEmbed).mock.calls.length;
 
       const messageList2 = new MessageList();
       messageList2.add([message], 'input');
