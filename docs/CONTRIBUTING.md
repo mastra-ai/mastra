@@ -94,64 +94,62 @@ packages:
 
 Headings should be nested by their rank. Headings with an equal or higher rank start a new section, headings with a lower rank start new subsections that are part of the higher ranked section.
 
-h1 headings should be written in title-casing, where the first letter of each major word is capitalized. Example: "This Is a Heading".
-
-All other headings should be written in sentence-casing, where only the first word of the heading is capitalized. Example: "This is a heading".
+All headings should be written in sentence-casing, where only the first word of the heading is capitalized. Example: "This is a heading".
 
 ### Code blocks
 
 Syntax-highlighted code blocks are rendered wherever markdown code blocks are used. To add syntax highlighting, specify a language next to the backticks before the fenced code block.
 
-````md
+```md
 ​`typescript
 function add(a: number, b: number) {
   return a + b
 }
 ​`
-````
+```
 
 You can also specify a filename by passing the `title` prop.
 
-````md
+```md
 ​`typescript title="add.ts"
 function add(a: number, b: number) {
   return a + b
 }
 ​`
-````
+```
 
 #### Highlighting
 
 You can highlight specific lines in a code block using the `{}` notation. For example, to highlight line 2 and lines 5-7:
 
-````md
+```md
 ​`typescript {2,5-7}
 function add(a: number, b: number) {
   return a + b
 }
 ​`
-````
+```
 
 Alternatively you can use `// highlight-next-line` and `// highlight-start` / `// highlight-end` comments to specify which lines to highlight.
 
-````md
+```md
 ​`typescript
 function add(a: number, b: number) {
   // highlight-next-line
   return a + b
 }
 ​`
-````
+```
 
 ### `npm install` code blocks
 
 When including `npm install` code blocks, please use the following format to ensure consistent styling across the documentation:
 
-````md
+```md
 ​`bash npm2yarn
 npm install @mastra/core
 ​`
-````
+```
 
 By including `npm2yarn` after `bash`, the documentation site will automatically generate a toggle that allows users to switch between different package managers.
 

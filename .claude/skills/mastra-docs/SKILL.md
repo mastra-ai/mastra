@@ -5,4 +5,17 @@ description: Documentation guidelines for Mastra. This skill should be used when
 
 # Mastra Documentation Guidelines
 
-TODO
+Instructions and styleguides for writing and maintaining Mastra documentation. This skill should be used whenever creating or updating documentation for Mastra to ensure consistency, clarity, and quality across all docs.
+
+## Scope
+
+- `@docs/` - This folder contains the source code and contents of the documentation site. All documentation for Mastra should be created and maintained here.
+- `@docs/src/content/en/` - This subfolder contains the actual markdown files for the documentation site, organized into `docs/`, `guides/`, and `reference/` sections. The `models/` subfolder contains auto-generated documentation for model providers and should not be edited manually.
+
+## Styleguides
+
+Follow the general styleguide at `@docs/styleguides/STYLEGUIDE.md` for all documentation. Additionally, refer to these specific styleguides when writing different types of documentation:
+
+- `@docs/styleguides/DOC.md` - For any file inside `@docs/src/content/en/docs/`
+- `@docs/styleguides/GUIDE.md` - For any file inside `@docs/src/content/en/guides/`
+- `@docs/styleguides/REFERENCE.md` - For any file inside `@docs/src/content/en/reference/`
