@@ -1004,8 +1004,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   toolName: toolCall.toolName,
                   args: toolCall.args,
                 },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
-                ...(toolCall.providerExecuted ? { providerExecuted: true as const } : {}),
+                providerMetadata: toolCall.providerMetadata,
+                providerExecuted: toolCall.providerExecuted,
               };
             }),
           },
