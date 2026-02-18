@@ -1103,4 +1103,121 @@ describe('Memory', () => {
       expect(writeIndexName).toContain('384');
     });
   });
+
+  describe('toModelOutput persistence', () => {
+    it('should preserve raw tool result in storage and apply toModelOutput when building prompt', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+      });
+      const resourceId = 'tmo-resource';
+      const threadId = 'tmo-thread';
+
+      // Create thread
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'toModelOutput test',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Save messages with a tool result
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'tmo-msg-1',
+          threadId,
+          resourceId,
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'What is the weather?' }] },
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+        },
+        {
+          id: 'tmo-msg-2',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'getWeather',
+                  args: { city: 'NYC' },
+                  result: {
+                    temperature: 72,
+                    conditions: 'sunny',
+                    humidity: 45,
+                    windSpeed: 12,
+                    forecast: [
+                      { day: 'Monday', high: 75, low: 60 },
+                      { day: 'Tuesday', high: 70, low: 55 },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+        },
+      ];
+
+      await memory.saveMessages({ messages });
+
+      // Load messages back from storage
+      const { messages: loadedMessages } = await memory.recall({
+        threadId,
+        resourceId,
+      });
+
+      // Verify raw result is preserved in storage
+      expect(loadedMessages).toHaveLength(2);
+      const toolMsg = loadedMessages[1]!;
+      expect(toolMsg.content).toHaveProperty('format', 2);
+      const parts = (toolMsg.content as any).parts;
+      expect(parts[0].type).toBe('tool-invocation');
+      expect(parts[0].toolInvocation.result).toEqual({
+        temperature: 72,
+        conditions: 'sunny',
+        humidity: 45,
+        windSpeed: 12,
+        forecast: [
+          { day: 'Monday', high: 75, low: 60 },
+          { day: 'Tuesday', high: 70, low: 55 },
+        ],
+      });
+
+      // Create a MessageList from loaded messages and call llmPrompt with tools
+      const list = new MessageList({ threadId, resourceId }).add(loadedMessages, 'memory');
+
+      // Without tools — no toModelOutput applied, result is default json
+      const promptWithout = await list.get.all.aiV5.llmPrompt();
+      const toolResultWithout = promptWithout.flatMap((m: any) => m.content).find((p: any) => p.type === 'tool-result');
+      expect(toolResultWithout).toBeDefined();
+      expect(toolResultWithout.output.type).toBe('json');
+
+      // With tools + toModelOutput — transformed output
+      const promptWith = await list.get.all.aiV5.llmPrompt({
+        tools: {
+          getWeather: {
+            execute: async () => ({}),
+            toModelOutput: (output: any) => ({
+              type: 'text',
+              value: `${output.temperature}°F, ${output.conditions}`,
+            }),
+          },
+        } as any,
+      });
+      const toolResultWith = promptWith.flatMap((m: any) => m.content).find((p: any) => p.type === 'tool-result');
+      expect(toolResultWith).toBeDefined();
+      expect(toolResultWith.output).toEqual({
+        type: 'text',
+        value: '72°F, sunny',
+      });
+    });
+  });
 });

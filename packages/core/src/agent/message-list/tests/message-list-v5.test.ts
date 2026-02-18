@@ -1664,4 +1664,196 @@ describe('MessageList V5 Support', () => {
       expect((dataProgressPart as any)?.data).toEqual({ step: 1, total: 3 });
     });
   });
+
+  describe('toModelOutput support', () => {
+    it('should apply toModelOutput when tools are passed to llmPrompt', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      // Add a user message (required for llmPrompt)
+      list.add('What is the weather?', 'input');
+
+      // Add an assistant message with a tool invocation result
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'getWeather',
+                state: 'result',
+                args: { city: 'NYC' },
+                result: { temperature: 72, humidity: 45, conditions: 'sunny', forecast: [1, 2, 3, 4, 5] },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      // Without tools: should get default json output
+      const promptWithoutTools = await list.get.all.aiV5.llmPrompt();
+      const toolRoleWithout = promptWithoutTools.find(m => m.role === 'tool');
+      expect(toolRoleWithout).toBeDefined();
+      const toolResultPartWithout = (toolRoleWithout as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPartWithout.output.type).toBe('json');
+      expect(toolResultPartWithout.output.value).toEqual({
+        temperature: 72,
+        humidity: 45,
+        conditions: 'sunny',
+        forecast: [1, 2, 3, 4, 5],
+      });
+
+      // With tools + toModelOutput: should get transformed output
+      const tools = {
+        getWeather: {
+          parameters: {},
+          toModelOutput: (output: any) => ({
+            type: 'text' as const,
+            value: `Temperature: ${output.temperature}°F, ${output.conditions}`,
+          }),
+        },
+      };
+
+      const promptWithTools = await list.get.all.aiV5.llmPrompt({ tools: tools as any });
+      const toolRoleWith = promptWithTools.find(m => m.role === 'tool');
+      expect(toolRoleWith).toBeDefined();
+      const toolResultPartWith = (toolRoleWith as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPartWith.output.type).toBe('text');
+      expect(toolResultPartWith.output.value).toBe('Temperature: 72°F, sunny');
+    });
+
+    it('should preserve raw result in stored messages when toModelOutput is used', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Call a tool', 'input');
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-tool-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-2',
+                toolName: 'fetchData',
+                state: 'result',
+                args: { url: 'https://example.com' },
+                result: { status: 200, body: 'lots of data here' },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      // Get tools with toModelOutput
+      const tools = {
+        fetchData: {
+          parameters: {},
+          toModelOutput: () => ({
+            type: 'text' as const,
+            value: 'Data fetched successfully',
+          }),
+        },
+      };
+
+      // llmPrompt should transform the output
+      const prompt = await list.get.all.aiV5.llmPrompt({ tools: tools as any });
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output.type).toBe('text');
+      expect(toolResultPart.output.value).toBe('Data fetched successfully');
+
+      // But the raw DB messages should still have the original result
+      const dbMessages = list.get.all.db();
+      const toolDbMsg = dbMessages.find(m => m.content.parts?.some((p: any) => p.type === 'tool-invocation'));
+      const toolPart = toolDbMsg?.content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
+    });
+
+    it('should work with multiple tool results and only transform matching tools', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Do things', 'input');
+
+      const multiToolMessage: MastraDBMessage = {
+        id: 'msg-multi',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-a',
+                toolName: 'toolA',
+                state: 'result',
+                args: {},
+                result: { raw: 'a-data' },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-b',
+                toolName: 'toolB',
+                state: 'result',
+                args: {},
+                result: { raw: 'b-data' },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(multiToolMessage, 'response');
+
+      // Only toolA has toModelOutput
+      const tools = {
+        toolA: {
+          parameters: {},
+          toModelOutput: () => ({
+            type: 'text' as const,
+            value: 'A transformed',
+          }),
+        },
+        toolB: {
+          parameters: {},
+          // No toModelOutput — should get default json conversion
+        },
+      };
+
+      const prompt = await list.get.all.aiV5.llmPrompt({ tools: tools as any });
+      const toolRoles = prompt.filter(m => m.role === 'tool');
+
+      // Find the tool-result parts
+      const allToolResults = toolRoles.flatMap((m: any) => m.content.filter((p: any) => p.type === 'tool-result'));
+
+      const resultA = allToolResults.find((p: any) => p.toolName === 'toolA');
+      const resultB = allToolResults.find((p: any) => p.toolName === 'toolB');
+
+      expect(resultA.output.type).toBe('text');
+      expect(resultA.output.value).toBe('A transformed');
+
+      expect(resultB.output.type).toBe('json');
+      expect(resultB.output.value).toEqual({ raw: 'b-data' });
+    });
+  });
 });
