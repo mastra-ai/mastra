@@ -32,14 +32,17 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
   const [validationError, setValidationError] = useState<string | null>(null);
   const { updateDataset } = useDatasetMutations();
 
-  // Sync form state when dataset prop changes
+  // Sync form state when dialog opens
   useEffect(() => {
-    setName(dataset.name);
-    setDescription(dataset.description ?? '');
-    setInputSchema(dataset.inputSchema ?? null);
-    setGroundTruthSchema(dataset.groundTruthSchema ?? null);
-    setValidationError(null);
-  }, [dataset.name, dataset.description, dataset.inputSchema, dataset.groundTruthSchema]);
+    if (open) {
+      setName(dataset.name);
+      setDescription(dataset.description ?? '');
+      setInputSchema(dataset.inputSchema ?? null);
+      setGroundTruthSchema(dataset.groundTruthSchema ?? null);
+      setValidationError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleSchemaChange = (schemas: {
     inputSchema: Record<string, unknown> | null;
@@ -74,11 +77,13 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
       onSuccess?.();
     } catch (err: unknown) {
       // Handle validation errors (existing items may fail new schema)
-      const error = err as { cause?: { failingItems?: unknown[] }; message?: string };
-      if (error?.cause?.failingItems) {
-        const count = error.cause.failingItems.length;
+      // MastraClientError stores the parsed response body in `body`
+      const body = (err as { body?: { cause?: { failingItems?: unknown[] } } })?.body;
+      if (body?.cause?.failingItems) {
+        const count = body.cause.failingItems.length;
         setValidationError(`${count} existing item(s) fail validation. Fix items or adjust schema.`);
       } else {
+        const error = err as { message?: string };
         toast.error(`Failed to update dataset: ${error?.message || 'Unknown error'}`);
       }
     }
