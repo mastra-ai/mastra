@@ -57,7 +57,9 @@ export const tokenLimiterProvider: ProcessorProvider = {
   }),
   availablePhases: ['processInput', 'processOutputStream', 'processOutputResult'] as ProcessorPhase[],
   createProcessor(config) {
-    return new TokenLimiterProcessor(config as { limit: number; strategy?: 'truncate' | 'abort'; countMode?: 'cumulative' | 'part' });
+    return new TokenLimiterProcessor(
+      config as { limit: number; strategy?: 'truncate' | 'abort'; countMode?: 'cumulative' | 'part' },
+    );
   },
 };
 
@@ -237,7 +239,7 @@ export const BUILT_IN_PROCESSOR_PROVIDERS: Record<string, ProcessorProvider> = {
   'token-limiter': tokenLimiterProvider,
   'tool-call-filter': toolCallFilterProvider,
   'batch-parts': batchPartsProvider,
-  'moderation': moderationProvider,
+  moderation: moderationProvider,
   'prompt-injection-detector': promptInjectionDetectorProvider,
   'pii-detector': piiDetectorProvider,
   'language-detector': languageDetectorProvider,

@@ -692,10 +692,30 @@ describe('MastraEditor with LibSQL Integration', () => {
           instructions: 'You are an assistant with processors',
           model: { provider: 'mock', name: 'structured-mock' },
           inputProcessors: {
-            steps: [{ type: 'step', step: { id: 'processor-test-input', providerId: 'processor-test', config: {}, enabledPhases: ['processInput'] } }],
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-input',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processInput'],
+                },
+              },
+            ],
           } satisfies StoredProcessorGraph,
           outputProcessors: {
-            steps: [{ type: 'step', step: { id: 'processor-test-output', providerId: 'processor-test', config: {}, enabledPhases: ['processOutputResult'] } }],
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-output',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processOutputResult'],
+                },
+              },
+            ],
           } satisfies StoredProcessorGraph,
         },
       });
@@ -742,10 +762,30 @@ describe('MastraEditor with LibSQL Integration', () => {
             'accuracy-scorer': {},
           },
           inputProcessors: {
-            steps: [{ type: 'step', step: { id: 'processor-test-input', providerId: 'processor-test', config: {}, enabledPhases: ['processInput'] } }],
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-input',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processInput'],
+                },
+              },
+            ],
           } satisfies StoredProcessorGraph,
           outputProcessors: {
-            steps: [{ type: 'step', step: { id: 'processor-test-output', providerId: 'processor-test', config: {}, enabledPhases: ['processOutputResult'] } }],
+            steps: [
+              {
+                type: 'step',
+                step: {
+                  id: 'processor-test-output',
+                  providerId: 'processor-test',
+                  config: {},
+                  enabledPhases: ['processOutputResult'],
+                },
+              },
+            ],
           } satisfies StoredProcessorGraph,
 
           defaultOptions: {

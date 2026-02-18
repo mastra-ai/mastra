@@ -302,7 +302,12 @@ describe('Stored Agents with Processor Providers', () => {
         steps: [
           {
             type: 'step',
-            step: { id: 'out', providerId: 'suffixer', config: { suffix: '-OUT' }, enabledPhases: ['processOutputResult'] },
+            step: {
+              id: 'out',
+              providerId: 'suffixer',
+              config: { suffix: '-OUT' },
+              enabledPhases: ['processOutputResult'],
+            },
           },
         ],
       };
@@ -477,7 +482,12 @@ describe('Stored Agents with Processor Providers', () => {
         steps: [
           {
             type: 'step',
-            step: { id: 'admin-s', providerId: 'admin-tagger', config: { tag: 'ADMIN' }, enabledPhases: ['processInput'] },
+            step: {
+              id: 'admin-s',
+              providerId: 'admin-tagger',
+              config: { tag: 'ADMIN' },
+              enabledPhases: ['processInput'],
+            },
           },
         ],
       };
@@ -541,8 +551,18 @@ describe('Stored Agents with Processor Providers', () => {
           {
             type: 'parallel',
             branches: [
-              [{ type: 'step', step: { id: 'ba', providerId: 'tagger-a', config: { tag: 'A' }, enabledPhases: ['processInput'] } }],
-              [{ type: 'step', step: { id: 'bb', providerId: 'tagger-b', config: { tag: 'B' }, enabledPhases: ['processInput'] } }],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'ba', providerId: 'tagger-a', config: { tag: 'A' }, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'bb', providerId: 'tagger-b', config: { tag: 'B' }, enabledPhases: ['processInput'] },
+                },
+              ],
             ],
           },
         ],
@@ -584,12 +604,28 @@ describe('Stored Agents with Processor Providers', () => {
                   conditions: [{ field: 'phase', operator: 'equals', value: 'processInput' }],
                 },
                 steps: [
-                  { type: 'step', step: { id: 'ca', providerId: 'tagger-a', config: { tag: 'COND-A' }, enabledPhases: ['processInput'] } },
+                  {
+                    type: 'step',
+                    step: {
+                      id: 'ca',
+                      providerId: 'tagger-a',
+                      config: { tag: 'COND-A' },
+                      enabledPhases: ['processInput'],
+                    },
+                  },
                 ],
               },
               {
                 steps: [
-                  { type: 'step', step: { id: 'cb', providerId: 'tagger-b', config: { tag: 'COND-B' }, enabledPhases: ['processInput'] } },
+                  {
+                    type: 'step',
+                    step: {
+                      id: 'cb',
+                      providerId: 'tagger-b',
+                      config: { tag: 'COND-B' },
+                      enabledPhases: ['processInput'],
+                    },
+                  },
                 ],
               },
             ],
@@ -630,8 +666,18 @@ describe('Stored Agents with Processor Providers', () => {
           {
             type: 'parallel',
             branches: [
-              [{ type: 'step', step: { id: 'pa', providerId: 'tagger-a', config: { tag: 'A' }, enabledPhases: ['processInput'] } }],
-              [{ type: 'step', step: { id: 'pb', providerId: 'tagger-b', config: { tag: 'B' }, enabledPhases: ['processInput'] } }],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'pa', providerId: 'tagger-a', config: { tag: 'A' }, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'pb', providerId: 'tagger-b', config: { tag: 'B' }, enabledPhases: ['processInput'] },
+                },
+              ],
             ],
           },
         ],
@@ -729,7 +775,12 @@ describe('Stored Agents with Processor Providers', () => {
         steps: [
           {
             type: 'step',
-            step: { id: 'v2-step', providerId: 'suffixer', config: { suffix: '-V2' }, enabledPhases: ['processOutputResult'] },
+            step: {
+              id: 'v2-step',
+              providerId: 'suffixer',
+              config: { suffix: '-V2' },
+              enabledPhases: ['processOutputResult'],
+            },
           },
         ],
       };
@@ -993,7 +1044,12 @@ describe('Stored Agents with Processor Providers', () => {
         steps: [
           {
             type: 'step',
-            step: { id: 'out', providerId: 'suffixer', config: { suffix: ' [OUT]' }, enabledPhases: ['processOutputResult'] },
+            step: {
+              id: 'out',
+              providerId: 'suffixer',
+              config: { suffix: ' [OUT]' },
+              enabledPhases: ['processOutputResult'],
+            },
           },
         ],
       };
@@ -1178,8 +1234,18 @@ describe('Stored Agents with Processor Providers', () => {
           {
             type: 'parallel',
             branches: [
-              [{ type: 'step', step: { id: 'pa', providerId: 'branch-a', config: {}, enabledPhases: ['processInput'] } }],
-              [{ type: 'step', step: { id: 'pb', providerId: 'branch-b', config: {}, enabledPhases: ['processInput'] } }],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'pa', providerId: 'branch-a', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'pb', providerId: 'branch-b', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
             ],
           },
         ],
@@ -1270,7 +1336,10 @@ describe('Stored Agents with Processor Providers', () => {
                   conditions: [{ field: 'phase', operator: 'equals' as const, value: 'input' }],
                 },
                 steps: [
-                  { type: 'step', step: { id: 'ci', providerId: 'input-branch', config: {}, enabledPhases: ['processInput'] } },
+                  {
+                    type: 'step',
+                    step: { id: 'ci', providerId: 'input-branch', config: {}, enabledPhases: ['processInput'] },
+                  },
                 ],
               },
               {
@@ -1279,7 +1348,10 @@ describe('Stored Agents with Processor Providers', () => {
                   conditions: [{ field: 'phase', operator: 'equals' as const, value: 'outputResult' }],
                 },
                 steps: [
-                  { type: 'step', step: { id: 'co', providerId: 'output-branch', config: {}, enabledPhases: ['processInput'] } },
+                  {
+                    type: 'step',
+                    step: { id: 'co', providerId: 'output-branch', config: {}, enabledPhases: ['processInput'] },
+                  },
                 ],
               },
             ],
@@ -1366,13 +1438,19 @@ describe('Stored Agents with Processor Providers', () => {
                   conditions: [{ field: 'phase', operator: 'equals' as const, value: 'nonexistent' }],
                 },
                 steps: [
-                  { type: 'step', step: { id: 'cu', providerId: 'unmatched', config: {}, enabledPhases: ['processInput'] } },
+                  {
+                    type: 'step',
+                    step: { id: 'cu', providerId: 'unmatched', config: {}, enabledPhases: ['processInput'] },
+                  },
                 ],
               },
               {
                 // Default fallback (no rules)
                 steps: [
-                  { type: 'step', step: { id: 'cf', providerId: 'fallback', config: {}, enabledPhases: ['processInput'] } },
+                  {
+                    type: 'step',
+                    step: { id: 'cf', providerId: 'fallback', config: {}, enabledPhases: ['processInput'] },
+                  },
                 ],
               },
             ],
@@ -1441,8 +1519,18 @@ describe('Stored Agents with Processor Providers', () => {
           {
             type: 'parallel',
             branches: [
-              [{ type: 'step', step: { id: 'pa', providerId: 'branch-a', config: {}, enabledPhases: ['processInput'] } }],
-              [{ type: 'step', step: { id: 'pb', providerId: 'branch-b', config: {}, enabledPhases: ['processInput'] } }],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'pa', providerId: 'branch-a', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'pb', providerId: 'branch-b', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
             ],
           },
         ],

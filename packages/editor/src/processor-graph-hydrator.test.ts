@@ -34,10 +34,8 @@ function makeInputProvider(id: string, tag: string): ProcessorProvider {
             ...m,
             content: {
               ...m.content,
-              parts: m.content.parts.map((p) =>
-                p.type === 'text'
-                  ? { ...p, text: `[${(config.tag as string) ?? tag}] ${p.text}` }
-                  : p,
+              parts: m.content.parts.map(p =>
+                p.type === 'text' ? { ...p, text: `[${(config.tag as string) ?? tag}] ${p.text}` } : p,
               ),
             },
           })),
@@ -55,13 +53,17 @@ function makeOutputProvider(id: string, suffix: string): ProcessorProvider {
       return {
         id: `${id}-instance`,
         name: `${id} Instance`,
-        processOutputResult: async ({ messages }) => messages.map((m) => ({
-          ...m,
-          content: {
-            ...m.content,
-            parts: m.content.parts.map((p) => ({ ...p, text: `${(p as TextPart).text}${(config.suffix as string) ?? suffix}` })),
-          },
-        })),
+        processOutputResult: async ({ messages }) =>
+          messages.map(m => ({
+            ...m,
+            content: {
+              ...m.content,
+              parts: m.content.parts.map(p => ({
+                ...p,
+                text: `${(p as TextPart).text}${(config.suffix as string) ?? suffix}`,
+              })),
+            },
+          })),
       };
     },
   };
@@ -176,9 +178,7 @@ describe('hydrateProcessorGraph', () => {
         logger: { warn: warnSpy } as unknown as IMastraLogger,
       });
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('nonexistent'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('nonexistent'));
       expect(result).toBeUndefined();
     });
   });
@@ -241,7 +241,9 @@ describe('hydrateProcessorGraph', () => {
       for (const proc of processors) {
         const result = await proc.processInput!({
           messages,
-          abort: () => { throw new Error('abort'); },
+          abort: () => {
+            throw new Error('abort');
+          },
           messageList: new MessageList(),
           systemMessages: [],
           state: {},
@@ -292,7 +294,12 @@ describe('hydrateProcessorGraph', () => {
         steps: [
           {
             type: 'step',
-            step: { id: 's1', providerId: 'suffixer', config: { suffix: '-done' }, enabledPhases: ['processOutputResult'] },
+            step: {
+              id: 's1',
+              providerId: 'suffixer',
+              config: { suffix: '-done' },
+              enabledPhases: ['processOutputResult'],
+            },
           },
         ],
       };
@@ -310,7 +317,9 @@ describe('hydrateProcessorGraph', () => {
         messageList: new MessageList(),
         state: {},
         retryCount: 0,
-        abort: () => { throw new Error('abort'); },
+        abort: () => {
+          throw new Error('abort');
+        },
       });
       if (result instanceof MessageList) {
         const text = (result.get.response.db()[0]!.content.parts[0] as TextPart).text;
@@ -424,8 +433,18 @@ describe('hydrateProcessorGraph', () => {
           {
             type: 'parallel',
             branches: [
-              [{ type: 'step', step: { id: 'ba', providerId: 'branch-a', config: {}, enabledPhases: ['processInput'] } }],
-              [{ type: 'step', step: { id: 'bb', providerId: 'branch-b', config: {}, enabledPhases: ['processInput'] } }],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'ba', providerId: 'branch-a', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
+              [
+                {
+                  type: 'step',
+                  step: { id: 'bb', providerId: 'branch-b', config: {}, enabledPhases: ['processInput'] },
+                },
+              ],
             ],
           },
         ],
@@ -550,12 +569,28 @@ describe('hydrateProcessorGraph', () => {
             type: 'conditional',
             conditions: [
               {
-                rules: { operator: 'AND' as const, conditions: [{ field: 'phase', operator: 'equals' as const, value: 'input' }] },
-                steps: [{ type: 'step', step: { id: 'ca', providerId: 'prov-a', config: {}, enabledPhases: ['processInput'] } }],
+                rules: {
+                  operator: 'AND' as const,
+                  conditions: [{ field: 'phase', operator: 'equals' as const, value: 'input' }],
+                },
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'ca', providerId: 'prov-a', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
               },
               {
-                rules: { operator: 'AND' as const, conditions: [{ field: 'phase', operator: 'equals' as const, value: 'outputResult' }] },
-                steps: [{ type: 'step', step: { id: 'cb', providerId: 'prov-b', config: {}, enabledPhases: ['processInput'] } }],
+                rules: {
+                  operator: 'AND' as const,
+                  conditions: [{ field: 'phase', operator: 'equals' as const, value: 'outputResult' }],
+                },
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'cb', providerId: 'prov-b', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
               },
             ],
           },
@@ -570,12 +605,14 @@ describe('hydrateProcessorGraph', () => {
       expect(isProcessorWorkflow(workflow)).toBe(true);
 
       // Execute the workflow directly with raw messages (no MessageList)
-      const messages: MastraDBMessage[] = [{
-        id: 'test-msg-1',
-        role: 'user' as const,
-        createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
-      }];
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'test-msg-1',
+          role: 'user' as const,
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        },
+      ];
       const ml = new MessageList();
       ml.add(messages, 'input');
 
@@ -638,12 +675,25 @@ describe('hydrateProcessorGraph', () => {
             type: 'conditional',
             conditions: [
               {
-                rules: { operator: 'AND' as const, conditions: [{ field: 'phase', operator: 'equals' as const, value: 'nonexistent' }] },
-                steps: [{ type: 'step', step: { id: 'cn', providerId: 'prov-never', config: {}, enabledPhases: ['processInput'] } }],
+                rules: {
+                  operator: 'AND' as const,
+                  conditions: [{ field: 'phase', operator: 'equals' as const, value: 'nonexistent' }],
+                },
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'cn', providerId: 'prov-never', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
               },
               {
                 // Default branch (no rules)
-                steps: [{ type: 'step', step: { id: 'cd', providerId: 'prov-default', config: {}, enabledPhases: ['processInput'] } }],
+                steps: [
+                  {
+                    type: 'step',
+                    step: { id: 'cd', providerId: 'prov-default', config: {}, enabledPhases: ['processInput'] },
+                  },
+                ],
               },
             ],
           },
@@ -657,12 +707,14 @@ describe('hydrateProcessorGraph', () => {
       const workflow = result![0]! as ProcessorWorkflow;
       expect(isProcessorWorkflow(workflow)).toBe(true);
 
-      const messages: MastraDBMessage[] = [{
-        id: 'test-msg-1',
-        role: 'user' as const,
-        createdAt: new Date(),
-        content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
-      }];
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'test-msg-1',
+          role: 'user' as const,
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        },
+      ];
       const ml = new MessageList();
       ml.add(messages, 'input');
 

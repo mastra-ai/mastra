@@ -169,17 +169,17 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    * Each matching variant's value (an array) is concatenated in order.
    * Variants with no rules are treated as unconditional (always included).
    */
-    private accumulateArrayVariants<T>(
-      variants: StorageConditionalVariant<T[]>[],
-      context: Record<string, unknown>,
-    ): T[] {
-      const result: T[] = [];
-      for (const variant of variants) {
-        if (!variant.rules || evaluateRuleGroup(variant.rules, context)) {
-          result.push(...variant.value);
-        }
+  private accumulateArrayVariants<T>(
+    variants: StorageConditionalVariant<T[]>[],
+    context: Record<string, unknown>,
+  ): T[] {
+    const result: T[] = [];
+    for (const variant of variants) {
+      if (!variant.rules || evaluateRuleGroup(variant.rules, context)) {
+        result.push(...variant.value);
       }
-      return result;
+    }
+    return result;
   }
 
   /**
@@ -362,11 +362,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           );
           return hydrateProcessorGraph(graph, 'input', hydrationCtx);
         }
-      : hydrateProcessorGraph(
-          storedAgent.inputProcessors as StoredProcessorGraph | undefined,
-          'input',
-          hydrationCtx,
-        );
+      : hydrateProcessorGraph(storedAgent.inputProcessors as StoredProcessorGraph | undefined, 'input', hydrationCtx);
 
     // Output processors (graph): first-match from conditional variants, then hydrate
     const outputProcessors = hasConditionalOutputProcessors
@@ -378,11 +374,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           );
           return hydrateProcessorGraph(graph, 'output', hydrationCtx);
         }
-      : hydrateProcessorGraph(
-          storedAgent.outputProcessors as StoredProcessorGraph | undefined,
-          'output',
-          hydrationCtx,
-        );
+      : hydrateProcessorGraph(storedAgent.outputProcessors as StoredProcessorGraph | undefined, 'output', hydrationCtx);
 
     // Model (object): accumulate by merging config from all matching variants
     let model: string | (({ requestContext }: { requestContext: RequestContext }) => string);
@@ -927,8 +919,6 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     return Object.keys(resolvedScorers).length > 0 ? resolvedScorers : undefined;
   }
-
-
 
   // ============================================================================
   // Clone

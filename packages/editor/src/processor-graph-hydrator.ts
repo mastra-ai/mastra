@@ -5,15 +5,16 @@
  * ProcessorProvider, then builds a workflow from the graph structure
  * (sequential, parallel, conditional).
  */
-import type { Processor, ProcessorWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
+import type {
+  Processor,
+  ProcessorWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '@mastra/core/processors';
 import { ProcessorStepSchema } from '@mastra/core/processors';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import { PhaseFilteredProcessor } from '@mastra/core/processor-provider';
-import type {
-  StoredProcessorGraph,
-  ProcessorGraphEntry,
-  ProcessorGraphStep,
-} from '@mastra/core/storage';
+import type { StoredProcessorGraph, ProcessorGraphEntry, ProcessorGraphStep } from '@mastra/core/storage';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Mastra } from '@mastra/core';
@@ -188,11 +189,7 @@ function buildWorkflow(
           if (!proc) continue;
           branchStep = createStep(proc as Parameters<typeof createStep>[0]);
         } else {
-          branchStep = buildWorkflow(
-            condition.steps,
-            `${workflowId}-cond-branch-${i}`,
-            ctx,
-          );
+          branchStep = buildWorkflow(condition.steps, `${workflowId}-cond-branch-${i}`, ctx);
           if (!branchStep) continue;
         }
 
@@ -255,14 +252,10 @@ export function hydrateProcessorGraph(
 
     // Filter by mode: input processors need input methods, output processors need output methods
     if (mode === 'input') {
-      const filtered = processors.filter(
-        p => p.processInput || p.processInputStep,
-      );
+      const filtered = processors.filter(p => p.processInput || p.processInputStep);
       return filtered.length > 0 ? (filtered as InputProcessorOrWorkflow[]) : undefined;
     } else {
-      const filtered = processors.filter(
-        p => p.processOutputStream || p.processOutputResult || p.processOutputStep,
-      );
+      const filtered = processors.filter(p => p.processOutputStream || p.processOutputResult || p.processOutputStep);
       return filtered.length > 0 ? (filtered as OutputProcessorOrWorkflow[]) : undefined;
     }
   }
