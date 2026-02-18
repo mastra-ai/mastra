@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   AgentsStorage,
@@ -24,31 +24,6 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-
-/**
- * The set of fields from StorageAgentSnapshotType that live on version rows.
- * Used to determine which updates create new versions vs update agent metadata.
- */
-const SNAPSHOT_FIELDS = [
-  'name',
-  'description',
-  'instructions',
-  'model',
-  'tools',
-  'defaultOptions',
-  'workflows',
-  'agents',
-  'integrationTools',
-  'inputProcessors',
-  'outputProcessors',
-  'memory',
-  'scorers',
-  'mcpClients',
-  'requestContextSchema',
-  'workspace',
-  'skills',
-  'skillsFormat',
-] as const;
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
@@ -409,9 +384,8 @@ export class AgentsLibSQL extends AgentsStorage {
   async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
     const { id, ...updates } = input;
     try {
-      // First, get the existing agent
-      const existingAgent = await this.getById(id);
-      if (!existingAgent) {
+      const existing = await this.getById(id);
+      if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -421,90 +395,27 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
-      // Separate metadata-level fields from config fields
-      const metadataFields = {
-        authorId: updates.authorId,
-        activeVersionId: updates.activeVersionId,
-        metadata: updates.metadata,
+      const { authorId, activeVersionId, metadata, status } = updates;
+
+      // Build update data for the agent record
+      const updateData: Record<string, unknown> = {
+        updatedAt: new Date().toISOString(),
       };
 
-      // Extract config fields (anything that's part of StorageAgentSnapshotType)
-      const configFields: Record<string, any> = {};
-      for (const field of SNAPSHOT_FIELDS) {
-        if ((updates as any)[field] !== undefined) {
-          configFields[field] = (updates as any)[field];
-        }
+      if (authorId !== undefined) updateData.authorId = authorId;
+      if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
+      if (status !== undefined) updateData.status = status;
+      if (metadata !== undefined) {
+        updateData.metadata = { ...existing.metadata, ...metadata };
       }
 
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        // Get the latest version number
-        const latestVersion = await this.getLatestVersion(id);
-        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+      await this.#db.update({
+        tableName: TABLE_AGENTS,
+        keys: { id },
+        data: updateData,
+      });
 
-        // If we have a latest version, start from its config, otherwise error
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'UPDATE_AGENT', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for agent ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Extract snapshot fields from latest version
-        const latestSnapshot: Record<string, any> = {};
-        for (const field of SNAPSHOT_FIELDS) {
-          if ((latestVersion as any)[field] !== undefined) {
-            latestSnapshot[field] = (latestVersion as any)[field];
-          }
-        }
-
-        // Convert null values to undefined (null means "remove this field")
-        const sanitizedConfigFields = Object.fromEntries(
-          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-        );
-
-        // Create new version with the config updates
-        const versionInput: CreateVersionInput = {
-          id: crypto.randomUUID(),
-          agentId: id,
-          versionNumber: nextVersionNumber,
-          ...latestSnapshot, // Start from latest version
-          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateVersionInput;
-
-        await this.createVersion(versionInput);
-      }
-
-      // Build the data object with only metadata-level fields
-      const data: Record<string, any> = {
-        updatedAt: new Date(),
-      };
-
-      if (metadataFields.authorId !== undefined) data.authorId = metadataFields.authorId;
-      if (metadataFields.activeVersionId !== undefined) {
-        data.activeVersionId = metadataFields.activeVersionId;
-        // Do NOT automatically set status='published' when activeVersionId is updated
-      }
-      if (metadataFields.metadata !== undefined) {
-        // LibSQL uses REPLACE semantics for metadata
-        data.metadata = metadataFields.metadata;
-      }
-
-      // Only update if there's more than just updatedAt
-      if (Object.keys(data).length > 1) {
-        await this.#db.update({
-          tableName: TABLE_AGENTS,
-          keys: { id },
-          data,
-        });
-      }
-
-      // Return the updated agent
+      // Fetch and return updated agent
       const updatedAgent = await this.getById(id);
       if (!updatedAgent) {
         throw new MastraError({
@@ -558,7 +469,7 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -577,8 +488,42 @@ export class AgentsLibSQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: InValue[] = [];
+
+      conditions.push('status = ?');
+      queryParams.push(status);
+
+      if (authorId !== undefined) {
+        conditions.push('authorId = ?');
+        queryParams.push(authorId);
+      }
+
+      if (metadata && Object.keys(metadata).length > 0) {
+        for (const [key, value] of Object.entries(metadata)) {
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_AGENTS', 'INVALID_METADATA_KEY'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Invalid metadata key: ${key}. Keys must be alphanumeric with underscores.`,
+              details: { key },
+            });
+          }
+          conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+          queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
+        }
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       // Get total count
-      const total = await this.#db.selectTotalCount({ tableName: TABLE_AGENTS });
+      const countResult = await this.#client.execute({
+        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}" ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
 
       if (total === 0) {
         return {
@@ -592,12 +537,12 @@ export class AgentsLibSQL extends AgentsStorage {
 
       // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
-      const rows = await this.#db.selectMany<Record<string, any>>({
-        tableName: TABLE_AGENTS,
-        orderBy: `"${field}" ${direction}`,
-        limit: limitValue,
-        offset,
+      const result = await this.#client.execute({
+        sql: `SELECT * FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, offset],
       });
+
+      const rows = result.rows ?? [];
 
       const agents = rows.map(row => this.parseRow(row));
 

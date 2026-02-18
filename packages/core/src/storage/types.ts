@@ -511,6 +511,11 @@ export type StorageListAgentsInput = {
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Filter agents by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
@@ -658,6 +663,11 @@ export type StorageListPromptBlocksInput = {
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Filter prompt blocks by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
 };
 
 /** Paginated list output for thin prompt block records */
@@ -796,6 +806,11 @@ export type StorageListScorerDefinitionsInput = {
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Filter scorers by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
 };
 
 /** Paginated list output for thin stored scorer records */
@@ -1310,6 +1325,11 @@ export type StorageListMCPClientsInput = {
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Filter MCP clients by status.
+   * Defaults to 'published' if not specified.
+   */
+  status?: 'draft' | 'published' | 'archived';
 };
 
 /** Paginated list output for thin stored MCP client records */

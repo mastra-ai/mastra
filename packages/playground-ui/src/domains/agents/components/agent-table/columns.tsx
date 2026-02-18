@@ -110,7 +110,7 @@ const attachedEntitiesColumn: ColumnDef<AgentTableColumn> = {
                 >
                   Processors
                 </a>
-                <span className="text-icon3">
+                <span className="text-neutral3">
                   {[inputProcessorsCount > 0 && 'input', outputProcessorsCount > 0 && 'output']
                     .filter(Boolean)
                     .join(', ')}
