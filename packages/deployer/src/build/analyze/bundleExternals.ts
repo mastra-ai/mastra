@@ -29,6 +29,7 @@ import {
   rollupSafeName,
   slash,
 } from '../utils';
+import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
 
 type VirtualDependency = {
@@ -147,7 +148,7 @@ async function getInputPlugins(
     bundlerOptions: { noBundling: boolean };
     rootDir: string;
     externals: string[];
-    platform: 'node' | 'browser' | 'neutral';
+    platform: BundlerPlatform;
   },
 ) {
   const transpilePackagesMap = new Map<string, string>();
@@ -306,7 +307,7 @@ async function buildExternalDependencies(
       isDev: boolean;
       externalsPreset: boolean;
     };
-    platform: 'node' | 'browser' | 'neutral';
+    platform: BundlerPlatform;
   },
 ) {
   /**
@@ -459,7 +460,7 @@ export async function bundleExternals(
     projectRoot?: string;
     workspaceRoot?: string;
     workspaceMap?: Map<string, WorkspacePackageInfo>;
-    platform?: 'node' | 'browser' | 'neutral';
+    platform?: BundlerPlatform;
   },
 ) {
   const {

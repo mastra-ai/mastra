@@ -2,6 +2,7 @@ import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { basename, join, relative } from 'node:path';
+import type { RollupNodeResolveOptions } from '@rollup/plugin-node-resolve';
 
 /** The detected JavaScript runtime environment */
 export type RuntimePlatform = 'node' | 'bun';
@@ -23,7 +24,7 @@ export type BundlerPlatform = 'node' | 'browser' | 'neutral';
  *
  * For 'node' and 'neutral' (Bun) platforms, uses Node.js module resolution.
  */
-export function getNodeResolveOptions(platform: BundlerPlatform) {
+export function getNodeResolveOptions(platform: BundlerPlatform): RollupNodeResolveOptions {
   if (platform === 'browser') {
     return {
       preferBuiltins: false,
