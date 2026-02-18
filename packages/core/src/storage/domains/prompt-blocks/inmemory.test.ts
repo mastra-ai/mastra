@@ -170,7 +170,8 @@ describe('InMemoryPromptBlocksStorage', () => {
       const resolved = await storage.getByIdResolved('block-1');
       expect(resolved!.name).toBe('V2 Name');
       expect(resolved!.content).toBe('V2 Content');
-      expect(resolved!.status).toBe('published');
+      // Status remains 'draft' — auto-publish was removed from storage
+      expect(resolved!.status).toBe('draft');
     });
 
     it('should fall back to latest version when activeVersionId points to missing version', async () => {
@@ -234,7 +235,7 @@ describe('InMemoryPromptBlocksStorage', () => {
       expect(versionCountAfter).toBe(1);
     });
 
-    it('should create a new version when updating config fields', async () => {
+    it('should not create a new version when updating config fields', async () => {
       const versionCountBefore = await storage.countVersions(blockId);
       expect(versionCountBefore).toBe(1);
 
@@ -244,17 +245,12 @@ describe('InMemoryPromptBlocksStorage', () => {
         content: 'Updated content',
       });
 
-      // New version created
+      // No new version created — update() no longer creates versions
       const versionCountAfter = await storage.countVersions(blockId);
-      expect(versionCountAfter).toBe(2);
-
-      // Resolved should reflect new values
-      const resolved = await storage.getByIdResolved(blockId);
-      expect(resolved!.name).toBe('Updated Name');
-      expect(resolved!.content).toBe('Updated content');
+      expect(versionCountAfter).toBe(1);
     });
 
-    it('should set status=published when activeVersionId is updated', async () => {
+    it('should not auto-publish when activeVersionId is updated (handler manages status)', async () => {
       // Create a second version
       const versionId = 'v2-id';
       await storage.createVersion({
@@ -271,20 +267,21 @@ describe('InMemoryPromptBlocksStorage', () => {
         activeVersionId: versionId,
       });
 
-      expect(result.status).toBe('published');
+      // Status remains 'draft' — auto-publish was removed from storage
+      expect(result.status).toBe('draft');
       expect(result.activeVersionId).toBe(versionId);
     });
 
-    it('should handle mixed metadata and config updates', async () => {
+    it('should handle mixed metadata and config updates without creating a version', async () => {
       await storage.update({
         id: blockId,
         metadata: { key3: 'val3' },
         name: 'Mixed Update Name',
       });
 
-      // Should create a new version for config change
+      // No new version created — update() no longer creates versions
       const versionCount = await storage.countVersions(blockId);
-      expect(versionCount).toBe(2);
+      expect(versionCount).toBe(1);
 
       const block = await storage.getById(blockId);
       expect(block!.metadata).toEqual({
@@ -292,9 +289,6 @@ describe('InMemoryPromptBlocksStorage', () => {
         key2: 'val2',
         key3: 'val3',
       });
-
-      const resolved = await storage.getByIdResolved(blockId);
-      expect(resolved!.name).toBe('Mixed Update Name');
     });
 
     it('should throw for non-existent block', async () => {
@@ -358,29 +352,29 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should return all blocks with default pagination', async () => {
-      const result = await storage.list();
+      const result = await storage.list({ status: 'draft' });
       expect(result.promptBlocks).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.page).toBe(0);
     });
 
     it('should support pagination', async () => {
-      const page0 = await storage.list({ page: 0, perPage: 2 });
+      const page0 = await storage.list({ status: 'draft', page: 0, perPage: 2 });
       expect(page0.promptBlocks).toHaveLength(2);
       expect(page0.hasMore).toBe(true);
       expect(page0.total).toBe(5);
 
-      const page1 = await storage.list({ page: 1, perPage: 2 });
+      const page1 = await storage.list({ status: 'draft', page: 1, perPage: 2 });
       expect(page1.promptBlocks).toHaveLength(2);
       expect(page1.hasMore).toBe(true);
 
-      const page2 = await storage.list({ page: 2, perPage: 2 });
+      const page2 = await storage.list({ status: 'draft', page: 2, perPage: 2 });
       expect(page2.promptBlocks).toHaveLength(1);
       expect(page2.hasMore).toBe(false);
     });
 
     it('should filter by authorId', async () => {
-      const result = await storage.list({ authorId: 'author-a' });
+      const result = await storage.list({ status: 'draft', authorId: 'author-a' });
       expect(result.promptBlocks).toHaveLength(3);
       result.promptBlocks.forEach(b => {
         expect(b.authorId).toBe('author-a');
@@ -388,13 +382,13 @@ describe('InMemoryPromptBlocksStorage', () => {
     });
 
     it('should filter by metadata', async () => {
-      const result = await storage.list({ metadata: { index: 3 } });
+      const result = await storage.list({ status: 'draft', metadata: { index: 3 } });
       expect(result.promptBlocks).toHaveLength(1);
       expect(result.promptBlocks[0]!.id).toBe('block-3');
     });
 
     it('should sort by createdAt DESC by default', async () => {
-      const result = await storage.list();
+      const result = await storage.list({ status: 'draft' });
       const ids = result.promptBlocks.map(b => b.id);
       // DESC means newest first
       expect(ids[0]).toBe('block-5');
@@ -403,6 +397,7 @@ describe('InMemoryPromptBlocksStorage', () => {
 
     it('should sort by createdAt ASC when specified', async () => {
       const result = await storage.list({
+        status: 'draft',
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
       const ids = result.promptBlocks.map(b => b.id);
@@ -431,7 +426,7 @@ describe('InMemoryPromptBlocksStorage', () => {
         promptBlock: { id: 'block-2', name: 'Block Two', content: 'Content Two' },
       });
 
-      const result = await storage.listResolved();
+      const result = await storage.listResolved({ status: 'draft' });
       expect(result.promptBlocks).toHaveLength(2);
 
       // Each resolved block should have both thin record fields and snapshot fields
