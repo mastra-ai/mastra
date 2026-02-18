@@ -1,7 +1,4 @@
 ---
-'@mastra/express': patch
-'@mastra/fastify': patch
-'@mastra/hono': patch
 '@mastra/koa': patch
 ---
 
