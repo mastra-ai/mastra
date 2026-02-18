@@ -2422,8 +2422,8 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
       lru-cache:
-        specifier: ^11.2.2
-        version: 11.2.2
+        specifier: ^11.2.6
+        version: 11.2.6
       p-map:
         specifier: ^7.0.3
         version: 7.0.3
@@ -3188,8 +3188,8 @@ importers:
         specifier: ^0.4.0
         version: 0.4.0
       lru-cache:
-        specifier: ^11.2.2
-        version: 11.2.2
+        specifier: ^11.2.6
+        version: 11.2.6
       xxhash-wasm:
         specifier: ^1.1.0
         version: 1.1.0
@@ -18148,8 +18148,8 @@ packages:
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
 
-  lru-cache@11.2.2:
-    resolution: {integrity: sha512-F9ODfyqML2coTIsQpSkRHnLSZMtkU8Q+mSfcaIyKwy58u+8k5nvAYeiNhsyMARvzNcXJ9QfWVrcPsC9e9rAxtg==}
+  lru-cache@11.2.6:
+    resolution: {integrity: sha512-ESL2CrkS/2wTPfuend7Zhkzo2u0daGJ/A2VucJOgQ/C48S/zB8MMeMHSGKYpXhIjbPxfuezITkaBH1wqv00DDQ==}
     engines: {node: 20 || >=22}
 
   lru-cache@5.1.1:
@@ -32624,7 +32624,7 @@ snapshots:
 
   '@types/lru-cache@7.10.10':
     dependencies:
-      lru-cache: 11.2.2
+      lru-cache: 11.2.6
 
   '@types/mdast@3.0.15':
     dependencies:
@@ -38415,7 +38415,7 @@ snapshots:
 
   lru-cache@10.4.3: {}
 
-  lru-cache@11.2.2: {}
+  lru-cache@11.2.6: {}
 
   lru-cache@5.1.1:
     dependencies:
@@ -39983,7 +39983,7 @@ snapshots:
 
   path-scurry@2.0.1:
     dependencies:
-      lru-cache: 11.2.2
+      lru-cache: 11.2.6
       minipass: 7.1.2
 
   path-to-regexp@0.1.12: {}
