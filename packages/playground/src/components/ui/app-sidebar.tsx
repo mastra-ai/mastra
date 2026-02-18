@@ -27,7 +27,6 @@ import {
   MastraVersionFooter,
   useMastraPlatform,
   NavLink,
-  useExperimentalFeatures,
 } from '@mastra/playground-ui';
 
 const mainNavigation: NavSection[] = [
@@ -175,12 +174,8 @@ export function AppSidebar() {
 
   const hideCloudCta = window?.MASTRA_HIDE_CLOUD_CTA === 'true';
   const { isMastraPlatform } = useMastraPlatform();
-  const { experimentalFeaturesEnabled } = useExperimentalFeatures();
 
   const filterPlatformLink = (link: NavLink) => {
-    if (link.name === 'Datasets' && !experimentalFeaturesEnabled) {
-      return false;
-    }
     if (isMastraPlatform) {
       return link.isOnMastraPlatform;
     }
