@@ -16,8 +16,9 @@ Usage:
 - Search in directory: { pattern: "import", path: "./src" }
 - Filter by glob: { pattern: "import", path: "**/*.ts" }
 - Combined path + glob: { pattern: "import", path: "src/**/*.ts" }
-- With context: { pattern: "function", contextLines: 2 }
-- Use contextLines to see surrounding code for each match`,
+- Multiple file types: { pattern: "import", path: "**/*.{ts,tsx,js}" }
+- Multiple directories: { pattern: "TODO", path: "{src,lib}/**/*.ts" }
+- With context: { pattern: "function", contextLines: 2 }`,
   inputSchema: z.object({
     pattern: z.string().describe('Regex pattern to search for'),
     path: z
