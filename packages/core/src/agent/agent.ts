@@ -3230,18 +3230,23 @@ export class Agent<
         )) as MastraLanguageModelV2;
       }
 
-      const modelInfo: ModelInformation = {
-        provider: structuredOutputModel.provider,
-        modelId: structuredOutputModel.modelId,
-        supportsStructuredOutputs: false, // Set to false to enable transform
-      };
+      const targetProvider = structuredOutputModel.provider;
+      const targetModelId = structuredOutputModel.modelId;
+      // Only apply OpenAI compat transforms for OpenAI models
+      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
+        const modelInfo: ModelInformation = {
+          provider: targetProvider,
+          modelId: targetModelId,
+          supportsStructuredOutputs: false, // Set to false to enable transform
+        };
 
-      // Apply OpenAI compat transforms (unwraps StandardSchemaWithJSON, processes, re-wraps)
-      // For OpenAI models, this converts .optional() → .nullable().transform() for compatibility
-      options.structuredOutput.schema = applyOpenAICompatTransforms(
-        options.structuredOutput.schema,
-        modelInfo,
-      ) as typeof options.structuredOutput.schema;
+        // Apply OpenAI compat transforms (unwraps StandardSchemaWithJSON, processes, re-wraps)
+        // For OpenAI models, this converts .optional() → .nullable().transform() for compatibility
+        options.structuredOutput.schema = applyOpenAICompatTransforms(
+          options.structuredOutput.schema,
+          modelInfo,
+        ) as typeof options.structuredOutput.schema;
+      }
     }
 
     const runId =

@@ -2,8 +2,6 @@ import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
-import type { ModelInformation } from '@mastra/schema-compat';
-import { applyOpenAICompatToTools } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
@@ -75,18 +73,8 @@ export function execute<OUTPUT = undefined>({
   // V3 models (AI SDK v6) need 'provider' type, V2 models need 'provider-defined'
   const targetVersion: ModelSpecVersion = model.specificationVersion === 'v3' ? 'v3' : 'v2';
 
-  // Apply OpenAI schema compatibility layer to tool schemas
-  // This transforms .optional() to .nullable().transform() for OpenAI compatibility
-  const modelInfo: ModelInformation = {
-    provider: model.provider,
-    modelId: model.modelId,
-    supportsStructuredOutputs: false, // Set to false to enable transform
-  };
-
-  const processedTools = applyOpenAICompatToTools(tools, modelInfo);
-
   const toolsAndToolChoice = prepareToolsAndToolChoice({
-    tools: processedTools,
+    tools,
     toolChoice,
     activeTools,
     targetVersion,
