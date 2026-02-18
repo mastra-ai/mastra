@@ -105,7 +105,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       {command && (
         <div className="px-3 py-2 bg-surface3 border-b border-border1 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-icon6 text-xs shrink-0">$</span>
+            <span className="text-neutral6 text-xs shrink-0">$</span>
             <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
           </div>
           {onCopy && (
@@ -134,7 +134,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
         style={{ maxHeight }}
         className="overflow-x-auto overflow-y-auto p-3 text-sm text-neutral-300 font-mono whitespace-pre-wrap bg-black"
       >
-        {content || <span className="text-icon6 italic">No output</span>}
+        {content || <span className="text-neutral6 italic">No output</span>}
       </pre>
     </div>
   );
@@ -180,8 +180,10 @@ export const SandboxExecutionBadge = ({
       (chunk.name === 'sandbox-stdout' || chunk.name === 'sandbox-stderr') && chunk.data?.toolCallId === toolCallId,
   );
 
-  // Workspace metadata emitted first — contains workspace/sandbox info
-  const workspaceMetaPart = dataParts.find(chunk => chunk.name === 'workspace-metadata');
+  // Workspace metadata emitted first — scoped to this tool call
+  const workspaceMetaPart = dataParts.find(
+    chunk => chunk.name === 'workspace-metadata' && chunk.data?.toolCallId === toolCallId,
+  );
   const execMeta = workspaceMetaPart?.data as WorkspaceMetadata | undefined;
 
   // Exit chunk scoped to this tool call
@@ -192,9 +194,9 @@ export const SandboxExecutionBadge = ({
   // Streaming is complete if we have exit chunk or a final result
   const isStreamingComplete = !!exitChunk || typeof result === 'string';
 
-  const hasStreamingOutput = sandboxChunks.length > 0;
-  const isRunning = hasStreamingOutput && !isStreamingComplete;
-  const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStreamingOutput);
+  const hasStarted = !!workspaceMetaPart; // metadata is emitted at tool start
+  const isRunning = hasStarted && !isStreamingComplete;
+  const toolCalled = toolCalledProp ?? (isStreamingComplete || hasStarted);
 
   // Get exit info from data chunks
   const exitCode = exitChunk?.data?.exitCode;
@@ -231,7 +233,7 @@ export const SandboxExecutionBadge = ({
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
-              className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
@@ -248,7 +250,7 @@ export const SandboxExecutionBadge = ({
                 <span className="w-1.5 h-1.5 bg-accent6 rounded-full animate-pulse" />
                 <span className="animate-pulse">running</span>
               </span>
-              <span className="text-icon6 text-xs tabular-nums">{elapsedTime}ms</span>
+              <span className="text-neutral6 text-xs tabular-nums">{elapsedTime}ms</span>
             </>
           ) : (
             <>
@@ -260,7 +262,7 @@ export const SandboxExecutionBadge = ({
                     exit {exitCode}
                   </span>
                 ))}
-              {executionTime !== undefined && <span className="text-icon6 text-xs">{executionTime}ms</span>}
+              {executionTime !== undefined && <span className="text-neutral6 text-xs">{executionTime}ms</span>}
             </>
           )}
         </div>

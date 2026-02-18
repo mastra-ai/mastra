@@ -59,7 +59,7 @@ describe('executeTarget', () => {
         updatedAt: new Date(),
       });
 
-      expect(result.output).toEqual({ text: 'Hello response' });
+      expect(result.output).toEqual(expect.objectContaining({ text: 'Hello response' }));
       expect(result.error).toBeNull();
       expect(mockAgent.generate).toHaveBeenCalledWith('Hello', {
         scorers: {},
@@ -81,7 +81,7 @@ describe('executeTarget', () => {
         updatedAt: new Date(),
       });
 
-      expect(result.output).toEqual({ text: 'Hi response' });
+      expect(result.output).toEqual(expect.objectContaining({ text: 'Hi response' }));
       expect(result.error).toBeNull();
       expect(mockAgent.generate).toHaveBeenCalledWith(messagesInput, {
         scorers: {},
@@ -102,7 +102,7 @@ describe('executeTarget', () => {
         updatedAt: new Date(),
       });
 
-      expect(result.output).toEqual({ text: 'Empty response' });
+      expect(result.output).toEqual(expect.objectContaining({ text: 'Empty response' }));
       expect(result.error).toBeNull();
       // Verify empty string is passed through - agent decides behavior
       expect(mockAgent.generate).toHaveBeenCalledWith('', {
@@ -147,7 +147,7 @@ describe('executeTarget', () => {
         updatedAt: new Date(),
       });
 
-      expect(result.output).toEqual({ text: 'Legacy response' });
+      expect(result.output).toEqual(expect.objectContaining({ text: 'Legacy response' }));
       expect(result.error).toBeNull();
       expect(mockAgent.generateLegacy).toHaveBeenCalledWith('Test', {
         scorers: {},

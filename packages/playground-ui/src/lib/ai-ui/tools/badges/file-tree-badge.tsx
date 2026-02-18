@@ -111,12 +111,14 @@ export const FileTreeBadge = ({
   const hasResult = !!treeOutput;
   const toolCalled = toolCalledProp ?? hasResult;
 
-  // Extract filesystem metadata from message data parts (via writer.custom)
+  // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
   const message = useAuiState(s => s.message);
   const workspaceMetadata = useMemo(() => {
     const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.find(part => part.type === 'data' && part.name === 'workspace-metadata');
-  }, [message.content]);
+    return content.find(
+      part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
+    );
+  }, [message.content, toolCallId]);
 
   const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 
@@ -134,8 +136,10 @@ export const FileTreeBadge = ({
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
           <Badge icon={<FolderTree className="text-accent6" size={16} />}>
-            List Files <span className="text-icon6 font-normal ml-1">{path}</span>
-            {argsDisplay.length > 0 && <span className="text-icon4 font-normal ml-1">({argsDisplay.join(', ')})</span>}
+            List Files <span className="text-neutral6 font-normal ml-1">{path}</span>
+            {argsDisplay.length > 0 && (
+              <span className="text-neutral4 font-normal ml-1">({argsDisplay.join(', ')})</span>
+            )}
           </Badge>
         </button>
 
@@ -143,7 +147,7 @@ export const FileTreeBadge = ({
         {wsMeta?.filesystem && (
           <Link
             href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="flex items-center gap-1.5 text-xs text-icon6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
           >
             <HardDrive className="size-3" />
             <span>{wsMeta.name || wsMeta.filesystem.name}</span>
@@ -151,7 +155,7 @@ export const FileTreeBadge = ({
         )}
 
         {/* Summary - show in header when collapsed */}
-        {isCollapsed && hasResult && summary && <span className="text-icon6 text-xs">{summary}</span>}
+        {isCollapsed && hasResult && summary && <span className="text-neutral6 text-xs">{summary}</span>}
       </div>
 
       {/* Content area */}
@@ -179,7 +183,7 @@ export const FileTreeBadge = ({
             <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
-                {summary && <span className="text-icon6 text-xs">{summary}</span>}
+                {summary && <span className="text-neutral6 text-xs">{summary}</span>}
                 <IconButton variant="light" size="sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
@@ -208,7 +212,7 @@ export const FileTreeBadge = ({
           {/* Loading state */}
           {toolCalled && !hasResult && (
             <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
-              <span className="text-xs text-icon6">Loading...</span>
+              <span className="text-xs text-neutral6">Loading...</span>
             </div>
           )}
         </div>
