@@ -28,6 +28,7 @@ Usage:
 
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
 
+    const toolCallId = context?.agent?.toolCallId;
     const startedAt = Date.now();
     let stdout = '';
     let stderr = '';
@@ -39,14 +40,14 @@ Usage:
           stdout += data;
           await context?.writer?.custom({
             type: 'data-sandbox-stdout',
-            data: { output: data, timestamp: Date.now() },
+            data: { output: data, timestamp: Date.now(), toolCallId },
           });
         },
         onStderr: async (data: string) => {
           stderr += data;
           await context?.writer?.custom({
             type: 'data-sandbox-stderr',
-            data: { output: data, timestamp: Date.now() },
+            data: { output: data, timestamp: Date.now(), toolCallId },
           });
         },
       });
@@ -57,6 +58,7 @@ Usage:
           exitCode: result.exitCode,
           success: result.success,
           executionTimeMs: result.executionTimeMs,
+          toolCallId,
         },
       });
 
@@ -74,6 +76,7 @@ Usage:
           exitCode: -1,
           success: false,
           executionTimeMs: Date.now() - startedAt,
+          toolCallId,
         },
       });
       // Include any stdout/stderr captured before the error (e.g., timeout)
