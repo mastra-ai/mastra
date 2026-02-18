@@ -98,6 +98,15 @@ export async function getEditDiagnosticsText(
     const diagnostics: LSPDiagnostic[] = await lspManager.getDiagnostics(absolutePath, content, basePath);
     if (diagnostics.length === 0) return '';
 
+    // Deduplicate by severity + location + message
+    const seen = new Set<string>();
+    const deduped = diagnostics.filter(d => {
+      const key = `${d.severity}:${d.line}:${d.character}:${d.message}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     // Group diagnostics by severity
     const groups: Record<DiagnosticSeverity, LSPDiagnostic[]> = {
       error: [],
@@ -106,7 +115,7 @@ export async function getEditDiagnosticsText(
       hint: [],
     };
 
-    for (const d of diagnostics) {
+    for (const d of deduped) {
       groups[d.severity].push(d);
     }
 
@@ -129,7 +138,15 @@ export async function getEditDiagnosticsText(
       }
     }
 
-    return lines.join('\n');
+    let result = lines.join('\n');
+
+    // Truncate to ~500 tokens (~2000 chars) to avoid bloating tool output
+    const maxChars = 2000;
+    if (result.length > maxChars) {
+      result = result.slice(0, maxChars) + '\n  ... (truncated)';
+    }
+
+    return result;
   } catch {
     return '';
   }
