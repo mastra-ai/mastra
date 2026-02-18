@@ -79,7 +79,7 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
       // Handle validation errors (existing items may fail new schema)
       // MastraClientError stores the parsed response body in `body`
       const body = (err as { body?: { cause?: { failingItems?: unknown[] } } })?.body;
-      if (body?.cause?.failingItems) {
+      if (Array.isArray(body?.cause?.failingItems) && body.cause.failingItems.length > 0) {
         const count = body.cause.failingItems.length;
         setValidationError(`${count} existing item(s) fail validation. Fix items or adjust schema.`);
       } else {
