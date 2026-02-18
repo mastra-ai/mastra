@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { createScorer } from "@mastra/core/evals";
-import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
-import { getAssistantMessageFromRunOutput } from "@mastra/evals/scorers/utils";
+import { z } from 'zod';
+import { createScorer } from '@mastra/core/evals';
+import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+import { getAssistantMessageFromRunOutput } from '@mastra/evals/scorers/utils';
 
 /**
  * Evaluates whether the agent's summary contains concrete, actionable recommendations
@@ -9,48 +9,30 @@ import { getAssistantMessageFromRunOutput } from "@mastra/evals/scorers/utils";
  * exactly what to do, not just what customers said.
  */
 export const actionabilityScorer = createScorer({
-  id: "actionability-scorer",
-  name: "Actionability",
+  id: 'actionability-scorer',
+  name: 'Actionability',
   description:
     "Evaluates whether the agent's feedback summary contains concrete, actionable recommendations that a product team could act on immediately.",
-  type: "agent",
+  type: 'agent',
   judge: {
-    model: "openai/gpt-5.2",
+    model: 'openai/gpt-5.2',
     instructions:
-      "You are an expert evaluator of product feedback summaries. Your job is to assess whether a summary contains specific, actionable recommendations. Return only the structured JSON matching the provided schema.",
+      'You are an expert evaluator of product feedback summaries. Your job is to assess whether a summary contains specific, actionable recommendations. Return only the structured JSON matching the provided schema.',
   },
 })
   .preprocess(({ run }) => {
-    const assistantText = getAssistantMessageFromRunOutput(run.output) || "";
+    const assistantText = getAssistantMessageFromRunOutput(run.output) || '';
     return { assistantText };
   })
   .analyze({
-    description:
-      "Determine if the summary contains specific, actionable recommendations",
+    description: 'Determine if the summary contains specific, actionable recommendations',
     outputSchema: z.object({
-      hasRecommendations: z
-        .boolean()
-        .describe("Whether the response contains a recommendations section"),
-      recommendationCount: z
-        .number()
-        .describe("Number of distinct recommendations made"),
-      areSpecific: z
-        .boolean()
-        .describe("Whether recommendations are specific vs vague"),
-      arePrioritized: z
-        .boolean()
-        .describe("Whether recommendations are ordered by priority or impact"),
-      tiedToFeedback: z
-        .boolean()
-        .describe(
-          "Whether recommendations reference specific feedback or data points",
-        ),
-      confidence: z
-        .number()
-        .min(0)
-        .max(1)
-        .default(1)
-        .describe("Confidence in this analysis from 0 to 1"),
+      hasRecommendations: z.boolean().describe('Whether the response contains a recommendations section'),
+      recommendationCount: z.number().describe('Number of distinct recommendations made'),
+      areSpecific: z.boolean().describe('Whether recommendations are specific vs vague'),
+      arePrioritized: z.boolean().describe('Whether recommendations are ordered by priority or impact'),
+      tiedToFeedback: z.boolean().describe('Whether recommendations reference specific feedback or data points'),
+      confidence: z.number().min(0).max(1).default(1).describe('Confidence in this analysis from 0 to 1'),
     }),
     createPrompt: ({ results }) => {
       const r = results as any;
@@ -103,25 +85,22 @@ Return JSON with fields:
   })
   .generateReason(({ results, score }) => {
     const analysis = (results as any)?.analyzeStepResult;
-    if (!analysis) return "Could not analyze the response for actionability.";
-    if (!analysis.hasRecommendations)
-      return "The response does not contain actionable recommendations.";
+    if (!analysis) return 'Could not analyze the response for actionability.';
+    if (!analysis.hasRecommendations) return 'The response does not contain actionable recommendations.';
 
     const parts = [
       `Found ${analysis.recommendationCount} recommendation(s).`,
       analysis.areSpecific
-        ? "Recommendations are specific and actionable."
-        : "Recommendations are too vague to act on.",
-      analysis.arePrioritized
-        ? "Recommendations are prioritized."
-        : "Recommendations lack prioritization.",
+        ? 'Recommendations are specific and actionable.'
+        : 'Recommendations are too vague to act on.',
+      analysis.arePrioritized ? 'Recommendations are prioritized.' : 'Recommendations lack prioritization.',
       analysis.tiedToFeedback
-        ? "Recommendations reference specific feedback data."
-        : "Recommendations are not tied to specific feedback.",
+        ? 'Recommendations reference specific feedback data.'
+        : 'Recommendations are not tied to specific feedback.',
       `Score: ${score}`,
     ];
 
-    return parts.join(" ");
+    return parts.join(' ');
   });
 
 /**

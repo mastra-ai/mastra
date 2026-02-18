@@ -1,33 +1,30 @@
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { getFeedbackTool } from "../tools/get-feedback";
-import {
-  actionabilityScorer,
-  completenessScorer,
-} from "../scorers/feedback-scorers";
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { getFeedbackTool } from '../tools/get-feedback';
+import { actionabilityScorer, completenessScorer } from '../scorers/feedback-scorers';
 
 export const feedbackSummarizer = new Agent({
-  id: "feedbackSummarizer",
-  name: "Customer Feedback Summarizer",
+  id: 'feedbackSummarizer',
+  name: 'Customer Feedback Summarizer',
   description:
-    "Analyzes and summarizes customer feedback to produce actionable insights. Retrieves feedback from the database, categorizes it, assesses sentiment and urgency, and generates executive summaries.",
-  model: "openai/gpt-5.2",
+    'Analyzes and summarizes customer feedback to produce actionable insights. Retrieves feedback from the database, categorizes it, assesses sentiment and urgency, and generates executive summaries.',
+  model: 'openai/gpt-5.2',
   tools: { getFeedbackTool },
   scorers: {
     actionabilityScorer: {
       scorer: actionabilityScorer,
-      sampling: { type: "ratio", rate: 1 },
+      sampling: { type: 'ratio', rate: 1 },
     },
     completenessScorer: {
       scorer: completenessScorer,
-      sampling: { type: "ratio", rate: 1 },
+      sampling: { type: 'ratio', rate: 1 },
     },
   },
   memory: new Memory({
     options: {
       lastMessages: 20,
       observationalMemory: {
-        model: "openai/gpt-5-mini",
+        model: 'openai/gpt-5-mini',
       },
     },
   }),
