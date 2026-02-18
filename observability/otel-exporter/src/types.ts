@@ -72,6 +72,19 @@ export interface OtelExporterConfig extends BaseExporterConfig {
 
   // Override or provide a custom span exporter
   exporter?: SpanExporter;
+
+  /**
+   * Signal enablement. All signals are enabled by default when their
+   * required OTEL packages are installed. Set to false to disable.
+   */
+  signals?: {
+    /** Enable trace export (default: true) */
+    traces?: boolean;
+    /** Enable log export (default: true) */
+    logs?: boolean;
+    /** Enable metric export (default: true) */
+    metrics?: boolean;
+  };
 }
 
 export interface SpanData {
