@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed Gemini API errors caused by empty reasoning parts stored in message memory. When using Gemini with reasoning tokens, empty reasoning parts could poison conversation history, causing all subsequent messages to fail with 'must include at least one parts field'. Empty reasoning parts are now filtered out before sending messages to the model, while preserving OpenAI encrypted reasoning parts that carry providerMetadata.
+Fixed Gemini API errors caused by empty reasoning parts stored in message memory. Empty reasoning from providers like Gemini is no longer stored when there's no content or providerMetadata. For OpenAI, empty reasoning with providerMetadata (needed for item_reference) is preserved without creating empty details entries. A sanitize safety net is retained for legacy stored data.
