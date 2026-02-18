@@ -178,6 +178,19 @@ export const indexResponseSchema = z.object({
 });
 
 // =============================================================================
+// Mount Schemas
+// =============================================================================
+
+export const mountInfoSchema = z.object({
+  path: z.string().describe('Mount path'),
+  provider: z.string().describe('Filesystem provider type'),
+  readOnly: z.boolean().describe('Whether the mount is read-only'),
+  displayName: z.string().optional().describe('Human-readable name'),
+  icon: z.string().optional().describe('UI icon identifier'),
+  name: z.string().optional().describe('Filesystem instance name'),
+});
+
+// =============================================================================
 // Workspace Info Schema
 // =============================================================================
 
@@ -213,6 +226,7 @@ export const workspaceInfoResponseSchema = z.object({
       metadata: z.record(z.unknown()).optional(),
     })
     .optional(),
+  mounts: z.array(mountInfoSchema).optional().describe('Mount points (only present for CompositeFilesystem)'),
 });
 
 const workspaceItemSchema = z.object({
@@ -410,6 +424,7 @@ export const skillsShInstallBodySchema = z.object({
   owner: z.string().describe('GitHub repository owner'),
   repo: z.string().describe('GitHub repository name'),
   skillName: z.string().describe('Skill name from skills.sh'),
+  mount: z.string().optional().describe('Mount path to install into (for CompositeFilesystem)'),
 });
 
 export const skillsShInstallResponseSchema = z.object({

@@ -36,10 +36,10 @@ export function ScorerCreateContent({ onSuccess }: ScorerCreateContentProps) {
         model: values.model,
         instructions: values.instructions || undefined,
         scoreRange: values.scoreRange,
-        ...(values.defaultSampling?.type === 'ratio' &&
-          typeof values.defaultSampling.rate === 'number' && {
-            defaultSampling: values.defaultSampling,
-          }),
+        defaultSampling:
+          values.defaultSampling?.type === 'ratio' && typeof values.defaultSampling.rate === 'number'
+            ? values.defaultSampling
+            : { type: 'none' as const },
       };
 
       const created = await createStoredScorer.mutateAsync(createParams);

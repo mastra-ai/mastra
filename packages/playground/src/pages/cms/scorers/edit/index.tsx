@@ -80,10 +80,10 @@ function CmsScorersEditForm({ scorer, scorerId }: CmsScorersEditFormProps) {
         model: values.model,
         instructions: values.instructions || undefined,
         scoreRange: values.scoreRange,
-        ...(values.defaultSampling?.type === 'ratio' &&
-          typeof values.defaultSampling.rate === 'number' && {
-            defaultSampling: values.defaultSampling,
-          }),
+        defaultSampling:
+          values.defaultSampling?.type === 'ratio' && typeof values.defaultSampling.rate === 'number'
+            ? values.defaultSampling
+            : { type: 'none' as const },
       };
 
       await updateStoredScorer.mutateAsync(updateParams);
@@ -157,9 +157,9 @@ function CmsScorersEditPage() {
           </HeaderTitle>
         </Header>
         <AgentEditLayout
-          leftSlot={<div className="flex items-center justify-center h-full text-icon3">Scorer not found</div>}
+          leftSlot={<div className="flex items-center justify-center h-full text-neutral3">Scorer not found</div>}
         >
-          <div className="flex items-center justify-center h-full text-icon3">Scorer not found</div>
+          <div className="flex items-center justify-center h-full text-neutral3">Scorer not found</div>
         </AgentEditLayout>
       </MainContentLayout>
     );

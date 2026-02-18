@@ -46,6 +46,9 @@ const SNAPSHOT_FIELDS = [
   'scorers',
   'mcpClients',
   'requestContextSchema',
+  'workspace',
+  'skills',
+  'skillsFormat',
 ] as const;
 
 export class MongoDBAgentsStorage extends AgentsStorage {
@@ -285,65 +288,24 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         updatedAt: new Date(),
       };
 
-      // Separate metadata-level fields from config fields
+      // Metadata-level fields
       const metadataFields = {
         authorId: updates.authorId,
         activeVersionId: updates.activeVersionId,
         metadata: updates.metadata,
+        status: updates.status,
       };
 
-      // Extract config fields (anything that's part of StorageAgentSnapshotType)
-      const configFields: Record<string, any> = {};
-      for (const field of SNAPSHOT_FIELDS) {
-        if ((updates as any)[field] !== undefined) {
-          configFields[field] = (updates as any)[field];
-        }
-      }
-
-      // If we have config updates, create a new version
-      if (Object.keys(configFields).length > 0) {
-        // Get the latest version number
-        const latestVersion = await this.getLatestVersion(id);
-        const nextVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-        // If we have a latest version, start from its config, otherwise error
-        if (!latestVersion) {
-          throw new MastraError({
-            id: createStorageErrorId('MONGODB', 'UPDATE_AGENT', 'NO_VERSION'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Cannot update config fields for agent ${id} - no versions exist`,
-            details: { id },
-          });
-        }
-
-        // Convert null values to undefined (null means "remove this field")
-        const sanitizedConfigFields = Object.fromEntries(
-          Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-        );
-
-        // Create new version with the config updates
-        const versionInput: CreateVersionInput = {
-          id: randomUUID(),
-          agentId: id,
-          versionNumber: nextVersionNumber,
-          ...this.extractSnapshotFields(latestVersion), // Start from latest version
-          ...sanitizedConfigFields, // Apply updates (null values converted to undefined)
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateVersionInput;
-
-        await this.createVersion(versionInput);
-      }
-
-      // Handle metadata-level updates (these go to the agent record)
+      // Handle metadata-level updates
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
       if (metadataFields.activeVersionId !== undefined) {
         updateDoc.activeVersionId = metadataFields.activeVersionId;
-        // Do NOT automatically set status='published' when activeVersionId is updated
+      }
+      if (metadataFields.status !== undefined) {
+        updateDoc.status = metadataFields.status;
       }
 
-      // Merge metadata if provided (MongoDB adapter uses merge semantics)
+      // Merge metadata
       if (metadataFields.metadata !== undefined) {
         const existingMetadata = existingAgent.metadata || {};
         updateDoc.metadata = { ...existingMetadata, ...metadataFields.metadata };
@@ -402,7 +364,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -421,7 +383,20 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const collection = await this.getCollection(TABLE_AGENTS);
-      const total = await collection.countDocuments({});
+
+      // Build filter
+      const filter: Record<string, any> = {};
+      filter.status = status;
+      if (authorId) {
+        filter.authorId = authorId;
+      }
+      if (metadata) {
+        for (const [key, value] of Object.entries(metadata)) {
+          filter[`metadata.${key}`] = value;
+        }
+      }
+
+      const total = await collection.countDocuments(filter);
 
       if (total === 0 || perPage === 0) {
         return {
@@ -437,7 +412,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
       let cursor = collection
-        .find({})
+        .find(filter)
         .sort({ [field]: sortOrder })
         .skip(offset);
 
@@ -745,16 +720,6 @@ export class MongoDBAgentsStorage extends AgentsStorage {
   /**
    * Extracts just the snapshot config fields from a version.
    */
-  private extractSnapshotFields(version: AgentVersion): Record<string, any> {
-    const result: Record<string, any> = {};
-    for (const field of SNAPSHOT_FIELDS) {
-      if ((version as any)[field] !== undefined) {
-        result[field] = (version as any)[field];
-      }
-    }
-    return result;
-  }
-
   /**
    * Transforms a raw MongoDB version document into an AgentVersion.
    * Config fields are returned directly (no nested snapshot object).

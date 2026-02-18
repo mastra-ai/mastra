@@ -27,6 +27,7 @@ export function ExperimentResultPanel({
   onShowTrace,
 }: ExperimentResultPanelProps) {
   const hasError = Boolean(result.error);
+  const inputStr = formatValue(result.input);
   const outputStr = formatValue(result.output);
 
   return (
@@ -61,7 +62,8 @@ export function ExperimentResultPanel({
           </MainHeader.Column>
         </MainHeader>
 
-        <SideDialog.CodeSection title="Input" icon={<FileOutputIcon />} codeStr={outputStr} />
+        <SideDialog.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />
+        <SideDialog.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
 
         <div className="grid gap-2">
           <h4 className="text-sm font-medium text-neutral5 flex items-center gap-2">

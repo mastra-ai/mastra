@@ -6,6 +6,7 @@ export interface EntityProps {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export const Entity = ({ children, className, onClick }: EntityProps) => {
@@ -20,7 +21,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
         }
       }}
       className={cn(
-        'flex gap-3 group/entity bg-surface3 rounded-lg border border-border1 py-3 px-4',
+        'flex gap-3 group/entity bg-surface3 rounded-xl border border-border1 py-3 px-4',
         onClick && 'cursor-pointer hover:bg-surface4 transition-all',
         className,
       )}
@@ -31,9 +32,9 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
   );
 };
 
-export const EntityIcon = ({ children, className }: EntityProps) => {
+export const EntityIcon = ({ children, className, style }: EntityProps) => {
   return (
-    <Icon size="lg" className={cn('text-neutral3 mt-1', className)}>
+    <Icon size="lg" className={cn('text-neutral3 mt-1 shrink-0', className)} style={style}>
       {children}
     </Icon>
   );
@@ -49,12 +50,12 @@ export const EntityName = ({ children, className }: EntityProps) => {
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className={cn('text-neutral3', className)}>
+    <Txt as="div" variant="ui-sm" className={cn('text-neutral3', className)}>
       {children}
     </Txt>
   );
 };
 
 export const EntityContent = ({ children, className }: EntityProps) => {
-  return <div className={className}>{children}</div>;
+  return <div className={cn('flex-1 w-full', className)}>{children}</div>;
 };

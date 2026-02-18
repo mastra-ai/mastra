@@ -77,7 +77,7 @@ export function SearchWorkspacePanel({
         <div className="flex gap-3 items-center">
           {/* Query Input */}
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-icon3" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral3" />
             <Input
               value={query}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
@@ -88,7 +88,7 @@ export function SearchWorkspacePanel({
 
           {/* Top K */}
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-icon4">Top</span>
+            <span className="text-xs text-neutral4">Top</span>
             <Input
               type="number"
               min={1}
@@ -119,7 +119,7 @@ export function SearchWorkspacePanel({
                   onClick={() => setMode(m)}
                   className={`
                     inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border transition-colors
-                    ${isActive ? config.color : 'bg-surface2 text-icon4 border-transparent hover:bg-surface3'}
+                    ${isActive ? config.color : 'bg-surface2 text-neutral4 border-transparent hover:bg-surface3'}
                   `}
                 >
                   {config.icon}
@@ -135,9 +135,9 @@ export function SearchWorkspacePanel({
       {searchResults && (
         <div className="border-t border-border1">
           <div className="px-4 py-2 flex items-center justify-between text-xs">
-            <span className="text-icon4">
+            <span className="text-neutral4">
               {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "
-              <span className="text-icon6">{searchResults.query}</span>"
+              <span className="text-neutral6">{searchResults.query}</span>"
             </span>
             <span className={`px-1.5 py-0.5 rounded ${modeConfig[searchResults.mode].color}`}>
               {modeConfig[searchResults.mode].label}
@@ -145,7 +145,7 @@ export function SearchWorkspacePanel({
           </div>
 
           {searchResults.results.length === 0 ? (
-            <div className="px-4 py-8 text-center text-icon4 text-sm">No results found. Try a different query.</div>
+            <div className="px-4 py-8 text-center text-neutral4 text-sm">No results found. Try a different query.</div>
           ) : (
             <ul className="max-h-[320px] overflow-auto">
               {searchResults.results.map((result, index) => (
@@ -176,21 +176,21 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
   return (
     <li className="border-t border-border1 first:border-t-0">
       <button onClick={onClick} className="w-full px-4 py-3 text-left hover:bg-surface5 transition-colors flex gap-3">
-        <span className="text-xs text-icon3 tabular-nums w-4 flex-shrink-0">{rank}</span>
+        <span className="text-xs text-neutral3 tabular-nums w-4 flex-shrink-0">{rank}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <FolderOpen className="h-3.5 w-3.5 text-icon4 flex-shrink-0" />
-            <span className="font-mono text-sm text-icon6 truncate">{result.id}</span>
+            <FolderOpen className="h-3.5 w-3.5 text-neutral4 flex-shrink-0" />
+            <span className="font-mono text-sm text-neutral6 truncate">{result.id}</span>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <div className="w-12 h-1 rounded-full bg-surface2 overflow-hidden">
                 <div className="h-full rounded-full bg-accent1" style={{ width: `${scorePercent}%` }} />
               </div>
-              <span className="text-[0.625rem] text-icon3 tabular-nums">{result.score.toFixed(2)}</span>
+              <span className="text-[0.625rem] text-neutral3 tabular-nums">{result.score.toFixed(2)}</span>
             </div>
           </div>
-          <p className="text-xs text-icon4 line-clamp-2">{result.content}</p>
+          <p className="text-xs text-neutral4 line-clamp-2">{result.content}</p>
           {result.lineRange && (
-            <p className="text-xs text-icon3 mt-1">
+            <p className="text-xs text-neutral3 mt-1">
               Lines {result.lineRange.start}–{result.lineRange.end}
             </p>
           )}
@@ -228,13 +228,13 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
       <form onSubmit={handleSearch} className="space-y-3">
         <div className="flex gap-2">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-icon3" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral3" />
             <input
               type="text"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search across skills..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-surface3 border border-border1 text-sm text-icon6 placeholder:text-icon3 focus:outline-none focus:ring-2 focus:ring-accent1"
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-surface3 border border-border1 text-sm text-neutral6 placeholder:text-neutral3 focus:outline-none focus:ring-2 focus:ring-accent1"
             />
           </div>
           <Button type="submit" disabled={!query.trim() || isSearching}>
@@ -243,12 +243,12 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
         </div>
 
         <div className="flex items-center gap-4 text-sm">
-          <label className="flex items-center gap-2 text-icon4">
+          <label className="flex items-center gap-2 text-neutral4">
             <span>Results:</span>
             <select
               value={topK}
               onChange={e => setTopK(Number(e.target.value))}
-              className="px-2 py-1 rounded bg-surface3 border border-border1 text-icon5"
+              className="px-2 py-1 rounded bg-surface3 border border-border1 text-neutral5"
             >
               <option value={3}>3</option>
               <option value={5}>5</option>
@@ -257,7 +257,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
             </select>
           </label>
 
-          <label className="flex items-center gap-2 text-icon4 cursor-pointer">
+          <label className="flex items-center gap-2 text-neutral4 cursor-pointer">
             <input
               type="checkbox"
               checked={includeReferences}
@@ -272,7 +272,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
       {/* Results */}
       {results.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-icon5">
+          <h3 className="text-sm font-medium text-neutral5">
             Found {results.length} result{results.length !== 1 ? 's' : ''}
           </h3>
           <div className="space-y-2">
@@ -301,23 +301,23 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
       <div className="flex items-start gap-3">
         <div className="p-1.5 rounded bg-surface5 shrink-0 mt-0.5">
           {isReference ? (
-            <FileText className="h-3.5 w-3.5 text-icon4" />
+            <FileText className="h-3.5 w-3.5 text-neutral4" />
           ) : (
-            <SkillIcon className="h-3.5 w-3.5 text-icon4" />
+            <SkillIcon className="h-3.5 w-3.5 text-neutral4" />
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="font-medium text-icon6">{result.skillName}</span>
-            <span className="text-xs text-icon3">{result.source}</span>
-            <span className="ml-auto text-xs text-icon3">Score: {result.score.toFixed(3)}</span>
+            <span className="font-medium text-neutral6">{result.skillName}</span>
+            <span className="text-xs text-neutral3">{result.source}</span>
+            <span className="ml-auto text-xs text-neutral3">Score: {result.score.toFixed(3)}</span>
           </div>
-          <p className="text-sm text-icon4 line-clamp-3 whitespace-pre-wrap">
+          <p className="text-sm text-neutral4 line-clamp-3 whitespace-pre-wrap">
             {result.content.slice(0, 300)}
             {result.content.length > 300 && '...'}
           </p>
           {result.lineRange && (
-            <p className="text-xs text-icon3 mt-2">
+            <p className="text-xs text-neutral3 mt-2">
               Lines {result.lineRange.start}–{result.lineRange.end}
             </p>
           )}
