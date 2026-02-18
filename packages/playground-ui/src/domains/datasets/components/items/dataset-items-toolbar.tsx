@@ -192,6 +192,7 @@ export function DatasetItemsToolbar({
         variant="experimental"
         size="default"
         onReset={() => onSearchChange?.('')}
+        disabled={!hasItems}
       />
 
       <ButtonsGroup>
