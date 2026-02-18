@@ -93,6 +93,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
    * @returns true if the error was handled and the response was set on ctx
    */
   private async handleOnError(err: unknown, ctx: Context): Promise<boolean> {
+    // Guard against double invocation (route catch → re-throw → error middleware)
+    if ((ctx as any)._mastraOnErrorAttempted) return false;
+    (ctx as any)._mastraOnErrorAttempted = true;
+
     const onError = this.mastra.getServer()?.onError;
     if (!onError) return false;
 
