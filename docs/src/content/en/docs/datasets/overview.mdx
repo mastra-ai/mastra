@@ -8,7 +8,7 @@ packages:
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Datasets overview
+# Datasets Overview
 
 Datasets are collections of test cases that you run experiments against to measure how well your agents and workflows perform. Each mutation creates a new version, so you can reproduce past experiments exactly. Pair datasets with [scorers](/docs/evals/overview) to track quality across prompts, models, or code changes.
 
@@ -88,7 +88,7 @@ console.log(dataset.id); // auto-generated UUID
 
 ### Defining schemas
 
-You can enforce the shape of `input` and `groundTruth` by passing Zod schemas. Mastra converts them to JSON Schema automatically:
+You can enforce the shape of `input` and `groundTruth` by passing Zod schemas. Mastra converts them to JSON Schema at creation time:
 
 ```typescript title="src/mastra/datasets/create-with-schema.ts"
 import { z } from "zod";

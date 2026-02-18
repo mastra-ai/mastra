@@ -472,7 +472,7 @@ const sidebars = {
             { type: 'doc', id: 'datasets/get', label: '.get()' },
             { type: 'doc', id: 'datasets/list', label: '.list()' },
             { type: 'doc', id: 'datasets/delete', label: '.delete()' },
-            { type: 'doc', id: 'datasets/getExperimentById', label: '.getExperiment()' },
+            { type: 'doc', id: 'datasets/datasets-manager-getExperiment', label: '.getExperiment()' },
             { type: 'doc', id: 'datasets/compareExperiments', label: '.compareExperiments()' },
             // Dataset (single dataset instance)
             { type: 'doc', id: 'datasets/dataset', label: 'Dataset Class' },
