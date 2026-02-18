@@ -260,6 +260,140 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
   });
 
+  describe('deleteWorkflowRunsOlderThan', () => {
+    beforeEach(async () => {
+      await workflowsStorage.dangerouslyClearAll();
+    });
+
+    it('should delete old workflow runs and keep recent ones', async () => {
+      const oldDate = new Date('2023-01-01T00:00:00Z');
+      const recentDate = new Date(Date.now());
+
+      // Create an old workflow run
+      const oldRun = createSampleWorkflowSnapshot('completed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: oldRun.runId,
+        snapshot: oldRun.snapshot,
+        createdAt: oldDate,
+      });
+
+      // Create a recent workflow run
+      const recentRun = createSampleWorkflowSnapshot('completed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: recentRun.runId,
+        snapshot: recentRun.snapshot,
+        createdAt: recentDate,
+      });
+
+      // Delete runs older than 2024
+      const result = await workflowsStorage.deleteWorkflowRunsOlderThan({
+        beforeDate: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      expect(result.deletedCount).toBe(1);
+      expect(await workflowsStorage.getWorkflowRunById({ runId: oldRun.runId, workflowName: 'test-workflow' })).toBeNull();
+      expect(await workflowsStorage.getWorkflowRunById({ runId: recentRun.runId, workflowName: 'test-workflow' })).not.toBeNull();
+    });
+
+    it('should filter by workflowName', async () => {
+      const oldDate = new Date('2023-01-01T00:00:00Z');
+
+      const run1 = createSampleWorkflowSnapshot('completed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'workflow-a',
+        runId: run1.runId,
+        snapshot: run1.snapshot,
+        createdAt: oldDate,
+      });
+
+      const run2 = createSampleWorkflowSnapshot('completed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'workflow-b',
+        runId: run2.runId,
+        snapshot: run2.snapshot,
+        createdAt: oldDate,
+      });
+
+      const result = await workflowsStorage.deleteWorkflowRunsOlderThan({
+        beforeDate: new Date('2024-01-01T00:00:00Z'),
+        filters: { workflowName: 'workflow-a' },
+      });
+
+      expect(result.deletedCount).toBe(1);
+      expect(await workflowsStorage.getWorkflowRunById({ runId: run1.runId, workflowName: 'workflow-a' })).toBeNull();
+      expect(await workflowsStorage.getWorkflowRunById({ runId: run2.runId, workflowName: 'workflow-b' })).not.toBeNull();
+    });
+
+    it('should filter by status', async () => {
+      const oldDate = new Date('2023-01-01T00:00:00Z');
+
+      const completedRun = createSampleWorkflowSnapshot('completed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: completedRun.runId,
+        snapshot: completedRun.snapshot,
+        createdAt: oldDate,
+      });
+
+      const failedRun = createSampleWorkflowSnapshot('failed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: failedRun.runId,
+        snapshot: failedRun.snapshot,
+        createdAt: oldDate,
+      });
+
+      const result = await workflowsStorage.deleteWorkflowRunsOlderThan({
+        beforeDate: new Date('2024-01-01T00:00:00Z'),
+        filters: { status: 'completed' },
+      });
+
+      expect(result.deletedCount).toBe(1);
+      expect(await workflowsStorage.getWorkflowRunById({ runId: completedRun.runId, workflowName: 'test-workflow' })).toBeNull();
+      expect(await workflowsStorage.getWorkflowRunById({ runId: failedRun.runId, workflowName: 'test-workflow' })).not.toBeNull();
+    });
+
+    it('should filter by resourceId', async () => {
+      const oldDate = new Date('2023-01-01T00:00:00Z');
+
+      const run1 = createSampleWorkflowSnapshot('completed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: run1.runId,
+        resourceId: 'resource-1',
+        snapshot: run1.snapshot,
+        createdAt: oldDate,
+      });
+
+      const run2 = createSampleWorkflowSnapshot('completed');
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: run2.runId,
+        resourceId: 'resource-2',
+        snapshot: run2.snapshot,
+        createdAt: oldDate,
+      });
+
+      const result = await workflowsStorage.deleteWorkflowRunsOlderThan({
+        beforeDate: new Date('2024-01-01T00:00:00Z'),
+        filters: { resourceId: 'resource-1' },
+      });
+
+      expect(result.deletedCount).toBe(1);
+      expect(await workflowsStorage.getWorkflowRunById({ runId: run1.runId, workflowName: 'test-workflow' })).toBeNull();
+      expect(await workflowsStorage.getWorkflowRunById({ runId: run2.runId, workflowName: 'test-workflow' })).not.toBeNull();
+    });
+
+    it('should return zero when no runs match', async () => {
+      const result = await workflowsStorage.deleteWorkflowRunsOlderThan({
+        beforeDate: new Date('2020-01-01T00:00:00Z'),
+      });
+      expect(result.deletedCount).toBe(0);
+    });
+  });
+
   describe('listWorkflowRuns with resourceId', () => {
     const workflowName = 'workflow-id-test';
     let resourceId: string;
