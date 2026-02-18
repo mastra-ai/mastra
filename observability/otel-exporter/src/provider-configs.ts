@@ -10,6 +10,7 @@ import type {
   NewRelicConfig,
   TraceloopConfig,
   LaminarConfig,
+  GrafanaCloudConfig,
   CustomConfig,
 } from './types.js';
 
@@ -30,6 +31,8 @@ export function resolveProviderConfig(config: ProviderConfig): ResolvedProviderC
     return resolveTraceloopConfig(config.traceloop);
   } else if ('laminar' in config) {
     return resolveLaminarConfig(config.laminar);
+  } else if ('grafana' in config) {
+    return resolveGrafanaCloudConfig(config.grafana);
   } else if ('custom' in config) {
     return resolveCustomConfig(config.custom);
   } else {
@@ -195,6 +198,54 @@ function resolveLaminarConfig(config: LaminarConfig): ResolvedProviderConfig | n
     endpoint,
     headers,
     protocol: 'http/protobuf', // Use HTTP/protobuf instead of gRPC for better compatibility
+  };
+}
+
+function resolveGrafanaCloudConfig(config: GrafanaCloudConfig): ResolvedProviderConfig | null {
+  // Read from config or environment variables
+  const instanceId = config.instanceId ?? process.env.GRAFANA_CLOUD_INSTANCE_ID;
+  const apiToken = config.apiToken ?? process.env.GRAFANA_CLOUD_API_TOKEN;
+  const configEndpoint = config.endpoint ?? process.env.GRAFANA_CLOUD_OTLP_ENDPOINT;
+
+  if (!instanceId) {
+    console.error(
+      '[OtelExporter] Grafana Cloud configuration requires instanceId. ' +
+        'Set GRAFANA_CLOUD_INSTANCE_ID environment variable or pass it in config. Tracing will be disabled.',
+    );
+    return null;
+  }
+
+  if (!apiToken) {
+    console.error(
+      '[OtelExporter] Grafana Cloud configuration requires apiToken. ' +
+        'Set GRAFANA_CLOUD_API_TOKEN environment variable or pass it in config. Tracing will be disabled.',
+    );
+    return null;
+  }
+
+  if (!configEndpoint) {
+    console.error(
+      '[OtelExporter] Grafana Cloud configuration requires endpoint (e.g. https://otlp-gateway-prod-us-east-3.grafana.net/otlp). ' +
+        'Set GRAFANA_CLOUD_OTLP_ENDPOINT environment variable or pass it in config. Tracing will be disabled.',
+    );
+    return null;
+  }
+
+  // Grafana Cloud OTLP uses HTTP Basic Auth: username = instanceId, password = apiToken
+  const basicAuth = Buffer.from(`${instanceId}:${apiToken}`).toString('base64');
+
+  // Append /v1/traces if the endpoint doesn't already have a signal path
+  let endpoint = configEndpoint;
+  if (!endpoint.endsWith('/v1/traces') && !endpoint.endsWith('/v1/logs') && !endpoint.endsWith('/v1/metrics')) {
+    endpoint = endpoint.replace(/\/$/, '') + '/v1/traces';
+  }
+
+  return {
+    endpoint,
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+    },
+    protocol: 'http/protobuf',
   };
 }
 
