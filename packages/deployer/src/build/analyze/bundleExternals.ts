@@ -22,7 +22,13 @@ import { nodeGypDetector } from '../plugins/node-gyp-detector';
 import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import type { DependencyMetadata } from '../types';
-import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
+import {
+  getCompiledDepCachePath,
+  getNodeResolveOptions,
+  isDependencyPartOfPackage,
+  rollupSafeName,
+  slash,
+} from '../utils';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
 
 type VirtualDependency = {
@@ -230,18 +236,7 @@ async function getInputPlugins(
       transformMixedEsModules: true,
       ignoreTryCatch: false,
     }),
-    bundlerOptions.noBundling
-      ? null
-      : platform === 'browser'
-        ? nodeResolve({
-            preferBuiltins: false,
-            browser: true,
-            exportConditions: ['browser', 'worker', 'default'],
-          })
-        : nodeResolve({
-            preferBuiltins: true,
-            exportConditions: ['node'],
-          }),
+    bundlerOptions.noBundling ? null : nodeResolve(getNodeResolveOptions(platform)),
     bundlerOptions.noBundling ? esmShim() : null,
     // hono is imported from deployer, so we need to resolve from here instead of the project root
     aliasHono(),

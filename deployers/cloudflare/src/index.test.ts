@@ -30,37 +30,16 @@ describe('CloudflareDeployer', () => {
       // which depends on the 'https' module).
       //
       // For Cloudflare Workers, we need to use 'browser' platform which:
-      // 1. Uses browser-compatible export conditions
+      // 1. Uses browser-compatible export conditions ['browser', 'worker', 'default']
       // 2. Doesn't assume Node.js built-ins are available
-      deployer = new CloudflareDeployer({ name: 'test-worker' });
-
-      // Access the protected platform property to verify it's set correctly
-      // @ts-expect-error - accessing protected property for testing
-      const platform = deployer.platform;
-
-      expect(platform).toBe('browser');
-    });
-
-    it('should work correctly for both D1 bindings mode and REST API mode', () => {
-      // This fix ensures that:
-      // 1. D1 bindings mode: Uses the D1Database binding from the Workers runtime directly
-      //    - No external SDK needed, binding is passed to D1Store
-      //    - Works because Workers runtime provides the binding
       //
-      // 2. D1 REST API mode: Uses the Cloudflare SDK to make API calls
-      //    - SDK has conditional exports: browser (global fetch) vs node (node-fetch + https)
-      //    - With platform: 'browser', SDK resolves to browser-compatible code
-      //    - Uses global fetch which is available in Workers runtime
+      // This enables both D1 modes to work:
+      // - Bindings mode: Uses D1Database binding from Workers runtime directly
+      // - REST API mode: Cloudflare SDK resolves to web runtime using global fetch
       deployer = new CloudflareDeployer({ name: 'test-worker' });
 
       // @ts-expect-error - accessing protected property for testing
-      const platform = deployer.platform;
-
-      // The 'browser' platform ensures:
-      // - nodeResolve uses browser: true (not exportConditions: ['node'])
-      // - Packages resolve to browser/worker-compatible code
-      // - No dependency on Node.js built-in modules like 'https'
-      expect(platform).toBe('browser');
+      expect(deployer.platform).toBe('browser');
     });
   });
 

@@ -14,7 +14,7 @@ import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-r
 import { removeDeployer } from './plugins/remove-deployer';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { slash } from './utils';
+import { getNodeResolveOptions, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
@@ -38,19 +38,7 @@ export async function getInputOptions(
     externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
-  // For 'browser' platform (Cloudflare Workers), use browser-compatible module resolution.
-  // For 'neutral' platform (Bun) and 'node', use Node.js module resolution.
-  let nodeResolvePlugin =
-    platform === 'browser'
-      ? nodeResolve({
-          preferBuiltins: false,
-          browser: true,
-          exportConditions: ['browser', 'worker', 'default'],
-        })
-      : nodeResolve({
-          preferBuiltins: true,
-          exportConditions: ['node'],
-        });
+  const nodeResolvePlugin = nodeResolve(getNodeResolveOptions(platform));
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
   const externals = externalsPreset ? [] : Array.from(externalsCopy);

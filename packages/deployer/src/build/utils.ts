@@ -15,6 +15,29 @@ export type RuntimePlatform = 'node' | 'bun';
 export type BundlerPlatform = 'node' | 'browser' | 'neutral';
 
 /**
+ * Get nodeResolve plugin options based on the target platform.
+ *
+ * For 'browser' platform (e.g., Cloudflare Workers), uses browser-compatible
+ * export conditions so packages like the Cloudflare SDK resolve to their
+ * web runtime instead of Node.js-specific code.
+ *
+ * For 'node' and 'neutral' (Bun) platforms, uses Node.js module resolution.
+ */
+export function getNodeResolveOptions(platform: BundlerPlatform) {
+  if (platform === 'browser') {
+    return {
+      preferBuiltins: false,
+      browser: true,
+      exportConditions: ['browser', 'worker', 'default'],
+    };
+  }
+  return {
+    preferBuiltins: true,
+    exportConditions: ['node'],
+  };
+}
+
+/**
  * Detect the current JavaScript runtime environment.
  *
  * This is used by the bundler to determine the appropriate esbuild platform
