@@ -79,12 +79,24 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
 export function resolveThreadIdFromArgs(args: {
   memory?: { thread?: string | { id: string } };
   threadId?: string;
+  overrideId?: string;
 }): (Partial<StorageThreadType> & { id: string }) | undefined {
+  let resolved: (Partial<StorageThreadType> & { id: string }) | undefined;
+
   if (args?.memory?.thread) {
-    if (typeof args.memory.thread === 'string') return { id: args.memory.thread };
-    if (typeof args.memory.thread === 'object' && args.memory.thread.id)
-      return args.memory.thread as Partial<StorageThreadType> & { id: string };
+    if (typeof args.memory.thread === 'string') {
+      resolved = { id: args.memory.thread };
+    } else if (typeof args.memory.thread === 'object' && args.memory.thread.id) {
+      resolved = args.memory.thread as Partial<StorageThreadType> & { id: string };
+    }
   }
-  if (args?.threadId) return { id: args.threadId };
-  return undefined;
+  if (!resolved && args?.threadId) {
+    resolved = { id: args.threadId };
+  }
+
+  if (args.overrideId) {
+    return { ...(resolved || {}), id: args.overrideId };
+  }
+
+  return resolved;
 }

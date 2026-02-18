@@ -3198,14 +3198,13 @@ export class Agent<
     const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
 
-    const threadFromArgs = threadIdFromContext
-      ? { id: threadIdFromContext }
-      : resolveThreadIdFromArgs({
-          memory: {
-            ...options.memory,
-            thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
-          },
-        });
+    const threadFromArgs = resolveThreadIdFromArgs({
+      memory: {
+        ...options.memory,
+        thread: options.memory?.thread || snapshotMemoryInfo?.threadId,
+      },
+      overrideId: threadIdFromContext,
+    });
 
     const resourceId = resourceIdFromContext || options.memory?.resource || snapshotMemoryInfo?.resourceId;
     const memoryConfig = options.memory?.options;
