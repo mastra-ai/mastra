@@ -1197,30 +1197,53 @@ function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boo
 /**
  * Extract checks array from Zod schema, compatible with both Zod 3 and Zod 4.
  * Zod 3 uses _def.checks with {kind: "..."} objects
- * Zod 4 uses _zod.def.checks with {def: {check: "..."}} objects
+ * Zod 4 uses _zod.def.checks with {def: {check: "...", format: "..."}} objects
  */
 function getZodChecks(schema: z.ZodTypeAny): Array<{ kind: string }> {
-  const schemaAny = schema as any;
-
   // Zod 4 structure: checks have def.check instead of kind
-  if (schemaAny._zod?.def?.checks && Array.isArray(schemaAny._zod.def.checks)) {
-    return schemaAny._zod.def.checks.map((check: any) => {
-      // For number checks in Zod 4, format:"safeint" means int()
-      if (check.def?.check === 'number_format' && check.def?.format === 'safeint') {
-        return { kind: 'int' };
-      }
-      // For string checks in Zod 4, check type is the format name
-      if (check.def?.check === 'string_format') {
-        return { kind: check.def.format }; // e.g., "uuid", "email", etc.
-      }
-      // Generic mapping: use the check type as kind
-      return { kind: check.def?.check || check.kind || 'unknown' };
-    });
+  if ('_zod' in schema) {
+    const zodV4 = schema as { _zod?: { def?: { checks?: unknown[] } } };
+    const checks = zodV4._zod?.def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks.map((check: unknown) => {
+        // Type guard for Zod v4 check structure
+        if (
+          typeof check === 'object' &&
+          check !== null &&
+          'def' in check &&
+          typeof check.def === 'object' &&
+          check.def !== null
+        ) {
+          const def = check.def as Record<string, unknown>;
+
+          // For number checks in Zod 4, format:"safeint" means int()
+          if (def.check === 'number_format' && def.format === 'safeint') {
+            return { kind: 'int' };
+          }
+
+          // For string checks in Zod 4, check type is the format name
+          if (def.check === 'string_format' && typeof def.format === 'string') {
+            return { kind: def.format }; // e.g., "uuid", "email", etc.
+          }
+
+          // Generic mapping: use the check type as kind
+          return { kind: typeof def.check === 'string' ? def.check : 'unknown' };
+        }
+
+        return { kind: 'unknown' };
+      });
+    }
   }
 
   // Zod 3 structure: checks already have kind property
-  if (schemaAny._def?.checks && Array.isArray(schemaAny._def.checks)) {
-    return schemaAny._def.checks;
+  if ('_def' in schema) {
+    const zodV3 = schema as { _def?: { checks?: Array<{ kind: string }> } };
+    const checks = zodV3._def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks;
+    }
   }
 
   return [];

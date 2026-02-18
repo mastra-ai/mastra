@@ -56,7 +56,20 @@ export function asJsonSchema(schema: StandardSchemaWithJSON | undefined): JSONSc
 
   // Handle StandardSchemaWithJSON
   if (isStandardSchemaWithJSON(schema)) {
-    return standardSchemaToJSONSchema(schema);
+    // Use 'input' IO mode to get the schema BEFORE transforms are applied
+    // This is critical for OpenAI compat transforms that add .transform()
+    // which can't be properly represented in JSON Schema
+    //
+    // Use 'draft-07' target for maximum compatibility with LLM providers
+    const jsonSchema = standardSchemaToJSONSchema(schema, { io: 'input', target: 'draft-07' });
+
+    // Ensure additionalProperties is set to false for OpenAI strict mode
+    // OpenAI requires this at the root level for structured outputs
+    if (jsonSchema.type === 'object' && !('additionalProperties' in jsonSchema)) {
+      jsonSchema.additionalProperties = false;
+    }
+
+    return jsonSchema;
   }
 
   return undefined;

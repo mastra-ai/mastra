@@ -222,28 +222,27 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       await result.consumeStream();
 
       expect(tools).toMatchInlineSnapshot(`
-            [
-              {
-                "description": undefined,
-                "inputSchema": {
-                  "$schema": "http://json-schema.org/draft-07/schema#",
-                  "additionalProperties": false,
-                  "properties": {
-                    "value": {
-                      "type": "string",
-                    },
-                  },
-                  "required": [
-                    "value",
-                  ],
-                  "type": "object",
+        [
+          {
+            "description": undefined,
+            "inputSchema": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "properties": {
+                "value": {
+                  "type": "string",
                 },
-                "name": "tool1",
-                "providerOptions": undefined,
-                "type": "function",
               },
-            ]
-          `);
+              "required": [
+                "value",
+              ],
+              "type": "object",
+            },
+            "name": "tool1",
+            "providerOptions": undefined,
+            "type": "function",
+          },
+        ]
+      `);
     });
   });
 
@@ -386,7 +385,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "description": undefined,
                   "inputSchema": {
                     "$schema": "http://json-schema.org/draft-07/schema#",
-                    "additionalProperties": false,
                     "properties": {
                       "value": {
                         "type": "string",
@@ -459,7 +457,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "description": undefined,
                   "inputSchema": {
                     "$schema": "http://json-schema.org/draft-07/schema#",
-                    "additionalProperties": false,
                     "properties": {
                       "value": {
                         "type": "string",

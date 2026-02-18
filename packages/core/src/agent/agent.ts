@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
-import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
+import { applyOpenAICompatTransforms } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
@@ -3218,8 +3218,9 @@ export class Agent<
 
     const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
 
-    // Apply OpenAI schema compatibility layer automatically for OpenAI models
-    // In direct mode, use the main model; in processor mode, use structuredOutput.model
+    // Apply OpenAI schema compatibility layer for structured output
+    // The schema is already StandardSchemaWithJSON (converted at API boundary in generate/stream)
+    // but may need OpenAI-specific transforms for optional fields
     if ('structuredOutput' in options && options.structuredOutput?.schema) {
       let structuredOutputModel = llm.getModel();
       if (options.structuredOutput?.model) {
@@ -3231,36 +3232,20 @@ export class Agent<
 
       const targetProvider = structuredOutputModel.provider;
       const targetModelId = structuredOutputModel.modelId;
-      // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
-      // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
-      // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
+      // Only apply OpenAI compat transforms for OpenAI models
       if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
-        if (isZodType(options.structuredOutput.schema) && targetModelId) {
-          const modelInfo: ModelInformation = {
-            provider: targetProvider,
-            modelId: targetModelId,
-            supportsStructuredOutputs: false, // Set to false to enable transform
-          };
+        const modelInfo: ModelInformation = {
+          provider: targetProvider,
+          modelId: targetModelId,
+          supportsStructuredOutputs: false, // Set to false to enable transform
+        };
 
-          const isReasoningModel = /^o[1-5]/.test(targetModelId);
-          const compatLayer = isReasoningModel
-            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
-            : new OpenAISchemaCompatLayer(modelInfo);
-
-          // processZodType only works with Zod schemas - skip if schema is not a Zod type
-          // The schema may be a StandardSchemaWithJSON that wraps a Zod type (preserving Zod methods via prototype)
-          const schema = options.structuredOutput.schema;
-          if (compatLayer.shouldApply() && schema && isZodType(schema)) {
-            // Process the Zod schema for OpenAI compatibility, then re-wrap as StandardSchemaWithJSON
-            // Type casts are needed because:
-            // 1. processZodType has overloads for Zod v3/v4 that don't fully overlap with StandardSchemaWithJSON
-            // 2. toStandardSchema returns StandardSchemaWithJSON<unknown> but we need to preserve OUTPUT type
-            const processedZodSchema = (compatLayer.processZodType as (s: any) => any)(schema);
-            options.structuredOutput.schema = toStandardSchema(
-              processedZodSchema,
-            ) as typeof options.structuredOutput.schema;
-          }
-        }
+        // Apply OpenAI compat transforms (unwraps StandardSchemaWithJSON, processes, re-wraps)
+        // For OpenAI models, this converts .optional() → .nullable().transform() for compatibility
+        options.structuredOutput.schema = applyOpenAICompatTransforms(
+          options.structuredOutput.schema,
+          modelInfo,
+        ) as typeof options.structuredOutput.schema;
       }
     }
 
@@ -3814,6 +3799,8 @@ export class Agent<
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
+            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+            // This follows the same pattern as Tool/Workflow constructors
             schema: toStandardSchema(mergedOptions.structuredOutput.schema),
           }
         : undefined,
@@ -3919,6 +3906,8 @@ export class Agent<
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
+            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+            // This follows the same pattern as Tool/Workflow constructors
             schema: toStandardSchema(mergedOptions.structuredOutput.schema),
           }
         : undefined,

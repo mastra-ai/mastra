@@ -60,12 +60,15 @@ export async function validateStepInput({
 
     if (!validatedInput.success) {
       const errorMessages = validatedInput.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new MastraError({
-        id: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-        text: 'Step input validation failed: \n' + errorMessages,
-      });
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step input validation failed: \n' + errorMessages,
+        },
+        { issues: validatedInput.issues },
+      );
     } else {
       const isEmptyData = isEmpty(validatedInput.data);
       inputData = isEmptyData ? prevOutput : validatedInput.data;

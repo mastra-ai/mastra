@@ -1,5 +1,6 @@
 import { TransformStream } from 'node:stream/web';
-import { isDeepEqualData, parsePartialJson } from '@internal/ai-sdk-v5';
+import { isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
+import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
 import { isZodType } from '@mastra/schema-compat';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
@@ -8,6 +9,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { StandardSchemaWithJSON } from '../../schema/schema';
 import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
+import { safeValidateTypes } from '../aisdk/v5/compat';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
@@ -161,32 +163,68 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
       };
     }
 
-    // Use StandardSchemaWithJSON's validate method
-    try {
-      const result = await this.schema['~standard'].validate(value);
+    if (this.isZodSchema(this.schema)) {
+      // Use Standard Schema for consistent error message format + safeParse for ZodError cause
+      try {
+        const ssResult = await this.schema['~standard'].validate(value);
 
-      // Check if validation succeeded (no issues)
-      if (!result.issues) {
+        if (!ssResult.issues) {
+          return {
+            success: true,
+            value: ssResult.value as OUTPUT,
+          };
+        }
+
+        // Format error message from Standard Schema issues
+        const errorMessages = ssResult.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+
+        // Also use safeParse to get ZodError as cause (for backward compatibility with tests)
+        const zodResult = this.schema.safeParse(value);
+        const zodError = !zodResult.success ? zodResult.error : undefined;
+
         return {
-          success: true,
-          value: result.value as OUTPUT,
+          success: false,
+          error: new MastraError(
+            {
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.SYSTEM,
+              id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
+              text: `Structured output validation failed: ${errorMessages}`,
+              details: {
+                value: typeof value === 'object' ? JSON.stringify(value) : String(value),
+              },
+            },
+            zodError,
+          ),
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error : new Error('Zod validation failed', { cause: error }),
         };
       }
+    }
 
-      // Validation failed - convert issues to error
-      const errorMessages = result.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
-      return {
-        success: false,
-        error: new MastraError({
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.SYSTEM,
-          id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-          text: `Structured output validation failed: ${errorMessages}`,
-          details: {
-            value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-          },
-        }),
-      };
+    // For non-Zod schemas: plain JSONSchema7 or AI SDK Schema
+    try {
+      if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
+        // Plain JSONSchema7 object - wrap it using jsonSchema()
+        const result = await safeValidateTypes({ value, schema: jsonSchema(this.schema as JSONSchema7) });
+        return result as ValidationResult<OUTPUT>;
+      } else if ((this.schema as Schema<any>).jsonSchema) {
+        // Already an AI SDK Schema - use it directly
+        const result = await safeValidateTypes({
+          value,
+          schema: this.schema as Schema<OUTPUT>,
+        });
+        return result;
+      } else {
+        // Should not reach here, but handle as fallback
+        return {
+          success: true,
+          value: value as OUTPUT,
+        };
+      }
     } catch (error) {
       return {
         success: false,
