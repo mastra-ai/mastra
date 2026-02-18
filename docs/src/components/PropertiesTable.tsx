@@ -5,6 +5,7 @@ interface Parameter {
   type: string
   isOptional?: boolean
   description: string
+  properties?: Property[]
 }
 
 interface Property {
@@ -55,6 +56,7 @@ const PropertiesTable: React.FC<PropertiesTableProps> = ({ content = [] }) => {
                         </div>
                       </div>
                       <div className="text-sm leading-5 text-(--ifm-color-emphasis-700)">{param.description}</div>
+                      {renderType({ properties: param.properties })}
                     </div>
                   ))}
               </div>
