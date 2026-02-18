@@ -73,7 +73,9 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * @param args.filters - Optional filters to scope which workflow runs are deleted
    * @returns The number of workflow runs deleted
    */
-  async deleteWorkflowRunsOlderThan(_args: DeleteWorkflowRunsOlderThanArgs): Promise<DeleteWorkflowRunsOlderThanResponse> {
+  async deleteWorkflowRunsOlderThan(
+    _args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
     throw new MastraError({
       id: 'WORKFLOWS_STORAGE_DELETE_RUNS_OLDER_THAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.STORAGE,

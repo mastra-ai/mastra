@@ -293,8 +293,12 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
 
       expect(result.deletedCount).toBe(1);
-      expect(await workflowsStorage.getWorkflowRunById({ runId: oldRun.runId, workflowName: 'test-workflow' })).toBeNull();
-      expect(await workflowsStorage.getWorkflowRunById({ runId: recentRun.runId, workflowName: 'test-workflow' })).not.toBeNull();
+      expect(
+        await workflowsStorage.getWorkflowRunById({ runId: oldRun.runId, workflowName: 'test-workflow' }),
+      ).toBeNull();
+      expect(
+        await workflowsStorage.getWorkflowRunById({ runId: recentRun.runId, workflowName: 'test-workflow' }),
+      ).not.toBeNull();
     });
 
     it('should filter by workflowName', async () => {
@@ -323,7 +327,9 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
 
       expect(result.deletedCount).toBe(1);
       expect(await workflowsStorage.getWorkflowRunById({ runId: run1.runId, workflowName: 'workflow-a' })).toBeNull();
-      expect(await workflowsStorage.getWorkflowRunById({ runId: run2.runId, workflowName: 'workflow-b' })).not.toBeNull();
+      expect(
+        await workflowsStorage.getWorkflowRunById({ runId: run2.runId, workflowName: 'workflow-b' }),
+      ).not.toBeNull();
     });
 
     it('should filter by status', async () => {
@@ -351,8 +357,12 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
 
       expect(result.deletedCount).toBe(1);
-      expect(await workflowsStorage.getWorkflowRunById({ runId: completedRun.runId, workflowName: 'test-workflow' })).toBeNull();
-      expect(await workflowsStorage.getWorkflowRunById({ runId: failedRun.runId, workflowName: 'test-workflow' })).not.toBeNull();
+      expect(
+        await workflowsStorage.getWorkflowRunById({ runId: completedRun.runId, workflowName: 'test-workflow' }),
+      ).toBeNull();
+      expect(
+        await workflowsStorage.getWorkflowRunById({ runId: failedRun.runId, workflowName: 'test-workflow' }),
+      ).not.toBeNull();
     });
 
     it('should filter by resourceId', async () => {
@@ -382,8 +392,12 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
 
       expect(result.deletedCount).toBe(1);
-      expect(await workflowsStorage.getWorkflowRunById({ runId: run1.runId, workflowName: 'test-workflow' })).toBeNull();
-      expect(await workflowsStorage.getWorkflowRunById({ runId: run2.runId, workflowName: 'test-workflow' })).not.toBeNull();
+      expect(
+        await workflowsStorage.getWorkflowRunById({ runId: run1.runId, workflowName: 'test-workflow' }),
+      ).toBeNull();
+      expect(
+        await workflowsStorage.getWorkflowRunById({ runId: run2.runId, workflowName: 'test-workflow' }),
+      ).not.toBeNull();
     });
 
     it('should return zero when no runs match', async () => {

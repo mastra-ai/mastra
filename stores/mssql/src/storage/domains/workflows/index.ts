@@ -461,7 +461,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
-  async deleteWorkflowRunsOlderThan(args: DeleteWorkflowRunsOlderThanArgs): Promise<DeleteWorkflowRunsOlderThanResponse> {
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();
     try {

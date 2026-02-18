@@ -449,9 +449,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       it('should not delete traces newer than beforeDate', async () => {
         // Create traces - all will get createdAt = now
         await observabilityStorage.batchCreateSpans({
-          records: [
-            createSpan({ traceId: 'recent-trace', spanId: 'recent-root' }),
-          ],
+          records: [createSpan({ traceId: 'recent-trace', spanId: 'recent-root' })],
         });
 
         // Delete with beforeDate in the past - should delete nothing

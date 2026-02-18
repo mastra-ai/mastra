@@ -458,7 +458,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       // Check optional filters
       if (args.filters?.entityType !== undefined && rootSpan.entityType !== args.filters.entityType) continue;
       if (args.filters?.entityId !== undefined && rootSpan.entityId !== args.filters.entityId) continue;
-      if (args.filters?.organizationId !== undefined && rootSpan.organizationId !== args.filters.organizationId) continue;
+      if (args.filters?.organizationId !== undefined && rootSpan.organizationId !== args.filters.organizationId)
+        continue;
       if (args.filters?.environment !== undefined && rootSpan.environment !== args.filters.environment) continue;
 
       traceIdsToDelete.push(traceId);

@@ -346,7 +346,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }, 'deleteWorkflowRunById');
   }
 
-  async deleteWorkflowRunsOlderThan(args: DeleteWorkflowRunsOlderThanArgs): Promise<DeleteWorkflowRunsOlderThanResponse> {
+  async deleteWorkflowRunsOlderThan(
+    args: DeleteWorkflowRunsOlderThanArgs,
+  ): Promise<DeleteWorkflowRunsOlderThanResponse> {
     return this.executeWithRetry(async () => {
       try {
         const params: InValue[] = [args.beforeDate.toISOString()];

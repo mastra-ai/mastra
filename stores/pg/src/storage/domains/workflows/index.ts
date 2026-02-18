@@ -362,9 +362,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           conditions.push(`"resourceId" = $${paramIndex++}`);
           params.push(args.filters.resourceId);
         } else {
-          this.logger?.warn?.(
-            `[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`,
-          );
+          this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
