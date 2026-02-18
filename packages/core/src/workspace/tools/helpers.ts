@@ -149,7 +149,8 @@ export async function getEditDiagnosticsText(
     // Truncate to ~500 tokens (~2000 chars) to avoid bloating tool output
     const maxChars = 2000;
     if (result.length > maxChars) {
-      result = result.slice(0, maxChars) + '\n  ... (truncated)';
+      const cutoff = result.lastIndexOf('\n', maxChars);
+      result = result.slice(0, cutoff > 0 ? cutoff : maxChars) + '\n  ... (truncated)';
     }
 
     return result;

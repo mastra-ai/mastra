@@ -348,10 +348,7 @@ export function patternReplace(content: string, root: any, pattern: string, repl
       modifiedContent = modifiedContent.slice(0, start) + text + modifiedContent.slice(end);
     }
   } catch {
-    // Fallback to simple string replacement if pattern matching fails
-    const regex = new RegExp(pattern.replace(/\$\w+/g, '(.+)'), 'g');
-    modifiedContent = content.replace(regex, replacement);
-    count = (content.match(regex) || []).length;
+    // AST pattern matching failed — don't fall back to regex (unsafe + surprising)
   }
 
   return { content: modifiedContent, count };
