@@ -1,23 +1,28 @@
-import { useMemo } from 'react';
-import { Controller, useWatch } from 'react-hook-form';
+import { useMemo, useState } from 'react';
+import { useWatch } from 'react-hook-form';
 
-import { EntityAccordionItem, SectionHeader } from '@/domains/cms';
+import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { WorkflowIcon } from '@/ds/icons';
-import { MultiCombobox } from '@/ds/components/Combobox';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Section } from '@/ds/components/Section';
+import { SubSectionRoot } from '@/ds/components/Section/section-root';
+import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
+import { EntityName, EntityDescription, EntityContent, Entity } from '@/ds/components/Entity';
+import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/lib/utils';
+import { Searchbar } from '@/ds/components/Searchbar';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import type { RuleGroup } from '@/lib/rule-engine';
-import type { EntityConfig } from '../../components/agent-edit-page/utils/form-validation';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const { data: workflows, isLoading } = useWorkflows();
+  const { data: workflows } = useWorkflows();
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
   const variables = useWatch({ control, name: 'variables' });
-  const count = Object.keys(selectedWorkflows || {}).length;
+  const [search, setSearch] = useState('');
 
   const options = useMemo(() => {
     if (!workflows) return [];
@@ -28,93 +33,111 @@ export function WorkflowsPage() {
     }));
   }, [workflows]);
 
+  const selectedWorkflowIds = Object.keys(selectedWorkflows || {});
+  const count = selectedWorkflowIds.length;
+
   const getOriginalDescription = (id: string): string => {
     const option = options.find(opt => opt.value === id);
     return option?.description || '';
   };
 
+  const handleValueChange = (workflowId: string) => {
+    const isSet = selectedWorkflows?.[workflowId] !== undefined;
+    if (isSet) {
+      const next = { ...selectedWorkflows };
+      delete next[workflowId];
+      form.setValue('workflows', next);
+    } else {
+      form.setValue('workflows', {
+        ...selectedWorkflows,
+        [workflowId]: { ...selectedWorkflows?.[workflowId], description: getOriginalDescription(workflowId) },
+      });
+    }
+  };
+
+  const handleDescriptionChange = (workflowId: string, description: string) => {
+    form.setValue('workflows', {
+      ...selectedWorkflows,
+      [workflowId]: { ...selectedWorkflows?.[workflowId], description },
+    });
+  };
+
+  const handleRulesChange = (workflowId: string, rules: RuleGroup | undefined) => {
+    form.setValue('workflows', {
+      ...selectedWorkflows,
+      [workflowId]: { ...selectedWorkflows?.[workflowId], rules },
+    });
+  };
+
+  const filteredOptions = useMemo(() => {
+    return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
   return (
     <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 p-4">
+      <div className="flex flex-col gap-6">
         <SectionHeader
           title="Workflows"
           subtitle={`Select workflows this agent can trigger.${count > 0 ? ` (${count} selected)` : ''}`}
-          icon={<WorkflowIcon className="text-accent3" />}
         />
 
-        <Controller
-          name="workflows"
-          control={control}
-          render={({ field }) => {
-            const selectedIds = Object.keys(field.value || {});
-            const selectedOptions = options.filter(opt => selectedIds.includes(opt.value));
+        <SubSectionRoot>
+          <Section.Header>
+            <SubSectionHeader title="Available Workflows" icon={<WorkflowIcon />} />
+          </Section.Header>
 
-            const handleValueChange = (newIds: string[]) => {
-              const newValue: Record<string, EntityConfig> = {};
-              for (const id of newIds) {
-                newValue[id] = field.value?.[id] || {
-                  description: getOriginalDescription(id),
-                };
-              }
-              field.onChange(newValue);
-            };
+          <Searchbar onSearch={setSearch} label="Search workflows" placeholder="Search workflows" />
 
-            const handleDescriptionChange = (workflowId: string, description: string) => {
-              field.onChange({
-                ...field.value,
-                [workflowId]: { ...field.value?.[workflowId], description },
-              });
-            };
+          {filteredOptions.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {filteredOptions.map(workflow => {
+                const isSelected = selectedWorkflowIds.includes(workflow.value);
 
-            const handleRemove = (workflowId: string) => {
-              const newValue = { ...field.value };
-              delete newValue[workflowId];
-              field.onChange(newValue);
-            };
+                const isDisabled = readOnly || !isSelected;
 
-            const handleRulesChange = (workflowId: string, rules: RuleGroup | undefined) => {
-              field.onChange({
-                ...field.value,
-                [workflowId]: { ...field.value?.[workflowId], rules },
-              });
-            };
+                return (
+                  <Entity key={workflow.value} className="bg-surface2">
+                    <EntityContent>
+                      <EntityName>{workflow.label}</EntityName>
+                      <EntityDescription>
+                        <input
+                          type="text"
+                          disabled={isDisabled}
+                          className={cn(
+                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                            !isDisabled && 'border-border1 border-dashed ',
+                          )}
+                          value={
+                            isSelected
+                              ? (selectedWorkflows?.[workflow.value]?.description ?? workflow.description)
+                              : workflow.description
+                          }
+                          onChange={e => handleDescriptionChange(workflow.value, e.target.value)}
+                        />
+                      </EntityDescription>
+                    </EntityContent>
 
-            return (
-              <div className="flex flex-col gap-2">
-                <MultiCombobox
-                  options={options}
-                  value={selectedIds}
-                  onValueChange={handleValueChange}
-                  placeholder="Select workflows..."
-                  searchPlaceholder="Search workflows..."
-                  emptyText="No workflows available"
-                  disabled={isLoading || readOnly}
-                  variant="light"
-                />
-                {selectedOptions.length > 0 && (
-                  <div className="flex flex-col gap-3 mt-2">
-                    {selectedOptions.map(workflow => (
-                      <EntityAccordionItem
-                        key={workflow.value}
-                        id={workflow.value}
-                        name={workflow.label}
-                        icon={<WorkflowIcon className="text-accent3" />}
-                        description={field.value?.[workflow.value]?.description || ''}
-                        onDescriptionChange={
-                          readOnly ? undefined : desc => handleDescriptionChange(workflow.value, desc)
-                        }
-                        onRemove={readOnly ? undefined : () => handleRemove(workflow.value)}
+                    {isSelected && !readOnly && (
+                      <DisplayConditionsDialog
+                        entityName={workflow.label}
                         schema={variables}
-                        rules={field.value?.[workflow.value]?.rules || undefined}
-                        onRulesChange={readOnly ? undefined : rules => handleRulesChange(workflow.value, rules)}
+                        rules={selectedWorkflows?.[workflow.value]?.rules}
+                        onRulesChange={rules => handleRulesChange(workflow.value, rules)}
                       />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }}
-        />
+                    )}
+
+                    {!readOnly && (
+                      <Switch
+                        checked={selectedWorkflowIds.includes(workflow.value)}
+                        onCheckedChange={() => handleValueChange(workflow.value)}
+                      />
+                    )}
+                  </Entity>
+                );
+              })}
+            </div>
+          )}
+        </SubSectionRoot>
       </div>
     </ScrollArea>
   );
