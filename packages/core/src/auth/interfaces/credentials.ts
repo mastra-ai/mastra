@@ -8,7 +8,7 @@ import type { EEUser } from './user';
 /**
  * Result of a successful credentials operation.
  */
-export interface CredentialsResult<TUser extends EEUser = EEUser> {
+export interface CredentialsResult<TUser = EEUser> {
   /** The authenticated user */
   user: TUser;
   /** Optional session token */

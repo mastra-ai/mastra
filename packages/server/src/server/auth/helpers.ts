@@ -122,6 +122,12 @@ export const isCustomRoutePublic = (
   return false;
 };
 
+// NOTE: This uses isProtectedCustomRoute (default-allow for unknown paths) rather than
+// !isCustomRoutePublic (default-deny). This is intentional — all registered server and
+// custom routes are auth-checked via registerRoute/checkRouteAuth regardless of this
+// function. The '/api/*' protected pattern exists as a user-facing override mechanism.
+// The old default-deny logic incorrectly blocked non-API paths (e.g. '/', '/agents')
+// which prevented the studio login page from loading in production.
 export const isProtectedPath = (
   path: string,
   method: string,
