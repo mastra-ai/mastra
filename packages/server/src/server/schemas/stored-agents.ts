@@ -1,7 +1,8 @@
 import z from 'zod';
-import { paginationInfoSchema, createPagePaginationSchema } from './common';
+import { paginationInfoSchema, createPagePaginationSchema, statusQuerySchema } from './common';
 import { defaultOptionsSchema } from './default-options';
 import { serializedMemoryConfigSchema } from './memory-config';
+import { ruleGroupSchema } from './rule-group';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -26,11 +27,18 @@ const storageOrderBySchema = z.object({
   direction: z.enum(['ASC', 'DESC']).optional(),
 });
 
+export { statusQuerySchema };
+
 /**
  * GET /stored/agents - List stored agents
  */
 export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).extend({
   orderBy: storageOrderBySchema.optional(),
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Filter agents by status (defaults to published)'),
   authorId: z.string().optional().describe('Filter agents by author identifier'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Filter agents by metadata key-value pairs'),
 });
@@ -40,56 +48,17 @@ export const listStoredAgentsQuerySchema = createPagePaginationSchema(100).exten
 // ============================================================================
 
 /**
- * Scorer config schema with optional sampling
+ * Scorer config schema with optional sampling and rules
  */
 const scorerConfigSchema = z.object({
+  description: z.string().optional(),
   sampling: z
     .union([
       z.object({ type: z.literal('none') }),
       z.object({ type: z.literal('ratio'), rate: z.number().min(0).max(1) }),
     ])
     .optional(),
-});
-
-/**
- * Rule and RuleGroup schemas for conditional prompt block evaluation.
- */
-const ruleSchema = z.object({
-  field: z.string(),
-  operator: z.enum([
-    'equals',
-    'not_equals',
-    'contains',
-    'not_contains',
-    'greater_than',
-    'less_than',
-    'greater_than_or_equal',
-    'less_than_or_equal',
-    'in',
-    'not_in',
-    'exists',
-    'not_exists',
-  ]),
-  value: z.unknown().optional(),
-});
-
-/**
- * Rule group schema with a fixed nesting depth (3 levels) to avoid
- * infinite recursion when converting to JSON Schema / OpenAPI.
- */
-const ruleGroupDepth2 = z.object({
-  operator: z.enum(['AND', 'OR']),
-  conditions: z.array(ruleSchema),
-});
-
-const ruleGroupDepth1 = z.object({
-  operator: z.enum(['AND', 'OR']),
-  conditions: z.array(z.union([ruleSchema, ruleGroupDepth2])),
-});
-
-const ruleGroupSchema = z.object({
-  operator: z.enum(['AND', 'OR']),
-  conditions: z.array(z.union([ruleSchema, ruleGroupDepth1])),
+  rules: ruleGroupSchema.optional(),
 });
 
 /**
@@ -128,8 +97,16 @@ const modelConfigSchema = z
   })
   .passthrough();
 
+/** Per-tool config schema */
+const toolConfigSchema = z.object({ description: z.string().optional(), rules: ruleGroupSchema.optional() });
+
 /** Base tools config schema */
-const toolsConfigSchema = z.record(z.string(), z.object({ description: z.string().optional() }));
+const toolsConfigSchema = z.record(z.string(), toolConfigSchema);
+
+/** MCP client tools config schema — specifies which tools to use from an MCP client/server */
+const mcpClientToolsConfigSchema = z.object({
+  tools: z.record(z.string(), toolConfigSchema).optional(),
+});
 
 /**
  * Agent snapshot config fields (name, description, instructions, model, tools, etc.)
@@ -151,16 +128,18 @@ const snapshotConfigSchema = z.object({
   defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
     .optional()
     .describe('Default options for generate/stream calls — static or conditional'),
-  workflows: conditionalFieldSchema(z.array(z.string()))
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of workflow keys — static or conditional'),
-  agents: conditionalFieldSchema(z.array(z.string()))
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of agent keys — static or conditional'),
-  integrationTools: z
-    .array(z.string())
+    .describe('Agent keys with optional per-agent config — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
   inputProcessors: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of processor keys — static or conditional'),
@@ -246,16 +225,18 @@ export const storedAgentSchema = z.object({
   defaultOptions: conditionalFieldSchema(defaultOptionsSchema)
     .optional()
     .describe('Default options for generate/stream calls — static or conditional'),
-  workflows: conditionalFieldSchema(z.array(z.string()))
+  workflows: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of workflow keys — static or conditional'),
-  agents: conditionalFieldSchema(z.array(z.string()))
+    .describe('Workflow keys with optional per-workflow config — static or conditional'),
+  agents: conditionalFieldSchema(z.record(z.string(), toolConfigSchema))
     .optional()
-    .describe('Array of agent keys — static or conditional'),
-  integrationTools: z
-    .array(z.string())
+    .describe('Agent keys with optional per-agent config — static or conditional'),
+  integrationTools: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
     .optional()
-    .describe('Array of specific integration tool IDs (format: provider_toolkitSlug_toolSlug)'),
+    .describe('Map of tool provider IDs to their tool configurations — static or conditional'),
+  mcpClients: conditionalFieldSchema(z.record(z.string(), mcpClientToolsConfigSchema))
+    .optional()
+    .describe('Map of stored MCP client IDs to their tool configurations — static or conditional'),
   inputProcessors: conditionalFieldSchema(z.array(z.string()))
     .optional()
     .describe('Array of processor keys — static or conditional'),
@@ -349,4 +330,11 @@ export const previewInstructionsResponseSchema = z.object({
 /**
  * Exported for use in agent-versions.ts schemas
  */
-export { snapshotConfigSchema, scorerConfigSchema, conditionalFieldSchema, modelConfigSchema, toolsConfigSchema };
+export {
+  snapshotConfigSchema,
+  scorerConfigSchema,
+  conditionalFieldSchema,
+  modelConfigSchema,
+  toolConfigSchema,
+  toolsConfigSchema,
+};

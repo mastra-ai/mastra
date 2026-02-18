@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { PostgresStore, PgVector } from '@mastra/pg';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { afterAll, describe, it, expect, beforeAll, beforeEach } from 'vitest';
 
 import { getResuableTests } from './reusable-tests';
 
@@ -37,6 +37,18 @@ const parseConnectionString = (url: string) => {
 export function getPgStorageTests(connectionString: string) {
   const config = parseConnectionString(connectionString);
 
+  // Limit pool size to avoid "too many clients" errors in tests
+  const poolLimits = { max: 2, idleTimeoutMillis: 5000 } as const;
+
+  // Track all stores/vectors created so we can close pools in afterAll
+  const storesToClose: PostgresStore[] = [];
+  const vectorsToClose: PgVector[] = [];
+
+  afterAll(async () => {
+    await Promise.allSettled(storesToClose.map(s => s.close()));
+    await Promise.allSettled(vectorsToClose.map(v => v.disconnect()));
+  });
+
   describe('PostgresStore stores initialization', () => {
     it('should have stores.memory available immediately after construction (without calling init)', () => {
       // This test verifies that PostgresStore initializes its stores property
@@ -45,7 +57,9 @@ export function getPgStorageTests(connectionString: string) {
       const storage = new PostgresStore({
         id: 'test-stores-init',
         ...config,
+        ...poolLimits,
       });
+      storesToClose.push(storage);
 
       // The stores.memory should be defined immediately after construction
       expect(storage.stores).toBeDefined();
@@ -55,13 +69,15 @@ export function getPgStorageTests(connectionString: string) {
     });
   });
 
+  const reusableStorage = new PostgresStore({ id: randomUUID(), ...config, ...poolLimits });
+  const reusableVector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+  storesToClose.push(reusableStorage);
+  vectorsToClose.push(reusableVector);
+
   getResuableTests(
     new Memory({
-      storage: new PostgresStore({
-        id: randomUUID(),
-        ...config,
-      }),
-      vector: new PgVector({ connectionString, id: 'test-vector' }),
+      storage: reusableStorage,
+      vector: reusableVector,
       embedder: fastembed,
       options: {
         lastMessages: 10,
@@ -74,13 +90,15 @@ export function getPgStorageTests(connectionString: string) {
     }),
   );
 
+  const integrationStorage = new PostgresStore({ id: randomUUID(), ...config, ...poolLimits });
+  const integrationVector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+  storesToClose.push(integrationStorage);
+  vectorsToClose.push(integrationVector);
+
   describe('Memory with PostgresStore Integration', () => {
     const memory = new Memory({
-      storage: new PostgresStore({
-        id: randomUUID(),
-        ...config,
-      }),
-      vector: new PgVector({ connectionString, id: 'test-vector' }),
+      storage: integrationStorage,
+      vector: integrationVector,
       embedder: fastembed,
       options: {
         lastMessages: 10,
@@ -505,9 +523,13 @@ export function getPgStorageTests(connectionString: string) {
 
     describe('PostgreSQL Vector Index Configuration', () => {
       it('should support HNSW index configuration', async () => {
+        const hnswStorage = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        const hnswVector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+        storesToClose.push(hnswStorage);
+        vectorsToClose.push(hnswVector);
         const hnswMemory = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: hnswStorage,
+          vector: hnswVector,
           embedder: fastembed,
           options: {
             lastMessages: 5,
@@ -561,9 +583,13 @@ export function getPgStorageTests(connectionString: string) {
       });
 
       it('should support IVFFlat index configuration with custom lists', async () => {
+        const ivfflatStorage = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        const ivfflatVector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+        storesToClose.push(ivfflatStorage);
+        vectorsToClose.push(ivfflatVector);
         const ivfflatMemory = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: ivfflatStorage,
+          vector: ivfflatVector,
           embedder: fastembed,
           options: {
             lastMessages: 5,
@@ -616,9 +642,13 @@ export function getPgStorageTests(connectionString: string) {
       });
 
       it('should support flat (no index) configuration', async () => {
+        const flatStorage = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        const flatVector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+        storesToClose.push(flatStorage);
+        vectorsToClose.push(flatVector);
         const flatMemory = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: flatStorage,
+          vector: flatVector,
           embedder: fastembed,
           options: {
             lastMessages: 5,
@@ -669,9 +699,13 @@ export function getPgStorageTests(connectionString: string) {
 
       it('should handle index configuration changes', async () => {
         // Start with IVFFlat
+        const changeStorage1 = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        const changeVector1 = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+        storesToClose.push(changeStorage1);
+        vectorsToClose.push(changeVector1);
         const memory1 = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: changeStorage1,
+          vector: changeVector1,
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -704,9 +738,13 @@ export function getPgStorageTests(connectionString: string) {
         });
 
         // Now switch to HNSW - should trigger index recreation
+        const changeStorage2 = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        const changeVector2 = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+        storesToClose.push(changeStorage2);
+        vectorsToClose.push(changeVector2);
         const memory2 = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: changeStorage2,
+          vector: changeVector2,
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -745,9 +783,13 @@ export function getPgStorageTests(connectionString: string) {
 
       it('should preserve existing index when no config provided', async () => {
         // First, create with HNSW
+        const preserveStorage1 = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        const preserveVector1 = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+        storesToClose.push(preserveStorage1);
+        vectorsToClose.push(preserveVector1);
         const memory1 = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: preserveStorage1,
+          vector: preserveVector1,
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -781,9 +823,13 @@ export function getPgStorageTests(connectionString: string) {
         });
 
         // Create another memory instance without index config - should preserve HNSW
+        const preserveStorage2 = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        const preserveVector2 = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
+        storesToClose.push(preserveStorage2);
+        vectorsToClose.push(preserveVector2);
         const memory2 = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: preserveStorage2,
+          vector: preserveVector2,
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -828,8 +874,10 @@ export function getPgStorageTests(connectionString: string) {
         //
         // This breaks conversation history for any thread that exceeds lastMessages.
 
+        const limitStorage = new PostgresStore({ ...config, id: randomUUID(), ...poolLimits });
+        storesToClose.push(limitStorage);
         const memoryWithLimit = new Memory({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
+          storage: limitStorage,
           options: {
             lastMessages: 3, // Limit to 3 messages
           },

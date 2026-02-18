@@ -63,7 +63,7 @@ import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
-import type { Workspace } from '../workspace';
+import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -160,7 +160,7 @@ export class Agent<
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: MastraVoice;
-  #workspace?: DynamicArgument<Workspace | undefined>;
+  #workspace?: DynamicArgument<AnyWorkspace | undefined>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -866,7 +866,7 @@ export class Agent<
    */
   public async getWorkspace({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Workspace | undefined> {
+  }: { requestContext?: RequestContext } = {}): Promise<AnyWorkspace | undefined> {
     // If agent has its own workspace configured, use it
     if (this.#workspace) {
       if (typeof this.#workspace !== 'function') {
@@ -2305,6 +2305,12 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            // Save the parent agent's MastraMemory before the sub-agent runs.
+            // The sub-agent's prepare-memory-step will overwrite this key with
+            // its own thread/resource identity. We restore it after the sub-agent
+            // returns so the parent's processors (OM, working memory, etc.) still
+            // see the correct context on subsequent steps.
+            const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               this.logger.debug(`[Agent:${this.name}] - Executing agent as tool ${agentName}`, {
                 name: agentName,
@@ -2345,14 +2351,6 @@ export class Agent<
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
-
-                // const x = agent.generate(' yo', [
-                //   structuredOutput: {
-                //     schema: z.object({
-                //       text: z.string(),
-                //     }),
-                //   },
-                // ]);
 
                 const generateResult = resumeData
                   ? await agent.resumeGenerate(resumeData, {
@@ -2506,8 +2504,19 @@ export class Agent<
                 result = { text: fullText };
               }
 
+              // Restore the parent agent's MastraMemory after sub-agent execution
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               return result;
             } catch (err) {
+              // Restore even on error so the parent's retry/fallback logic
+              // sees the correct memory context
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',

@@ -47,7 +47,7 @@
     "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",
-    "hono": "^4.11.3",
+    "hono": "^4.11.9",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",

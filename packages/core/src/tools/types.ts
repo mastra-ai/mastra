@@ -96,6 +96,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions & {
    * per-step via prepareStep.
    */
   workspace?: Workspace;
+  /**
+   * Request context for tool execution. When provided at execution time, this overrides
+   * any requestContext configured at tool build time. Allows workflow steps to forward
+   * their requestContext (e.g., authenticated API clients, feature flags) to tools.
+   */
+  requestContext?: RequestContext;
 };
 
 /**

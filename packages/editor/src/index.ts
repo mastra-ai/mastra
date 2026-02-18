@@ -1,8 +1,9 @@
-import { Mastra, IMastraEditor, MastraEditorConfig } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import type { IMastraEditor, MastraEditorConfig } from '@mastra/core/editor';
+import type { IMastraLogger as Logger } from '@mastra/core/logger';
+import type { ToolProvider } from '@mastra/core/tool-provider';
 
-import type { Logger } from '@mastra/core';
-
-import { EditorAgentNamespace, EditorPromptNamespace, EditorScorerNamespace } from './namespaces';
+import { EditorAgentNamespace, EditorMCPNamespace, EditorPromptNamespace, EditorScorerNamespace } from './namespaces';
 
 export type { MastraEditorConfig };
 
@@ -13,6 +14,7 @@ export {
   EditorNamespace,
   CrudEditorNamespace,
   EditorAgentNamespace,
+  EditorMCPNamespace,
   EditorPromptNamespace,
   EditorScorerNamespace,
 } from './namespaces';
@@ -24,13 +26,18 @@ export class MastraEditor implements IMastraEditor {
   /** @internal — exposed for namespace classes, not part of public API */
   __logger?: Logger;
 
+  private __toolProviders: Record<string, ToolProvider>;
+
   public readonly agent: EditorAgentNamespace;
+  public readonly mcp: EditorMCPNamespace;
   public readonly prompt: EditorPromptNamespace;
   public readonly scorer: EditorScorerNamespace;
 
   constructor(config?: MastraEditorConfig) {
     this.__logger = config?.logger;
+    this.__toolProviders = config?.toolProviders ?? {};
     this.agent = new EditorAgentNamespace(this);
+    this.mcp = new EditorMCPNamespace(this);
     this.prompt = new EditorPromptNamespace(this);
     this.scorer = new EditorScorerNamespace(this);
   }
@@ -44,5 +51,15 @@ export class MastraEditor implements IMastraEditor {
     if (!this.__logger) {
       this.__logger = mastra.getLogger();
     }
+  }
+
+  /** Registered tool providers */
+  getToolProvider(id: string): ToolProvider | undefined {
+    return this.__toolProviders[id];
+  }
+
+  /** List all registered tool providers */
+  getToolProviders(): Record<string, ToolProvider> {
+    return this.__toolProviders;
   }
 }

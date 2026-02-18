@@ -152,16 +152,16 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
 
   if (!ruleGroup) {
     return (
-      <div className={cn('border-t border-border1 bg-surface3 overflow-hidden', className)}>
-        <div className="p-2">
-          <Button type="button" onClick={handleAddFirstRule} variant="ghost" size="sm">
-            <Icon>
-              <Plus />
-            </Icon>
-            Add conditional rule
-          </Button>
-        </div>
-      </div>
+      <button
+        type="button"
+        onClick={handleAddFirstRule}
+        className="flex items-center justify-center gap-2 text-ui-sm text-neutral3 hover:text-neutral6 w-full border border-dashed border-border1 p-2 rounded-md"
+      >
+        <Icon>
+          <Plus />
+        </Icon>
+        Add conditional rule
+      </button>
     );
   }
 

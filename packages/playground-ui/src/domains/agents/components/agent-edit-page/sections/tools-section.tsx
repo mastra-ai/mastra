@@ -7,12 +7,8 @@ import { ToolsIcon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
-import type { AgentFormValues } from '../utils/form-validation';
+import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
-
-interface EntityConfig {
-  description?: string;
-}
 
 interface ToolsSectionProps {
   control: Control<AgentFormValues>;
@@ -44,7 +40,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
     <div className="rounded-md border border-border1 bg-surface2">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
-          <ChevronRight className="h-4 w-4 text-icon3" />
+          <ChevronRight className="h-4 w-4 text-neutral3" />
           <SectionTitle icon={<ToolsIcon className="text-accent6" />}>
             Tools{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
           </SectionTitle>

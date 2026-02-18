@@ -8,6 +8,7 @@ import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
+import { ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
 type AddToolMetadataOptions = {
@@ -222,7 +223,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       if (!tool) {
-        throw new Error(`Tool ${inputData.toolName} not found`);
+        const availableToolNames = Object.keys(stepTools || {});
+        const availableToolsStr =
+          availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
+        return {
+          error: new ToolNotFoundError(
+            `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+          ),
+          ...inputData,
+        };
       }
 
       if (tool && 'onInputAvailable' in tool) {
@@ -357,6 +366,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
           workspace: _internal?.stepWorkspace,
+          // Forward requestContext so tools receive values set by the workflow step
+          requestContext,
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
               controller.enqueue({

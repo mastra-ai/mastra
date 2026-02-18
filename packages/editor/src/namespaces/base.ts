@@ -1,4 +1,5 @@
-import type { Mastra, Logger } from '@mastra/core';
+import type { Mastra } from '@mastra/core';
+import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import type { GetByIdOptions } from '@mastra/core/editor';
 import type { MastraEditor } from '../index';
 

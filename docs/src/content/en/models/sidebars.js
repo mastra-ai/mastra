@@ -243,8 +243,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kilo',
+          label: 'Kilo Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kuae-cloud-coding-plan',
+          label: 'KUAE Cloud Coding Plan',
         },
         {
           type: 'doc',
@@ -390,6 +400,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun',
+          label: 'StepFun',
         },
         {
           type: 'doc',

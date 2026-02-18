@@ -91,30 +91,8 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       throw new Error(`Agent with id ${id} not found`);
     }
 
-    // Separate metadata fields from config fields
-    const { authorId, activeVersionId, metadata, ...configFields } = updates;
+    const { authorId, activeVersionId, metadata, status } = updates;
 
-    // Extract just the config field names from StorageAgentSnapshotType
-    const configFieldNames = [
-      'name',
-      'description',
-      'instructions',
-      'model',
-      'tools',
-      'defaultOptions',
-      'workflows',
-      'agents',
-      'integrationTools',
-      'inputProcessors',
-      'outputProcessors',
-      'memory',
-      'scorers',
-    ];
-
-    // Check if any config fields are present in the update
-    const hasConfigUpdate = configFieldNames.some(field => field in configFields);
-
-    // Update metadata fields on the agent record
     const updatedAgent: StorageAgentType = {
       ...existingAgent,
       ...(authorId !== undefined && { authorId }),
@@ -122,68 +100,10 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       ...(metadata !== undefined && {
         metadata: { ...existingAgent.metadata, ...metadata },
       }),
+      ...(status !== undefined && { status }),
       updatedAt: new Date(),
     };
 
-    // If activeVersionId is set, mark as published
-    if (activeVersionId !== undefined) {
-      updatedAgent.status = 'published';
-    }
-
-    // If config fields are being updated, create a new version
-    if (hasConfigUpdate) {
-      // Get the latest version to use as base
-      const latestVersion = await this.getLatestVersion(id);
-      if (!latestVersion) {
-        throw new Error(`No versions found for agent ${id}`);
-      }
-
-      // Extract config from latest version
-      const {
-        id: _versionId,
-        agentId: _agentId,
-        versionNumber: _versionNumber,
-        changedFields: _changedFields,
-        changeMessage: _changeMessage,
-        createdAt: _createdAt,
-        ...latestConfig
-      } = latestVersion;
-
-      // Merge updates into latest config
-      // Convert null values to undefined (null means "remove this field")
-      const sanitizedConfigFields = Object.fromEntries(
-        Object.entries(configFields).map(([key, value]) => [key, value === null ? undefined : value]),
-      );
-      const newConfig = {
-        ...latestConfig,
-        ...sanitizedConfigFields,
-      };
-
-      // Identify which fields changed
-      const changedFields = configFieldNames.filter(
-        field =>
-          field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-      );
-
-      // Only create a new version if something actually changed
-      if (changedFields.length > 0) {
-        const newVersionId = crypto.randomUUID();
-        const newVersionNumber = latestVersion.versionNumber + 1;
-
-        await this.createVersion({
-          id: newVersionId,
-          agentId: id,
-          versionNumber: newVersionNumber,
-          ...newConfig,
-          changedFields,
-          changeMessage: `Updated ${changedFields.join(', ')}`,
-        });
-      }
-    }
-
-    // Save the updated agent record
     this.db.agents.set(id, updatedAgent);
     return this.deepCopyAgent(updatedAgent);
   }
@@ -197,7 +117,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryAgentsStorage: list called`);
@@ -217,6 +137,9 @@ export class InMemoryAgentsStorage extends AgentsStorage {
 
     // Get all agents and apply filters
     let agents = Array.from(this.db.agents.values());
+
+    // Filter by status
+    agents = agents.filter(agent => agent.status === status);
 
     // Filter by authorId if provided
     if (authorId !== undefined) {

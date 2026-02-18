@@ -12,6 +12,8 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
@@ -544,5 +546,103 @@ describe('Koa Server Adapter', () => {
     applyMiddleware: (app, middleware) => {
       app.use(middleware);
     },
+  });
+
+  describe('Custom API Routes (registerApiRoute)', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should register and respond to custom API routes added via registerApiRoute', async () => {
+      // This reproduces the bug reported by users: custom API routes registered via
+      // registerApiRoute() are silently ignored by non-Hono server adapters.
+      // They show up in the OpenAPI spec but return 404.
+      const customRoutes = [
+        registerApiRoute('/hello', {
+          method: 'GET',
+          handler: async c => {
+            return c.json({ message: 'Hello from custom route!' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      // Start server
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      // Request the custom route
+      const response = await fetch(`http://localhost:${port}/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
+    });
+
+    it('should register custom API routes with POST method', async () => {
+      const customRoutes = [
+        registerApiRoute('/echo', {
+          method: 'POST',
+          handler: async c => {
+            const body = await c.req.json();
+            return c.json({ echo: body });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/echo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ echo: { test: 'data' } });
+    });
   });
 });

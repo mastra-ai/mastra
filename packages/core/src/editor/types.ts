@@ -23,10 +23,19 @@ import type {
   StorageListScorerDefinitionsOutput,
   StorageResolvedScorerDefinitionType,
   StorageListScorerDefinitionsResolvedOutput,
+  StorageCreateMCPClientInput,
+  StorageUpdateMCPClientInput,
+  StorageListMCPClientsInput,
+  StorageListMCPClientsOutput,
+  StorageResolvedMCPClientType,
+  StorageListMCPClientsResolvedOutput,
 } from '../storage/types';
+import type { ToolProvider } from '../tool-provider';
 
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
+  /** Tool providers for integration tools (e.g., Composio) */
+  toolProviders?: Record<string, ToolProvider>;
 }
 
 export interface GetByIdOptions {
@@ -91,12 +100,26 @@ export interface IEditorScorerNamespace {
 }
 
 // ============================================================================
+// MCP Config Namespace Interface
+// ============================================================================
+
+export interface IEditorMCPNamespace {
+  create(input: StorageCreateMCPClientInput): Promise<StorageResolvedMCPClientType>;
+  getById(id: string, options?: GetByIdOptions): Promise<StorageResolvedMCPClientType | null>;
+  update(input: StorageUpdateMCPClientInput): Promise<StorageResolvedMCPClientType>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput>;
+  listResolved(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsResolvedOutput>;
+  clearCache(id?: string): void;
+}
+
+// ============================================================================
 // Main Editor Interface
 // ============================================================================
 
 /**
- * Interface for the Mastra Editor, which handles agent, prompt, and scorer
- * management from stored data.
+ * Interface for the Mastra Editor, which handles agent, prompt, scorer,
+ * and MCP config management from stored data.
  */
 export interface IMastraEditor {
   /**
@@ -108,9 +131,17 @@ export interface IMastraEditor {
   /** Agent management namespace */
   readonly agent: IEditorAgentNamespace;
 
+  /** MCP config management namespace */
+  readonly mcp: IEditorMCPNamespace;
+
   /** Prompt block management namespace */
   readonly prompt: IEditorPromptNamespace;
 
   /** Scorer definition management namespace */
   readonly scorer: IEditorScorerNamespace;
+
+  /** Registered tool providers */
+  getToolProvider(id: string): ToolProvider | undefined;
+  /** List all registered tool providers */
+  getToolProviders(): Record<string, ToolProvider>;
 }

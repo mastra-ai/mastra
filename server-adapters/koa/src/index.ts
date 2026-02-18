@@ -150,7 +150,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = ctx.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -514,6 +514,23 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   private extractParamNames(path: string): string[] {
     const matches = path.match(/:[^/]+/g) || [];
     return matches.map(m => m.slice(1)); // Remove the leading ':'
+  }
+
+  async registerCustomApiRoutes(): Promise<void> {
+    if (!(await this.buildCustomRouteHandler())) return;
+
+    this.app.use(async (ctx: Context, next: Next) => {
+      const response = await this.handleCustomRouteRequest(
+        `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
+        ctx.method,
+        ctx.headers as Record<string, string | string[] | undefined>,
+        ctx.request.body,
+        ctx.state.requestContext,
+      );
+      if (!response) return next();
+      ctx.respond = false;
+      await this.writeCustomRouteResponse(response, ctx.res);
+    });
   }
 
   registerContextMiddleware(): void {

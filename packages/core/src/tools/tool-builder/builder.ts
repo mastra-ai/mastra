@@ -350,7 +350,7 @@ export class CoreToolBuilder extends MastraBase {
             mastra: wrappedMastra,
             memory: options.memory,
             runId: options.runId,
-            requestContext: options.requestContext ?? new RequestContext(),
+            requestContext: execOptions.requestContext ?? options.requestContext ?? new RequestContext(),
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
@@ -532,7 +532,7 @@ export class CoreToolBuilder extends MastraBase {
         );
         logger.trackException(mastraError);
         logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
-        return mastraError;
+        throw mastraError;
       }
     };
   }

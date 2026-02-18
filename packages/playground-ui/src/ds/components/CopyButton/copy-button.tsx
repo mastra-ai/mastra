@@ -8,6 +8,8 @@ import { Icon, IconProps } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 import { transitions } from '@/ds/primitives/transitions';
 import { focusRing } from '@/ds/primitives/transitions';
+import { Button, ButtonProps } from '../Button';
+import { B } from 'node_modules/vitest/dist/chunks/config.d.CzIjkicf';
 
 export type CopyButtonProps = {
   content: string;
@@ -15,6 +17,7 @@ export type CopyButtonProps = {
   tooltip?: string;
   className?: string;
   iconSize?: IconProps['size'];
+  size?: ButtonProps['size'];
 };
 
 export function CopyButton({
@@ -23,6 +26,7 @@ export function CopyButton({
   tooltip = 'Copy to clipboard',
   iconSize = 'default',
   className,
+  size = 'tiny',
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const { handleCopy: originalHandleCopy } = useCopyToClipboard({
@@ -39,18 +43,15 @@ export function CopyButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           onClick={handleCopy}
           type="button"
-          className={cn('rounded-lg p-1', transitions.all, focusRing.visible, 'hover:bg-surface4', className)}
+          //    className={cn('rounded-lg p-1', transitions.all, focusRing.visible, 'hover:bg-surface4', className)}
+          size={size}
+          variant="standard"
         >
-          <Icon
-            className={cn('text-neutral3', transitions.all, 'hover:text-neutral6', copied && 'text-accent1')}
-            size={iconSize}
-          >
-            {copied ? <CheckIcon /> : <CopyIcon />}
-          </Icon>
-        </button>
+          {copied ? <CheckIcon /> : <CopyIcon />}
+        </Button>
       </TooltipTrigger>
       <TooltipContent>{copied ? 'Copied!' : tooltip}</TooltipContent>
     </Tooltip>

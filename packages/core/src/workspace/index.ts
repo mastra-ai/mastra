@@ -67,6 +67,16 @@ export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from '
 // Constants
 export { WORKSPACE_TOOLS_PREFIX, WORKSPACE_TOOLS, type WorkspaceToolName } from './constants';
 
+// Glob Utilities
+export {
+  isGlobPattern,
+  extractGlobBase,
+  createGlobMatcher,
+  matchGlob,
+  type GlobMatcher,
+  type GlobMatcherOptions,
+} from './glob';
+
 // Skills
 export type {
   SkillFormat,

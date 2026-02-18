@@ -14,7 +14,11 @@ import type { PostgresStoreConfig } from '../shared/config';
 import { PoolAdapter } from './client';
 import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
+import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
+import { DatasetsPG } from './domains/datasets';
+import { ExperimentsPG } from './domains/experiments';
+import { MCPClientsPG } from './domains/mcp-clients';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { PromptBlocksPG } from './domains/prompt-blocks';
@@ -27,9 +31,55 @@ const DEFAULT_MAX_CONNECTIONS = 20;
 /** Default idle timeout in milliseconds */
 const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
-export { exportSchemas } from './db';
+/**
+ * All storage domain classes, in order. Each provides a static getExportDDL method
+ * that returns the complete DDL (tables, constraints, indexes, triggers) for that domain.
+ */
+const ALL_DOMAINS = [
+  MemoryPG,
+  ObservabilityPG,
+  ScoresPG,
+  ScorerDefinitionsPG,
+  PromptBlocksPG,
+  AgentsPG,
+  WorkflowsPG,
+  DatasetsPG,
+  ExperimentsPG,
+] as const;
+
+/**
+ * Exports the Mastra database schema as SQL DDL statements, including tables, indexes, and triggers.
+ * Does not require a database connection. Each domain class provides its own DDL contribution
+ * via a static getExportDDL method, ensuring a single source of truth.
+ */
+export function exportSchemas(schemaName?: string): string {
+  const statements: string[] = [];
+
+  if (schemaName) {
+    const quotedSchemaName = getSchemaName(schemaName);
+    statements.push(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName};`);
+    statements.push('');
+  }
+
+  for (const Domain of ALL_DOMAINS) {
+    statements.push(...Domain.getExportDDL(schemaName));
+  }
+
+  return statements.join('\n');
+}
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsPG, MemoryPG, ObservabilityPG, PromptBlocksPG, ScorerDefinitionsPG, ScoresPG, WorkflowsPG };
+export {
+  AgentsPG,
+  DatasetsPG,
+  ExperimentsPG,
+  MCPClientsPG,
+  MemoryPG,
+  ObservabilityPG,
+  PromptBlocksPG,
+  ScorerDefinitionsPG,
+  ScoresPG,
+  WorkflowsPG,
+};
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
@@ -98,6 +148,9 @@ export class PostgresStore extends MastraCompositeStore {
         agents: new AgentsPG(domainConfig),
         promptBlocks: new PromptBlocksPG(domainConfig),
         scorerDefinitions: new ScorerDefinitionsPG(domainConfig),
+        mcpClients: new MCPClientsPG(domainConfig),
+        datasets: new DatasetsPG(domainConfig),
+        experiments: new ExperimentsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(

@@ -46,7 +46,12 @@ export const AgentChat = ({
     }
   }, [messageId, data, isMessagesLoading]);
 
-  const messages = data?.messages ?? [];
+  // Stable empty array per thread: stays the same reference across re-renders
+  // (preventing useChat from wiping streamed messages), but changes when threadId
+  // changes (allowing useChat to reset when switching threads).
+  const emptyMessages = useMemo(() => [] as never[], [threadId]);
+
+  const messages = data?.messages ?? emptyMessages;
   const v5Messages = useMemo(() => toAISdkV5Messages(messages) as MastraUIMessage[], [messages]);
   const v4Messages = useMemo(() => toAISdkV4Messages(messages), [messages]);
 
