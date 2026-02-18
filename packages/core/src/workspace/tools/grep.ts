@@ -111,7 +111,7 @@ Usage:
             // Skip hidden files/dirs unless includeHidden is set
             if (!includeHidden && entry.name.startsWith('.')) continue;
 
-            const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+            const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
             if (entry.type === 'file') {
               // Skip non-text files
               if (!isTextFile(entry.name)) continue;

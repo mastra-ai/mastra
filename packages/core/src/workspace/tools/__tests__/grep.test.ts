@@ -345,4 +345,58 @@ describe('workspace_grep', () => {
     expect(result).toContain('.prettierrc.json');
     expect(result).not.toContain('tsconfig.json');
   });
+
+  it('should produce clean paths with default ./ root', async () => {
+    await fs.writeFile(path.join(tempDir, 'hello.ts'), 'findme');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({ pattern: 'findme' });
+
+    // Should be ./hello.ts, not .//hello.ts
+    expect(result).toContain('./hello.ts:1:');
+    expect(result).not.toContain('.//');
+  });
+
+  it('should support combined path + glob pattern', async () => {
+    await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'lib'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'src', 'app.ts'), 'target');
+    await fs.writeFile(path.join(tempDir, 'src', 'style.css'), 'target');
+    await fs.writeFile(path.join(tempDir, 'lib', 'util.ts'), 'target');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
+      pattern: 'target',
+      path: 'src/**/*.ts',
+    });
+
+    // Should only match .ts files under src/, not lib/ or .css
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('src/app.ts');
+    expect(result).not.toContain('style.css');
+    expect(result).not.toContain('lib/');
+  });
+
+  it('should truncate at internal global cap', async () => {
+    // Create a file with more lines than the global cap (1000)
+    const lines = Array.from({ length: 1100 }, (_, i) => `line_${i}`).join('\n');
+    await fs.writeFile(path.join(tempDir, 'huge.ts'), lines);
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute({
+      pattern: 'line_',
+    });
+
+    expect(result).toContain('1000 matches across 1 file');
+    expect(result).toContain('(truncated at 1000)');
+  });
 });
