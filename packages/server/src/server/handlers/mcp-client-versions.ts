@@ -253,6 +253,9 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         status: 'published',
       });
 
+      // Clear the editor cache so subsequent requests see the new active version
+      mastra.getEditor()?.mcp.clearCache(mcpClientId);
+
       return {
         success: true,
         message: `Version ${version.versionNumber} is now active`,
@@ -348,6 +351,9 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
         mcpClient.activeVersionId,
       );
 
+      // Clear the editor cache so subsequent requests see the updated config
+      mastra.getEditor()?.mcp.clearCache(mcpClientId);
+
       return newVersion;
     } catch (error) {
       return handleError(error, 'Error restoring MCP client version');
@@ -403,6 +409,9 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       }
 
       await mcpClientStore.deleteVersion(versionId);
+
+      // Clear the editor cache so subsequent requests see the updated config
+      mastra.getEditor()?.mcp.clearCache(mcpClientId);
 
       return {
         success: true,
