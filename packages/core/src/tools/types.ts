@@ -319,7 +319,7 @@ export interface ToolAction<
    * Receives the raw tool output and returns a transformed representation.
    * Passed through from the original tool definition.
    */
-  toModelOutput?: (output: unknown) => unknown;
+  toModelOutput?: (output: TSchemaOut) => unknown;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata

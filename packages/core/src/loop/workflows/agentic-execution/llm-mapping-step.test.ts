@@ -576,7 +576,7 @@ describe('createLLMMappingStep toModelOutput', () => {
   });
 
   it('should call toModelOutput for mixed tools (only the ones that define it)', async () => {
-    const toModelOutputMock = vi.fn((output: unknown) => ({
+    const toModelOutputMock = vi.fn((_output: unknown) => ({
       type: 'text',
       value: 'transformed',
     }));

@@ -141,7 +141,7 @@ export class Tool<
    * Optional function to transform the tool's raw output before sending it to the model.
    * The raw result is still available for application logic; only the model sees the transformed version.
    */
-  toModelOutput?: (output: unknown) => unknown;
+  toModelOutput?: (output: TSchemaOut) => unknown;
 
   /**
    * Optional MCP-specific properties including annotations and metadata.
