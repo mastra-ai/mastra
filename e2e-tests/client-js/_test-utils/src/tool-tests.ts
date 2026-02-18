@@ -74,10 +74,12 @@ export function createToolTests(config: ToolTestConfig = {}) {
 
       it('should return validation error for invalid data', async () => {
         const tool = client.getTool('calculator');
+        // Tool wrapper catches Zod validation failures and returns { error, message }
+        // as a 200 response (not an HTTP error), so execute() resolves rather than rejects.
         const result: any = await tool.execute({ data: { a: 'not-a-number', b: 3 } });
-        // Tool returns a validation error object instead of throwing
         expect(result).toBeDefined();
-        expect(result.error).toBeDefined();
+        expect(result.error).toBe(true);
+        expect(typeof result.message).toBe('string');
       });
     });
   });
