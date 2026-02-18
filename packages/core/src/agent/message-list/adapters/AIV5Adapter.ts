@@ -172,7 +172,7 @@ export class AIV5Adapter {
               return p;
             }, '') ??
               '');
-          if (text || part.providerMetadata) {
+          if (text || part.providerMetadata || part.details?.some(d => d.type === 'redacted')) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,
               text: text || '',

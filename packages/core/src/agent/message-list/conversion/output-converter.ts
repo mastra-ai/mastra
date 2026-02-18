@@ -74,9 +74,9 @@ export function sanitizeV5UIMessages(
           if (hasNonEmptyParts) return false;
         }
 
-        // Filter out empty reasoning parts without providerMetadata (Issue #12980)
-        // Gemini with reasoning tokens can produce empty reasoning parts that get stored in memory.
-        // When sent back, Gemini rejects with "must include at least one parts field".
+        // Safety net for legacy stored data: filter out empty reasoning parts without providerMetadata (#12980)
+        // New data is fixed at the source (llm-execution-step.ts skips storing empty reasoning without providerMetadata),
+        // but existing DB records may still contain empty reasoning parts from before this fix.
         // Preserve empty reasoning parts that have providerMetadata (e.g. OpenAI encrypted reasoning).
         if (p.type === 'reasoning' && (!('text' in p) || !p.text) && !('providerMetadata' in p && p.providerMetadata)) {
           return false;

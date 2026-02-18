@@ -285,26 +285,38 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-end': {
-        // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
-        // See: https://github.com/mastra-ai/mastra/issues/9005
-        const message: MastraDBMessage = {
-          id: messageId,
-          role: 'assistant',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'reasoning' as const,
-                reasoning: '',
-                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
-                providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
-              },
-            ],
-          },
-          createdAt: new Date(),
-        };
+        const reasoningText = runState.state.reasoningDeltas.join('');
+        const providerMeta = chunk.payload.providerMetadata ?? runState.state.providerOptions;
 
-        messageList.add(message, 'response');
+        // Only store reasoning when there's actual content or providerMetadata.
+        // OpenAI requires empty reasoning with providerMetadata for item_reference (see #9005).
+        // Skip empty reasoning from providers like Gemini to prevent poisoning conversation history (#12980).
+        if (reasoningText || providerMeta) {
+          // Don't create empty details entries — only add when there's actual text
+          const details: Array<{ type: 'text'; text: string }> = [];
+          if (reasoningText) {
+            details.push({ type: 'text', text: reasoningText });
+          }
+
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'reasoning' as const,
+                  reasoning: '',
+                  details,
+                  providerMetadata: providerMeta,
+                },
+              ],
+            },
+            createdAt: new Date(),
+          };
+
+          messageList.add(message, 'response');
+        }
 
         // Reset reasoning state - clear providerOptions to prevent reasoning metadata
         // (like openai.itemId) from leaking into subsequent text parts
