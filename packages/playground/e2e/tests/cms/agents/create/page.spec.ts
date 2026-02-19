@@ -364,7 +364,7 @@ test.describe('Agent Creation Persistence - MCP Client Tools', () => {
     await page.getByRole('button', { name: /try to connect/i }).click();
 
     // Wait for tools to appear in the preview panel
-    await expect(page.getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('dialog').getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
 
     // The tool should have a switch - verify it's initially unchecked (default: unselected)
     const toolSwitch = page.getByRole('dialog').getByRole('switch').first();
@@ -403,7 +403,7 @@ test.describe('Agent Creation Persistence - MCP Client Tools', () => {
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 
     // Wait for tools to load (auto-connects in view mode)
-    await expect(page.getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('dialog').getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
 
     // The tool switch should still be checked (persisted selection)
     const persistedSwitch = page.getByRole('dialog').getByRole('switch').first();
