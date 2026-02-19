@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, WorkspaceReadOnlyError } from '../errors';
-import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
 
 // =============================================================================
 // Types
@@ -523,6 +523,8 @@ Pattern replace (for everything else):
       return `No changes made to ${path} (${changes.join('; ')})`;
     }
 
-    return `${path}: ${changes.join('; ')}`;
+    let output = `${path}: ${changes.join('; ')}`;
+    output += await getEditDiagnosticsText(filesystem, path, modifiedContent);
+    return output;
   },
 });

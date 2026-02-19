@@ -235,21 +235,7 @@
     "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
-    "@ast-grep/napi": "^0.40.0",
-    "vscode-jsonrpc": "^8.2.0",
-    "vscode-languageserver-protocol": "^3.17.0",
     "zod": "^3.25.0 || ^4.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@ast-grep/napi": {
-      "optional": true
-    },
-    "vscode-jsonrpc": {
-      "optional": true
-    },
-    "vscode-languageserver-protocol": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@ast-grep/napi": "^0.40.0",
