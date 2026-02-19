@@ -1,4 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import type { LanguageModelV1 } from '@ai-sdk/provider';
+import type { MastraLanguageModel } from '@mastra/core/agent';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { AuthStorage } from '../auth/storage.js';
@@ -18,7 +20,7 @@ const authStorage = new AuthStorage();
  * - For moonshotai/* models: Uses Moonshot AI Anthropic-compatible endpoint
  * - For all other providers: Uses Mastra's model router (models.dev gateway)
  */
-export function resolveModel(modelId: string) {
+export function resolveModel(modelId: string): LanguageModelV1 | MastraLanguageModel {
   const isAnthropicModel = modelId.startsWith('anthropic/');
   const isOpenAIModel = modelId.startsWith('openai/');
   const isMoonshotModel = modelId.startsWith('moonshotai/');
@@ -45,7 +47,7 @@ export function resolveModel(modelId: string) {
  * Dynamic model function that reads the current model from harness state.
  * This allows runtime model switching via the /models picker.
  */
-export function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
+export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): LanguageModelV1 | MastraLanguageModel {
   const harnessContext = requestContext.get('harness') as HarnessRuntimeContext<typeof stateSchema> | undefined;
 
   const modelId = harnessContext?.state?.currentModelId;

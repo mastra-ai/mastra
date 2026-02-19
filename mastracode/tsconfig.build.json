@@ -3,7 +3,6 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "isolatedDeclarations": true,
     "noCheck": true
   },
   "include": ["src/**/*"],

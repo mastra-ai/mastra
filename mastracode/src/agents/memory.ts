@@ -4,8 +4,8 @@ import { Memory } from "@mastra/memory"
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from "../constants"
 import type { HarnessRuntimeContext } from "../harness/types"
 import type { stateSchema } from "../schema"
-import { resolveModel } from "./model"
 import { getOmScope } from "../utils/project"
+import { resolveModel } from "./model"
 
 
 let cachedMemory: Memory | null = null

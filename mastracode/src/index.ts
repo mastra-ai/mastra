@@ -8,10 +8,11 @@ import { LibSQLStore } from "@mastra/libsql"
 import { getDynamicInstructions } from "./agents/instructions.js"
 import { getDynamicMemory } from "./agents/memory.js"
 import { getDynamicModel, resolveModel } from "./agents/model.js"
-import { createDynamicTools } from "./agents/tools.js"
+import { executeSubagent } from "./agents/subagents/execute.js"
 import { exploreSubagent } from "./agents/subagents/explore.js"
 import { planSubagent } from "./agents/subagents/plan.js"
-import { executeSubagent } from "./agents/subagents/execute.js"
+import { createDynamicTools } from "./agents/tools.js"
+
 import { getDynamicWorkspace } from "./agents/workspace.js"
 import { AuthStorage } from "./auth/storage.js"
 import { HookManager } from "./hooks/index.js"
@@ -44,41 +45,41 @@ import {
 } from "./utils/project.js"
 
 export function createMastraCode() {
-  // Auth storage (shared with Claude Max / OpenAI providers and Harness)
-  const authStorage = new AuthStorage();
-  setAuthStorage(authStorage);
-  setOpenAIAuthStorage(authStorage);
+	// Auth storage (shared with Claude Max / OpenAI providers and Harness)
+	const authStorage = new AuthStorage();
+	setAuthStorage(authStorage);
+	setOpenAIAuthStorage(authStorage);
 
 	// Project detection
 	const project = detectProject(process.cwd())
 
-  const resourceIdOverride = getResourceIdOverride(project.rootPath);
-  if (resourceIdOverride) {
-    project.resourceId = resourceIdOverride;
-    project.resourceIdOverride = true;
-  }
+	const resourceIdOverride = getResourceIdOverride(project.rootPath);
+	if (resourceIdOverride) {
+		project.resourceId = resourceIdOverride;
+		project.resourceIdOverride = true;
+	}
 
-  console.info(`Project: ${project.name}`);
-  console.info(`Resource ID: ${project.resourceId}${project.resourceIdOverride ? ' (override)' : ''}`);
-  if (project.gitBranch) console.info(`Branch: ${project.gitBranch}`);
-  if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`);
+	console.info(`Project: ${project.name}`);
+	console.info(`Resource ID: ${project.resourceId}${project.resourceIdOverride ? ' (override)' : ''}`);
+	if (project.gitBranch) console.info(`Branch: ${project.gitBranch}`);
+	if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`);
 
-  const userId = getUserId(project.rootPath);
-  console.info(`User: ${userId}`);
-  console.info('--------------------------------');
+	const userId = getUserId(project.rootPath);
+	console.info(`User: ${userId}`);
+	console.info('--------------------------------');
 
-  // Storage
-  const storageConfig = getStorageConfig(project.rootPath);
-  const storage = new LibSQLStore({
-    id: 'mastra-code-storage',
-    url: storageConfig.url,
-    ...(storageConfig.authToken ? { authToken: storageConfig.authToken } : {}),
-  });
+	// Storage
+	const storageConfig = getStorageConfig(project.rootPath);
+	const storage = new LibSQLStore({
+		id: 'mastra-code-storage',
+		url: storageConfig.url,
+		...(storageConfig.authToken ? { authToken: storageConfig.authToken } : {}),
+	});
 
-  const memory = getDynamicMemory(storage);
+	const memory = getDynamicMemory(storage);
 
-  // MCP
-  const mcpManager = new MCPManager(project.rootPath);
+	// MCP
+	const mcpManager = new MCPManager(project.rootPath);
 
 	// Agent
 	const codeAgentInstance = new Agent({
@@ -97,14 +98,14 @@ export function createMastraCode() {
 
 	const codeAgent = mastraInstance.getAgent("code-agent")
 
-  // Hooks
-  const hookManager = new HookManager(project.rootPath, 'session-init');
+	// Hooks
+	const hookManager = new HookManager(project.rootPath, 'session-init');
 
-  if (hookManager.hasHooks()) {
-    const hookConfig = hookManager.getConfig();
-    const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
-    console.info(`Hooks: ${hookCount} hook(s) configured`);
-  }
+	if (hookManager.hasHooks()) {
+		const hookConfig = hookManager.getConfig();
+		const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
+		console.info(`Hooks: ${hookCount} hook(s) configured`);
+	}
 
 	// Build subagent definitions with project-scoped tools
 	const viewTool = createViewTool(project.rootPath)
