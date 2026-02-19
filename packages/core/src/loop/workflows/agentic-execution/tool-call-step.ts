@@ -1,7 +1,9 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import z from 'zod';
+import { ConsoleLogger } from '../../../logger';
 import type { MastraDBMessage } from '../../../memory';
+import { ProcessorRunner } from '../../../processors/runner';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -38,6 +40,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   modelSpanTracker,
   _internal,
   logger,
+  inputProcessors,
+  processorStates,
+  agentId,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -47,11 +52,45 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Use tools from _internal.stepTools if available (set by llmExecutionStep via prepareStep/processInputStep)
       // This avoids serialization issues - _internal is a mutable object that preserves execute functions
       // Fall back to the original tools from the closure if not set
-      const stepTools = (_internal?.stepTools as Tools) || tools;
+      let stepTools = (_internal?.stepTools as Tools) || tools;
 
-      const tool =
+      let tool =
         stepTools?.[inputData.toolName] ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
+
+      // If tool not found and we're resuming, try re-running processors to resolve it.
+      // This handles tools added by processors (e.g. ToolSearchProcessor) that were lost
+      // during suspend/resume serialization since execute functions aren't serializable.
+      if (!tool && workflowResumeData && inputProcessors?.length) {
+        try {
+          const processorRunner = new ProcessorRunner({
+            inputProcessors,
+            outputProcessors: [],
+            logger: logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId || 'unknown',
+            processorStates,
+          });
+
+          const result = await processorRunner.runProcessInputStep({
+            messageList,
+            stepNumber: 0,
+            steps: [],
+            tools: stepTools,
+            requestContext,
+          });
+
+          if (result.tools?.[inputData.toolName]) {
+            tool = result.tools[inputData.toolName] as any;
+            stepTools = result.tools as Tools;
+            // Update _internal so subsequent tool calls in this foreach don't re-run processors
+            if (_internal) {
+              _internal.stepTools = result.tools;
+            }
+          }
+        } catch (error) {
+          logger?.error('Error re-running processors to resolve tool on resume:', error);
+        }
+      }
 
       const addToolMetadata = ({
         toolCallId,
