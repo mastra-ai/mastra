@@ -23,6 +23,7 @@ This file provides guidance to coding agents when working with code in this repo
   - `@voice/`
   - `@workflows/`
   - `@workspaces/`
+- The `@docs/` folder contains the documentation and needs specific instructions which are covered in `@docs/AGENTS.md`
 - All packages use TypeScript with strict type checking
 - Vitest is used for testing, with test files co-located with source code
 
@@ -58,7 +59,7 @@ The `@docs/` directory contains the source code and contents of the documentatio
 
 Whenever you change or add code, you MUST update/add related documentation for those changes.
 
-Read `@docs/CONTRIBUTING.md` to learn more about the general setup and technical instructions. Read `@docs/styleguides/STYLEGUIDE.md` to adhere to the documentation styleguide. Read other relevant styleguides in `@docs/styleguides/` for specific types of documentation.
+Read `@docs/AGENTS.md` to learn more about how to work with documentation.
 
 ## Changelogs
 

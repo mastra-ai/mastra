@@ -6,8 +6,8 @@ Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, read
 
 ## How to decide which template to use
 
-- **Overview page** — the landing page for a category (e.g. `agents/overview.mdx`, `memory/overview.mdx`). It introduces the topic, lists the key concepts, and links to the standard pages in the same category.
-- **Standard page** — every other page in the category. It teaches a single concept with code examples and configuration details.
+- **Overview page**: the landing page for a category (e.g. `agents/overview.mdx`, `memory/overview.mdx`). It introduces the topic, lists the key concepts, and links to the standard pages in the same category.
+- **Standard page**: every other page in the category. It teaches a single concept with code examples and configuration details.
 
 ## Overview page
 
@@ -58,11 +58,11 @@ Add H2 sections for cross-cutting concerns that apply to the whole category (e.g
 
 ### Rules
 
-1. **Title format** — Use `"$TOPIC overview | $CATEGORY"` (e.g. `"Memory overview | Memory"`). The part after the pipe is the sidebar category label.
-2. **Opening paragraph** — One to two sentences only. Explain what the category is and what it enables.
-3. **Sub-topic list** — Use bold linked names followed by a dash and a one-sentence description. Every standard page in the category should be reachable from this list.
-4. **No deep dives** — Keep individual sections short. If you're writing more than two paragraphs about a single sub-topic, move that content to a standard page and link to it instead.
-5. **Close with "Next steps"** — List links to the standard pages and the API reference. This replaces the "Related" section used on standard pages.
+1. **Title format**: Use `"$TOPIC overview | $CATEGORY"` (e.g. `"Memory overview | Memory"`). The part after the pipe is the sidebar category label.
+2. **Opening paragraph**: One to two sentences only. Explain what the category is and what it enables.
+3. **Sub-topic list**: Use bold linked names followed by a dash and a one-sentence description. Every standard page in the category should be reachable from this list.
+4. **No deep dives**: Keep individual sections short. If you're writing more than two paragraphs about a single sub-topic, move that content to a standard page and link to it instead.
+5. **Close with "Next steps"**: List links to the standard pages and the API reference. This replaces the "Related" section used on standard pages.
 
 ### Example: Memory overview
 
@@ -157,13 +157,13 @@ One or more H2 sections, each covering a distinct aspect of the feature. Each se
 
 1. A short explanation (one to two paragraphs).
 2. A code example demonstrating the concept.
-3. An :::info block linking to the API reference when relevant.
+3. An :::note block linking to the API reference when relevant.
 
 ```typescript title="src/mastra/<path>.ts"
 // Code showing this concept
 ```
 
-:::info
+:::note
 
 Visit [ClassName reference](/reference/$CATEGORY/<class>) for a full list of configuration options.
 
@@ -191,16 +191,16 @@ Use Tabs when the reader can choose between multiple approaches.
 
 ### Rules
 
-1. **Title format** — Use `"$FEATURE | $CATEGORY"` (e.g. `"Working memory | Memory"`).
-2. **Opening paragraph** — One to two sentences. State what the feature **is** and what it **does**.
-3. **"When to use" section** — Include this when the feature has clear alternatives or when the reader may be unsure if it's the right choice.
-4. **Quick start** — Show the shortest working example. The reader should be able to copy this block and have something functional. Use line highlighting (`{2,5-7}`) to draw attention to the relevant lines.
-5. **Code examples** — Always include TypeScript code in a fenced block with syntax highlighting. Add a `title` attribute for file paths. Use the `npm2yarn` flag on `bash` blocks for install commands.
-6. **Tabs** — Use `<Tabs>` when the reader must choose between mutually exclusive approaches (e.g. Zod vs JSON Schema, generate vs stream, different providers).
-7. **Steps** — Use `<Steps>` and `<StepItem>` for setup/installation sequences where order matters.
-8. **Admonitions** — Use `:::info` to link to API reference pages. Use `:::note`, `:::tip`, and `:::warning` sparingly for supplementary information.
-9. **Close with "Related"** — Always end with a "Related" section that links to related pages and the API reference.
-10. **One concept per page** — If a section grows beyond three H2-level subsections, consider splitting it into its own page.
+1. **Title format**: Use `"$FEATURE | $CATEGORY"` (e.g. `"Working memory | Memory"`).
+2. **Opening paragraph**: One to two sentences. State what the feature **is** and what it **does**.
+3. **"When to use" section**: Include this when the feature has clear alternatives or when the reader may be unsure if it's the right choice.
+4. **Quick start**: Show the shortest working example. The reader should be able to copy this block and have something functional. Use line highlighting (`{2,5-7}`) to draw attention to the relevant lines.
+5. **Code examples**: Always include TypeScript code in a fenced block with syntax highlighting. Add a `title` attribute for file paths. Use the `npm2yarn` flag on `bash` blocks for install commands.
+6. **Tabs**: Use `<Tabs>` when the reader must choose between mutually exclusive approaches (e.g. Zod vs JSON Schema, generate vs stream, different providers).
+7. **Steps**: Use `<Steps>` and `<StepItem>` for setup/installation sequences where order matters.
+8. **Admonitions**: Use `:::note` to link to API reference pages. Use `:::tip` and `:::warning` sparingly for supplementary information.
+9. **Close with "Related"**: Always end with a "Related" section that links to related pages and the API reference.
+10. **One concept per page**: If a section grows beyond three H2-level subsections, consider splitting it into its own page.
 
 ### Example: Standard page
 
@@ -275,7 +275,7 @@ console.log(response.object)
   </TabItem>
 </Tabs>
 
-:::info
+:::note
 
 Visit [.generate()](/reference/agents/generate) for a full list of configuration options.
 
