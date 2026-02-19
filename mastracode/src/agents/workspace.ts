@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
-import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { stateSchema } from '../schema';
 
 // =============================================================================

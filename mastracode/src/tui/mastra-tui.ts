@@ -3159,9 +3159,15 @@ ${instructions}`,
           this.ui.hideOverlay();
           await this.harness.setSubagentModelId(model.id, agentType);
           if (scope === 'global') {
-            this.authStorage?.setSubagentModelId(model.id, agentType);
+            if (this.authStorage) {
+              this.authStorage.setSubagentModelId(model.id, agentType);
+              this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+            } else {
+              this.showError('Cannot persist global preference: auth storage not configured');
+            }
+          } else {
+            this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
           }
-          this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
           resolve();
         },
         onCancel: () => {

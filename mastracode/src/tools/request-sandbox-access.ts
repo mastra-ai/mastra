@@ -4,9 +4,9 @@
  */
 
 import * as path from 'node:path';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v3';
-import type { HarnessRequestContext } from '@mastra/core/harness';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
 let requestCounter = 0;

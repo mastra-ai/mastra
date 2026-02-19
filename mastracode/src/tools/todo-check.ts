@@ -2,9 +2,9 @@
  * TodoCheck tool — checks the completion status of the current todo list.
  * Helps the agent determine if all tasks are completed before ending work.
  */
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v3';
-import type { HarnessRequestContext } from '@mastra/core/harness';
 
 export const todoCheckTool = createTool({
   id: 'todo_check',

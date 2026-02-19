@@ -9,10 +9,10 @@
  * real-time subagent activity (tool calls, text deltas, etc.).
  */
 import { Agent } from '@mastra/core/agent';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v3';
 import { getSubagentDefinition, getSubagentIds } from '../agents/subagents/index.js';
-import type { HarnessRequestContext } from '@mastra/core/harness';
 
 export interface SubagentToolDeps {
   /**
