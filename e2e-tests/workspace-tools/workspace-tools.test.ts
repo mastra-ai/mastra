@@ -30,7 +30,7 @@ async function setupFixture(fixtureName: string, registry: string, tag: string):
   return fixturePath;
 }
 
-async function runFixtureTest(fixturePath: string): Promise<{ toolNames: string[] }> {
+async function runFixtureTest(fixturePath: string): Promise<{ toolNames: string[]; napiResolvable: boolean }> {
   const { stdout } = await execa('node', ['test.mjs'], { cwd: fixturePath });
   const lines = stdout.trim().split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -66,6 +66,7 @@ describe('workspace tools — optional dependency gating', () => {
     fixturePaths.push(fixturePath);
 
     const result = await runFixtureTest(fixturePath);
+    expect(result.napiResolvable).toBe(true);
     expect(result.toolNames).toContain('mastra_workspace_ast_edit');
   });
 
@@ -76,6 +77,7 @@ describe('workspace tools — optional dependency gating', () => {
     fixturePaths.push(withoutAstGrepFixturePath);
 
     const result = await runFixtureTest(withoutAstGrepFixturePath);
+    expect(result.napiResolvable).toBe(false);
     expect(result.toolNames).not.toContain('mastra_workspace_ast_edit');
   });
 
