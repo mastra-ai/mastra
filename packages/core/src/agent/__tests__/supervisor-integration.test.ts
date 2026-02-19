@@ -1992,3 +1992,548 @@ describe('Supervisor Pattern - Completion feedback', () => {
     expect(completionCheckEvents[1].payload.maxIterationReached).toBe(true);
   });
 });
+
+describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
+  it('should forward the supervisor conversation history to the sub-agent as context', async () => {
+    // When the supervisor delegates to a sub-agent tool, the sub-agent should
+    // receive the supervisor's current conversation history so it can understand
+    // the full context of what has been discussed.
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Your name is Alice.',
+          content: [{ type: 'text', text: 'Your name is Alice.' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'question-answer-agent',
+      name: 'Question Answer Agent',
+      description: 'An agent that answers questions based on conversation context',
+      instructions: 'Answer questions based on the conversation history.',
+      model: subAgentMockModel,
+    });
+
+    // Supervisor delegates to sub-agent once, then finishes
+    let supervisorCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'supervisor-history-test',
+      name: 'Supervisor History Test',
+      instructions: 'Delegate questions to the question-answer-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-questionAnswerAgent',
+                  input: JSON.stringify({ prompt: 'What is my name?' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Your name is Alice.',
+            content: [{ type: 'text', text: 'Your name is Alice.' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { questionAnswerAgent: subAgent },
+      memory: new MockMemory(),
+    });
+
+    // Pass multiple messages as conversation history to the supervisor
+    await supervisorAgent.generate(
+      [
+        { role: 'user', content: 'My name is Alice.' },
+        { role: 'user', content: 'What is my name?' },
+      ],
+      { maxSteps: 3 },
+    );
+
+    // The sub-agent should have been called at least once
+    expect(subAgentReceivedPrompts.length).toBeGreaterThan(0);
+
+    // Verify the sub-agent received the prior user message from the supervisor's history
+    const promptString = JSON.stringify(subAgentReceivedPrompts[subAgentReceivedPrompts.length - 1]);
+    expect(promptString).toContain('My name is Alice');
+  });
+
+  it('should NOT include any internal network routing JSON in sub-agent context (supervisor never produces it)', async () => {
+    // The supervisor pattern does NOT produce isNetwork, primitiveId/selectionReason,
+    // or routing JSON — those are specific to the agent.network() flow.
+    // This test confirms the sub-agent context stays clean of such internal fields
+    // even across multiple supervisor → sub-agent delegations.
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Done.',
+          content: [{ type: 'text', text: 'Done.' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-routing-test',
+      name: 'Sub Agent Routing Test',
+      description: 'A sub-agent',
+      instructions: 'Complete the assigned task.',
+      model: subAgentMockModel,
+    });
+
+    // Supervisor delegates to sub-agent twice (two iterations)
+    let supervisorCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'supervisor-no-routing-json',
+      name: 'Supervisor No Routing JSON',
+      instructions: 'Delegate steps to the sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do step 1' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          if (supervisorCallCount === 2) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-2',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do step 2' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Both steps complete.',
+            content: [{ type: 'text', text: 'Both steps complete.' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    await supervisorAgent.generate('Do a multi-step task', { maxSteps: 5 });
+
+    // Sub-agent should have been called at least twice (once per supervisor delegation)
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
+
+    // Verify no network-specific internal JSON fields appear in either sub-agent call.
+    // The supervisor pattern never generates isNetwork routing messages.
+    for (const prompt of subAgentReceivedPrompts) {
+      const promptStr = JSON.stringify(prompt);
+      expect(promptStr).not.toContain('isNetwork');
+      expect(promptStr).not.toContain('selectionReason');
+      expect(promptStr).not.toContain('primitiveId');
+      expect(promptStr).not.toContain('"primitiveType"');
+    }
+  });
+
+  it('should make completion feedback visible to the supervisor so it informs subsequent delegations', async () => {
+    // Completion feedback (from failed scorers) is added as an assistant message to the
+    // supervisor's own message list. This means:
+    //   - The SUPERVISOR'S LLM sees the feedback on its next call and can use it to craft
+    //     a better delegation prompt for the sub-agent.
+    //   - Sub-agents receive only user input messages as context (not assistant messages),
+    //     so completion feedback does NOT appear directly in the sub-agent's context.
+    //
+    // This is the correct flow: the feedback helps the supervisor decide what to do next,
+    // and a real LLM supervisor would incorporate the feedback into the prompt it sends to
+    // the sub-agent. The test verifies:
+    //   1. The supervisor loop continues when scorer fails (feedback keeps isContinued = true).
+    //   2. completion-check events are emitted so the feedback is observable.
+    //   3. Sub-agents receive the user's original task messages (not internal feedback messages).
+
+    let supervisorLLMReceivedPrompts: any[] = [];
+    let subAgentReceivedPrompts: any[] = [];
+
+    // Sub-agent needs both doGenerate and doStream. When the supervisor calls stream(),
+    // sub-agents are also invoked via agent.stream(), so doStream is what captures prompts.
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Task completed.',
+          content: [{ type: 'text', text: 'Task completed.' }],
+          warnings: [],
+        };
+      },
+      doStream: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'sub-id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Task completed.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-feedback-visibility-test',
+      name: 'Sub Agent Feedback Visibility Test',
+      description: 'A sub-agent for feedback visibility testing',
+      instructions: 'Complete the assigned task.',
+      model: subAgentMockModel,
+    });
+
+    // Scorer: fails first call, passes on second
+    let scorerCallCount = 0;
+    const mockScorer = {
+      id: 'fail-then-pass-scorer',
+      name: 'Fail Then Pass Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        if (scorerCallCount === 1) {
+          return { score: 0, reason: 'Task not complete yet, needs more work' };
+        }
+        return { score: 1, reason: 'Task is now complete' };
+      }),
+    };
+
+    // The completion check step runs only when isContinued = false (finish reason: stop).
+    // Sequence:
+    //   call 1: tool-call → sub-agent call 1 (isContinued = true, check skipped)
+    //   call 2: stop      → completion check runs, scorer FAILS, feedback added to supervisor context
+    //   call 3: tool-call → sub-agent call 2 (supervisor's LLM has seen the feedback)
+    //   call 4: stop      → completion check runs, scorer PASSES, loop ends
+    let supervisorCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'supervisor-feedback-visibility',
+      name: 'Supervisor Feedback Visibility',
+      instructions: 'Delegate work to the sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          supervisorCallCount++;
+          supervisorLLMReceivedPrompts.push(prompt);
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do the task (attempt 1)' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          if (supervisorCallCount === 2) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Partial progress, will try again.',
+              content: [{ type: 'text', text: 'Partial progress, will try again.' }],
+              warnings: [],
+            };
+          }
+          if (supervisorCallCount === 3) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-3',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do the task (attempt 2)' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'All done.',
+            content: [{ type: 'text', text: 'All done.' }],
+            warnings: [],
+          };
+        },
+        doStream: async ({ prompt }) => {
+          supervisorCallCount++;
+          supervisorLLMReceivedPrompts.push(prompt);
+          const call = supervisorCallCount;
+          if (call === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do the task (attempt 1)' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+          if (call === 2) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Partial progress, will try again.' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+              ]),
+            };
+          }
+          if (call === 3) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-3',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do the task (attempt 2)' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'All done.' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    const completionCheckEvents: any[] = [];
+    const result = await supervisorAgent.stream('Complete a multi-part task', {
+      maxSteps: 6,
+      completion: { scorers: [mockScorer as any] },
+    });
+
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'completion-check') {
+        completionCheckEvents.push(chunk);
+      }
+    }
+
+    // Scorer ran twice: once failing, once passing
+    expect(scorerCallCount).toBeGreaterThanOrEqual(2);
+
+    // Sub-agent called for each delegation
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
+
+    // completion-check events were emitted — the feedback is observable in the supervisor stream
+    expect(completionCheckEvents).toHaveLength(2);
+    expect(completionCheckEvents[0].payload.passed).toBe(false);
+    expect(completionCheckEvents[1].payload.passed).toBe(true);
+
+    // Verify the supervisor's LLM received the completion feedback in its THIRD call.
+    // The feedback is an assistant message in the supervisor's context, visible to the
+    // supervisor LLM so it can craft better delegation prompts in subsequent iterations.
+    const supervisorCall3Str = JSON.stringify(supervisorLLMReceivedPrompts[2]);
+    expect(supervisorCall3Str).toContain('Completion Check Results');
+    expect(supervisorCall3Str).toContain('NOT COMPLETE');
+
+    // Sub-agents receive only the user's original task message as context (not the
+    // assistant-role completion feedback), because tool context uses user input messages only.
+    const subAgentCall2Str = JSON.stringify(subAgentReceivedPrompts[1]);
+    expect(subAgentCall2Str).not.toContain('Completion Check Results');
+    expect(subAgentCall2Str).toContain('Complete a multi-part task');
+  });
+
+  it('should allow contextFilter to customise which messages are forwarded to the sub-agent', async () => {
+    // The optional delegation.contextFilter callback lets callers control exactly
+    // which supervisor context messages are forwarded to sub-agents.
+
+    let subAgentReceivedPrompts: any[] = [];
+    const filteredMessages: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: 'Done.',
+          content: [{ type: 'text', text: 'Done.' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-filter-test',
+      name: 'Sub Agent Filter Test',
+      description: 'A sub-agent for testing context filtering',
+      instructions: 'Do the task.',
+      model: subAgentMockModel,
+    });
+
+    let supervisorCallCount = 0;
+    const supervisorAgent = new Agent({
+      id: 'supervisor-context-filter',
+      name: 'Supervisor Context Filter',
+      instructions: 'Delegate to sub-agent.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-subAgent',
+                  input: JSON.stringify({ prompt: 'Do the task' }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Done.',
+            content: [{ type: 'text', text: 'Done.' }],
+            warnings: [],
+          };
+        },
+      }),
+      agents: { subAgent },
+      memory: new MockMemory(),
+    });
+
+    // Pass two user messages, but the contextFilter will keep only the most recent one
+    await supervisorAgent.generate(
+      [
+        { role: 'user', content: 'SECRET: do not share this' },
+        { role: 'user', content: 'Do the task please' },
+      ],
+      {
+        maxSteps: 3,
+        delegation: {
+          contextFilter: async ({ messages }) => {
+            // Only forward messages that don't contain "SECRET"
+            const filtered = messages.filter((m: any) => {
+              const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+              return !content.includes('SECRET');
+            });
+            filteredMessages.push(...filtered);
+            return filtered;
+          },
+        },
+      },
+    );
+
+    expect(subAgentReceivedPrompts.length).toBeGreaterThan(0);
+
+    // Sub-agent should NOT have received the SECRET message
+    const promptStr = JSON.stringify(subAgentReceivedPrompts[subAgentReceivedPrompts.length - 1]);
+    expect(promptStr).not.toContain('SECRET');
+
+    // Sub-agent SHOULD have received the non-secret task message
+    expect(promptStr).toContain('Do the task please');
+  });
+});
