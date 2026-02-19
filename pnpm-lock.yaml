@@ -3035,7 +3035,7 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       pino-pretty:
-        specifier: ^13.0.0
+        specifier: ^13.1.3
         version: 13.1.3
     devDependencies:
       '@internal/lint':
