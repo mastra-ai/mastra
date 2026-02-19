@@ -28,7 +28,7 @@ export function CourseSignupCTA({ className }: CourseSignupCTAProps) {
     if (!email || submitting) return
 
     const portalId = siteConfig.customFields?.hsPortalId as string
-    const formGuid = siteConfig.customFields?.hsFormGuid as string
+    const formGuid = siteConfig.customFields?.hsFormGuidLearn as string
 
     if (!portalId || !formGuid) {
       setError('Signup is not configured yet.')
