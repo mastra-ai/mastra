@@ -14,14 +14,15 @@ export type ZodLikeSchema<T = any> = {
   parse(data: unknown): T;
   safeParse(
     data: unknown,
-  ): { success: true; data: T } | { success: false; error: { issues: Array<{ path?: any; message: string }>; format(...args: any[]): any } };
+  ):
+    | { success: true; data: T }
+    | { success: false; error: { issues: Array<{ path?: any; message: string }>; format(...args: any[]): any } };
 };
 
 /**
  * Helper type for extracting the inferred type from a Zod-like schema after parsing
  */
-export type InferZodLikeSchema<T extends ZodLikeSchema<any>> =
-  T extends ZodLikeSchema<infer V> ? V : never;
+export type InferZodLikeSchema<T extends ZodLikeSchema<any>> = T extends ZodLikeSchema<infer V> ? V : never;
 
 /**
  * Helper type for extracting the input type from a Zod-like schema.

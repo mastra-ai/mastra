@@ -7,19 +7,19 @@
  */
 
 export interface SubagentDefinition {
-	/** Unique identifier for this subagent type (e.g., "explore", "plan") */
-	id: string
+  /** Unique identifier for this subagent type (e.g., "explore", "plan") */
+  id: string;
 
-	/** Human-readable name shown in tool output */
-	name: string
+  /** Human-readable name shown in tool output */
+  name: string;
 
-	/** System prompt for this subagent */
-	instructions: string
+  /** System prompt for this subagent */
+  instructions: string;
 
-	/**
-	 * Which tool IDs this subagent may use.
-	 * These are keys from the parent agent's tool registry
-	 * (e.g., "view", "search_content", "find_files").
-	 */
-	allowedTools: string[]
+  /**
+   * Which tool IDs this subagent may use.
+   * These are keys from the parent agent's tool registry
+   * (e.g., "view", "search_content", "find_files").
+   */
+  allowedTools: string[];
 }

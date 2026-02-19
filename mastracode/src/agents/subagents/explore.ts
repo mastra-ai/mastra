@@ -5,12 +5,12 @@
  * "understand how module Y works") and uses read-only tools to explore
  * the codebase, then returns a concise summary of its findings.
  */
-import type { SubagentDefinition } from "./types.js"
+import type { SubagentDefinition } from './types.js';
 
 export const exploreSubagent: SubagentDefinition = {
-	id: "explore",
-	name: "Explore",
-	instructions: `You are an expert code explorer. Your job is to investigate a codebase and answer a specific question or gather specific information.
+  id: 'explore',
+  name: 'Explore',
+  instructions: `You are an expert code explorer. Your job is to investigate a codebase and answer a specific question or gather specific information.
 
 ## Rules
 - You have READ-ONLY access. You cannot modify files or run commands.
@@ -36,5 +36,5 @@ End with a structured summary:
 . **Details**: Additional context if needed
 
 Keep your summary under 300 words.`,
-	allowedTools: ["view", "search_content", "find_files"],
-}
+  allowedTools: ['view', 'search_content', 'find_files'],
+};
