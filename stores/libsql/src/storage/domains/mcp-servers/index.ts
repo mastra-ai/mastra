@@ -523,43 +523,31 @@ export class MCPServersLibSQL extends MCPServersStorage {
   // Private Helpers
   // ==========================================================================
 
-  #parseMCPServerRow(row: Record<string, unknown>): StorageMCPServerType {
-    const safeParseJSON = (val: unknown): unknown => {
-      if (val === null || val === undefined) return undefined;
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          return val;
-        }
+  #safeParseJSON(val: unknown): unknown {
+    if (val === null || val === undefined) return undefined;
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return val;
       }
-      return val;
-    };
+    }
+    return val;
+  }
 
+  #parseMCPServerRow(row: Record<string, unknown>): StorageMCPServerType {
     return {
       id: row.id as string,
       status: (row.status as StorageMCPServerType['status']) ?? 'draft',
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
-      metadata: safeParseJSON(row.metadata) as Record<string, unknown> | undefined,
+      metadata: this.#safeParseJSON(row.metadata) as Record<string, unknown> | undefined,
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
   }
 
   #parseVersionRow(row: Record<string, unknown>): MCPServerVersion {
-    const safeParseJSON = (val: unknown): unknown => {
-      if (val === null || val === undefined) return undefined;
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          return val;
-        }
-      }
-      return val;
-    };
-
     return {
       id: row.id as string,
       mcpServerId: row.mcpServerId as string,
@@ -568,14 +556,14 @@ export class MCPServersLibSQL extends MCPServersStorage {
       version: row.version as string,
       description: (row.description as string) ?? undefined,
       instructions: (row.instructions as string) ?? undefined,
-      repository: safeParseJSON(row.repository) as MCPServerVersion['repository'],
+      repository: this.#safeParseJSON(row.repository) as MCPServerVersion['repository'],
       releaseDate: (row.releaseDate as string) ?? undefined,
       isLatest: row.isLatest === null || row.isLatest === undefined ? undefined : Boolean(row.isLatest),
       packageCanonical: (row.packageCanonical as string) ?? undefined,
-      tools: safeParseJSON(row.tools) as MCPServerVersion['tools'],
-      agents: safeParseJSON(row.agents) as MCPServerVersion['agents'],
-      workflows: safeParseJSON(row.workflows) as MCPServerVersion['workflows'],
-      changedFields: safeParseJSON(row.changedFields) as string[] | undefined,
+      tools: this.#safeParseJSON(row.tools) as MCPServerVersion['tools'],
+      agents: this.#safeParseJSON(row.agents) as MCPServerVersion['agents'],
+      workflows: this.#safeParseJSON(row.workflows) as MCPServerVersion['workflows'],
+      changedFields: this.#safeParseJSON(row.changedFields) as string[] | undefined,
       changeMessage: (row.changeMessage as string) ?? undefined,
       createdAt: new Date(row.createdAt as string),
     };
