@@ -1594,6 +1594,98 @@ export interface GetSkillReferenceResponse {
 }
 
 // ============================================================================
+// Stored Skill Types
+// ============================================================================
+
+/**
+ * File node for skill workspace
+ */
+export interface StoredSkillFileNode {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: StoredSkillFileNode[];
+}
+
+/**
+ * Stored skill data returned from API
+ */
+export interface StoredSkillResponse {
+  id: string;
+  status: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Parameters for listing stored skills
+ */
+export interface ListStoredSkillsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored skills
+ */
+export interface ListStoredSkillsResponse {
+  skills: StoredSkillResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored skill
+ */
+export interface CreateStoredSkillParams {
+  id?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name: string;
+  description?: string;
+  instructions: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Parameters for updating a stored skill
+ */
+export interface UpdateStoredSkillParams {
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  name?: string;
+  description?: string;
+  instructions?: string;
+  license?: string;
+  files?: StoredSkillFileNode[];
+}
+
+/**
+ * Response for deleting a stored skill
+ */
+export interface DeleteStoredSkillResponse {
+  success: boolean;
+  message: string;
+}
+
+// ============================================================================
 // Processor Types
 // ============================================================================
 

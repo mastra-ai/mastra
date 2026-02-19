@@ -10,6 +10,7 @@ import { useAgentEditForm } from '../components/agent-edit-page/use-agent-edit-f
 import type { AgentFormValues, EntityConfig } from '../components/agent-edit-page/utils/form-validation';
 import { useStoredAgentMutations } from './use-stored-agents';
 import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
+import { collectSkillIds } from '../utils/collect-skill-ids';
 import { computeAgentInitialValues, type AgentDataSource } from '../utils/compute-agent-initial-values';
 import {
   mapInstructionBlocksToApi,
@@ -129,6 +130,9 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         }),
       );
 
+      // Create stored skills and collect IDs
+      const skillIds = await collectSkillIds(values.skills ?? [], client);
+
       return {
         name: values.name,
         description: values.description || undefined,
@@ -139,6 +143,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         workflows: values.workflows && Object.keys(values.workflows).length > 0 ? values.workflows : undefined,
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         mcpClients: mcpClientsParam,
+        skills: skillIds.length > 0 ? skillIds : undefined,
         scorers: mapScorersToApi(values.scorers),
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
       };
