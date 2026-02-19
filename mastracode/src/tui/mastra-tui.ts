@@ -3301,7 +3301,7 @@ ${instructions}`,
     const state = this.harness.getState() as any;
     const config = {
       notifications: (state?.notifications ?? 'off') as NotificationMode,
-      yolo: (this.harness.getState() as any).yolo === true,
+      yolo: state?.yolo === true,
       thinkingLevel: this.harness.getThinkingLevel(),
       escapeAsCancel: this.editor.escapeEnabled,
     };
@@ -3379,8 +3379,12 @@ ${instructions}`,
               if (mode === 'login') {
                 await this.performLogin(provider.id);
               } else {
-                this.authStorage?.logout(provider.id);
-                this.showInfo(`Logged out from ${provider.name}`);
+                if (this.authStorage) {
+                  this.authStorage.logout(provider.id);
+                  this.showInfo(`Logged out from ${provider.name}`);
+                } else {
+                  this.showError('Auth storage not configured');
+                }
               }
             }
             resolve();
@@ -3406,6 +3410,11 @@ ${instructions}`,
     const provider = getOAuthProviders().find(p => p.id === providerId);
     const providerName = provider?.name || providerId;
 
+    if (!this.authStorage) {
+      this.showError('Auth storage not configured');
+      return;
+    }
+
     return new Promise(resolve => {
       const dialog = new LoginDialogComponent(this.ui, providerId, (success, message) => {
         this.ui.hideOverlay();
@@ -3425,13 +3434,6 @@ ${instructions}`,
       });
       dialog.focused = true;
 
-      // Start the login flow via authStorage
-      if (!this.authStorage) {
-        this.ui.hideOverlay();
-        this.showError('Auth storage not configured');
-        resolve();
-        return;
-      }
       this.authStorage
         .login(providerId, {
           onAuth: (info: { url: string; instructions?: string }) => {

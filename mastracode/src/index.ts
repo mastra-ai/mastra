@@ -35,6 +35,11 @@ import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
 
+const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
+	anthropic: 'anthropic',
+	openai: 'openai-codex',
+};
+
 export interface MastraCodeConfig {
 	/** Working directory for project detection. Default: process.cwd() */
 	cwd?: string;
@@ -221,11 +226,7 @@ export function createMastraCode(config?: MastraCodeConfig) {
 		modes: config?.modes ?? defaultModes,
 		heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
 		modelAuthChecker: provider => {
-			const providerToOAuthId: Record<string, string> = {
-				anthropic: 'anthropic',
-				openai: 'openai-codex',
-			};
-			const oauthId = providerToOAuthId[provider];
+			const oauthId = PROVIDER_TO_OAUTH_ID[provider];
 			if (oauthId && authStorage.isLoggedIn(oauthId)) {
 				return true;
 			}
@@ -235,13 +236,15 @@ export function createMastraCode(config?: MastraCodeConfig) {
 	});
 
 	// Sync hookManager session ID on thread changes
-	harness.subscribe(event => {
-		if (event.type === 'thread_changed') {
-			hookManager.setSessionId((event as any).threadId);
-		} else if (event.type === 'thread_created') {
-			hookManager.setSessionId((event as any).thread.id);
-		}
-	});
+	if (hookManager) {
+		harness.subscribe(event => {
+			if (event.type === 'thread_changed') {
+				hookManager.setSessionId(event.threadId);
+			} else if (event.type === 'thread_created') {
+				hookManager.setSessionId(event.thread.id);
+			}
+		});
+	}
 
 	return { harness, mcpManager, hookManager, authStorage };
 }

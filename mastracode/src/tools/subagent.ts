@@ -114,7 +114,7 @@ Use this tool when:
       const defaultForType = agentType === 'explore' ? EXPLORE_SUBAGENT_MODEL : DEFAULT_SUBAGENT_MODEL;
 
       // Check for configured subagent model from harness (per-type)
-      const configuredSubagentModel = await harnessCtx?.getSubagentModelId?.(agentType);
+      const configuredSubagentModel = harnessCtx?.getSubagentModelId?.(agentType);
 
       const resolvedModelId = modelId ?? configuredSubagentModel ?? deps.defaultModelId ?? defaultForType;
       let model: any;

@@ -1767,6 +1767,10 @@ export class Agent<
 
   public __setWorkspace(workspace: DynamicArgument<AnyWorkspace | undefined>) {
     this.#workspace = workspace;
+    if (this.#mastra && workspace && typeof workspace !== 'function') {
+      workspace.__setLogger(this.logger);
+      this.#mastra.addWorkspace(workspace);
+    }
   }
 
   /**

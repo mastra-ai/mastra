@@ -44,8 +44,19 @@ export const askUserTool = createTool({
 
       const questionId = `q_${++questionCounter}_${Date.now()}`;
 
-      const answer = await new Promise<string>(resolve => {
-        harnessCtx.registerQuestion!(questionId, resolve);
+      const answer = await new Promise<string>((resolve, reject) => {
+        const signal = harnessCtx.abortSignal;
+        if (signal?.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'));
+          return;
+        }
+        const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+        signal?.addEventListener('abort', onAbort, { once: true });
+
+        harnessCtx.registerQuestion!(questionId, answer => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(answer);
+        });
 
         harnessCtx.emitEvent!({
           type: 'ask_question',
@@ -71,7 +82,7 @@ export const askUserTool = createTool({
 export const submitPlanTool = createTool({
   id: 'submit_plan',
   description:
-    'Submit a completed implementation plan for user review. The plan will be rendered as markdown and the user can approve, reject, or request changes. Use this when your exploration is complete and you have a concrete plan ready for review. On approval, the system automatically switches to Build mode so you can implement.',
+    'Submit a completed implementation plan for user review. The plan will be rendered as markdown and the user can approve, reject, or request changes. Use this when your exploration is complete and you have a concrete plan ready for review. On approval, the system automatically switches to the default mode so you can implement.',
   inputSchema: z.object({
     title: z.string().optional().describe("Short title for the plan (e.g., 'Add dark mode toggle')"),
     plan: z
@@ -92,8 +103,19 @@ export const submitPlanTool = createTool({
 
       const planId = `plan_${++planCounter}_${Date.now()}`;
 
-      const result = await new Promise<{ action: 'approved' | 'rejected'; feedback?: string }>(resolve => {
-        harnessCtx.registerPlanApproval!(planId, resolve);
+      const result = await new Promise<{ action: 'approved' | 'rejected'; feedback?: string }>((resolve, reject) => {
+        const signal = harnessCtx.abortSignal;
+        if (signal?.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'));
+          return;
+        }
+        const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+        signal?.addEventListener('abort', onAbort, { once: true });
+
+        harnessCtx.registerPlanApproval!(planId, res => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(res);
+        });
 
         harnessCtx.emitEvent!({
           type: 'plan_approval_required',
@@ -228,7 +250,7 @@ Use this tool when:
       });
 
       let partialText = '';
-      const toolCallLog: Array<{ name: string; isError?: boolean }> = [];
+      const toolCallLog: Array<{ name: string; toolCallId: string; isError?: boolean }> = [];
 
       try {
         const response = await subagent.stream(task, {
@@ -250,7 +272,7 @@ Use this tool when:
               break;
 
             case 'tool-call':
-              toolCallLog.push({ name: chunk.payload.toolName });
+              toolCallLog.push({ name: chunk.payload.toolName, toolCallId: chunk.payload.toolCallId });
               emitEvent?.({
                 type: 'subagent_tool_start',
                 toolCallId,
@@ -263,7 +285,7 @@ Use this tool when:
             case 'tool-result': {
               const isErr = chunk.payload.isError ?? false;
               for (let i = toolCallLog.length - 1; i >= 0; i--) {
-                if (toolCallLog[i]!.name === chunk.payload.toolName && toolCallLog[i]!.isError === undefined) {
+                if (toolCallLog[i]!.toolCallId === chunk.payload.toolCallId && toolCallLog[i]!.isError === undefined) {
                   toolCallLog[i]!.isError = isErr;
                   break;
                 }
@@ -288,7 +310,8 @@ Use this tool when:
             : '[Aborted by user]';
 
           emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: abortResult, isError: false, durationMs });
-          return { content: abortResult, isError: false };
+          const meta = buildSubagentMeta(resolvedModelId, durationMs, toolCallLog);
+          return { content: abortResult + meta, isError: false };
         }
 
         const fullOutput = await response.getFullOutput();

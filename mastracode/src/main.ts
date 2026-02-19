@@ -59,21 +59,22 @@ async function main() {
   });
 }
 
-process.on('beforeExit', async () => {
-  await Promise.all([mcpManager?.disconnect(), harness.stopHeartbeats()]);
-});
-
-const cleanup = () => {
+const asyncCleanup = async () => {
   releaseAllThreadLocks();
+  await Promise.allSettled([mcpManager?.disconnect(), harness.stopHeartbeats()]);
 };
-process.on('exit', cleanup);
+
+process.on('beforeExit', () => {
+  void asyncCleanup();
+});
+process.on('exit', () => {
+  releaseAllThreadLocks();
+});
 process.on('SIGINT', () => {
-  cleanup();
-  process.exit(0);
+  void asyncCleanup().finally(() => process.exit(0));
 });
 process.on('SIGTERM', () => {
-  cleanup();
-  process.exit(0);
+  void asyncCleanup().finally(() => process.exit(0));
 });
 
 main().catch(error => {

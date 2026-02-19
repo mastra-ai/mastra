@@ -134,20 +134,6 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       await this.config.storage.init();
     }
 
-    // Propagate harness-level memory and workspace to mode agents that don't have their own
-    const workspaceForAgents = this.workspaceFn ?? this.workspace;
-    for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent) continue;
-
-      if (this.config.memory && !agent.hasOwnMemory()) {
-        agent.__setMemory(this.config.memory);
-      }
-      if (workspaceForAgents && !agent.hasOwnWorkspace()) {
-        agent.__setWorkspace(workspaceForAgents);
-      }
-    }
-
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
     if (this.config.workspace && !this.workspaceInitialized && !this.workspaceFn) {
       try {
@@ -172,6 +158,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
         this.emit({ type: 'workspace_status_changed', status: 'error', error: err });
         this.emit({ type: 'workspace_error', error: err });
+      }
+    }
+
+    // Propagate harness-level memory and workspace to mode agents (after workspace init)
+    const workspaceForAgents = this.workspaceFn ?? this.workspace;
+    for (const mode of this.config.modes) {
+      const agent = typeof mode.agent === 'function' ? null : mode.agent;
+      if (!agent) continue;
+
+      if (this.config.memory && !agent.hasOwnMemory()) {
+        agent.__setMemory(this.config.memory);
+      }
+      if (workspaceForAgents && !agent.hasOwnWorkspace()) {
+        agent.__setWorkspace(workspaceForAgents);
       }
     }
 
@@ -246,11 +246,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const defaults: Record<string, unknown> = {};
 
     for (const [key, field] of Object.entries(shape)) {
-      if (field instanceof Object && '_def' in field) {
-        const def = (field as any)._def;
-        if (def.defaultValue !== undefined) {
-          defaults[key] = typeof def.defaultValue === 'function' ? def.defaultValue() : def.defaultValue;
+      try {
+        const result = (field as any).safeParse(undefined);
+        if (result.success && result.data !== undefined) {
+          defaults[key] = result.data;
         }
+      } catch {
+        // field has no default or doesn't support safeParse — skip
       }
     }
 

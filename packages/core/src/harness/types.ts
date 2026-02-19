@@ -234,7 +234,7 @@ export type PermissionPolicy = 'allow' | 'ask' | 'deny';
  */
 export interface PermissionRules {
   categories: Partial<Record<ToolCategory, PermissionPolicy>>;
-  tools: Record<string, PermissionPolicy>;
+  tools: Partial<Record<string, PermissionPolicy>>;
 }
 
 // =============================================================================
