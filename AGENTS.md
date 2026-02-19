@@ -45,7 +45,7 @@ This file provides guidance to coding agents when working with code in this repo
 - Integration test folders and `/examples` folders need to run `pnpm i --ignore-workspace`
 - Package-specific tests: `pnpm test:core`, `pnpm test:cli`, `pnpm test:memory`, `pnpm test:rag`, etc.
 - For faster iteration: build from root first, then `cd` into a package and run `pnpm test` there
-- Core tests take a long time to run, for targetted changes, run the appropriate individual test suites.
+- Core tests take a long time to run, for targeted changes, run the appropriate individual test suites.
 
 ### Linting and formatting
 
