@@ -1,10 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
-import { supportedLanguageModelSpecifications } from '../../../agent/utils';
 import type { MastraDBMessage } from '../../../memory';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
-import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
@@ -140,6 +138,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               },
             };
             await processAndEnqueueChunk(chunk);
+            await rest.options?.onChunk?.(chunk);
           }
 
           const msg: MastraDBMessage = {
@@ -200,6 +199,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 },
               };
               await processAndEnqueueChunk(chunk);
+              await rest.options?.onChunk?.(chunk);
             }
 
             const successMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
@@ -279,14 +279,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           };
 
           await processAndEnqueueChunk(chunk);
-
-          if (supportedLanguageModelSpecifications.includes(initialResult?.metadata?.modelVersion)) {
-            await rest.options?.onChunk?.({
-              chunk: convertMastraChunkToAISDKv5({
-                chunk,
-              }),
-            } as any);
-          }
+          await rest.options?.onChunk?.(chunk);
         }
 
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
