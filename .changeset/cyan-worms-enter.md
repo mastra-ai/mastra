@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added AST edit tool (`workspace_ast_edit`) for intelligent code transformations — rename functions/variables, add/remove/merge imports, and pattern-based find-and-replace using AST analysis. Requires `@ast-grep/napi` as an optional peer dependency.
+Added AST edit tool (`workspace_ast_edit`) for intelligent code transformations using AST analysis. Supports renaming identifiers, adding/removing/merging imports, and pattern-based find-and-replace with metavariable substitution. Automatically available when `@ast-grep/napi` is installed in the project.
 
 **Example:**
 
@@ -12,18 +12,25 @@ const workspace = new Workspace({
 });
 const tools = createWorkspaceTools(workspace);
 
-// Rename a function across the file
+// Rename all occurrences of an identifier
 await tools['mastra_workspace_ast_edit'].execute({
   path: '/src/utils.ts',
-  transform: 'rename-function',
+  transform: 'rename',
   targetName: 'oldName',
   newName: 'newName',
 });
 
-// Add an import
+// Add an import (merges into existing imports from the same module)
 await tools['mastra_workspace_ast_edit'].execute({
   path: '/src/app.ts',
   transform: 'add-import',
   importSpec: { module: 'react', names: ['useState', 'useEffect'] },
+});
+
+// Pattern-based replacement with metavariables
+await tools['mastra_workspace_ast_edit'].execute({
+  path: '/src/app.ts',
+  pattern: 'console.log($ARG)',
+  replacement: 'logger.debug($ARG)',
 });
 ```
