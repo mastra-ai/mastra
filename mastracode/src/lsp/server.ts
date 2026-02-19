@@ -1,10 +1,10 @@
-import { spawn, ChildProcess } from "child_process"
-import { existsSync } from "fs"
-import { join } from "path"
+import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
+import { createRequire } from "node:module"
+import path, { join } from "node:path"
+import { pathToFileURL } from "node:url"
 import { getLanguageId } from "./language"
-import { createRequire } from "module"
-import { pathToFileURL } from "url"
-import path from "path"
 
 /**
  * LSP Server definition and spawning logic

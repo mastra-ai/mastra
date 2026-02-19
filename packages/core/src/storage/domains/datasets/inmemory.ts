@@ -34,6 +34,21 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
   };
 }
 
+/** Internal record that allows null schemas (for "clear schema" semantics) */
+type InternalDatasetRecord = Omit<DatasetRecord, 'inputSchema' | 'groundTruthSchema'> & {
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
+};
+
+/** Normalize internal record (which may have null schemas) to public DatasetRecord */
+function toDatasetRecord(record: InternalDatasetRecord): DatasetRecord {
+  return {
+    ...record,
+    inputSchema: record.inputSchema ?? undefined,
+    groundTruthSchema: record.groundTruthSchema ?? undefined,
+  };
+}
+
 export class DatasetsInMemory extends DatasetsStorage {
   private db: InMemoryDB;
 
@@ -52,7 +67,7 @@ export class DatasetsInMemory extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     const id = crypto.randomUUID();
     const now = new Date();
-    const dataset: DatasetRecord = {
+    const dataset = {
       id,
       name: input.name,
       description: input.description,
@@ -62,13 +77,14 @@ export class DatasetsInMemory extends DatasetsStorage {
       version: 0,
       createdAt: now,
       updatedAt: now,
-    };
+    } as DatasetRecord;
     this.db.datasets.set(id, dataset);
-    return dataset;
+    return toDatasetRecord(dataset);
   }
 
   async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
-    return this.db.datasets.get(id) ?? null;
+    const record = this.db.datasets.get(id);
+    return record ? toDatasetRecord(record) : null;
   }
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
@@ -77,7 +93,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       throw new Error(`Dataset not found: ${args.id}`);
     }
 
-    const updated: DatasetRecord = {
+    const updated = {
       ...existing,
       name: args.name ?? existing.name,
       description: args.description ?? existing.description,
@@ -85,9 +101,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       inputSchema: args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema,
       groundTruthSchema: args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema,
       updatedAt: new Date(),
-    };
+    } as DatasetRecord;
     this.db.datasets.set(args.id, updated);
-    return updated;
+    return toDatasetRecord(updated);
   }
 
   async deleteDataset({ id }: { id: string }): Promise<void> {
@@ -124,7 +140,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     const end = perPageInput === false ? datasets.length : start + perPage;
 
     return {
-      datasets: datasets.slice(start, end),
+      datasets: datasets.slice(start, end).map(toDatasetRecord),
       pagination: {
         total: datasets.length,
         page,

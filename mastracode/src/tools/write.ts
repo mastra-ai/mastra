@@ -1,10 +1,10 @@
 /**
  * Write tool — create new files or overwrite existing ones.
  */
+import * as fs from "node:fs"
+import * as path from "node:path"
 import { createTool } from "@mastra/core/tools"
 import { z } from "zod/v3"
-import * as path from "path"
-import * as fs from "fs"
 import { assertPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 
 /**
