@@ -65,18 +65,18 @@ const response = await agent.generate('List all files in the workspace');
       defaultValue: "true",
     },
     {
-      name: "readOnly",
-      type: "boolean",
-      description: "When true, all write operations are blocked. Read operations are still allowed.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
       name: "allowedPaths",
       type: "string[]",
       description: "Additional absolute paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Paths are resolved to absolute paths.",
       isOptional: true,
       defaultValue: "[]",
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description: "When true, all write operations are blocked. Read operations are still allowed.",
+      isOptional: true,
+      defaultValue: "false",
     },
   ]}
 />
@@ -146,14 +146,14 @@ Called by `workspace.destroy()`.
 
 ### `setAllowedPaths(pathsOrUpdater)`
 
-Update the allowed paths at runtime. Accepts a direct array or an updater callback receiving the current paths (React setState pattern).
+Update the allowed paths at runtime. Accepts a new paths array (replaces current) or an updater callback that receives the current paths and returns the new set.
 
 ```typescript
 // Set directly
 filesystem.setAllowedPaths(['/home/user/.config']);
 
 // Update with callback
-filesystem.setAllowedPaths(prev => [...prev, '/home/user/.ssh']);
+filesystem.setAllowedPaths(prev => [...prev, '/home/user/documents']);
 
 // Clear all allowed paths
 filesystem.setAllowedPaths([]);

@@ -71,7 +71,7 @@ const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
     // highlight-next-line
-    allowedPaths: ['/home/user/.config', '/home/user/.ssh'],
+    allowedPaths: ['/home/user/.config', '/home/user/documents'],
   }),
 });
 ```
@@ -80,7 +80,7 @@ Allowed paths can be updated at runtime using the `setAllowedPaths()` method:
 
 ```typescript
 // Add a path dynamically
-workspace.filesystem?.setAllowedPaths(prev => [...prev, '/home/user/documents']);
+workspace.filesystem.setAllowedPaths(prev => [...prev, '/home/user/documents']);
 ```
 
 This is the recommended approach for least-privilege access — the agent can only reach the specific directories you allow.
