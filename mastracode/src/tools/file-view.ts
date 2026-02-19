@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator';
 import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 

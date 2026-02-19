@@ -3,7 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { execa, ExecaError } from 'execa';
 import stripAnsi from 'strip-ansi';
 import treeKill from 'tree-kill';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { ipcReporter } from '../ipc/ipc-reporter.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
@@ -254,7 +254,7 @@ Usage notes:
           try {
             process.kill(-subprocess.pid, 'SIGKILL');
           } catch {
-            treeKill(subprocess.pid, 'SIGKILL', () => {});
+            treeKill(subprocess.pid, 'SIGKILL', () => { });
           }
         }
       };
