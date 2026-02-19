@@ -333,7 +333,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
-        id: 'VECTOR_MONGODB_QUERY_MISSING_VECTOR',
+        id: createVectorErrorId('MONGODB', 'QUERY', 'MISSING_VECTOR'),
         text: 'queryVector is required for MongoDB queries. Metadata-only queries are not supported by this vector store.',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,

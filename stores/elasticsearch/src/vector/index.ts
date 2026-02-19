@@ -366,7 +366,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
   }: ElasticSearchVectorParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
-        id: 'VECTOR_ELASTICSEARCH_QUERY_MISSING_VECTOR',
+        id: createVectorErrorId('ELASTICSEARCH', 'QUERY', 'MISSING_VECTOR'),
         text: 'queryVector is required for Elasticsearch queries. Metadata-only queries are not supported by this vector store.',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,

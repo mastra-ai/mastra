@@ -127,7 +127,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
   }: VectorizeQueryParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
-        id: 'VECTOR_VECTORIZE_QUERY_MISSING_VECTOR',
+        id: createVectorErrorId('VECTORIZE', 'QUERY', 'MISSING_VECTOR'),
         text: 'queryVector is required for Vectorize queries. Metadata-only queries are not supported by this vector store.',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,

@@ -152,7 +152,7 @@ describe('PgVector', () => {
         filter: { category: 'A' },
         topK: 10,
       });
-      expect(results.length).toBeGreaterThan(0);
+      expect(results).toHaveLength(2);
       expect(results.every(r => r.metadata?.category === 'A')).toBe(true);
       // v1=[1,0,0] has cosine similarity 1.0 with queryVector [1,0,0]
       expect(results[0]!.score).toBeCloseTo(1, 5);
