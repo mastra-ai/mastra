@@ -77,6 +77,11 @@ export type {
   SandboxInfo,
   SandboxLifecycleHook,
   MastraSandboxOptions,
+  // Background process types
+  CommandHandle,
+  ProcessInfo,
+  SandboxProcessManager,
+  SpawnProcessOptions,
 } from './sandbox';
 export type { MountManagerConfig, MountFn, OnMountHook, OnMountArgs, OnMountResult } from './sandbox';
 

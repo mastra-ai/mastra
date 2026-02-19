@@ -23,6 +23,7 @@ import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 
 import { shellQuote } from '../utils/shell-quote';
+import { E2BProcessManager } from './processes';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
@@ -147,6 +148,12 @@ export class E2BSandbox extends MastraSandbox {
   private readonly connectionOpts: Record<string, string>;
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
 
+  /**
+   * Background process manager.
+   * Always available — auto-starts the sandbox when spawn is called.
+   */
+  readonly processes: E2BProcessManager;
+
   /** Resolved template ID after building (if needed) */
   private _resolvedTemplateId?: string;
 
@@ -167,6 +174,8 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.apiKey && { apiKey: options.apiKey }),
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
+
+    this.processes = new E2BProcessManager(() => this.ensureSandbox(), this.env);
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
@@ -755,6 +764,9 @@ export class E2BSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
+    // Kill all background processes before stopping
+    await this.processes.killAll();
+
     // Unmount all filesystems before stopping
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
@@ -774,6 +786,9 @@ export class E2BSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
+    // Kill all background processes
+    await this.processes.killAll();
+
     // Unmount all filesystems
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
