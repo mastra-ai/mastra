@@ -2,22 +2,23 @@
  * Main TUI class for Mastra Code.
  * Wires the Harness to pi-tui components for a full interactive experience.
  */
+import fs from "node:fs"
+import path from "node:path"
 import {
 	CombinedAutocompleteProvider,
-	type Component,
+	
 	Container,
-	Markdown,
 	Spacer,
 	Text,
 	TUI,
 	ProcessTerminal,
-	visibleWidth,
-	type EditorTheme,
-	type SlashCommand,
+	visibleWidth
+	
+	
 } from "@mariozechner/pi-tui"
+import type {Component, SlashCommand} from "@mariozechner/pi-tui";
+import type { Workspace } from "@mastra/core/workspace"
 import chalk from "chalk"
-import path from "path"
-import fs from "fs"
 import type { Harness } from "../harness/harness.js"
 import type {
 	HarnessEvent,
@@ -26,83 +27,89 @@ import type {
 	HarnessEventListener,
 	TokenUsage,
 } from "../harness/types.js"
-import type { Workspace } from "@mastra/core/workspace"
-import { detectProject, type ProjectInfo } from "../utils/project.js"
-import { ThreadLockError } from "../utils/thread-lock.js"
+import { getToolCategory, TOOL_CATEGORIES } from "../permissions.js"
+import { parseSubagentMeta } from "../tools/subagent.js"
 import { parseError } from "../utils/errors.js"
+import { detectProject  } from "../utils/project.js"
+import type {ProjectInfo} from "../utils/project.js";
 import {
-	loadCustomCommands,
-	type SlashCommandMetadata,
+	loadCustomCommands
+	
 } from "../utils/slash-command-loader.js"
+import type {SlashCommandMetadata} from "../utils/slash-command-loader.js";
 import { processSlashCommand } from "../utils/slash-command-processor.js"
+import { ThreadLockError } from "../utils/thread-lock.js"
+import { AskQuestionDialogComponent } from "./components/ask-question-dialog.js"
+import { AskQuestionInlineComponent } from "./components/ask-question-inline.js"
 import { AssistantMessageComponent } from "./components/assistant-message.js"
+import { CustomEditor } from "./components/custom-editor.js"
+import { DiffOutputComponent } from "./components/diff-output.js"
+import { LoginDialogComponent } from "./components/login-dialog.js"
+import {
+	ModelSelectorComponent
+	
+} from "./components/model-selector.js"
+import type {ModelItem} from "./components/model-selector.js";
 import {
 	GradientAnimator,
 	applyGradientSweep,
 } from "./components/obi-loader.js"
-import { CustomEditor } from "./components/custom-editor.js"
-import { LoginDialogComponent } from "./components/login-dialog.js"
 
-import {
-	ModelSelectorComponent,
-	type ModelItem,
-} from "./components/model-selector.js"
-import { ThreadSelectorComponent } from "./components/thread-selector.js"
-import { OMMarkerComponent, type OMMarkerData } from "./components/om-marker.js"
+import { OMMarkerComponent  } from "./components/om-marker.js"
+import type {OMMarkerData} from "./components/om-marker.js";
 import { OMOutputComponent } from "./components/om-output.js"
-import { OMSettingsComponent } from "./components/om-settings.js"
-import { SettingsComponent } from "./components/settings.js"
-
+import type {
+	OMProgressComponent,OMProgressState} from "./components/om-progress.js";
 import {
-	OMProgressComponent,
-	type OMProgressState,
+	
 	defaultOMProgressState,
 	formatObservationStatus,
-	formatReflectionStatus,
+	formatReflectionStatus
 } from "./components/om-progress.js"
-import { AskQuestionDialogComponent } from "./components/ask-question-dialog.js"
-import { AskQuestionInlineComponent } from "./components/ask-question-inline.js"
+import { OMSettingsComponent } from "./components/om-settings.js"
 import {
 	PlanApprovalInlineComponent,
 	PlanResultComponent,
 } from "./components/plan-approval-inline.js"
-import {
-	ToolApprovalDialogComponent,
-	type ApprovalAction,
-} from "./components/tool-approval-dialog.js"
-import {
-	ToolExecutionComponentEnhanced,
-	type ToolResult,
-} from "./components/tool-execution-enhanced.js"
-import type { IToolExecutionComponent } from "./components/tool-execution-interface.js"
-import { SubagentExecutionComponent } from "./components/subagent-execution.js"
-import { parseSubagentMeta } from "../tools/subagent.js"
-import {
-	TodoProgressComponent,
-	type TodoItem,
-} from "./components/todo-progress.js"
-import { UserMessageComponent } from "./components/user-message.js"
-import { SlashCommandComponent } from "./components/slash-command.js"
-import { SystemReminderComponent } from "./components/system-reminder.js"
+import { SettingsComponent } from "./components/settings.js"
 import { ShellOutputComponent } from "./components/shell-output.js"
-import { DiffOutputComponent } from "./components/diff-output.js"
+import { SlashCommandComponent } from "./components/slash-command.js"
+import { SubagentExecutionComponent } from "./components/subagent-execution.js"
+import { SystemReminderComponent } from "./components/system-reminder.js"
+import { ThreadSelectorComponent } from "./components/thread-selector.js"
+
+import {
+	TodoProgressComponent
+	
+} from "./components/todo-progress.js"
+import type {TodoItem} from "./components/todo-progress.js";
+import {
+	ToolApprovalDialogComponent
+	
+} from "./components/tool-approval-dialog.js"
+import type {ApprovalAction} from "./components/tool-approval-dialog.js";
+import {
+	ToolExecutionComponentEnhanced
+	
+} from "./components/tool-execution-enhanced.js"
+import type {ToolResult} from "./components/tool-execution-enhanced.js";
+import type { IToolExecutionComponent } from "./components/tool-execution-interface.js"
+import { UserMessageComponent } from "./components/user-message.js"
+import {
+	sendNotification
+	
+	
+} from "./notify.js"
+import type {NotificationMode, NotificationReason} from "./notify.js";
 import {
 	getEditorTheme,
 	getMarkdownTheme,
-	getTheme,
 	fg,
 	bold,
-	getContrastText,
 	theme,
 	mastra,
 	tintHex,
 } from "./theme.js"
-import {
-	sendNotification,
-	type NotificationMode,
-	type NotificationReason,
-} from "./notify.js"
-import { getToolCategory, TOOL_CATEGORIES } from "../permissions.js"
 
 // =============================================================================
 // Types
@@ -500,7 +507,7 @@ export class MastraTUI {
 					// Normal send — fire and forget; events handle the rest
 					this.fireMessage(userInput, images)
 				}
-			} catch (error) {
+			} catch {
 				this.showError(error instanceof Error ? error.message : "Unknown error")
 			}
 		}
@@ -618,7 +625,7 @@ export class MastraTUI {
 				this.todoProgress.updateTodos(todos)
 				this.ui.requestRender()
 			}
-		} catch (error) {
+		} catch {
 			// Silently ignore todo rendering errors
 		}
 	}
@@ -644,7 +651,7 @@ export class MastraTUI {
 		// Auto-resume the most recent thread for this directory
 		try {
 			await this.harness.switchThread(mostRecent.id)
-		} catch (error) {
+		} catch {
 			if (error instanceof ThreadLockError) {
 				// Defer the lock conflict prompt until after the TUI is started
 				this.pendingNewThread = true
@@ -2809,7 +2816,7 @@ ${instructions}`,
 					}
 					try {
 						await this.harness.switchThread(thread.id)
-					} catch (error) {
+					} catch {
 						if (error instanceof ThreadLockError) {
 							this.showThreadLockPrompt(
 								thread.title || thread.id,
@@ -3151,7 +3158,7 @@ ${instructions}`,
 				`Skills (${skills.length}):\n${skillLines.join("\n")}\n\n` +
 					"Skills are automatically activated by the agent when relevant.",
 			)
-		} catch (error) {
+		} catch {
 			this.showError(
 				`Failed to list skills: ${error instanceof Error ? error.message : String(error)}`,
 			)
@@ -4203,7 +4210,7 @@ Keyboard shortcuts:
 						this.showInfo(
 							`MCP: Reloaded. ${connected.length} server(s) connected, ${totalTools} tool(s).`,
 						)
-					} catch (error) {
+					} catch {
 						this.showError(
 							`MCP reload failed: ${error instanceof Error ? error.message : String(error)}`,
 						)
@@ -4383,7 +4390,7 @@ Keyboard shortcuts:
 			} else {
 				this.showInfo(`Executed //${command.name} (no output)`)
 			}
-		} catch (error) {
+		} catch {
 			this.showError(
 				`Error executing //${command.name}: ${error instanceof Error ? error.message : String(error)}`,
 			)
@@ -4845,7 +4852,7 @@ Keyboard shortcuts:
 				)
 				this.chatContainer.addChild(component)
 				this.ui.requestRender()
-			} catch (error) {
+			} catch {
 				this.showError(
 					error instanceof Error ? error.message : "Failed to get diff",
 				)
@@ -4933,7 +4940,7 @@ Keyboard shortcuts:
 			)
 			this.chatContainer.addChild(component)
 			this.ui.requestRender()
-		} catch (error) {
+		} catch {
 			this.showError(
 				error instanceof Error ? error.message : "Shell command failed",
 			)

@@ -3,8 +3,9 @@
  * syntax highlighting, and smart summarization.
  */
 
-import { Container, Text, Spacer, type TUI } from "@mariozechner/pi-tui"
-import { theme, fg, bold, bg } from "../theme.js"
+import { Container, Text, Spacer  } from "@mariozechner/pi-tui"
+import type {TUI} from "@mariozechner/pi-tui";
+import { fg, bold, bg } from "../theme.js"
 import { CollapsibleComponent } from "./collapsible.js"
 
 export interface ErrorInfo {

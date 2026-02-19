@@ -1,6 +1,6 @@
-import { promises as fs } from "fs"
-import { exec } from "child_process"
-import { promisify } from "util"
+import { exec } from "node:child_process"
+import { promises as fs } from "node:fs"
+import { promisify } from "node:util"
 import { distance } from "fastest-levenshtein"
 
 function removeWhitespace(str: string): string {

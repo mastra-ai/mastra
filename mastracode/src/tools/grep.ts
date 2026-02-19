@@ -1,10 +1,10 @@
 /**
  * Grep tool — fast content search using ripgrep (rg) with Node.js fallback.
  */
+import * as path from "node:path"
 import { createTool } from "@mastra/core/tools"
-import { z } from "zod/v3"
 import { execa } from "execa"
-import * as path from "path"
+import { z } from "zod/v3"
 import { truncateStringForTokenEstimate } from "../utils/token-estimator.js"
 import { assertPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 

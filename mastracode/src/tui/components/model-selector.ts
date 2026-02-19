@@ -6,14 +6,15 @@
 import {
 	Box,
 	Container,
-	type Focusable,
+	
 	fuzzyFilter,
 	getEditorKeybindings,
 	Input,
 	Spacer,
-	Text,
-	type TUI,
+	Text
+	
 } from "@mariozechner/pi-tui"
+import type {Focusable, TUI} from "@mariozechner/pi-tui";
 import { bg, fg, bold } from "../theme.js"
 
 // =============================================================================

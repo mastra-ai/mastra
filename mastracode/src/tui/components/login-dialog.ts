@@ -2,19 +2,20 @@
  * Login dialog component - handles OAuth login flow UI
  */
 
+import { exec } from "node:child_process"
 import {
 	Box,
 	Container,
-	type Focusable,
+	
 	getEditorKeybindings,
 	Input,
 	Spacer,
-	Text,
-	type TUI,
+	Text
+	
 } from "@mariozechner/pi-tui"
+import type {Focusable, TUI} from "@mariozechner/pi-tui";
 import { getOAuthProviders } from "../../auth/index.js"
 import { bg, fg } from "../theme.js"
-import { exec } from "child_process"
 
 export class LoginDialogComponent extends Box implements Focusable {
 	private contentContainer: Container

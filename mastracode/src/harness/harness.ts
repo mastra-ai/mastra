@@ -7,6 +7,26 @@ import { Workspace } from "@mastra/core/workspace"
 import type { WorkspaceConfig } from "@mastra/core/workspace"
 import type { z } from "zod"
 
+import {
+	AuthStorage,
+	getOAuthProviders
+	
+	
+} from "../auth/index.js"
+import type {OAuthProviderInterface, OAuthLoginCallbacks} from "../auth/index.js";
+import type { HookManager } from "../hooks/index.js"
+import type { MCPManager } from "../mcp/index.js"
+import {
+	
+	
+	SessionGrants,
+	resolveApproval,
+	createDefaultRules,
+	getToolCategory
+} from "../permissions.js"
+import type {PermissionRules, ToolCategory} from "../permissions.js";
+import { parseError  } from "../utils/errors.js"
+import { acquireThreadLock, releaseThreadLock } from "../utils/thread-lock.js"
 import type {
 	HeartbeatHandler,
 	HarnessConfig,
@@ -20,22 +40,6 @@ import type {
 	HarnessStateSchema,
 	HarnessThread,
 } from "./types"
-import {
-	AuthStorage,
-	getOAuthProviders,
-	type OAuthProviderInterface,
-	type OAuthLoginCallbacks,
-} from "../auth/index.js"
-import { parseError, type ParsedError } from "../utils/errors.js"
-import { acquireThreadLock, releaseThreadLock } from "../utils/thread-lock.js"
-import {
-	type PermissionRules,
-	type ToolCategory,
-	SessionGrants,
-	resolveApproval,
-	createDefaultRules,
-	getToolCategory,
-} from "../permissions.js"
 
 // =============================================================================
 /**
@@ -138,8 +142,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 		  }) => Promise<Workspace | undefined> | Workspace | undefined)
 		| undefined = undefined
 	private workspaceInitialized = false
-	private hookManager: import("../hooks/index.js").HookManager | undefined
-	private mcpManager: import("../mcp/index.js").MCPManager | undefined
+	private hookManager: HookManager | undefined
+	private mcpManager: MCPManager | undefined
 	private sessionGrants = new SessionGrants()
 	private streamDebug = !!process.env.MASTRA_STREAM_DEBUG
 	private heartbeatTimers = new Map<
@@ -390,14 +394,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 	/**
 	 * Get the hook manager (if configured).
 	 */
-	getHookManager(): import("../hooks/index.js").HookManager | undefined {
+	getHookManager(): HookManager | undefined {
 		return this.hookManager
 	}
 
 	/**
 	 * Get the MCP manager (if configured).
 	 */
-	getMcpManager(): import("../mcp/index.js").MCPManager | undefined {
+	getMcpManager(): MCPManager | undefined {
 		return this.mcpManager
 	}
 
@@ -1090,7 +1094,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - token persistence is not critical
 		}
 	}
@@ -1117,7 +1121,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - settings persistence is not critical
 		}
 	}
@@ -1144,7 +1148,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 					},
 				})
 			}
-		} catch (error) {
+		} catch {
 			// Silently fail - settings removal is not critical
 		}
 	}
@@ -1247,7 +1251,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
 			// Load OM progress from storage record
 			await this.loadOMProgress()
-		} catch (error) {
+		} catch {
 			this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
 		}
 	}

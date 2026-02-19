@@ -1,9 +1,8 @@
+import * as fs from "node:fs"
+import * as path from "node:path"
 import { describe, it, expect, afterAll, afterEach } from "vitest"
 import { stringReplaceLspTool } from "../../tools/string-replace-lsp.js"
 import { lspManager } from "../manager.js"
-import * as fs from "fs"
-import * as path from "path"
-import * as os from "os"
 
 const projectRoot = path.resolve(import.meta.dirname, "../../../")
 

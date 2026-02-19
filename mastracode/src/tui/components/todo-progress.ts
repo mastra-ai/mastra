@@ -6,7 +6,7 @@
  */
 import { Container, Text, Spacer } from "@mariozechner/pi-tui"
 import chalk from "chalk"
-import { fg, bold, mastra } from "../theme.js"
+import { fg, bold } from "../theme.js"
 
 export interface TodoItem {
 	content: string

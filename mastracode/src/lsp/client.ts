@@ -1,4 +1,4 @@
-import type { ChildProcess } from "child_process"
+import type { ChildProcess } from "node:child_process"
 import {
 	StreamMessageReader,
 	StreamMessageWriter,
@@ -74,20 +74,20 @@ export class LSPClient {
 			},
 		)
 		;(this.connection as any).onNotification(
-			(method: string, params: any) => {},
+			(_method: string, _params: any) => {},
 		)
 
 		this.connection.listen()
 
 		// Capture stderr for debugging
 		if (this.process.stderr) {
-			this.process.stderr.on("data", (data) => {})
+			this.process.stderr.on("data", (_data) => {})
 		}
 
 		// Handle process errors
-		this.process.on("error", (error) => {})
+		this.process.on("error", (_error) => {})
 
-		this.process.on("exit", (code, signal) => {})
+		this.process.on("exit", (_code, _signal) => {})
 
 		// Send initialize request matching OpenCode's structure
 		const initParams: any = {
@@ -192,7 +192,7 @@ export class LSPClient {
 		// Handle window/workDoneProgress/create requests
 		this.connection.onRequest(
 			"window/workDoneProgress/create",
-			(params: any) => {
+			(_params: any) => {
 				return null
 			},
 		)
@@ -312,7 +312,7 @@ export class LSPClient {
 				textDocument: TextDocumentIdentifier.create(`file://${filePath}`),
 				position: Position.create(line, character),
 			})
-		} catch (error) {
+		} catch {
 			return null
 		}
 	}
@@ -383,12 +383,12 @@ export class LSPClient {
 					])
 					this.connection.sendNotification("exit")
 				}
-			} catch (error) {
+			} catch {
 				// Ignore shutdown errors (process may have already crashed)
 			}
 			try {
 				this.connection.dispose()
-			} catch (error) {
+			} catch {
 				// Ignore dispose errors (stream may already be destroyed)
 			}
 			this.connection = null
@@ -399,7 +399,7 @@ export class LSPClient {
 				if (!this.process.killed) {
 					this.process.kill()
 				}
-			} catch (error) {
+			} catch {
 				// Ignore kill errors
 			}
 			this.process = null
