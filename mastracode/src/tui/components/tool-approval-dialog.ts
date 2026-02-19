@@ -8,14 +8,15 @@
  *   a       — always allow this category for the session
  *   Y       — switch to YOLO mode (approve all)
  */
-import chalk from "chalk"
 import {
 	Box,
-	type Focusable,
+	
 	getEditorKeybindings,
 	Spacer,
-	Text,
+	Text
 } from "@mariozechner/pi-tui"
+import type {Focusable} from "@mariozechner/pi-tui";
+import chalk from "chalk"
 import { bg, fg } from "../theme.js"
 
 export type ApprovalAction =

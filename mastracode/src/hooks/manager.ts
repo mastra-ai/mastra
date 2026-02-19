@@ -2,6 +2,12 @@
  * HookManager — high-level orchestration for the hooks system.
  * Created once at startup, provides methods for each lifecycle event.
  */
+import {
+	loadHooksConfig,
+	getProjectHooksPath,
+	getGlobalHooksPath,
+} from "./config.js"
+import { runHooksForEvent } from "./executor.js"
 import type {
 	HooksConfig,
 	HookEventResult,
@@ -11,12 +17,6 @@ import type {
 	HookStdinSession,
 	HookStdinNotification,
 } from "./types.js"
-import {
-	loadHooksConfig,
-	getProjectHooksPath,
-	getGlobalHooksPath,
-} from "./config.js"
-import { runHooksForEvent } from "./executor.js"
 
 export class HookManager {
 	private config: HooksConfig

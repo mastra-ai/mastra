@@ -1,11 +1,11 @@
+import * as fs from "node:fs"
+import * as path from "node:path"
 import { createTool } from "@mastra/core/tools"
 import { z } from "zod/v3"
-import { sharedFileEditor } from "./file-editor.js"
 import { lspManager } from "../lsp/manager.js"
 import { findWorkspaceRoot } from "../lsp/workspace.js"
-import * as path from "path"
-import * as fs from "fs"
 import { truncateStringForTokenEstimate } from "../utils/token-estimator.js"
+import { sharedFileEditor } from "./file-editor.js"
 import { assertPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 
 export const stringReplaceLspTool = createTool({
@@ -117,8 +117,7 @@ Usage notes:
 						diagnosticOutput = `\n\nLSP Diagnostics:\nNo errors or warnings`
 					}
 				}
-			} catch (error) {
-				// LSP errors are non-fatal
+			} catch {
 				// LSP errors are non-fatal — diagnostics just won't be available
 			}
 

@@ -1,0 +1,28 @@
+import type { HarnessRuntimeContext } from "../harness/types.js"
+import type { stateSchema } from "../schema.js"
+import type { PromptContext } from "./prompts/index.js"
+import { buildFullPrompt } from "./prompts/index.js"
+
+export function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
+    const harnessContext = requestContext.get("harness") as
+        | HarnessRuntimeContext<typeof stateSchema>
+        | undefined
+    const state = harnessContext?.state
+    const modeId = harnessContext?.modeId ?? "build"
+
+    const promptCtx: PromptContext = {
+        projectPath: state?.projectPath ?? process.cwd(),
+        projectName: state?.projectName ?? "",
+        gitBranch: state?.gitBranch,
+        platform: process.platform,
+        date: new Date().toISOString().split("T")[0]!,
+        mode: modeId,
+        activePlan: state?.activePlan ?? null,
+        modeId: modeId,
+        currentDate: new Date().toISOString().split("T")[0]!,
+        workingDir: state?.projectPath ?? process.cwd(),
+        state: state,
+    }
+
+    return buildFullPrompt(promptCtx)
+}

@@ -9,18 +9,19 @@
 import {
 	Box,
 	Container,
-	type Focusable,
+	
 	fuzzyFilter,
 	getEditorKeybindings,
 	Input,
 	SelectList,
-	type SelectItem,
-	type SettingItem,
+	
+	
 	SettingsList,
 	Spacer,
-	Text,
-	type TUI,
+	Text
+	
 } from "@mariozechner/pi-tui"
+import type {Focusable, SelectItem, SettingItem, TUI} from "@mariozechner/pi-tui";
 import {
 	fg,
 	bg,

@@ -7,9 +7,9 @@
 
 import { execSync } from "node:child_process"
 import { createHash } from "node:crypto"
-import path from "node:path"
 import fs from "node:fs"
 import os from "node:os"
+import path from "node:path"
 export interface ProjectInfo {
 	/** Unique resource ID for this project (used for thread grouping) */
 	resourceId: string
