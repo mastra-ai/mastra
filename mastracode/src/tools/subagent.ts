@@ -8,11 +8,11 @@
  * Stream events are forwarded to the parent harness so the TUI can show
  * real-time subagent activity (tool calls, text deltas, etc.).
  */
-import { createTool } from "@mastra/core/tools"
 import { Agent } from "@mastra/core/agent"
+import { createTool } from "@mastra/core/tools"
 import { z } from "zod/v3"
 import { getSubagentDefinition, getSubagentIds } from "../agents/subagents/index.js"
-import type { HarnessEvent, HarnessRuntimeContext } from "../harness/types.js"
+import type { HarnessRuntimeContext } from "../harness/types.js"
 
 export interface SubagentToolDeps {
 	/**
