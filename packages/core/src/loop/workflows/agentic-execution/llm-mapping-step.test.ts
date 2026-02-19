@@ -584,7 +584,18 @@ describe('createLLMMappingStep onChunk', () => {
     );
   });
 
-  it('should not call onChunk when options.onChunk is not provided', async () => {
+  it('should not call onChunk for blocked chunks (tripwire)', async () => {
+    // processOutputStream calls abort() to trigger a TripWire, which blocks the chunk
+    const blockingProcessor = {
+      id: 'blocker',
+      name: 'blocker',
+      processOutputStream: vi.fn().mockImplementation(({ abort }: any) => {
+        abort('Content blocked by policy');
+      }),
+    };
+
+    const processorStates = new Map();
+
     const llmMappingStep = createLLMMappingStep(
       {
         models: {} as any,
@@ -592,7 +603,10 @@ describe('createLLMMappingStep onChunk', () => {
         messageList,
         runId: 'test-run',
         _internal: { generateId: () => 'test-message-id' },
-        // no options.onChunk
+        options: { onChunk },
+        outputProcessors: [blockingProcessor],
+        processorStates,
+        logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       } as any,
       llmExecutionStep,
     );
@@ -606,8 +620,69 @@ describe('createLLMMappingStep onChunk', () => {
       },
     ];
 
-    // Should not throw when onChunk is not provided
-    await expect(llmMappingStep.execute(createExecuteParams(inputData))).resolves.toBeDefined();
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // onChunk should NOT be called because the chunk was blocked
+    expect(onChunk).not.toHaveBeenCalled();
+    // But a tripwire chunk should have been enqueued
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tripwire',
+      }),
+    );
+  });
+
+  it('should pass processed chunk to onChunk when output processor modifies it', async () => {
+    // processOutputStream returns the modified chunk directly
+    const modifyingProcessor = {
+      id: 'modifier',
+      name: 'modifier',
+      processOutputStream: vi.fn().mockImplementation(({ part }: any) => {
+        return {
+          ...part,
+          payload: { ...part.payload, modified: true },
+        };
+      }),
+    };
+
+    const processorStates = new Map();
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        options: { onChunk },
+        outputProcessors: [modifyingProcessor],
+        processorStates,
+        logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'myTool',
+        args: { input: 'test' },
+        result: { success: true },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // onChunk should receive the MODIFIED chunk, not the original
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          modified: true,
+          toolCallId: 'call-1',
+        }),
+      }),
+    );
   });
 });
 
