@@ -464,6 +464,8 @@ interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
+  /** Custom instructions to append to the Observer's system prompt */
+  instruction?: string;
 }
 
 interface ResolvedReflectionConfig {
@@ -479,6 +481,8 @@ interface ResolvedReflectionConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
+  /** Custom instructions to append to the Reflector's system prompt */
+  instruction?: string;
 }
 
 /**
@@ -1099,6 +1103,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
+      instruction: config.observation?.instruction,
     };
 
     // Resolve reflection config with defaults
@@ -1127,6 +1132,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           ),
+      instruction: config.reflection?.instruction,
     };
 
     this.tokenCounter = new TokenCounter();
@@ -1430,7 +1436,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
-      const systemPrompt = buildObserverSystemPrompt();
+      const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
@@ -1447,7 +1453,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getReflectorAgent(): Agent {
     if (!this.reflectorAgent) {
-      const systemPrompt = buildReflectorSystemPrompt();
+      const systemPrompt = buildReflectorSystemPrompt(this.reflectionConfig.instruction);
 
       this.reflectorAgent = new Agent({
         id: 'observational-memory-reflector',
@@ -2175,7 +2181,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
       model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(true),
+      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
     });
 
     const prompt = buildMultiThreadObserverPrompt(existingObservations, messagesByThread, threadOrder);

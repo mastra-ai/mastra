@@ -228,7 +228,7 @@ describe('createLLMMappingStep HITL behavior', () => {
     ];
 
     // Act
-    await llmMappingStep.execute(createExecuteParams(inputData));
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
     // Assert: Should emit tool-error chunk
     expect(controller.enqueue).toHaveBeenCalledWith(
@@ -240,7 +240,9 @@ describe('createLLMMappingStep HITL behavior', () => {
         }),
       }),
     );
-    expect(bail).toHaveBeenCalled();
+    // Should NOT bail — the agentic loop should continue so the model can see the error and retry
+    expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
   });
 
   it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {
@@ -362,7 +364,7 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(false);
   });
 
-  it('should bail when errors are a mix of tool-not-found and other errors', async () => {
+  it('should continue the loop when errors are a mix of tool-not-found and other errors', async () => {
     // Arrange: One tool-not-found error and one execution error
     const { ToolNotFoundError } = await import('../errors');
     const inputData: ToolCallOutput[] = [
@@ -385,9 +387,10 @@ describe('createLLMMappingStep HITL behavior', () => {
     // Act
     const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
-    // Assert: Should bail because not all errors are tool-not-found
-    expect(bail).toHaveBeenCalled();
-    expect(result.stepResult.isContinued).toBe(false);
+    // Assert: Should NOT bail — error messages are in the messageList,
+    // the model can see them and self-correct or retry
+    expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
   });
 });
 
