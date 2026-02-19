@@ -297,9 +297,9 @@ describeIfAstGrep('workspace_ast_edit', () => {
   });
 
   // ===========================================================================
-  // Rename Function
+  // Rename
   // ===========================================================================
-  describe('rename-function transform', () => {
+  describe('rename transform', () => {
     it('should rename function declaration and call sites', async () => {
       const code = `function greet(name: string) {\n  return "Hello " + name;\n}\n\ngreet("world");\ngreet("foo");`;
       await fs.writeFile(path.join(tempDir, 'test.ts'), code);
@@ -311,7 +311,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
         path: '/test.ts',
-        transform: 'rename-function',
+        transform: 'rename',
         targetName: 'greet',
         newName: 'sayHello',
       });
@@ -326,29 +326,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(content).not.toMatch(/\bgreet\b/);
     });
 
-    it('should error when targetName or newName missing', async () => {
-      await fs.writeFile(path.join(tempDir, 'test.ts'), 'function foo() {}');
-
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-      });
-      const tools = createWorkspaceTools(workspace);
-
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
-        path: '/test.ts',
-        transform: 'rename-function',
-        targetName: 'foo',
-      });
-
-      expect(result).toContain('newName');
-    });
-  });
-
-  // ===========================================================================
-  // Rename Variable
-  // ===========================================================================
-  describe('rename-variable transform', () => {
-    it('should rename all identifier occurrences', async () => {
+    it('should rename variable declarations and all references', async () => {
       const code = `const count = 0;\nconst total = count + 1;\nconsole.log(count);`;
       await fs.writeFile(path.join(tempDir, 'test.ts'), code);
 
@@ -359,7 +337,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
         path: '/test.ts',
-        transform: 'rename-variable',
+        transform: 'rename',
         targetName: 'count',
         newName: 'counter',
       });
@@ -373,6 +351,23 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(content).toContain('console.log(counter)');
       // 'count' appears as substring of 'counter', so use word boundary check
       expect(content).not.toMatch(/\bcount\b/);
+    });
+
+    it('should error when targetName or newName missing', async () => {
+      await fs.writeFile(path.join(tempDir, 'test.ts'), 'function foo() {}');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'rename',
+        targetName: 'foo',
+      });
+
+      expect(result).toContain('newName');
     });
   });
 
@@ -409,7 +404,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
         path: '/test.tsx',
-        transform: 'rename-variable',
+        transform: 'rename',
         targetName: 'App',
         newName: 'MyApp',
       });
@@ -430,7 +425,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
         path: '/test.jsx',
-        transform: 'rename-variable',
+        transform: 'rename',
         targetName: 'App',
         newName: 'MyApp',
       });

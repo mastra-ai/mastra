@@ -391,10 +391,8 @@ Transforms:
   { transform: "add-import", importSpec: { module: "express", names: ["express", "Router"], isDefault: true } } → import express, { Router } from 'express'
 - remove-import: Remove an import by module name.
   { transform: "remove-import", targetName: "lodash" }
-- rename-function: Rename function declarations and all call sites.
-  { transform: "rename-function", targetName: "oldName", newName: "newName" }
-- rename-variable: Rename variable declarations and all references.
-  { transform: "rename-variable", targetName: "oldVar", newName: "newVar" }
+- rename: Rename all occurrences of an identifier (not scope-aware).
+  { transform: "rename", targetName: "oldName", newName: "newName" }
 
 Pattern replace (for everything else):
   { pattern: "console.log($ARG)", replacement: "logger.debug($ARG)" }`,
@@ -409,21 +407,14 @@ Pattern replace (for everything else):
       .optional()
       .describe('Replacement pattern (can use captured $VARIABLES, e.g., "logger.debug($ARG)")'),
     transform: z
-      .enum(['add-import', 'remove-import', 'rename-function', 'rename-variable'])
+      .enum(['add-import', 'remove-import', 'rename'])
       .optional()
       .describe('Structured transformation to apply'),
     targetName: z
       .string()
       .optional()
-      .describe(
-        'Required for remove-import, rename-function, and rename-variable transforms. The current name to target.',
-      ),
-    newName: z
-      .string()
-      .optional()
-      .describe(
-        'Required for rename-function and rename-variable transforms. The new name to replace targetName with.',
-      ),
+      .describe('Required for remove-import and rename transforms. The current name to target.'),
+    newName: z.string().optional().describe('Required for rename transform. The new name to replace targetName with.'),
     importSpec: z
       .object({
         module: z.string().describe('Module to import from'),
@@ -494,23 +485,13 @@ Pattern replace (for everything else):
           break;
         }
 
-        case 'rename-function': {
+        case 'rename': {
           if (!targetName || !newName) {
-            return 'Error: targetName and newName are required for rename-function transform';
+            return 'Error: targetName and newName are required for rename transform';
           }
-          const funcResult = renameIdentifiers(content, root, targetName, newName);
-          modifiedContent = funcResult.content;
-          changes.push(`Renamed function '${targetName}' to '${newName}' (${funcResult.count} occurrences)`);
-          break;
-        }
-
-        case 'rename-variable': {
-          if (!targetName || !newName) {
-            return 'Error: targetName and newName are required for rename-variable transform';
-          }
-          const varResult = renameIdentifiers(content, root, targetName, newName);
-          modifiedContent = varResult.content;
-          changes.push(`Renamed variable '${targetName}' to '${newName}' (${varResult.count} occurrences)`);
+          const renameResult = renameIdentifiers(content, root, targetName, newName);
+          modifiedContent = renameResult.content;
+          changes.push(`Renamed '${targetName}' to '${newName}' (${renameResult.count} occurrences)`);
           break;
         }
       }
