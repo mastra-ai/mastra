@@ -1,5 +1,109 @@
 # @mastra/editor
 
+## 0.5.0
+
+### Minor Changes
+
+- Added workspace and skill storage domains with full CRUD, versioning, and implementations across LibSQL, Postgres, and MongoDB. Added `editor.workspace` and `editor.skill` namespaces for managing workspace configurations and skill definitions through the editor. Agents stored in the editor can now reference workspaces (by ID or inline config) and skills, with full hydration to runtime `Workspace` instances during agent resolution. ([#13156](https://github.com/mastra-ai/mastra/pull/13156))
+
+  **Filesystem-native skill versioning (draft → publish model):**
+
+  Skills are versioned as filesystem trees with content-addressable blob storage. The editing surface (live filesystem) is separated from the serving surface (versioned blob store), enabling a `draft → publish` workflow:
+  - `editor.skill.publish(skillId, source, skillPath)` — Snapshots a skill directory from the filesystem into blob storage, creates a new version with a tree manifest, and sets `activeVersionId`
+  - Version switching via `editor.skill.update({ id, activeVersionId })` — Points the skill to a previous version without re-publishing
+  - Publishing a skill automatically invalidates cached agents that reference it, so they re-hydrate with the updated version on next access
+
+  **Agent skill resolution strategies:**
+
+  Agents can reference skills with different resolution strategies:
+  - `strategy: 'latest'` — Resolves the skill's active version (honors `activeVersionId` for rollback)
+  - `pin: '<versionId>'` — Pins to a specific version, immune to publishes
+  - `strategy: 'live'` — Reads directly from the live filesystem (no blob store)
+
+  **Blob storage infrastructure:**
+  - `BlobStore` abstract class for content-addressable storage keyed by SHA-256 hash
+  - `InMemoryBlobStore` for testing
+  - LibSQL, Postgres, and MongoDB implementations
+  - `S3BlobStore` for storing blobs in S3 or S3-compatible storage (AWS, R2, MinIO, DO Spaces)
+  - `BlobStoreProvider` interface and `MastraEditorConfig.blobStores` registry for pluggable blob storage
+  - `VersionedSkillSource` and `CompositeVersionedSkillSource` for reading skill files from the blob store at runtime
+
+  **New storage types:**
+  - `StorageWorkspaceSnapshotType` and `StorageSkillSnapshotType` with corresponding input/output types
+  - `StorageWorkspaceRef` for ID-based or inline workspace references on agents
+  - `StorageSkillConfig` for per-agent skill overrides (`pin`, `strategy`, description, instructions)
+  - `SkillVersionTree` and `SkillVersionTreeEntry` for tree manifests
+  - `StorageBlobEntry` for content-addressable blob entries
+  - `SKILL_BLOBS_SCHEMA` for the `mastra_skill_blobs` table
+
+  **New editor namespaces:**
+  - `editor.workspace` — CRUD for workspace configs, plus `hydrateSnapshotToWorkspace()` for resolving to runtime `Workspace` instances
+  - `editor.skill` — CRUD for skill definitions, plus `publish()` for filesystem-to-blob snapshots
+
+  **Provider registries:**
+  - `MastraEditorConfig` accepts `filesystems`, `sandboxes`, and `blobStores` provider registries (keyed by provider ID)
+  - Built-in `local` filesystem and sandbox providers are auto-registered
+  - `editor.resolveBlobStore()` resolves from provider registry or falls back to the storage backend's blobs domain
+  - Providers expose `id`, `name`, `description`, `configSchema` (JSON Schema for UI form rendering), and a factory method
+
+  **Storage adapter support:**
+  - LibSQL: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - Postgres: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - MongoDB: Full `workspaces`, `skills`, and `blobs` domain implementations
+  - All three include `workspace`, `skills`, and `skillsFormat` fields on agent versions
+
+  **Server endpoints:**
+  - `GET/POST/PATCH/DELETE /stored/workspaces` — CRUD for stored workspaces
+  - `GET/POST/PATCH/DELETE /stored/skills` — CRUD for stored skills
+  - `POST /stored/skills/:id/publish` — Publish a skill from a filesystem source
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+  import { s3FilesystemProvider, s3BlobStoreProvider } from '@mastra/s3';
+  import { e2bSandboxProvider } from '@mastra/e2b';
+
+  const editor = new MastraEditor({
+    filesystems: { s3: s3FilesystemProvider },
+    sandboxes: { e2b: e2bSandboxProvider },
+    blobStores: { s3: s3BlobStoreProvider },
+  });
+
+  // Create a skill and publish it
+  const skill = await editor.skill.create({
+    name: 'Code Review',
+    description: 'Reviews code for best practices',
+    instructions: 'Analyze the code and provide feedback...',
+  });
+  await editor.skill.publish(skill.id, source, 'skills/code-review');
+
+  // Agents resolve skills by strategy
+  await editor.agent.create({
+    name: 'Dev Assistant',
+    model: { provider: 'openai', name: 'gpt-4' },
+    workspace: { type: 'id', workspaceId: workspace.id },
+    skills: { [skill.id]: { strategy: 'latest' } },
+    skillsFormat: 'xml',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed conditional rules not being persisted for workflows, agents, and scorers when creating or updating agents in the CMS. Rules configured on these entities are now correctly saved to storage. ([#13044](https://github.com/mastra-ai/mastra/pull/13044))
+
+- CMS draft support with status badges for agents. ([#13194](https://github.com/mastra-ai/mastra/pull/13194))
+  - Agent list now resolves the latest (draft) version for each stored agent, showing current edits rather than the last published state.
+  - Added `hasDraft` and `activeVersionId` fields to the agent list API response.
+  - Agent list badges: "Published" (green) when a published version exists, "Draft" (colored when unpublished changes exist, grayed out otherwise).
+  - Added `resolvedVersionId` to all `StorageResolved*Type` types so the server can detect whether the latest version differs from the active version.
+  - Added `status` option to `GetByIdOptions` to allow resolving draft vs published versions through the editor layer.
+  - Fixed editor cache not being cleared on version activate, restore, and delete — all four versioned domains (agents, scorers, prompt-blocks, mcp-clients) now clear the cache after version mutations.
+  - Added `ALTER TABLE` migration for `mastra_agent_versions` in libsql and pg to add newer columns (`mcpClients`, `requestContextSchema`, `workspace`, `skills`, `skillsFormat`).
+
+- Updated dependencies [[`252580a`](https://github.com/mastra-ai/mastra/commit/252580a71feb0e46d0ccab04a70a79ff6a2ee0ab), [`f8e819f`](https://github.com/mastra-ai/mastra/commit/f8e819fabdfdc43d2da546a3ad81ba23685f603d), [`f8e819f`](https://github.com/mastra-ai/mastra/commit/f8e819fabdfdc43d2da546a3ad81ba23685f603d), [`5c75261`](https://github.com/mastra-ai/mastra/commit/5c7526120d936757d4ffb7b82232e1641ebd45cb), [`e27d832`](https://github.com/mastra-ai/mastra/commit/e27d83281b5e166fd63a13969689e928d8605944), [`e37ef84`](https://github.com/mastra-ai/mastra/commit/e37ef8404043c94ca0c8e35ecdedb093b8087878), [`6fdd3d4`](https://github.com/mastra-ai/mastra/commit/6fdd3d451a07a8e7e216c62ac364f8dd8e36c2af), [`10cf521`](https://github.com/mastra-ai/mastra/commit/10cf52183344743a0d7babe24cd24fd78870c354), [`6fdd3d4`](https://github.com/mastra-ai/mastra/commit/6fdd3d451a07a8e7e216c62ac364f8dd8e36c2af), [`efdb682`](https://github.com/mastra-ai/mastra/commit/efdb682887f6522149769383908f9790c188ab88), [`0dee7a0`](https://github.com/mastra-ai/mastra/commit/0dee7a0ff4c2507e6eb6e6ee5f9738877ebd4ad1), [`04c2c8e`](https://github.com/mastra-ai/mastra/commit/04c2c8e888984364194131aecb490a3d6e920e61), [`02dc07a`](https://github.com/mastra-ai/mastra/commit/02dc07acc4ad42d93335825e3308f5b42266eba2), [`8650e4d`](https://github.com/mastra-ai/mastra/commit/8650e4d3579a2c3a13e2dba7ec6ee7c82c7f61a8), [`bd222d3`](https://github.com/mastra-ai/mastra/commit/bd222d39e292bfcc4a2d9a9e6ec3976cc5a4f22f), [`bb7262b`](https://github.com/mastra-ai/mastra/commit/bb7262b7c0ca76320d985b40510b6ffbbb936582), [`1415bcd`](https://github.com/mastra-ai/mastra/commit/1415bcd894baba03e07640b3b1986037db49559d), [`cf1c6e7`](https://github.com/mastra-ai/mastra/commit/cf1c6e789b131f55638fed52183a89d5078b4876), [`5ffadfe`](https://github.com/mastra-ai/mastra/commit/5ffadfefb1468ac2612b20bb84d24c39de6961c0), [`1e1339c`](https://github.com/mastra-ai/mastra/commit/1e1339cc276e571a48cfff5014487877086bfe68), [`ffa5468`](https://github.com/mastra-ai/mastra/commit/ffa546857fc4821753979b3a34e13b4d76fbbcd4), [`d03df73`](https://github.com/mastra-ai/mastra/commit/d03df73f8fe9496064a33e1c3b74ba0479bf9ee6), [`79b8f45`](https://github.com/mastra-ai/mastra/commit/79b8f45a6767e1a5c3d56cd3c5b1214326b81661), [`9bbf08e`](https://github.com/mastra-ai/mastra/commit/9bbf08e3c20731c79dea13a765895b9fcf29cbf1), [`0a25952`](https://github.com/mastra-ai/mastra/commit/0a259526b5e1ac11e6efa53db1f140272962af2d), [`ffa5468`](https://github.com/mastra-ai/mastra/commit/ffa546857fc4821753979b3a34e13b4d76fbbcd4), [`3264a04`](https://github.com/mastra-ai/mastra/commit/3264a04e30340c3c5447433300a035ea0878df85), [`6fdd3d4`](https://github.com/mastra-ai/mastra/commit/6fdd3d451a07a8e7e216c62ac364f8dd8e36c2af), [`6fdd3d4`](https://github.com/mastra-ai/mastra/commit/6fdd3d451a07a8e7e216c62ac364f8dd8e36c2af), [`088d9ba`](https://github.com/mastra-ai/mastra/commit/088d9ba2577518703c52b0dccd617178d9ee6b0d), [`74fbebd`](https://github.com/mastra-ai/mastra/commit/74fbebd918a03832a2864965a8bea59bf617d3a2), [`74fbebd`](https://github.com/mastra-ai/mastra/commit/74fbebd918a03832a2864965a8bea59bf617d3a2), [`aea6217`](https://github.com/mastra-ai/mastra/commit/aea621790bfb2291431b08da0cc5e6e150303ae7), [`b6a855e`](https://github.com/mastra-ai/mastra/commit/b6a855edc056e088279075506442ba1d6fa6def9), [`ae408ea`](https://github.com/mastra-ai/mastra/commit/ae408ea7128f0d2710b78d8623185198e7cb19c1), [`17e942e`](https://github.com/mastra-ai/mastra/commit/17e942eee2ba44985b1f807e6208cdde672f82f9), [`2015cf9`](https://github.com/mastra-ai/mastra/commit/2015cf921649f44c3f5bcd32a2c052335f8e49b4), [`7ef454e`](https://github.com/mastra-ai/mastra/commit/7ef454eaf9dcec6de60021c8f42192052dd490d6), [`2be1d99`](https://github.com/mastra-ai/mastra/commit/2be1d99564ce79acc4846071082bff353035a87a), [`2708fa1`](https://github.com/mastra-ai/mastra/commit/2708fa1055ac91c03e08b598869f6b8fb51fa37f), [`ba74aef`](https://github.com/mastra-ai/mastra/commit/ba74aef5716142dbbe931351f5243c9c6e4128a9), [`ba74aef`](https://github.com/mastra-ai/mastra/commit/ba74aef5716142dbbe931351f5243c9c6e4128a9), [`ec53e89`](https://github.com/mastra-ai/mastra/commit/ec53e8939c76c638991e21af762e51378eff7543), [`9b5a8cb`](https://github.com/mastra-ai/mastra/commit/9b5a8cb13e120811b0bf14140ada314f1c067894), [`607e66b`](https://github.com/mastra-ai/mastra/commit/607e66b02dc7f531ee37799f3456aa2dc0ca7ac5), [`a215d06`](https://github.com/mastra-ai/mastra/commit/a215d06758dcf590eabfe0b7afd4ae39bdbf082c), [`6909c74`](https://github.com/mastra-ai/mastra/commit/6909c74a7781e0447d475e9dbc1dc871b700f426), [`192438f`](https://github.com/mastra-ai/mastra/commit/192438f8a90c4f375e955f8ff179bf8dc6821a83)]:
+  - @mastra/core@1.5.0
+  - @mastra/memory@1.4.0
+  - @mastra/schema-compat@1.1.1
+
 ## 0.5.0-alpha.1
 
 ### Patch Changes
