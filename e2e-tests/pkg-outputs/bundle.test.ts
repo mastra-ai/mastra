@@ -100,8 +100,11 @@ describe.for(
 // =============================================================================
 
 describe('@mastra/core native optional deps', () => {
-  const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core')!;
+  const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core');
+  if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
   const coreDistDir = join(corePkg.dir, 'dist');
+
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // Optional peer dependencies with native binaries must not be statically
   // imported in the bundle. They should only appear as string literals inside
@@ -121,13 +124,13 @@ describe('@mastra/core native optional deps', () => {
         if (!content.includes(dep)) continue;
 
         // Static ESM import: import ... from "@ast-grep/napi"
-        const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${dep.replace('/', '\\/')}["']`, 'm');
+        const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${escapeRegExp(dep)}["']`, 'm');
         expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
 
         // Static CJS require: require("@ast-grep/napi")  (top-level, not inside req.resolve)
         // We allow: req.resolve("@ast-grep/napi") and const moduleName = "@ast-grep/napi"
         // We disallow: require("@ast-grep/napi") as a direct call
-        const staticRequire = new RegExp(`(?<!\\.)require\\(["']${dep.replace('/', '\\/')}["']\\)`, 'm');
+        const staticRequire = new RegExp(`(?<!\\.)require\\(["']${escapeRegExp(dep)}["']\\)`, 'm');
         expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
       }
     },
