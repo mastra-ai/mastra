@@ -136,6 +136,7 @@ export class MongoDBMCPServersStorage extends MCPServersStorage {
 
       return this.transformMCPServer(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'GET_MCP_SERVER_BY_ID', 'FAILED'),
@@ -303,6 +304,7 @@ export class MongoDBMCPServersStorage extends MCPServersStorage {
       const collection = await this.getCollection(TABLE_MCP_SERVERS);
       await collection.deleteOne({ id });
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'DELETE_MCP_SERVER', 'FAILED'),
