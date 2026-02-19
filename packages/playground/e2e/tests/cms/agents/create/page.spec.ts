@@ -348,13 +348,13 @@ test.describe('Agent Creation Persistence - MCP Client Tools', () => {
     await clickSidebarLink(page, 'Tools');
 
     // Click "Add MCP Client" button
-    await page.getByRole('button', { name: 'Add MCP Client' }).click();
+    await page.getByRole('button', { name: 'Add MCP Client' }).first().click();
 
     // Wait for the side dialog to open
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 
     // Fill MCP client name
-    await page.locator('#mcp-name').fill('Test MCP Client');
+    await page.locator('#mcp-client-name').fill('Test MCP Client');
 
     // The kitchen-sink exposes the simple-mcp-server at /api/mcp/simple-mcp-server/mcp
     // Fill URL field (HTTP is default)
