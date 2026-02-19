@@ -90,11 +90,8 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
       // We need to construct headers with the Authorization bearer token
       const headers = new Headers();
 
-      // Copy relevant headers from the request.
-      // The auth middleware may pass a raw Request (c.req.raw) instead of HonoRequest,
-      // so use the standard Web API (request.headers.get) which works with both.
-      const rawRequest: Request = 'raw' in request ? (request as any).raw : (request as unknown as Request);
-      const authHeader = rawRequest.headers.get('Authorization');
+      // Copy relevant headers from the request
+      const authHeader = request.header('Authorization');
       if (authHeader) {
         headers.set('Authorization', authHeader);
       } else if (token) {
@@ -103,7 +100,7 @@ export class MastraAuthBetterAuth extends MastraAuthProvider<BetterAuthUser> {
       }
 
       // Copy cookie header if present (Better Auth can use cookies for sessions)
-      const cookieHeader = rawRequest.headers.get('Cookie');
+      const cookieHeader = request.header('Cookie');
       if (cookieHeader) {
         headers.set('Cookie', cookieHeader);
       }
