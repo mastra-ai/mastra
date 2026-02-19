@@ -1,7 +1,7 @@
 {
-  "name": "pdf-quiz-generator",
+  "name": "chat-with-pdf",
   "version": "1.0.0",
-  "description": "",
+  "description": "An AI-powered PDF assistant that lets you chat with any PDF document. Index PDFs from URLs, ask questions about content, and generate quizzes from the material.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

@@ -2,11 +2,13 @@
 
 # Chat with PDF
 
-An AI-powered PDF quiz generator that turns any PDF into an interactive learning experience. Index PDFs from URLs, then let the AI generate comprehension questions from the content. Uses RAG (Retrieval-Augmented Generation) to find relevant passages and create questions with page-specific hints. Built with [Mastra](https://mastra.ai).
+An AI-powered PDF assistant that lets you chat with any PDF document. Index PDFs from URLs, ask questions about the content, and optionally generate quizzes to test your comprehension. Uses RAG (Retrieval-Augmented Generation) to find relevant passages and provide accurate, sourced answers. Built with [Mastra](https://mastra.ai).
 
 ## Why we built this
 
-This template shows how Mastra's RAG capabilities, vector storage, and agent workflows work together: PDF ingestion with chunking, semantic search over document content, and an agent that generates educational quizzes from retrieved passages.
+Putting an entire PDF in a context window hits token limits, wastes money on irrelevant tokens, and causes context drift—where the model loses focus as it wades through pages of text that don't matter. Instead, we convert the PDF into vector embeddings: chunk the document, embed each chunk, and store them in a vector database. When you ask a question, we search for the most relevant chunks and include only those in the prompt. This keeps costs down, avoids context limits, and gives the model focused context for better answers.
+
+This template shows how Mastra's RAG capabilities, vector storage, and agent workflows work together: PDF ingestion with chunking, semantic search over document content, and an agent that answers questions with page-specific citations.
 
 ## Demo
 
@@ -18,9 +20,9 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - ✅ PDF ingestion from any URL with automatic text extraction
 - ✅ Vector-based semantic search over document content
+- ✅ Conversational Q&A with page-specific source citations
 - ✅ Quiz generation with multiple question types (multiple choice, short answer, true/false)
 - ✅ Page-specific hints so users can verify answers in the source material
-- ✅ Stratified sampling across page ranges for comprehensive coverage
 - ✅ Multi-document support with document selection
 
 ## Prerequisites
@@ -38,9 +40,9 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Making it yours
 
-Open Studio and start chatting with the quiz agent. Provide a PDF URL to index it, then ask for a quiz on specific pages or topics. The agent searches the indexed content, generates questions from actual passages, and evaluates your answers against the source material.
+Open Studio and start chatting with the PDF agent. Provide a PDF URL to index it, then ask questions about the content or request a quiz on specific pages or topics. The agent searches the indexed content, answers questions with page citations, and can generate comprehension quizzes from actual passages.
 
-Swap in a different embedding model, adjust the chunking strategy, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). The agent, tools, and workflow are all in `src/` — edit them directly to fit your use case.
+Swap in a different embedding model, adjust the chunking strategy, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). You can also swap out LibSQL for another vector database — Mastra supports [many options](https://mastra.ai/docs/storage/vector-databases) including Pinecone, Qdrant, Chroma, pgvector, and more. The agent, tools, and workflow are all in `src/` — edit them directly to fit your use case.
 
 ## About Mastra templates
 
