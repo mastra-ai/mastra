@@ -144,22 +144,34 @@ describe('NovaSonicVoice', () => {
 
     it('should include all documented voice IDs', async () => {
       const speakers = await voice.getSpeakers();
-      const voiceIds = speakers.map((s) => s.voiceId);
-      
-      const expectedVoices = [
-        'tiffany', 'matthew', // English (US) - polyglot
-        'amy', // English (UK)
-        'olivia', // English (Australia)
-        'kiara', 'arjun', // English (Indian) / Hindi
-        'ambre', 'florian', // French
-        'beatrice', 'lorenzo', // Italian
-        'tina', 'lennart', // German
-        'lupe', 'carlos', // Spanish (US)
-        'carolina', 'leo', // Portuguese
+
+      // 18 total entries: 16 unique voiceIds, with kiara and arjun each appearing
+      // for both en-IN and hi-IN locales
+      expect(speakers).toHaveLength(18);
+
+      const expectedSpeakers = [
+        { voiceId: 'tiffany', locale: 'en-US' },
+        { voiceId: 'matthew', locale: 'en-US' },
+        { voiceId: 'amy', locale: 'en-GB' },
+        { voiceId: 'olivia', locale: 'en-AU' },
+        { voiceId: 'kiara', locale: 'en-IN' },
+        { voiceId: 'arjun', locale: 'en-IN' },
+        { voiceId: 'ambre', locale: 'fr-FR' },
+        { voiceId: 'florian', locale: 'fr-FR' },
+        { voiceId: 'beatrice', locale: 'it-IT' },
+        { voiceId: 'lorenzo', locale: 'it-IT' },
+        { voiceId: 'tina', locale: 'de-DE' },
+        { voiceId: 'lennart', locale: 'de-DE' },
+        { voiceId: 'lupe', locale: 'es-US' },
+        { voiceId: 'carlos', locale: 'es-US' },
+        { voiceId: 'carolina', locale: 'pt-BR' },
+        { voiceId: 'leo', locale: 'pt-BR' },
+        { voiceId: 'kiara', locale: 'hi-IN' },
+        { voiceId: 'arjun', locale: 'hi-IN' },
       ];
-      
-      expectedVoices.forEach((voiceId) => {
-        expect(voiceIds).toContain(voiceId);
+
+      expectedSpeakers.forEach(({ voiceId, locale }) => {
+        expect(speakers).toContainEqual(expect.objectContaining({ voiceId, locale }));
       });
     });
   });
@@ -736,7 +748,9 @@ describe('NovaSonicVoice', () => {
 
   describe('speak', () => {
     it('should throw error when not connected', async () => {
-      await expect(voice.speak('Hello')).rejects.toThrow(NovaSonicError);
+      await expect(voice.speak('Hello')).rejects.toThrow(
+        expect.objectContaining({ code: NovaSonicErrorCode.NOT_CONNECTED }),
+      );
     });
 
     it('should throw error for empty text', async () => {
@@ -751,19 +765,25 @@ describe('NovaSonicVoice', () => {
       const mockStream = {
         read: vi.fn(),
       };
-      await expect(voice.listen(mockStream as any)).rejects.toThrow(NovaSonicError);
+      await expect(voice.listen(mockStream as any)).rejects.toThrow(
+        expect.objectContaining({ code: NovaSonicErrorCode.NOT_CONNECTED }),
+      );
     });
   });
 
   describe('send', () => {
     it('should throw error when not connected', async () => {
       const audioData = new Int16Array([1, 2, 3]);
-      await expect(voice.send(audioData)).rejects.toThrow(NovaSonicError);
+      await expect(voice.send(audioData)).rejects.toThrow(
+        expect.objectContaining({ code: NovaSonicErrorCode.NOT_CONNECTED }),
+      );
     });
 
     it('should throw error for invalid audio format', async () => {
       voice['state'] = 'connected' as any;
-      await expect(voice.send('invalid' as any)).rejects.toThrow(NovaSonicError);
+      await expect(voice.send('invalid' as any)).rejects.toThrow(
+        expect.objectContaining({ code: NovaSonicErrorCode.INVALID_AUDIO_FORMAT }),
+      );
     });
   });
 

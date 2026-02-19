@@ -1594,6 +1594,14 @@ export class NovaSonicVoice extends MastraVoice<
     }
     this.log(`[send] State check passed, proceeding with send`);
 
+    // Validate audio format early, before any network operations
+    if (!(audioData instanceof Int16Array) && !(audioData && typeof audioData === 'object' && 'read' in audioData)) {
+      throw new NovaSonicError(
+        ErrorCode.INVALID_AUDIO_FORMAT,
+        'Unsupported audio data format',
+      );
+    }
+
     // Reset turnCompleted flag when user starts speaking again (new turn)
     // According to AWS sample: contentStart (AUDIO) is sent ONCE at the beginning and the same
     // audioContentId is reused for ALL turns. We do NOT send a new contentStart after turn completion.

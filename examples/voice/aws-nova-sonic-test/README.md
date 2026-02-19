@@ -161,7 +161,7 @@ pnpm dev
 ```
 
 2. **Open your browser** and navigate to:
-```
+```md
 http://localhost:3000
 ```
 
