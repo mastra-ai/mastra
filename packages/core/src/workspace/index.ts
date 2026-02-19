@@ -78,7 +78,7 @@ export type {
   SandboxLifecycleHook,
   MastraSandboxOptions,
   // Background process types
-  CommandHandle,
+  ProcessHandle,
   ProcessInfo,
   SandboxProcessManager,
   SpawnProcessOptions,

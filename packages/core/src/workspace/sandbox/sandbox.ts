@@ -96,7 +96,7 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    * Optional - if not implemented, background process tools won't be available.
    *
    * Provides methods to spawn long-running processes, list them, and interact
-   * with them via their {@link CommandHandle} (kill, sendStdin, wait, read output).
+   * with them via their {@link ProcessHandle} (kill, sendStdin, wait, read output).
    *
    * @example
    * ```typescript

@@ -8,17 +8,17 @@
 import * as childProcess from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 
-import type { CommandHandle, CommandResult, ProcessInfo, SandboxProcessManager, SpawnProcessOptions } from './types';
+import type { ProcessHandle, CommandResult, ProcessInfo, SandboxProcessManager, SpawnProcessOptions } from './types';
 
 // =============================================================================
 // Local Command Handle
 // =============================================================================
 
 /**
- * Local implementation of CommandHandle wrapping a node ChildProcess.
+ * Local implementation of ProcessHandle wrapping a node ChildProcess.
  * Not exported — internal to this module.
  */
-class LocalCommandHandle implements CommandHandle {
+class LocalProcessHandle implements ProcessHandle {
   readonly pid: number;
   readonly command: string;
   readonly args: string[];
@@ -128,13 +128,13 @@ class LocalCommandHandle implements CommandHandle {
  */
 export class LocalProcessManager implements SandboxProcessManager {
   private readonly _sandbox: { ensureRunning(): Promise<void>; readonly workingDirectory: string };
-  private readonly _handles = new Map<number, LocalCommandHandle>();
+  private readonly _handles = new Map<number, LocalProcessHandle>();
 
   constructor(sandbox: { ensureRunning(): Promise<void>; readonly workingDirectory: string }) {
     this._sandbox = sandbox;
   }
 
-  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<CommandHandle> {
+  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     await this._sandbox.ensureRunning();
 
     const startTime = Date.now();
@@ -145,7 +145,7 @@ export class LocalProcessManager implements SandboxProcessManager {
     };
 
     const proc = childProcess.spawn(command, args, { cwd, env });
-    const handle = new LocalCommandHandle(proc, command, args, startTime);
+    const handle = new LocalProcessHandle(proc, command, args, startTime);
 
     this._handles.set(handle.pid, handle);
 
@@ -156,7 +156,7 @@ export class LocalProcessManager implements SandboxProcessManager {
     return Array.from(this._handles.values()).map(handle => handle.toProcessInfo());
   }
 
-  get(pid: number): CommandHandle | undefined {
+  get(pid: number): ProcessHandle | undefined {
     return this._handles.get(pid);
   }
 

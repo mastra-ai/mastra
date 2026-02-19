@@ -6,7 +6,7 @@
  */
 
 import type {
-  CommandHandle as MastraCommandHandle,
+  ProcessHandle as MastraProcessHandle,
   CommandResult,
   ProcessInfo,
   SandboxProcessManager,
@@ -21,10 +21,10 @@ import { shellQuote } from '../utils/shell-quote';
 // =============================================================================
 
 /**
- * Wraps an E2B CommandHandle to conform to Mastra's CommandHandle interface.
+ * Wraps an E2B CommandHandle to conform to Mastra's ProcessHandle interface.
  * Not exported — internal to this module.
  */
-class E2BHandle implements MastraCommandHandle {
+class E2BHandle implements MastraProcessHandle {
   readonly pid: number;
   readonly command: string;
   readonly args: string[];
@@ -132,7 +132,7 @@ export class E2BProcessManager implements SandboxProcessManager {
     this._env = env;
   }
 
-  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<MastraCommandHandle> {
+  async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<MastraProcessHandle> {
     await this._sandbox.ensureRunning();
     const e2b = this._sandbox.instance;
     const startTime = Date.now();
@@ -162,7 +162,7 @@ export class E2BProcessManager implements SandboxProcessManager {
     return Array.from(this._handles.values()).map(handle => handle.toProcessInfo());
   }
 
-  get(pid: number): MastraCommandHandle | undefined {
+  get(pid: number): MastraProcessHandle | undefined {
     return this._handles.get(pid);
   }
 

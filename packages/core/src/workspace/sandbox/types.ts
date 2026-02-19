@@ -96,9 +96,9 @@ export interface SpawnProcessOptions {
 /**
  * Handle to a spawned background process.
  * Returned by {@link SandboxProcessManager.spawn}.
- * Provides methods to interact with the running process.
+ * Provides methods to interact with a running background process.
  */
-export interface CommandHandle {
+export interface ProcessHandle {
   /** Process ID of the running command */
   readonly pid: number;
   /** Accumulated stdout so far */
@@ -159,11 +159,11 @@ export interface ProcessInfo {
  */
 export interface SandboxProcessManager {
   /** Spawn a background process. Returns a handle to interact with it. */
-  spawn(command: string, args?: string[], options?: SpawnProcessOptions): Promise<CommandHandle>;
+  spawn(command: string, args?: string[], options?: SpawnProcessOptions): Promise<ProcessHandle>;
   /** List all tracked background processes. */
   list(): Promise<ProcessInfo[]>;
   /** Get a handle to a background process by PID. Returns undefined if not found. */
-  get(pid: number): CommandHandle | undefined;
+  get(pid: number): ProcessHandle | undefined;
 }
 
 // =============================================================================
