@@ -37,7 +37,11 @@ Bulleted list of the key sub-topics in this category. Each item links to the cor
 - [**Sub-topic A**](/docs/$CATEGORY/sub-topic-a) — what sub-topic A does.
 - [**Sub-topic B**](/docs/$CATEGORY/sub-topic-b) — what sub-topic B does.
 
-## Getting started
+## When to use $TOPIC
+
+Short paragraph or bulleted list of use cases. Help the reader decide if this category is relevant to them and what problems it can solve.
+
+## Get started
 
 Brief paragraph directing the reader to the right starting point. This can be a short list of links or a sentence pointing to the most common entry point.
 
@@ -82,7 +86,11 @@ Mastra supports four complementary memory types:
 - [**Semantic recall**](/docs/memory/semantic-recall) — retrieves relevant messages from older conversations based on semantic meaning.
 - [**Observational memory**](/docs/memory/observational-memory) — uses background agents to maintain a dense observation log.
 
-## Getting started
+## When to use memory
+
+Use memory when your agent needs to remember user messages, agent replies, and tool results across interactions, giving it the context it needs to stay consistent, maintain conversation flow, and produce better answers over time.
+
+## Get started
 
 Choose a memory option to get started:
 
