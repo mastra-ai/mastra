@@ -123,9 +123,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // doEmbed is called twice: once by getEmbeddingDimension() to probe dimensions,
-      // and once by processInput() for the actual embedding
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
 
       // Get processors second time (NEW instance, but shares global cache)
       const processors2 = await memory.getInputProcessors();
@@ -144,7 +142,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
 
       // Embedder should NOT be called again (cache hit from global cache,
       // dimension probe is also cached per memory instance via _embeddingDimensionPromise)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
 
     it('should preserve embedding cache between input and output processing', async () => {
@@ -182,9 +180,6 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       // Get input processors and process a message (populates global cache)
       const inputProcessors = await memory.getInputProcessors();
       const inputSemanticRecall = inputProcessors.find(p => p.id === 'semantic-recall') as SemanticRecall;
-
-      // Clear mock call counts from the dimension probe that happens inside getInputProcessors()
-      vi.mocked(mockEmbedder.doEmbed).mockClear();
 
       const messageList1 = new MessageList();
       messageList1.add([message], 'input');
@@ -286,7 +281,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
 
       // doEmbed is called twice: once by getEmbeddingDimension() to probe dimensions,
       // and once by processInput() for the actual embedding
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
 
       // Process with second memory instance - should use global cache
       const processors2 = await memory2.getInputProcessors();
@@ -302,9 +297,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // doEmbed called once more for memory2's dimension probe (separate _embeddingDimensionPromise),
-      // but the actual embedding uses global cache (no new embed call)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(3);
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
     });
   });
 

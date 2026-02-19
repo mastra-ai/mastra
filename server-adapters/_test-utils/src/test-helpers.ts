@@ -454,26 +454,6 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
-  // Mock tool provider for tool-providers routes
-  const mockToolProvider = {
-    info: {
-      id: 'test-provider',
-      name: 'Test Provider',
-      description: 'A test tool provider for integration tests',
-    },
-    listToolkits: vi.fn().mockResolvedValue({
-      data: [{ slug: 'TEST_TOOLKIT', name: 'Test Toolkit', description: 'A test toolkit' }],
-    }),
-    listTools: vi.fn().mockResolvedValue({
-      data: [{ slug: 'test-tool-slug', name: 'Test Tool', description: 'A test tool', toolkit: 'TEST_TOOLKIT' }],
-    }),
-    getToolSchema: vi.fn().mockResolvedValue({
-      type: 'object',
-      properties: { input: { type: 'string' } },
-    }),
-    resolveTools: vi.fn().mockResolvedValue({}),
-  };
-
   // Mock getEditor to return an object with namespaced methods for stored agents routes
   const mockToolProvider = {
     info: { id: 'test-provider', name: 'Test Provider', description: 'A test tool provider' },
@@ -484,6 +464,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
+      clearCache: vi.fn(),
+    },
+    mcp: {
+      clearCache: vi.fn(),
     },
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
