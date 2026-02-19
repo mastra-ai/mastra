@@ -70,8 +70,7 @@ All documentation should be written in English and placed in the appropriate sec
 
 ## Editing content
 
-All documentation content is located in `/src`. Mastra's documentation content is written in a variation of markdown called MDX. MDX allows us to embed React components in the content, unlocking rich, interactive documentation experiences. Mastra's documentation site also supports GitHub Flavored Markdown, adding support for things like tables and task lists.
-
+All documentation content is located in `/src`. Mastra's documentation content is written in a variation of Markdown called MDX, which allows embedding React components directly in content. The site also supports GitHub Flavored Markdown, adding support for tables and task lists.
 ### File metadata
 
 Each file has a few required frontmatter fields, which are defined like so:
