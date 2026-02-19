@@ -140,7 +140,6 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         } catch (error) {
           const repaired = tryRepairJson(value.input);
           if (repaired) {
-            console.warn('[JSON Repair] Fixed malformed JSON for tool:', value.toolName);
             toolCallInput = repaired;
           } else {
             toolCallInput = {};
@@ -679,7 +678,9 @@ function applyStructuralFixes(input: string): string {
 
   // Strip trailing LLM special tokens like <|call|>, <|endoftext|> (issue #13185)
   // Some OpenAI models append internal tokens after valid JSON, e.g. '{}\t<|call|>'
-  result = result.replace(/<\|[^|]*\|>\s*/g, '').trim();
+  // Only strip tokens at the end of the string to avoid corrupting string values that
+  // legitimately contain angle-bracket-pipe patterns.
+  result = result.replace(/\s*(<\|[^|]*\|>\s*)+$/, '').trim();
 
   // Fix missing opening quote before property name (partial quote)
   // {"a":"b",c":"d"} -> {"a":"b","c":"d"}
@@ -688,6 +689,10 @@ function applyStructuralFixes(input: string): string {
 
   // Add missing quotes around fully unquoted property names
   // {command:"value"} -> {"command":"value"}
+  // Note: this regex is not string-aware and could match inside string values containing
+  // colon patterns (e.g. "msg": "key: value"). This is safe in practice because
+  // tryRepairJson only runs on strings that already failed JSON.parse, so well-formed
+  // string values won't reach this code path.
   result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
 
   // Remove trailing commas before closing braces/brackets

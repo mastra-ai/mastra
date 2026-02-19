@@ -603,5 +603,12 @@ describe('tryRepairJson', () => {
       const validInput = '{"text":"say <|call|> now"}';
       expect(JSON.parse(validInput)).toEqual({ text: 'say <|call|> now' });
     });
+
+    it('should preserve token-like strings inside values when repairing other issues', () => {
+      // Trailing comma + token-like string in value — only the trailing comma
+      // should be repaired, the value content should be preserved.
+      const input = '{"prompt":"use <|endoftext|> token","mode":"test",}';
+      expect(tryRepairJson(input)).toEqual({ prompt: 'use <|endoftext|> token', mode: 'test' });
+    });
   });
 });
