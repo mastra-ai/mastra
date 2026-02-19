@@ -59,6 +59,7 @@ Usage:
     context,
   ) => {
     const { filesystem } = requireFilesystem(context);
+    const abortSignal = context?.abortSignal;
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
     // Guard against excessively long patterns as a cheap ReDoS heuristic
@@ -99,6 +100,7 @@ Usage:
       } else {
         // Directory — walk recursively
         const collectFiles = async (dir: string): Promise<string[]> => {
+          if (abortSignal?.aborted) return [];
           const files: string[] = [];
           let entries;
           try {
@@ -108,6 +110,7 @@ Usage:
           }
 
           for (const entry of entries) {
+            if (abortSignal?.aborted) break;
             // Skip hidden files/dirs unless includeHidden is set
             if (!includeHidden && entry.name.startsWith('.')) continue;
 
@@ -139,7 +142,7 @@ Usage:
     const GLOBAL_CAP = 1000;
 
     for (const filePath of filePaths) {
-      if (truncated) break;
+      if (truncated || abortSignal?.aborted) break;
 
       let content: string;
       try {

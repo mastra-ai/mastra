@@ -288,6 +288,40 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('abort signal', () => {
+    it('passes context.abortSignal to sandbox.executeCommand', async () => {
+      const controller = new AbortController();
+      let receivedOptions: ExecuteCommandOptions | undefined;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOptions = opts;
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      context.abortSignal = controller.signal;
+      await execute({ command: 'echo', args: ['hi'], timeout: null, cwd: null }, context);
+
+      expect(receivedOptions?.abortSignal).toBe(controller.signal);
+    });
+
+    it('passes undefined abortSignal when context has none', async () => {
+      let receivedOptions: ExecuteCommandOptions | undefined;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOptions = opts;
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      await execute({ command: 'echo', args: ['hi'], timeout: null, cwd: null }, context);
+
+      expect(receivedOptions?.abortSignal).toBeUndefined();
+    });
+  });
+
   describe('streaming chunks match return value', () => {
     it('streamed stdout chunks contain same data as final result', async () => {
       const stdoutLines = ['line 1\n', 'line 2\n', 'line 3\n'];
