@@ -228,7 +228,7 @@ describe('createLLMMappingStep HITL behavior', () => {
     ];
 
     // Act
-    await llmMappingStep.execute(createExecuteParams(inputData));
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
 
     // Assert: Should emit tool-error chunk
     expect(controller.enqueue).toHaveBeenCalledWith(
@@ -242,6 +242,7 @@ describe('createLLMMappingStep HITL behavior', () => {
     );
     // Should NOT bail — the agentic loop should continue so the model can see the error and retry
     expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
   });
 
   it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {
