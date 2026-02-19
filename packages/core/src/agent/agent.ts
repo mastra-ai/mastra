@@ -2314,10 +2314,6 @@ export class Agent<
             // Each iteration typically produces an assistant message
             const derivedIteration = Math.max(1, contextMessages.filter(m => m.role === 'assistant').length);
 
-            // contextFilter is applied after onDelegationStart so the callback receives the
-            // effective (possibly modified) prompt.
-            const _hasContextMessages = !!delegation?.contextFilter;
-
             // Build delegation start context
             const delegationStartContext: DelegationStartContext = {
               primitiveId: agent.id,
