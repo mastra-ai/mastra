@@ -1,8 +1,8 @@
-import { AgentIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
+import { AgentIcon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { BrainIcon } from 'lucide-react';
 import { type ExperimentUISpanStyle } from '../types';
 
-export const spanTypePrefixes = ['agent', 'workflow', 'model', 'tool', 'other'];
+export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'other'];
 
 export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | null {
   const typePrefix = type?.toLowerCase().split('_')[0];
@@ -29,6 +29,13 @@ export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | n
       bgColor: 'bg-oklch(0.75 0.15 320 / 0.1)',
       typePrefix: 'model',
     },
+    mcp: {
+      icon: <McpServerIcon />,
+      color: 'oklch(0.75 0.15 160)',
+      label: 'MCP',
+      bgColor: 'bg-oklch(0.75 0.15 160 / 0.1)',
+      typePrefix: 'mcp',
+    },
     tool: {
       icon: <ToolsIcon />,
       color: 'oklch(0.75 0.15 100)',
@@ -38,11 +45,8 @@ export function getExperimentSpanTypeUi(type: string): ExperimentUISpanStyle | n
     },
   };
 
-  // Map mcp_tool_call to the tool UI
-  const resolvedPrefix = typePrefix === 'mcp' ? 'tool' : typePrefix;
-
-  if (resolvedPrefix in spanTypeToUiElements) {
-    return spanTypeToUiElements[resolvedPrefix];
+  if (typePrefix in spanTypeToUiElements) {
+    return spanTypeToUiElements[typePrefix];
   }
 
   return {
