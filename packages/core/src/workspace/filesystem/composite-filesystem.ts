@@ -19,6 +19,8 @@
  * ```
  */
 
+import posixPath from 'node:path/posix';
+
 import { PermissionError } from '../errors';
 import { callLifecycle } from '../lifecycle';
 import type { ProviderStatus } from '../lifecycle';
@@ -167,7 +169,9 @@ export class CompositeFilesystem<
 
   private normalizePath(path: string): string {
     if (!path || path === '/') return '/';
-    let n = path.startsWith('/') ? path : `/${path}`;
+    // posix.normalize resolves dot segments (./foo → foo, a/../b → b)
+    let n = posixPath.normalize(path);
+    if (!n.startsWith('/')) n = `/${n}`;
     if (n.length > 1 && n.endsWith('/')) n = n.slice(0, -1);
     return n;
   }
@@ -455,7 +459,7 @@ export class CompositeFilesystem<
       })
       .join('\n');
 
-    return `Mounted filesystems:\n${mountDescriptions}\nFiles written via workspace tools are accessible at the same paths in sandbox commands.`;
+    return `Mounted filesystems:\n${mountDescriptions}`;
   }
 }
 

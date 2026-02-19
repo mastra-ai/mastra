@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-openai",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Mastra OpenAI speech integration",
   "type": "module",
   "files": [
@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "openai": "^5.11.0"
+    "openai": "^5.23.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
