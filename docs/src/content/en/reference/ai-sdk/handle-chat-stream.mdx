@@ -30,6 +30,8 @@ export async function POST(req: Request) {
     mastra,
     agentId: 'weatherAgent',
     params,
+    // Optional: pass provider-specific options (e.g. OpenAI reasoningEffort)
+    providerOptions: { openai: { reasoningEffort: 'low' } },
   });
   return createUIMessageStreamResponse({ stream });
 }
@@ -85,6 +87,12 @@ export async function POST(req: Request) {
       name: "defaultOptions",
       type: "AgentExecutionOptions",
       description: "Default options passed to agent execution. These are merged with params, with params taking precedence.",
+      isOptional: true,
+    },
+    {
+      name: "providerOptions",
+      type: "ProviderOptions",
+      description: "Provider-specific options (e.g. openai.reasoningEffort) forwarded to the agent's stream/resumeStream call. Overrides params.providerOptions when both are set.",
       isOptional: true,
     },
     {
