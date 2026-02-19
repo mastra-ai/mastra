@@ -1,5 +1,14 @@
 # @mastra/loggers
 
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13237](https://github.com/mastra-ai/mastra/pull/13237))
+  - Updated dependency [`pino-pretty@^13.1.3` ↗︎](https://www.npmjs.com/package/pino-pretty/v/13.1.3) (from `^13.0.0`, in `dependencies`)
+- Updated dependencies:
+  - @mastra/core@1.5.0-alpha.1
+
 ## 1.0.1
 
 ### Patch Changes

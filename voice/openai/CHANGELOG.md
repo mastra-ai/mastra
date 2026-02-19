@@ -1,5 +1,14 @@
 # @mastra/voice-openai
 
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13189](https://github.com/mastra-ai/mastra/pull/13189))
+  - Updated dependency [`openai@^5.23.2` ↗︎](https://www.npmjs.com/package/openai/v/5.23.2) (from `^5.11.0`, in `dependencies`)
+- Updated dependencies:
+  - @mastra/core@1.5.0-alpha.1
+
 ## 0.12.0
 
 ### Minor Changes
