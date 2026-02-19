@@ -119,7 +119,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // doEmbed is called twice: once by getEmbeddingDimension() to probe dimensions,
+      // and once by processInput() for the actual embedding
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
 
       // Get processors second time (NEW instance, but shares global cache)
       const processors2 = await memory.getInputProcessors();
@@ -136,8 +138,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // Embedder should NOT be called again (cache hit from global cache)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // Embedder should NOT be called again (cache hit from global cache,
+      // dimension probe is also cached per memory instance via _embeddingDimensionPromise)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
     });
 
     it('should preserve embedding cache between input and output processing', async () => {
@@ -186,7 +189,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // doEmbed is called twice: once by getEmbeddingDimension() to probe dimensions,
+      // and once by processInput() for the actual embedding
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
 
       // Get output processors and process the same message
       const outputProcessors = await memory.getOutputProcessors();
@@ -206,8 +211,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // Embedder should NOT be called again (cache hit from global cache)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // Embedder should NOT be called again (cache hit from global cache,
+      // dimension probe is also cached per memory instance via _embeddingDimensionPromise)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
     });
 
     it('should share embedding cache across different Memory instances', async () => {
@@ -268,7 +274,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // doEmbed is called twice: once by getEmbeddingDimension() to probe dimensions,
+      // and once by processInput() for the actual embedding
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
 
       // Process with second memory instance - should use global cache
       const processors2 = await memory2.getInputProcessors();
@@ -284,8 +292,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // Embedder should NOT be called again (cache hit from global cache)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // doEmbed called once more for memory2's dimension probe (separate _embeddingDimensionPromise),
+      // but the actual embedding uses global cache (no new embed call)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(3);
     });
   });
 
