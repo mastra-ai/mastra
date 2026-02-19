@@ -1723,7 +1723,7 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       posthog-node:
-        specifier: ^4.0.1
+        specifier: ^4.18.0
         version: 4.18.0
     devDependencies:
       '@internal/lint':
