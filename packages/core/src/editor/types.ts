@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { MCPServerBase } from '../mcp';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
 import type {
@@ -36,6 +37,11 @@ import type {
   StorageListWorkspacesOutput,
   StorageResolvedWorkspaceType,
   StorageListWorkspacesResolvedOutput,
+  StorageCreateMCPServerInput,
+  StorageUpdateMCPServerInput,
+  StorageListMCPServersInput,
+  StorageListMCPServersOutput,
+  StorageListMCPServersResolvedOutput,
   StorageCreateSkillInput,
   StorageUpdateSkillInput,
   StorageListSkillsInput,
@@ -217,6 +223,20 @@ export interface IEditorMCPNamespace {
 }
 
 // ============================================================================
+// MCP Server Namespace Interface
+// ============================================================================
+
+export interface IEditorMCPServerNamespace {
+  create(input: StorageCreateMCPServerInput): Promise<MCPServerBase>;
+  getById(id: string, options?: GetByIdOptions): Promise<MCPServerBase | null>;
+  update(input: StorageUpdateMCPServerInput): Promise<MCPServerBase>;
+  delete(id: string): Promise<void>;
+  list(args?: StorageListMCPServersInput): Promise<StorageListMCPServersOutput>;
+  listResolved(args?: StorageListMCPServersInput): Promise<StorageListMCPServersResolvedOutput>;
+  clearCache(id?: string): void;
+}
+
+// ============================================================================
 // Workspace Namespace Interface
 // ============================================================================
 
@@ -264,6 +284,9 @@ export interface IMastraEditor {
 
   /** MCP config management namespace */
   readonly mcp: IEditorMCPNamespace;
+
+  /** MCP server management namespace */
+  readonly mcpServer: IEditorMCPServerNamespace;
 
   /** Prompt block management namespace */
   readonly prompt: IEditorPromptNamespace;
