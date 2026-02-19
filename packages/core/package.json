@@ -228,7 +228,7 @@
     "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.6",
-    "p-map": "^7.0.3",
+    "p-map": "^7.0.4",
     "p-retry": "^7.1.0",
     "picomatch": "^4.0.3",
     "radash": "^12.1.1",
