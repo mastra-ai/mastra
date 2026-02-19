@@ -792,31 +792,68 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     let result: MastraModelOutput<unknown>;
 
     beforeEach(async () => {
+      let responseCount = 0;
       result = await loopFn({
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: createTestModels({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'tool1',
-              input: `{ "value": "value" }`,
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: testUsage,
-            },
-          ]),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      warnings: [],
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'tool1',
+                          input: `{ "value": "value" }`,
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      warnings: [],
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'I see the tool failed, let me help.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
         tools: {
           tool1: {
             inputSchema: z.object({ value: z.string() }),
@@ -825,6 +862,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             },
           },
         },
+        stopWhen: stepCountIs(3),
         ...defaultSettings(),
       });
     });
