@@ -158,7 +158,10 @@ export function createSchemaValidationWorkflows(ctx: WorkflowCreatorContext) {
       options: { validateInputs: true },
     });
 
-    workflow.then(step1).then(step2 as any).commit();
+    workflow
+      .then(step1)
+      .then(step2 as any)
+      .commit();
 
     workflows['schema-step-default'] = { workflow, mocks: {} };
   }

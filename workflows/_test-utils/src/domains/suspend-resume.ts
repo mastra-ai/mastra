@@ -3289,8 +3289,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeDountil || !ctx.resume)(
       'should handle basic suspend and resume in a dountil workflow',
       async () => {
-        const { workflow, nestedWorkflowId, resetMocks } =
-          registry!['dountil-suspend-workflow']!;
+        const { workflow, nestedWorkflowId, resetMocks } = registry!['dountil-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `dountil-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3798,7 +3797,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeParallelMulti || !ctx.resume)(
       'should remain suspended when only one of multiple parallel suspended steps is resumed - #6418',
       async () => {
-        const { workflow, resetMocks } = registry!["parallel-suspension-bug-6418-workflow"]!;
+        const { workflow, resetMocks } = registry!['parallel-suspension-bug-6418-workflow']!;
         resetMocks?.();
 
         const runId = `parallel-6418-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4176,7 +4175,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNestedWithPath || !ctx.resume)(
       'should be able to suspend nested workflow step',
       async () => {
-        const { workflow, nestedWorkflow, otherStep, mocks, resetMocks } = registry!['sr-suspend-nested-step-workflow']!;
+        const { workflow, nestedWorkflow, otherStep, mocks, resetMocks } =
+          registry!['sr-suspend-nested-step-workflow']!;
         resetMocks?.();
 
         const runId = `suspend-nested-step-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;

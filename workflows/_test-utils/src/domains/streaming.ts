@@ -2234,7 +2234,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             idGenerator: () => randomUUID(),
           });
 
-          workflow.then(agentStep).then(processArticleStep as any).commit();
+          workflow
+            .then(agentStep)
+            .then(processArticleStep as any)
+            .commit();
 
           const run = await workflow.createRun({ runId: 'structured-output-test' });
           const result = await run.start({

@@ -181,7 +181,10 @@ export function createDependencyInjectionWorkflows(ctx: WorkflowCreatorContext) 
           return suspend({});
         }
         // On resume: append to responses array and return
-        requestContext.set('responses', [...((requestContext.get('responses') as string[]) ?? []), 'promptAgentAction']);
+        requestContext.set('responses', [
+          ...((requestContext.get('responses') as string[]) ?? []),
+          'promptAgentAction',
+        ]);
         return { result: 'done' };
       },
       inputSchema: z.object({ userInput: z.string() }),
