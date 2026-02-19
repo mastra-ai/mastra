@@ -446,7 +446,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.restartNotActive)(
       'should throw error when restarting workflow that was never started',
       async () => {
-        const { workflow } = registry!['restart-not-active'];
+        const { workflow } = registry!['restart-not-active']!;
 
         // Create a run but don't start it
         const run = await workflow.createRun();
@@ -457,7 +457,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
     );
 
     it.skipIf(skipTests.restartCompleted)('should restart a completed workflow execution', async () => {
-      const { workflow, mocks, getExecutionCount, resetMocks } = registry!['restart-completed'];
+      const { workflow, mocks, resetMocks } = registry!['restart-completed']!;
       resetMocks?.();
 
       // Get storage to simulate interrupted workflow
@@ -503,12 +503,12 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const result = await run.restart();
 
       expect(result.status).toBe('success');
-      expect(result.steps.counter.output).toMatchObject({ count: 1, value: 42 });
+      expect((result.steps.counter as any)?.output).toMatchObject({ count: 1, value: 42 });
       expect(mocks.counter).toHaveBeenCalledTimes(1);
     });
 
     it.skipIf(skipTests.restartMultistep)('should restart workflow with multiple steps', async () => {
-      const { workflow, mocks, resetMocks } = registry!['restart-multistep'];
+      const { workflow, mocks, resetMocks } = registry!['restart-multistep']!;
       resetMocks?.();
 
       // Get storage to simulate interrupted workflow
@@ -560,14 +560,14 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
 
       expect(result.status).toBe('success');
       // step2: 15 * 2 = 30
-      expect(result.steps.step2.output).toEqual({ value: 30 });
+      expect((result.steps.step2 as any)?.output).toEqual({ value: 30 });
       // step1 was already done, step2 runs on restart
       expect(mocks.step1).toHaveBeenCalledTimes(0); // Already completed in snapshot
       expect(mocks.step2).toHaveBeenCalledTimes(1); // Restarted
     });
 
     it.skipIf(skipTests.restartFailed)('should restart a failed workflow and succeed on retry', async () => {
-      const { workflow, mocks, setShouldFail, resetMocks } = registry!['restart-failed'];
+      const { workflow, mocks, setShouldFail, resetMocks } = registry!['restart-failed']!;
       resetMocks?.();
 
       // Get storage to simulate interrupted workflow
@@ -614,14 +614,14 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
       const result = await run.restart();
 
       expect(result.status).toBe('success');
-      expect(result.steps.failingStep.output).toEqual({ result: 'HELLO' });
+      expect((result.steps.failingStep as any)?.output).toEqual({ result: 'HELLO' });
       expect(mocks.failingStep).toHaveBeenCalledTimes(1);
     });
 
     it.skipIf(skipTests.restartNested)(
       'should restart a workflow execution that was previously active and has nested workflows',
       async () => {
-        const entry = registry!['restart-nested'];
+        const entry = registry!['restart-nested']!;
         const { workflow, nestedWorkflow, mocks, resetMocks } = entry;
         resetMocks?.();
 
@@ -744,7 +744,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.restartSuspendResume)(
       'should successfully suspend and resume a restarted workflow execution',
       async () => {
-        const entry = registry!['restart-suspend-resume'];
+        const entry = registry!['restart-suspend-resume']!;
         const { workflow, improveResponseStep, mocks, resetMocks } = entry;
         resetMocks?.();
 
@@ -796,7 +796,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
         const run = await workflow.createRun({ runId });
         const initialResult = await run.restart();
 
-        expect(initialResult.steps.promptAgent.status).toBe('suspended');
+        expect(initialResult.steps.promptAgent!.status).toBe('suspended');
         expect(mocks.promptAgent).toHaveBeenCalledTimes(1);
         expect(initialResult.steps).toMatchObject({
           input: { input: 'test' },
@@ -871,7 +871,7 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
     );
 
     it.skipIf(skipTests.restartParallel)('should restart workflow with parallel steps', async () => {
-      const { workflow, mocks, resetMocks } = registry!['restart-parallel'];
+      const { workflow, mocks, resetMocks } = registry!['restart-parallel']!;
       resetMocks?.();
 
       // Get storage to simulate interrupted workflow
@@ -921,8 +921,8 @@ export function createRestartTests(ctx: WorkflowTestContext, registry?: Workflow
 
       expect(result.status).toBe('success');
       // step1: 5 * 2 = 10, step2: 5 + 10 = 15
-      expect(result.steps.step1.output).toEqual({ result: 10 });
-      expect(result.steps.step2.output).toEqual({ result: 15 });
+      expect((result.steps.step1 as any)?.output).toEqual({ result: 10 });
+      expect((result.steps.step2 as any)?.output).toEqual({ result: 15 });
       expect(mocks.step1).toHaveBeenCalledTimes(1);
       expect(mocks.step2).toHaveBeenCalledTimes(1);
     });

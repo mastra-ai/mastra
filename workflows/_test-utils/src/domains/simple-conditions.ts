@@ -148,13 +148,13 @@ export function createSimpleConditionsWorkflows(ctx: WorkflowCreatorContext) {
           async ({ inputData }) => {
             return inputData.status === 'success';
           },
-          step2,
+          step2 as any,
         ],
         [
           async ({ inputData }) => {
             return inputData.status === 'failed';
           },
-          step3,
+          step3 as any,
         ],
       ])
       .map({
@@ -335,7 +335,7 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
 
   describe('Simple Conditions', () => {
     it('should follow conditional chains', async () => {
-      const { workflow, mocks } = registry!['cond-follow-chains'];
+      const { workflow, mocks } = registry!['cond-follow-chains']!;
       const result = await execute(workflow, { status: 'success' });
 
       expect(mocks.step1Action).toHaveBeenCalled();
@@ -350,7 +350,7 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
     });
 
     it.skipIf(skipTests.state)('should follow conditional chains with state', async () => {
-      const { workflow, mocks } = registry!['cond-chains-with-state'];
+      const { workflow, mocks } = registry!['cond-chains-with-state']!;
       const result = await execute(workflow, { status: 'success' }, { initialState: { value: 'test-state' } });
 
       expect(mocks.step1Action).toHaveBeenCalled();
@@ -365,7 +365,7 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
     });
 
     it('should handle failing dependencies', async () => {
-      const { workflow, mocks } = registry!['cond-failing-deps'];
+      const { workflow, mocks } = registry!['cond-failing-deps']!;
 
       let result: Awaited<ReturnType<typeof execute>> | undefined = undefined;
       try {
@@ -391,7 +391,7 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
     });
 
     it('should support simple string conditions', async () => {
-      const { workflow, mocks } = registry!['cond-simple-string'];
+      const { workflow, mocks } = registry!['cond-simple-string']!;
       const result = await execute(workflow, { status: 'success' });
 
       expect(mocks.step1Action).toHaveBeenCalled();
@@ -417,7 +417,7 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
     });
 
     it('should support custom condition functions', async () => {
-      const { workflow, mocks } = registry!['cond-custom-function'];
+      const { workflow, mocks } = registry!['cond-custom-function']!;
       const result = await execute(workflow, { count: 5 });
 
       expect(mocks.step2Action).toHaveBeenCalled();
@@ -434,7 +434,7 @@ export function createSimpleConditionsTests(ctx: WorkflowTestContext, registry?:
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect(result.steps.step2.output === undefined || !('output' in result.steps.step2)).toBe(true);
+      expect(result.steps.step2!.output === undefined || !('output' in result.steps.step2!)).toBe(true);
     });
   });
 }

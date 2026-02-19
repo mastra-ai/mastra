@@ -632,7 +632,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
       'should run a single item concurrency (default) for loop',
       async () => {
         const startTime = Date.now();
-        const { workflow } = registry!['foreach-single-concurrency'];
+        const { workflow } = registry!['foreach-single-concurrency']!;
         const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
 
         const endTime = Date.now();
@@ -664,7 +664,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     // Note: Timing test skipped for Inngest - network overhead makes timing assertions unreliable
     it.skipIf(skipTests.foreachConcurrentTiming)('should run a concurrent for loop', async () => {
       const startTime = Date.now();
-      const { workflow } = registry!['foreach-concurrent'];
+      const { workflow } = registry!['foreach-concurrent']!;
       const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
 
       const endTime = Date.now();
@@ -688,7 +688,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     // Note: Timing test skipped for Inngest - network overhead makes timing assertions unreliable
     it.skipIf(skipTests.foreachPartialConcurrencyTiming)('should run a partial concurrency for loop', async () => {
       const startTime = Date.now();
-      const { workflow } = registry!['foreach-partial-concurrency'];
+      const { workflow } = registry!['foreach-partial-concurrency']!;
       const result = await execute(workflow, [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }]);
 
       const endTime = Date.now();
@@ -711,7 +711,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     });
 
     it.skipIf(skipTests.emptyForeach)('should handle empty array in foreach', async () => {
-      const { workflow } = registry!['foreach-empty-array'];
+      const { workflow } = registry!['foreach-empty-array']!;
       const result = await execute(workflow, []);
 
       // Empty array should pass through without calling map step
@@ -728,7 +728,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     });
 
     it('should chain steps before foreach and aggregate results after', async () => {
-      const { workflow } = registry!['foreach-chained'];
+      const { workflow } = registry!['foreach-chained']!;
       const result = await execute(workflow, { count: 3 });
 
       // generate produces [{ value: 1 }, { value: 2 }, { value: 3 }]
@@ -754,7 +754,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.foreachStateBatch)(
       'should update state after each concurrent batch in foreach step',
       async () => {
-        const { workflow } = registry!['foreach-state-batch'];
+        const { workflow } = registry!['foreach-state-batch']!;
         const result = await execute(workflow, [2, 1], {
           initialState: { output: 0 },
           outputOptions: { includeState: true },
@@ -766,7 +766,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     );
 
     it.skipIf(skipTests.foreachBail)('should bail foreach execution when called in a concurrent batch', async () => {
-      const { workflow, bailResult } = registry!['foreach-bail'];
+      const { workflow, bailResult } = registry!['foreach-bail']!;
       const result = await execute(workflow, [1, 2, 3, 4], {
         initialState: { output: 0 },
         outputOptions: { includeState: true },
@@ -780,7 +780,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     });
 
     it('should aggregate results correctly from foreach iterations', async () => {
-      const { workflow } = registry!['foreach-aggregate'];
+      const { workflow } = registry!['foreach-aggregate']!;
       const result = await execute(workflow, [
         { name: 'alice', score: 5 },
         { name: 'bob', score: 3 },
@@ -811,7 +811,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.foreachProgressStreaming)(
       'should emit per-iteration progress events during foreach streaming',
       async () => {
-        const { workflow } = registry!['foreach-progress'];
+        const { workflow } = registry!['foreach-progress']!;
         const { stream } = ctx;
 
         if (!stream) {
@@ -873,7 +873,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.foreachProgressConcurrentStreaming)(
       'should emit per-iteration progress events with concurrency during foreach streaming',
       async () => {
-        const { workflow } = registry!['foreach-progress-concurrent'];
+        const { workflow } = registry!['foreach-progress-concurrent']!;
         const { stream } = ctx;
 
         if (!stream) {
@@ -904,7 +904,7 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.foreachProgressFailStreaming)(
       'should emit progress event with failed iterationStatus when a foreach iteration fails',
       async () => {
-        const { workflow } = registry!['foreach-progress-fail'];
+        const { workflow } = registry!['foreach-progress-fail']!;
         const { stream } = ctx;
 
         if (!stream) {

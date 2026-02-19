@@ -130,7 +130,7 @@ export function createTracingTests(ctx: WorkflowTestContext, registry?: Workflow
 
   describe('tracing', () => {
     it.skipIf(skipTests.tracingContext)('should provide tracingContext to step execution', async () => {
-      const { workflow, getCapturedTracingContext } = registry!['tracing-context'];
+      const { workflow, getCapturedTracingContext } = registry!['tracing-context']!;
       const result = await execute(workflow, { input: 'test' });
 
       expect(result.status).toBe('success');
@@ -161,7 +161,7 @@ export function createTracingTests(ctx: WorkflowTestContext, registry?: Workflow
     });
 
     it.skipIf(skipTests.tracingMultistep)('should provide tracingContext to all steps in workflow', async () => {
-      const { workflow, getCapturedContexts } = registry!['tracing-multistep'];
+      const { workflow, getCapturedContexts } = registry!['tracing-multistep']!;
       const result = await execute(workflow, { input: 'test' });
 
       expect(result.status).toBe('success');

@@ -251,7 +251,7 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
 
   describe('perStep execution', () => {
     it.skipIf(skipTests.perStepBasic)('should execute only first step when perStep is true', async () => {
-      const { workflow, mocks } = registry!['perstep-basic'];
+      const { workflow, mocks } = registry!['perstep-basic']!;
       const result = await execute(workflow, { input: 'test' }, { perStep: true });
 
       // Only first step should execute
@@ -271,7 +271,7 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.perStepParallel)(
       'should execute only one step in parallel workflow when perStep is true',
       async () => {
-        const { workflow, mocks } = registry!['perstep-parallel'];
+        const { workflow, mocks } = registry!['perstep-parallel']!;
         const result = await execute(workflow, { input: 'test' }, { perStep: true });
 
         // perStep executes only ONE step, even in parallel mode
@@ -296,7 +296,7 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.perStepConditional)(
       'should execute only check step in conditional when perStep is true',
       async () => {
-        const { workflow, mocks } = registry!['perstep-conditional'];
+        const { workflow, mocks } = registry!['perstep-conditional']!;
         const result = await execute(workflow, { input: 'test' }, { perStep: true });
 
         // Only check step should execute
@@ -319,7 +319,7 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.perStepNested)(
       'should execute only outer step in nested workflow when perStep is true',
       async () => {
-        const { workflow, mocks } = registry!['perstep-nested'];
+        const { workflow, mocks } = registry!['perstep-nested']!;
         const result = await execute(workflow, { input: 'test' }, { perStep: true });
 
         // Only outer step should execute
@@ -342,7 +342,7 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.perStepContinue)(
       'should continue execution step by step with multiple perStep calls',
       async () => {
-        const { workflow, mocks } = registry!['perstep-basic'];
+        const { workflow, mocks } = registry!['perstep-basic']!;
 
         // First call - execute step1
         const result1 = await execute(workflow, { input: 'test' }, { perStep: true });

@@ -97,7 +97,7 @@ export function createRunCountTests(ctx: WorkflowTestContext, registry?: Workflo
 
   describe('Run Count', () => {
     it.skipIf(skipTests.runCount)('retryCount should exist and equal zero for the first run', async () => {
-      const { workflow, mocks } = registry!['run-count-basic-workflow'];
+      const { workflow, mocks } = registry!['run-count-basic-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -110,7 +110,7 @@ export function createRunCountTests(ctx: WorkflowTestContext, registry?: Workflo
     });
 
     it.skipIf(skipTests.retryCount)('multiple steps should have different run counts in loops', async () => {
-      const { workflow } = registry!['run-count-loop-workflow'];
+      const { workflow } = registry!['run-count-loop-workflow']!;
 
       const result = await execute(workflow, { count: 0 });
 

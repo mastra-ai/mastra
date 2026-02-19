@@ -126,7 +126,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedResult: () => {
         const mock = mockRegistry.get('result-callback-workflow:receivedResult');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -340,7 +340,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedRunId: () => {
         const mock = mockRegistry.get('callback-runid-workflow:receivedRunId');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -379,7 +379,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedWorkflowId: () => {
         const mock = mockRegistry.get('callback-workflowid-workflow:receivedWorkflowId');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -423,7 +423,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedState: () => {
         const mock = mockRegistry.get('callback-state-workflow:receivedState');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -462,7 +462,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedResourceId: () => {
         const mock = mockRegistry.get('callback-resourceid-workflow:receivedResourceId');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -501,7 +501,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedRunId: () => {
         const mock = mockRegistry.get('callback-error-runid-workflow:receivedRunId');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -540,7 +540,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedWorkflowId: () => {
         const mock = mockRegistry.get('callback-error-workflowid-workflow:receivedWorkflowId');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -582,7 +582,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedStatus: () => {
         const mock = mockRegistry.get('callback-suspended-workflow:receivedStatus');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -622,7 +622,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedInitData: () => {
         const mock = mockRegistry.get('callback-getinitdata-workflow:receivedInitData');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -662,7 +662,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedInitData: () => {
         const mock = mockRegistry.get('callback-getinitdata-error-workflow:receivedInitData');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -699,7 +699,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedLogger: () => {
         const mock = mockRegistry.get('callback-logger-workflow:receivedLogger');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -738,7 +738,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedLogger: () => {
         const mock = mockRegistry.get('callback-logger-error-workflow:receivedLogger');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -777,7 +777,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedContext: () => {
         const mock = mockRegistry.get('callback-requestcontext-workflow:receivedContext');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -816,7 +816,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedContext: () => {
         const mock = mockRegistry.get('callback-requestcontext-error-workflow:receivedContext');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -855,7 +855,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedMastra: () => {
         const mock = mockRegistry.get('callback-mastra-onfinish-workflow:receivedMastra');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -894,7 +894,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedMastra: () => {
         const mock = mockRegistry.get('callback-mastra-onerror-workflow:receivedMastra');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -933,7 +933,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedResourceId: () => {
         const mock = mockRegistry.get('callback-error-resourceid-workflow:receivedResourceId');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -988,7 +988,7 @@ export function createCallbacksWorkflows(ctx: WorkflowCreatorContext) {
       mocks: {},
       getReceivedState: () => {
         const mock = mockRegistry.get('callback-error-state-workflow:receivedState');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -1002,7 +1002,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
 
   describe('onFinish and onError callbacks', () => {
     it.skipIf(skipTests.callbackOnFinish)('should call onFinish callback when workflow succeeds', async () => {
-      const { workflow, mocks } = registry!['callback-test-workflow'];
+      const { workflow, mocks } = registry!['callback-test-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -1011,7 +1011,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackOnError)('should call onError callback when workflow fails', async () => {
-      const { workflow, mocks } = registry!['error-callback-test-workflow'];
+      const { workflow, mocks } = registry!['error-callback-test-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -1020,7 +1020,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackResult)('should pass workflow result to onFinish callback', async () => {
-      const { workflow, getReceivedResult } = registry!['result-callback-workflow'];
+      const { workflow, getReceivedResult } = registry!['result-callback-workflow']!;
 
       await execute(workflow, {});
 
@@ -1032,7 +1032,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     it.skipIf(skipTests.callbackOnErrorNotCalled)(
       'should not call onError callback when workflow succeeds',
       async () => {
-        const { workflow, mocks } = registry!['no-error-callback-workflow'];
+        const { workflow, mocks } = registry!['no-error-callback-workflow']!;
 
         const result = await execute(workflow, {});
 
@@ -1044,7 +1044,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     it.skipIf(skipTests.callbackBothOnFailure)(
       'should call both onFinish and onError when workflow fails',
       async () => {
-        const { workflow, mocks } = registry!['both-callbacks-workflow'];
+        const { workflow, mocks } = registry!['both-callbacks-workflow']!;
 
         const result = await execute(workflow, {});
 
@@ -1055,7 +1055,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     );
 
     it.skipIf(skipTests.callbackAsyncOnFinish)('should support async onFinish callback', async () => {
-      const { workflow, mocks, getCallbackCompleted } = registry!['async-onfinish-workflow'];
+      const { workflow, mocks, getCallbackCompleted } = registry!['async-onfinish-workflow']!;
 
       await execute(workflow, {});
 
@@ -1064,7 +1064,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackAsyncOnError)('should support async onError callback', async () => {
-      const { workflow, mocks, getCallbackCompleted } = registry!['async-onerror-workflow'];
+      const { workflow, mocks, getCallbackCompleted } = registry!['async-onerror-workflow']!;
 
       await execute(workflow, {});
 
@@ -1073,7 +1073,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackRunId)('should provide runId in onFinish callback', async () => {
-      const { workflow, getReceivedRunId, resetMocks } = registry!['callback-runid-workflow'];
+      const { workflow, getReceivedRunId, resetMocks } = registry!['callback-runid-workflow']!;
       resetMocks?.();
 
       const customRunId = `test-runid-${Date.now()}`;
@@ -1084,7 +1084,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackWorkflowId)('should provide workflowId in onFinish callback', async () => {
-      const { workflow, getReceivedWorkflowId, resetMocks } = registry!['callback-workflowid-workflow'];
+      const { workflow, getReceivedWorkflowId, resetMocks } = registry!['callback-workflowid-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {});
@@ -1094,7 +1094,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackState ?? skipTests.state)('should provide state in onFinish callback', async () => {
-      const { workflow, getReceivedState, resetMocks } = registry!['callback-state-workflow'];
+      const { workflow, getReceivedState, resetMocks } = registry!['callback-state-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {}, { initialState: { counter: 0 } });
@@ -1107,7 +1107,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     it.skipIf(skipTests.callbackResourceId)(
       'should provide resourceId in onFinish callback when provided',
       async () => {
-        const { workflow, getReceivedResourceId, resetMocks } = registry!['callback-resourceid-workflow'];
+        const { workflow, getReceivedResourceId, resetMocks } = registry!['callback-resourceid-workflow']!;
         resetMocks?.();
 
         const testResourceId = `resource-${Date.now()}`;
@@ -1119,7 +1119,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     );
 
     it.skipIf(skipTests.callbackRunId)('should provide runId in onError callback', async () => {
-      const { workflow, getReceivedRunId, resetMocks } = registry!['callback-error-runid-workflow'];
+      const { workflow, getReceivedRunId, resetMocks } = registry!['callback-error-runid-workflow']!;
       resetMocks?.();
 
       const customRunId = `test-error-runid-${Date.now()}`;
@@ -1130,7 +1130,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackWorkflowId)('should provide workflowId in onError callback', async () => {
-      const { workflow, getReceivedWorkflowId, resetMocks } = registry!['callback-error-workflowid-workflow'];
+      const { workflow, getReceivedWorkflowId, resetMocks } = registry!['callback-error-workflowid-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {}, {});
@@ -1142,7 +1142,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     it.skipIf(skipTests.callbackSuspended)(
       'should call onFinish with suspended status when workflow suspends',
       async () => {
-        const { workflow, getReceivedStatus, resetMocks } = registry!['callback-suspended-workflow'];
+        const { workflow, getReceivedStatus, resetMocks } = registry!['callback-suspended-workflow']!;
         resetMocks?.();
 
         await execute(workflow, {});
@@ -1153,7 +1153,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     );
 
     it.skipIf(skipTests.callbackGetInitData)('should provide getInitData function in onFinish callback', async () => {
-      const { workflow, getReceivedInitData, resetMocks } = registry!['callback-getinitdata-workflow'];
+      const { workflow, getReceivedInitData, resetMocks } = registry!['callback-getinitdata-workflow']!;
       resetMocks?.();
 
       await execute(workflow, { userId: 'user-123' });
@@ -1163,7 +1163,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackGetInitData)('should provide getInitData function in onError callback', async () => {
-      const { workflow, getReceivedInitData, resetMocks } = registry!['callback-getinitdata-error-workflow'];
+      const { workflow, getReceivedInitData, resetMocks } = registry!['callback-getinitdata-error-workflow']!;
       resetMocks?.();
 
       await execute(workflow, { userId: 'user-456' });
@@ -1173,7 +1173,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackLogger)('should provide logger in onFinish callback', async () => {
-      const { workflow, getReceivedLogger, resetMocks } = registry!['callback-logger-workflow'];
+      const { workflow, getReceivedLogger, resetMocks } = registry!['callback-logger-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {});
@@ -1185,7 +1185,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackLogger)('should provide logger in onError callback', async () => {
-      const { workflow, getReceivedLogger, resetMocks } = registry!['callback-logger-error-workflow'];
+      const { workflow, getReceivedLogger, resetMocks } = registry!['callback-logger-error-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {});
@@ -1197,7 +1197,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackRequestContext)('should provide requestContext in onFinish callback', async () => {
-      const { workflow, getReceivedContext, resetMocks } = registry!['callback-requestcontext-workflow'];
+      const { workflow, getReceivedContext, resetMocks } = registry!['callback-requestcontext-workflow']!;
       resetMocks?.();
 
       // Pass requestContext as a Map since RequestContext extends Map
@@ -1210,7 +1210,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackRequestContext)('should provide requestContext in onError callback', async () => {
-      const { workflow, getReceivedContext, resetMocks } = registry!['callback-requestcontext-error-workflow'];
+      const { workflow, getReceivedContext, resetMocks } = registry!['callback-requestcontext-error-workflow']!;
       resetMocks?.();
 
       const requestContext = new Map([['errorKey', 'errorValue']]);
@@ -1222,7 +1222,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackMastraOnFinish)('should provide mastra instance in onFinish callback', async () => {
-      const { workflow, getReceivedMastra, resetMocks } = registry!['callback-mastra-onfinish-workflow'];
+      const { workflow, getReceivedMastra, resetMocks } = registry!['callback-mastra-onfinish-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {});
@@ -1233,7 +1233,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.callbackMastraOnError)('should provide mastra instance in onError callback', async () => {
-      const { workflow, getReceivedMastra, resetMocks } = registry!['callback-mastra-onerror-workflow'];
+      const { workflow, getReceivedMastra, resetMocks } = registry!['callback-mastra-onerror-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {});
@@ -1245,7 +1245,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     it.skipIf(skipTests.callbackResourceIdOnError)(
       'should provide resourceId in onError callback when provided',
       async () => {
-        const { workflow, getReceivedResourceId, resetMocks } = registry!['callback-error-resourceid-workflow'];
+        const { workflow, getReceivedResourceId, resetMocks } = registry!['callback-error-resourceid-workflow']!;
         resetMocks?.();
 
         await execute(workflow, {}, { resourceId: 'error-resource-456' });
@@ -1256,7 +1256,7 @@ export function createCallbacksTests(ctx: WorkflowTestContext, registry?: Workfl
     );
 
     it.skipIf(skipTests.callbackStateOnError)('should provide state in onError callback', async () => {
-      const { workflow, getReceivedState, resetMocks } = registry!['callback-error-state-workflow'];
+      const { workflow, getReceivedState, resetMocks } = registry!['callback-error-state-workflow']!;
       resetMocks?.();
 
       await execute(workflow, {});

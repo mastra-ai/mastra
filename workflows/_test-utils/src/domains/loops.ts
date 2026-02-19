@@ -270,20 +270,18 @@ export function createLoopsWorkflows(ctx: WorkflowCreatorContext) {
  * Create tests for loops.
  */
 export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
-  const { execute, skipTests } = ctx;
+  const { execute } = ctx;
 
   describe('Loops', () => {
     it('should run an until loop', async () => {
-      const { workflow } = registry!['loops-until-counter'];
+      const { workflow } = registry!['loops-until-counter']!;
       const result = await execute(workflow, { target: 10, value: 0 });
 
       // Verify loop ran correct number of times via output (not mock counts - unreliable with memoization)
       // Loop starts at 0, increments until >= 12, so final value is 12
       expect(result.status).toBe('success');
-      // @ts-expect-error - result.result type
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-expect-error - steps.increment type
-      expect(result.steps.increment.output).toEqual({ value: 12 });
+      expect((result.steps.increment as any).output).toEqual({ value: 12 });
       expect(result.steps.final).toMatchObject({
         status: 'success',
         output: { finalValue: 12 },
@@ -291,16 +289,14 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     });
 
     it('should run a while loop', async () => {
-      const { workflow } = registry!['loops-while-counter'];
+      const { workflow } = registry!['loops-while-counter']!;
       const result = await execute(workflow, { target: 10, value: 0 });
 
       // Verify loop ran correct number of times via output (not mock counts - unreliable with memoization)
       // Loop starts at 0, increments while < 12, so final value is 12
       expect(result.status).toBe('success');
-      // @ts-expect-error - result.result type
       expect(result.result).toEqual({ finalValue: 12 });
-      // @ts-expect-error - steps.increment type
-      expect(result.steps.increment.output).toEqual({ value: 12 });
+      expect((result.steps.increment as any).output).toEqual({ value: 12 });
       expect(result.steps.final).toMatchObject({
         status: 'success',
         output: { finalValue: 12 },
@@ -308,7 +304,7 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     });
 
     it('should exit loop immediately when condition is already met', async () => {
-      const { workflow, mocks, resetMocks } = registry!['loops-immediate-exit'];
+      const { workflow, resetMocks } = registry!['loops-immediate-exit']!;
       resetMocks?.();
 
       // Start with count = 10, which is >= 10, so dowhile should not run the body at all
@@ -324,7 +320,7 @@ export function createLoopsTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     });
 
     it('should accumulate data across loop iterations', async () => {
-      const { workflow, resetMocks } = registry!['loops-accumulate'];
+      const { workflow, resetMocks } = registry!['loops-accumulate']!;
       resetMocks?.();
 
       const result = await execute(workflow, {});

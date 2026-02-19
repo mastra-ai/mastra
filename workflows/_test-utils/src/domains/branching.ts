@@ -573,8 +573,8 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
     counterWorkflow
       .then(firstStep)
       .branch([
-        [async () => false, wfA],
-        [async () => true, wfB],
+        [async () => false, wfA as any],
+        [async () => true, wfB as any],
       ])
       .then(lastStep)
       .commit();
@@ -613,7 +613,7 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
 
   describe('if-else branching', () => {
     it('should run the if-then branch', async () => {
-      const { workflow, mocks } = registry!['branch-if-then'];
+      const { workflow, mocks } = registry!['branch-if-then']!;
       const result = await execute(workflow, { startValue: 1 });
 
       expect(mocks.start).toHaveBeenCalledTimes(1);
@@ -626,7 +626,7 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.branchingElse)('should run the else branch', async () => {
-      const { workflow, mocks } = registry!['branch-else'];
+      const { workflow, mocks } = registry!['branch-else']!;
       const result = await execute(workflow, { startValue: 6 });
 
       expect(mocks.start).toHaveBeenCalledTimes(1);
@@ -639,7 +639,7 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should handle three-way branching - low path', async () => {
-      const { workflow, mocks } = registry!['branch-threeway'];
+      const { workflow, mocks } = registry!['branch-threeway']!;
       const result = await execute(workflow, { value: 10 });
 
       expect(mocks.check).toHaveBeenCalledTimes(1);
@@ -647,12 +647,11 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(mocks.medium).toHaveBeenCalledTimes(0);
       expect(mocks.high).toHaveBeenCalledTimes(0);
       expect(result.status).toBe('success');
-      // @ts-expect-error
       expect(result.steps.low?.output).toEqual({ result: 'low' });
     });
 
     it('should handle three-way branching - medium path', async () => {
-      const { workflow, mocks } = registry!['branch-threeway'];
+      const { workflow, mocks } = registry!['branch-threeway']!;
       const result = await execute(workflow, { value: 50 });
 
       expect(mocks.check).toHaveBeenCalledTimes(1);
@@ -660,12 +659,11 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(mocks.medium).toHaveBeenCalledTimes(1);
       expect(mocks.high).toHaveBeenCalledTimes(0);
       expect(result.status).toBe('success');
-      // @ts-expect-error
       expect(result.steps.medium?.output).toEqual({ result: 'medium' });
     });
 
     it('should handle three-way branching - high path', async () => {
-      const { workflow, mocks } = registry!['branch-threeway'];
+      const { workflow, mocks } = registry!['branch-threeway']!;
       const result = await execute(workflow, { value: 80 });
 
       expect(mocks.check).toHaveBeenCalledTimes(1);
@@ -673,12 +671,11 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(mocks.medium).toHaveBeenCalledTimes(0);
       expect(mocks.high).toHaveBeenCalledTimes(1);
       expect(result.status).toBe('success');
-      // @ts-expect-error
       expect(result.steps.high?.output).toEqual({ result: 'high' });
     });
 
     it('should pass correct data to selected branch - true path', async () => {
-      const { workflow, mocks } = registry!['branch-data-passing'];
+      const { workflow, mocks } = registry!['branch-data-passing']!;
       const result = await execute(workflow, { rawValue: 100 });
 
       expect(mocks.initial).toHaveBeenCalledTimes(1);
@@ -686,14 +683,12 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(mocks.falsePath).toHaveBeenCalledTimes(0);
 
       expect(result.status).toBe('success');
-      // @ts-expect-error
       expect(result.steps.initial?.output).toEqual({ processedValue: 200, flag: true });
-      // @ts-expect-error
       expect(result.steps.truePath?.output).toEqual({ final: 'processed: 200, flag: true' });
     });
 
     it.skipIf(skipTests.branchingNestedConditions)('should execute nested else and if-branch', async () => {
-      const { workflow, mocks, resetMocks } = registry!['branch-nested-conditions'];
+      const { workflow, mocks, resetMocks } = registry!['branch-nested-conditions']!;
       resetMocks?.();
       const result = await execute(workflow, { startValue: 1 });
 
@@ -734,7 +729,7 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should pass correct data to selected branch - false path', async () => {
-      const { workflow, mocks } = registry!['branch-data-passing'];
+      const { workflow, mocks } = registry!['branch-data-passing']!;
       const result = await execute(workflow, { rawValue: 25 });
 
       expect(mocks.initial).toHaveBeenCalledTimes(1);
@@ -742,9 +737,7 @@ export function createBranchingTests(ctx: WorkflowTestContext, registry?: Workfl
       expect(mocks.falsePath).toHaveBeenCalledTimes(1);
 
       expect(result.status).toBe('success');
-      // @ts-expect-error
       expect(result.steps.initial?.output).toEqual({ processedValue: 50, flag: false });
-      // @ts-expect-error
       expect(result.steps.falsePath?.output).toEqual({ final: 'small: 50' });
     });
   });

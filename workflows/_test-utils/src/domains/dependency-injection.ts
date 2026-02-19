@@ -49,7 +49,7 @@ export function createDependencyInjectionWorkflows(ctx: WorkflowCreatorContext) 
       mocks: {},
       getReceivedContext: (): RequestContext | undefined => {
         const mock = mockRegistry.get('di-test-workflow:receivedContext');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -155,7 +155,7 @@ export function createDependencyInjectionWorkflows(ctx: WorkflowCreatorContext) 
       mocks: {},
       getFinalContextValue: (): any => {
         const mock = mockRegistry.get('di-removed-requestcontext-workflow:finalContextValue');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : 'NOT_CALLED';
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : 'NOT_CALLED';
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -177,11 +177,11 @@ export function createDependencyInjectionWorkflows(ctx: WorkflowCreatorContext) 
       execute: async ({ suspend, resumeData, requestContext }) => {
         if (!resumeData) {
           // First call: append to responses array and suspend
-          requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'first message']);
+          requestContext.set('responses', [...((requestContext.get('responses') as string[]) ?? []), 'first message']);
           return suspend({});
         }
         // On resume: append to responses array and return
-        requestContext.set('responses', [...(requestContext.get('responses') ?? []), 'promptAgentAction']);
+        requestContext.set('responses', [...((requestContext.get('responses') as string[]) ?? []), 'promptAgentAction']);
         return { result: 'done' };
       },
       inputSchema: z.object({ userInput: z.string() }),
@@ -193,7 +193,7 @@ export function createDependencyInjectionWorkflows(ctx: WorkflowCreatorContext) 
       id: 'requestContextAction',
       execute: async ({ requestContext }) => {
         const responses = requestContext.get('responses');
-        return responses;
+        return responses as any;
       },
       inputSchema: z.object({ result: z.string() }),
       outputSchema: z.object({}),
@@ -247,7 +247,7 @@ export function createDependencyInjectionWorkflows(ctx: WorkflowCreatorContext) 
       mocks: {},
       getCapturedValue: (): any => {
         const mock = mockRegistry.get('di-resume-requestcontext-workflow:capturedValue');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : 'NOT_CALLED';
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : 'NOT_CALLED';
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -306,7 +306,7 @@ export function createDependencyInjectionWorkflows(ctx: WorkflowCreatorContext) 
       mocks: {},
       getFinalContextValue: (): any => {
         const mock = mockRegistry.get('di-requestcontext-before-suspension-workflow:finalContextValue');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : 'NOT_CALLED';
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : 'NOT_CALLED';
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -320,7 +320,7 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
 
   describe('Dependency Injection', () => {
     it('should provide requestContext to step execute function', async () => {
-      const { workflow, getReceivedContext } = registry!['di-test-workflow'];
+      const { workflow, getReceivedContext } = registry!['di-test-workflow']!;
 
       // requestContext is always provided by the workflow engine
       const result = await execute(workflow, {});
@@ -333,7 +333,7 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
     it.skipIf(skipTests.requestContextPropagation)(
       'should propagate requestContext values through workflow steps',
       async () => {
-        const { workflow, getContextValues } = registry!['di-propagation-workflow'];
+        const { workflow, getContextValues } = registry!['di-propagation-workflow']!;
 
         const result = await execute(workflow, {});
 
@@ -349,7 +349,7 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
     it.skipIf(skipTests.diRemovedRequestContext || !ctx.resume)(
       'should not show removed requestContext values in subsequent steps',
       async () => {
-        const { workflow, mocks, resetMocks, getFinalContextValue } = registry!['di-removed-requestcontext-workflow'];
+        const { workflow, resetMocks, getFinalContextValue } = registry!['di-removed-requestcontext-workflow']!;
         resetMocks?.();
         const runId = `di-removed-${Date.now()}`;
         const result = await execute(workflow, { value: 0 }, { runId });
@@ -365,27 +365,27 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
     );
 
     it.skipIf(skipTests.diBug4442 || !ctx.resume)('should work with custom requestContext - bug #4442', async () => {
-      const { workflow, mocks, resetMocks } = registry!['di-bug-4442-workflow'];
+      const { workflow, resetMocks } = registry!['di-bug-4442-workflow']!;
       resetMocks?.();
       const runId = `di-4442-${Date.now()}`;
       const requestContext = new Map([['responses', []]]) as any;
       const result = await execute(workflow, { input: 'test' }, { runId, requestContext });
       expect(result.status).toBe('suspended');
-      expect(result.steps.promptAgent.status).toBe('suspended');
+      expect(result.steps.promptAgent!.status).toBe('suspended');
       const resumeResult = await ctx.resume!(workflow, {
         runId,
         step: 'promptAgent',
         resumeData: { userInput: 'test input for resumption' },
       });
       expect(resumeResult.status).toBe('success');
-      expect(resumeResult.steps.requestContextAction.status).toBe('success');
-      expect((resumeResult.steps.requestContextAction as any).output).toEqual(['first message', 'promptAgentAction']);
+      expect(resumeResult.steps.requestContextAction!.status).toBe('success');
+      expect((resumeResult.steps.requestContextAction as any)!.output).toEqual(['first message', 'promptAgentAction']);
     });
 
     it.skipIf(skipTests.diResumeRequestContext || !ctx.resume)(
       'should inject requestContext into steps during resume',
       async () => {
-        const { workflow, resetMocks, getCapturedValue } = registry!['di-resume-requestcontext-workflow'];
+        const { workflow, resetMocks, getCapturedValue } = registry!['di-resume-requestcontext-workflow']!;
         resetMocks?.();
         const runId = `di-resume-ctx-${Date.now()}`;
         const requestContext = new Map([['injectedKey', 'injected-value']]) as any;
@@ -405,7 +405,7 @@ export function createDependencyInjectionTests(ctx: WorkflowTestContext, registr
       'should preserve requestContext values set before suspension through resume',
       async () => {
         const { workflow, resetMocks, getFinalContextValue } =
-          registry!['di-requestcontext-before-suspension-workflow'];
+          registry!['di-requestcontext-before-suspension-workflow']!;
         resetMocks?.();
 
         const runId = `di-before-suspension-${Date.now()}`;

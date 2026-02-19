@@ -27,7 +27,6 @@ export function createInteroperabilityWorkflows(ctx: WorkflowCreatorContext) {
       outputSchema: z.object({ name: z.string() }),
     });
 
-    // @ts-expect-error - mock implementation
     const toolAction = vi.fn().mockImplementation(async (input, _context) => {
       return { name: input.name };
     });
@@ -64,19 +63,17 @@ export function createInteroperabilityTests(ctx: WorkflowTestContext, registry?:
 
   describe('Interoperability (Actions)', () => {
     it('should be able to use all action types in a workflow', async () => {
-      const { workflow, mocks } = registry!['interop-workflow'];
+      const { workflow, mocks } = registry!['interop-workflow']!;
 
       const result = await execute(workflow, {});
 
       expect(mocks.step1Action).toHaveBeenCalled();
       expect(mocks.toolAction).toHaveBeenCalled();
-      // @ts-expect-error - dynamic step keys
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { name: 'step1' },
         payload: {},
       });
-      // @ts-expect-error - dynamic step keys
       expect(result.steps['random-tool']).toMatchObject({
         status: 'success',
         output: { name: 'step1' },

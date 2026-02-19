@@ -1103,7 +1103,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
 
   describe('Time travel', () => {
     it('should execute a sleep step', async () => {
-      const { workflow, mocks } = registry!['sleep-test-workflow'];
+      const { workflow, mocks } = registry!['sleep-test-workflow']!;
 
       const startTime = Date.now();
       const result = await execute(workflow, {});
@@ -1127,7 +1127,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     });
 
     it('should execute a sleep step with fn parameter', async () => {
-      const { workflow, mocks } = registry!['sleep-fn-test-workflow'];
+      const { workflow, mocks } = registry!['sleep-fn-test-workflow']!;
 
       const startTime = Date.now();
       const result = await execute(workflow, {});
@@ -1144,7 +1144,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     });
 
     it('should handle sleep in conditional branch', async () => {
-      const { workflow, mocks } = registry!['sleep-in-branch-workflow'];
+      const { workflow, mocks } = registry!['sleep-in-branch-workflow']!;
 
       const startTime = Date.now();
       const result = await execute(workflow, {});
@@ -1164,7 +1164,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     });
 
     it('should preserve step results across sleep', async () => {
-      const { workflow, mocks } = registry!['preserve-results-across-sleep-workflow'];
+      const { workflow, mocks } = registry!['preserve-results-across-sleep-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -1184,7 +1184,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     });
 
     it('should execute a sleepUntil step', async () => {
-      const { workflow, mocks } = registry!['sleep-until-test-workflow'];
+      const { workflow, mocks } = registry!['sleep-until-test-workflow']!;
 
       const startTime = Date.now();
       const result = await execute(workflow, {});
@@ -1206,7 +1206,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     });
 
     it('should execute a sleepUntil step with fn parameter', async () => {
-      const { workflow, mocks } = registry!['sleep-until-fn-test-workflow'];
+      const { workflow, mocks } = registry!['sleep-until-fn-test-workflow']!;
 
       const startTime = Date.now();
       const result = await execute(workflow, {});
@@ -1224,7 +1224,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
 
     // Time travel API tests
     it.skipIf(skipTests.timeTravelBasic || !timeTravel)('should timeTravel a workflow execution', async () => {
-      const { workflow, step2, mocks, resetMocks } = registry!['timetravel-basic-workflow'];
+      const { workflow, step2, mocks, resetMocks } = registry!['timetravel-basic-workflow']!;
       resetMocks?.();
 
       // Time travel to step2 with pre-populated step1 result
@@ -1254,7 +1254,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelParallel || !timeTravel)(
       'should timeTravel workflow execution for workflow with parallel steps',
       async () => {
-        const { workflow, finalStep, mocks, resetMocks } = registry!['timetravel-parallel-workflow'];
+        const { workflow, finalStep, mocks, resetMocks } = registry!['timetravel-parallel-workflow']!;
         resetMocks?.();
 
         // Time travel to final step with pre-populated parallel step results
@@ -1292,7 +1292,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelPerStep || !timeTravel)(
       'should timeTravel a workflow execution and run only one step when perStep is true',
       async () => {
-        const { workflow, step2, mocks, resetMocks } = registry!['timetravel-perstep-workflow'];
+        const { workflow, step2, mocks, resetMocks } = registry!['timetravel-perstep-workflow']!;
         resetMocks?.();
 
         // Time travel to step2 with perStep=true
@@ -1329,7 +1329,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelPreviousRun || !timeTravel)(
       'should timeTravel a workflow execution that was previously ran',
       async () => {
-        const { workflow, step2, mocks, resetMocks } = registry!['timetravel-prevrun-workflow'];
+        const { workflow, step2, mocks, resetMocks } = registry!['timetravel-prevrun-workflow']!;
         resetMocks?.();
 
         // First, run the workflow normally
@@ -1368,7 +1368,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelNested || !timeTravel)(
       'should timeTravel a workflow execution that has nested workflows',
       async () => {
-        const { workflow, nestedWorkflow, mocks, resetMocks } = registry!['timetravel-nested-workflow'];
+        const { workflow, nestedWorkflow, mocks, resetMocks } = registry!['timetravel-nested-workflow']!;
         resetMocks?.();
 
         // Time travel to the nested workflow
@@ -1400,7 +1400,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelSuspendResume || !timeTravel)(
       'should successfully suspend and resume a timeTravelled workflow execution',
       async () => {
-        const { workflow, suspendStep, mocks, resetMocks } = registry!['timetravel-suspend-workflow'];
+        const { workflow, suspendStep, mocks, resetMocks } = registry!['timetravel-suspend-workflow']!;
         resetMocks?.();
 
         // Time travel to suspend step
@@ -1428,7 +1428,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelConditional || !timeTravel)(
       'should timeTravel to step in conditional chains',
       async () => {
-        const { workflow, branchA, mocks, resetMocks } = registry!['timetravel-conditional-workflow'];
+        const { workflow, branchA, mocks, resetMocks } = registry!['timetravel-conditional-workflow']!;
         resetMocks?.();
 
         // Time travel to branchA with check result showing branch A should be taken
@@ -1460,7 +1460,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelLoop || !timeTravel)(
       'should timeTravel workflow execution for a do-until workflow',
       async () => {
-        const { workflow, loopStep, finalStep, mocks, resetMocks } = registry!['timetravel-loop-workflow'];
+        const { workflow, finalStep, mocks, resetMocks } = registry!['timetravel-loop-workflow']!;
         resetMocks?.();
 
         // Time travel to the final step with pre-completed loop iterations
@@ -1490,7 +1490,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelPreviousRunPerStep || !timeTravel)(
       'should timeTravel previously ran workflow with perStep',
       async () => {
-        const { workflow, step2, mocks, resetMocks } = registry!['timetravel-prevrun-workflow'];
+        const { workflow, step2, mocks, resetMocks } = registry!['timetravel-prevrun-workflow']!;
         resetMocks?.();
 
         // First, run the workflow normally
@@ -1528,7 +1528,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelParallelPerStep || !timeTravel)(
       'should timeTravel parallel steps with perStep',
       async () => {
-        const { workflow, p1, p2, mocks, resetMocks } = registry!['timetravel-parallel-perstep-workflow'];
+        const { workflow, p1, mocks, resetMocks } = registry!['timetravel-parallel-perstep-workflow']!;
         resetMocks?.();
 
         // Time travel to p1 with perStep=true
@@ -1566,7 +1566,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelConditionalPerStep || !timeTravel)(
       'should timeTravel conditional chains with perStep',
       async () => {
-        const { workflow, branchA, mocks, resetMocks } = registry!['timetravel-conditional-workflow'];
+        const { workflow, branchA, mocks, resetMocks } = registry!['timetravel-conditional-workflow']!;
         resetMocks?.();
 
         // Time travel to branchA with perStep=true
@@ -1600,7 +1600,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelNonExistentStep || !timeTravel)(
       'should throw error if trying to timetravel to a non-existent step',
       async () => {
-        const { workflow, resetMocks } = registry!['timetravel-basic-workflow'];
+        const { workflow, resetMocks } = registry!['timetravel-basic-workflow']!;
         resetMocks?.();
 
         try {
@@ -1627,7 +1627,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelErrorRunning || !timeTravel || !ctx.getStorage)(
       'should throw error if trying to timetravel a workflow execution that is still running',
       async () => {
-        const { workflow, resetMocks } = registry!['tt-error-running-workflow'];
+        const { workflow, resetMocks } = registry!['tt-error-running-workflow']!;
         resetMocks?.();
 
         const storage = ctx.getStorage!();
@@ -1690,7 +1690,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelErrorInvalidInput || !timeTravel)(
       'should throw error if validateInputs is true and trying to timetravel with invalid inputData',
       async () => {
-        const { workflow, resetMocks } = registry!['tt-error-invalid-input-workflow'];
+        const { workflow, resetMocks } = registry!['tt-error-invalid-input-workflow']!;
         resetMocks?.();
 
         try {
@@ -1710,7 +1710,7 @@ export function createTimeTravelTests(ctx: WorkflowTestContext, registry?: Workf
     it.skipIf(skipTests.timeTravelSuspended || !timeTravel)(
       'should timetravel a suspended workflow execution',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['tt-suspended-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['tt-suspended-workflow']!;
         resetMocks?.();
 
         const runId = `tt-suspended-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;

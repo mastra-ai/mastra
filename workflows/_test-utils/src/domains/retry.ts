@@ -170,7 +170,7 @@ export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRe
 
   describe('Retry', () => {
     it('should retry a step default 0 times', async () => {
-      const { workflow, mocks } = registry!['retry-default'];
+      const { workflow, mocks } = registry!['retry-default']!;
       const result = await execute(workflow, {});
 
       expect(result.steps.step1).toMatchObject({
@@ -189,7 +189,7 @@ export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     });
 
     it('should retry a step with a custom retry config', async () => {
-      const { workflow, mocks } = registry!['retry-custom-config'];
+      const { workflow, mocks } = registry!['retry-custom-config']!;
       const result = await execute(workflow, {});
 
       expect(result.steps.step1).toMatchObject({
@@ -208,7 +208,7 @@ export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     });
 
     it('should retry a step with step retries option, overriding the workflow retry config', async () => {
-      const { workflow, mocks } = registry!['retry-step-override'];
+      const { workflow, mocks } = registry!['retry-step-override']!;
       const result = await execute(workflow, {});
 
       expect(result.steps.step1).toMatchObject({

@@ -10,6 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
+// @ts-ignore - module resolution for test utilities
 import { MockLanguageModelV1, MockLanguageModelV2 } from '@internal/ai-sdk-v4/test';
 import { Mastra } from '@mastra/core/mastra';
 import type { StreamEvent } from '@mastra/core/workflows';
@@ -453,6 +454,7 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
   // Test: should be able to use an agent as a step
   if (Agent) {
     const agent1 = new Agent({
+      id: 'test-agent-1',
       name: 'test-agent-1',
       instructions: 'test agent instructions',
       model: new MockLanguageModelV1({
@@ -474,6 +476,7 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
     });
 
     const agent2 = new Agent({
+      id: 'test-agent-2',
       name: 'test-agent-2',
       instructions: 'test agent instructions',
       model: new MockLanguageModelV1({
@@ -577,6 +580,7 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
     });
 
     const agentWithOptions = new Agent({
+      id: 'test-agent-with-options',
       name: 'test-agent-with-options',
       instructions: 'original instructions',
       model: new MockLanguageModelV1({
@@ -626,7 +630,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
 
   describe('Streaming', () => {
     it('should execute workflow that could be streamed', async () => {
-      const { workflow, mocks } = registry!['streaming-test-workflow'];
+      const { workflow } = registry!['streaming-test-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -644,7 +648,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.stepExecutionOrder)('should track step execution order in workflow result', async () => {
-      const { workflow, getExecutionOrder } = registry!['execution-order-workflow'];
+      const { workflow, getExecutionOrder } = registry!['execution-order-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -658,7 +662,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.state)('should execute workflow with state that could be streamed', async () => {
-      const { workflow, mocks, resetMocks } = registry!['streaming-with-state-workflow'];
+      const { workflow, resetMocks } = registry!['streaming-with-state-workflow']!;
       resetMocks?.();
 
       const result = await execute(workflow, {}, { initialState: { counter: 0 } });
@@ -676,7 +680,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should execute workflow with parallel steps that could be streamed', async () => {
-      const { workflow, mocks, resetMocks } = registry!['streaming-parallel-workflow'];
+      const { workflow, resetMocks } = registry!['streaming-parallel-workflow']!;
       resetMocks?.();
 
       const result = await execute(workflow, {});
@@ -697,7 +701,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should execute workflow that suspends (streamable without closing)', async () => {
-      const { workflow, mocks, resetMocks } = registry!['streaming-suspend-workflow'];
+      const { workflow, resetMocks } = registry!['streaming-suspend-workflow']!;
       resetMocks?.();
 
       const result = await execute(workflow, {});
@@ -718,7 +722,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
     // Stream event format tests - verify streaming APIs work and produce correct events
     describe('Stream Events', () => {
       it('should produce correct streamLegacy events', async () => {
-        const { workflow } = registry!['streaming-test-workflow'];
+        const { workflow } = registry!['streaming-test-workflow']!;
         const { stream } = ctx;
 
         if (!stream) {
@@ -753,7 +757,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingDetailedEvents)(
         'should generate stream with detailed event structure (streamLegacy)',
         async () => {
-          const { workflow } = registry!['streaming-test-workflow'];
+          const { workflow } = registry!['streaming-test-workflow']!;
           const { stream } = ctx;
 
           if (!stream) {
@@ -844,7 +848,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       );
 
       it('should produce correct stream() events', async () => {
-        const { workflow } = registry!['streaming-test-workflow'];
+        const { workflow } = registry!['streaming-test-workflow']!;
         const { stream } = ctx;
 
         if (!stream) {
@@ -869,7 +873,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       });
 
       it.skipIf(skipTests.streamingSuspendResume)('should handle streaming suspend and resume flow', async () => {
-        const { workflow, promptAgentStep, mocks, resetMocks } = registry!['streaming-suspend-resume-workflow'];
+        const { workflow, promptAgentStep, mocks, resetMocks } = registry!['streaming-suspend-resume-workflow']!;
         const { stream, streamResume } = ctx;
         resetMocks?.();
 
@@ -924,7 +928,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingSuspendResumeLegacy)(
         'should handle basic suspend and resume flow (streamLegacy)',
         async () => {
-          const { workflow, promptAgentStep, mocks, resetMocks } = registry!['streaming-suspend-resume-workflow'];
+          const { workflow, promptAgentStep, mocks, resetMocks } = registry!['streaming-suspend-resume-workflow']!;
           resetMocks?.();
 
           // Use the workflow's createRun directly for resume-during-iteration pattern
@@ -979,7 +983,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       );
 
       it.skipIf(skipTests.streamingSuspendResume)('should handle custom event emission using writer', async () => {
-        const { workflow, stepWithWriter } = registry!['writer-custom-workflow'];
+        const { workflow, stepWithWriter } = registry!['writer-custom-workflow']!;
         const { stream, streamResume } = ctx;
 
         if (!stream || !streamResume) {
@@ -1018,7 +1022,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingErrorPreservation)(
         'should preserve error details in streaming workflow',
         async () => {
-          const { workflow, resetMocks } = registry!['error-preserve-workflow'];
+          const { workflow, resetMocks } = registry!['error-preserve-workflow']!;
           const { stream } = ctx;
           resetMocks?.();
 
@@ -1062,6 +1066,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -1083,6 +1088,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -1119,7 +1125,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         new Mastra({
           workflows: { 'agent-detailed-streaming-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-          idGenerator: randomUUID,
+          idGenerator: () => randomUUID(),
         });
 
         const agentStep1 = createStep(agent);
@@ -1375,7 +1381,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       });
 
       it('should be able to use an agent as a step (stream)', async () => {
-        const entry = registry!['agent-streaming-workflow'];
+        const entry = registry!['agent-streaming-workflow']!;
         const { stream } = ctx;
 
         if (!entry || !stream) {
@@ -1421,7 +1427,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       });
 
       it.skipIf(skipTests.agentOptions)('should pass agentOptions when wrapping agent with createStep', async () => {
-        const entry = registry!['streaming-agent-options-workflow'];
+        const entry = registry!['streaming-agent-options-workflow']!;
         const { execute } = ctx;
 
         if (!entry) {
@@ -1460,7 +1466,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         const onChunkSpy = vi.fn();
         const maxSteps = 5;
 
-        const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }) => {
+        const doStreamSpy = vi.fn<any>(async ({ prompt, temperature }: { prompt: any; temperature: any }) => {
           const systemMessage = prompt?.find((m: any) => m.role === 'system');
           expect(systemMessage?.content).toContain('overridden instructions');
           expect(systemMessage?.content).not.toContain('original instructions');
@@ -1483,6 +1489,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent = new Agent({
+          id: 'test-agent-with-options',
           name: 'Test Agent With Options',
           instructions: 'original instructions',
           model: new MockLanguageModelV1({
@@ -1542,6 +1549,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV2({
@@ -1566,6 +1574,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV2({
@@ -1602,7 +1611,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         new Mastra({
           workflows: { 'agent-vnext-streaming-test': workflow },
           agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
-          idGenerator: randomUUID,
+          idGenerator: () => randomUUID(),
         });
 
         const agentStep1 = createStep(agent);
@@ -1674,6 +1683,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           description: 'test-agent-1 description',
@@ -1696,6 +1706,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           description: 'test-agent-2 description',
@@ -1785,6 +1796,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -1798,6 +1810,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -1930,6 +1943,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           });
 
           const agent = new Agent({
+            id: 'Tripwire Test Agent',
             name: 'Tripwire Test Agent',
             instructions: 'You are helpful',
             model: mockModel,
@@ -2011,6 +2025,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           });
 
           const agent = new Agent({
+            id: 'Stream Tripwire Agent',
             name: 'Stream Tripwire Agent',
             instructions: 'You are helpful',
             model: mockModel,
@@ -2099,6 +2114,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           });
 
           const agent = new Agent({
+            id: 'Output Tripwire Agent',
             name: 'Output Tripwire Agent',
             instructions: 'You are helpful',
             model: mockModel,
@@ -2152,6 +2168,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           });
 
           const agent = new Agent({
+            id: 'article-generator',
             name: 'Article Generator',
             instructions: 'Generate an article with title, summary, and tags',
             model: new MockLanguageModelV2({
@@ -2189,6 +2206,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             }),
           });
 
+          // @ts-expect-error - Type instantiation is excessively deep
           const agentStep = createStep(agent, {
             structuredOutput: { schema: articleSchema },
           });
@@ -2198,7 +2216,7 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
             description: 'Process the generated article',
             inputSchema: articleSchema,
             outputSchema: z.object({ processed: z.boolean(), tagCount: z.number() }),
-            execute: async ({ inputData }: { inputData: { tags: string[] } }) => ({
+            execute: async ({ inputData }: any) => ({
               processed: true,
               tagCount: inputData.tags.length,
             }),
@@ -2213,10 +2231,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
           new Mastra({
             workflows: { 'article-workflow': workflow },
             agents: { 'article-generator': agent },
-            idGenerator: randomUUID,
+            idGenerator: () => randomUUID(),
           });
 
-          workflow.then(agentStep).then(processArticleStep).commit();
+          workflow.then(agentStep).then(processArticleStep as any).commit();
 
           const run = await workflow.createRun({ runId: 'structured-output-test' });
           const result = await run.start({

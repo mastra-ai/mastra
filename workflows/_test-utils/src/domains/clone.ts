@@ -198,7 +198,7 @@ export function createCloneWorkflows(ctx: WorkflowCreatorContext) {
       .then(
         createStep({
           id: 'last-step',
-          inputSchema: nestedWf.outputSchema, // Use workflow's output schema as input
+          inputSchema: nestedWf.outputSchema as any, // Use workflow's output schema as input
           outputSchema: z.object({ success: z.boolean() }),
           execute: async ctx => mockRegistry.get('spec-result:last')(ctx),
         }),
@@ -239,7 +239,7 @@ export function createCloneTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     it.skipIf(skipTests.cloneWorkflows !== false || !cloneStep || !cloneWorkflow)(
       'should be able to clone workflows as steps',
       async () => {
-        const entry = registry!['clone-workflow-test'];
+        const entry = registry!['clone-workflow-test']!;
         if (!entry) {
           // Skip if workflows weren't created (clone functions not available)
           return;
@@ -276,7 +276,7 @@ export function createCloneTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     it.skipIf(skipTests.specResultVariables || !cloneStep || !cloneWorkflow)(
       'should be able to spec out workflow result via variables',
       async () => {
-        const entry = registry!['spec-result-workflow'];
+        const entry = registry!['spec-result-workflow']!;
         if (!entry) {
           return;
         }

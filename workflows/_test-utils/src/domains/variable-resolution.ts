@@ -44,7 +44,7 @@ export function createVariableResolutionWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should provide access to step results via getStepResult helper
   {
-    const step1Action = vi.fn().mockImplementation(async ({ inputData }) => {
+    const step1Action = vi.fn().mockImplementation(async () => {
       return { value: 'step1-result' };
     });
 
@@ -145,7 +145,7 @@ export function createVariableResolutionWorkflows(ctx: WorkflowCreatorContext) {
     const step2 = createStep({
       id: 'step2',
       execute: async ({ getInitData }) => {
-        const initData = getInitData<typeof triggerSchema>();
+        const initData = getInitData<z.infer<typeof triggerSchema>>();
         return { result: initData };
       },
       inputSchema: z.object({ result: z.string() }),
@@ -550,7 +550,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
   describe('Variable Resolution', () => {
     it('should resolve trigger data', async () => {
       if (useRegistry) {
-        const { workflow, mocks } = registry['var-resolve-trigger-data'];
+        const { workflow } = registry!['var-resolve-trigger-data']!;
         const result = await execute(workflow, { inputData: 'test-input' });
 
         expect(result.steps.step1).toMatchObject({
@@ -605,7 +605,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it('should provide access to step results via getStepResult helper', async () => {
       if (useRegistry) {
-        const entry = registry['var-get-step-result'];
+        const entry = registry!['var-get-step-result']!;
         entry.resetAssertions?.();
 
         const result = await execute(entry.workflow, { inputValue: 'test-input' });
@@ -686,7 +686,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it('should resolve trigger data from context', async () => {
       if (useRegistry) {
-        const { workflow, mocks } = registry['var-trigger-from-context'];
+        const { workflow, mocks } = registry!['var-trigger-from-context']!;
         await execute(workflow, { inputData: 'test-input' });
 
         expect(mocks.executeAction).toHaveBeenCalledWith(
@@ -728,7 +728,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it.skipIf(skipTests.getInitData)('should resolve trigger data from getInitData', async () => {
       if (useRegistry) {
-        const { workflow, mocks } = registry['var-get-init-data'];
+        const { workflow, mocks } = registry!['var-get-init-data']!;
         const result = await execute(workflow, { cool: 'test-input' });
 
         expect(mocks.executeAction).toHaveBeenCalledWith(
@@ -758,7 +758,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
         const step2 = createStep({
           id: 'step2',
           execute: async ({ getInitData }) => {
-            const initData = getInitData<typeof triggerSchema>();
+            const initData = getInitData<z.infer<typeof triggerSchema>>();
             return { result: initData };
           },
           inputSchema: z.object({ result: z.string() }),
@@ -791,7 +791,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it.skipIf(skipTests.mapPreviousStep)('should resolve variables from previous steps via .map()', async () => {
       if (useRegistry) {
-        const { workflow, mocks } = registry['var-map-previous-step'];
+        const { workflow, mocks } = registry!['var-map-previous-step']!;
         const result = await execute(workflow, {});
 
         expect(mocks.step2Action).toHaveBeenCalledWith(
@@ -854,7 +854,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it.skipIf(skipTests.nonObjectOutput)('should resolve inputs from previous steps that are not objects', async () => {
       if (useRegistry) {
-        const { workflow } = registry['var-non-object-output'];
+        const { workflow } = registry!['var-non-object-output']!;
         const result = await execute(workflow, {});
 
         expect(result.steps.step1).toMatchObject({
@@ -907,7 +907,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it('should resolve inputs from previous steps that are arrays', async () => {
       if (useRegistry) {
-        const { workflow } = registry['var-array-output'];
+        const { workflow } = registry!['var-array-output']!;
         const result = await execute(workflow, {});
 
         expect(result.steps.step1).toMatchObject({
@@ -960,7 +960,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it('should resolve constant values via .map()', async () => {
       if (useRegistry) {
-        const { workflow } = registry['var-map-constant'];
+        const { workflow } = registry!['var-map-constant']!;
         const result = await execute(workflow, { cool: 'test-input' });
 
         expect(result.steps.step2).toMatchObject({
@@ -1027,7 +1027,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it('should resolve fully dynamic input via .map()', async () => {
       if (useRegistry) {
-        const { workflow } = registry['var-map-dynamic'];
+        const { workflow } = registry!['var-map-dynamic']!;
         const result = await execute(workflow, { cool: 'test-input' });
 
         expect(result.steps.step2).toMatchObject({
@@ -1092,7 +1092,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
       'should resolve trigger data and DI requestContext values via .map()',
       async () => {
         if (useRegistry) {
-          const { workflow, mocks } = registry['var-map-requestcontext'];
+          const { workflow, mocks } = registry!['var-map-requestcontext']!;
           // Create a Map-like requestContext
           const requestContext = new Map([['life', 42]]);
 
@@ -1115,7 +1115,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it.skipIf(skipTests.mapDynamicFn)('should resolve dynamic mappings via .map()', async () => {
       if (useRegistry) {
-        const { workflow, mocks } = registry['var-map-dynamic-fn'];
+        const { workflow, mocks } = registry!['var-map-dynamic-fn']!;
         const result = await execute(workflow, { cool: 'test-input' });
 
         if (result.status !== 'success') {
@@ -1143,7 +1143,7 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
 
     it.skipIf(skipTests.mapCustomStepId)('should resolve dynamic mappings via .map() with custom step id', async () => {
       if (useRegistry) {
-        const { workflow, mocks } = registry['var-map-custom-step-id'];
+        const { workflow, mocks } = registry!['var-map-custom-step-id']!;
         const result = await execute(workflow, { cool: 'test-input' });
 
         if (result.status !== 'success') {

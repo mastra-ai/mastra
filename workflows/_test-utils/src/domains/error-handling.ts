@@ -480,7 +480,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
 
   describe('Error Handling', () => {
     it.skipIf(skipTests.errorMessageFormat)('should handle step execution errors', async () => {
-      const { workflow } = registry!['error-step-execution'];
+      const { workflow } = registry!['error-step-execution']!;
       const result = await execute(workflow, {});
 
       expect(result.status).toBe('failed');
@@ -504,7 +504,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it.skipIf(skipTests.variableResolutionErrors)('should handle variable resolution errors', async () => {
-      const { workflow } = registry!['error-variable-resolution'];
+      const { workflow } = registry!['error-variable-resolution']!;
       const result = await execute(workflow, {});
 
       expect(result).toMatchObject({
@@ -533,7 +533,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(skipTests.parallelBranchErrors)(
       'should handle step execution errors within parallel branches',
       async () => {
-        const { workflow } = registry!['error-parallel-branches'];
+        const { workflow } = registry!['error-parallel-branches']!;
         const result = await execute(workflow, {});
 
         expect(result.steps).toMatchObject({
@@ -558,7 +558,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(skipTests.errorIdentity)(
       'should preserve custom error properties when step throws error with extra fields',
       async () => {
-        const entry = registry!['error-custom-properties'];
+        const entry = registry!['error-custom-properties']!;
         const { workflow } = entry;
         const result = await execute(workflow, {});
 
@@ -578,7 +578,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     );
 
     it.skipIf(skipTests.errorIdentity)('should propagate step error to workflow-level error', async () => {
-      const entry = registry!['error-propagation-workflow'];
+      const entry = registry!['error-propagation-workflow']!;
       const { workflow } = entry;
       const result = await execute(workflow, {});
 
@@ -594,7 +594,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(skipTests.nestedWorkflowErrors)(
       'should handle step execution errors within nested workflows',
       async () => {
-        const { workflow } = registry!['error-nested-main-workflow'];
+        const { workflow } = registry!['error-nested-main-workflow']!;
         const result = await execute(workflow, {});
 
         expect(result.steps).toMatchObject({
@@ -613,7 +613,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     );
 
     it.skipIf(skipTests.errorCauseChain)('should preserve error.cause chain in result.error', async () => {
-      const entry = registry!['error-cause-chain-workflow'];
+      const entry = registry!['error-cause-chain-workflow']!;
       const { workflow, topLevelMessage, intermediateMessage, rootCauseMessage } = entry;
       const result = await execute(workflow, {});
 
@@ -641,7 +641,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(skipTests.errorStorageRoundtrip ?? true)(
       'should load serialized error from storage via getWorkflowRunById',
       async () => {
-        const entry = registry!['error-storage-roundtrip'];
+        const entry = registry!['error-storage-roundtrip']!;
         const { workflow, errorMessage } = entry;
 
         // Use a unique runId so we can retrieve it from storage
@@ -699,7 +699,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
 
         const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot');
 
-        const entry = registry!['error-persist-without-stack'];
+        const entry = registry!['error-persist-without-stack']!;
         const { workflow, errorMessage } = entry;
 
         const runId = `test-error-persist-${Date.now()}`;
@@ -716,13 +716,13 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         const snapshot = failedCall?.[0]?.snapshot;
 
         expect(snapshot).toBeDefined();
-        expect(snapshot.status).toBe('failed');
+        expect(snapshot!.status).toBe('failed');
 
-        const step1Result = snapshot.context?.step1;
+        const step1Result = snapshot!.context?.step1;
         expect(step1Result).toBeDefined();
         expect(step1Result?.status).toBe('failed');
 
-        const failedStepResult = step1Result;
+        const failedStepResult = step1Result as any;
         expect(failedStepResult.error).toBeDefined();
 
         // Verify the error message is preserved
@@ -756,7 +756,7 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
 
         const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot');
 
-        const entry = registry!['error-persist-mastra-error'];
+        const entry = registry!['error-persist-mastra-error']!;
         const { workflow, errorMessage } = entry;
 
         const runId = `test-mastra-error-persist-${Date.now()}`;
@@ -773,13 +773,13 @@ export function createErrorHandlingTests(ctx: WorkflowTestContext, registry?: Wo
         const snapshot = failedCall?.[0]?.snapshot;
 
         expect(snapshot).toBeDefined();
-        expect(snapshot.status).toBe('failed');
+        expect(snapshot!.status).toBe('failed');
 
-        const step1Result = snapshot.context?.step1;
+        const step1Result = snapshot!.context?.step1;
         expect(step1Result).toBeDefined();
         expect(step1Result?.status).toBe('failed');
 
-        const failedStepResult = step1Result;
+        const failedStepResult = step1Result as any;
         expect(failedStepResult.error).toBeDefined();
 
         // Verify the error message is preserved

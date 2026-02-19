@@ -183,7 +183,7 @@ export function createWorkflowRunsTests(ctx: WorkflowTestContext, registry?: Wor
 
   describe('Workflow Runs', () => {
     it('should track workflow run status', async () => {
-      const { workflow, mocks } = registry!['run-status-workflow'];
+      const { workflow, mocks } = registry!['run-status-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -192,7 +192,7 @@ export function createWorkflowRunsTests(ctx: WorkflowTestContext, registry?: Wor
     });
 
     it('should track workflow run with multiple steps', async () => {
-      const { workflow, mocks } = registry!['multi-step-run-workflow'];
+      const { workflow, mocks } = registry!['multi-step-run-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -207,26 +207,26 @@ export function createWorkflowRunsTests(ctx: WorkflowTestContext, registry?: Wor
     });
 
     it('should execute multiple runs of a workflow', async () => {
-      const { workflow } = registry!['multiple-runs-workflow'];
+      const { workflow } = registry!['multiple-runs-workflow']!;
 
       // First run
       const result1 = await execute(workflow, { input: 'run1' });
       expect(result1.status).toBe('success');
-      expect(result1.steps.step1.output).toEqual({ runNumber: 1 });
+      expect(result1.steps.step1!.output).toEqual({ runNumber: 1 });
 
       // Second run
       const result2 = await execute(workflow, { input: 'run2' });
       expect(result2.status).toBe('success');
-      expect(result2.steps.step1.output).toEqual({ runNumber: 2 });
+      expect(result2.steps.step1!.output).toEqual({ runNumber: 2 });
 
       // Third run
       const result3 = await execute(workflow, { input: 'run3' });
       expect(result3.status).toBe('success');
-      expect(result3.steps.step1.output).toEqual({ runNumber: 3 });
+      expect(result3.steps.step1!.output).toEqual({ runNumber: 3 });
     });
 
     it('should use provided runId', async () => {
-      const { workflow } = registry!['runid-workflow'];
+      const { workflow } = registry!['runid-workflow']!;
       const customRunId = 'my-custom-run-id-12345';
 
       const result = await execute(workflow, { input: 'test' }, { runId: customRunId });

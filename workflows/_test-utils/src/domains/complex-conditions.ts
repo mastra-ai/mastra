@@ -109,7 +109,7 @@ export function createComplexConditionsTests(ctx: WorkflowTestContext, registry?
 
   describe('Complex Conditions', () => {
     it('should handle nested AND/OR conditions', async () => {
-      const { workflow, mocks } = registry!['complex-nested-and-or'];
+      const { workflow, mocks } = registry!['complex-nested-and-or']!;
       const result = await execute(workflow, {});
 
       expect(mocks.step2Action).toHaveBeenCalled();

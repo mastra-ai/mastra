@@ -493,7 +493,6 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
 
   // Test: should preserve state across suspend and resume cycles
   {
-    let resumeCallCount = 0;
     const stateValuesObserved: Array<{ step: string; state: any }> = [];
 
     const step1Action = vi.fn().mockImplementation(async ({ state, setState, suspend, resumeData }) => {
@@ -545,7 +544,6 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       workflow,
       mocks: { step1Action, step2Action, stateValuesObserved },
       resetMocks: () => {
-        resumeCallCount = 0;
         stateValuesObserved.length = 0;
         step1Action.mockClear();
         step2Action.mockClear();
@@ -2479,7 +2477,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
 
     const lastStep = createStep({
       id: 'last-step',
-      inputSchema: wfA.outputSchema,
+      inputSchema: wfA.outputSchema as any,
       outputSchema: z.object({ success: z.boolean() }),
       execute: lastAction,
     });
@@ -2721,7 +2719,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       return { mainWorkflow, nestedWorkflow };
     };
 
-    const { mainWorkflow, nestedWorkflow } = buildWorkflow();
+    const { mainWorkflow } = buildWorkflow();
 
     workflows['sr-map-branch-suspend-workflow'] = {
       workflow: mainWorkflow,
@@ -2808,7 +2806,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
 
   describe('Suspend and Resume', () => {
     it('should return the correct runId', async () => {
-      const { workflow, mocks } = registry!['suspend-resume-runid-workflow'];
+      const { workflow, mocks } = registry!['suspend-resume-runid-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2817,7 +2815,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should suspend workflow when suspend is called', async () => {
-      const { workflow, mocks } = registry!['suspend-test-workflow'];
+      const { workflow, mocks } = registry!['suspend-test-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2835,7 +2833,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should handle suspend with empty payload', async () => {
-      const { workflow } = registry!['empty-suspend-workflow'];
+      const { workflow } = registry!['empty-suspend-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2846,7 +2844,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should suspend with typed payload and suspendSchema', async () => {
-      const { workflow, mocks } = registry!['typed-suspend-workflow'];
+      const { workflow, mocks } = registry!['typed-suspend-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2863,7 +2861,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should not execute steps after suspended step', async () => {
-      const { workflow, mocks } = registry!['suspend-stops-execution-workflow'];
+      const { workflow, mocks } = registry!['suspend-stops-execution-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2886,7 +2884,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should handle suspend in conditional branch', async () => {
-      const { workflow, mocks } = registry!['suspend-in-branch-workflow'];
+      const { workflow, mocks } = registry!['suspend-in-branch-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2908,7 +2906,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
 
     // Note: This test only verifies suspend with state - full resume cycle requires storage setup
     it.skipIf(ctx.skipTests.state)('should suspend workflow with state modifications', async () => {
-      const { workflow, mocks } = registry!['suspend-resume-with-state-workflow'];
+      const { workflow, mocks } = registry!['suspend-resume-with-state-workflow']!;
 
       const result = await execute(workflow, {}, { initialState: { value: 'initial' } });
 
@@ -2929,7 +2927,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should remain suspended when one of parallel steps suspends', async () => {
-      const { workflow, mocks } = registry!['parallel-one-suspend-workflow'];
+      const { workflow, mocks } = registry!['parallel-one-suspend-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2952,7 +2950,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should complete parallel workflow when no steps suspend', async () => {
-      const { workflow, mocks } = registry!['parallel-no-suspend-workflow'];
+      const { workflow, mocks } = registry!['parallel-no-suspend-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -2973,7 +2971,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it('should propagate suspend from nested workflow', async () => {
-      const { workflow, mocks, nestedWorkflowId } = registry!['nested-suspend-main'];
+      const { workflow, mocks, nestedWorkflowId } = registry!['nested-suspend-main']!;
 
       const result = await execute(workflow, {});
 
@@ -2996,7 +2994,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
 
     // Tests that require explicit resume() support
     it.skipIf(ctx.skipTests.resumeBasic || !ctx.resume)('should handle basic suspend and resume flow', async () => {
-      const { workflow, mocks, resetMocks } = registry!['basic-resume-workflow'];
+      const { workflow, mocks, resetMocks } = registry!['basic-resume-workflow']!;
       resetMocks?.();
 
       // Generate a unique run ID for this test
@@ -3028,7 +3026,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeWithLabel || !ctx.resume)(
       'should handle suspend and resume using resumeLabel',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['resume-with-label-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['resume-with-label-workflow']!;
         resetMocks?.();
 
         // Generate a unique run ID for this test
@@ -3061,7 +3059,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeWithState || !ctx.resume)(
       'should preserve state across suspend and resume cycles',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['state-persistence-resume-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['state-persistence-resume-workflow']!;
         resetMocks?.();
 
         const stateValuesObserved = mocks.stateValuesObserved as Array<{ step: string; state: any }>;
@@ -3109,7 +3107,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeParallelMulti || !ctx.resume)(
       'should handle multiple suspend/resume cycles in parallel workflow',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['multi-suspend-parallel-workflow'];
+        const { workflow, resetMocks } = registry!['multi-suspend-parallel-workflow']!;
         resetMocks?.();
 
         // Generate a unique run ID for this test
@@ -3146,7 +3144,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeMultiSuspendError || !ctx.resume)(
       'should throw error when multiple steps are suspended and no step specified',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['multi-suspend-branch-workflow'];
+        const { workflow, resetMocks } = registry!['multi-suspend-branch-workflow']!;
         resetMocks?.();
 
         const runId = `multi-suspend-error-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3187,7 +3185,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeAutoDetect || !ctx.resume)(
       'should support both explicit step resume and auto-resume',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['auto-resume-test-workflow'];
+        const { workflow, resetMocks } = registry!['auto-resume-test-workflow']!;
         resetMocks?.();
 
         // Test 1: Start workflow and suspend
@@ -3233,7 +3231,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeBranchingStatus || !ctx.resume)(
       'should maintain correct step status after resuming in branching workflows',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['branching-resume-status-workflow'];
+        const { workflow, resetMocks } = registry!['branching-resume-status-workflow']!;
         resetMocks?.();
 
         const runId = `branching-resume-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3242,8 +3240,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const initialResult = await execute(workflow, { value: 10 }, { runId });
 
         expect(initialResult.status).toBe('suspended');
-        expect(initialResult.steps['branch-step-1'].status).toBe('suspended');
-        expect(initialResult.steps['branch-step-2'].status).toBe('suspended');
+        expect(initialResult.steps['branch-step-1']!.status).toBe('suspended');
+        expect(initialResult.steps['branch-step-2']!.status).toBe('suspended');
 
         if (initialResult.status === 'suspended') {
           expect((initialResult as any).suspended).toHaveLength(2);
@@ -3260,8 +3258,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
 
         // Workflow should still be suspended (branch-step-2 not resumed yet)
         expect(resumedResult1.status).toBe('suspended');
-        expect(resumedResult1.steps['branch-step-1'].status).toBe('success');
-        expect(resumedResult1.steps['branch-step-2'].status).toBe('suspended');
+        expect(resumedResult1.steps['branch-step-1']!.status).toBe('success');
+        expect(resumedResult1.steps['branch-step-2']!.status).toBe('suspended');
 
         if (resumedResult1.status === 'suspended') {
           expect((resumedResult1 as any).suspended).toHaveLength(1);
@@ -3276,8 +3274,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         });
 
         expect(finalResult.status).toBe('success');
-        expect(finalResult.steps['branch-step-1'].status).toBe('success');
-        expect(finalResult.steps['branch-step-2'].status).toBe('success');
+        expect(finalResult.steps['branch-step-1']!.status).toBe('success');
+        expect(finalResult.steps['branch-step-2']!.status).toBe('success');
 
         if (finalResult.status === 'success') {
           expect(finalResult.result).toEqual({
@@ -3291,8 +3289,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeDountil || !ctx.resume)(
       'should handle basic suspend and resume in a dountil workflow',
       async () => {
-        const { workflow, nestedWorkflowId, mocks, getIterationCount, resetMocks } =
-          registry!['dountil-suspend-workflow'];
+        const { workflow, nestedWorkflowId, resetMocks } =
+          registry!['dountil-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `dountil-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3336,7 +3334,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeLoopInput || !ctx.resume)(
       'should have access to the correct input value when resuming in a loop',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['loop-resume-input-workflow'];
+        const { workflow, resetMocks } = registry!['loop-resume-input-workflow']!;
         resetMocks?.();
 
         const runId = `loop-resume-input-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3351,7 +3349,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           resumeData: { shouldContinue: true },
         });
         expect(resume1.status).toBe('suspended');
-        expect(resume1.steps['step-1'].payload.value).toBe(1);
+        expect((resume1.steps['step-1']!.payload as any).value).toBe(1);
 
         // Second resume - should increment to 2 and suspend again
         const resume2 = await ctx.resume!(workflow, {
@@ -3359,7 +3357,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           resumeData: { shouldContinue: true },
         });
         expect(resume2.status).toBe('suspended');
-        expect(resume2.steps['step-1'].payload.value).toBe(2);
+        expect((resume2.steps['step-1']!.payload as any).value).toBe(2);
 
         // Third resume - should increment to 3 and suspend again
         const resume3 = await ctx.resume!(workflow, {
@@ -3367,14 +3365,14 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           resumeData: { shouldContinue: true },
         });
         expect(resume3.status).toBe('suspended');
-        expect(resume3.steps['step-1'].payload.value).toBe(3);
+        expect((resume3.steps['step-1']!.payload as any).value).toBe(3);
       },
     );
 
     it.skipIf(ctx.skipTests.resumeMapStep || !ctx.resume)(
       'should have access to the correct inputValue when resuming a step preceded by a .map step',
       async () => {
-        const { workflow, improveResponseStep, mocks, resetMocks } = registry!['map-step-resume-workflow'];
+        const { workflow, improveResponseStep, resetMocks } = registry!['map-step-resume-workflow']!;
         resetMocks?.();
 
         const runId = `map-step-resume-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3382,7 +3380,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         // Start workflow - should suspend at promptAgent
         const startResult = await execute(workflow, { input: 'test' }, { runId });
         expect(startResult.status).toBe('suspended');
-        expect(startResult.steps.promptAgent.status).toBe('suspended');
+        expect(startResult.steps.promptAgent!.status).toBe('suspended');
         expect(startResult.steps.getUserInput).toMatchObject({
           status: 'success',
           output: { userInput: 'test' },
@@ -3403,7 +3401,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           status: 'success',
           output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
         });
-        expect(resume1.steps.improveResponse.status).toBe('suspended');
+        expect(resume1.steps.improveResponse!.status).toBe('suspended');
 
         // Second resume - resume improveResponse, workflow should complete
         const resume2 = await ctx.resume!(workflow, {
@@ -3415,22 +3413,22 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           },
         });
         expect(resume2.status).toBe('success');
-        expect(resume2.steps.improveResponse.status).toBe('success');
-        expect(resume2.steps.improveResponse.output.improvedOutput).toBe('improved output');
+        expect(resume2.steps.improveResponse!.status).toBe('success');
+        expect((resume2.steps.improveResponse!.output as any).improvedOutput).toBe('improved output');
         // Use approximate matching for floating point calculations
-        const improveOutput = resume2.steps.improveResponse.output.overallScore;
+        const improveOutput = (resume2.steps.improveResponse!.output as any).overallScore;
         expect(improveOutput.toneScore.score).toBeCloseTo(0.85, 10); // (0.8 + 0.9) / 2
         expect(improveOutput.completenessScore.score).toBeCloseTo(0.75, 10); // (0.7 + 0.8) / 2
 
-        expect(resume2.steps.evaluateImprovedResponse.status).toBe('success');
-        const evalOutput = resume2.steps.evaluateImprovedResponse.output;
+        expect(resume2.steps.evaluateImprovedResponse!.status).toBe('success');
+        const evalOutput = resume2.steps.evaluateImprovedResponse!.output as any;
         expect(evalOutput.toneScore.score).toBeCloseTo(0.85, 10);
         expect(evalOutput.completenessScore.score).toBeCloseTo(0.75, 10);
       },
     );
 
     it.skipIf(ctx.skipTests.resumeForeach || !ctx.resume)('should suspend and resume in foreach loop', async () => {
-      const { workflow, mocks, resetMocks } = registry!['foreach-suspend-workflow'];
+      const { workflow, resetMocks } = registry!['foreach-suspend-workflow']!;
       resetMocks?.();
 
       const runId = `foreach-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3474,7 +3472,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeForeachConcurrent || !ctx.resume)(
       'should suspend and resume when running concurrent foreach',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['foreach-concurrent-suspend-workflow'];
+        const { workflow, resetMocks } = registry!['foreach-concurrent-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `foreach-concurrent-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3505,7 +3503,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeForeachIndex || !ctx.resume)(
       'should suspend and resume with forEachIndex',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['foreach-index-suspend-workflow'];
+        const { workflow, resetMocks } = registry!['foreach-index-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `foreach-index-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3553,7 +3551,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeForeachLabel || !ctx.resume)(
       'should suspend and resume provided label when running all items concurrency for loop',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['foreach-label-suspend-workflow'];
+        const { workflow, resetMocks } = registry!['foreach-label-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `foreach-label-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3601,7 +3599,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeForeachPartial || !ctx.resume)(
       'should suspend and resume when running a partial item concurrency for loop',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['foreach-partial-suspend-workflow'];
+        const { workflow, resetMocks } = registry!['foreach-partial-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `foreach-partial-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3641,7 +3639,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeForeachPartialIndex || !ctx.resume)(
       'should suspend and resume provided index when running a partial item concurrency for loop',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['foreach-partial-index-suspend-workflow'];
+        const { workflow, resetMocks } = registry!['foreach-partial-index-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `foreach-partial-index-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3698,7 +3696,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNested || !ctx.resume)(
       'should be able to resume suspended nested workflow step',
       async () => {
-        const { workflow, nestedWorkflowId, mocks, resetMocks } = registry!['nested-resume-workflow'];
+        const { workflow, nestedWorkflowId, mocks, resetMocks } = registry!['nested-resume-workflow']!;
         resetMocks?.();
 
         const runId = `nested-resume-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3742,7 +3740,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeConsecutiveNested || !ctx.resume)(
       'should handle consecutive nested workflows with suspend/resume',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['consecutive-nested-resume-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['consecutive-nested-resume-workflow']!;
         resetMocks?.();
 
         const runId = `consecutive-nested-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3800,7 +3798,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeParallelMulti || !ctx.resume)(
       'should remain suspended when only one of multiple parallel suspended steps is resumed - #6418',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['parallel-suspension-bug-6418-workflow'];
+        const { workflow, resetMocks } = registry!["parallel-suspension-bug-6418-workflow"]!;
         resetMocks?.();
 
         const runId = `parallel-6418-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3809,7 +3807,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const startResult = await execute(workflow, { value: 100 }, { runId });
         expect(startResult.status).toBe('suspended');
         if (startResult.status === 'suspended') {
-          expect(startResult.suspended).toHaveLength(2);
+          expect((startResult as any).suspended).toHaveLength(2);
         }
 
         // Resume ONLY the first parallel step
@@ -3820,8 +3818,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         });
         expect(resumeResult1.status).toBe('suspended');
         if (resumeResult1.status === 'suspended') {
-          expect(resumeResult1.suspended).toHaveLength(1);
-          expect(resumeResult1.suspended[0]).toContain('parallel-step-2');
+          expect((resumeResult1 as any).suspended).toHaveLength(1);
+          expect((resumeResult1 as any).suspended[0]).toContain('parallel-step-2');
         }
 
         // Only after resuming the second step should the workflow complete
@@ -3842,14 +3840,14 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
 
     // Bug regression test #4442 - requestContext should work during suspend/resume
     it.skipIf(ctx.skipTests.resumeWithState || !ctx.resume)('should work with requestContext - bug #4442', async () => {
-      const { workflow, mocks, resetMocks } = registry!['requestcontext-bug-4442-workflow'];
+      const { workflow, mocks, resetMocks } = registry!['requestcontext-bug-4442-workflow']!;
       resetMocks?.();
 
       const runId = `requestcontext-4442-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
       // Start workflow - should suspend at promptAgent step
       const initialResult = await execute(workflow, { input: 'test' }, { runId });
-      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(initialResult.steps.promptAgent!.status).toBe('suspended');
       expect(mocks.promptAgentAction).toHaveBeenCalledTimes(1);
 
       // Resume with user input
@@ -3860,7 +3858,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
       });
 
       expect(mocks.promptAgentAction).toHaveBeenCalledTimes(2);
-      expect(resumeResult.steps.requestContextAction.status).toBe('success');
+      expect(resumeResult.steps.requestContextAction!.status).toBe('success');
       // @ts-expect-error - testing dynamic workflow result
       expect(resumeResult.steps.requestContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
@@ -3869,7 +3867,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeBranchingStatus || !ctx.resume)(
       'should maintain correct step status after resuming in branching workflows - #6419',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['branching-state-bug-6419-workflow'];
+        const { workflow, resetMocks } = registry!['branching-state-bug-6419-workflow']!;
         resetMocks?.();
 
         const runId = `branching-6419-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3878,12 +3876,12 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const initialResult = await execute(workflow, { value: 10 }, { runId });
 
         expect(initialResult.status).toBe('suspended');
-        expect(initialResult.steps['branch-step-1'].status).toBe('suspended');
-        expect(initialResult.steps['branch-step-2'].status).toBe('suspended');
+        expect(initialResult.steps['branch-step-1']!.status).toBe('suspended');
+        expect(initialResult.steps['branch-step-2']!.status).toBe('suspended');
         if (initialResult.status === 'suspended') {
-          expect(initialResult.suspended).toHaveLength(2);
-          expect(initialResult.suspended[0]).toContain('branch-step-1');
-          expect(initialResult.suspended[1]).toContain('branch-step-2');
+          expect((initialResult as any).suspended).toHaveLength(2);
+          expect((initialResult as any).suspended[0]).toContain('branch-step-1');
+          expect((initialResult as any).suspended[1]).toContain('branch-step-2');
         }
 
         // Resume only branch-step-1
@@ -3895,11 +3893,11 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
 
         // Workflow should still be suspended (branch-step-2 not resumed yet)
         expect(resumedResult1.status).toBe('suspended');
-        expect(resumedResult1.steps['branch-step-1'].status).toBe('success');
-        expect(resumedResult1.steps['branch-step-2'].status).toBe('suspended');
+        expect(resumedResult1.steps['branch-step-1']!.status).toBe('success');
+        expect(resumedResult1.steps['branch-step-2']!.status).toBe('suspended');
         if (resumedResult1.status === 'suspended') {
-          expect(resumedResult1.suspended).toHaveLength(1);
-          expect(resumedResult1.suspended[0]).toContain('branch-step-2');
+          expect((resumedResult1 as any).suspended).toHaveLength(1);
+          expect((resumedResult1 as any).suspended[0]).toContain('branch-step-2');
         }
 
         // Resume branch-step-2 to complete the workflow
@@ -3910,8 +3908,8 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         });
 
         expect(finalResult.status).toBe('success');
-        expect(finalResult.steps['branch-step-1'].status).toBe('success');
-        expect(finalResult.steps['branch-step-2'].status).toBe('success');
+        expect(finalResult.steps['branch-step-1']!.status).toBe('success');
+        expect(finalResult.steps['branch-step-2']!.status).toBe('success');
         if (finalResult.status === 'success') {
           expect(finalResult.result).toEqual({
             'branch-step-1': { result: 20 }, // 10 * 2
@@ -3925,7 +3923,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeLoopInput || !ctx.resume)(
       'should have access to the correct input value when resuming in a loop - bug #6669',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['loop-input-bug-6669-workflow'];
+        const { workflow, resetMocks } = registry!['loop-input-bug-6669-workflow']!;
         resetMocks?.();
 
         const runId = `loop-input-6669-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3941,14 +3939,14 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           resumeData: { shouldContinue: true },
         });
 
-        expect(firstResume.steps['step-1'].payload.value).toBe(1);
+        expect((firstResume.steps['step-1']!.payload as any).value).toBe(1);
 
         // Resume second time - value becomes 2
         const secondResume = await ctx.resume!(workflow, {
           runId,
           resumeData: { shouldContinue: true },
         });
-        expect(secondResume.steps['step-1'].payload.value).toBe(2);
+        expect((secondResume.steps['step-1']!.payload as any).value).toBe(2);
 
         // Resume third time - value becomes 3
         const thirdResume = await ctx.resume!(workflow, {
@@ -3956,7 +3954,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           resumeData: { shouldContinue: true },
         });
 
-        expect(thirdResume.steps['step-1'].payload.value).toBe(3);
+        expect((thirdResume.steps['step-1']!.payload as any).value).toBe(3);
         expect(thirdResume.status).toBe('suspended');
       },
     );
@@ -3965,7 +3963,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeDountil || !ctx.resume)(
       'should handle basic suspend and resume in nested dountil workflow - bug #5650',
       async () => {
-        const { workflow, nestedWorkflowId, mocks, resetMocks } = registry!['nested-dountil-bug-5650-workflow'];
+        const { workflow, nestedWorkflowId, resetMocks } = registry!['nested-dountil-bug-5650-workflow']!;
         resetMocks?.();
 
         const runId = `nested-dountil-5650-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -3996,7 +3994,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeAutoNoStep || !ctx.resume)(
       'should auto-resume without specifying step parameter when only one step is suspended',
       async () => {
-        const { workflow, resetMocks } = registry!['suspend-resume-auto-nonstep-workflow'];
+        const { workflow, resetMocks } = registry!['suspend-resume-auto-nonstep-workflow']!;
         resetMocks?.();
 
         const runId = `auto-nonstep-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4021,7 +4019,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeSchemaDefaults || !ctx.resume)(
       'should use resumeSchema defaults when resuming with empty data',
       async () => {
-        const { workflow, resetMocks } = registry!['suspend-resume-schema-defaults-workflow'];
+        const { workflow, resetMocks } = registry!['suspend-resume-schema-defaults-workflow']!;
         resetMocks?.();
 
         const runId = `schema-defaults-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4048,7 +4046,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.consecutiveParallel)(
       'should handle consecutive parallel chains with merged outputs',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['suspend-resume-consecutive-parallel-workflow'];
+        const { workflow, resetMocks } = registry!['suspend-resume-consecutive-parallel-workflow']!;
         resetMocks?.();
 
         const result = await execute(workflow, { input: 'test' });
@@ -4068,7 +4066,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNotSuspendedWorkflow || !ctx.resume)(
       'should throw error when resuming a non-suspended workflow',
       async () => {
-        const { workflow, resetMocks } = registry!['suspend-resume-not-suspended-workflow'];
+        const { workflow, resetMocks } = registry!['suspend-resume-not-suspended-workflow']!;
         resetMocks?.();
 
         const runId = `not-suspended-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4096,7 +4094,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeInvalidData || !ctx.resume)(
       'should throw error when resuming with invalid data then succeed with valid data',
       async () => {
-        const { workflow, resetMocks } = registry!['suspend-resume-invalid-data-workflow'];
+        const { workflow, resetMocks } = registry!['suspend-resume-invalid-data-workflow']!;
         resetMocks?.();
 
         const runId = `invalid-data-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4137,7 +4135,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNonSuspendedStep || !ctx.resume)(
       'should throw error when you try to resume a workflow step that is not suspended',
       async () => {
-        const { workflow, resetMocks } = registry!['suspend-resume-non-suspended-step-workflow'];
+        const { workflow, resetMocks } = registry!['suspend-resume-non-suspended-step-workflow']!;
         resetMocks?.();
 
         const runId = `non-suspended-step-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4178,7 +4176,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNestedWithPath || !ctx.resume)(
       'should be able to suspend nested workflow step',
       async () => {
-        const { workflow, nestedWorkflow, otherStep, mocks, resetMocks } = registry!['sr-suspend-nested-step-workflow'];
+        const { workflow, nestedWorkflow, otherStep, mocks, resetMocks } = registry!['sr-suspend-nested-step-workflow']!;
         resetMocks?.();
 
         const runId = `suspend-nested-step-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4217,7 +4215,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNestedOnlyWfStep || !ctx.resume)(
       'should be able to resume suspended nested workflow step with only nested workflow step provided',
       async () => {
-        const { workflow, nestedWorkflowId, mocks, resetMocks } = registry!['sr-suspend-nested-step-workflow'];
+        const { workflow, nestedWorkflowId, mocks, resetMocks } = registry!['sr-suspend-nested-step-workflow']!;
         resetMocks?.();
 
         const runId = `resume-nested-only-wf-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4256,7 +4254,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeNestedRequestContext || !ctx.resume)(
       'should preserve request context in nested workflows after suspend/resume',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['sr-request-context-nested-suspend-workflow'];
+        const { workflow, resetMocks } = registry!['sr-request-context-nested-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `request-context-nested-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4283,7 +4281,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeDeepNested || !ctx.resume)(
       'should be able to suspend nested workflow step in a nested workflow step',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['sr-deep-nested-suspend-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['sr-deep-nested-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `deep-nested-suspend-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4332,7 +4330,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeIncorrectBranches || !ctx.resume)(
       'should not execute incorrect branches after resuming from suspended nested workflow',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['sr-incorrect-branches-resume-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['sr-incorrect-branches-resume-workflow']!;
         resetMocks?.();
 
         const runId = `incorrect-branches-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4378,7 +4376,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         expect(finalResult.steps['first-item-step']).toBeUndefined();
         expect(finalResult.steps['third-item-step']).toBeUndefined();
         expect(finalResult.steps['sr-second-item-workflow']).toBeDefined();
-        expect(finalResult.steps['sr-second-item-workflow'].status).toBe('success');
+        expect(finalResult.steps['sr-second-item-workflow']!.status).toBe('success');
 
         // The final processing step should have been called exactly once
         expect(mocks.finalProcessingAction).toHaveBeenCalledTimes(1);
@@ -4395,7 +4393,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeMapBranchCondition || !ctx.resume)(
       'should pass correct inputData to branch condition when resuming after map',
       async () => {
-        const { workflow, buildWorkflow, mocks, resetMocks } = registry!['sr-map-branch-suspend-workflow'];
+        const { workflow, buildWorkflow, mocks, resetMocks } = registry!['sr-map-branch-suspend-workflow']!;
         resetMocks?.();
 
         const runId = `map-branch-condition-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -4425,14 +4423,14 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         expect(mocks.conditionSpy).not.toHaveBeenCalled();
 
         expect(resumedResult.status).toBe('success');
-        expect(resumedResult.steps['sr-nested-wf-with-suspend'].status).toBe('success');
+        expect(resumedResult.steps['sr-nested-wf-with-suspend']!.status).toBe('success');
       },
     );
 
     it.skipIf(ctx.skipTests.suspendDataAccess || !ctx.resume)(
       'should provide access to suspendData in workflow step on resume',
       async () => {
-        const { workflow, suspendDataAccessStep } = registry!['suspend-data-access-workflow'];
+        const { workflow, suspendDataAccessStep } = registry!['suspend-data-access-workflow']!;
 
         const runId = `suspend-data-access-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 

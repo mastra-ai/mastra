@@ -5,7 +5,6 @@
 import { createWorkflowTestSuite } from './factory';
 import { createWorkflow, createStep } from '@mastra/core/workflows/evented';
 import { Agent } from '@mastra/core/agent';
-import type { Workflow } from '@mastra/core/workflows';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { EventEmitterPubSub } from '@mastra/core/events';
@@ -16,16 +15,16 @@ import type {
   StreamWorkflowResult,
   StreamEvent,
 } from './types';
-import { vi } from 'vitest';
 
 // Shared storage instance
 const testStorage = new MockStore();
 
+// @ts-expect-error - TS2589: EventedWorkflow types cause excessively deep type instantiation
 createWorkflowTestSuite({
   name: 'Workflow (Evented Engine)',
 
   getWorkflowFactory: () => ({
-    createWorkflow,
+    createWorkflow: createWorkflow as any,
     createStep,
     Agent,
   }),
@@ -226,10 +225,10 @@ createWorkflowTestSuite({
       if (api === 'streamLegacy') {
         const { stream, getWorkflowState } = run.streamLegacy({
           inputData,
-          initialState: options.initialState,
+          initialState: options.initialState as any,
           perStep: options.perStep,
           requestContext: options.requestContext as any,
-        });
+        } as any);
 
         for await (const event of stream) {
           events.push(JSON.parse(JSON.stringify(event)));

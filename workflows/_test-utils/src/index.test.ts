@@ -9,7 +9,7 @@ import { DefaultStorage } from '@mastra/libsql';
 import type { WorkflowResult, WorkflowRegistry, ResumeWorkflowOptions, TimeTravelWorkflowOptions } from './types';
 
 // Shared Mastra instance with storage for tests that need persistence
-let mastra: Mastra;
+// Mastra instance created for side-effect (registers workflows)
 let storage: DefaultStorage;
 
 createWorkflowTestSuite({
@@ -46,7 +46,7 @@ createWorkflowTestSuite({
     }
 
     // Create Mastra with all workflows and storage
-    mastra = new Mastra({
+    new Mastra({
       storage,
       workflows,
     });

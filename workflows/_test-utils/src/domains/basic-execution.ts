@@ -240,7 +240,7 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
       mocks: {},
       getCapturedRunId: () => {
         const mock = mockRegistry.get('basic-runid:capturedRunId');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -347,7 +347,7 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
       mocks: {},
       getReceivedInput: () => {
         const mock = mockRegistry.get('basic-input-data:receivedInput');
-        return mock.mock.calls.length > 0 ? mock.mock.calls[0][0] : undefined;
+        return mock.mock.calls.length > 0 ? mock.mock.calls[0]![0] : undefined;
       },
       resetMocks: () => mockRegistry.reset(),
     };
@@ -388,7 +388,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
 
   describe('Basic Workflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
-      const { workflow, mocks } = registry['basic-single-step'];
+      const { workflow, mocks } = registry['basic-single-step']!;
       const result = await execute(workflow, {});
 
       expect(mocks.executeAction).toHaveBeenCalled();
@@ -402,7 +402,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
 
     // Alias test - same functionality, different name for compatibility
     it('should start workflow and complete successfully', async () => {
-      const { workflow, mocks, resetMocks } = registry['basic-single-step'];
+      const { workflow, resetMocks } = registry['basic-single-step']!;
       resetMocks?.();
       const result = await execute(workflow, {});
 
@@ -414,7 +414,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it('should execute multiple runs of a workflow', async () => {
-      const { workflow, mocks, resetMocks } = registry['basic-single-step'];
+      const { workflow, mocks, resetMocks } = registry['basic-single-step']!;
 
       // First run
       resetMocks?.();
@@ -436,7 +436,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it.skipIf(skipTests.state)('should execute a single step workflow successfully with state', async () => {
-      const entry = registry['basic-single-step-with-state'];
+      const entry = registry['basic-single-step-with-state']!;
 
       const result = await execute(entry.workflow, {}, { initialState: { value: 'test-state' } });
 
@@ -448,7 +448,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it('should execute multiple steps in sequence', async () => {
-      const { workflow, mocks } = registry['basic-two-step-sequence'];
+      const { workflow, mocks } = registry['basic-two-step-sequence']!;
       const result = await execute(workflow, {});
 
       expect(mocks.step1Action).toHaveBeenCalled();
@@ -465,7 +465,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it('should execute multiple steps in parallel', async () => {
-      const { workflow, mocks } = registry['basic-parallel-steps'];
+      const { workflow, mocks } = registry['basic-parallel-steps']!;
       const result = await execute(workflow, {});
 
       expect(mocks.step1Action).toHaveBeenCalled();
@@ -482,7 +482,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it('should be able to bail workflow execution', async () => {
-      const { workflow } = registry['basic-bail'];
+      const { workflow } = registry['basic-bail']!;
 
       // Test bail scenario
       const result = await execute(workflow, { value: 'bail' });
@@ -505,7 +505,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it('should have runId in the step execute function', async () => {
-      const entry = registry['basic-runid'];
+      const entry = registry['basic-runid']!;
 
       await execute(entry.workflow, {});
 
@@ -514,7 +514,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it.skipIf(skipTests.state)('should execute multiple steps in parallel with state', async () => {
-      const { workflow, mocks } = registry['basic-parallel-with-state'];
+      const { workflow } = registry['basic-parallel-with-state']!;
       const result = await execute(workflow, {}, { initialState: { value: 'test-state' } });
 
       expect(result.status).toBe('success');
@@ -529,7 +529,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it('should have access to typed workflow results', async () => {
-      const { workflow } = registry['basic-typed-results'];
+      const { workflow } = registry['basic-typed-results']!;
       const result = await execute(workflow, {});
 
       expect(result.status).toBe('success');
@@ -537,7 +537,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it('should pass input data through to steps', async () => {
-      const entry = registry['basic-input-data'];
+      const entry = registry['basic-input-data']!;
 
       await execute(entry.workflow, { foo: 'hello', bar: 42 });
 
@@ -594,7 +594,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     );
 
     it.skipIf(skipTests.missingSuspendData)('should handle missing suspendData gracefully', async () => {
-      const { workflow } = registry['basic-missing-suspend-data'];
+      const { workflow } = registry['basic-missing-suspend-data']!;
 
       const result = await execute(workflow, { value: 'test' });
 

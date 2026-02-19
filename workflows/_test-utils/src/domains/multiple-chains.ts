@@ -97,7 +97,7 @@ export function createMultipleChainsTests(ctx: WorkflowTestContext, registry?: W
     });
 
     it('should run multiple chains in parallel', async () => {
-      const { workflow } = registry!['chains-parallel'];
+      const { workflow } = registry!['chains-parallel']!;
       const result = await execute(workflow, {});
 
       expect(result.steps['nested-a']).toMatchObject({

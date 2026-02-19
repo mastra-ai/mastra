@@ -267,7 +267,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
 
   describe('Storage Persistence', () => {
     it.skipIf(skipTests.storageListRuns)('should get workflow runs from storage', async () => {
-      const { workflow } = registry!['storage-list-runs-workflow'];
+      const { workflow } = registry!['storage-list-runs-workflow']!;
 
       // Generate unique run IDs
       const runId1 = `storage-test-${Date.now()}-1`;
@@ -294,7 +294,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
     });
 
     it.skipIf(skipTests.storageGetDelete)('should get and delete workflow run by id from storage', async () => {
-      const { workflow } = registry!['storage-get-delete-workflow'];
+      const { workflow } = registry!['storage-get-delete-workflow']!;
 
       const runId = `storage-delete-test-${Date.now()}`;
 
@@ -318,7 +318,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
     });
 
     it.skipIf(skipTests.storageResourceId)('should persist resourceId when creating workflow runs', async () => {
-      const { workflow } = registry!['storage-resourceid-workflow'];
+      const { workflow } = registry!['storage-resourceid-workflow']!;
 
       const runId = `storage-resourceid-test-${Date.now()}`;
       const resourceId = 'user-123';
@@ -341,7 +341,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.storageResourceIdResume || !ctx.resume)(
       'should preserve resourceId when resuming a suspended workflow',
       async () => {
-        const { workflow } = registry!['storage-resourceid-resume-workflow'];
+        const { workflow } = registry!['storage-resourceid-resume-workflow']!;
 
         const runId = `storage-resourceid-resume-test-${Date.now()}`;
         const resourceId = 'user-789';
@@ -375,7 +375,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.storageFieldsFilter)(
       'should return only requested fields when fields option is specified',
       async () => {
-        const { workflow } = registry!['storage-fields-filter-workflow'];
+        const { workflow } = registry!['storage-fields-filter-workflow']!;
 
         const runId = `storage-fields-filter-test-${Date.now()}`;
 
@@ -409,7 +409,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.storageWithNestedWorkflows)(
       'should exclude nested workflow steps when withNestedWorkflows is false',
       async () => {
-        const { workflow } = registry!['storage-nested-parent-workflow'];
+        const { workflow } = registry!['storage-nested-parent-workflow']!;
 
         const runId = `storage-nested-test-${Date.now()}`;
 
@@ -437,7 +437,7 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
     it.skipIf(skipTests.storageShouldPersistSnapshot || !ctx.resume)(
       'should use shouldPersistSnapshot option',
       async () => {
-        const { workflow } = registry!['storage-shouldpersist-workflow'];
+        const { workflow } = registry!['storage-shouldpersist-workflow']!;
         const runId = `persist-test-${Date.now()}`;
 
         // Execute - should suspend at resume-step

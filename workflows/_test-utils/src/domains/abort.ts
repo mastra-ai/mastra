@@ -334,7 +334,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
 
   describe('abort', () => {
     it('should provide abort signal to step execute function', async () => {
-      const { workflow, getReceivedAbortSignal } = registry!['abort-test-workflow'];
+      const { workflow, getReceivedAbortSignal } = registry!['abort-test-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -344,7 +344,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     });
 
     it('should provide abort function to step execute function', async () => {
-      const { workflow, getReceivedAbortFn } = registry!['abort-fn-test-workflow'];
+      const { workflow, getReceivedAbortFn } = registry!['abort-fn-test-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -355,7 +355,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
 
     // TODO: Evented engine doesn't return 'canceled' status on abort
     it.skipIf(skipTests.abortStatus)('should abort workflow when abort function is called', async () => {
-      const { workflow, mocks } = registry!['abort-workflow'];
+      const { workflow, mocks } = registry!['abort-workflow']!;
 
       const result = await execute(workflow, {});
 
@@ -369,7 +369,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     // They serve as documentation for expected behavior
 
     it('should prepare workflow for immediate abort', async () => {
-      const { workflow, mocks, resetMocks } = registry!['immediate-abort-workflow'];
+      const { workflow, mocks, resetMocks } = registry!['immediate-abort-workflow']!;
       resetMocks?.();
 
       // This test validates the workflow setup for immediate abort scenarios
@@ -386,13 +386,13 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     it.skipIf(skipTests.abortDuringStep)(
       'should provide abort signal that can be listened to during step execution',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['abort-during-step-workflow'];
+        const { workflow, mocks, resetMocks } = registry!['abort-during-step-workflow']!;
         resetMocks?.();
 
         // This test validates that abortSignal is available to steps
         // The workflow will complete since we don't actually trigger abort here
         // Actual abort during step requires run.cancel() which is tested in engine-specific tests
-        const result = await execute(workflow, {});
+        await execute(workflow, {});
 
         // When not aborted, step2 should eventually complete (or timeout in test framework)
         // For shared tests, we verify the structure is correct
@@ -408,7 +408,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     it.skipIf(skipTests.abortNestedPropagation)(
       'should have nested workflow setup for abort propagation testing',
       async () => {
-        const { workflow, resetMocks } = registry!['abort-nested-propagation-workflow'];
+        const { workflow, resetMocks } = registry!['abort-nested-propagation-workflow']!;
         resetMocks?.();
 
         // Without abort, the workflow should complete (but with 5s timeout in nested step)
@@ -425,7 +425,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
     );
 
     it('should suspend workflow that can be canceled', async () => {
-      const { workflow, mocks, resetMocks } = registry!['cancel-suspended-workflow'];
+      const { workflow, mocks, resetMocks } = registry!['cancel-suspended-workflow']!;
       resetMocks?.();
 
       // This test validates the workflow suspends correctly before cancel

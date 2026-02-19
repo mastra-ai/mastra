@@ -158,7 +158,7 @@ export function createSchemaValidationWorkflows(ctx: WorkflowCreatorContext) {
       options: { validateInputs: true },
     });
 
-    workflow.then(step1).then(step2).commit();
+    workflow.then(step1).then(step2 as any).commit();
 
     workflows['schema-step-default'] = { workflow, mocks: {} };
   }
@@ -354,7 +354,7 @@ export function createSchemaValidationWorkflows(ctx: WorkflowCreatorContext) {
       options: { validateInputs: true },
     });
 
-    workflow.then(step1).commit();
+    workflow.then(step1 as any).commit();
 
     workflows['schema-zod-cause'] = { workflow, mocks: {} };
   }
@@ -370,13 +370,12 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
 
   describe('Schema Validation', () => {
     it.skipIf(skipTests.schemaValidationThrows)('should throw error if trigger data is invalid', async () => {
-      const { workflow } = registry!['schema-invalid-trigger'];
+      const { workflow } = registry!['schema-invalid-trigger']!;
 
       try {
         await execute(workflow, {
           required: 'test',
-          // @ts-expect-error - intentionally passing invalid data
-          nested: { value: 'not-a-number' },
+          nested: { value: 'not-a-number' as any },
         });
         expect.fail('Expected error to be thrown');
       } catch (error) {
@@ -387,7 +386,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
     });
 
     it('should use default value from inputSchema', async () => {
-      const { workflow } = registry!['schema-default-value'];
+      const { workflow } = registry!['schema-default-value']!;
       const result = await execute(workflow, {
         required: 'test',
       });
@@ -399,17 +398,15 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
         output: { required: 'test', nested: { value: 1 } },
       });
 
-      // @ts-expect-error - result type is not inferred
       expect(result.result).toEqual({ required: 'test', nested: { value: 1 } });
     });
 
     it.skipIf(skipTests.schemaValidationThrows)('should throw error if inputData is invalid', async () => {
-      const { workflow } = registry!['schema-invalid-input'];
+      const { workflow } = registry!['schema-invalid-input']!;
 
       try {
         await execute(workflow, {
-          // @ts-expect-error - intentionally passing invalid data
-          start: 123,
+          start: 123 as any,
         });
         expect.fail('Expected error to be thrown');
       } catch (error) {
@@ -420,7 +417,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
     });
 
     it('should use default value from inputSchema for step input', async () => {
-      const { workflow } = registry!['schema-step-default'];
+      const { workflow } = registry!['schema-step-default']!;
       const result = await execute(workflow, {});
 
       expect(result.status).toBe('success');
@@ -431,7 +428,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
     });
 
     it('should allow a steps input schema to be a subset of the previous step output schema', async () => {
-      const { workflow } = registry!['schema-subset-input'];
+      const { workflow } = registry!['schema-subset-input']!;
       const result = await execute(workflow, {});
 
       expect(result.status).toBe('success');
@@ -443,7 +440,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
 
     // Bug regression test #11313 - .map after .foreach should properly validate schema
     it('should properly validate input schema when .map is used after .foreach - bug #11313', async () => {
-      const { workflow, mocks, resetMocks } = registry!['schema-map-after-foreach-bug-11313'];
+      const { workflow, mocks, resetMocks } = registry!['schema-map-after-foreach-bug-11313']!;
       resetMocks?.();
 
       const result = await execute(workflow, [{ value: 1 }, { value: 22 }, { value: 333 }]);
@@ -468,7 +465,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
     it.skipIf(skipTests.schemaMapValidation)(
       'should throw error if inputData is invalid in workflow with .map()',
       async () => {
-        const { workflow } = registry!['schema-map-invalid'];
+        const { workflow } = registry!['schema-map-invalid']!;
         const result = await execute(workflow, { start: 2 });
         expect(result.status).toBe('failed');
         if (result.status === 'failed') {
@@ -482,7 +479,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
     it.skipIf(skipTests.schemaNestedValidation)(
       'should throw error if inputData is invalid in nested workflows',
       async () => {
-        const { workflow } = registry!['schema-nested-invalid'];
+        const { workflow } = registry!['schema-nested-invalid']!;
         const result = await execute(workflow, { num: 42 });
         expect(result.status).toBe('failed');
         if (result.status === 'failed') {
@@ -495,7 +492,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
     it.skipIf(skipTests.schemaZodErrorCause)(
       'should preserve ZodError as cause when input validation fails',
       async () => {
-        const { workflow } = registry!['schema-zod-cause'];
+        const { workflow } = registry!['schema-zod-cause']!;
         const result = await execute(workflow, {});
         expect(result.status).toBe('failed');
         if (result.status === 'failed') {

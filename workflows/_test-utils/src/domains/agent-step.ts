@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+// @ts-ignore
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { Mastra } from '@mastra/core/mastra';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
@@ -389,7 +390,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
 
   describe('Agent as step', () => {
     it('should execute workflow with step that simulates agent behavior', async () => {
-      const { workflow } = registry!['agent-workflow'];
+      const { workflow } = registry!['agent-workflow']!;
 
       const result = await execute(workflow, { prompt: 'Hello, world!' });
 
@@ -401,7 +402,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should chain steps before and after agent-like step', async () => {
-      const { workflow } = registry!['chained-agent-workflow'];
+      const { workflow } = registry!['chained-agent-workflow']!;
 
       const result = await execute(workflow, { input: 'test input' });
 
@@ -421,7 +422,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should handle agent step errors gracefully', async () => {
-      const { workflow } = registry!['failing-agent-workflow'];
+      const { workflow } = registry!['failing-agent-workflow']!;
 
       const result = await execute(workflow, { input: 'test input' });
 
@@ -437,7 +438,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should execute agent-like steps in parallel', async () => {
-      const { workflow } = registry!['parallel-agents-workflow'];
+      const { workflow } = registry!['parallel-agents-workflow']!;
 
       const result = await execute(workflow, { prompt1: 'Hello', prompt2: 'World' });
 
@@ -462,7 +463,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should execute agent-like nested workflow as a step', async () => {
-      const { workflow } = registry!['agent-nested-step-workflow'];
+      const { workflow } = registry!['agent-nested-step-workflow']!;
 
       const result = await execute(workflow, { question: 'What is the capital of France?' });
 
@@ -482,7 +483,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it.skipIf(skipTests.agentStepDeepNested)('should handle agent-like step in deeply nested workflow', async () => {
-      const { workflow } = registry!['deep-nested-agent-workflow'];
+      const { workflow } = registry!['deep-nested-agent-workflow']!;
 
       const result = await execute(workflow, { data: 'test data' });
 
@@ -503,7 +504,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
     });
 
     it('should pass options through to agent-like step', async () => {
-      const { workflow, resetReceivedOptions } = registry!['agent-options-workflow'];
+      const { workflow, resetReceivedOptions } = registry!['agent-options-workflow']!;
       resetReceivedOptions?.();
 
       const result = await execute(workflow, {
@@ -545,6 +546,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -558,6 +560,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -678,6 +681,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent = new Agent({
+          id: 'test-agent-1',
           name: 'test-agent-1',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({
@@ -691,6 +695,7 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
         });
 
         const agent2 = new Agent({
+          id: 'test-agent-2',
           name: 'test-agent-2',
           instructions: 'test agent instructions',
           model: new MockLanguageModelV1({

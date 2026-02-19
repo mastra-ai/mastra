@@ -362,7 +362,7 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
 
   describe('Nested workflows', () => {
     it('should execute nested workflow as a step', async () => {
-      const { workflow, mocks, nestedWorkflowId } = registry!['nested-basic'];
+      const { workflow, mocks, nestedWorkflowId } = registry!['nested-basic']!;
 
       const result = await execute(workflow, {});
 
@@ -381,7 +381,7 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
     });
 
     it.skipIf(skipTests.nestedWorkflowFailure)('should handle failing steps in nested workflows', async () => {
-      const { workflow, nestedWorkflowId } = registry!['nested-failing'];
+      const { workflow, nestedWorkflowId } = registry!['nested-failing']!;
 
       const result = await execute(workflow, {});
 
@@ -398,7 +398,7 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
     });
 
     it.skipIf(skipTests.nestedDataPassing)('should pass data between parent and nested workflow', async () => {
-      const { workflow, nestedWorkflowId } = registry!['nested-data-passing'];
+      const { workflow, nestedWorkflowId } = registry!['nested-data-passing']!;
 
       const result = await execute(workflow, { input: 'test' });
 
@@ -413,7 +413,7 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
     });
 
     it('should execute nested workflow with conditions', async () => {
-      const { workflow, nestedWorkflowId } = registry!['nested-conditions'];
+      const { workflow, nestedWorkflowId } = registry!['nested-conditions']!;
 
       const result = await execute(workflow, {});
 
@@ -427,7 +427,7 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
     });
 
     it.skipIf(skipTests.nestedMultipleLevels)('should handle multiple levels of nesting', async () => {
-      const { workflow, middleWorkflowId } = registry!['nested-multiple-levels'];
+      const { workflow, middleWorkflowId } = registry!['nested-multiple-levels']!;
 
       const result = await execute(workflow, {});
 
@@ -443,7 +443,7 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
     });
 
     it.skipIf(skipTests.state)('should execute nested workflow with state', async () => {
-      const { workflow, nestedWorkflowId } = registry!['nested-with-state'];
+      const { workflow, nestedWorkflowId } = registry!['nested-with-state']!;
 
       const result = await execute(workflow, {}, { initialState: { value: 'test-state', otherValue: 'other' } });
 
@@ -457,7 +457,7 @@ export function createNestedWorkflowsTests(ctx: WorkflowTestContext, registry?: 
     it.skipIf(skipTests.state)(
       'should execute nested workflow with state being set by the nested workflow',
       async () => {
-        const { workflow, nestedWorkflowId } = registry!['nested-setstate'];
+        const { workflow, nestedWorkflowId } = registry!['nested-setstate']!;
 
         const result = await execute(workflow, {}, { initialState: { value: 'test-state', otherValue: 'other' } });
 
