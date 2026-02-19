@@ -10,7 +10,7 @@
 '@mastra/deployer-vercel': patch
 '@mastra/deployer-netlify': patch
 '@mastra/deployer-cloudflare': patch
-'@mastra/cli': patch
+'mastra': patch
 '@mastra/client-js': patch
 ---
 
