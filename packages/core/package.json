@@ -235,9 +235,16 @@
     "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
+    "@ast-grep/napi": "^0.36.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
+  "peerDependenciesMeta": {
+    "@ast-grep/napi": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@ast-grep/napi": "^0.36.0",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.61",
     "@ai-sdk/azure": "^2.0.0",
     "@ai-sdk/cerebras-v5": "npm:@ai-sdk/cerebras@1.0.36",
