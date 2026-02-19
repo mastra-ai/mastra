@@ -136,15 +136,27 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // This is required when writing directly to reply.raw
     reply.hijack();
 
+    const streamFormat = route.streamFormat || 'stream';
+
     // Write headers directly to the raw response, merging existing headers (like CORS)
     // with our stream-specific headers
+    const sseHeaders =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
     reply.raw.writeHead(200, {
       ...existingHeaders,
-      'Content-Type': 'text/plain',
+      ...sseHeaders,
       'Transfer-Encoding': 'chunked',
     });
-
-    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
