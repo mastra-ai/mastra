@@ -2,11 +2,12 @@
 '@mastra/core': patch
 ---
 
-Fix tool calls with malformed JSON arguments from certain LLM providers (e.g., Kimi/K2) silently failing. (#11078)
+Fix tool calls with malformed JSON arguments from certain LLM providers silently failing. (#11078, #13185)
 
-**Auto-repair** — four common malformation patterns are now fixed before parsing:
+**Auto-repair** — five common malformation patterns are now fixed before parsing:
 
-- Missing opening quote on property names: `{"a":"b",c":"d"}` → `{"a":"b","c":"d"}`
+- Trailing LLM special tokens: `{"a":1}<|call|>` → `{"a":1}` (OpenAI gpt-4o/gpt-4o-mini)
+- Missing opening quote on property names: `{"a":"b",c":"d"}` → `{"a":"b","c":"d"}` (Kimi/K2)
 - Fully unquoted property names: `{command:"ls"}` → `{"command":"ls"}`
 - Single quotes instead of double quotes: `{'key':'val'}` → `{"key":"val"}`
 - Trailing commas: `{"a":1,}` → `{"a":1}`

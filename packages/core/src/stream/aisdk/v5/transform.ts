@@ -582,8 +582,9 @@ function normalizeFinishReason(
 }
 
 /**
- * Attempts to repair common JSON malformations from LLM providers (unquoted keys,
- * single quotes, trailing commas). Returns parsed object or null.
+ * Attempts to repair common JSON malformations from LLM providers (trailing LLM
+ * special tokens, unquoted keys, single quotes, trailing commas). Returns parsed
+ * object or null.
  */
 export function tryRepairJson(input: string): Record<string, any> | null {
   const repaired = applyStructuralFixes(input.trim());
@@ -675,6 +676,10 @@ function replaceSingleQuoteDelimiters(input: string): string {
 
 function applyStructuralFixes(input: string): string {
   let result = input;
+
+  // Strip trailing LLM special tokens like <|call|>, <|endoftext|> (issue #13185)
+  // Some OpenAI models append internal tokens after valid JSON, e.g. '{}\t<|call|>'
+  result = result.replace(/<\|[^|]*\|>\s*/g, '').trim();
 
   // Fix missing opening quote before property name (partial quote)
   // {"a":"b",c":"d"} -> {"a":"b","c":"d"}

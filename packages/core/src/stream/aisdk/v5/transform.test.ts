@@ -234,6 +234,60 @@ describe('convertFullStreamChunkToMastra', () => {
         expect((result as any).payload.parseError).toBeUndefined();
       });
 
+      it('should repair trailing LLM special tokens like <|call|> (issue #13185)', () => {
+        const chunk: StreamPart = {
+          type: 'tool-call',
+          toolCallId: 'call-repair-token-1',
+          toolName: 'test_tool',
+          input: '{"checkpointNumber": 1, "vehicleType": "leopard"}\t<|call|>',
+          providerExecuted: false,
+        };
+
+        const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+        expect(result).toBeDefined();
+        expect(result?.type).toBe('tool-call');
+        expect((result as any).payload.args).toEqual({
+          checkpointNumber: 1,
+          vehicleType: 'leopard',
+        });
+        expect((result as any).payload.parseError).toBeUndefined();
+      });
+
+      it('should repair empty object with trailing <|call|> token', () => {
+        const chunk: StreamPart = {
+          type: 'tool-call',
+          toolCallId: 'call-repair-token-2',
+          toolName: 'test_tool',
+          input: '{}<|call|>',
+          providerExecuted: false,
+        };
+
+        const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+        expect(result).toBeDefined();
+        expect(result?.type).toBe('tool-call');
+        expect((result as any).payload.args).toEqual({});
+        expect((result as any).payload.parseError).toBeUndefined();
+      });
+
+      it('should repair trailing <|endoftext|> token', () => {
+        const chunk: StreamPart = {
+          type: 'tool-call',
+          toolCallId: 'call-repair-token-3',
+          toolName: 'test_tool',
+          input: '{"query": "test"}<|endoftext|>',
+          providerExecuted: false,
+        };
+
+        const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+        expect(result).toBeDefined();
+        expect(result?.type).toBe('tool-call');
+        expect((result as any).payload.args).toEqual({ query: 'test' });
+        expect((result as any).payload.parseError).toBeUndefined();
+      });
+
       it('should repair trailing comma in nested arrays', () => {
         const chunk: StreamPart = {
           type: 'tool-call',
@@ -512,5 +566,42 @@ describe('tryRepairJson', () => {
   it('should return null for truncated/incomplete JSON (not repairable)', () => {
     expect(tryRepairJson('{"location": "New York", "unit": "cel')).toBeNull();
     expect(tryRepairJson('{"a": {')).toBeNull();
+  });
+
+  describe('LLM special token stripping (issue #13185)', () => {
+    it('should strip trailing <|call|> from valid JSON', () => {
+      expect(tryRepairJson('{}<|call|>')).toEqual({});
+      expect(tryRepairJson('{"a":1}<|call|>')).toEqual({ a: 1 });
+    });
+
+    it('should strip trailing <|call|> preceded by whitespace', () => {
+      expect(tryRepairJson('{"checkpointNumber": 1, "vehicleType": "leopard"}\t<|call|>')).toEqual({
+        checkpointNumber: 1,
+        vehicleType: 'leopard',
+      });
+      expect(tryRepairJson('{"a":1}\n<|call|>')).toEqual({ a: 1 });
+    });
+
+    it('should strip <|endoftext|> token', () => {
+      expect(tryRepairJson('{"query": "test"}<|endoftext|>')).toEqual({ query: 'test' });
+    });
+
+    it('should strip multiple special tokens', () => {
+      expect(tryRepairJson('{"a":1}<|call|><|endoftext|>')).toEqual({ a: 1 });
+    });
+
+    it('should handle special tokens combined with other repairs', () => {
+      // Trailing comma + special token
+      expect(tryRepairJson('{"a":1,}<|call|>')).toEqual({ a: 1 });
+      // Unquoted key + special token
+      expect(tryRepairJson('{command:"ls"}<|call|>')).toEqual({ command: 'ls' });
+    });
+
+    it('should not affect valid JSON containing special-token-like strings (parsed before repair)', () => {
+      // If <|call|> is inside a valid JSON string, JSON.parse succeeds on the first try
+      // and tryRepairJson is never called. Verify the valid JSON parses normally.
+      const validInput = '{"text":"say <|call|> now"}';
+      expect(JSON.parse(validInput)).toEqual({ text: 'say <|call|> now' });
+    });
   });
 });
