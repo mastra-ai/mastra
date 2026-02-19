@@ -331,6 +331,86 @@ test.describe('Agent Creation Persistence - Tools', () => {
   });
 });
 
+test.describe('Agent Creation Persistence - MCP Client Tools', () => {
+  /**
+   * FEATURE: MCP Client Tool Selection
+   * USER STORY: As a user, I want to select which MCP tools my agent can use
+   *             so that I can control the agent's capabilities
+   * BEHAVIOR UNDER TEST: Selected MCP tools persist after agent creation and reload
+   */
+  test('persists selected MCP client tools', async ({ page }) => {
+    await page.goto('/cms/agents/create');
+
+    const agentName = uniqueAgentName('MCP Tools');
+    await fillRequiredFields(page, agentName);
+
+    // Navigate to tools page via sidebar
+    await clickSidebarLink(page, 'Tools');
+
+    // Click "Add MCP Client" button
+    await page.getByRole('button', { name: 'Add MCP Client' }).click();
+
+    // Wait for the side dialog to open
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+
+    // Fill MCP client name
+    await page.locator('#mcp-name').fill('Test MCP Client');
+
+    // The kitchen-sink exposes the simple-mcp-server at /api/mcp/simple-mcp-server/mcp
+    // Fill URL field (HTTP is default)
+    await page.locator('#mcp-url').fill('http://localhost:4111/api/mcp/simple-mcp-server/mcp');
+
+    // Click "Try to connect" button
+    await page.getByRole('button', { name: /try to connect/i }).click();
+
+    // Wait for tools to appear in the preview panel
+    await expect(page.getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
+
+    // The tool should have a switch - verify it's initially unchecked (default: unselected)
+    const toolSwitch = page.getByRole('dialog').getByRole('switch').first();
+    await expect(toolSwitch).not.toBeChecked();
+
+    // Toggle the tool ON
+    await toolSwitch.click();
+    await expect(toolSwitch).toBeChecked();
+
+    // Header should show "1/1 selected"
+    await expect(page.getByText(/1\/1 selected/)).toBeVisible();
+
+    // Click "Create MCP Client" button to confirm
+    await page.getByRole('button', { name: /create mcp client/i }).click();
+
+    // Wait for dialog to close
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 });
+
+    // The MCP client should now appear in the list
+    await expect(page.getByText('Test MCP Client')).toBeVisible();
+
+    // Create the agent
+    const agentId = await createAgentAndGetId(page);
+
+    // Verify on edit page - navigate to tools
+    await page.goto(`/cms/agents/${agentId}/edit/tools`);
+    await page.waitForTimeout(2000);
+
+    // The MCP client should be visible
+    await expect(page.getByText('Test MCP Client')).toBeVisible({ timeout: 10000 });
+
+    // Click on the MCP client to view it
+    await page.getByText('Test MCP Client').click();
+
+    // Wait for dialog to open and connect
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+
+    // Wait for tools to load (auto-connects in view mode)
+    await expect(page.getByText('simpleMcpTool')).toBeVisible({ timeout: 10000 });
+
+    // The tool switch should still be checked (persisted selection)
+    const persistedSwitch = page.getByRole('dialog').getByRole('switch').first();
+    await expect(persistedSwitch).toBeChecked({ timeout: 5000 });
+  });
+});
+
 test.describe('Agent Creation Persistence - Sub-Agents', () => {
   test('persists selected sub-agents', async ({ page }) => {
     await page.goto('/cms/agents/create');

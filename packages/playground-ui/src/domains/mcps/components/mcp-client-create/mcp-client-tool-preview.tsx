@@ -3,6 +3,7 @@ import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { Txt } from '@/ds/components/Txt';
 import { Spinner } from '@/ds/components/Spinner';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
+import { Switch } from '@/ds/components/Switch';
 
 import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 
@@ -10,9 +11,17 @@ interface MCPClientToolPreviewProps {
   serverType: 'stdio' | 'http';
   url: string;
   tryConnect: TryConnectMcpMutation;
+  selectedTools?: Record<string, { description?: string }>;
+  onToggleTool?: (toolName: string, description?: string) => void;
 }
 
-export function MCPClientToolPreview({ serverType, url, tryConnect }: MCPClientToolPreviewProps) {
+export function MCPClientToolPreview({
+  serverType,
+  url,
+  tryConnect,
+  selectedTools,
+  onToggleTool,
+}: MCPClientToolPreviewProps) {
   if (serverType === 'stdio') {
     return (
       <EmptyState>
@@ -60,7 +69,9 @@ export function MCPClientToolPreview({ serverType, url, tryConnect }: MCPClientT
         <Txt className="text-neutral3">Connected successfully but no tools were found.</Txt>
       )}
 
-      {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && <ToolList tools={tryConnect.data.tools} />}
+      {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
+        <ToolList tools={tryConnect.data.tools} selectedTools={selectedTools} onToggleTool={onToggleTool} />
+      )}
     </div>
   );
 }
@@ -69,7 +80,17 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className="flex items-center justify-center h-full p-8 text-center">{children}</div>;
 }
 
-function ToolList({ tools }: { tools: { name: string; description?: string }[] }) {
+function ToolList({
+  tools,
+  selectedTools = {},
+  onToggleTool,
+}: {
+  tools: { name: string; description?: string }[];
+  selectedTools?: Record<string, { description?: string }>;
+  onToggleTool?: (toolName: string, description?: string) => void;
+}) {
+  const selectedCount = Object.keys(selectedTools).length;
+
   return (
     <div className="p-5 overflow-y-auto">
       <div className="text-neutral6 flex gap-2 items-center">
@@ -77,22 +98,29 @@ function ToolList({ tools }: { tools: { name: string; description?: string }[] }
           <McpServerIcon />
         </Icon>
         <Txt variant="header-md" as="h2" className="font-medium">
-          Available Tools ({tools.length})
+          Available Tools ({selectedCount}/{tools.length} selected)
         </Txt>
       </div>
 
       <div className="flex flex-col gap-2 pt-6">
-        {tools.map(tool => (
-          <Entity key={tool.name}>
-            <EntityIcon>
-              <ToolsIcon className="group-hover/entity:text-accent6" />
-            </EntityIcon>
-            <EntityContent>
-              <EntityName>{tool.name}</EntityName>
-              {tool.description && <EntityDescription>{tool.description}</EntityDescription>}
-            </EntityContent>
-          </Entity>
-        ))}
+        {tools.map(tool => {
+          const isSelected = tool.name in selectedTools;
+
+          return (
+            <Entity key={tool.name}>
+              <EntityIcon>
+                <ToolsIcon className="group-hover/entity:text-accent6" />
+              </EntityIcon>
+              <EntityContent>
+                <EntityName>{tool.name}</EntityName>
+                {tool.description && <EntityDescription>{tool.description}</EntityDescription>}
+              </EntityContent>
+              {onToggleTool && (
+                <Switch checked={isSelected} onCheckedChange={() => onToggleTool(tool.name, tool.description)} />
+              )}
+            </Entity>
+          );
+        })}
       </div>
     </div>
   );
