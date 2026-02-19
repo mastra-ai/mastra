@@ -32,6 +32,8 @@ export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
 export { EditDatasetDialog } from './components/edit-dataset-dialog';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
 export { EmptyDatasetsTable } from './components/empty-datasets-table';
+export { DatasetCombobox } from './components/dataset-combobox';
+export type { DatasetComboboxProps } from './components/dataset-combobox';
 
 // Dataset detail components
 export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
