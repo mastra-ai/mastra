@@ -16,7 +16,7 @@ Returns:
 - List of incomplete tasks (if any)
 - Boolean indicating if all tasks are done`,
   inputSchema: z.object({}), // No input needed
-  execute: async ({ }, context) => {
+  execute: async ({}, context) => {
     try {
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
 

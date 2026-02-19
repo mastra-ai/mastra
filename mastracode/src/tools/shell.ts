@@ -254,7 +254,7 @@ Usage notes:
           try {
             process.kill(-subprocess.pid, 'SIGKILL');
           } catch {
-            treeKill(subprocess.pid, 'SIGKILL', () => { });
+            treeKill(subprocess.pid, 'SIGKILL', () => {});
           }
         }
       };

@@ -330,12 +330,12 @@ export function parseSubagentMeta(content: string): {
   const durationMs = parseInt(match[2]!, 10);
   const toolCalls = match[3]
     ? match[3]
-      .split(',')
-      .filter(Boolean)
-      .map(entry => {
-        const [name, status] = entry.split(':');
-        return { name: name!, isError: status === 'err' };
-      })
+        .split(',')
+        .filter(Boolean)
+        .map(entry => {
+          const [name, status] = entry.split(':');
+          return { name: name!, isError: status === 'err' };
+        })
     : [];
 
   return { text, modelId, durationMs, toolCalls };
