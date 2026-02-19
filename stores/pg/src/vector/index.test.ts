@@ -134,15 +134,15 @@ describe('PgVector', () => {
     });
 
     it('should throw when neither queryVector nor filter is provided', async () => {
-      await expect(
-        vectorDB.query({ indexName: metadataQueryIndex } as any),
-      ).rejects.toThrow('Either queryVector or filter must be provided');
+      await expect(vectorDB.query({ indexName: metadataQueryIndex } as any)).rejects.toThrow(
+        'Either queryVector or filter must be provided',
+      );
     });
 
     it('should throw when queryVector is undefined and filter is empty', async () => {
-      await expect(
-        vectorDB.query({ indexName: metadataQueryIndex, filter: {} }),
-      ).rejects.toThrow('Either queryVector or filter must be provided');
+      await expect(vectorDB.query({ indexName: metadataQueryIndex, filter: {} })).rejects.toThrow(
+        'Either queryVector or filter must be provided',
+      );
     });
 
     it('should still work with both queryVector and filter (similarity search)', async () => {
