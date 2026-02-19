@@ -373,6 +373,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           toolCallId: inputData.toolCallId,
           messages: messageList.get.input.aiV5.model(),
           outputWriter,
+          requestContext,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
