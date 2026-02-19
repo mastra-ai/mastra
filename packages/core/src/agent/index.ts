@@ -18,6 +18,7 @@ export type {
   DelegationCompleteResult,
   OnDelegationCompleteHandler,
   DelegationConfig,
+  ContextFilterContext,
   // Iteration hook types
   IterationCompleteContext,
   IterationCompleteResult,

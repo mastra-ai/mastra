@@ -140,9 +140,8 @@ describe('onIterationComplete Hook Integration', () => {
       },
     });
 
-    // The hook should be called (at least once for the iterations that happen)
-    // Note: Hook is called at the END of each iteration
-    expect(iterations.length).toBeGreaterThanOrEqual(1);
+    // Two iterations: one for the tool call, one for the final stop response
+    expect(iterations).toEqual([1, 2]);
   });
 
   it('should stop iteration when onIterationComplete returns continue: false', async () => {
@@ -248,10 +247,8 @@ describe('onIterationComplete Hook Integration', () => {
       },
     });
 
-    // Should have been called at least once and stopped early
-    // The exact number depends on when the hook gets called in the flow
-    expect(iterations.length).toBeGreaterThanOrEqual(1);
-    expect(iterations.length).toBeLessThanOrEqual(3); // Should stop early, not reach maxSteps of 10
+    // Hook returns continue: false at iteration >= 2, so exactly 2 iterations fire
+    expect(iterations).toEqual([1, 2]);
   });
 
   it('should add feedback to conversation when provided', async () => {
@@ -372,10 +369,12 @@ describe('onIterationComplete Hook Integration', () => {
       },
     });
 
-    // Verify the hook was called
-    // Note: The feedback mechanism works but verifying it in mocks is complex
-    // The main verification is that the hook runs without error
-    expect(iterationCount).toBeGreaterThanOrEqual(1);
+    // When the model returns stop (isFinal), the loop ends after that iteration
+    // even if the hook returns continue: true with feedback. Feedback only adds
+    // a user message for the *next* iteration when the loop would naturally continue
+    // (e.g. during a tool-call sequence). Here the model says stop on iteration 1
+    // so the loop ends and the hook is called exactly once.
+    expect(iterationCount).toBe(1);
   });
 
   it('should accept onIterationComplete configuration without errors', async () => {

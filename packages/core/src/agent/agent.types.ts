@@ -33,6 +33,35 @@ export type StreamCompletionConfig = CompletionConfig;
 // ============================================================================
 
 /**
+ * Context passed to the contextFilter callback.
+ * Contains everything needed to decide which parent messages to share with the sub-agent.
+ */
+export interface ContextFilterContext {
+  /** Full unfiltered messages from the parent agent's conversation history */
+  messages: MastraDBMessage[];
+  /** The ID of the primitive being delegated to */
+  primitiveId: string;
+  /** The type of primitive being delegated to */
+  primitiveType: 'agent' | 'workflow';
+  /** The prompt being sent to the sub-agent (after any onDelegationStart modifications) */
+  prompt: string;
+  /** Current iteration number (1-based) */
+  iteration: number;
+  /** ID of the current run */
+  runId: string;
+  /** Current thread ID (if using memory) */
+  threadId?: string;
+  /** Resource ID (if using memory) */
+  resourceId?: string;
+  /** The parent agent's ID */
+  parentAgentId: string;
+  /** The parent agent's name */
+  parentAgentName: string;
+  /** Tool call ID from the LLM */
+  toolCallId: string;
+}
+
+/**
  * Context passed to the onDelegationStart hook.
  * Contains information about the sub-agent or workflow being called.
  */
@@ -248,27 +277,23 @@ export interface DelegationConfig {
   bailStrategy?: 'first' | 'last';
 
   /**
-   * Context filtering for sub-agent execution.
-   * Controls which messages from the parent are passed to sub-agents.
+   * Callback that controls which parent messages are passed to each sub-agent as conversation
+   * context. Receives the full parent message history along with delegation metadata, and
+   * returns the messages that should be forwarded.
+   *
+   * Runs after `onDelegationStart` so the `prompt` reflects any modifications made there.
+   *
+   * @example
+   * ```typescript
+   * contextFilter: ({ messages, primitiveId, prompt }) => {
+   *   // Pass only the last 5 messages, excluding tool calls
+   *   return messages
+   *     .filter(m => !m.content?.parts?.some(p => p.type === 'tool-invocation'))
+   *     .slice(-5);
+   * }
+   * ```
    */
-  contextFilter?: {
-    /**
-     * Maximum number of recent messages to include (default: all)
-     */
-    maxMessages?: number;
-    /**
-     * Include system messages (default: true)
-     */
-    includeSystem?: boolean;
-    /**
-     * Include tool call/result messages (default: true)
-     */
-    includeToolMessages?: boolean;
-    /**
-     * Custom filter function for messages
-     */
-    filter?: (message: MastraDBMessage) => boolean;
-  };
+  contextFilter?: (context: ContextFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
 }
 
 /**

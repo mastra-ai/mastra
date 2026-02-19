@@ -54,6 +54,8 @@ export type StreamInternal = {
   stepTools?: ToolSet;
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
   stepWorkspace?: Workspace;
+  // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
+  _delegationBailed?: boolean;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

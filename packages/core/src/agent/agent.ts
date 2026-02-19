@@ -2308,46 +2308,15 @@ export class Agent<
             const toolCallId = context?.agent?.toolCallId || randomUUID();
 
             // Get messages from context - available at tool execution time
-            let contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
-
-            // Apply context filtering if configured
-            if (delegation?.contextFilter) {
-              const filter = delegation.contextFilter;
-
-              // Apply message type filters
-              if (filter.includeSystem === false) {
-                contextMessages = contextMessages.filter(m => m.role !== 'system');
-              }
-
-              if (filter.includeToolMessages === false) {
-                contextMessages = contextMessages.filter(m => {
-                  if (m.role === 'assistant' && m.content) {
-                    // Filter out messages with tool calls
-                    const content = m.content;
-                    if (typeof content === 'object' && content !== null && 'parts' in content) {
-                      const parts = (content as any).parts;
-                      return !parts.some((p: any) => p.type === 'tool-call');
-                    }
-                  }
-                  // Filter out tool result messages
-                  return (m as { role: string }).role !== 'tool';
-                });
-              }
-
-              // Apply custom filter function
-              if (filter.filter) {
-                contextMessages = contextMessages.filter(filter.filter);
-              }
-
-              // Apply maxMessages limit (take most recent messages)
-              if (filter.maxMessages && filter.maxMessages > 0 && contextMessages.length > filter.maxMessages) {
-                contextMessages = contextMessages.slice(-filter.maxMessages);
-              }
-            }
+            const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
 
             // Derive iteration from the number of assistant messages (rough approximation)
             // Each iteration typically produces an assistant message
             const derivedIteration = Math.max(1, contextMessages.filter(m => m.role === 'assistant').length);
+
+            // contextFilter is applied after onDelegationStart so the callback receives the
+            // effective (possibly modified) prompt.
+            const _hasContextMessages = !!delegation?.contextFilter;
 
             // Build delegation start context
             const delegationStartContext: DelegationStartContext = {
@@ -2373,16 +2342,16 @@ export class Agent<
             // Generate sub-agent thread and resource IDs early (before any rejection)
             // These are needed for both successful execution and rejection cases
             const slugify = await import(`@sindresorhus/slugify`);
-            const subAgentThreadId = `${
-              inputData.threadId ||
-              context?.mastra?.generateId({
-                idType: 'thread',
-                source: 'agent',
-                entityId: agentName,
-                resourceId,
-              }) ||
-              randomUUID()
-            }-${agentName}`;
+            const subAgentThreadId =
+              `${
+                inputData.threadId ||
+                context?.mastra?.generateId({
+                  idType: 'thread',
+                  source: 'agent',
+                  entityId: agentName,
+                  resourceId,
+                })
+              }-${randomUUID()}` || randomUUID(); //add randomUUID at end to make threadId always unique for every agent call and prevent possible message mix up
             const subAgentResourceId =
               `${
                 inputData.resourceId ||
@@ -2536,6 +2505,35 @@ export class Agent<
 
               const { resumeData, suspend } = context?.agent ?? {};
 
+              // Apply contextFilter callback (runs after onDelegationStart so effectivePrompt
+              // reflects any hook modifications). Falls back to full context on error.
+              let filteredContextMessages = contextMessages;
+              if (delegation?.contextFilter) {
+                try {
+                  filteredContextMessages = await delegation.contextFilter({
+                    messages: contextMessages,
+                    primitiveId: agent.id,
+                    primitiveType: 'agent',
+                    prompt: effectivePrompt,
+                    iteration: derivedIteration,
+                    runId: runId || randomUUID(),
+                    threadId,
+                    resourceId,
+                    parentAgentId: this.id,
+                    parentAgentName: this.name,
+                    toolCallId,
+                  });
+                } catch (filterError) {
+                  this.logger.error(`[Agent:${this.name}] - contextFilter error: ${filterError}`);
+                  // Fall back to unfiltered context on error
+                }
+              }
+
+              const messagesForSubAgent: MessageListInput = [
+                ...filteredContextMessages,
+                { role: 'user' as const, content: effectivePrompt },
+              ];
+
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(modelVersion)
@@ -2551,7 +2549,7 @@ export class Agent<
                         ? { memory: { resource: subAgentResourceId, thread: subAgentThreadId } }
                         : {}),
                     })
-                  : await agent.generate(effectivePrompt, {
+                  : await agent.generate(messagesForSubAgent, {
                       requestContext,
                       tracingContext: context?.tracingContext,
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -2576,7 +2574,7 @@ export class Agent<
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(effectivePrompt, {
+                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   tracingContext: context?.tracingContext,
                 });
@@ -2601,7 +2599,7 @@ export class Agent<
                           }
                         : {}),
                     })
-                  : await agent.stream(effectivePrompt, {
+                  : await agent.stream(messagesForSubAgent, {
                       requestContext,
                       tracingContext: context?.tracingContext,
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
@@ -2712,9 +2710,10 @@ export class Agent<
 
                   const completeResult = await delegation.onDelegationComplete(delegationCompleteContext);
 
-                  // If bailed, add a marker to the result
+                  // If bailed, add a marker to the result and signal via requestContext
                   if (bailed) {
                     result._bailed = true;
+                    requestContext.set('__mastra_delegationBailed', true);
                   }
 
                   // Handle feedback if provided

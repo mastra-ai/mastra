@@ -198,6 +198,12 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         }
       }
 
+      // Check if a delegation hook called ctx.bail() — stop the loop after this iteration
+      if (!hasFinishedSteps && _internal?._delegationBailed) {
+        hasFinishedSteps = true;
+        _internal._delegationBailed = false;
+      }
+
       if (typedInputData.stepResult) {
         typedInputData.stepResult.isContinued = hasFinishedSteps ? false : typedInputData.stepResult.isContinued;
       }
