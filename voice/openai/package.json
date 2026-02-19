@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "openai": "^5.11.0"
+    "openai": "^5.23.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
