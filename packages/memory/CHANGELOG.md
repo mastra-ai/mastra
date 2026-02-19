@@ -1,5 +1,59 @@
 # @mastra/memory
 
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Update peer dependencies to match core package version bump (1.5.0) ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- Update peer dependencies to match core package version bump (1.4.1) ([#13151](https://github.com/mastra-ai/mastra/pull/13151))
+
+- Update peer dependencies to match core package version bump (1.4.1) ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- Add `instruction` property to observational memory configs ([#13240](https://github.com/mastra-ai/mastra/pull/13240))
+
+  Adds optional `instruction` field to `ObservationConfig` and `ReflectionConfig` that allows users to extend the built-in observer/reflector system prompts with custom guidance.
+
+  Example:
+
+  ```typescript
+  const memory = new ObservationalMemory({
+    model: openai('gpt-4'),
+    observation: {
+      instruction: 'Focus on user preferences about food and dietary restrictions.',
+    },
+    reflection: {
+      instruction: 'Prioritize consolidating health-related observations together.',
+    },
+  });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#13167](https://github.com/mastra-ai/mastra/pull/13167))
+  - Updated dependency [`lru-cache@^11.2.6` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.2.6) (from `^11.2.2`, in `dependencies`)
+
+- Added generic Harness class to @mastra/core for orchestrating agents with modes, state management, built-in tools (ask_user, submit_plan), subagent support, Observational Memory integration, model discovery, and permission-aware tool approval. The Harness provides a reusable foundation for building agent-powered applications with features like thread management, heartbeat monitoring, and event-driven architecture. ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- - Reflection retry logic now attempts compression up to level 3, so reflections more consistently shrink to meet token limits ([#13170](https://github.com/mastra-ai/mastra/pull/13170))
+  - Default target compression reduced from 50% to 25% (`sliceTokenEstimate * 0.75`), making automatic trimming less aggressive
+  - `tokensBuffered` marker now reports the actual slice size rather than total observation tokens, giving accurate size monitoring
+
+  These changes reduce failed reflections and make reported metrics match what is actually being processed.
+
+- Fixed a bug where the OM context window would jump to extremely high token counts (e.g. 16k → 114k) after observation activation. Two issues were causing this: ([#13070](https://github.com/mastra-ai/mastra/pull/13070))
+  - **Token counter included OM metadata parts**: `data-om-activation` marker parts (which contain the full observation text, up to 150k+ characters) were being counted as message tokens when loaded from the database. These parts are never sent to the LLM and are now skipped during token counting.
+  - **Marker duplication on messages**: Activation markers were being added to assistant messages twice — once by the AI SDK stream and once by the persistence layer — doubling every marker and compounding the token inflation. Both `persistMarkerToMessage` and `persistMarkerToStorage` now deduplicate by `type + cycleId` before adding a marker.
+
+- Fixed thread title not being generated for pre-created threads. When threads were created before starting a conversation (e.g., for URL routing or storing metadata), the title stayed as a placeholder because the title generation condition checked whether the thread existed rather than whether it had a title. Threads created without an explicit title now get an empty title instead of a placeholder, and title generation fires whenever a thread has no title. Resolves #13145. ([#13151](https://github.com/mastra-ai/mastra/pull/13151))
+
+- Migrated MastraCode from the prototype harness to the generic CoreHarness from @mastra/core. The createMastraCode function is now fully configurable with optional parameters for modes, subagents, storage, tools, and more. Removed the deprecated prototype harness implementation. ([#13245](https://github.com/mastra-ai/mastra/pull/13245))
+
+- Fixed sub-agent memory context pollution that caused 'Exhausted all fallback models' errors when using Observational Memory with sub-agents. The parent agent's memory context is now preserved across sub-agent tool execution. ([#13051](https://github.com/mastra-ai/mastra/pull/13051))
+
+- Updated dependencies [[`252580a`](https://github.com/mastra-ai/mastra/commit/252580a71feb0e46d0ccab04a70a79ff6a2ee0ab), [`f8e819f`](https://github.com/mastra-ai/mastra/commit/f8e819fabdfdc43d2da546a3ad81ba23685f603d), [`5c75261`](https://github.com/mastra-ai/mastra/commit/5c7526120d936757d4ffb7b82232e1641ebd45cb), [`e27d832`](https://github.com/mastra-ai/mastra/commit/e27d83281b5e166fd63a13969689e928d8605944), [`e37ef84`](https://github.com/mastra-ai/mastra/commit/e37ef8404043c94ca0c8e35ecdedb093b8087878), [`6fdd3d4`](https://github.com/mastra-ai/mastra/commit/6fdd3d451a07a8e7e216c62ac364f8dd8e36c2af), [`10cf521`](https://github.com/mastra-ai/mastra/commit/10cf52183344743a0d7babe24cd24fd78870c354), [`efdb682`](https://github.com/mastra-ai/mastra/commit/efdb682887f6522149769383908f9790c188ab88), [`0dee7a0`](https://github.com/mastra-ai/mastra/commit/0dee7a0ff4c2507e6eb6e6ee5f9738877ebd4ad1), [`04c2c8e`](https://github.com/mastra-ai/mastra/commit/04c2c8e888984364194131aecb490a3d6e920e61), [`02dc07a`](https://github.com/mastra-ai/mastra/commit/02dc07acc4ad42d93335825e3308f5b42266eba2), [`bb7262b`](https://github.com/mastra-ai/mastra/commit/bb7262b7c0ca76320d985b40510b6ffbbb936582), [`cf1c6e7`](https://github.com/mastra-ai/mastra/commit/cf1c6e789b131f55638fed52183a89d5078b4876), [`5ffadfe`](https://github.com/mastra-ai/mastra/commit/5ffadfefb1468ac2612b20bb84d24c39de6961c0), [`1e1339c`](https://github.com/mastra-ai/mastra/commit/1e1339cc276e571a48cfff5014487877086bfe68), [`d03df73`](https://github.com/mastra-ai/mastra/commit/d03df73f8fe9496064a33e1c3b74ba0479bf9ee6), [`79b8f45`](https://github.com/mastra-ai/mastra/commit/79b8f45a6767e1a5c3d56cd3c5b1214326b81661), [`9bbf08e`](https://github.com/mastra-ai/mastra/commit/9bbf08e3c20731c79dea13a765895b9fcf29cbf1), [`0a25952`](https://github.com/mastra-ai/mastra/commit/0a259526b5e1ac11e6efa53db1f140272962af2d), [`ffa5468`](https://github.com/mastra-ai/mastra/commit/ffa546857fc4821753979b3a34e13b4d76fbbcd4), [`3264a04`](https://github.com/mastra-ai/mastra/commit/3264a04e30340c3c5447433300a035ea0878df85), [`6fdd3d4`](https://github.com/mastra-ai/mastra/commit/6fdd3d451a07a8e7e216c62ac364f8dd8e36c2af), [`088d9ba`](https://github.com/mastra-ai/mastra/commit/088d9ba2577518703c52b0dccd617178d9ee6b0d), [`74fbebd`](https://github.com/mastra-ai/mastra/commit/74fbebd918a03832a2864965a8bea59bf617d3a2), [`aea6217`](https://github.com/mastra-ai/mastra/commit/aea621790bfb2291431b08da0cc5e6e150303ae7), [`b6a855e`](https://github.com/mastra-ai/mastra/commit/b6a855edc056e088279075506442ba1d6fa6def9), [`ae408ea`](https://github.com/mastra-ai/mastra/commit/ae408ea7128f0d2710b78d8623185198e7cb19c1), [`17e942e`](https://github.com/mastra-ai/mastra/commit/17e942eee2ba44985b1f807e6208cdde672f82f9), [`2015cf9`](https://github.com/mastra-ai/mastra/commit/2015cf921649f44c3f5bcd32a2c052335f8e49b4), [`7ef454e`](https://github.com/mastra-ai/mastra/commit/7ef454eaf9dcec6de60021c8f42192052dd490d6), [`2be1d99`](https://github.com/mastra-ai/mastra/commit/2be1d99564ce79acc4846071082bff353035a87a), [`2708fa1`](https://github.com/mastra-ai/mastra/commit/2708fa1055ac91c03e08b598869f6b8fb51fa37f), [`ba74aef`](https://github.com/mastra-ai/mastra/commit/ba74aef5716142dbbe931351f5243c9c6e4128a9), [`ba74aef`](https://github.com/mastra-ai/mastra/commit/ba74aef5716142dbbe931351f5243c9c6e4128a9), [`ec53e89`](https://github.com/mastra-ai/mastra/commit/ec53e8939c76c638991e21af762e51378eff7543), [`9b5a8cb`](https://github.com/mastra-ai/mastra/commit/9b5a8cb13e120811b0bf14140ada314f1c067894), [`607e66b`](https://github.com/mastra-ai/mastra/commit/607e66b02dc7f531ee37799f3456aa2dc0ca7ac5), [`a215d06`](https://github.com/mastra-ai/mastra/commit/a215d06758dcf590eabfe0b7afd4ae39bdbf082c), [`6909c74`](https://github.com/mastra-ai/mastra/commit/6909c74a7781e0447d475e9dbc1dc871b700f426), [`192438f`](https://github.com/mastra-ai/mastra/commit/192438f8a90c4f375e955f8ff179bf8dc6821a83)]:
+  - @mastra/core@1.5.0-alpha.0
+
 ## 1.3.0
 
 ### Minor Changes

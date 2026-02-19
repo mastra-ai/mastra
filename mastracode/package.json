@@ -1,0 +1,92 @@
+{
+  "name": "mastracode",
+  "version": "0.1.0-alpha.0",
+  "description": "",
+  "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "mastracode"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "mastracode": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "cli": "tsx src/main.ts",
+    "check": "tsc --noEmit",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "prepack": "pnpx tsx ../scripts/generate-package-docs.ts",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/anthropic": "latest",
+    "@ai-sdk/openai": "latest",
+    "@ast-grep/napi": "latest",
+    "@mariozechner/pi-tui": "latest",
+    "@mastra/core": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@tavily/core": "latest",
+    "ai": "latest",
+    "chalk": "latest",
+    "cli-highlight": "latest",
+    "execa": "^9.6.1",
+    "fastest-levenshtein": "latest",
+    "js-tiktoken": "^1.0.21",
+    "js-yaml": "latest",
+    "strip-ansi": "^7.1.2",
+    "tree-kill": "latest",
+    "vscode-jsonrpc": "latest",
+    "vscode-languageserver-protocol": "latest"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "22.19.7",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "eslint": "^9.37.0",
+    "typescript-eslint": "^8.51.0",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "tsx": "^4.19.4",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

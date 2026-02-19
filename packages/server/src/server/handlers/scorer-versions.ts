@@ -260,6 +260,9 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
         status: 'published',
       });
 
+      // Clear the editor cache so subsequent requests see the new active version
+      mastra.getEditor()?.scorer.clearCache(scorerId);
+
       return {
         success: true,
         message: `Version ${version.versionNumber} is now active`,
@@ -352,6 +355,9 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
         scorer.activeVersionId,
       );
 
+      // Clear the editor cache so subsequent requests see the updated config
+      mastra.getEditor()?.scorer.clearCache(scorerId);
+
       return newVersion;
     } catch (error) {
       return handleError(error, 'Error restoring scorer version');
@@ -407,6 +413,9 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
       }
 
       await scorerStore.deleteVersion(versionId);
+
+      // Clear the editor cache so subsequent requests see the updated config
+      mastra.getEditor()?.scorer.clearCache(scorerId);
 
       return {
         success: true,
