@@ -6,7 +6,7 @@ Welcome to Mastra! We welcome contributions of any size and skill level. Thanks 
 >
 > **For new contributors:** Take a look at [https://github.com/firstcontributions/first-contributions](https://github.com/firstcontributions/first-contributions) for helpful information on contributing to open source projects.
 
-## Contributor Guidelines
+## Contributor guidelines
 
 Please read the guidance below about what to do if you:
 
@@ -38,7 +38,7 @@ Be sure to include a title and clear description, as much relevant information a
 
 Read the [documentation contribution guidelines](./docs/CONTRIBUTING.md) for more details.
 
-## Minimal Reproduction
+## Minimal reproduction
 
 A minimal reproduction is a simplified Mastra project that demonstrates a bug with the least amount of code necessary. This helps isolate the issue and makes it easier for maintainers to verify and fix the problem. A minimal reproduction also proves that the bug is not caused by other parts of your codebase or environment. Lastly, creating a minimal reproduction often helps you identify the root cause of the issue yourself.
 
@@ -114,7 +114,7 @@ Create a public GitHub repository with your reproduction:
 
 **Build vs runtime issues**:
 
-- Clarify if the bug occurs during `pnpm build`, `pnpm dev`, or at runtime
+- Clarify if the bug occurs during `mastra build`, `mastra dev`, or at runtime
 - Include build output if it's a build-time error
 
 **Monorepo context**:

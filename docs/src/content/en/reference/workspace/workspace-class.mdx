@@ -284,22 +284,6 @@ const context = workspace.getPathContext();
 // { filesystem?, sandbox?, instructions }
 ```
 
-**Returns:** `PathContext`
-
-```typescript
-interface PathContext {
-  filesystem?: {
-    provider: string;
-    basePath?: string;
-  };
-  sandbox?: {
-    provider: string;
-    workingDirectory?: string;
-  };
-  instructions: string;
-}
-```
-
 The `instructions` field contains provider-generated descriptions combined from the filesystem and sandbox. These instructions are included in tool descriptions to help agents understand the execution context.
 
 #### `getToolsConfig()`
@@ -348,10 +332,3 @@ Added when BM25 or vector search is configured:
 | `mastra_workspace_index` | Index content for search. Associates content with a path for later retrieval. |
 
 The `index` tool is excluded when the filesystem is in read-only mode.
-
-## Related
-
-- [Workspace overview](/docs/workspace/overview)
-- [Search and indexing](/docs/workspace/search)
-- [Filesystem reference](/reference/workspace/filesystem)
-- [Sandbox reference](/reference/workspace/sandbox)
