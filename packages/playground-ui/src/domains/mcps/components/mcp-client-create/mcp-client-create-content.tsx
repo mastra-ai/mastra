@@ -68,6 +68,13 @@ export function MCPClientCreateContent({
     });
   }, []);
 
+  const handleDescriptionChange = useCallback((toolName: string, description: string) => {
+    setSelectedTools(prev => ({
+      ...prev,
+      [toolName]: { ...prev[toolName], description },
+    }));
+  }, []);
+
   const handlePreFillFromServer = (serverId: string) => {
     const host = window.MASTRA_SERVER_HOST;
     const port = window.MASTRA_SERVER_PORT;
@@ -149,6 +156,7 @@ export function MCPClientCreateContent({
           tryConnect={tryConnect}
           selectedTools={selectedTools}
           onToggleTool={onAdd ? handleToggleTool : undefined}
+          onDescriptionChange={onAdd ? handleDescriptionChange : undefined}
         />
       </MCPClientEditLayout>
     </div>

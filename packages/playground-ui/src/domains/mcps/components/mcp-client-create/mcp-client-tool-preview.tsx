@@ -4,6 +4,7 @@ import { Txt } from '@/ds/components/Txt';
 import { Spinner } from '@/ds/components/Spinner';
 import { Entity, EntityContent, EntityDescription, EntityIcon, EntityName } from '@/ds/components/Entity';
 import { Switch } from '@/ds/components/Switch';
+import { cn } from '@/lib/utils';
 
 import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 
@@ -13,6 +14,7 @@ interface MCPClientToolPreviewProps {
   tryConnect: TryConnectMcpMutation;
   selectedTools?: Record<string, { description?: string }>;
   onToggleTool?: (toolName: string, description?: string) => void;
+  onDescriptionChange?: (toolName: string, description: string) => void;
 }
 
 export function MCPClientToolPreview({
@@ -21,6 +23,7 @@ export function MCPClientToolPreview({
   tryConnect,
   selectedTools,
   onToggleTool,
+  onDescriptionChange,
 }: MCPClientToolPreviewProps) {
   if (serverType === 'stdio') {
     return (
@@ -70,7 +73,12 @@ export function MCPClientToolPreview({
       )}
 
       {tryConnect.isSuccess && tryConnect.data.tools.length > 0 && (
-        <ToolList tools={tryConnect.data.tools} selectedTools={selectedTools} onToggleTool={onToggleTool} />
+        <ToolList
+          tools={tryConnect.data.tools}
+          selectedTools={selectedTools}
+          onToggleTool={onToggleTool}
+          onDescriptionChange={onDescriptionChange}
+        />
       )}
     </div>
   );
@@ -84,10 +92,12 @@ function ToolList({
   tools,
   selectedTools = {},
   onToggleTool,
+  onDescriptionChange,
 }: {
   tools: { name: string; description?: string }[];
   selectedTools?: Record<string, { description?: string }>;
   onToggleTool?: (toolName: string, description?: string) => void;
+  onDescriptionChange?: (toolName: string, description: string) => void;
 }) {
   const selectedCount = Object.keys(selectedTools).length;
 
@@ -105,6 +115,7 @@ function ToolList({
       <div className="flex flex-col gap-2 pt-6">
         {tools.map(tool => {
           const isSelected = tool.name in selectedTools;
+          const isDisabled = !onDescriptionChange || !isSelected;
 
           return (
             <Entity key={tool.name}>
@@ -113,7 +124,22 @@ function ToolList({
               </EntityIcon>
               <EntityContent>
                 <EntityName>{tool.name}</EntityName>
-                {tool.description && <EntityDescription>{tool.description}</EntityDescription>}
+                <EntityDescription>
+                  <input
+                    type="text"
+                    disabled={isDisabled}
+                    className={cn(
+                      'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                      !isDisabled && 'border-border1 border-dashed',
+                    )}
+                    value={
+                      isSelected
+                        ? (selectedTools[tool.name]?.description ?? tool.description ?? '')
+                        : (tool.description ?? '')
+                    }
+                    onChange={e => onDescriptionChange?.(tool.name, e.target.value)}
+                  />
+                </EntityDescription>
               </EntityContent>
               {onToggleTool && (
                 <Switch checked={isSelected} onCheckedChange={() => onToggleTool(tool.name, tool.description)} />
