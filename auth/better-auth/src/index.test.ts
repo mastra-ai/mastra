@@ -29,11 +29,22 @@ describe('MastraAuthBetterAuth', () => {
 
   const mockRequest = {
     header: vi.fn(),
+    headers: new Headers(),
   } as any;
+
+  /**
+   * Mock a standard Web Request (what c.req.raw returns in Hono).
+   * Does NOT have a .header() method — only .headers (Headers object).
+   */
+  const mockRawRequest = (headers: Record<string, string> = {}) =>
+    ({
+      headers: new Headers(headers),
+    }) as unknown as any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequest.header.mockReset();
+    mockRequest.headers = new Headers();
   });
 
   describe('initialization', () => {
@@ -70,10 +81,7 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: mockUser,
       });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Authorization') return 'Bearer test-token';
-        return undefined;
-      });
+      mockRequest.headers = new Headers({ Authorization: 'Bearer test-token' });
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -89,7 +97,6 @@ describe('MastraAuthBetterAuth', () => {
 
     it('should return null when session is not found', async () => {
       mockAuth.api.getSession.mockResolvedValue(null);
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -101,7 +108,6 @@ describe('MastraAuthBetterAuth', () => {
 
     it('should return null when getSession throws an error', async () => {
       mockAuth.api.getSession.mockRejectedValue(new Error('Session expired'));
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -116,7 +122,6 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: null,
       });
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -131,7 +136,6 @@ describe('MastraAuthBetterAuth', () => {
         session: null,
         user: mockUser,
       });
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -146,10 +150,7 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: mockUser,
       });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Authorization') return 'Bearer existing-token';
-        return undefined;
-      });
+      mockRequest.headers = new Headers({ Authorization: 'Bearer existing-token' });
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -172,10 +173,7 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: mockUser,
       });
-      mockRequest.header.mockImplementation((name: string) => {
-        if (name === 'Cookie') return 'better-auth.session_token=abc123';
-        return undefined;
-      });
+      mockRequest.headers = new Headers({ Cookie: 'better-auth.session_token=abc123' });
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -191,7 +189,6 @@ describe('MastraAuthBetterAuth', () => {
         session: mockSession,
         user: mockUser,
       });
-      mockRequest.header.mockReturnValue(undefined);
 
       const auth = new MastraAuthBetterAuth({
         auth: mockAuth as any,
@@ -200,6 +197,61 @@ describe('MastraAuthBetterAuth', () => {
 
       const call = mockAuth.api.getSession.mock.calls[0][0];
       expect(call.headers.get('Authorization')).toBe('Bearer my-bearer-token');
+    });
+
+    it('should work with raw Request (no .header() method)', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const rawReq = mockRawRequest({ Authorization: 'Bearer raw-token' });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      const result = await auth.authenticateToken('raw-token', rawReq);
+
+      expect(result).toEqual({ session: mockSession, user: mockUser });
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Authorization')).toBe('Bearer raw-token');
+    });
+
+    it('should read Cookie from raw Request', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      const rawReq = mockRawRequest({ Cookie: 'better-auth.session_token=raw123' });
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      await auth.authenticateToken('test-token', rawReq);
+
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Cookie')).toBe('better-auth.session_token=raw123');
+    });
+
+    it('should handle HonoRequest with .raw property', async () => {
+      mockAuth.api.getSession.mockResolvedValue({
+        session: mockSession,
+        user: mockUser,
+      });
+      // Simulate HonoRequest which has a .raw property pointing to the underlying Request
+      const honoReq = {
+        raw: new Request('http://localhost/test', {
+          headers: { Authorization: 'Bearer hono-token' },
+        }),
+      } as any;
+
+      const auth = new MastraAuthBetterAuth({
+        auth: mockAuth as any,
+      });
+      const result = await auth.authenticateToken('hono-token', honoReq);
+
+      expect(result).toEqual({ session: mockSession, user: mockUser });
+      const call = mockAuth.api.getSession.mock.calls[0][0];
+      expect(call.headers.get('Authorization')).toBe('Bearer hono-token');
     });
   });
 
