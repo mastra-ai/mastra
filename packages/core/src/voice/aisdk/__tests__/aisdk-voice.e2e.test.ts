@@ -11,12 +11,7 @@ describe('AI SDK Voice Integration Tests', () => {
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
-    try {
-      mkdirSync(outputDir, { recursive: true });
-    } catch (err) {
-      // Ignore if directory already exists
-      console.log('Directory already exists: ', err);
-    }
+    mkdirSync(outputDir, { recursive: true });
   });
 
   let speech: AISDKSpeech;
@@ -98,9 +93,6 @@ describe('AI SDK Voice Integration Tests', () => {
     }, 10000);
 
     it('should throw when trying to listen', async () => {
-      const audioStream = new PassThrough();
-      audioStream.end('test');
-
       await expect(speech.listen()).rejects.toThrow('AI SDK speech models do not support transcription');
     });
 
@@ -137,19 +129,13 @@ describe('AI SDK Voice Integration Tests', () => {
     }, 15000);
 
     it('should transcribe audio file', async () => {
-      // Path from packages/core to voice/openai
-      try {
-        const speechStream = await speech.speak('This is a transcription test');
-        const text = await transcription.listen(speechStream);
+      const speechStream = await speech.speak('This is a transcription test');
+      const text = await transcription.listen(speechStream);
 
-        expect(text).toBeTruthy();
-        expect(typeof text).toBe('string');
-        expect(text.length).toBeGreaterThan(0);
-        console.log('Transcribed fixture:', text);
-      } catch (err) {
-        // If the fixture file doesn't exist or format detection fails, skip
-        console.log('Fixture file test skipped:', err);
-      }
+      expect(text).toBeTruthy();
+      expect(typeof text).toBe('string');
+      expect(text.length).toBeGreaterThan(0);
+      console.log('Transcribed fixture:', text);
     }, 15000);
 
     it('should handle provider-specific options', async () => {
