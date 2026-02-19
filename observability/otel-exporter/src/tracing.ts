@@ -92,9 +92,28 @@ export class OtelExporter extends BaseExporter {
 
     this.config = config;
 
-    // Set up OpenTelemetry diagnostics if debug mode
+    // Set up OpenTelemetry diagnostics if debug mode.
+    // Use a filtered logger that suppresses the massive payload dumps
+    // from OTLPExportDelegate ("items to be sent" with full span objects).
     if (config.logLevel === 'debug') {
-      diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+      const inner = new DiagConsoleLogger();
+      diag.setLogger(
+        {
+          verbose: (message: string, ...args: unknown[]) => inner.verbose(message, ...args),
+          debug: (message: string, ...args: unknown[]) => {
+            // Suppress the giant payload logged by OTLPExportDelegate
+            if (message.includes('items to be sent')) {
+              inner.debug(`${message} (${Array.isArray(args[0]) ? args[0].length : '?'} items, payload omitted)`);
+              return;
+            }
+            inner.debug(message, ...args);
+          },
+          info: (message: string, ...args: unknown[]) => inner.info(message, ...args),
+          warn: (message: string, ...args: unknown[]) => inner.warn(message, ...args),
+          error: (message: string, ...args: unknown[]) => inner.error(message, ...args),
+        },
+        DiagLogLevel.DEBUG,
+      );
     }
   }
 
