@@ -292,9 +292,6 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       const processors2 = await memory2.getInputProcessors();
       const semanticRecall2 = processors2.find(p => p.id === 'semantic-recall') as SemanticRecall;
 
-      // Record call count before second processInput (dimension probes may have added calls)
-      const callCountBeforeSecondProcess = vi.mocked(mockEmbedder.doEmbed).mock.calls.length;
-
       const messageList2 = new MessageList();
       messageList2.add([message], 'input');
 
