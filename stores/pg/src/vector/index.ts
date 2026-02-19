@@ -347,7 +347,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
           ${filterQuery}
-          ORDER BY id
+          ORDER BY vector_id
           LIMIT $${filterValues.length + 1}`;
         const result = await client.query(query, [...filterValues, topK]);
 

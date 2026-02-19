@@ -280,9 +280,9 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
   }: OpenSearchVectorParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
-        id: 'VECTOR_OPENSEARCH_QUERY_MISSING_VECTOR',
+        id: createVectorErrorId('OPENSEARCH', 'QUERY', 'MISSING_VECTOR'),
         text: 'queryVector is required for OpenSearch queries. Metadata-only queries are not supported by this vector store.',
-        domain: ErrorDomain.MASTRA_VECTOR,
+        domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         details: { indexName },
       });
