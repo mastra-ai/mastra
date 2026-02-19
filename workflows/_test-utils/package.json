@@ -5,9 +5,7 @@
   "type": "module",
   "main": "src/index.ts",
   "private": true,
-  "scripts": {
-    "test": "vitest run"
-  },
+  "scripts": {},
   "exports": {
     ".": "./src/index.ts"
   },
