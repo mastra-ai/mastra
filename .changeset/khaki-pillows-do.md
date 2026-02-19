@@ -12,10 +12,11 @@ Added MCP server storage and editor support. MCP server configurations can now b
 
 ```ts
 // Register tools with Mastra
+const editor = new MastraEditor();
 const mastra = new Mastra({
   tools: { getWeather: weatherTool, calculate: calculatorTool },
   storage: new LibSQLStore({ url: ':memory:' }),
-  editor: new MastraEditor(),
+  editor,
 });
 
 // Store an MCP server config referencing tools by ID
