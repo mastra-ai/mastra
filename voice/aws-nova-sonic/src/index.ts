@@ -749,6 +749,12 @@ export class NovaSonicVoice extends MastraVoice<
       this.log('Connected to AWS Bedrock Nova 2 Sonic');
     } catch (error) {
       this.state = 'disconnected';
+      if (this.client) {
+        if (typeof this.client.destroy === 'function') {
+          this.client.destroy();
+        }
+        this.client = undefined;
+      }
       this.log('Connection error:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error during connection';
@@ -791,13 +797,12 @@ export class NovaSonicVoice extends MastraVoice<
           const now = Date.now();
           const timeSinceLastEvent = now - lastEventTime;
           lastEventTime = now;
-          this.log(`[Stream] Received chunk #${eventCount}, length: ${textResponse.length}, time since last: ${timeSinceLastEvent}ms, preview: ${textResponse.substring(0, 200)}`);
+          this.log(`[Stream] Received chunk #${eventCount}, length: ${textResponse.length}, time since last: ${timeSinceLastEvent}ms`);
           
           try {
             const jsonResponse = JSON.parse(textResponse);
             this.log(`[Stream] ========================================`);
             this.log(`[Stream] Parsed JSON response, keys: ${Object.keys(jsonResponse).join(', ')}`);
-            this.log(`[Stream] Full response (first 500 chars): ${JSON.stringify(jsonResponse).substring(0, 500)}`);
             
             // AWS wraps most events in an 'event' property
             // Structure: { event: { textOutput: ..., audioOutput: ..., etc } }
@@ -813,7 +818,7 @@ export class NovaSonicVoice extends MastraVoice<
                 this.log(`[Stream] → Handling contentStart`);
                 this.handleServerEvent({ contentStart: jsonResponse.event.contentStart } as NovaSonicServerEvent);
               } else if (jsonResponse.event.textOutput) {
-                this.log(`[Stream] → Handling textOutput: ${JSON.stringify(jsonResponse.event.textOutput).substring(0, 200)}`);
+                this.log(`[Stream] → Handling textOutput, content length: ${jsonResponse.event.textOutput?.content?.length ?? 0}`);
                 this.handleServerEvent({ textOutput: jsonResponse.event.textOutput } as NovaSonicServerEvent);
               } else if (jsonResponse.event.audioOutput) {
                 this.handleServerEvent({ audioOutput: jsonResponse.event.audioOutput } as NovaSonicServerEvent);
@@ -858,13 +863,13 @@ export class NovaSonicVoice extends MastraVoice<
                     }
                   }
                 } else if (Object.keys(jsonResponse).length > 0) {
-                  this.log(`[Stream] Unknown event structure:`, JSON.stringify(jsonResponse, null, 2));
+                  this.log(`[Stream] Unknown event structure, keys:`, Object.keys(jsonResponse).join(', '));
                 }
               }
             } else {
               // Handle events that might be at top level (usageEvent, completionEnd, etc.)
               if (this.debug) {
-                this.log('[Stream] Received event without "event" wrapper:', JSON.stringify(jsonResponse, null, 2));
+                this.log('[Stream] Received event without "event" wrapper, keys:', Object.keys(jsonResponse).join(', '));
               }
               
               // Check if it's a usageEvent
@@ -886,7 +891,7 @@ export class NovaSonicVoice extends MastraVoice<
               // Also check if completionEnd might be directly in jsonResponse (not wrapped)
               if (!jsonResponse.event && !jsonResponse.completionEnd && !jsonResponse.usageEvent) {
                 // Log the entire response to see what we're missing
-                this.log('[Stream] Received response without event wrapper, full structure:', JSON.stringify(jsonResponse, null, 2));
+                this.log('[Stream] Received response without event wrapper, keys:', Object.keys(jsonResponse).join(', '));
               }
               
               // Check if it's a completionStart at top level or in event
@@ -1020,7 +1025,7 @@ export class NovaSonicVoice extends MastraVoice<
    */
   private handleServerEvent(event: NovaSonicServerEvent): void {
     if (this.debug) {
-      this.log('Received event:', JSON.stringify(event, null, 2));
+      this.log('Received event, keys:', Object.keys(event).join(', '));
     }
 
     // Handle content start
@@ -1425,7 +1430,7 @@ export class NovaSonicVoice extends MastraVoice<
       this.log(`[sendClientEvent] Signal sent`);
       
       if (this.debug) {
-        this.log('Sent client event:', JSON.stringify(event, null, 2));
+        this.log('Sent client event, keys:', Object.keys(event).join(', '));
       }
     } catch (error) {
       throw new NovaSonicError(
@@ -1470,6 +1475,16 @@ export class NovaSonicVoice extends MastraVoice<
       stream.end();
     }
     this.speakerStreams.clear();
+
+    // Destroy the Bedrock client to release HTTP/2 sessions
+    if (this.client) {
+      if (typeof this.client.destroy === 'function') {
+        this.client.destroy();
+      }
+      this.client = undefined;
+    }
+
+    this.stream = undefined;
 
     this.log('Disconnected from AWS Bedrock Nova 2 Sonic');
   }
