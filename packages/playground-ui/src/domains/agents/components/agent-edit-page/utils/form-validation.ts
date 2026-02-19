@@ -161,6 +161,15 @@ export const agentFormSchema = z.object({
         name: z.string().min(1),
         description: z.string().optional(),
         servers: z.record(z.string(), z.any()),
+        selectedTools: z
+          .record(
+            z.string(),
+            z.object({
+              description: z.string().optional(),
+            }),
+          )
+          .optional()
+          .default({}),
       }),
     )
     .optional()
