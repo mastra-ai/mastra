@@ -171,56 +171,6 @@ filesystem.setAllowedPaths([]);
   ]}
 />
 
-### `isPathAllowed(targetPath)`
-
-Check whether an absolute path is within `basePath` or any allowed path.
-
-```typescript
-const fs = new LocalFilesystem({
-  basePath: '/project',
-  allowedPaths: ['/home/user/.config'],
-});
-
-fs.isPathAllowed('/project/src/index.ts');         // true (within basePath)
-fs.isPathAllowed('/home/user/.config/app.json');   // true (within allowedPaths)
-fs.isPathAllowed('/etc/passwd');                    // false
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
-    {
-      name: "targetPath",
-      type: "string",
-      description: "Absolute path to check",
-    },
-  ]}
-/>
-
-**Returns:** `boolean`
-
-### `assertPathAllowed(targetPath)`
-
-Assert that an absolute path is within `basePath` or any allowed path. Throws `PermissionError` if not.
-
-```typescript
-filesystem.assertPathAllowed('/project/src/index.ts'); // OK
-filesystem.assertPathAllowed('/etc/passwd');            // throws PermissionError
-```
-
-**Parameters:**
-
-<PropertiesTable
-  content={[
-    {
-      name: "targetPath",
-      type: "string",
-      description: "Absolute path to check",
-    },
-  ]}
-/>
-
 ### `readFile(path, options?)`
 
 Read file contents.
