@@ -1,6 +1,9 @@
 import type { TestProject } from 'vitest/node';
 import type { Mastra } from '@mastra/core/mastra';
 import type { Server } from 'http';
+import { randomUUID } from 'crypto';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import getPort from 'get-port';
@@ -109,9 +112,6 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
 
     // Create vector store (use file-based temp db because libsql vector extensions
     // may not work reliably with :memory: for cross-operation queries)
-    const { randomUUID } = await import('crypto');
-    const { tmpdir } = await import('os');
-    const { join } = await import('path');
     const vectorDbPath = `file:${join(tmpdir(), `mastra-vector-${randomUUID()}.db`)}`;
     const testVector = new LibSQLVector({
       id: `${storageId}-vector`,

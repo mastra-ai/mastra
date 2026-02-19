@@ -91,11 +91,10 @@ export function createWorkflowTests(config: WorkflowTestConfig = {}) {
         expect(runsResponse.runs).toBeDefined();
         expect(Array.isArray(runsResponse.runs)).toBe(true);
         expect(runsResponse.runs.length).toBeGreaterThan(0);
-        // Verify the most recent run has the expected snapshot
-        const latestRun = runsResponse.runs[0];
-        expect(latestRun).toBeDefined();
-        expect(latestRun.runId).toBeDefined();
-        const snapshot = typeof latestRun.snapshot === 'string' ? JSON.parse(latestRun.snapshot) : latestRun.snapshot;
+        // Find the specific run by ID rather than assuming ordering
+        const foundRun = runsResponse.runs.find(r => r.runId === run.runId);
+        expect(foundRun).toBeDefined();
+        const snapshot = typeof foundRun!.snapshot === 'string' ? JSON.parse(foundRun!.snapshot) : foundRun!.snapshot;
         expect(snapshot.status).toBe('success');
         expect(snapshot.result).toEqual({ result: 3 });
       });
