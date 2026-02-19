@@ -138,6 +138,12 @@ export class Tool<
   providerOptions?: Record<string, Record<string, unknown>>;
 
   /**
+   * Optional function to transform the tool's raw output before sending it to the model.
+   * The raw result is still available for application logic; only the model sees the transformed version.
+   */
+  toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
    * Optional MCP-specific properties including annotations and metadata.
    * Only relevant when the tool is being used in an MCP context.
    * @example
@@ -183,6 +189,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
+    this.toModelOutput = opts.toModelOutput;
     this.mcp = opts.mcp;
 
     // Tools receive two parameters:

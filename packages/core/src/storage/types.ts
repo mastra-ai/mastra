@@ -1955,8 +1955,8 @@ export interface CreateDatasetInput {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetInput {
@@ -1964,8 +1964,8 @@ export interface UpdateDatasetInput {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemInput {

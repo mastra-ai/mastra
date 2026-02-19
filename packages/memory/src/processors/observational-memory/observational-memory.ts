@@ -464,6 +464,8 @@ interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
+  /** Custom instructions to append to the Observer's system prompt */
+  instruction?: string;
 }
 
 interface ResolvedReflectionConfig {
@@ -479,6 +481,8 @@ interface ResolvedReflectionConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
+  /** Custom instructions to append to the Reflector's system prompt */
+  instruction?: string;
 }
 
 /**
@@ -1099,6 +1103,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
+      instruction: config.observation?.instruction,
     };
 
     // Resolve reflection config with defaults
@@ -1127,6 +1132,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           ),
+      instruction: config.reflection?.instruction,
     };
 
     this.tokenCounter = new TokenCounter();
@@ -1430,7 +1436,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObserverAgent(): Agent {
     if (!this.observerAgent) {
-      const systemPrompt = buildObserverSystemPrompt();
+      const systemPrompt = buildObserverSystemPrompt(false, this.observationConfig.instruction);
 
       this.observerAgent = new Agent({
         id: 'observational-memory-observer',
@@ -1447,7 +1453,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getReflectorAgent(): Agent {
     if (!this.reflectorAgent) {
-      const systemPrompt = buildReflectorSystemPrompt();
+      const systemPrompt = buildReflectorSystemPrompt(this.reflectionConfig.instruction);
 
       this.reflectorAgent = new Agent({
         id: 'observational-memory-reflector',
@@ -2106,7 +2112,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
     abortSignal?: AbortSignal,
-    options?: { skipContinuationHints?: boolean },
+    options?: { skipContinuationHints?: boolean; requestContext?: RequestContext },
   ): Promise<{
     observations: string;
     currentTask?: string;
@@ -2125,6 +2131,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.observationConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
+          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
         }),
       abortSignal,
     );
@@ -2159,6 +2166,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     messagesByThread: Map<string, MastraDBMessage[]>,
     threadOrder: string[],
     abortSignal?: AbortSignal,
+    requestContext?: RequestContext,
   ): Promise<{
     results: Map<
       string,
@@ -2175,7 +2183,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       id: 'multi-thread-observer',
       name: 'multi-thread-observer',
       model: this.observationConfig.model,
-      instructions: buildObserverSystemPrompt(true),
+      instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
     });
 
     const prompt = buildMultiThreadObserverPrompt(existingObservations, messagesByThread, threadOrder);
@@ -2199,6 +2207,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           },
           providerOptions: this.observationConfig.providerOptions as any,
           ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
         }),
       abortSignal,
     );
@@ -2263,7 +2272,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observationTokensThreshold?: number,
     abortSignal?: AbortSignal,
     skipContinuationHints?: boolean,
-    compressionStartLevel?: 0 | 1 | 2,
+    compressionStartLevel?: 0 | 1 | 2 | 3,
+    requestContext?: RequestContext,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -2279,84 +2289,100 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Track total usage across attempts
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
-    // First attempt — use the provided start level (0 for regular reflection, 1 for buffered)
-    const firstLevel = compressionStartLevel ?? 0;
-    const retryLevel = Math.min(firstLevel + 1, 2) as 0 | 1 | 2;
-    let prompt = buildReflectorPrompt(observations, manualPrompt, firstLevel, skipContinuationHints);
-    omDebug(
-      `[OM:callReflector] starting first attempt: originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
-    );
+    // Attempt reflection with escalating compression levels.
+    // Start at the provided level and retry up to level 3 if compression fails.
+    let currentLevel: 0 | 1 | 2 | 3 = compressionStartLevel ?? 0;
+    const maxLevel: 0 | 1 | 2 | 3 = 3;
+    let parsed: ReturnType<typeof parseReflectorOutput> = { observations: '', suggestedContinuation: undefined };
+    let reflectedTokens = 0;
+    let attemptNumber = 0;
 
-    let chunkCount = 0;
-    const generatePromise = agent.generate(prompt, {
-      modelSettings: {
-        ...this.reflectionConfig.modelSettings,
-      },
-      providerOptions: this.reflectionConfig.providerOptions as any,
-      ...(abortSignal ? { abortSignal } : {}),
-      onChunk(chunk) {
-        chunkCount++;
-        if (chunkCount === 1 || chunkCount % 50 === 0) {
-          const preview =
-            chunk.type === 'text-delta'
-              ? ` text="${(chunk as any).textDelta?.slice(0, 80)}..."`
-              : chunk.type === 'tool-call'
-                ? ` tool=${(chunk as any).toolName}`
-                : '';
-          omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-        }
-      },
-      onFinish(event) {
-        omDebug(
-          `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-        );
-      },
-      onAbort(event) {
-        omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-      },
-      onError({ error }) {
-        omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-      },
-    });
+    while (currentLevel <= maxLevel) {
+      attemptNumber++;
+      const isRetry = attemptNumber > 1;
 
-    let result = await this.withAbortCheck(async () => {
-      return await generatePromise;
-    }, abortSignal);
+      const prompt = buildReflectorPrompt(observations, manualPrompt, currentLevel, skipContinuationHints);
+      omDebug(
+        `[OM:callReflector] ${isRetry ? `retry #${attemptNumber - 1}` : 'first attempt'}: level=${currentLevel}, originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
+      );
 
-    omDebug(
-      `[OM:callReflector] first attempt returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}, keys=${Object.keys(result).join(',')}`,
-    );
+      let chunkCount = 0;
+      const result = await this.withAbortCheck(
+        () =>
+          agent.generate(prompt, {
+            modelSettings: {
+              ...this.reflectionConfig.modelSettings,
+            },
+            providerOptions: this.reflectionConfig.providerOptions as any,
+            ...(abortSignal ? { abortSignal } : {}),
+            ...(requestContext ? { requestContext } : {}),
+            ...(attemptNumber === 1
+              ? {
+                  onChunk(chunk: any) {
+                    chunkCount++;
+                    if (chunkCount === 1 || chunkCount % 50 === 0) {
+                      const preview =
+                        chunk.type === 'text-delta'
+                          ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                          : chunk.type === 'tool-call'
+                            ? ` tool=${chunk.toolName}`
+                            : '';
+                      omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                    }
+                  },
+                  onFinish(event: any) {
+                    omDebug(
+                      `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                    );
+                  },
+                  onAbort(event: any) {
+                    omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                  },
+                  onError({ error }: { error: unknown }) {
+                    omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                  },
+                }
+              : {}),
+          }),
+        abortSignal,
+      );
 
-    // Accumulate usage from first attempt
-    const firstUsage = result.totalUsage ?? result.usage;
-    if (firstUsage) {
-      totalUsage.inputTokens += firstUsage.inputTokens ?? 0;
-      totalUsage.outputTokens += firstUsage.outputTokens ?? 0;
-      totalUsage.totalTokens += firstUsage.totalTokens ?? 0;
-    }
+      omDebug(
+        `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
+      );
 
-    let parsed = parseReflectorOutput(result.text);
-    let reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
-    omDebug(
-      `[OM:callReflector] first attempt parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}`,
-    );
+      // Accumulate usage
+      const usage = result.totalUsage ?? result.usage;
+      if (usage) {
+        totalUsage.inputTokens += usage.inputTokens ?? 0;
+        totalUsage.outputTokens += usage.outputTokens ?? 0;
+        totalUsage.totalTokens += usage.totalTokens ?? 0;
+      }
 
-    // Check if compression was successful (reflected tokens should be below target threshold)
-    if (!validateCompression(reflectedTokens, targetThreshold)) {
-      // Emit failed marker for first attempt, then start marker for retry
+      parsed = parseReflectorOutput(result.text);
+      reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
+      omDebug(
+        `[OM:callReflector] attempt #${attemptNumber} parsed: reflectedTokens=${reflectedTokens}, targetThreshold=${targetThreshold}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}, parsedObsLen=${parsed.observations?.length}`,
+      );
+
+      // If compression succeeded or we've exhausted all levels, stop
+      if (validateCompression(reflectedTokens, targetThreshold) || currentLevel >= maxLevel) {
+        break;
+      }
+
+      // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
         const failedMarker = this.createObservationFailedMarker({
           cycleId: streamContext.cycleId,
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
-          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying with compression guidance`,
+          error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
         await streamContext.writer.custom(failedMarker).catch(() => {});
 
-        // Generate new cycleId for retry
         const retryCycleId = crypto.randomUUID();
         streamContext.cycleId = retryCycleId;
 
@@ -2368,42 +2394,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           threadId: streamContext.threadId,
           threadIds: [streamContext.threadId],
         });
-        // Update startedAt from the marker that was just created
         streamContext.startedAt = startMarker.data.startedAt;
         await streamContext.writer.custom(startMarker).catch(() => {});
       }
 
-      // Retry with next compression level
-      prompt = buildReflectorPrompt(observations, manualPrompt, retryLevel, skipContinuationHints);
-      omDebug(`[OM:callReflector] starting retry: promptLen=${prompt.length}`);
-      result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.reflectionConfig.modelSettings,
-            },
-            providerOptions: this.reflectionConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-          }),
-        abortSignal,
-      );
-      omDebug(
-        `[OM:callReflector] retry returned: textLen=${result.text?.length}, inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
-      );
-
-      // Accumulate usage from retry attempt
-      const retryUsage = result.totalUsage ?? result.usage;
-      if (retryUsage) {
-        totalUsage.inputTokens += retryUsage.inputTokens ?? 0;
-        totalUsage.outputTokens += retryUsage.outputTokens ?? 0;
-        totalUsage.totalTokens += retryUsage.totalTokens ?? 0;
-      }
-
-      parsed = parseReflectorOutput(result.text);
-      reflectedTokens = this.tokenCounter.countObservations(parsed.observations);
-      omDebug(
-        `[OM:callReflector] retry parsed: reflectedTokens=${reflectedTokens}, compressionValid=${validateCompression(reflectedTokens, targetThreshold)}`,
-      );
+      // Escalate to next compression level
+      currentLevel = Math.min(currentLevel + 1, maxLevel) as 0 | 1 | 2 | 3;
     }
 
     return {
@@ -2730,6 +2726,7 @@ ${suggestedResponse}
     writer: ProcessInputStepArgs['writer'],
     abortSignal: ProcessInputStepArgs['abortSignal'],
     abort: ProcessInputStepArgs['abort'],
+    requestContext?: RequestContext,
   ): Promise<{
     observationSucceeded: boolean;
     updatedRecord: ObservationalMemoryRecord;
@@ -2821,7 +2818,13 @@ ${suggestedResponse}
           // Check if async reflection should be triggered or activated.
           // This only does async work (background buffering or instant activation) —
           // never blocking sync reflection that could overwrite freshly activated observations.
-          await this.maybeAsyncReflect(updatedRecord, updatedRecord.observationTokenCount ?? 0, writer, messageList);
+          await this.maybeAsyncReflect(
+            updatedRecord,
+            updatedRecord.observationTokenCount ?? 0,
+            writer,
+            messageList,
+            requestContext,
+          );
           return;
         }
 
@@ -2853,6 +2856,7 @@ ${suggestedResponse}
               currentThreadMessages: freshUnobservedMessages,
               writer,
               abortSignal,
+              requestContext,
             });
           } else {
             await this.doSynchronousObservation({
@@ -2861,6 +2865,7 @@ ${suggestedResponse}
               unobservedMessages: freshUnobservedMessages,
               writer,
               abortSignal,
+              requestContext,
             });
           }
           // Check if observation actually updated lastObservedAt
@@ -3315,6 +3320,7 @@ ${suggestedResponse}
               threadId,
               writer,
               messageList,
+              requestContext,
             });
             // Re-fetch record — reflection may have created a new generation with lower obsTokens
             record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3336,7 +3342,14 @@ ${suggestedResponse}
       const obsTokens = record.observationTokenCount ?? 0;
       if (this.shouldReflect(obsTokens)) {
         omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} over reflectThreshold, triggering reflection`);
-        await this.maybeReflect({ record, observationTokens: obsTokens, threadId, writer, messageList });
+        await this.maybeReflect({
+          record,
+          observationTokens: obsTokens,
+          threadId,
+          writer,
+          messageList,
+          requestContext,
+        });
         // Re-fetch record after reflection may have created a new generation
         record = await this.getOrCreateRecord(threadId, resourceId);
       } else if (this.isAsyncReflectionEnabled()) {
@@ -3344,7 +3357,7 @@ ${suggestedResponse}
         const lockKey = this.getLockKey(threadId, resourceId);
         if (this.shouldTriggerAsyncReflection(obsTokens, lockKey, record)) {
           omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} above activation point, triggering async reflection`);
-          await this.maybeAsyncReflect(record, obsTokens, writer, messageList);
+          await this.maybeAsyncReflect(record, obsTokens, writer, messageList, requestContext);
           record = await this.getOrCreateRecord(threadId, resourceId);
         }
       }
@@ -3400,6 +3413,7 @@ ${suggestedResponse}
             lockKey,
             writer,
             unbufferedPendingTokens,
+            requestContext,
           );
         }
       } else if (this.isAsyncObservationEnabled()) {
@@ -3418,6 +3432,7 @@ ${suggestedResponse}
             lockKey,
             writer,
             unbufferedPendingTokens,
+            requestContext,
           );
         }
       }
@@ -3446,6 +3461,7 @@ ${suggestedResponse}
           writer,
           abortSignal,
           abort,
+          requestContext,
         );
 
         if (observationSucceeded) {
@@ -3927,8 +3943,9 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter;
     abortSignal?: AbortSignal;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+    requestContext?: RequestContext;
   }): Promise<void> {
-    const { record, threadId, unobservedMessages, writer, abortSignal, reflectionHooks } = opts;
+    const { record, threadId, unobservedMessages, writer, abortSignal, reflectionHooks, requestContext } = opts;
     // Emit debug event for observation triggered
     this.emitDebugEvent({
       type: 'observation_triggered',
@@ -4010,6 +4027,7 @@ ${formattedMessages}
         freshRecord?.activeObservations ?? record.activeObservations,
         messagesToObserve,
         abortSignal,
+        { requestContext },
       );
 
       // Build new observations (use freshRecord if available)
@@ -4117,6 +4135,7 @@ ${formattedMessages}
         writer,
         abortSignal,
         reflectionHooks,
+        requestContext,
       });
     } catch (error) {
       // Insert FAILED marker on error
@@ -4173,6 +4192,7 @@ ${formattedMessages}
     lockKey: string,
     writer?: ProcessorStreamWriter,
     contextWindowTokens?: number,
+    requestContext?: RequestContext,
   ): void {
     const bufferKey = this.getObservationBufferKey(lockKey);
 
@@ -4190,17 +4210,22 @@ ${formattedMessages}
     });
 
     // Start the async operation - waits for any existing op to complete first
-    const asyncOp = this.runAsyncBufferedObservation(record, threadId, unobservedMessages, bufferKey, writer).finally(
-      () => {
-        // Clean up the operation tracking
-        ObservationalMemory.asyncBufferingOps.delete(bufferKey);
-        // Clear persistent flag
-        unregisterOp(record.id, 'bufferingObservation');
-        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
-          omError('[OM] Failed to clear buffering observation flag', err);
-        });
-      },
-    );
+    const asyncOp = this.runAsyncBufferedObservation(
+      record,
+      threadId,
+      unobservedMessages,
+      bufferKey,
+      writer,
+      requestContext,
+    ).finally(() => {
+      // Clean up the operation tracking
+      ObservationalMemory.asyncBufferingOps.delete(bufferKey);
+      // Clear persistent flag
+      unregisterOp(record.id, 'bufferingObservation');
+      this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+        omError('[OM] Failed to clear buffering observation flag', err);
+      });
+    });
 
     ObservationalMemory.asyncBufferingOps.set(bufferKey, asyncOp);
   }
@@ -4215,6 +4240,7 @@ ${formattedMessages}
     unobservedMessages: MastraDBMessage[],
     bufferKey: string,
     writer?: ProcessorStreamWriter,
+    requestContext?: RequestContext,
   ): Promise<void> {
     // Wait for any existing buffering operation to complete first (mutex behavior)
     const existingOp = ObservationalMemory.asyncBufferingOps.get(bufferKey);
@@ -4325,7 +4351,15 @@ ${formattedMessages}
       omDebug(
         `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${this.tokenCounter.countMessages(messagesToBuffer)}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
       );
-      await this.doAsyncBufferedObservation(freshRecord, threadId, messagesToBuffer, cycleId, startedAt, writer);
+      await this.doAsyncBufferedObservation(
+        freshRecord,
+        threadId,
+        messagesToBuffer,
+        cycleId,
+        startedAt,
+        writer,
+        requestContext,
+      );
 
       // Update the buffer cursor so the next buffer only sees messages newer than this one.
       // Uses the same timestamp logic as the chunk's lastObservedAt (max message timestamp + 1ms).
@@ -4365,6 +4399,7 @@ ${formattedMessages}
     cycleId: string,
     startedAt: string,
     writer?: ProcessorStreamWriter,
+    requestContext?: RequestContext,
   ): Promise<void> {
     // Build combined context for the observer: active + buffered chunk observations
     const bufferedChunks = this.getBufferedChunks(record);
@@ -4376,7 +4411,7 @@ ${formattedMessages}
       combinedObservations,
       messagesToBuffer,
       undefined, // No abort signal for background ops
-      { skipContinuationHints: true },
+      { skipContinuationHints: true, requestContext },
     );
 
     // Get the new observations to buffer (just the new content, not merged)
@@ -4601,6 +4636,7 @@ ${formattedMessages}
     observationTokens: number,
     lockKey: string,
     writer?: ProcessorStreamWriter,
+    requestContext?: RequestContext,
   ): void {
     const bufferKey = this.getReflectionBufferKey(lockKey);
 
@@ -4619,7 +4655,7 @@ ${formattedMessages}
     });
 
     // Start the async operation
-    const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer)
+    const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer, requestContext)
       .catch(async error => {
         // Emit buffering failed marker
         if (writer) {
@@ -4659,6 +4695,7 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     _bufferKey: string,
     writer?: ProcessorStreamWriter,
+    requestContext?: RequestContext,
   ): Promise<void> {
     // Re-fetch the record to get the latest observation token count.
     // The record passed in may be stale if sync observation just ran.
@@ -4690,8 +4727,10 @@ ${formattedMessages}
     const activeObservations = allLines.slice(0, linesToReflect).join('\n');
     const reflectedObservationLineCount = linesToReflect;
     const sliceTokenEstimate = Math.round(avgTokensPerLine * linesToReflect);
-    // Compression target is the slice size × activation ratio, capped at the reflection threshold.
-    const compressionTarget = Math.min(sliceTokenEstimate * bufferActivation, reflectThreshold);
+    // Compression target: ask for 75% of the slice size. This is a modest reduction
+    // that LLMs can reliably achieve on dense observation text, unlike the more
+    // aggressive bufferActivation ratio which often fails on already-compressed content.
+    const compressionTarget = Math.round(sliceTokenEstimate * 0.75);
 
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
@@ -4724,6 +4763,7 @@ ${formattedMessages}
       undefined, // No abort signal for background ops
       true, // Skip continuation hints for async buffering
       1, // Start at compression level 1 for buffered reflection
+      requestContext,
     );
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
@@ -4749,7 +4789,7 @@ ${formattedMessages}
         cycleId,
         operationType: 'reflection',
         startedAt,
-        tokensBuffered: observationTokens,
+        tokensBuffered: sliceTokenEstimate,
         bufferedTokens: reflectionTokenCount,
         recordId: currentRecord.id,
         threadId: currentRecord.threadId ?? '',
@@ -4891,8 +4931,18 @@ ${formattedMessages}
     writer?: ProcessorStreamWriter;
     abortSignal?: AbortSignal;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+    requestContext?: RequestContext;
   }): Promise<void> {
-    const { record, currentThreadId, resourceId, currentThreadMessages, writer, abortSignal, reflectionHooks } = opts;
+    const {
+      record,
+      currentThreadId,
+      resourceId,
+      currentThreadMessages,
+      writer,
+      abortSignal,
+      reflectionHooks,
+      requestContext,
+    } = opts;
     // Clear debug entries at start of observation cycle
 
     // ════════════════════════════════════════════════════════════
@@ -5153,6 +5203,7 @@ ${formattedMessages}
           batch.threadMap,
           batch.threadIds,
           abortSignal,
+          requestContext,
         );
         return batchResult;
       });
@@ -5331,6 +5382,7 @@ ${formattedMessages}
         writer,
         abortSignal,
         reflectionHooks,
+        requestContext,
       });
     } catch (error) {
       // Insert FAILED markers into each thread's last message on error
@@ -5380,6 +5432,7 @@ ${formattedMessages}
     observationTokens: number,
     writer?: ProcessorStreamWriter,
     messageList?: MessageList,
+    requestContext?: RequestContext,
   ): Promise<void> {
     if (!this.isAsyncReflectionEnabled()) return;
 
@@ -5395,7 +5448,7 @@ ${formattedMessages}
       const shouldTrigger = this.shouldTriggerAsyncReflection(observationTokens, lockKey, record);
       omDebug(`[OM:reflect] below threshold: shouldTrigger=${shouldTrigger}`);
       if (shouldTrigger) {
-        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
+        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer, requestContext);
       }
       return;
     }
@@ -5419,7 +5472,7 @@ ${formattedMessages}
     // This can happen when observations jump past the threshold via activation
     // without any background reflection having been triggered beforehand.
     omDebug(`[OM:reflect] no buffered reflection, starting background reflection...`);
-    this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
+    this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer, requestContext);
   }
 
   /**
@@ -5436,8 +5489,9 @@ ${formattedMessages}
     abortSignal?: AbortSignal;
     messageList?: MessageList;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+    requestContext?: RequestContext;
   }): Promise<void> {
-    const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks } = opts;
+    const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks, requestContext } = opts;
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
 
@@ -5449,7 +5503,7 @@ ${formattedMessages}
       // Check if we've crossed the bufferActivation threshold
       if (this.shouldTriggerAsyncReflection(observationTokens, lockKey, record)) {
         // Start background reflection (fire-and-forget)
-        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
+        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer, requestContext);
       }
     }
 
@@ -5494,7 +5548,7 @@ ${formattedMessages}
           `[OM:reflect] async activation failed, no blockAfter or below it (obsTokens=${observationTokens}, blockAfter=${this.reflectionConfig.blockAfter}) — starting background reflection`,
         );
         // Start background reflection so it's ready for next activation attempt
-        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer);
+        this.startAsyncBufferedReflection(record, observationTokens, lockKey, writer, requestContext);
         return;
       }
     }
@@ -5552,6 +5606,9 @@ ${formattedMessages}
         streamContext,
         reflectThreshold,
         abortSignal,
+        undefined,
+        undefined,
+        requestContext,
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
@@ -5626,8 +5683,9 @@ ${formattedMessages}
     resourceId?: string;
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
+    requestContext?: RequestContext;
   }): Promise<void> {
-    const { threadId, resourceId, messages, hooks } = opts;
+    const { threadId, resourceId, messages, hooks, requestContext } = opts;
     const lockKey = this.getLockKey(threadId, resourceId);
     const reflectionHooks = hooks
       ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
@@ -5657,6 +5715,7 @@ ${formattedMessages}
             resourceId,
             currentThreadMessages: currentMessages,
             reflectionHooks,
+            requestContext,
           });
         } finally {
           hooks?.onObservationEnd?.();
@@ -5687,7 +5746,13 @@ ${formattedMessages}
 
         hooks?.onObservationStart?.();
         try {
-          await this.doSynchronousObservation({ record: freshRecord, threadId, unobservedMessages, reflectionHooks });
+          await this.doSynchronousObservation({
+            record: freshRecord,
+            threadId,
+            unobservedMessages,
+            reflectionHooks,
+            requestContext,
+          });
         } finally {
           hooks?.onObservationEnd?.();
         }
@@ -5706,7 +5771,12 @@ ${formattedMessages}
    * );
    * ```
    */
-  async reflect(threadId: string, resourceId?: string, prompt?: string): Promise<void> {
+  async reflect(
+    threadId: string,
+    resourceId?: string,
+    prompt?: string,
+    requestContext?: RequestContext,
+  ): Promise<void> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
 
     if (!record.activeObservations) {
@@ -5718,7 +5788,16 @@ ${formattedMessages}
 
     try {
       const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
-      const reflectResult = await this.callReflector(record.activeObservations, prompt, undefined, reflectThreshold);
+      const reflectResult = await this.callReflector(
+        record.activeObservations,
+        prompt,
+        undefined,
+        reflectThreshold,
+        undefined,
+        undefined,
+        undefined,
+        requestContext,
+      );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
