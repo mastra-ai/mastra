@@ -22,7 +22,7 @@ const tui = new MastraTUI({
 });
 
 async function main() {
-  if (mcpManager.hasServers()) {
+  if (mcpManager?.hasServers()) {
     await mcpManager.init();
     const statuses = mcpManager.getServerStatuses();
     const connected = statuses.filter(s => s.connected);
@@ -60,7 +60,7 @@ async function main() {
 }
 
 process.on('beforeExit', async () => {
-  await Promise.all([mcpManager.disconnect(), harness.stopHeartbeats()]);
+  await Promise.all([mcpManager?.disconnect(), harness.stopHeartbeats()]);
 });
 
 const cleanup = () => {

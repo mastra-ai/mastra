@@ -2,7 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
-import type { HarnessRuntimeContext } from '../harness/types';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { stateSchema } from '../schema';
 import { getOmScope } from '../utils/project';
 import { resolveModel } from './model';
@@ -15,7 +15,7 @@ let cachedMemoryKey: string | null = null;
  * Used by both the memory factory and the OM model functions.
  */
 function getHarnessState(requestContext: RequestContext) {
-  return (requestContext.get('harness') as HarnessRuntimeContext<typeof stateSchema> | undefined)?.getState?.();
+  return (requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined)?.getState?.();
 }
 
 /**

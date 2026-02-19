@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
-import type { HarnessRuntimeContext } from '../harness/types';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { stateSchema } from '../schema';
 
 // =============================================================================
@@ -77,7 +77,7 @@ const skillPaths = collectSkillPaths([
 ]);
 
 export function getDynamicWorkspace({ requestContext }: { requestContext: RequestContext }) {
-  const ctx = requestContext.get('harness') as HarnessRuntimeContext<typeof stateSchema> | undefined;
+  const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
   const state = ctx?.getState?.();
   const projectPath = state?.projectPath;
 

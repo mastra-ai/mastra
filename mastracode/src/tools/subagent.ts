@@ -12,7 +12,7 @@ import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v3';
 import { getSubagentDefinition, getSubagentIds } from '../agents/subagents/index.js';
-import type { HarnessRuntimeContext } from '../harness/types.js';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 
 export interface SubagentToolDeps {
   /**
@@ -92,7 +92,7 @@ Use this tool when:
       }
 
       // Get emit function and abort signal from harness context (if available)
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRuntimeContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
       const emitEvent = harnessCtx?.emitEvent;
       const abortSignal = harnessCtx?.abortSignal;
       // toolCallId from the parent agent's tool invocation

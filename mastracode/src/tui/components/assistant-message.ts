@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Container, Markdown, Spacer, Text } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
-import type { HarnessMessage } from '../../harness/types.js';
+import type { HarnessMessage } from '@mastra/core/harness';
 import { getMarkdownTheme, theme } from '../theme.js';
 
 let _compId = 0;

@@ -4,7 +4,7 @@ import type { MastraLanguageModel } from '@mastra/core/agent';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { AuthStorage } from '../auth/storage.js';
-import type { HarnessRuntimeContext } from '../harness/types.js';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { opencodeClaudeMaxProvider } from '../providers/claude-max.js';
 import { openaiCodexProvider } from '../providers/openai-codex.js';
 import type { stateSchema } from '../schema.js';
@@ -52,7 +52,7 @@ export function getDynamicModel({
 }: {
   requestContext: RequestContext;
 }): LanguageModelV1 | MastraLanguageModel {
-  const harnessContext = requestContext.get('harness') as HarnessRuntimeContext<typeof stateSchema> | undefined;
+  const harnessContext = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
 
   const modelId = harnessContext?.state?.currentModelId;
   if (!modelId) {

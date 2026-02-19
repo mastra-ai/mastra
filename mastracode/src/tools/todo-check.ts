@@ -4,7 +4,7 @@
  */
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v3';
-import type { HarnessRuntimeContext } from '../harness/types.js';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 
 export const todoCheckTool = createTool({
   id: 'todo_check',
@@ -18,7 +18,7 @@ Returns:
   inputSchema: z.object({}), // No input needed
   execute: async ({}, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRuntimeContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
 
       if (!harnessCtx) {
         return {
