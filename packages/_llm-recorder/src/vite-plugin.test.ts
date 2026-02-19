@@ -127,10 +127,7 @@ describe('llmRecorderPlugin', () => {
     expect(result1).toBeNull();
 
     // Should transform matching test files
-    const result2 = transform(
-      'describe("test", () => {});',
-      '/project/packages/core/integration/agent.test.ts',
-    );
+    const result2 = transform('describe("test", () => {});', '/project/packages/core/integration/agent.test.ts');
     expect(result2).not.toBeNull();
   });
 
@@ -156,20 +153,14 @@ describe('llmRecorderPlugin', () => {
 
   it('skips node_modules by default', () => {
     const { transform } = getPlugin();
-    const result = transform(
-      'describe("test", () => {});',
-      '/project/node_modules/some-pkg/src/agent.test.ts',
-    );
+    const result = transform('describe("test", () => {});', '/project/node_modules/some-pkg/src/agent.test.ts');
 
     expect(result).toBeNull();
   });
 
   it('skips dist by default', () => {
     const { transform } = getPlugin();
-    const result = transform(
-      'describe("test", () => {});',
-      '/project/dist/src/agent.test.ts',
-    );
+    const result = transform('describe("test", () => {});', '/project/dist/src/agent.test.ts');
 
     expect(result).toBeNull();
   });
@@ -201,5 +192,48 @@ describe('My Tests', () => {
 
     expect(result).not.toBeNull();
     expect(result!.code).toContain("from '@internal/llm-recorder'");
+  });
+
+  it('injects transformRequest import and option', () => {
+    const { transform } = getPlugin({
+      transformRequest: {
+        importPath: './my-transform',
+        exportName: 'normalizeRequest',
+      },
+    });
+    const result = transform('describe("test", () => {});', '/project/packages/core/src/agent.test.ts');
+
+    expect(result).not.toBeNull();
+    expect(result!.code).toContain(`import { normalizeRequest as __autoTransformRequest } from "./my-transform";`);
+    expect(result!.code).toContain('transformRequest: __autoTransformRequest');
+  });
+
+  it('defaults transformRequest exportName to "transformRequest"', () => {
+    const { transform } = getPlugin({
+      transformRequest: {
+        importPath: '@internal/test-utils',
+      },
+    });
+    const result = transform('describe("test", () => {});', '/project/packages/core/src/agent.test.ts');
+
+    expect(result).not.toBeNull();
+    expect(result!.code).toContain(
+      `import { transformRequest as __autoTransformRequest } from "@internal/test-utils";`,
+    );
+  });
+
+  it('combines recordingsDir and transformRequest options', () => {
+    const { transform } = getPlugin({
+      recordingsDir: '/custom/dir',
+      transformRequest: {
+        importPath: './transform',
+        exportName: 'myTransform',
+      },
+    });
+    const result = transform('describe("test", () => {});', '/project/packages/core/src/agent.test.ts');
+
+    expect(result).not.toBeNull();
+    expect(result!.code).toContain('recordingsDir: "/custom/dir"');
+    expect(result!.code).toContain('transformRequest: __autoTransformRequest');
   });
 });

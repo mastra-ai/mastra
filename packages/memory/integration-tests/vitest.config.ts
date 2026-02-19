@@ -3,7 +3,14 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   // Cast to any to avoid vite version mismatch type errors between workspace packages
-  plugins: [llmRecorderPlugin() as any],
+  plugins: [
+    llmRecorderPlugin({
+      transformRequest: {
+        importPath: './src/transform-request',
+        exportName: 'transformRequest',
+      },
+    }) as any,
+  ],
   test: {
     //pool: 'forks',
     globals: true,

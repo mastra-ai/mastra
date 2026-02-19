@@ -44,6 +44,12 @@ export interface AutoRecordingOptions {
   replayWithTiming?: boolean;
   /** Maximum delay between chunks during replay in ms (default: 10) */
   maxChunkDelay?: number;
+  /**
+   * Transform the request URL and/or body before hashing for recording lookup.
+   *
+   * @see LLMRecorderOptions.transformRequest
+   */
+  transformRequest?: (req: { url: string; body: unknown }) => { url: string; body: unknown };
 }
 
 /**

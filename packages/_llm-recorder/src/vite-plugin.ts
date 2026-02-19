@@ -31,6 +31,35 @@ export interface LLMRecorderPluginOptions {
   nameGenerator?: (filepath: string) => string;
   /** Override the recordings directory */
   recordingsDir?: string;
+  /**
+   * Import path and export name of a `transformRequest` function to inject.
+   *
+   * Since the plugin generates code at build time, it can't accept a function
+   * directly. Instead, provide the module that exports the transform and the
+   * plugin will inject an import + wire it into the `useLLMRecording` options.
+   *
+   * @example
+   * ```typescript
+   * // my-transform.ts
+   * export function normalizeRequest({ url, body }) {
+   *   return { url, body: { ...body, timestamp: 'STABLE' } };
+   * }
+   *
+   * // vitest.config.ts
+   * llmRecorderPlugin({
+   *   transformRequest: {
+   *     importPath: './my-transform',
+   *     exportName: 'normalizeRequest',
+   *   },
+   * })
+   * ```
+   */
+  transformRequest?: {
+    /** Module path to import from (e.g. './my-transform', '@internal/test-utils') */
+    importPath: string;
+    /** Named export to use (default: 'transformRequest') */
+    exportName?: string;
+  };
 }
 
 /**
@@ -69,9 +98,7 @@ export function defaultNameGenerator(filepath: string): string {
 
   // Fallback: use the filename without extension
   const basename = path.basename(normalized);
-  return basename
-    .replace(/\.(test|spec)\.(ts|tsx|js|jsx|mts|cts)$/, '')
-    .replace(/\.(ts|tsx|js|jsx|mts|cts)$/, '');
+  return basename.replace(/\.(test|spec)\.(ts|tsx|js|jsx|mts|cts)$/, '').replace(/\.(ts|tsx|js|jsx|mts|cts)$/, '');
 }
 
 /**
@@ -123,6 +150,7 @@ export function llmRecorderPlugin(options: LLMRecorderPluginOptions = {}): Plugi
     exclude = ['**/node_modules/**', '**/dist/**'],
     nameGenerator = defaultNameGenerator,
     recordingsDir,
+    transformRequest,
   } = options;
 
   return {
@@ -146,14 +174,30 @@ export function llmRecorderPlugin(options: LLMRecorderPluginOptions = {}): Plugi
       }
 
       const recordingName = nameGenerator(id);
-      const optionsArg = recordingsDir ? `, { recordingsDir: ${JSON.stringify(recordingsDir)} }` : '';
 
-      // Inject the import and the auto-recording call at the top of the file
-      const injection = [
-        `import { useLLMRecording as __autoUseLLMRecording } from '@internal/llm-recorder';`,
-        `__autoUseLLMRecording(${JSON.stringify(recordingName)}${optionsArg});`,
-        '',
-      ].join('\n');
+      // Build the options object for useLLMRecording
+      const optionFields: string[] = [];
+      if (recordingsDir) {
+        optionFields.push(`recordingsDir: ${JSON.stringify(recordingsDir)}`);
+      }
+      if (transformRequest) {
+        optionFields.push(`transformRequest: __autoTransformRequest`);
+      }
+      const optionsArg = optionFields.length > 0 ? `, { ${optionFields.join(', ')} }` : '';
+
+      // Build the import lines
+      const imports = [`import { useLLMRecording as __autoUseLLMRecording } from '@internal/llm-recorder';`];
+      if (transformRequest) {
+        const exportName = transformRequest.exportName || 'transformRequest';
+        imports.push(
+          `import { ${exportName} as __autoTransformRequest } from ${JSON.stringify(transformRequest.importPath)};`,
+        );
+      }
+
+      // Inject the imports and the auto-recording call at the top of the file
+      const injection = [...imports, `__autoUseLLMRecording(${JSON.stringify(recordingName)}${optionsArg});`, ''].join(
+        '\n',
+      );
 
       return {
         code: injection + code,

@@ -14,7 +14,6 @@
  * Tests run with OpenAI models.
  */
 
-import { randomUUID } from 'node:crypto';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
@@ -231,7 +230,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '28f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'ordering-test-user';
 
         console.info('\n========================================');
@@ -379,7 +378,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '48f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'multi-tool-test';
 
         console.info('\n========================================');
@@ -478,7 +477,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           tools,
         });
 
-        const threadId = randomUUID();
+        const threadId = '38f55d05-8b0b-447c-9d49-28e35cdd5db6';
         const resourceId = 'exact-match-test';
 
         console.info('\n========================================');

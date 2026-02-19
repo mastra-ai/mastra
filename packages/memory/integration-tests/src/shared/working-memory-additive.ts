@@ -501,7 +501,7 @@ Schema structure reminder:
         expect(wmRaw!.toLowerCase()).toContain('datacorp');
       });
 
-      it.only('should preserve people array when adding work details', async () => {
+      it('should preserve people array when adding work details', async () => {
         // Turn 1: Mention people first
         await agentGenerate(
           agent,
@@ -550,7 +550,7 @@ Schema structure reminder:
         expect(wmRaw!.toLowerCase()).toContain('alice');
         expect(wmRaw!.toLowerCase()).toContain('bob');
       });
-
+      // 1568
       it('should clear work info when user changes jobs', async () => {
         // Turn 1: Set up work info
         await agentGenerate(

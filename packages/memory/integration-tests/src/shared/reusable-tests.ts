@@ -95,7 +95,7 @@ const getTextContent = (message: any): string => {
 };
 
 export function getResuableTests(optionsFactory: () => { memory: Memory; workerTestConfig?: WorkerTestConfig }) {
-  const cleanupAllThreads = async () => {
+  const cleanupAllThreads = async (memory: Memory) => {
     let allThreads: any[] = [];
     let page = 0;
     const perPage = 100;
@@ -110,13 +110,18 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
       page++;
     }
     await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
+
+    const indexes = await memory.vector?.listIndexes();
+    if (indexes) {
+      await Promise.all(indexes.map(index => memory.vector?.deleteIndex({ indexName: index })));
+    }
   };
 
   let memory: Memory;
   let workerTestConfig: WorkerTestConfig | undefined;
   beforeEach(async () => {
     messageCounter = 0;
-    await cleanupAllThreads();
+    await cleanupAllThreads(memory);
   });
 
   beforeAll(() => {
@@ -126,7 +131,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
   });
 
   afterAll(async () => {
-    await cleanupAllThreads();
+    await cleanupAllThreads(memory);
   });
 
   describe('Memory Features', () => {
@@ -398,6 +403,7 @@ export function getResuableTests(optionsFactory: () => { memory: Memory; workerT
             semanticRecall: { messageRange: 0, topK: 1 },
           },
         });
+
         const programmingContents = resultProgramming.messages.map(m => getTextContent(m));
         expect(programmingContents).toContain('JavaScript is a versatile language.');
         expect(programmingContents).not.toContain('The weather is rainy and cold.');

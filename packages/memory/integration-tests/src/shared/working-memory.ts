@@ -14,7 +14,7 @@ import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { JSONSchema7 } from 'json-schema';
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, beforeAll } from 'vitest';
 import { z } from 'zod';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
@@ -1586,45 +1586,41 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
       });
 
       describe('Standard Working Memory Tool - Thread Scope', () => {
-        let memory: Memory;
-
-        beforeEach(() => {
-          memory = new Memory({
-            options: {
-              workingMemory: {
-                enabled: true,
-                scope: 'thread',
+        runWorkingMemoryNetworkTests(
+          () =>
+            new Memory({
+              options: {
+                workingMemory: {
+                  enabled: true,
+                  scope: 'thread',
+                },
+                lastMessages: 10,
               },
-              lastMessages: 10,
-            },
-            storage,
-            vector,
-            embedder: fastembed,
-          });
-        });
-
-        runWorkingMemoryNetworkTests(() => memory, model);
+              storage,
+              vector,
+              embedder: fastembed,
+            }),
+          model,
+        );
       });
 
       describe('Standard Working Memory Tool - Resource Scope', () => {
-        let memory: Memory;
-
-        beforeEach(() => {
-          memory = new Memory({
-            options: {
-              workingMemory: {
-                enabled: true,
-                scope: 'resource',
+        runWorkingMemoryNetworkTests(
+          () =>
+            new Memory({
+              options: {
+                workingMemory: {
+                  enabled: true,
+                  scope: 'resource',
+                },
+                lastMessages: 10,
               },
-              lastMessages: 10,
-            },
-            storage,
-            vector,
-            embedder: fastembed,
-          });
-        });
-
-        runWorkingMemoryNetworkTests(() => memory, model);
+              storage,
+              vector,
+              embedder: fastembed,
+            }),
+          model,
+        );
       });
     });
   });
@@ -1635,22 +1631,27 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
  * Can be run with any memory configuration (thread/resource scope, standard/vnext).
  */
 function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraModelConfig) {
-  // Create a math agent that can do calculations
-  const mathAgent = new Agent({
-    id: 'math-agent',
-    name: 'math-agent',
-    instructions: 'You are a helpful math assistant.',
-    model,
-  });
+  let mathAgent: Agent;
+  let getWeather: Tool;
 
-  // Create a weather tool
-  const getWeather = createTool({
-    id: 'get-weather',
-    description: 'Get current weather for a city',
-    inputSchema: z.object({ city: z.string() }),
-    execute: async inputData => {
-      return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
-    },
+  beforeAll(() => {
+    // Create a math agent that can do calculations
+    mathAgent = new Agent({
+      id: 'math-agent',
+      name: 'math-agent',
+      instructions: 'You are a helpful math assistant.',
+      model,
+    });
+
+    // Create a weather tool
+    getWeather = createTool({
+      id: 'get-weather',
+      description: 'Get current weather for a city',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async inputData => {
+        return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
+      },
+    });
   });
 
   // Helper functions to reduce code duplication
@@ -1797,7 +1798,7 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       memory,
     });
 
-    const threadId = randomUUID();
+    const threadId = '58f55d05-8b0b-447c-9d49-28e35cdd5db6';
 
     const result = await networkAgent.network('Calculate 15 times 4, then remember the result', {
       memory: { thread: threadId, resource: resourceId },
@@ -1967,9 +1968,9 @@ function runWorkingMemoryNetworkTests(getMemory: () => Memory, model: MastraMode
       id: 'network-orchestrator',
       name: 'network-orchestrator',
       instructions: 'You help users with various tasks efficiently. Complete all parts of multi-step requests.',
-      model,
       agents: { mathAgent },
       tools: { getWeather },
+      model,
       memory,
     });
 

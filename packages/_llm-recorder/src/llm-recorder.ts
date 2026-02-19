@@ -61,7 +61,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import stringSimilarity from 'string-similarity';
-import { beforeAll, afterAll } from 'vitest';
+import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { diffJson } from 'diff';
 
 // Default recordings directory - can be overridden via options
@@ -161,6 +161,26 @@ export interface LLMRecorderOptions {
   replayWithTiming?: boolean;
   /** Maximum delay between chunks during replay in ms (default: 10) */
   maxChunkDelay?: number;
+  /**
+   * Transform the request URL and/or body before hashing for recording lookup.
+   *
+   * Useful for normalizing dynamic fields (timestamps, UUIDs, session IDs)
+   * so recordings match reliably across test runs.
+   *
+   * Applied both during **recording** (to normalize what gets stored) and
+   * during **replay** (to normalize what gets matched).
+   *
+   * @example
+   * ```typescript
+   * useLLMRecording('my-tests', {
+   *   transformRequest: ({ url, body }) => ({
+   *     url,
+   *     body: { ...body, timestamp: 'NORMALIZED' },
+   *   }),
+   * });
+   * ```
+   */
+  transformRequest?: (req: { url: string; body: unknown }) => { url: string; body: unknown };
 }
 
 export interface LLMRecorderInstance {
@@ -196,6 +216,23 @@ const LLM_API_HOSTS = [
  * Headers to skip when storing (sensitive + compression)
  */
 const SKIP_HEADERS = ['authorization', 'x-api-key', 'api-key', 'content-encoding', 'transfer-encoding'];
+
+/**
+ * Module-scoped active recorder instance.
+ *
+ * Vitest runs each test file in its own worker, so there's no cross-file
+ * contamination. This lets `useLiveMode()` discover the active recorder
+ * without the user having to pass it explicitly.
+ */
+let activeRecorder: LLMRecorderInstance | null = null;
+
+/**
+ * Get the currently active recorder instance (if any).
+ * Primarily for internal use by `useLiveMode()`.
+ */
+export function getActiveRecorder(): LLMRecorderInstance | null {
+  return activeRecorder;
+}
 
 /**
  * Deep sort object keys for stable serialization
@@ -396,7 +433,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
   // Live mode: no interception, just pass through
   if (mode === 'live') {
-    return {
+    const instance: LLMRecorderInstance = {
       server: null,
       mode: 'live',
       isRecording: false,
@@ -404,14 +441,16 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       recordingCount: 0,
       start() {
         console.log(`[llm-recorder] LIVE mode: ${options.name} (real API calls, no recording)`);
+        activeRecorder = instance;
       },
       stop() {
-        // no-op
+        if (activeRecorder === instance) activeRecorder = null;
       },
       async save() {
         // no-op
       },
     };
+    return instance;
   }
 
   const recordings: LLMRecording[] = [];
@@ -426,12 +465,20 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
   // Create handlers for each LLM API host
   const handlers = LLM_API_HOSTS.flatMap(baseUrl => [
     http.post(`${baseUrl}/*`, async ({ request }) => {
-      const url = request.url;
-      const body = await request
+      let url = request.url;
+      let body: unknown = await request
         .clone()
         .json()
         .catch(() => ({}));
-      const hash = hashRequest(url, body);
+
+      // Apply user-provided transform before hashing
+      let hash: string;
+      if (options.transformRequest) {
+        const transformed = options.transformRequest({ url, body });
+        hash = hashRequest(transformed.url, transformed.body);
+      } else {
+        hash = hashRequest(url, body);
+      }
 
       if (isRecordMode) {
         console.log(`[llm-recorder] Recording: ${url}`);
@@ -521,6 +568,9 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             })
             .join('\n');
           console.warn(`[llm-recorder] Diff (recorded vs actual):\n${formatted}`);
+          throw new Error(
+            `No recording found for request: ${url} (hash: ${hash}). Run with UPDATE_RECORDINGS=true to re-record.`,
+          );
         }
 
         if (recording.response.isStreaming) {
@@ -543,7 +593,7 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
   const server = setupServer(...handlers);
 
-  return {
+  const instance: LLMRecorderInstance = {
     server,
     mode,
     isRecording: isRecordMode,
@@ -556,14 +606,16 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
     start() {
       console.log(`[llm-recorder] ${mode.toUpperCase()} mode: ${options.name}`);
       server.listen({ onUnhandledRequest: 'bypass' });
+      activeRecorder = instance;
     },
 
     stop() {
       server.close();
+      if (activeRecorder === instance) activeRecorder = null;
     },
 
     async save() {
-      if (!isRecordMode) {
+      if (!isRecordMode || recordings.length === 0) {
         return;
       }
 
@@ -572,6 +624,8 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       console.log(`[llm-recorder] Saved ${recordings.length} recordings to: ${recordingPath}`);
     },
   };
+
+  return instance;
 }
 
 /**
@@ -605,6 +659,51 @@ export function useLLMRecording(name: string, options: Omit<LLMRecorderOptions, 
 }
 
 /**
+ * Opt individual tests out of LLM recording within a suite that has recording enabled.
+ *
+ * When used inside a `describe` block, stops the active MSW server before
+ * each test and restarts it after, letting real HTTP requests go through.
+ * This is the per-test counterpart to suite-wide `useLLMRecording()`.
+ *
+ * No-op if there is no active recorder (e.g. already in global live mode).
+ *
+ * @example
+ * ```typescript
+ * describe('My LLM Tests', () => {
+ *   useLLMRecording('my-suite');
+ *
+ *   it('replays from recording', async () => {
+ *     // This test uses recorded responses
+ *   });
+ *
+ *   describe('real API calls', () => {
+ *     useLiveMode();
+ *
+ *     it('hits the real API', async () => {
+ *       // This test bypasses recording and calls the real API
+ *     });
+ *   });
+ * });
+ * ```
+ */
+export function useLiveMode() {
+  let recorder: LLMRecorderInstance | null = null;
+
+  beforeEach(() => {
+    recorder = activeRecorder;
+    if (recorder?.server) {
+      recorder.server.close();
+    }
+  });
+
+  afterEach(() => {
+    if (recorder?.server) {
+      recorder.server.listen({ onUnhandledRequest: 'bypass' });
+    }
+  });
+}
+
+/**
  * Callback wrapper for recording LLM interactions in a single test.
  * Starts recording before the callback, saves and stops after.
  *
@@ -621,6 +720,13 @@ export async function withLLMRecording<T>(
   fn: () => T | Promise<T>,
   options: Omit<LLMRecorderOptions, 'name'> = {},
 ): Promise<T> {
+  // If another MSW server is already listening (e.g. from a suite-level
+  // useLLMRecording or the vitest plugin), pause it so we don't collide.
+  const parentRecorder = activeRecorder;
+  if (parentRecorder?.server) {
+    parentRecorder.server.close();
+  }
+
   const recorder = setupLLMRecording({ name, ...options });
   recorder.start();
   try {
@@ -629,6 +735,12 @@ export async function withLLMRecording<T>(
   } finally {
     await recorder.save();
     recorder.stop();
+
+    // Restore the parent recorder's server
+    if (parentRecorder?.server) {
+      parentRecorder.server.listen({ onUnhandledRequest: 'bypass' });
+      activeRecorder = parentRecorder;
+    }
   }
 }
 
