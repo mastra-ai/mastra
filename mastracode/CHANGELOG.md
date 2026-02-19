@@ -1,5 +1,11 @@
 # mastracode
 
+## 0.1.0-alpha.1
+
+### Patch Changes
+
+- Fixed mastracode crashing on startup with ERR_MODULE_NOT_FOUND for vscode-jsonrpc/node. Node.js ESM requires explicit .js extensions on subpath imports. ([#13250](https://github.com/mastra-ai/mastra/pull/13250))
+
 ## 0.1.0-alpha.0
 
 ### Minor Changes
