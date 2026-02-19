@@ -1,4 +1,4 @@
-# Docs Styleguide
+# Documentation Styleguide
 
 These are the guidelines for writing Mastra documentation. Please use the following as a general guideline, and understand that contributions may be edited to match existing style, tone, conventions, and structure.
 

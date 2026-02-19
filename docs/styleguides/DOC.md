@@ -1,4 +1,4 @@
-# Doc page styleguide
+# Styleguide: Normal documentation page
 
 This styleguide covers the two page types found in `docs/src/content/en/docs/`: **overview pages** and **standard pages**. Every category (agents, memory, workflows, etc.) has one overview page and one or more standard pages.
 
