@@ -5,12 +5,7 @@ import type {
   LanguageModelV2ProviderDefinedTool,
 } from '@ai-sdk/provider-v5';
 import { stepCountIs, tool } from '@internal/ai-sdk-v5';
-import {
-  convertArrayToReadableStream,
-  convertReadableStreamToArray,
-  mockId,
-  mockValues,
-} from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, mockId, mockValues } from '@internal/ai-sdk-v5/test';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
@@ -71,7 +66,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       expect(toolExecuteMock).toHaveBeenCalledWith(
         { value: 'value' },
-        {
+        expect.objectContaining({
           abortSignal: abortController.signal,
           toolCallId: 'call-1',
           messages: expect.any(Array),
@@ -81,7 +76,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           suspend: expect.any(Function),
           tracingContext: undefined,
           workspace: undefined,
-        },
+        }),
       );
     });
   });

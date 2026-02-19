@@ -14,8 +14,5 @@ export type { SubagentToolDeps } from './subagent';
 export { todoWriteTool } from './todo';
 export type { TodoItem } from './todo';
 export { todoCheckTool } from './todo-check';
-export { askUserTool } from './ask-user';
-export { submitPlanTool } from './submit-plan';
-export type { PlanApprovalResult } from './submit-plan';
 export { astSmartEditTool } from './ast-smart-edit';
 export { requestSandboxAccessTool } from './request-sandbox-access';

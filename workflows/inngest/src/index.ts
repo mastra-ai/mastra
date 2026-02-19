@@ -10,7 +10,7 @@ import type { Processor, ProcessorStepOutput } from '@mastra/core/processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { ChunkType, OutputSchema, SchemaWithValidation } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
-import { Tool } from '@mastra/core/tools';
+import { Tool, createTool } from '@mastra/core/tools';
 import type { DynamicArgument } from '@mastra/core/types';
 import type { Step, AgentStepOptions, StepParams, ToolStep, StepMetadata } from '@mastra/core/workflows';
 import { Workflow } from '@mastra/core/workflows';
@@ -1019,6 +1019,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
 export function init(inngest: Inngest) {
   return {
+    createTool,
     createWorkflow<
       TWorkflowId extends string = string,
       TState = any,

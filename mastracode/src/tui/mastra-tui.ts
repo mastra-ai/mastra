@@ -14,16 +14,19 @@ import {
   visibleWidth,
 } from '@mariozechner/pi-tui';
 import type { Component, SlashCommand } from '@mariozechner/pi-tui';
-import type { Workspace } from '@mastra/core/workspace';
-import chalk from 'chalk';
-import type { Harness } from '../harness/harness.js';
 import type {
+  Harness,
   HarnessEvent,
   HarnessMessage,
   HarnessMessageContent,
   HarnessEventListener,
   TokenUsage,
-} from '../harness/types.js';
+} from '@mastra/core/harness';
+import type { Workspace } from '@mastra/core/workspace';
+import chalk from 'chalk';
+import type { AuthStorage } from '../auth/storage.js';
+import { getOAuthProviders } from '../auth/storage.js';
+import type { HookManager } from '../hooks/index.js';
 import { getToolCategory, TOOL_CATEGORIES } from '../permissions.js';
 import { parseSubagentMeta } from '../tools/subagent.js';
 import { parseError } from '../utils/errors.js';
@@ -77,6 +80,12 @@ export interface MastraTUIOptions {
   /** The harness instance to control */
   harness: Harness<any>;
 
+  /** Hook manager for session lifecycle hooks */
+  hookManager?: HookManager;
+
+  /** Auth storage for OAuth login/logout */
+  authStorage?: AuthStorage;
+
   /**
    * @deprecated Workspace is now obtained from the Harness.
    * Configure workspace via HarnessConfig.workspace instead.
@@ -107,6 +116,8 @@ export interface MastraTUIOptions {
 export class MastraTUI {
   private harness: Harness<any>;
   private options: MastraTUIOptions;
+  private hookManager?: HookManager;
+  private authStorage?: AuthStorage;
 
   // TUI components
   private ui: TUI;
@@ -205,6 +216,8 @@ export class MastraTUI {
   constructor(options: MastraTUIOptions) {
     this.harness = options.harness;
     this.options = options;
+    this.hookManager = options.hookManager;
+    this.authStorage = options.authStorage;
     this.workspace = options.workspace;
 
     // Detect project info for status line
@@ -338,8 +351,8 @@ export class MastraTUI {
     });
     // Ctrl+Y - toggle YOLO mode
     this.editor.onAction('toggleYolo', () => {
-      const current = this.harness.getYoloMode();
-      this.harness.setYoloMode(!current);
+      const current = (this.harness.getState() as any).yolo === true;
+      this.harness.setState({ yolo: !current } as any);
       this.updateStatusLine();
       this.showInfo(current ? 'YOLO mode off' : 'YOLO mode on');
     });
@@ -378,7 +391,7 @@ export class MastraTUI {
     await this.init();
 
     // Run SessionStart hooks (fire and forget)
-    const hookMgr = this.harness.getHookManager?.();
+    const hookMgr = this.hookManager;
     if (hookMgr) {
       hookMgr.runSessionStart().catch(() => {});
     }
@@ -472,7 +485,7 @@ export class MastraTUI {
    */
   stop(): void {
     // Run SessionEnd hooks (best-effort, don't await)
-    const hookMgr = this.harness.getHookManager?.();
+    const hookMgr = this.hookManager;
     if (hookMgr) {
       hookMgr.runSessionEnd().catch(() => {});
     }
@@ -764,7 +777,7 @@ ${instructions}`,
     }
 
     // --- Helper to style the model ID ---
-    const isYolo = this.harness.getYoloMode();
+    const isYolo = (this.harness.getState() as any).yolo === true;
     const styleModelId = (id: string): string => {
       if (!this.modelAuthStatus.hasAuth) {
         const envVar = this.modelAuthStatus.apiKeyEnvVar;
@@ -1931,7 +1944,7 @@ ${instructions}`,
         } else if (action.type === 'always_allow_category') {
           this.harness.resolveToolApprovalDecision('always_allow_category');
         } else if (action.type === 'yolo') {
-          this.harness.setYoloMode(true);
+          this.harness.setState({ yolo: true } as any);
           this.harness.resolveToolApprovalDecision('approve');
           this.updateStatusLine();
         } else {
@@ -3144,8 +3157,17 @@ ${instructions}`,
         title: `Select subagent model (${scopeLabel})`,
         onSelect: async (model: ModelItem) => {
           this.ui.hideOverlay();
-          await this.harness.setSubagentModelId(model.id, scope, agentType);
-          this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+          await this.harness.setSubagentModelId(model.id, agentType);
+          if (scope === 'global') {
+            if (this.authStorage) {
+              this.authStorage.setSubagentModelId(model.id, agentType);
+              this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+            } else {
+              this.showError('Cannot persist global preference: auth storage not configured');
+            }
+          } else {
+            this.showInfo(`Subagent model set for ${scopeLabel}: ${model.id}`);
+          }
           resolve();
         },
         onCancel: () => {
@@ -3187,21 +3209,21 @@ ${instructions}`,
         config,
         {
           onObserverModelChange: async modelId => {
-            await this.harness.switchObserverModel(modelId);
+            await this.harness.setState({ observerModelId: modelId } as any);
             this.showInfo(`Observer model → ${modelId}`);
           },
           onReflectorModelChange: async modelId => {
-            await this.harness.switchReflectorModel(modelId);
+            await this.harness.setState({ reflectorModelId: modelId } as any);
             this.showInfo(`Reflector model → ${modelId}`);
           },
           onObservationThresholdChange: value => {
-            this.harness.setObservationThreshold(value);
+            this.harness.setState({ observationThreshold: value } as any);
             this.omProgress.threshold = value;
             this.omProgress.thresholdPercent = value > 0 ? (this.omProgress.pendingTokens / value) * 100 : 0;
             this.updateStatusLine();
           },
           onReflectionThresholdChange: value => {
-            this.harness.setReflectionThreshold(value);
+            this.harness.setState({ reflectionThreshold: value } as any);
             this.omProgress.reflectionThreshold = value;
             this.omProgress.reflectionThresholdPercent =
               value > 0 ? (this.omProgress.observationTokens / value) * 100 : 0;
@@ -3230,9 +3252,9 @@ ${instructions}`,
   // ===========================================================================
   private async showPermissions(): Promise<void> {
     const { TOOL_CATEGORIES, getToolsForCategory } = await import('../permissions.js');
-    const rules = this.harness.getPermissionRules_public();
+    const rules = this.harness.getPermissionRules();
     const grants = this.harness.getSessionGrants();
-    const isYolo = this.harness.getYoloMode();
+    const isYolo = (this.harness.getState() as any).yolo === true;
 
     const lines: string[] = [];
     lines.push('Tool Approval Permissions');
@@ -3285,8 +3307,8 @@ ${instructions}`,
     const state = this.harness.getState() as any;
     const config = {
       notifications: (state?.notifications ?? 'off') as NotificationMode,
-      yolo: this.harness.getYoloMode(),
-      thinkingLevel: this.harness.getThinkingLevel(),
+      yolo: state?.yolo === true,
+      thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
       escapeAsCancel: this.editor.escapeEnabled,
     };
 
@@ -3297,11 +3319,11 @@ ${instructions}`,
           this.showInfo(`Notifications: ${mode}`);
         },
         onYoloChange: enabled => {
-          this.harness.setYoloMode(enabled);
+          this.harness.setState({ yolo: enabled } as any);
           this.updateStatusLine();
         },
         onThinkingLevelChange: async level => {
-          await this.harness.setThinkingLevel(level);
+          await this.harness.setState({ thinkingLevel: level } as any);
           this.updateStatusLine();
         },
         onEscapeAsCancelChange: async enabled => {
@@ -3328,8 +3350,8 @@ ${instructions}`,
   // ===========================================================================
 
   private async showLoginSelector(mode: 'login' | 'logout'): Promise<void> {
-    const allProviders = this.harness.getOAuthProviders();
-    const loggedInIds = this.harness.getLoggedInProviders();
+    const allProviders = getOAuthProviders();
+    const loggedInIds = allProviders.filter(p => this.authStorage?.isLoggedIn(p.id)).map(p => p.id);
 
     if (mode === 'logout') {
       if (loggedInIds.length === 0) {
@@ -3363,8 +3385,12 @@ ${instructions}`,
               if (mode === 'login') {
                 await this.performLogin(provider.id);
               } else {
-                this.harness.logout(provider.id);
-                this.showInfo(`Logged out from ${provider.name}`);
+                if (this.authStorage) {
+                  this.authStorage.logout(provider.id);
+                  this.showInfo(`Logged out from ${provider.name}`);
+                } else {
+                  this.showError('Auth storage not configured');
+                }
               }
             }
             resolve();
@@ -3387,8 +3413,13 @@ ${instructions}`,
   }
 
   private async performLogin(providerId: string): Promise<void> {
-    const provider = this.harness.getOAuthProviders().find(p => p.id === providerId);
+    const provider = getOAuthProviders().find(p => p.id === providerId);
     const providerName = provider?.name || providerId;
+
+    if (!this.authStorage) {
+      this.showError('Auth storage not configured');
+      return;
+    }
 
     return new Promise(resolve => {
       const dialog = new LoginDialogComponent(this.ui, providerId, (success, message) => {
@@ -3409,8 +3440,7 @@ ${instructions}`,
       });
       dialog.focused = true;
 
-      // Start the login flow via harness
-      this.harness
+      this.authStorage
         .login(providerId, {
           onAuth: (info: { url: string; instructions?: string }) => {
             dialog.showAuth(info.url, info.instructions);
@@ -3427,7 +3457,7 @@ ${instructions}`,
           this.ui.hideOverlay();
 
           // Auto-switch to the provider's default model
-          const defaultModel = this.harness.getAuthStorage().getDefaultModelForProvider(providerId as any);
+          const defaultModel = this.authStorage?.getDefaultModelForProvider(providerId as any);
           if (defaultModel) {
             await this.harness.switchModel(defaultModel);
             this.updateStatusLine();
@@ -3563,7 +3593,7 @@ ${modeList}`);
         return true;
       }
       case 'think': {
-        const currentLevel = this.harness.getThinkingLevel();
+        const currentLevel = ((this.harness.getState() as any)?.thinkingLevel ?? 'off') as string;
         const levels = [
           { label: 'Off', id: 'off' },
           { label: 'Minimal', id: 'minimal' },
@@ -3574,7 +3604,7 @@ ${modeList}`);
         const currentIdx = levels.findIndex(l => l.id === currentLevel);
         const nextIdx = (currentIdx + 1) % levels.length;
         const next = levels[nextIdx]!;
-        await this.harness.setThinkingLevel(next.id);
+        await this.harness.setState({ thinkingLevel: next.id } as any);
         this.showInfo(`Thinking: ${next.label}`);
         this.updateStatusLine();
         return true;
@@ -3601,8 +3631,8 @@ ${modeList}`);
         return true;
       }
       case 'yolo': {
-        const current = this.harness.getYoloMode();
-        this.harness.setYoloMode(!current);
+        const current = (this.harness.getState() as any).yolo === true;
+        this.harness.setState({ yolo: !current } as any);
         this.showInfo(!current ? 'YOLO mode ON — tools auto-approved' : 'YOLO mode OFF — tools require approval');
         this.updateStatusLine();
         return true;
@@ -3745,7 +3775,7 @@ Keyboard shortcuts:
       }
 
       case 'hooks': {
-        const hm = this.harness.getHookManager?.();
+        const hm = this.hookManager;
         if (!hm) {
           this.showInfo('Hooks system not initialized.');
           return true;
@@ -4487,7 +4517,7 @@ Keyboard shortcuts:
     sendNotification(reason, {
       mode,
       message,
-      hookManager: this.harness.getHookManager?.(),
+      hookManager: this.hookManager,
     });
   }
 

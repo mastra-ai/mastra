@@ -2,9 +2,9 @@
  * TodoWrite tool — manages a structured task list for the coding session.
  * Full-replacement semantics: each call replaces the entire todo list.
  */
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
-import type { HarnessRuntimeContext } from '../harness/types.js';
+import { z } from 'zod';
 
 const todoItemSchema = z.object({
   content: z.string().min(1).describe("Task description in imperative form (e.g., 'Fix authentication bug')"),
@@ -37,7 +37,7 @@ States:
   }),
   execute: async ({ todos }, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRuntimeContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
 
       if (harnessCtx) {
         // Always update state

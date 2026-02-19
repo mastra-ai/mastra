@@ -2,9 +2,9 @@
  * TodoCheck tool — checks the completion status of the current todo list.
  * Helps the agent determine if all tasks are completed before ending work.
  */
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
-import type { HarnessRuntimeContext } from '../harness/types.js';
+import { z } from 'zod';
 
 export const todoCheckTool = createTool({
   id: 'todo_check',
@@ -18,7 +18,7 @@ Returns:
   inputSchema: z.object({}), // No input needed
   execute: async ({}, context) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRuntimeContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
 
       if (!harnessCtx) {
         return {
