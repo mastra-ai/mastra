@@ -1463,15 +1463,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
-
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
         await this.switchMode(defaultMode.id);
       }
     }
+
+    this.pendingPlanApprovals.delete(planId);
+    resolve(response);
   }
 
   private async handleToolApprove(toolCallId?: string): Promise<{ message: HarnessMessage }> {
