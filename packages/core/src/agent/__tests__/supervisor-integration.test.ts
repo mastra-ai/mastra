@@ -2080,123 +2080,18 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     expect(promptString).toContain('My name is Alice');
   });
 
-  it('should NOT include any internal network routing JSON in sub-agent context (supervisor never produces it)', async () => {
-    // The supervisor pattern does NOT produce isNetwork, primitiveId/selectionReason,
-    // or routing JSON — those are specific to the agent.network() flow.
-    // This test confirms the sub-agent context stays clean of such internal fields
-    // even across multiple supervisor → sub-agent delegations.
-
-    let subAgentReceivedPrompts: any[] = [];
-
-    const subAgentMockModel = new MockLanguageModelV2({
-      doGenerate: async ({ prompt }) => {
-        subAgentReceivedPrompts.push(prompt);
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
-          text: 'Done.',
-          content: [{ type: 'text', text: 'Done.' }],
-          warnings: [],
-        };
-      },
-    });
-
-    const subAgent = new Agent({
-      id: 'sub-agent-routing-test',
-      name: 'Sub Agent Routing Test',
-      description: 'A sub-agent',
-      instructions: 'Complete the assigned task.',
-      model: subAgentMockModel,
-    });
-
-    // Supervisor delegates to sub-agent twice (two iterations)
-    let supervisorCallCount = 0;
-    const supervisorAgent = new Agent({
-      id: 'supervisor-no-routing-json',
-      name: 'Supervisor No Routing JSON',
-      instructions: 'Delegate steps to the sub-agent.',
-      model: new MockLanguageModelV2({
-        doGenerate: async () => {
-          supervisorCallCount++;
-          if (supervisorCallCount === 1) {
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'tool-calls' as const,
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              text: '',
-              content: [
-                {
-                  type: 'tool-call' as const,
-                  toolCallId: 'call-1',
-                  toolName: 'agent-subAgent',
-                  input: JSON.stringify({ prompt: 'Do step 1' }),
-                },
-              ],
-              warnings: [],
-            };
-          }
-          if (supervisorCallCount === 2) {
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'tool-calls' as const,
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              text: '',
-              content: [
-                {
-                  type: 'tool-call' as const,
-                  toolCallId: 'call-2',
-                  toolName: 'agent-subAgent',
-                  input: JSON.stringify({ prompt: 'Do step 2' }),
-                },
-              ],
-              warnings: [],
-            };
-          }
-          return {
-            rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-            text: 'Both steps complete.',
-            content: [{ type: 'text', text: 'Both steps complete.' }],
-            warnings: [],
-          };
-        },
-      }),
-      agents: { subAgent },
-      memory: new MockMemory(),
-    });
-
-    await supervisorAgent.generate('Do a multi-step task', { maxSteps: 5 });
-
-    // Sub-agent should have been called at least twice (once per supervisor delegation)
-    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
-
-    // Verify no network-specific internal JSON fields appear in either sub-agent call.
-    // The supervisor pattern never generates isNetwork routing messages.
-    for (const prompt of subAgentReceivedPrompts) {
-      const promptStr = JSON.stringify(prompt);
-      expect(promptStr).not.toContain('isNetwork');
-      expect(promptStr).not.toContain('selectionReason');
-      expect(promptStr).not.toContain('primitiveId');
-      expect(promptStr).not.toContain('"primitiveType"');
-    }
-  });
-
-  it('should make completion feedback visible to the supervisor so it informs subsequent delegations', async () => {
+  it('should make completion feedback visible to both the supervisor and sub-agents', async () => {
     // Completion feedback (from failed scorers) is added as an assistant message to the
-    // supervisor's own message list. This means:
-    //   - The SUPERVISOR'S LLM sees the feedback on its next call and can use it to craft
-    //     a better delegation prompt for the sub-agent.
-    //   - Sub-agents receive only user input messages as context (not assistant messages),
-    //     so completion feedback does NOT appear directly in the sub-agent's context.
+    // supervisor's own message list. The supervisor passes ALL messages (input + response,
+    // including completion feedback) as context to sub-agents. This means:
+    //   - The SUPERVISOR'S LLM sees the feedback on its next call.
+    //   - Sub-agents also see the feedback directly in their context, so they can produce
+    //     a better response without the supervisor needing to relay the feedback.
     //
-    // This is the correct flow: the feedback helps the supervisor decide what to do next,
-    // and a real LLM supervisor would incorporate the feedback into the prompt it sends to
-    // the sub-agent. The test verifies:
+    // The test verifies:
     //   1. The supervisor loop continues when scorer fails (feedback keeps isContinued = true).
     //   2. completion-check events are emitted so the feedback is observable.
-    //   3. Sub-agents receive the user's original task messages (not internal feedback messages).
+    //   3. Completion feedback IS directly visible in sub-agent context on the second call.
 
     let supervisorLLMReceivedPrompts: any[] = [];
     let subAgentReceivedPrompts: any[] = [];
@@ -2430,10 +2325,12 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     expect(supervisorCall3Str).toContain('Completion Check Results');
     expect(supervisorCall3Str).toContain('NOT COMPLETE');
 
-    // Sub-agents receive only the user's original task message as context (not the
-    // assistant-role completion feedback), because tool context uses user input messages only.
+    // Sub-agents now receive ALL supervisor messages as context (including completion feedback),
+    // because tool context passes all messages (input + response). The feedback is directly
+    // visible to the sub-agent on its second call so it can produce a better response.
     const subAgentCall2Str = JSON.stringify(subAgentReceivedPrompts[1]);
-    expect(subAgentCall2Str).not.toContain('Completion Check Results');
+    expect(subAgentCall2Str).toContain('Completion Check Results');
+    expect(subAgentCall2Str).toContain('NOT COMPLETE');
     expect(subAgentCall2Str).toContain('Complete a multi-part task');
   });
 

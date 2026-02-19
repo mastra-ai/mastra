@@ -2501,6 +2501,8 @@ export class Agent<
 
               const { resumeData, suspend } = context?.agent ?? {};
 
+              console.dir({ contextMessages }, { depth: null });
+
               // Apply contextFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
               let filteredContextMessages = contextMessages;
@@ -2525,10 +2527,14 @@ export class Agent<
                 }
               }
 
+              const hasContextMessages = filteredContextMessages.length > 0;
+
               const messagesForSubAgent: MessageListInput = [
                 ...filteredContextMessages,
                 { role: 'user' as const, content: effectivePrompt },
               ];
+
+              console.dir({ messagesForSubAgent }, { depth: null });
 
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
@@ -2605,6 +2611,9 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
+                              options: {
+                                lastMessages: hasContextMessages ? 1 : undefined,
+                              },
                             },
                           }
                         : {}),
