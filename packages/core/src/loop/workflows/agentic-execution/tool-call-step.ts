@@ -43,6 +43,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   inputProcessors,
   processorStates,
   agentId,
+  models,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -77,6 +78,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             steps: [],
             tools: stepTools,
             requestContext,
+            model: models?.[0]?.model!,
+            retryCount: 0,
           });
 
           if (result.tools?.[inputData.toolName]) {
@@ -84,7 +87,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             stepTools = result.tools as Tools;
             // Update _internal so subsequent tool calls in this foreach don't re-run processors
             if (_internal) {
-              _internal.stepTools = result.tools;
+              _internal.stepTools = result.tools as ToolSet;
             }
           }
         } catch (error) {
