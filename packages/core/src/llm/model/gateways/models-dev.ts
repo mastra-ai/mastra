@@ -43,9 +43,6 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   groq: {
     url: 'https://api.groq.com/openai/v1',
   },
-  vercel: {
-    apiKeyEnvVar: 'AI_GATEWAY_API_KEY',
-  },
   // moonshotai uses Anthropic-compatible API, not OpenAI-compatible
   moonshotai: {
     url: 'https://api.moonshot.ai/anthropic/v1',
