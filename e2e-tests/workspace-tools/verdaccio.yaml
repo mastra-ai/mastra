@@ -1,0 +1,34 @@
+storage: ./storage
+
+max_body_size: 100mb
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+
+packages:
+  '@mastra/*':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+
+  '**':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+
+security:
+  api:
+    legacy: true
+
+middlewares:
+  audit:
+    enabled: false
+
+web:
+  enable: true
+
+log:
+  - { type: stdout, format: pretty, level: error }
