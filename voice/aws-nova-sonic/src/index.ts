@@ -241,7 +241,7 @@ export class NovaSonicVoice extends MastraVoice<
     try {
       this.log('Getting AWS credentials...');
       // Get AWS credentials
-      const credentials = await getAwsCredentials(this.credentials);
+      const credentials = await getAwsCredentials(this.credentials, this.debug);
       
       if (!credentials) {
         throw new NovaSonicError(
@@ -1425,6 +1425,12 @@ export class NovaSonicVoice extends MastraVoice<
 
     this.state = 'disconnected';
     this.processingStream = false;
+
+    // Clear fallback turn-complete timeout to prevent callbacks after teardown
+    if (this.turnCompleteTimeout) {
+      clearTimeout(this.turnCompleteTimeout);
+      this.turnCompleteTimeout = undefined;
+    }
 
     // Signal close to the async iterable
     const closeSignal = (this as any)._closeSignal as (() => void) | undefined;

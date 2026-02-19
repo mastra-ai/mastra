@@ -129,7 +129,7 @@ You can customize the voice behavior in `src/mastra/agents/index.ts`:
 1. **From the monorepo root**, install all dependencies:
 ```bash
 # Navigate to the monorepo root
-cd /Users/alkrok/Projects/mastra
+cd <path-to-mastra-monorepo-root>
 
 # Install all dependencies (this will set up workspace links)
 pnpm install
@@ -191,7 +191,7 @@ http://localhost:3000
 
 ```bash
 # From the monorepo root (NOT from this directory)
-cd /Users/alkrok/Projects/mastra
+cd <path-to-mastra-monorepo-root>
 pnpm install
 ```
 
