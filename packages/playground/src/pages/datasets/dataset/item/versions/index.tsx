@@ -2,9 +2,7 @@ import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import {
   Database,
-  ScaleIcon,
   ArrowLeft,
-  FileCodeIcon,
   HistoryIcon,
   GitCompareIcon,
   ArrowLeftIcon,
@@ -91,9 +89,6 @@ function DatasetItemVersionsComparePage() {
               Datasets
             </Crumb>
             <Crumb isCurrent as="span">
-              <Icon>
-                <ScaleIcon />
-              </Icon>
               Compare Versions
             </Crumb>
           </Breadcrumb>
@@ -118,18 +113,12 @@ function DatasetItemVersionsComparePage() {
             Datasets
           </Crumb>
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name || datasetId?.slice(0, 8)}
+            {dataset?.name}
           </Crumb>
           <Crumb as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
-            <Icon>
-              <FileCodeIcon />
-            </Icon>
             Item
           </Crumb>
           <Crumb isCurrent as="span">
-            <Icon>
-              <ScaleIcon />
-            </Icon>
             Compare Versions
           </Crumb>
         </Breadcrumb>
