@@ -28,12 +28,7 @@ export default async function setup(project: TestProject) {
   project.provide('registry', registry.toString());
 
   // Only need @mastra/core and its dependencies
-  await publishPackages(
-    ['--filter="@mastra/core^..."', '--filter="@mastra/core"'],
-    tag,
-    rootDir,
-    registry,
-  );
+  await publishPackages(['--filter="@mastra/core^..."', '--filter="@mastra/core"'], tag, rootDir, registry);
 
   return () => {
     try {

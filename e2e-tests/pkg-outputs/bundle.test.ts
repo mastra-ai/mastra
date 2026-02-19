@@ -113,28 +113,25 @@ describe('@mastra/core native optional deps', () => {
   // trick), the bundle would embed the wrong platform binary.
   const nativeOptionalDeps = ['@ast-grep/napi'];
 
-  it.for(nativeOptionalDeps.map(dep => [dep]))(
-    '%s should not be statically imported in the bundle',
-    async ([dep]) => {
-      const jsFiles = await globby(join(coreDistDir, '**/*.{js,cjs}'));
-      expect(jsFiles.length).toBeGreaterThan(0);
+  it.for(nativeOptionalDeps.map(dep => [dep]))('%s should not be statically imported in the bundle', async ([dep]) => {
+    const jsFiles = await globby(join(coreDistDir, '**/*.{js,cjs}'));
+    expect(jsFiles.length).toBeGreaterThan(0);
 
-      for (const file of jsFiles) {
-        const content = await readFile(file, 'utf-8');
-        if (!content.includes(dep)) continue;
+    for (const file of jsFiles) {
+      const content = await readFile(file, 'utf-8');
+      if (!content.includes(dep)) continue;
 
-        // Static ESM import: import ... from "@ast-grep/napi"
-        const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${escapeRegExp(dep)}["']`, 'm');
-        expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
+      // Static ESM import: import ... from "@ast-grep/napi"
+      const staticEsmImport = new RegExp(`^import\\s+.*from\\s+["']${escapeRegExp(dep)}["']`, 'm');
+      expect(content, `${file} has a static ESM import of ${dep}`).not.toMatch(staticEsmImport);
 
-        // Static CJS require: require("@ast-grep/napi")  (top-level, not inside req.resolve)
-        // We allow: req.resolve("@ast-grep/napi") and const moduleName = "@ast-grep/napi"
-        // We disallow: require("@ast-grep/napi") as a direct call
-        const staticRequire = new RegExp(`(?<!\\.)require\\(["']${escapeRegExp(dep)}["']\\)`, 'm');
-        expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
-      }
-    },
-  );
+      // Static CJS require: require("@ast-grep/napi")  (top-level, not inside req.resolve)
+      // We allow: req.resolve("@ast-grep/napi") and const moduleName = "@ast-grep/napi"
+      // We disallow: require("@ast-grep/napi") as a direct call
+      const staticRequire = new RegExp(`(?<!\\.)require\\(["']${escapeRegExp(dep)}["']\\)`, 'm');
+      expect(content, `${file} has a static require() of ${dep}`).not.toMatch(staticRequire);
+    }
+  });
 
   it('should not contain native binary files (.node) in dist', async () => {
     const nativeFiles = await globby(join(coreDistDir, '**/*.node'));
