@@ -1,10 +1,10 @@
-## Styleguide: Integration guide
+# Styleguide: Integration guide
 
 An integration guide is a comprehensive reference for using Mastra with a specific external library or ecosystem (e.g. AI SDK UI). Unlike tutorials (which build one thing step-by-step), integration guides are organized by feature area. The reader jumps to the section they need — each section is self-contained.
 
 Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
 
-### Template
+## Template
 
 ````mdx
 ---
@@ -175,7 +175,7 @@ Key points:
 For a complete implementation, see the [example-name example](https://link-to-example).
 ````
 
-### Rules
+## Rules
 
 1. **Title format**: Use `"Using $LIBRARY | $CATEGORY"` in frontmatter (e.g. `"Using AI SDK UI | Frameworks"`). The H1 matches: "Using $LIBRARY".
 2. **Intro with admonitions**: After the intro paragraph, use `:::note` for migration guides or version notes, and `:::tip` for links to live examples or related quickstarts.
@@ -191,7 +191,7 @@ For a complete implementation, see the [example-name example](https://link-to-ex
 12. **No "Next steps" or "Related" section**: Integration guides don't need a closing section — the Recipes section serves as the natural end.
 13. **Use `npm2yarn` on install commands**: Same as other guide types.
 
-### Example: AI SDK UI integration
+## Example: AI SDK UI integration
 
 See [ai-sdk-ui.mdx](../src/content/en/guides/build-your-ui/ai-sdk-ui.mdx) for the gold-standard implementation of this template.
 

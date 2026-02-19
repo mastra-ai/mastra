@@ -4,7 +4,7 @@ This styleguide covers the "Quickstart" page type found in `docs/src/content/en/
 
 Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
 
-### Template
+## Template
 
 ````mdx
 ---
@@ -78,7 +78,7 @@ From here, you can extend the project:
 - [Link to deployment](/guides/deployment/page)
 ````
 
-### Rules
+## Rules
 
 1. **Title format**: Use `"$TECHNOLOGY | $CATEGORY"` in frontmatter (e.g. `"Next.js | Frameworks"`). No `packages` field — quickstarts aren't tied to a single package.
 2. **H1 is action-oriented**: Use a verb phrase describing the outcome (e.g. "Integrate Mastra in your Next.js project"), not just the technology name.
@@ -91,7 +91,7 @@ From here, you can extend the project:
 9. **No `<Steps>` component**: Quickstarts use H2 headings as steps, not the `<Steps>` MDX component. The H2 headings provide better navigation and allow longer content per step.
 10. **Use `npm2yarn` on all install commands**: Always add the `npm2yarn` flag to bash blocks containing `npm install` or `npx` commands.
 
-### Example: Next.js quickstart
+## Example: Next.js quickstart
 
 See [next-js.mdx](../src/content/en/guides/getting-started/next-js.mdx) for the gold-standard implementation of this template.
 

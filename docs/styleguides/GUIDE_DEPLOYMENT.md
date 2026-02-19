@@ -1,10 +1,10 @@
-## Styleguide: Deployment guide
+# Styleguide: Deployment guide
 
 A deployment guide walks the reader through deploying their Mastra application to a specific platform. It covers installation, configuration, the deploy process itself, and platform-specific concerns. The reader already has a working Mastra app — this guide gets it running in production.
 
 Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
 
-### Template
+## Template
 
 ````mdx
 ---
@@ -95,7 +95,7 @@ Explain the limitation and link to alternatives if applicable.
 - [Related guide or doc](/docs/category/page)
 ````
 
-### Rules
+## Rules
 
 1. **Title format**: Use `"Deploy Mastra to $PLATFORM | Deployment"` in frontmatter. The H1 should match the title.
 2. **Scope clarification**: Include a `:::note` block after the intro if this guide only covers one deployment method and alternatives exist. Don't let the reader follow the wrong guide.
@@ -107,7 +107,7 @@ Explain the limitation and link to alternatives if applicable.
 8. **Close with "Related"**: Link to the deployer reference, the deployment overview, and related guides. No congratulations message — deployment guides are reference-like.
 9. **Use `npm2yarn` on install commands**: Same as quickstarts.
 
-### Example: Vercel deployment
+## Example: Vercel deployment
 
 See [vercel.mdx](../src/content/en/guides/deployment/vercel.mdx) for the gold-standard implementation of this template.
 

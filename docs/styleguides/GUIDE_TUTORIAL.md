@@ -1,10 +1,10 @@
-## Styleguide: Tutorial guide
+# Styleguide: Tutorial guide
 
 A guide tutorial teaches the reader how to build something specific with Mastra. Unlike quickstarts (which get to a working result as fast as possible), tutorials go deeper — each step teaches a concept while building toward a complete project. The reader already has a Mastra project set up.
 
 Also read and follow the general [STYLEGUIDE.md](./STYLEGUIDE.md) for tone, readability, and formatting rules that apply to all documentation.
 
-### Template
+## Template
 
 ````mdx
 ---
@@ -116,7 +116,7 @@ Learn more:
 - [Link to external resource](https://example.com)
 ````
 
-### Rules
+## Rules
 
 1. **Title format**: Use `"Guide: Building a $THING"` in frontmatter. The H1 drops the "Guide:" prefix and uses a gerund: "Building a $THING".
 2. **Intro paragraph**: Start with "In this guide, you'll build..." followed by what the reader will learn. List the key concepts with links to reference docs.
@@ -129,7 +129,7 @@ Learn more:
 9. **No `<Steps>` component**: Like quickstarts, tutorials use H2 headings as steps for better navigation and longer content per step.
 10. **Use `npm2yarn` on install commands**: Same as other guide types.
 
-### Example: Code review bot
+## Example: Code review bot
 
 See [code-review-bot.mdx](../src/content/en/guides/guide/code-review-bot.mdx) for the gold-standard implementation of this template.
 

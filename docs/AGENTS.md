@@ -8,7 +8,7 @@ This file provides guidance to coding agents when working on documentation in th
 
 ## Getting started
 
-Refer to the `@CONTRIBUTING.md` file for instructions on how to setup this project and run it locally.
+Refer to the `@CONTRIBUTING.md` file for instructions on how to set up this project and run it locally.
 
 ## Documentation structure
 
