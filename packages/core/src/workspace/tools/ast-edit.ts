@@ -90,13 +90,18 @@ export function isAstGrepAvailable(): boolean {
 
 /**
  * Map file extension to ast-grep Lang enum.
+ *
+ * Only languages with built-in tree-sitter grammars in @ast-grep/napi are
+ * supported. Python, Go, Rust, etc. require separate @ast-grep/lang-* packages
+ * which are not currently integrated.
  */
 export function getLanguageFromPath(filePath: string, Lang: any): any {
   const ext = filePath.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'ts':
-    case 'tsx':
       return Lang.TypeScript;
+    case 'tsx':
+      return Lang.Tsx;
     case 'js':
     case 'jsx':
       return Lang.JavaScript;
@@ -382,16 +387,23 @@ Pattern replace (for everything else):
     targetName: z
       .string()
       .optional()
-      .describe('Target name for rename/remove transforms (e.g., the current function name)'),
-    newName: z.string().optional().describe('New name for rename transforms'),
+      .describe(
+        'Required for remove-import, rename-function, and rename-variable transforms. The current name to target.',
+      ),
+    newName: z
+      .string()
+      .optional()
+      .describe(
+        'Required for rename-function and rename-variable transforms. The new name to replace targetName with.',
+      ),
     importSpec: z
       .object({
         module: z.string().describe('Module to import from'),
-        names: z.array(z.string()).min(1).describe('Names to import'),
+        names: z.array(z.string()).min(1).describe('Names to import. For default imports, put the default name first.'),
         isDefault: z.boolean().optional().describe('Whether the first name is a default import'),
       })
       .optional()
-      .describe('Import specification for add-import transform'),
+      .describe('Required for add-import transform. Specifies the module and names to import.'),
   }),
   execute: async ({ path, pattern, replacement, transform, targetName, newName, importSpec }, context) => {
     const { filesystem } = requireFilesystem(context);

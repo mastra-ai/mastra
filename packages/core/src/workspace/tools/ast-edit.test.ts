@@ -192,6 +192,49 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(result).toContain('No changes');
     });
 
+    it('should merge named import into existing import with aliases', async () => {
+      const code = `import { foo as bar } from 'utils';\n\nconst x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'utils', names: ['baz'] },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      expect(content).toContain('foo as bar');
+      expect(content).toContain('baz');
+    });
+
+    it('should add default import with additional named imports', async () => {
+      const code = `const x = 1;`;
+      await fs.writeFile(path.join(tempDir, 'test.ts'), code);
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/test.ts',
+        transform: 'add-import',
+        importSpec: { module: 'express', names: ['express', 'Router', 'Request'], isDefault: true },
+      });
+
+      expect(result).not.toContain('No changes');
+
+      const content = await fs.readFile(path.join(tempDir, 'test.ts'), 'utf-8');
+      expect(content).toContain("import express, { Router, Request } from 'express';");
+    });
+
     it('should error when importSpec missing', async () => {
       await fs.writeFile(path.join(tempDir, 'test.ts'), 'const x = 1;');
 
