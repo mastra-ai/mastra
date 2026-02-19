@@ -360,8 +360,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         //this is to avoid passing resume data to the tool if it's not needed
+        // For agent tools, always pass resume data so the agent tool wrapper knows to call
+        // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
+        const isAgentTool = inputData.toolName?.startsWith('agent-');
         const resumeDataToPassToToolOptions =
-          toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
             ? undefined
             : resumeData;
 
