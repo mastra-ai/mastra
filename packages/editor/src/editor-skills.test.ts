@@ -1869,6 +1869,9 @@ describe('editor.skill — live strategy execution', () => {
     const now = new Date();
     await fs.utimes(skillsDir, now, now);
 
+    // Clear the cached agent so getById re-fetches from storage and re-hydrates
+    editor.agent.clearCache('live-edit-agent');
+
     // 4. Get a fresh agent instance (new Workspace -> new WorkspaceSkillsImpl)
     const agent2 = await editor.agent.getById('live-edit-agent');
     expect(agent2).toBeInstanceOf(Agent);

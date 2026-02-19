@@ -1538,7 +1538,7 @@ export class MemoryPG extends MemoryStorage {
         const newThread: StorageThreadType = {
           id: newThreadId,
           resourceId: resourceId || sourceThread.resourceId,
-          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
           metadata: {
             ...metadata,
             clone: cloneMetadata,

@@ -1283,7 +1283,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const newThread: StorageThreadType = {
         id: newThreadId,
         resourceId: resourceId || sourceThread.resourceId,
-        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
         metadata: {
           ...metadata,
           clone: cloneMetadata,
@@ -1303,7 +1303,7 @@ export class MemoryLibSQL extends MemoryStorage {
           args: [
             newThread.id,
             newThread.resourceId,
-            newThread.title || null,
+            newThread.title ?? '',
             JSON.stringify(newThread.metadata),
             nowStr,
             nowStr,

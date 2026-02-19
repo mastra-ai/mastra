@@ -22,6 +22,7 @@ interface MCPClientFormSidebarProps {
   onPreFillFromServer: (serverId: string) => void;
   containerRef?: React.RefObject<HTMLElement | null>;
   readOnly?: boolean;
+  showSubmit?: boolean;
   submitLabel?: string;
   onTryConnect?: () => void;
   isTryingConnect?: boolean;
@@ -34,6 +35,7 @@ export function MCPClientFormSidebar({
   onPreFillFromServer,
   containerRef,
   readOnly,
+  showSubmit,
   submitLabel = 'Create MCP Client',
   onTryConnect,
   isTryingConnect,
@@ -253,43 +255,48 @@ export function MCPClientFormSidebar({
         </div>
       </ScrollArea>
 
-      {!readOnly && (
+      {(showSubmit ?? !readOnly) && (
         <div className="flex-shrink-0 p-4 flex flex-col gap-2">
-          {(() => {
-            const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;
-            const tooltipContent =
-              serverType !== 'http' ? 'Only available for HTTP servers' : !url.trim() ? 'Enter a URL first' : undefined;
+          {!readOnly &&
+            (() => {
+              const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;
+              const tooltipContent =
+                serverType !== 'http'
+                  ? 'Only available for HTTP servers'
+                  : !url.trim()
+                    ? 'Enter a URL first'
+                    : undefined;
 
-            return tooltipContent ? (
-              <ButtonWithTooltip
-                variant="outline"
-                onClick={onTryConnect}
-                disabled={isDisabled}
-                className="w-full"
-                tooltipContent={tooltipContent}
-              >
-                {isTryingConnect ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Connecting...
-                  </>
-                ) : (
-                  'Try to connect'
-                )}
-              </ButtonWithTooltip>
-            ) : (
-              <Button variant="outline" onClick={onTryConnect} disabled={isDisabled} className="w-full">
-                {isTryingConnect ? (
-                  <>
-                    <Spinner className="h-4 w-4" />
-                    Connecting...
-                  </>
-                ) : (
-                  'Try to connect'
-                )}
-              </Button>
-            );
-          })()}
+              return tooltipContent ? (
+                <ButtonWithTooltip
+                  variant="outline"
+                  onClick={onTryConnect}
+                  disabled={isDisabled}
+                  className="w-full"
+                  tooltipContent={tooltipContent}
+                >
+                  {isTryingConnect ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      Connecting...
+                    </>
+                  ) : (
+                    'Try to connect'
+                  )}
+                </ButtonWithTooltip>
+              ) : (
+                <Button variant="outline" onClick={onTryConnect} disabled={isDisabled} className="w-full">
+                  {isTryingConnect ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      Connecting...
+                    </>
+                  ) : (
+                    'Try to connect'
+                  )}
+                </Button>
+              );
+            })()}
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
