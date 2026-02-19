@@ -5,7 +5,7 @@
 
 import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable, TUI } from '@mariozechner/pi-tui';
-import type { HarnessThread } from '../../harness/types.js';
+import type { HarnessThread } from '@mastra/core/harness';
 import { bg, fg, bold } from '../theme.js';
 
 // =============================================================================
