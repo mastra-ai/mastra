@@ -55,7 +55,11 @@ export type ParentWorkflow = {
   runId: string;
   executionPath: number[];
   resume: boolean;
-  stepResults: Record<string, StepResult<any, any, any, any>>;
+  /**
+   * @deprecated No longer carried through events to reduce memory.
+   * Parent stepResults are loaded from storage instead.
+   */
+  stepResults?: Record<string, StepResult<any, any, any, any>>;
   parentWorkflow?: ParentWorkflow;
   stepId: string;
 };
@@ -363,7 +367,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resumeSteps,
-          stepResults: parentWorkflow.stepResults,
+          stepResults: {}, // Loaded from storage in processWorkflowStepEnd
           prevResult,
           resumeData,
           activeSteps,
@@ -414,7 +418,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resumeSteps,
-          stepResults: parentWorkflow.stepResults,
+          stepResults: {}, // Loaded from storage in processWorkflowStepEnd
           prevResult: {
             ...prevResult,
             suspendPayload: {
@@ -500,7 +504,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId: parentWorkflow.runId,
           executionPath: parentWorkflow.executionPath,
           resumeSteps,
-          stepResults: parentWorkflow.stepResults,
+          stepResults: {}, // Loaded from storage in processWorkflowStepEnd
           prevResult,
           timeTravel,
           resumeData,
@@ -815,7 +819,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               resumeSteps,
-              stepResults,
+              // stepResults intentionally omitted — loaded from storage on completion
               input: prevResult,
               parentWorkflow,
             },
@@ -867,7 +871,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               resumeSteps,
-              stepResults,
+              // stepResults intentionally omitted — loaded from storage on completion
               timeTravel,
               input: prevResult,
               parentWorkflow,
@@ -897,7 +901,8 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               executionPath,
               resumeSteps,
-              stepResults,
+              // stepResults intentionally omitted — loaded from storage on completion
+              // to avoid carrying the full (and growing) result set through every event
               input: prevResult,
               parentWorkflow,
             },
@@ -1169,6 +1174,19 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Cache workflows store to avoid redundant async calls
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+
+    // For nested workflow completions, load the parent's stepResults from storage.
+    // parentWorkflow no longer carries stepResults through events to avoid
+    // O(depth × results) memory growth per event in deeply nested workflows.
+    if (parentContext) {
+      const parentSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+      });
+      if (parentSnapshot?.context) {
+        stepResults = parentSnapshot.context;
+      }
+    }
 
     if (step.type === 'foreach') {
       const snapshot = await workflowsStore?.loadWorkflowSnapshot({

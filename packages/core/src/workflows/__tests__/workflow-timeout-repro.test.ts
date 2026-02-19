@@ -295,4 +295,166 @@ describe('Workflow parallel step hang fixes (Evented)', () => {
       HANG_TIMEOUT_MS,
     );
   });
+
+  describe('Fix 4: strip stepResults from parentWorkflow events', () => {
+    it(
+      'should not carry parent stepResults through nested workflow events',
+      async () => {
+        // This test verifies the memory optimization: parentWorkflow no longer
+        // carries the full stepResults through every event. Instead, the parent's
+        // stepResults are loaded from storage when the nested workflow completes.
+        //
+        // Without this fix, each nested workflow event carries the FULL ancestor
+        // stepResults chain at every nesting level. For a forEach with N items,
+        // the Kth iteration's events carry all K-1 previous results, leading to
+        // O(N²) memory growth. With deeply nested workflows, this can reach GBs.
+
+        const innerStep = createStep({
+          id: 'inner-step',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async () => ({ value: 'inner-result' }),
+        });
+
+        const innerWorkflow = createWorkflow({
+          id: 'inner-wf',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ value: z.string() }),
+          steps: [innerStep],
+        });
+        innerWorkflow.then(innerStep).commit();
+
+        const finalStep = createStep({
+          id: 'final-step',
+          inputSchema: z.any(),
+          outputSchema: z.object({ done: z.boolean() }),
+          execute: async () => ({ done: true }),
+        });
+
+        const outerWorkflow = createWorkflow({
+          id: 'nested-event-wf',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ done: z.boolean() }),
+          steps: [innerWorkflow, finalStep],
+        });
+
+        outerWorkflow.then(innerWorkflow).then(finalStep).commit();
+
+        const mastra = new Mastra({
+          workflows: { 'nested-event-wf': outerWorkflow },
+          storage: testStorage,
+        });
+        await mastra.startEventEngine();
+
+        // Spy on pubsub.publish to capture events and verify parentWorkflow payloads
+        const publishedEvents: Array<{ type: string; data: any }> = [];
+        const originalPublish = mastra.pubsub.publish.bind(mastra.pubsub);
+        vi.spyOn(mastra.pubsub, 'publish').mockImplementation(async (topic, event) => {
+          if (topic === 'workflows') {
+            publishedEvents.push(event as any);
+          }
+          return originalPublish(topic, event);
+        });
+
+        try {
+          const run = await outerWorkflow.createRun();
+          const result = await run.start({ inputData: {} });
+
+          expect(result.status).toBe('success');
+
+          // Verify that workflow.start events for nested workflows do NOT carry
+          // stepResults in parentWorkflow
+          const nestedStartEvents = publishedEvents.filter(e => e.type === 'workflow.start' && e.data?.parentWorkflow);
+          expect(nestedStartEvents.length).toBeGreaterThan(0);
+
+          for (const event of nestedStartEvents) {
+            // parentWorkflow should NOT have stepResults (the key memory optimization)
+            expect(event.data.parentWorkflow.stepResults).toBeUndefined();
+          }
+
+          // Also verify that workflow.step.end events going back to parent
+          // don't carry stale stepResults from parentWorkflow
+          const stepEndEvents = publishedEvents.filter(e => e.type === 'workflow.step.end' && e.data?.parentContext);
+          for (const event of stepEndEvents) {
+            // stepResults should be empty (loaded from storage instead)
+            expect(Object.keys(event.data.stepResults).length).toBe(0);
+          }
+        } finally {
+          await mastra.stopEventEngine();
+        }
+      },
+      HANG_TIMEOUT_MS,
+    );
+
+    it(
+      'should complete deeply nested workflow (3 levels) correctly after stripping stepResults',
+      async () => {
+        // Ensures the storage-read fallback works at multiple nesting levels:
+        // outer → intermediary → inner
+
+        const innerStep = createStep({
+          id: 'deep-inner-step',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ v: z.string() }),
+          execute: async () => ({ v: 'deep' }),
+        });
+
+        const innerWorkflow = createWorkflow({
+          id: 'deep-inner-wf',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ v: z.string() }),
+          steps: [innerStep],
+        });
+        innerWorkflow.then(innerStep).commit();
+
+        const intermediaryStep = createStep({
+          id: 'intermediary-step',
+          inputSchema: z.any(),
+          outputSchema: z.object({ v: z.string() }),
+          execute: async () => ({ v: 'mid' }),
+        });
+
+        const intermediaryWorkflow = createWorkflow({
+          id: 'intermediary-wf',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ v: z.string() }),
+          steps: [innerWorkflow, intermediaryStep],
+        });
+        intermediaryWorkflow.then(innerWorkflow).then(intermediaryStep).commit();
+
+        const finalStep = createStep({
+          id: 'final-step',
+          inputSchema: z.any(),
+          outputSchema: z.object({ done: z.boolean() }),
+          execute: async () => ({ done: true }),
+        });
+
+        const outerWorkflow = createWorkflow({
+          id: 'deep-nested-wf',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ done: z.boolean() }),
+          steps: [intermediaryWorkflow, finalStep],
+        });
+        outerWorkflow.then(intermediaryWorkflow).then(finalStep).commit();
+
+        const mastra = new Mastra({
+          workflows: { 'deep-nested-wf': outerWorkflow },
+          storage: testStorage,
+        });
+        await mastra.startEventEngine();
+
+        try {
+          const run = await outerWorkflow.createRun();
+          const result = await run.start({ inputData: {} });
+
+          // The key assertion: deeply nested workflows should still complete
+          // correctly even though parentWorkflow no longer carries stepResults
+          expect(result.status).toBe('success');
+        } finally {
+          await mastra.stopEventEngine();
+        }
+      },
+      HANG_TIMEOUT_MS,
+    );
+  });
 });
