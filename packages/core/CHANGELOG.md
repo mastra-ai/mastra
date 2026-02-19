@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 1.5.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`1415bcd`](https://github.com/mastra-ai/mastra/commit/1415bcd894baba03e07640b3b1986037db49559d)]:
+  - @mastra/schema-compat@1.1.1-alpha.0
+
 ## 1.5.0-alpha.0
 
 ### Minor Changes

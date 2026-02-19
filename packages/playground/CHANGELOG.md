@@ -1,5 +1,15 @@
 # @internal/playground
 
+## 1.3.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.5.0-alpha.1
+  - @mastra/core@1.5.0-alpha.1
+  - @mastra/playground-ui@12.0.0-alpha.1
+  - @mastra/react@0.2.4-alpha.1
+
 ## 1.3.2-alpha.0
 
 ### Patch Changes

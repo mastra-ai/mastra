@@ -1,5 +1,14 @@
 # @mastra/posthog
 
+## 1.0.3-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13248](https://github.com/mastra-ai/mastra/pull/13248))
+  - Updated dependency [`posthog-node@^4.18.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/4.18.0) (from `^4.0.1`, in `dependencies`)
+- Updated dependencies:
+  - @mastra/core@1.5.0-alpha.1
+
 ## 1.0.2
 
 ### Patch Changes
