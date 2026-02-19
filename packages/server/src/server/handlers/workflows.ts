@@ -99,19 +99,19 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, partial }) => {
+  handler: (async ({ mastra, partial }: any) => {
     try {
       const workflows = mastra.listWorkflows({ serialized: false });
       const isPartial = partial === 'true';
       const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
-        acc[key] = getWorkflowInfo(workflow, isPartial);
+        acc[key] = getWorkflowInfo(workflow as any, isPartial);
         return acc;
       }, {});
       return _workflows;
     } catch (error) {
       return handleError(error, 'Error getting workflows');
     }
-  },
+  }) as any,
 });
 
 export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
@@ -124,7 +124,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId }) => {
+  handler: (async ({ mastra, workflowId }: any) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -134,7 +134,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }
-  },
+  }) as any,
 });
 
 export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({

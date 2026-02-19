@@ -207,6 +207,11 @@ export function zodToJsonSchema(
           ctx.jsonSchema.type = 'string';
           ctx.jsonSchema.format = 'date-time';
         }
+        // Add additionalProperties: false for object types to match Zod v3 behavior
+        // This is required for OpenAI strict mode function calling
+        if (def && (def.typeName === 'ZodObject' || def.type === 'object')) {
+          ctx.jsonSchema.additionalProperties = false;
+        }
       },
     }) as JSONSchema7;
 

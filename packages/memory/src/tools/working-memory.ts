@@ -1,9 +1,9 @@
-import type { MemoryConfig } from '@mastra/core/memory';
+import type { MemoryConfigInternal } from '@mastra/core/memory';
+import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
 import { convertSchemaToZod } from '@mastra/schema-compat';
-import type { Schema } from '@mastra/schema-compat';
-import { z, ZodObject } from 'zod';
-import type { ZodType } from 'zod';
+import { z } from 'zod';
 
 /**
  * Deep merges two objects, with special handling for null values (delete) and arrays (replace).
@@ -61,24 +61,28 @@ export function deepMergeWorkingMemory(
   return result;
 }
 
-export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
+export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => {
   const schema = memoryConfig?.workingMemory?.schema;
 
-  let inputSchema: ZodType = z.object({
+  // Default input schema for markdown-based working memory
+  let inputSchema: PublicSchema<{ memory: any }> = z.object({
     memory: z
       .string()
       .describe(`The Markdown formatted working memory content to store. This MUST be a string. Never pass an object.`),
   });
 
   if (schema) {
+    // Convert the schema to StandardSchemaWithJSON first
+    const standardSchema: StandardSchemaWithJSON = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
+
+    // Get JSON schema using .output() since this describes the structure the LLM should produce,
+    // then convert to Zod for runtime validation of the tool's inputSchema
+    const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as any;
+    const memorySchema = convertSchemaToZod(jsonSchema).describe(`The JSON formatted working memory content to store.`);
+
     inputSchema = z.object({
-      memory:
-        schema instanceof ZodObject
-          ? schema
-          : (convertSchemaToZod({ jsonSchema: schema } as Schema).describe(
-              `The JSON formatted working memory content to store.`,
-            ) as ZodObject<any>),
-    });
+      memory: memorySchema,
+    }) as PublicSchema<{ memory: any }>;
   }
 
   // For schema-based working memory, we use merge semantics
@@ -93,7 +97,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     id: 'update-working-memory',
     description,
     inputSchema,
-    execute: async (inputData, context) => {
+    execute: async (inputData: { memory: any }, context) => {
       const threadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
 
@@ -190,7 +194,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
   });
 };
 
-export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig) => {
+export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfigInternal) => {
   return createTool({
     id: 'update-working-memory',
     description: 'Update the working memory with new information.',
@@ -214,7 +218,14 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
           "The reason you're updating working memory. Passing any value other than 'append-new-memory' requires a searchString to be provided. Defaults to append-new-memory",
         ),
     }),
-    execute: async (inputData, context) => {
+    execute: async (
+      inputData: {
+        newMemory?: string;
+        searchString?: string;
+        updateReason?: 'append-new-memory' | 'clarify-existing-memory' | 'replace-irrelevant-memory';
+      },
+      context,
+    ) => {
       const threadId = context?.agent?.threadId;
       const resourceId = context?.agent?.resourceId;
 

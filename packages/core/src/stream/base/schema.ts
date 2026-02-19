@@ -1,24 +1,15 @@
-import { asSchema } from '@internal/ai-sdk-v5';
 import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
-import { isZodType } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
-import type { ZodLikeSchema } from '../../types/zod-compat';
+import { isStandardSchemaWithJSON } from '../../schema/schema';
+import type { StandardSchemaWithJSON } from '../../schema/schema';
+import { standardSchemaToJSONSchema } from '../../schema/standard-schema';
 
 export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ? undefined : Partial<OUTPUT>;
-export type InferSchemaOutput<OUTPUT extends OutputSchema> = OUTPUT extends undefined
-  ? undefined
-  : OUTPUT extends z4.ZodType<infer OBJECT, any>
-    ? OBJECT // Zod v4
-    : OUTPUT extends z3.Schema<infer OBJECT, z3.ZodTypeDef, any>
-      ? OBJECT // Zod v3
-      : OUTPUT extends Schema<infer OBJECT>
-        ? OBJECT // JSON Schema (AI SDK's Schema type)
-        : OUTPUT extends JSONSchema7
-          ? any // JSONSchema7 - we can't infer the exact type statically
-          : unknown; // Fallback
 
+/**
+ * @deprecated Use StandardSchemaWithJSON from '../../schema/schema' instead
+ */
 export type OutputSchema<OBJECT = any> =
   | z4.ZodType<OBJECT, any>
   | z3.Schema<OBJECT, z3.ZodTypeDef, any>
@@ -26,8 +17,30 @@ export type OutputSchema<OBJECT = any> =
   | JSONSchema7
   | undefined;
 
-export type InferZodLikeSchema<T> = T extends { parse: (data: unknown) => infer U } ? U : any;
-export type SchemaWithValidation<OBJECT = any> = ZodLikeSchema<OBJECT>;
+/**
+ * @deprecated Use StandardSchemaWithJSON from '../../schema/schema' instead
+ * Legacy type for schema validation - accepts both Zod v3 and v4 schemas
+ */
+export type SchemaWithValidation<T = any> = z4.ZodType<T, any> | z3.ZodType<T, z3.ZodTypeDef, any>;
+
+/**
+ * @deprecated Use InferPublicSchema or InferStandardSchemaOutput from '../../schema/schema' instead
+ * Infer the output type from a schema
+ */
+export type InferSchemaOutput<T> =
+  T extends z4.ZodType<infer O, any>
+    ? O
+    : T extends z3.ZodType<infer O, z3.ZodTypeDef, any>
+      ? O
+      : T extends Schema<infer O>
+        ? O
+        : unknown;
+
+/**
+ * @deprecated Use PublicSchema from '../../schema/schema' instead
+ */
+export type InferZodLikeSchema<T> =
+  T extends z4.ZodType<infer O, any> ? O : T extends z3.ZodType<infer O, z3.ZodTypeDef, any> ? O : unknown;
 
 export type ZodLikePartialSchema<T = any> = (
   | z4.core.$ZodType<Partial<T>, any> // Zod v4 partial schema
@@ -36,40 +49,34 @@ export type ZodLikePartialSchema<T = any> = (
   safeParse(value: unknown): { success: boolean; data?: Partial<T>; error?: any };
 };
 
-export function asJsonSchema(schema: OutputSchema): JSONSchema7 | undefined {
+export function asJsonSchema(schema: StandardSchemaWithJSON | undefined): JSONSchema7 | undefined {
   if (!schema) {
     return undefined;
   }
-  // Handle JSONSchema7 directly (plain object without safeParse or jsonSchema property)
-  if (
-    schema &&
-    typeof schema === 'object' &&
-    !(schema as z3.ZodType<any> | z4.ZodType<any, any>).safeParse &&
-    !(schema as Schema<any>).jsonSchema
-  ) {
-    return schema as JSONSchema7;
+
+  // Handle StandardSchemaWithJSON
+  if (isStandardSchemaWithJSON(schema)) {
+    // Use 'input' IO mode to get the schema BEFORE transforms are applied
+    // This is critical for OpenAI compat transforms that add .transform()
+    // which can't be properly represented in JSON Schema
+    //
+    // Use 'draft-07' target for maximum compatibility with LLM providers
+    const jsonSchema = standardSchemaToJSONSchema(schema, { io: 'input', target: 'draft-07' });
+
+    // Ensure additionalProperties is set to false for OpenAI strict mode
+    // OpenAI requires this at the root level for structured outputs
+    if (jsonSchema.type === 'object' && !('additionalProperties' in jsonSchema)) {
+      jsonSchema.additionalProperties = false;
+    }
+
+    return jsonSchema;
   }
 
-  // Handle Zod schemas using our transform-safe converter
-  // This uses `unrepresentable: 'any'` which gracefully handles transforms
-  // that would otherwise throw "Transforms cannot be represented in JSON Schema"
-  if (isZodType(schema)) {
-    return zodToJsonSchema(schema as z3.ZodType<any> | z4.ZodType<any, any>) as JSONSchema7;
-  }
-
-  // Handle AI SDK Schema types (objects with jsonSchema property)
-  if ((schema as Schema<any>).jsonSchema) {
-    return (schema as Schema<any>).jsonSchema;
-  }
-
-  // Fallback to AI SDK's asSchema for any other cases
-  return asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>).jsonSchema;
+  return undefined;
 }
 
-export function getTransformedSchema<OUTPUT = undefined>(schema?: OutputSchema<OUTPUT>) {
-  let jsonSchema: JSONSchema7 | undefined;
-
-  jsonSchema = asJsonSchema(schema);
+export function getTransformedSchema<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
+  const jsonSchema = asJsonSchema(schema);
 
   if (!jsonSchema) {
     return undefined;
@@ -118,7 +125,7 @@ export function getTransformedSchema<OUTPUT = undefined>(schema?: OutputSchema<O
   };
 }
 
-export function getResponseFormat(schema?: OutputSchema):
+export function getResponseFormat(schema?: StandardSchemaWithJSON):
   | {
       type: 'text';
     }

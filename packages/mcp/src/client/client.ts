@@ -205,6 +205,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private setupLogging(): void {
     if (this.enableServerLogs) {
       this.client.setNotificationHandler(
+        // @ts-expect-error - MCP SDK uses Zod v3 types, we use Zod v4
         z.object({
           method: z.literal('notifications/message'),
           params: z
@@ -213,7 +214,7 @@ export class InternalMastraMCPClient extends MastraBase {
             })
             .passthrough(),
         }),
-        notification => {
+        (notification: any) => {
           const { level, ...params } = notification.params;
           this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
         },
@@ -565,6 +566,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async subscribeResource(uri: string) {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
+    // @ts-expect-error - MCP SDK uses Zod v3 types, we use Zod v4
     return await this.client.request({ method: 'resources/subscribe', params: { uri } }, z.object({}), {
       timeout: this.timeout,
     });
@@ -572,6 +574,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async unsubscribeResource(uri: string) {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
+    // @ts-expect-error - MCP SDK uses Zod v3 types, we use Zod v4
     return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, z.object({}), {
       timeout: this.timeout,
     });
@@ -629,10 +632,10 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   setResourceUpdatedNotificationHandler(
-    handler: (params: z.infer<typeof ResourceUpdatedNotificationSchema>['params']) => void,
+    handler: (params: any) => void,
   ): void {
     this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, notification => {
+    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification: any) => {
       handler(notification.params);
     });
   }
@@ -661,9 +664,9 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
-  ): Promise<z.ZodType> {
+  ): Promise<z.ZodType<any, any>> {
     if (isZodType(inputSchema)) {
-      return inputSchema;
+      return inputSchema as unknown as z.ZodType<any, any>;
     }
 
     try {
@@ -673,7 +676,7 @@ export class InternalMastraMCPClient extends MastraBase {
         //@ts-expect-error - zod type issue
         return convertJsonSchemaToZod(jsonSchemaToConvert);
       } else {
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert) as unknown as z.ZodType<any, any>;
       }
     } catch (error: unknown) {
       let errorDetails: string | undefined;
@@ -703,10 +706,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private async convertOutputSchema(
     outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
-  ): Promise<z.ZodType | undefined> {
+  ): Promise<z.ZodType<any, any> | undefined> {
     if (!outputSchema) return;
     if (isZodType(outputSchema)) {
-      return outputSchema;
+      return outputSchema as unknown as z.ZodType<any, any>;
     }
 
     try {
@@ -716,7 +719,7 @@ export class InternalMastraMCPClient extends MastraBase {
         //@ts-expect-error - zod type issue
         return convertJsonSchemaToZod(jsonSchemaToConvert);
       } else {
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
+        return convertJsonSchemaToZodV3(jsonSchemaToConvert) as unknown as z.ZodType<any, any>;
       }
     } catch (error: unknown) {
       let errorDetails: string | undefined;

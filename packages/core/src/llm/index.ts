@@ -15,12 +15,11 @@ import type {
   StreamObjectOnFinishCallback,
 } from '@internal/ai-sdk-v4';
 import type { SystemModelMessage } from '@internal/ai-sdk-v5';
-import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
 
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { Run } from '../run/types';
+import type { StandardSchemaWithJSON } from '../schema/schema';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
 
@@ -81,7 +80,7 @@ export { ModelRouterLanguageModel } from './model/router';
 export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 
-export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
+export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
 
 export type SystemMessage =
   | string
@@ -111,7 +110,7 @@ export type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCust
 export type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOptionsKeys>;
 export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
 
-type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+type MastraCustomLLMOptions<Z extends StandardSchemaWithJSON | undefined = undefined> = {
   tools?: Record<string, CoreTool>;
   onStepFinish?: (step: unknown) => Promise<void> | void;
   experimental_output?: Z;
@@ -121,29 +120,29 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   tracingContext: TracingContext;
 } & Run;
 
-export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type LLMTextOptions<Z extends StandardSchemaWithJSON | undefined = undefined> = {
   messages: UIMessage[] | CoreMessage[];
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMTextOptions;
 
-export type LLMTextObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = LLMTextOptions<T> &
+export type LLMTextObjectOptions<T extends StandardSchemaWithJSON | undefined = undefined> = LLMTextOptions<T> &
   DefaultLLMTextObjectOptions & {
-    structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
+    structuredOutput: StandardSchemaWithJSON | StructuredOutput;
   };
 
-export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type LLMStreamOptions<Z extends StandardSchemaWithJSON | undefined = undefined> = {
   output?: OutputType | Z;
   onFinish?: StreamTextOnFinishCallback<any>;
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;
 
-export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type LLMInnerStreamOptions<Z extends StandardSchemaWithJSON | undefined = undefined> = {
   messages: UIMessage[] | CoreMessage[];
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;
 
-export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  structuredOutput: JSONSchema7 | z.ZodType<Z> | StructuredOutput;
+export type LLMStreamObjectOptions<Z extends StandardSchemaWithJSON | undefined = undefined> = {
+  structuredOutput: StandardSchemaWithJSON | StructuredOutput;
   onFinish?: StreamObjectOnFinishCallback<any>;
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;

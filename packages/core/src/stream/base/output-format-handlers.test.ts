@@ -4,7 +4,6 @@ import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import z3 from 'zod/v3';
-import z4 from 'zod/v4';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
 import { createObjectStreamTransformer, escapeUnescapedControlCharsInJsonStrings } from './output-format-handlers';
@@ -148,24 +147,28 @@ describe('output-format-handlers', () => {
 
       expect(errorChunk?.payload?.error).toBeInstanceOf(Error);
       expect((errorChunk?.payload?.error as Error).message).toContain('Structured output validation failed');
-      expect((errorChunk?.payload?.error as Error).message).toContain('String must contain at least 3 character(s)');
-      expect((errorChunk?.payload?.error as Error).message).toContain('at name');
-      expect((errorChunk?.payload?.error as Error).message).toContain('Number must be greater than 0');
-      expect((errorChunk?.payload?.error as Error).message).toContain('at age');
-      expect((errorChunk?.payload?.error as Error).message).toContain('Invalid email');
-      expect((errorChunk?.payload?.error as Error).message).toContain('at email');
-      expect((errorChunk?.payload?.error as Error).cause).toBeInstanceOf(z3.ZodError);
-      expect(((errorChunk?.payload?.error as Error).cause as z3.ZodError).issues).toHaveLength(3);
-      expect(((errorChunk?.payload?.error as Error).cause as z3.ZodError).issues[0].message).toContain(
-        'String must contain at least 3 character(s)',
+      expect((errorChunk?.payload?.error as Error).message).toContain(
+        'Too small: expected string to have >=3 characters',
       );
-      expect(((errorChunk?.payload?.error as Error).cause as z3.ZodError).issues[0].path).toEqual(['name']);
-      expect(((errorChunk?.payload?.error as Error).cause as z3.ZodError).issues[1].message).toContain(
-        'Number must be greater than 0',
+      expect((errorChunk?.payload?.error as Error).message).toContain('name:');
+      expect((errorChunk?.payload?.error as Error).message).toContain('Too small: expected number to be >0');
+      expect((errorChunk?.payload?.error as Error).message).toContain('age:');
+      expect((errorChunk?.payload?.error as Error).message).toContain('Invalid email address');
+      expect((errorChunk?.payload?.error as Error).message).toContain('email:');
+      expect((errorChunk?.payload?.error as Error).cause).toBeInstanceOf(z.ZodError);
+      expect(((errorChunk?.payload?.error as Error).cause as z.ZodError).issues).toHaveLength(3);
+      expect(((errorChunk?.payload?.error as Error).cause as z.ZodError).issues[0].message).toContain(
+        'Too small: expected string to have >=3 characters',
       );
-      expect(((errorChunk?.payload?.error as Error).cause as z3.ZodError).issues[1].path).toEqual(['age']);
-      expect(((errorChunk?.payload?.error as Error).cause as z3.ZodError).issues[2].message).toContain('Invalid email');
-      expect(((errorChunk?.payload?.error as Error).cause as z3.ZodError).issues[2].path).toEqual(['email']);
+      expect(((errorChunk?.payload?.error as Error).cause as z.ZodError).issues[0].path).toEqual(['name']);
+      expect(((errorChunk?.payload?.error as Error).cause as z.ZodError).issues[1].message).toContain(
+        'Too small: expected number to be >0',
+      );
+      expect(((errorChunk?.payload?.error as Error).cause as z.ZodError).issues[1].path).toEqual(['age']);
+      expect(((errorChunk?.payload?.error as Error).cause as z.ZodError).issues[2].message).toContain(
+        'Invalid email address',
+      );
+      expect(((errorChunk?.payload?.error as Error).cause as z.ZodError).issues[2].path).toEqual(['email']);
     });
 
     it('should successfully validate correct zod schema', async () => {
@@ -505,9 +508,9 @@ describe('output-format-handlers', () => {
 
   describe('zod v4 compatibility', () => {
     it('should validate zod v4 schema with detailed errors', async () => {
-      const schema = z4.object({
-        email: z4.string().email(),
-        score: z4.number().min(0).max(100),
+      const schema = z.object({
+        email: z.string().email(),
+        score: z.number().min(0).max(100),
       });
 
       const transformer = createObjectStreamTransformer({
@@ -550,9 +553,9 @@ describe('output-format-handlers', () => {
     });
 
     it('should successfully validate zod v4 schema', async () => {
-      const schema = z4.object({
-        username: z4.string(),
-        active: z4.boolean(),
+      const schema = z.object({
+        username: z.string(),
+        active: z.boolean(),
       });
 
       const transformer = createObjectStreamTransformer({

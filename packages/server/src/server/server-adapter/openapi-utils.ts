@@ -1,6 +1,7 @@
+import type { PublicSchema } from '@mastra/core/schema';
+import { toStandardSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
-import type { ZodSchema } from 'zod';
 import type { ServerRoute } from './routes';
 
 interface RouteOpenAPIConfig {
@@ -9,10 +10,10 @@ interface RouteOpenAPIConfig {
   summary?: string;
   description?: string;
   tags?: string[];
-  pathParamSchema?: ZodSchema;
-  queryParamSchema?: ZodSchema;
-  bodySchema?: ZodSchema;
-  responseSchema?: ZodSchema;
+  pathParamSchema?: PublicSchema<unknown>;
+  queryParamSchema?: PublicSchema<unknown>;
+  bodySchema?: PublicSchema<unknown>;
+  responseSchema?: PublicSchema<unknown>;
   deprecated?: boolean;
 }
 
@@ -22,13 +23,13 @@ interface OpenAPIRoute {
   tags?: string[];
   deprecated?: boolean;
   requestParams?: {
-    path?: ZodSchema;
-    query?: ZodSchema;
+    path?: PublicSchema<unknown>;
+    query?: PublicSchema<unknown>;
   };
   requestBody?: {
     content: {
       'application/json': {
-        schema: ZodSchema;
+        schema: PublicSchema<unknown>;
       };
     };
   };
@@ -37,7 +38,7 @@ interface OpenAPIRoute {
       description: string;
       content?: {
         'application/json': {
-          schema: ZodSchema;
+          schema: PublicSchema<unknown>;
         };
       };
     };
@@ -112,9 +113,17 @@ export function generateRouteOpenAPI({
 }
 
 /**
- * Converts an OpenAPI route spec with Zod schemas to one with JSON Schema
+ * Helper to convert any PublicSchema to JSON Schema for OpenAPI
  */
-function convertZodToJsonSchema(spec: OpenAPIRoute): any {
+function schemaToJsonSchema(schema: PublicSchema<unknown>): Record<string, unknown> {
+  const standardSchema = toStandardSchema(schema);
+  return standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as Record<string, unknown>;
+}
+
+/**
+ * Converts an OpenAPI route spec with PublicSchema to one with JSON Schema
+ */
+function convertToJsonSchema(spec: OpenAPIRoute): any {
   const converted: any = {
     summary: spec.summary,
     description: spec.description,
@@ -126,7 +135,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert path parameters
   if (spec.requestParams?.path) {
-    const pathSchema = zodToJsonSchema(spec.requestParams.path, 'openApi3', 'none') as any;
+    const pathSchema = schemaToJsonSchema(spec.requestParams.path) as any;
     const properties = pathSchema.properties || {};
 
     Object.entries(properties).forEach(([name, schema]) => {
@@ -142,7 +151,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert query parameters
   if (spec.requestParams?.query) {
-    const querySchema = zodToJsonSchema(spec.requestParams.query, 'openApi3', 'none') as any;
+    const querySchema = schemaToJsonSchema(spec.requestParams.query) as any;
     const properties = querySchema.properties || {};
     const required = querySchema.required || [];
 
@@ -167,7 +176,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
       required: true,
       content: {
         'application/json': {
-          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, 'openApi3', 'none'),
+          schema: schemaToJsonSchema(spec.requestBody.content['application/json'].schema),
         },
       },
     };
@@ -182,7 +191,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
     if (response.content?.['application/json']?.schema) {
       converted.responses[statusCode].content = {
         'application/json': {
-          schema: zodToJsonSchema(response.content['application/json'].schema, 'openApi3', 'none'),
+          schema: schemaToJsonSchema(response.content['application/json'].schema),
         },
       };
     }
@@ -214,7 +223,7 @@ export function generateOpenAPIDocument(
     }
 
     // Convert Zod schemas to JSON Schema
-    paths[openapiPath][route.method.toLowerCase()] = convertZodToJsonSchema(route.openapi);
+    paths[openapiPath][route.method.toLowerCase()] = convertToJsonSchema(route.openapi);
   });
 
   return {

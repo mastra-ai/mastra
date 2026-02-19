@@ -3222,7 +3222,9 @@ describe('MDocument', () => {
           strategy: 'sentence',
           minSize: 50,
         } as any),
-      ).rejects.toThrow('Invalid parameters for sentence strategy: maxSize: Required');
+      ).rejects.toThrow(
+        'Invalid parameters for sentence strategy: maxSize: Invalid input: expected number, received undefined',
+      );
     });
 
     it('should handle custom sentence enders', async () => {

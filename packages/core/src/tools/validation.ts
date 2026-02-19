@@ -1,45 +1,109 @@
-import type { z } from 'zod';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
-import type { SchemaWithValidation } from '../stream/base/schema';
+import { toStandardSchema } from '../schema/schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema/schema';
+import { standardSchemaToJSONSchema } from '../schema/standard-schema';
+import type { StandardSchemaIssue } from '../schema/standard-schema';
 import { getZodTypeName, isZodArray, isZodObject, unwrapZodType } from '../utils/zod-utils';
 
 /**
- * Keys that should be redacted from error messages to prevent sensitive data leakage.
+ * Safely validates data against a Standard Schema.
+ * Catches internal Zod errors (like undefined union options) and provides better error messages.
+ *
+ * @param schema The Standard Schema to validate against
+ * @param data The data to validate
+ * @returns The validation result or throws with a descriptive error
  */
-const SENSITIVE_KEYS = new Set([
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_THREAD_ID_KEY,
-  'apiKey',
-  'api_key',
-  'token',
-  'secret',
-  'password',
-  'credential',
-  'authorization',
-]);
-
-/**
- * Redacts sensitive keys from an object before logging.
- * @param data The data to redact
- * @returns A new object with sensitive values replaced with '[REDACTED]'
- */
-function redactSensitiveKeys(data: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (SENSITIVE_KEYS.has(key) || key.toLowerCase().includes('secret') || key.toLowerCase().includes('password')) {
-      result[key] = '[REDACTED]';
-    } else {
-      result[key] = value;
+function safeValidate<T>(
+  schema: StandardSchemaWithJSON<T>,
+  data: unknown,
+): { value: T } | { issues: readonly StandardSchemaIssue[] } {
+  try {
+    const result = schema['~standard'].validate(data);
+    if (result instanceof Promise) {
+      throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
     }
+    return result as { value: T } | { issues: readonly StandardSchemaIssue[] };
+  } catch (err) {
+    // Catch Zod internal errors like "Cannot read properties of undefined (reading 'run')"
+    // This happens when a union schema has undefined options
+    if (err instanceof TypeError && err.message.includes('Cannot read properties of undefined')) {
+      throw new Error(
+        `Schema validation failed due to an invalid schema definition. ` +
+          `This often happens when a union schema (z.union or z.or) has undefined options. ` +
+          `Please check that all schema options are properly defined. Original error: ${err.message}`,
+      );
+    }
+    throw err;
   }
-  return result;
 }
 
-export interface ValidationError<T = any> {
+/**
+ * Formatted validation errors structure.
+ * Contains `errors` array for messages at this level, and `fields` for nested field errors.
+ */
+export type FormattedValidationErrors<T = unknown> = {
+  errors: string[];
+  fields: T extends object ? { [K in keyof T]?: FormattedValidationErrors<T[K]> } : unknown;
+};
+
+export interface ValidationError<T = unknown> {
   error: true;
   message: string;
-  validationErrors: z.ZodFormattedError<T>;
+  validationErrors: FormattedValidationErrors<T>;
+}
+/**
+ * Extracts a string key from a path segment (handles both PropertyKey and PathSegment objects).
+ */
+function getPathKey(segment: PropertyKey | { key: PropertyKey }): string {
+  if (typeof segment === 'object' && segment !== null && 'key' in segment) {
+    return String(segment.key);
+  }
+  return String(segment);
+}
+
+/**
+ * Creates an empty FormattedValidationErrors object.
+ */
+function createEmptyErrors(): { errors: string[]; fields: Record<string, unknown> } {
+  return { errors: [], fields: {} };
+}
+
+/**
+ * Builds a formatted errors object from standard schema validation issues.
+ *
+ * @param issues Array of validation issues from standard schema validation
+ * @returns Formatted errors object with nested structure based on paths
+ */
+function buildFormattedErrors<T>(issues: readonly StandardSchemaIssue[]): FormattedValidationErrors<T> {
+  const result = createEmptyErrors();
+
+  for (const issue of issues) {
+    if (!issue.path || issue.path.length === 0) {
+      // Root-level error
+      result.errors.push(issue.message);
+    } else {
+      // Nested error - build path through fields
+      let current = result;
+      for (let i = 0; i < issue.path.length; i++) {
+        const key = getPathKey(issue.path[i]!);
+        if (i === issue.path.length - 1) {
+          // Last segment - add the error message
+          if (!current.fields[key]) {
+            current.fields[key] = createEmptyErrors();
+          }
+          (current.fields[key] as { errors: string[]; fields: Record<string, unknown> }).errors.push(issue.message);
+        } else {
+          // Intermediate segment - ensure object exists
+          if (!current.fields[key]) {
+            current.fields[key] = createEmptyErrors();
+          }
+          current = current.fields[key] as { errors: string[]; fields: Record<string, unknown> };
+        }
+      }
+    }
+  }
+
+  return result as FormattedValidationErrors<T>;
 }
 
 /**
@@ -61,40 +125,40 @@ function truncateForLogging(data: unknown, maxLength: number = 200): string {
 }
 
 /**
- * Validates raw suspend data against a Zod schema.
+ * Validates raw suspend data against a schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against
  * @param suspendData The raw suspend data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolSuspendData<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
+export function validateToolSuspendData<T = unknown>(
+  schema: StandardSchemaWithJSON<T> | undefined,
   suspendData: unknown,
   toolId?: string,
-): { data: T | unknown; error?: ValidationError<T> } {
-  // If no schema, return suspend data as-is
-  if (!schema || !('safeParse' in schema)) {
-    return { data: suspendData };
+): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
+  // If no schema, or schema is not a Standard Schema, return suspend data as-is
+  if (!schema || !('~standard' in schema)) {
+    return { data: suspendData as T };
   }
 
-  // Validate the input directly - no unwrapping needed in v1.0
-  const validation = schema.safeParse(suspendData);
+  // Validate the input using standard schema interface
+  const validation = safeValidate(schema, suspendData);
 
-  if (validation.success) {
-    return { data: validation.data };
+  if ('value' in validation) {
+    return { data: validation.value };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(suspendData)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: suspendData, error };
+  return { error };
 }
 
 /**
@@ -106,18 +170,20 @@ export function validateToolSuspendData<T = any>(
  * @param input The input to normalize
  * @returns The normalized input (original value, {}, or [])
  */
-function normalizeNullishInput(schema: SchemaWithValidation<unknown>, input: unknown): unknown {
-  if (input !== undefined && input !== null) {
+function normalizeNullishInput(schema: StandardSchemaWithJSON<any>, input: unknown): unknown {
+  if (typeof input !== 'undefined' && input !== null) {
     return input;
   }
 
+  const jsonSchema = standardSchemaToJSONSchema(schema, { io: 'input' });
+
   // Check if schema is an array type (using typeName to avoid dual-package hazard)
-  if (isZodArray(schema)) {
+  if (jsonSchema.type === 'array') {
     return [];
   }
 
   // Check if schema is an object type (using typeName to avoid dual-package hazard)
-  if (isZodObject(schema)) {
+  if (jsonSchema.type === 'object') {
     return {};
   }
 
@@ -138,57 +204,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
-}
-
-/**
- * Recursively strips null and undefined values from object properties.
- * This handles LLMs (e.g. Gemini) that send null for optional fields,
- * since Zod's .optional() only accepts undefined, not null. (GitHub #12362)
- *
- * When a property value is null or undefined, it is omitted from the result
- * object entirely, which is equivalent to "not provided" for Zod validation.
- *
- * Only recurses into plain objects to preserve class instances and built-in objects
- * like Date, Map, URL, etc.
- *
- * NOTE: This function should NOT be called unconditionally because it breaks
- * schemas that use .nullable() (where null is a valid value). It is used as
- * a fallback when initial validation fails. See validateToolInput for usage.
- *
- * @param input The input to process
- * @returns The processed input with null/undefined values stripped
- */
-function stripNullishValues(input: unknown): unknown {
-  // Top-level null/undefined becomes undefined
-  if (input === null || input === undefined) {
-    return undefined;
-  }
-
-  if (typeof input !== 'object') {
-    return input;
-  }
-
-  if (Array.isArray(input)) {
-    // For arrays, recursively process elements but keep nulls in arrays
-    // (array elements with null may be intentional)
-    return input.map(item => (item === null ? null : stripNullishValues(item)));
-  }
-
-  // Only recurse into plain objects - preserve class instances, built-in objects
-  if (!isPlainObject(input)) {
-    return input;
-  }
-
-  // It's a plain object - recursively process all properties, omitting null/undefined values
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(input)) {
-    if (value === null || value === undefined) {
-      // Omit null/undefined values - equivalent to "not provided" for optional fields
-      continue;
-    }
-    result[key] = stripNullishValues(value);
-  }
-  return result;
 }
 
 /**
@@ -232,6 +247,49 @@ function convertUndefinedToNull(input: unknown): unknown {
 }
 
 /**
+ * Recursively strips null/undefined values from object properties.
+ * This handles LLMs (e.g. Gemini) that send null for .optional() fields,
+ * where Zod expects undefined, not null. By stripping nullish values,
+ * we let Zod treat them as "not provided" which matches .optional() semantics.
+ * (GitHub #12362)
+ *
+ * @param input The input to process
+ * @returns The processed input with null/undefined values stripped from objects
+ */
+function stripNullishValues(input: unknown): unknown {
+  // Top-level null/undefined becomes undefined
+  if (input === null || input === undefined) {
+    return undefined;
+  }
+
+  if (typeof input !== 'object') {
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    // For arrays, recursively process elements but keep nulls in arrays
+    // (array elements with null may be intentional)
+    return input.map(item => (item === null ? null : stripNullishValues(item)));
+  }
+
+  // Only recurse into plain objects - preserve class instances, built-in objects
+  if (!isPlainObject(input)) {
+    return input;
+  }
+
+  // It's a plain object - recursively process all properties, omitting null/undefined values
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === null || value === undefined) {
+      // Omit null/undefined values - equivalent to "not provided" for optional fields
+      continue;
+    }
+    result[key] = stripNullishValues(value);
+  }
+  return result;
+}
+
+/**
  * Coerces stringified JSON values in object properties when the schema expects
  * an array or object but the LLM returned a JSON string.
  *
@@ -248,7 +306,7 @@ function convertUndefinedToNull(input: unknown): unknown {
  * @param input The input to process
  * @returns The input with stringified JSON values coerced, or the original input
  */
-function coerceStringifiedJsonValues(schema: SchemaWithValidation<unknown>, input: unknown): unknown {
+function coerceStringifiedJsonValues(schema: StandardSchemaWithJSON<unknown>, input: unknown): unknown {
   // Only process plain objects with object schemas
   if (!isPlainObject(input)) {
     return input;
@@ -310,21 +368,22 @@ function coerceStringifiedJsonValues(schema: SchemaWithValidation<unknown>, inpu
 }
 
 /**
- * Validates raw input data against a Zod schema.
+ * Validates raw input data against a schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against (or undefined to skip validation)
  * @param input The raw input data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolInput<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
+export function validateToolInput<T = unknown>(
+  schema: StandardSchemaWithJSON<T> | undefined,
   input: unknown,
   toolId?: string,
-): { data: T | unknown; error?: ValidationError<T> } {
-  // If no schema, return input as-is
-  if (!schema || !('safeParse' in schema)) {
-    return { data: input };
+): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
+  // If no schema, or schema is not a Standard Schema (e.g. plain JSON Schema from Vercel tools),
+  // return input as-is. Only validate when we have a proper Standard Schema with ~standard.validate.
+  if (!schema || !('~standard' in schema)) {
+    return { data: input as T };
   }
 
   // Validation pipeline:
@@ -354,10 +413,11 @@ export function validateToolInput<T = any>(
   // Step 2: Convert undefined values to null recursively (GitHub #11457)
   normalizedInput = convertUndefinedToNull(normalizedInput);
 
-  // Step 3: Try validation with null values preserved
-  const validation = schema.safeParse(normalizedInput);
-  if (validation.success) {
-    return { data: validation.data };
+  // Step 3: Validate the normalized input
+  const validation = safeValidate(schema, normalizedInput);
+
+  if ('value' in validation) {
+    return { data: validation.value };
   }
 
   // Step 4: Retry with stringified JSON values coerced (GitHub #12757)
@@ -365,9 +425,9 @@ export function validateToolInput<T = any>(
   // { "args": "[\"file.py\"]" } instead of { "args": ["file.py"] }.
   const coercedInput = coerceStringifiedJsonValues(schema, normalizedInput);
   if (coercedInput !== normalizedInput) {
-    const coercedValidation = schema.safeParse(coercedInput);
-    if (coercedValidation.success) {
-      return { data: coercedValidation.data };
+    const coercedValidation = safeValidate(schema, coercedInput);
+    if ('value' in coercedValidation) {
+      return { data: coercedValidation.value };
     }
   }
 
@@ -377,102 +437,142 @@ export function validateToolInput<T = any>(
   // handle this case without breaking .nullable() schemas that passed in step 3.
   const strippedInput = stripNullishValues(input);
   const normalizedStripped = normalizeNullishInput(schema, strippedInput);
-  const retryValidation = schema.safeParse(normalizedStripped);
+  const retryValidation = safeValidate(schema, normalizedStripped);
 
-  if (retryValidation.success) {
-    return { data: retryValidation.data };
+  if ('value' in retryValidation) {
+    return { data: retryValidation.value };
   }
 
   // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: input, error };
+  return { error };
 }
 
 /**
- * Validates tool output data against a Zod schema.
+ * Validates tool output data against a schema.
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against
  * @param output The output data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
  */
-export function validateToolOutput<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
+export function validateToolOutput<T = unknown>(
+  schema: StandardSchemaWithJSON<T> | undefined,
   output: unknown,
   toolId?: string,
   suspendCalled?: boolean,
-): { data: T | unknown; error?: ValidationError<T> } {
-  // If no schema, return output as-is
-  if (!schema || !('safeParse' in schema) || suspendCalled) {
-    return { data: output };
+): { data: T; error?: undefined } | { data?: undefined; error: ValidationError<T> } {
+  // If no schema, not a Standard Schema, or suspend was called, return output as-is
+  if (!schema || !('~standard' in schema) || suspendCalled) {
+    return { data: output as T };
   }
 
-  // Validate the output
-  const validation = schema.safeParse(output);
+  // Validate the output using standard schema interface
+  const validation = safeValidate(schema, output);
 
-  if (validation.success) {
-    return { data: validation.data };
+  if ('value' in validation) {
+    return { data: validation.value };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   const error: ValidationError<T> = {
     error: true,
     message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: output, error };
+  return { error };
 }
 
 /**
- * Validates request context values against a Zod schema.
+ * Keys that are considered sensitive and should be redacted in error messages.
+ */
+const SENSITIVE_KEYS = ['password', 'secret', 'token', 'apiKey', 'api_key', 'auth', 'credential'];
+
+/**
+ * Redacts sensitive keys from an object for safe logging.
+ * @param obj The object to redact
+ * @returns A new object with sensitive values replaced with '[REDACTED]'
+ */
+function redactSensitiveKeys(obj: unknown): unknown {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(redactSensitiveKeys);
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (SENSITIVE_KEYS.some(sensitive => key.toLowerCase().includes(sensitive.toLowerCase()))) {
+      result[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = redactSensitiveKeys(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Validates request context data against a schema.
+ * This is used to validate the request context before tool execution.
  *
- * @param schema The Zod schema to validate against
- * @param requestContext The RequestContext instance to validate
- * @param identifier Optional identifier for better error messages (e.g., tool ID, agent ID)
+ * @param schema The schema to validate against (PublicSchema which accepts Zod v3/v4, JSONSchema, etc.)
+ * @param requestContext The request context to validate
+ * @param identifier Optional identifier (tool/step ID) for better error messages
  * @returns The validated data or a validation error
  */
 export function validateRequestContext<T = any>(
-  schema: SchemaWithValidation<T> | undefined,
+  schema: PublicSchema<T> | undefined,
   requestContext: RequestContext | undefined,
   identifier?: string,
 ): { data: T | Record<string, any>; error?: ValidationError<T> } {
-  // Get all values from the requestContext
-  const contextValues = requestContext?.all ?? {};
-
-  // If no schema, return context values as-is
-  if (!schema || !('safeParse' in schema)) {
-    return { data: contextValues };
+  // If no schema, return request context values as-is
+  if (!schema) {
+    return { data: (requestContext?.all ?? {}) as T };
   }
 
-  // Validate the context values
-  const validation = schema.safeParse(contextValues);
+  // Get the values from request context
+  const contextValues = requestContext?.all ?? {};
 
-  if (validation.success) {
-    return { data: validation.data };
+  // Convert PublicSchema to StandardSchemaWithJSON for validation
+  const standardSchema = toStandardSchema(schema);
+
+  // Validate using standard schema interface
+  const validation = standardSchema['~standard'].validate(contextValues);
+
+  if (validation instanceof Promise) {
+    throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+  }
+
+  if ('value' in validation) {
+    return { data: validation.value };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.error.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
 
   // Redact sensitive keys before including in error message
-  const redactedContextValues = redactSensitiveKeys(contextValues);
+  const redactedContext = redactSensitiveKeys(contextValues);
 
   const error: ValidationError<T> = {
     error: true,
-    message: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided context: ${truncateForLogging(redactedContextValues)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    message: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided request context: ${truncateForLogging(redactedContext)}`,
+    validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: contextValues, error };
+  return { data: contextValues as T, error };
 }

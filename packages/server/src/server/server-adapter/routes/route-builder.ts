@@ -134,15 +134,17 @@ function isComplexType(schema: ZodTypeAny): boolean {
  * ```
  */
 export function wrapSchemaForQueryParams<T extends ZodRawShape>(schema: ZodObject<T>): ZodObject<ZodRawShape> {
-  const newShape: ZodRawShape = {};
+  const newShape: Record<string, ZodTypeAny> = {};
 
-  for (const [key, fieldSchema] of Object.entries(schema.shape)) {
-    if (isComplexType(fieldSchema as ZodTypeAny)) {
+  // schema.shape is Readonly in Zod v4, so we need to create a mutable copy
+  const shape = schema.shape as unknown as Record<string, ZodTypeAny>;
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    if (isComplexType(fieldSchema)) {
       // Wrap complex types to accept JSON strings
-      newShape[key] = jsonQueryParam(fieldSchema as ZodTypeAny);
+      newShape[key] = jsonQueryParam(fieldSchema);
     } else {
       // Keep simple types as-is
-      newShape[key] = fieldSchema as ZodTypeAny;
+      newShape[key] = fieldSchema;
     }
   }
 

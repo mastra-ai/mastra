@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
-import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
+import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import type { ModelInformation } from '@mastra/schema-compat';
+import { applyOpenAICompatTransforms } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema, z as z3 } from 'zod/v3';
+import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -18,7 +18,12 @@ import type {
 import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
-import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
+import type {
+  GenerateObjectResult,
+  GenerateTextResult,
+  StreamObjectResult,
+  StreamTextResult,
+} from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type {
@@ -31,7 +36,7 @@ import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfigInternal } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
 import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
 import type {
@@ -45,7 +50,8 @@ import { SkillsProcessor } from '../processors/processors/skills';
 import type { ProcessorState } from '../processors/runner';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
-
+import { toStandardSchema } from '../schema/schema';
+import { standardSchemaToJSONSchema } from '../schema/standard-schema';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
@@ -60,7 +66,6 @@ import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflo
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
-import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -68,6 +73,7 @@ import type {
   InnerAgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
   NetworkOptions,
+  PublicAgentExecutionOptions,
 } from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -85,6 +91,7 @@ import type {
   AgentInstructions,
   AgentMethodType,
   StructuredOutputOptions,
+  PublicStructuredOutputOptions,
 } from './types';
 import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
@@ -1793,7 +1800,7 @@ export class Agent<
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
@@ -2043,7 +2050,7 @@ export class Agent<
     resourceId?: string;
     threadId: string;
     vectorMessageSearch: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     requestContext: RequestContext;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memory = await this.getMemory({ requestContext });
@@ -2595,7 +2602,6 @@ export class Agent<
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
         const extendedInputSchema = z.object({
-          // @ts-expect-error - zod types mismatch between v3 and v4
           inputData: workflow.inputSchema ?? z.object({}).passthrough(),
           ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
         });
@@ -2606,7 +2612,6 @@ export class Agent<
           inputSchema: extendedInputSchema,
           outputSchema: z.union([
             z.object({
-              // @ts-expect-error - zod types mismatch between v3 and v4
               result: workflow.outputSchema,
               runId: z.string().describe('Unique identifier for the workflow run'),
             }),
@@ -2718,9 +2723,13 @@ export class Agent<
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
+                // Normalize resumeSchema to StandardSchemaWithJSON before extracting JSON Schema
+                const normalizedResumeSchema = resumeSchema ? toStandardSchema(resumeSchema) : undefined;
                 return suspend?.(suspendPayload, {
                   resumeLabel: suspendedStepIds,
-                  resumeSchema: resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined,
+                  resumeSchema: normalizedResumeSchema
+                    ? JSON.stringify(standardSchemaToJSONSchema(normalizedResumeSchema))
+                    : undefined,
                 });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
@@ -2805,7 +2814,7 @@ export class Agent<
     tracingContext?: TracingContext;
     outputWriter?: OutputWriter;
     methodType: AgentMethodType;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
     autoResumeSuspendedTools?: boolean;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
@@ -3187,7 +3196,7 @@ export class Agent<
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<OUTPUT = undefined>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
+  async #execute<OUTPUT>({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -3227,8 +3236,9 @@ export class Agent<
 
     const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
 
-    // Apply OpenAI schema compatibility layer automatically for OpenAI models
-    // In direct mode, use the main model; in processor mode, use structuredOutput.model
+    // Apply OpenAI schema compatibility layer for structured output
+    // The schema is already StandardSchemaWithJSON (converted at API boundary in generate/stream)
+    // but may need OpenAI-specific transforms for optional fields
     if ('structuredOutput' in options && options.structuredOutput?.schema) {
       let structuredOutputModel = llm.getModel();
       if (options.structuredOutput?.model) {
@@ -3240,26 +3250,20 @@ export class Agent<
 
       const targetProvider = structuredOutputModel.provider;
       const targetModelId = structuredOutputModel.modelId;
-      // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
-      // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
-      // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
+      // Only apply OpenAI compat transforms for OpenAI models
       if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
-        if (isZodType(options.structuredOutput.schema) && targetModelId) {
-          const modelInfo: ModelInformation = {
-            provider: targetProvider,
-            modelId: targetModelId,
-            supportsStructuredOutputs: false, // Set to false to enable transform
-          };
+        const modelInfo: ModelInformation = {
+          provider: targetProvider,
+          modelId: targetModelId,
+          supportsStructuredOutputs: false, // Set to false to enable transform
+        };
 
-          const isReasoningModel = /^o[1-5]/.test(targetModelId);
-          const compatLayer = isReasoningModel
-            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
-            : new OpenAISchemaCompatLayer(modelInfo);
-
-          if (compatLayer.shouldApply() && options.structuredOutput.schema) {
-            options.structuredOutput.schema = compatLayer.processZodType(options.structuredOutput.schema);
-          }
-        }
+        // Apply OpenAI compat transforms (unwraps StandardSchemaWithJSON, processes, re-wraps)
+        // For OpenAI models, this converts .optional() → .nullable().transform() for compatibility
+        options.structuredOutput.schema = applyOpenAICompatTransforms(
+          options.structuredOutput.schema,
+          modelInfo,
+        ) as typeof options.structuredOutput.schema;
       }
     }
 
@@ -3746,24 +3750,27 @@ export class Agent<
   async declineNetworkToolCall(options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
     return this.resumeNetwork({ approved: false }, options);
   }
-  async generate(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<FullOutput<TOutput>>;
+  async generate(
+    messages: MessageListInput,
+    options?: PublicAgentExecutionOptions<TOutput>,
+  ): Promise<FullOutput<TOutput>>;
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
-      structuredOutput: StructuredOutputOptions<OUTPUT>;
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<FullOutput<OUTPUT>>;
   // Catch-all overload to handle conditional types when OUTPUT is generic
   async generate<OUTPUT>(
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StructuredOutputOptions<any>;
+      structuredOutput?: PublicStructuredOutputOptions<any>;
     },
   ): Promise<FullOutput<OUTPUT>>;
   async generate(
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StructuredOutputOptions<any>;
+      structuredOutput?: PublicStructuredOutputOptions<any>;
     },
   ): Promise<FullOutput<any>> {
     // Validate request context if schema is provided
@@ -3807,6 +3814,14 @@ export class Agent<
 
     const executeOptions = {
       ...mergedOptions,
+      structuredOutput: mergedOptions.structuredOutput
+        ? {
+            ...mergedOptions.structuredOutput,
+            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+            // This follows the same pattern as Tool/Workflow constructors
+            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages,
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
@@ -3849,19 +3864,21 @@ export class Agent<
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
-      structuredOutput: StructuredOutputOptions<OUTPUT>;
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async stream<OUTPUT>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StructuredOutputOptions<any>;
+      structuredOutput?: PublicStructuredOutputOptions<any>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  async stream(messages: MessageListInput, streamOptions?: AgentExecutionOptions): Promise<MastraModelOutput>;
+  async stream(messages: MessageListInput, streamOptions?: PublicAgentExecutionOptions): Promise<MastraModelOutput>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT>,
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);
@@ -3904,6 +3921,14 @@ export class Agent<
 
     const executeOptions = {
       ...mergedOptions,
+      structuredOutput: mergedOptions.structuredOutput
+        ? {
+            ...mergedOptions.structuredOutput,
+            // Convert PublicSchema to StandardSchemaWithJSON at API boundary
+            // This follows the same pattern as Tool/Workflow constructors
+            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages,
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
@@ -3951,24 +3976,27 @@ export class Agent<
   async resumeStream<OUTPUT extends {}>(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
-      structuredOutput: StructuredOutputOptions<OUTPUT>;
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
       toolCallId?: string;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async resumeStream<OUTPUT>(
     resumeData: any,
     streamOptions: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StructuredOutputOptions<any>;
+      structuredOutput?: PublicStructuredOutputOptions<any>;
       toolCallId?: string;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
   async resumeStream(
     resumeData: any,
-    streamOptions?: AgentExecutionOptions & { toolCallId?: string },
+    streamOptions?: PublicAgentExecutionOptions & { toolCallId?: string },
   ): Promise<MastraModelOutput>;
   async resumeStream<OUTPUT = TOutput>(
     resumeData: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      toolCallId?: string;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
@@ -4010,6 +4038,12 @@ export class Agent<
 
     const result = await this.#execute({
       ...mergedStreamOptions,
+      structuredOutput: mergedStreamOptions.structuredOutput
+        ? {
+            ...mergedStreamOptions.structuredOutput,
+            schema: toStandardSchema(mergedStreamOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages: [],
       resumeContext: {
         resumeData,
@@ -4056,7 +4090,10 @@ export class Agent<
    */
   async resumeGenerate<OUTPUT = undefined>(
     resumeData: any,
-    options?: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+      toolCallId?: string;
+    },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
@@ -4102,6 +4139,12 @@ export class Agent<
 
     const result = await this.#execute({
       ...mergedOptions,
+      structuredOutput: mergedOptions.structuredOutput
+        ? {
+            ...mergedOptions.structuredOutput,
+            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+          }
+        : undefined,
       messages: [],
       resumeContext: {
         resumeData,
@@ -4245,11 +4288,11 @@ export class Agent<
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateTextResult<any, undefined>>;
-  async generateLegacy<OUTPUT extends ZodSchema | JSONSchema7>(
+  async generateLegacy<OUTPUT extends z3.ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<OUTPUT, undefined> & { output?: OUTPUT; experimental_output?: never },
   ): Promise<GenerateObjectResult<OUTPUT>>;
-  async generateLegacy<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7>(
+  async generateLegacy<EXPERIMENTAL_OUTPUT extends z3.ZodSchema | JSONSchema7>(
     messages: MessageListInput,
     args?: AgentGenerateOptions<undefined, EXPERIMENTAL_OUTPUT> & {
       output?: never;
@@ -4284,14 +4327,14 @@ export class Agent<
   >(
     messages: MessageListInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: never; experimental_output?: never },
-  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>>;
+  ): Promise<StreamTextResult<any, OUTPUT>>;
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
   >(
     messages: MessageListInput,
     args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & { output?: OUTPUT; experimental_output?: never },
-  ): Promise<StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties>;
+  ): Promise<StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties>;
   async streamLegacy<
     OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
     EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
@@ -4302,15 +4345,8 @@ export class Agent<
       experimental_output?: EXPERIMENTAL_OUTPUT;
     },
   ): Promise<
-    StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown> & {
-      partialObjectStream: StreamTextResult<
-        any,
-        OUTPUT extends ZodSchema
-          ? z.infer<OUTPUT>
-          : EXPERIMENTAL_OUTPUT extends ZodSchema
-            ? z.infer<EXPERIMENTAL_OUTPUT>
-            : unknown
-      >['experimental_partialOutputStream'];
+    StreamTextResult<any, EXPERIMENTAL_OUTPUT> & {
+      partialObjectStream: StreamTextResult<any, EXPERIMENTAL_OUTPUT>['experimental_partialOutputStream'];
     }
   >;
   async streamLegacy<
@@ -4320,10 +4356,13 @@ export class Agent<
     messages: MessageListInput,
     streamOptions: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = {},
   ): Promise<
-    | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
-    | (StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any> & TracingProperties)
+    | StreamTextResult<any, OUTPUT>
+    | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
   > {
-    return this.getLegacyHandler().streamLegacy(messages, streamOptions);
+    return this.getLegacyHandler().streamLegacy(messages, streamOptions) as Promise<
+      | StreamTextResult<any, OUTPUT>
+      | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties)
+    >;
   }
 
   /**

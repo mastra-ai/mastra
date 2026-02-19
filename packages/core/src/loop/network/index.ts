@@ -1,5 +1,5 @@
 import { parsePartialJson } from '@internal/ai-sdk-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import type { Mastra } from '../..';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions, NetworkOptions } from '../../agent/agent.types';
@@ -13,6 +13,9 @@ import { noopLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
+import { isStandardSchemaWithJSON } from '../../schema/schema';
+import type { PublicSchema } from '../../schema/schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
@@ -20,8 +23,25 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import type { IdGeneratorContext } from '../../types';
 import { createStep, createWorkflow } from '../../workflows';
 import type { Step, SuspendOptions } from '../../workflows';
-import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
+
+/**
+ * Convert a schema (PublicSchema) to JSON Schema.
+ * Handles Zod v3/v4, AI SDK schemas, JSON Schema, and StandardSchemaWithJSON.
+ */
+function schemaToJsonSchema(schema: PublicSchema): unknown {
+  if (isStandardSchemaWithJSON(schema)) {
+    return standardSchemaToJSONSchema(schema);
+  }
+
+  // Try to convert raw Zod schema (v3 or v4) to StandardSchema
+  try {
+    const standardSchema = toStandardSchema(schema);
+    return standardSchemaToJSONSchema(standardSchema);
+  } catch {
+    throw new Error('We could not convert the schema to a JSONSchema');
+  }
+}
 import type { CompletionConfig, CompletionContext } from './validation';
 import {
   runValidation,
@@ -144,7 +164,7 @@ export async function getRoutingAgent({
   const workflowList = Object.entries(workflowsToUse)
     .map(([name, workflow]) => {
       return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
-        zodToJsonSchema(workflow.inputSchema ?? z.object({})),
+        schemaToJsonSchema(workflow.inputSchema ?? z.object({})),
       )}`;
     })
     .join('\n');
@@ -154,7 +174,7 @@ export async function getRoutingAgent({
     .map(([name, tool]) => {
       // Use 'in' check for type narrowing, then nullish coalescing for undefined values
       const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(zodToJsonSchema(inputSchema))}`;
+      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -1210,7 +1230,7 @@ export async function createNetworkLoop({
         }
         const wflowStepSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
         if (wflowStepSchema) {
-          resumeSchema = JSON.stringify(zodToJsonSchema(wflowStepSchema));
+          resumeSchema = JSON.stringify(schemaToJsonSchema(wflowStepSchema));
         } else {
           resumeSchema = '';
         }
@@ -1502,16 +1522,15 @@ export async function createNetworkLoop({
 
       if (toolRequiresApproval) {
         if (!resumeData) {
+          const approvalSchema = z.object({
+            approved: z
+              .boolean()
+              .describe(
+                'Controls if the tool call is approved or not, should be true when approved and false when declined',
+              ),
+          });
           const requireApprovalResumeSchema = JSON.stringify(
-            zodToJsonSchema(
-              z.object({
-                approved: z
-                  .boolean()
-                  .describe(
-                    'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                  ),
-              }),
-            ),
+            standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
           );
           await saveMessagesWithProcessors(
             memory,
@@ -1685,7 +1704,7 @@ export async function createNetworkLoop({
                             type: 'suspension',
                             resumeSchema:
                               suspendOptions?.resumeSchema ??
-                              JSON.stringify(zodToJsonSchema((tool as any).resumeSchema)),
+                              JSON.stringify(schemaToJsonSchema((tool as any).resumeSchema)),
                             runId,
                             primitiveType: 'tool',
                             primitiveId: inputData.primitiveId,
@@ -1708,7 +1727,7 @@ export async function createNetworkLoop({
                   toolCallId,
                   args: inputDataToUse,
                   resumeSchema:
-                    suspendOptions?.resumeSchema ?? JSON.stringify(zodToJsonSchema((tool as any).resumeSchema)),
+                    suspendOptions?.resumeSchema ?? JSON.stringify(schemaToJsonSchema((tool as any).resumeSchema)),
                   suspendPayload,
                   runId,
                   selectionReason: inputData.selectionReason,
@@ -2186,7 +2205,6 @@ export async function networkLoop<OUTPUT = undefined>({
   // If validation fails, marks isComplete=false and adds feedback for next iteration
   const validationStep = createStep({
     id: 'validation-step',
-    // @ts-expect-error - will be fixed by standard schema
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: z.object({
       task: z.string(),

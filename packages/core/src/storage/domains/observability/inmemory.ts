@@ -205,7 +205,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
-    const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+    const parsed = listTracesArgsSchema.parse(args);
+    const filters = parsed.filters;
+    const pagination = parsed.pagination ?? { page: 0, perPage: 10 };
+    const orderBy = parsed.orderBy ?? { field: 'startedAt' as const, direction: 'DESC' as const };
 
     // Collect all traces that match filters
     const matchingRootSpans: SpanRecord[] = [];

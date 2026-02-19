@@ -14,7 +14,7 @@ import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { SchemaWithValidation } from '../stream/base/schema';
+import type { PublicSchema } from '../schema/schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
 import type { ToolStream } from './stream';
@@ -305,16 +305,16 @@ export interface ToolAction<
 > {
   id: TId;
   description: string;
-  inputSchema?: SchemaWithValidation<TSchemaIn>;
-  outputSchema?: SchemaWithValidation<TSchemaOut>;
-  suspendSchema?: SchemaWithValidation<TSuspend>;
-  resumeSchema?: SchemaWithValidation<TResume>;
+  inputSchema?: PublicSchema<TSchemaIn>;
+  outputSchema?: PublicSchema<TSchemaOut>;
+  suspendSchema?: PublicSchema<TSuspend>;
+  resumeSchema?: PublicSchema<TResume>;
   /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    * If validation fails, a validation error is returned instead of executing the tool.
    */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.

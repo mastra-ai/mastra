@@ -26,7 +26,15 @@ import type {
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+    string,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    TEngineType
+  >[],
   TWorkflowId extends string = string,
   TState = unknown,
   TInput = unknown,
@@ -41,7 +49,16 @@ export class InngestWorkflow<
   private readonly flowControlConfig?: InngestFlowControlConfig;
   private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
 
-  constructor(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>, inngest: Inngest) {
+  constructor(
+    params: InngestWorkflowConfig<
+      TWorkflowId,
+      TState,
+      TInput,
+      TOutput,
+      TSteps & Step<string, any, any, any, any, any, InngestEngineType>[]
+    >,
+    inngest: Inngest,
+  ) {
     const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
       params;
 

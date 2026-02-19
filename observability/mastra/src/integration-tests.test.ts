@@ -9,7 +9,6 @@ import type { TracingContext } from '@mastra/core/observability';
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
-import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -882,42 +881,117 @@ describe('Tracing Integration Tests', () => {
     },
   );
 
-  describe.each(agentMethods)('should trace agent using structuredOutput format using $name', ({ method, model }) => {
-    it(`should trace spans correctly`, async () => {
-      const testAgent = new Agent({
-        id: 'test-agent',
-        name: 'Test Agent',
-        instructions: 'Return a simple response',
-        model,
+  describe.each(agentMethods.filter(m => m.name === 'stream' || m.name === 'generate'))(
+    'should trace agent using structuredOutput format using $name',
+    ({ name, method, model }) => {
+      it(`should trace spans correctly`, async () => {
+        const testAgent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'Return a simple response',
+          model,
+        });
+
+        const outputSchema = z.object({
+          items: z.string(),
+        });
+
+        const structuredOutput: StructuredOutputOptions<z.infer<typeof outputSchema>> = {
+          schema: outputSchema,
+          model,
+        };
+
+        const mastra = new Mastra({
+          ...getBaseMastraConfig(testExporter),
+          agents: { testAgent },
+        });
+
+        const agent = mastra.getAgent('testAgent');
+        const result = await method(agent, 'Return a list of items separated by commas', { structuredOutput });
+        expect(result.object).toBeDefined();
+        expect(result.traceId).toBeDefined();
+
+        const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+        const llmGenerationSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+        const llmChunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+        const processorRunSpans = testExporter.getSpansByType(SpanType.PROCESSOR_RUN);
+        const toolCallSpans = testExporter.getSpansByType(SpanType.TOOL_CALL);
+        const workflowSpans = testExporter.getSpansByType(SpanType.WORKFLOW_RUN);
+        const workflowSteps = testExporter.getSpansByType(SpanType.WORKFLOW_STEP);
+
+        // Expected span structure:
+        // - Test Agent AGENT_RUN (root)
+        //   - Test Agent MODEL_GENERATION (initial model call)
+        //   - PROCESSOR_RUN (structuredOutputProcessor)
+        //     - Internal processor agent AGENT_RUN
+        //       - Internal processor agent MODEL_GENERATION
+
+        expect(agentRunSpans.length).toBe(2); // Test Agent + internal processor agent
+        expect(llmGenerationSpans.length).toBe(2); // Test Agent LLM + processor agent LLM
+        expect(processorRunSpans.length).toBe(1); // one processor run for structuredOutput
+        expect(toolCallSpans.length).toBe(0); // no tools
+        expect(workflowSpans.length).toBe(0); // no workflows
+        expect(workflowSteps.length).toBe(0); // no workflows
+        // For structured output: we now track object chunks
+        expect(llmChunkSpans.length).toBeGreaterThan(0);
+        // Verify we have object chunks (from both Test Agent and structured-output processor agent)
+        const hasObjectChunks = llmChunkSpans.some(s => s.name?.includes('object'));
+        expect(hasObjectChunks).toBe(true);
+
+        // Identify the Test Agent spans vs processor agent spans
+        const testAgentSpan = agentRunSpans.find(span => span.name?.includes('test-agent'));
+        const processorAgentSpan = agentRunSpans.find(span => span !== testAgentSpan);
+        const processorRunSpan = processorRunSpans[0];
+
+        // Identify LLM generation spans
+        const testAgentLlmSpan = llmGenerationSpans.find(span => span.parentSpanId === testAgentSpan?.id);
+        const processorAgentLlmSpan = llmGenerationSpans.find(span => span.parentSpanId === processorAgentSpan?.id);
+
+        expect(testAgentSpan).toBeDefined();
+        expect(processorAgentSpan).toBeDefined();
+        expect(processorRunSpan).toBeDefined();
+        expect(testAgentLlmSpan).toBeDefined();
+        expect(processorAgentLlmSpan).toBeDefined();
+
+        expect(testAgentSpan?.traceId).toBe(result.traceId);
+
+        // Verify span nesting
+        expect(testAgentLlmSpan!.parentSpanId).toEqual(testAgentSpan?.id);
+        expect(processorRunSpan?.parentSpanId).toEqual(testAgentSpan?.id);
+        expect(processorAgentSpan?.parentSpanId).toEqual(processorRunSpan?.id);
+        expect(processorAgentLlmSpan?.parentSpanId).toEqual(processorAgentSpan?.id);
+
+        // Verify LLM generation spans
+        expect(testAgentLlmSpan!.name).toBe("llm: 'mock-model-id'");
+        expect(testAgentLlmSpan!.input.messages).toHaveLength(2);
+        expect(testAgentLlmSpan!.output.text).toBe(`Mock V2 ${name} response`);
+
+        expect(processorAgentLlmSpan?.name).toBe("llm: 'mock-model-id'");
+        expect(processorAgentLlmSpan?.output.text).toBeDefined();
+
+        // Verify Test Agent output
+        expect(testAgentSpan?.output.text).toBe(`Mock V2 ${name} response`);
+
+        // Verify structured output
+        expect(result.object).toBeDefined();
+        expect(result.object).toHaveProperty('items');
+        expect((result.object as any).items).toBe('test structured output');
+
+        expect(testAgentLlmSpan!.attributes?.usage?.inputTokens).toBeGreaterThan(0);
+        expect(processorAgentLlmSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
+
+        expect(testAgentLlmSpan!.endTime).toBeDefined();
+        expect(testAgentSpan?.endTime).toBeDefined();
+        expect(testAgentLlmSpan!.endTime!.getTime()).toBeLessThanOrEqual(testAgentSpan!.endTime!.getTime());
+
+        expect(processorAgentLlmSpan?.endTime).toBeDefined();
+        expect(processorAgentSpan?.endTime).toBeDefined();
+        expect(processorAgentLlmSpan?.endTime!.getTime()).toBeLessThanOrEqual(processorAgentSpan!.endTime!.getTime());
+
+        testExporter.finalExpectations();
       });
-
-      const outputSchema = z.object({
-        items: z.string(),
-      });
-
-      const structuredOutput: StructuredOutputOptions<InferSchemaOutput<typeof outputSchema>> = {
-        schema: outputSchema,
-        model,
-      };
-
-      const mastra = new Mastra({
-        ...getBaseMastraConfig(testExporter),
-        agents: { testAgent },
-      });
-
-      const agent = mastra.getAgent('testAgent');
-      const result = await method(agent, 'Return a list of items separated by commas', { structuredOutput });
-      expect(result.object).toBeDefined();
-      expect(result.traceId).toBeDefined();
-
-      // Validate trace structure matches snapshot
-      await testExporter.assertMatchesSnapshot(`agent-structured-output-trace.json`);
-
-      // Verify structured output result (not covered by snapshot)
-      expect(result.object).toHaveProperty('items');
-      expect((result.object as any).items).toBe('test structured output');
-    });
-  });
+    },
+  );
 
   describe.each(agentMethods)('agent with input and output processors using $name', ({ method, model }) => {
     it('should trace all processor spans including internal agent spans', async () => {

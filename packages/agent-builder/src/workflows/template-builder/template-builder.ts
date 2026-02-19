@@ -249,7 +249,7 @@ Return the actual exported names of the units, as well as the file names.`,
             maxSteps: 100,
           })
         : await agent.generateLegacy(prompt, {
-            experimental_output: output,
+            experimental_output: output as any,
             maxSteps: 100,
           });
 
@@ -1462,7 +1462,7 @@ Previous iterations may have fixed some issues, so start by re-running validateC
               },
             })
           : await validationAgent.streamLegacy(iterationPrompt, {
-              experimental_output: output,
+              experimental_output: output as any,
             });
 
         let iterationErrors = 0;

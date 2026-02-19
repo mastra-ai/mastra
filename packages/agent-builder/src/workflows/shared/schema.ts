@@ -29,5 +29,5 @@ export const PlanningIterationResultSchema = z.object({
   message: z.string(),
   error: z.string().optional(),
   allPreviousQuestions: z.array(z.any()).optional(),
-  allPreviousAnswers: z.record(z.string()).optional(),
+  allPreviousAnswers: z.record(z.string(), z.string()).optional(),
 });

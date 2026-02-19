@@ -19,7 +19,7 @@ import type {
   DynamicToolResult,
   GeneratedFile,
 } from '@internal/ai-sdk-v5';
-import z from 'zod';
+import z from 'zod/v4';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
@@ -105,9 +105,9 @@ export const llmIterationStepResultSchema = z.object({
   isContinued: z.boolean(),
   logprobs: z.any().optional(),
   totalUsage: languageModelUsageSchema.optional(),
-  headers: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   messageId: z.string().optional(),
-  request: z.record(z.any()).optional(),
+  request: z.record(z.string(), z.any()).optional(),
 });
 
 export const llmIterationOutputSchema = z.object({
@@ -144,9 +144,9 @@ export const llmIterationOutputSchema = z.object({
       })
       .optional(),
     timestamp: z.date().optional(),
-    providerMetadata: z.record(z.any()).optional(),
-    headers: z.record(z.string()).optional(),
-    request: z.record(z.any()).optional(),
+    providerMetadata: z.record(z.string(), z.any()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    request: z.record(z.string(), z.any()).optional(),
   }),
   stepResult: llmIterationStepResultSchema,
   processorRetryCount: z.number().optional(),
@@ -156,13 +156,13 @@ export const llmIterationOutputSchema = z.object({
 export const toolCallInputSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
-  args: z.record(z.any()),
-  providerMetadata: z.record(z.any()).optional(),
+  args: z.record(z.string(), z.any()),
+  providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
 });
 
 export const toolCallOutputSchema = toolCallInputSchema.extend({
-  result: z.any(),
+  result: z.any().optional(),
   error: z.any().optional(),
 });

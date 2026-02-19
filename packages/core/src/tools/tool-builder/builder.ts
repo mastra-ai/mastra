@@ -9,12 +9,13 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
 import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
+import { isStandardSchemaWithJSON } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema/standard-schema';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
@@ -58,7 +59,8 @@ export class CoreToolBuilder extends MastraBase {
     this.logType = input.logType;
     if (
       !isVercelTool(this.originalTool) &&
-      (input.autoResumeSuspendedTools || (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-'))
+      (input.autoResumeSuspendedTools ||
+        (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-'))
     ) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {
@@ -183,10 +185,25 @@ export class CoreToolBuilder extends MastraBase {
         if (typeof parameters === 'object' && 'jsonSchema' in parameters) {
           // Already in AI SDK Schema format
           processedParameters = parameters;
+        } else if (isStandardSchemaWithJSON(parameters)) {
+          // StandardSchemaWithJSON - extract the JSON schema and wrap it
+          // Use input since parameters represent tool input
+          const jsonSchema = standardSchemaToJSONSchema(parameters, { io: 'input' });
+          processedParameters = { jsonSchema };
         } else {
-          // Convert Zod schema to AI SDK Schema
-          processedParameters = convertZodSchemaToAISDKSchema(parameters as z.ZodType);
+          // Assume Zod schema - convert to AI SDK Schema
+          processedParameters = convertZodSchemaToAISDKSchema(parameters as any);
         }
+      } else {
+        // No schema provided - create default empty object schema for AI SDK v1 compatibility
+        // OpenAI requires at minimum type: "object" even for tools without parameters
+        processedParameters = {
+          jsonSchema: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+          },
+        };
       }
 
       // Convert output schema to AI SDK Schema format if present
@@ -195,9 +212,13 @@ export class CoreToolBuilder extends MastraBase {
         if (typeof outputSchema === 'object' && 'jsonSchema' in outputSchema) {
           // Already in AI SDK Schema format
           processedOutputSchema = outputSchema;
+        } else if (isStandardSchemaWithJSON(outputSchema)) {
+          // StandardSchemaWithJSON - extract the JSON schema and wrap it
+          const jsonSchema = standardSchemaToJSONSchema(outputSchema);
+          processedOutputSchema = { jsonSchema };
         } else {
-          // Convert Zod schema to AI SDK Schema
-          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema as z.ZodType);
+          // Assume Zod schema - convert to AI SDK Schema
+          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema as any);
         }
       }
 
@@ -351,7 +372,9 @@ export class CoreToolBuilder extends MastraBase {
                 ...(suspendOptions ?? {}),
                 resumeSchema:
                   suspendOptions?.resumeSchema ??
-                  (resumeSchema ? JSON.stringify(zodToJsonSchema(resumeSchema)) : undefined),
+                  (resumeSchema
+                    ? JSON.stringify(standardSchemaToJSONSchema(toStandardSchema(resumeSchema), { io: 'input' }))
+                    : undefined),
               };
               return execOptions.suspend?.(args, newSuspendOptions);
             },
@@ -580,7 +603,9 @@ export class CoreToolBuilder extends MastraBase {
 
     // Apply schema compatibility to get both the transformed Zod schema (for validation)
     // and the AI SDK Schema (for the LLM)
-    let processedZodSchema: z.ZodTypeAny | undefined;
+    // Using 'any' here because processZodType returns different Zod types (v3/v4)
+    // that are not directly compatible, and the schema may come from various sources
+    let processedZodSchema: any;
     let processedSchema;
 
     const originalSchema = this.getParameters();
@@ -658,7 +683,7 @@ export class CoreToolBuilder extends MastraBase {
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
-      parameters: processedSchema ?? z.object({}),
+      parameters: processedSchema ?? convertZodSchemaToAISDKSchema(z.object({})),
       outputSchema: processedOutputSchema,
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,

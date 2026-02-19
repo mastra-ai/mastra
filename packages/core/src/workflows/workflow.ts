@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions, MastraDBMessage } from '../agent';
@@ -21,16 +21,21 @@ import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import { ProcessorRunner, ProcessorState } from '../processors';
 import type { Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
-import type { ProcessorStepOutput } from '../processors/step-schema';
+import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { toStandardSchema } from '../schema/schema';
+import type {
+  InferPublicSchema,
+  InferStandardSchemaOutput,
+  PublicSchema,
+  StandardSchemaWithJSON,
+} from '../schema/schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
-import type { InferSchemaOutput, InferZodLikeSchema, OutputSchema, SchemaWithValidation } from '../stream/base/schema';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
-import { isZodType } from '../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
@@ -73,7 +78,7 @@ import type {
   OutputWriter,
   StepMetadata,
 } from './types';
-import { cleanStepResult, createTimeTravelExecutionParams, getZodErrors } from './utils';
+import { cleanStepResult, createTimeTravelExecutionParams } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -155,12 +160,12 @@ function isStepParams(input: unknown): input is StepParams<any, any, any, any, a
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
-  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
+  TRequestContextSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<
     TStepId,
@@ -173,13 +178,13 @@ export function createStep<
   >,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
+  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
 >;
 
 /**
@@ -200,7 +205,7 @@ export function createStep<TStepId extends string>(
 export function createStep<TStepId extends string, TStepOutput>(
   agent: Agent<TStepId, any>,
   agentOptions: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
-    structuredOutput: { schema: OutputSchema<TStepOutput> };
+    structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -212,9 +217,9 @@ export function createStep<TStepId extends string, TStepOutput>(
  */
 export function createStep<
   TSchemaIn,
+  TSchemaOut,
   TSuspend,
   TResume,
-  TSchemaOut,
   TContext extends ToolExecutionContext<TSuspend, TResume, any>,
   TId extends string,
   TRequestContext extends Record<string, any> | unknown = unknown,
@@ -238,8 +243,8 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  z.infer<typeof ProcessorStepInputSchema>,
-  z.infer<typeof ProcessorStepOutputSchema>,
+  InferPublicSchema<typeof ProcessorStepInputSchema>,
+  InferPublicSchema<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
   DefaultEngineType
@@ -252,12 +257,12 @@ export function createStep<TProcessorId extends string>(
  */
 export function createStep<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
-  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema | undefined,
+  TInputSchema extends PublicSchema,
+  TOutputSchema extends PublicSchema,
+  TResumeSchema extends PublicSchema | undefined = undefined,
+  TSuspendSchema extends PublicSchema | undefined = undefined,
+  TRequestContextSchema extends PublicSchema | undefined = undefined,
 >(
   params: StepParams<
     TStepId,
@@ -270,13 +275,13 @@ export function createStep<
   >,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
+  TRequestContextSchema extends PublicSchema ? InferPublicSchema<TRequestContextSchema> : unknown
 >;
 
 // ============================================
@@ -313,31 +318,34 @@ export function createStep(params: any, agentOrToolOptions?: any): Step<any, any
 
 function createStepFromParams<
   TStepId extends string,
-  TStateSchema extends z.ZodTypeAny | undefined,
-  TInputSchema extends z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny,
-  TResumeSchema extends z.ZodTypeAny | undefined = undefined,
-  TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TStateSchema extends PublicSchema<any> | undefined,
+  TInputSchema extends PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any>,
+  TResumeSchema extends PublicSchema<any> | undefined = undefined,
+  TSuspendSchema extends PublicSchema<any> | undefined = undefined,
 >(
   params: StepParams<TStepId, TStateSchema, TInputSchema, TOutputSchema, TResumeSchema, TSuspendSchema>,
 ): Step<
   TStepId,
-  TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
-  z.infer<TInputSchema>,
-  z.infer<TOutputSchema>,
-  TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
-  TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
+  TStateSchema extends PublicSchema<any> ? InferPublicSchema<TStateSchema> : unknown,
+  InferPublicSchema<TInputSchema>,
+  InferPublicSchema<TOutputSchema>,
+  TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
+  TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType
 > {
+  // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
+  // but we need it to match the inferred generic types. The public overloads ensure
+  // type safety for consumers.
   return {
     id: params.id,
     description: params.description,
-    inputSchema: params.inputSchema,
-    stateSchema: params.stateSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
-    requestContextSchema: params.requestContextSchema,
+    inputSchema: params.inputSchema ? toStandardSchema(params.inputSchema) : params.inputSchema,
+    stateSchema: params.stateSchema ? toStandardSchema(params.stateSchema) : undefined,
+    outputSchema: params.outputSchema ? toStandardSchema(params.outputSchema) : params.outputSchema,
+    resumeSchema: params.resumeSchema ? toStandardSchema(params.resumeSchema) : undefined,
+    suspendSchema: params.suspendSchema ? toStandardSchema(params.suspendSchema) : undefined,
+    requestContextSchema: params.requestContextSchema ? toStandardSchema(params.requestContextSchema) : undefined,
     scorers: params.scorers,
     retries: params.retries,
     metadata: params.metadata,
@@ -348,7 +356,7 @@ function createStepFromParams<
 function createStepFromAgent<TStepId extends string, TStepOutput>(
   params: Agent<TStepId, any>,
   agentOrToolOptions?: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: OutputSchema<TStepOutput> };
+    structuredOutput?: { schema: StandardSchemaWithJSON<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -362,8 +370,9 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       })
     | undefined;
   // Determine output schema based on structuredOutput option
-  const outputSchema = (options?.structuredOutput?.schema ??
-    z.object({ text: z.string() })) as unknown as SchemaWithValidation<TStepOutput>;
+  const outputSchema = toStandardSchema(
+    (options?.structuredOutput?.schema ?? z.object({ text: z.string() })) as PublicSchema<TStepOutput>,
+  ) as StandardSchemaWithJSON<TStepOutput>;
   const { retries, scorers, metadata, ...agentOptions } =
     options ??
     ({} as AgentStepOptions<TStepOutput> & {
@@ -375,10 +384,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   return {
     id: params.id,
     description: params.getDescription(),
-    inputSchema: z.object({
-      prompt: z.string(),
-    }),
-    outputSchema,
+    inputSchema: toStandardSchema(
+      z.object({
+        prompt: z.string(),
+      }),
+    ),
+    outputSchema: toStandardSchema(outputSchema),
     retries,
     scorers,
     metadata,
@@ -633,11 +644,15 @@ function createStepFromProcessor<TProcessorId extends string>(
     }
   };
 
+  // Note: Zod v4 schemas natively implement StandardSchemaWithJSON at runtime,
+  // but TypeScript type inference has issues with the complex discriminated union types.
+  // We use type assertions here since toStandardSchema returns the schema directly
+  // when it already implements StandardSchemaWithJSON.
   return {
     id: `processor:${processor.id}`,
     description: processor.name ?? `Processor ${processor.id}`,
-    inputSchema: ProcessorStepInputSchema,
-    outputSchema: ProcessorStepOutputSchema,
+    inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
+    outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<ProcessorStepOutput>,
     execute: async ({ inputData, requestContext, tracingContext, outputWriter }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
@@ -1174,8 +1189,8 @@ function createStepFromProcessor<TProcessorId extends string>(
   } satisfies Step<
     `processor:${TProcessorId}`,
     unknown,
-    InferSchemaOutput<typeof ProcessorStepInputSchema>,
-    InferSchemaOutput<typeof ProcessorStepOutputSchema>,
+    InferStandardSchemaOutput<typeof ProcessorStepInputSchema>,
+    InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
     unknown,
     unknown,
     DefaultEngineType
@@ -1296,10 +1311,10 @@ export class Workflow<
 {
   public id: TWorkflowId;
   public description?: string | undefined;
-  public inputSchema: SchemaWithValidation<TInput>;
-  public outputSchema: SchemaWithValidation<TOutput>;
-  public stateSchema?: SchemaWithValidation<TState>;
-  public requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  public inputSchema: StandardSchemaWithJSON<TInput>;
+  public outputSchema: StandardSchemaWithJSON<TOutput>;
+  public stateSchema?: StandardSchemaWithJSON<TState>;
+  public requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
@@ -1339,10 +1354,10 @@ export class Workflow<
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
-    this.inputSchema = inputSchema;
-    this.outputSchema = outputSchema;
-    this.stateSchema = stateSchema;
-    this.requestContextSchema = requestContextSchema;
+    this.inputSchema = inputSchema ? toStandardSchema(inputSchema) : inputSchema;
+    this.outputSchema = outputSchema ? toStandardSchema(outputSchema) : outputSchema;
+    this.stateSchema = stateSchema ? toStandardSchema(stateSchema) : undefined;
+    this.requestContextSchema = requestContextSchema ? toStandardSchema(requestContextSchema) : undefined;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
@@ -1554,14 +1569,14 @@ export class Workflow<
                   | Step<string, any, any, any, any, any, TEngineType, any>[];
                 path: string;
               }
-            | { value: any; schema: SchemaWithValidation<any> }
+            | { value: any; schema: PublicSchema<any> }
             | {
                 initData: Workflow<TEngineType, any, any, any, any, any, any>;
                 path: string;
               }
             | {
                 requestContextPath: string;
-                schema: SchemaWithValidation<any>;
+                schema: PublicSchema<any>;
               }
             | DynamicMapping<TPrevSchema, any>;
         }
@@ -1754,7 +1769,9 @@ export class Workflow<
       TInput,
       TOutput,
       {
-        [K in keyof StepsRecord<TParallelSteps>]: InferZodLikeSchema<StepsRecord<TParallelSteps>[K]['outputSchema']>;
+        [K in keyof StepsRecord<TParallelSteps>]: InferStandardSchemaOutput<
+          StepsRecord<TParallelSteps>[K]['outputSchema']
+        >;
       },
       TRequestContext
     >;
@@ -1810,7 +1827,7 @@ export class Workflow<
       TInput,
       TOutput,
       {
-        [K in keyof StepsRecord<ExtractedSteps[]>]?: InferZodLikeSchema<
+        [K in keyof StepsRecord<ExtractedSteps[]>]?: InferStandardSchemaOutput<
           StepsRecord<ExtractedSteps[]>[K]['outputSchema']
         >;
       },
@@ -2645,9 +2662,9 @@ export class Run<
   streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
-  protected stateSchema?: SchemaWithValidation<TState>;
-  protected inputSchema?: SchemaWithValidation<TInput>;
-  protected requestContextSchema?: SchemaWithValidation<any>;
+  protected stateSchema?: StandardSchemaWithJSON<TState>;
+  protected inputSchema?: StandardSchemaWithJSON<TInput>;
+  protected requestContextSchema?: StandardSchemaWithJSON<any>;
 
   protected cleanup?: () => void;
 
@@ -2660,9 +2677,9 @@ export class Run<
     workflowId: string;
     runId: string;
     resourceId?: string;
-    stateSchema?: SchemaWithValidation<TState>;
-    inputSchema?: SchemaWithValidation<TInput>;
-    requestContextSchema?: SchemaWithValidation<any>;
+    stateSchema?: StandardSchemaWithJSON<TState>;
+    inputSchema?: StandardSchemaWithJSON<TInput>;
+    requestContextSchema?: StandardSchemaWithJSON<any>;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     mastra?: Mastra;
@@ -2733,100 +2750,75 @@ export class Run<
     }
   }
 
-  protected async _validateInput(inputData?: TInput) {
-    let inputDataToUse = inputData;
+  async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
+    const validatedInputData = await schema['~standard'].validate(data);
 
-    if (this.validateInputs && this.inputSchema && isZodType(this.inputSchema)) {
-      const validatedInputData = await this.inputSchema.safeParseAsync(inputData);
-
-      if (!validatedInputData.success) {
-        const errors = getZodErrors(validatedInputData.error);
-        throw new Error('Invalid input data: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
-      }
-
-      inputDataToUse = validatedInputData.data;
+    if (validatedInputData.issues) {
+      throw new Error(
+        `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+      );
     }
 
-    return inputDataToUse;
+    return validatedInputData.value;
+  }
+
+  protected async _validateInput(inputData?: TInput) {
+    if (!this.validateInputs || !this.inputSchema) {
+      return inputData;
+    }
+
+    return this.#validateSchema(this.inputSchema, inputData, 'input data');
   }
 
   protected async _validateInitialState(initialState?: TState) {
-    let initialStateToUse = initialState;
-    if (this.validateInputs) {
-      let stateSchema = this.stateSchema;
-
-      if (stateSchema && isZodType(stateSchema)) {
-        const validatedInitialState = await stateSchema.safeParseAsync(initialState);
-
-        if (!validatedInitialState.success) {
-          const errors = getZodErrors(validatedInitialState.error);
-          throw new Error(
-            'Invalid initial state: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-          );
-        }
-
-        initialStateToUse = validatedInitialState.data;
-      }
+    if (!this.validateInputs || !this.stateSchema) {
+      return initialState;
     }
 
-    return initialStateToUse;
+    return this.#validateSchema(this.stateSchema, initialState, 'initial data');
   }
 
   protected async _validateRequestContext(requestContext?: RequestContext) {
-    if (this.validateInputs && this.requestContextSchema && isZodType(this.requestContextSchema)) {
+    if (this.validateInputs && this.requestContextSchema) {
       const contextValues = requestContext?.all ?? {};
-      const validatedRequestContext = await this.requestContextSchema.safeParseAsync(contextValues);
+      const validation = this.requestContextSchema['~standard'].validate(contextValues);
 
-      if (!validatedRequestContext.success) {
-        const errors = getZodErrors(validatedRequestContext.error);
+      if (validation instanceof Promise) {
+        throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
+      }
+
+      if (!('value' in validation)) {
+        const errors = validation.issues;
         throw new Error(
           `Request context validation failed for workflow '${this.workflowId}': \n` +
-            errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+            errors
+              .map(e => {
+                const pathStr = e.path?.map(p => (typeof p === 'object' ? p.key : p)).join('.');
+                return `- ${pathStr}: ${e.message}`;
+              })
+              .join('\n'),
         );
       }
     }
   }
 
   protected async _validateResumeData<TResume>(resumeData: TResume, suspendedStep?: StepWithComponent) {
-    let resumeDataToUse = resumeData;
-
-    if (suspendedStep && suspendedStep.resumeSchema && this.validateInputs && isZodType(suspendedStep.resumeSchema)) {
-      const resumeSchema = suspendedStep.resumeSchema;
-
-      const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
-
-      if (!validatedResumeData.success) {
-        const errors = getZodErrors(validatedResumeData.error);
-        throw new Error('Invalid resume data: \n' + errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'));
-      }
-
-      resumeDataToUse = validatedResumeData.data;
+    if (!this.validateInputs || !suspendedStep?.resumeSchema) {
+      return resumeData;
     }
 
-    return resumeDataToUse;
+    return this.#validateSchema(suspendedStep.resumeSchema, resumeData, 'resume data');
   }
 
   protected async _validateTimetravelInputData<TInput>(
     inputData: TInput,
     step: Step<string, any, TInput, any, any, any, TEngineType, any>,
   ) {
-    let inputDataToUse = inputData;
-
-    if (step && step.inputSchema && this.validateInputs && isZodType(step.inputSchema)) {
-      const inputSchema = step.inputSchema;
-
-      const validatedInputData = await inputSchema.safeParseAsync(inputData);
-
-      if (!validatedInputData.success) {
-        const errors = getZodErrors(validatedInputData.error);
-        const errorMessages = errors.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-        throw new Error('Invalid inputData: \n' + errorMessages);
-      }
-
-      inputDataToUse = validatedInputData.data;
+    if (!this.validateInputs || !step?.inputSchema) {
+      return inputData;
     }
 
-    return inputDataToUse;
+    return this.#validateSchema(step.inputSchema, inputData, 'inputData');
   }
 
   protected async _start({

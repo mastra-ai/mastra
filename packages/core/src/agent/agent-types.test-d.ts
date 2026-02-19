@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
-import { z } from 'zod';
+import z3 from 'zod/v3';
+import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
-import type { OutputSchema } from '../stream/base/schema';
+import type { PublicSchema } from '../schema/schema';
 import type { AgentExecutionOptions } from './agent.types';
 import type { AgentConfig } from './types';
 
@@ -27,7 +28,7 @@ describe('Agent Type Tests', () => {
         },
       };
 
-      expectTypeOf(options.structuredOutput.schema).toExtend<NonNullable<OutputSchema<z.infer<typeof mySchema>>>>();
+      expectTypeOf(options.structuredOutput.schema).toExtend<NonNullable<PublicSchema<z.infer<typeof mySchema>>>>();
     });
 
     it('should allow Zod schema in defaultOptions.structuredOutput (AgentConfig)', () => {
@@ -48,20 +49,20 @@ describe('Agent Type Tests', () => {
         },
       };
 
-      // The schema should accept any OutputSchema type
+      // The schema should accept any PublicSchema type
       expectTypeOf(
         (config.defaultOptions as AgentExecutionOptions<z.infer<typeof mySchema>>).structuredOutput.schema!,
-      ).toExtend<NonNullable<OutputSchema<z.infer<typeof mySchema>>>>();
+      ).toExtend<NonNullable<PublicSchema<z.infer<typeof mySchema>>>>();
     });
 
-    it('should accept OutputSchema types in structuredOutput.schema after fix', () => {
-      // OutputSchema includes: ZodType, Schema, JSONSchema7, undefined
+    it('should accept PublicSchema types in structuredOutput.schema after fix', () => {
+      // PublicSchema includes: ZodType (v3/v4), Schema, JSONSchema7, StandardSchemaWithJSON
       // After the fix, defaultOptions.structuredOutput.schema should accept all of these
 
       const zodSchema = z.object({ name: z.string() });
 
-      // This tests that Zod schemas are valid OutputSchema types
-      expectTypeOf<typeof zodSchema>().toExtend<OutputSchema>();
+      // This tests that Zod schemas are valid PublicSchema types
+      expectTypeOf<typeof zodSchema>().toExtend<PublicSchema>();
 
       // Test with a discriminated union (from the original issue)
 
@@ -69,20 +70,20 @@ describe('Agent Type Tests', () => {
         z.object({ status: z.literal('success'), data: z.string() }),
         z.object({ status: z.literal('error'), error: z.string() }),
       ]);
-      expectTypeOf<typeof zodDiscriminatedUnion>().toExtend<OutputSchema>();
+      expectTypeOf<typeof zodDiscriminatedUnion>().toExtend<PublicSchema>();
     });
 
-    it('should allow any OutputSchema in AgentConfig.defaultOptions.structuredOutput.schema', () => {
-      // The fix changes AgentConfig.defaultOptions to use AgentExecutionOptions<OutputSchema>
+    it('should allow any PublicSchema in AgentConfig.defaultOptions.structuredOutput.schema', () => {
+      // The fix changes AgentConfig.defaultOptions to use AgentExecutionOptions<PublicSchema>
       // instead of AgentExecutionOptions (which defaults OUTPUT to undefined)
 
-      // AgentExecutionOptions<OutputSchema> should have schema: OutputSchema
-      type OptionsWithOutputSchema = AgentExecutionOptions<OutputSchema>;
-      type StructuredOutputType = NonNullable<OptionsWithOutputSchema['structuredOutput']>;
+      // AgentExecutionOptions<PublicSchema> should have schema: PublicSchema
+      type OptionsWithPublicSchema = AgentExecutionOptions<PublicSchema>;
+      type StructuredOutputType = NonNullable<OptionsWithPublicSchema['structuredOutput']>;
       type SchemaType = StructuredOutputType['schema'];
 
-      // After fix: SchemaType is `OutputSchema` (accepts Zod schemas, JSONSchema7, etc.)
-      expectTypeOf<SchemaType>().toExtend<NonNullable<OutputSchema<any>>>();
+      // After fix: SchemaType is `PublicSchema` (accepts Zod schemas, JSONSchema7, etc.)
+      expectTypeOf<SchemaType>().toExtend<NonNullable<PublicSchema<any>>>();
     });
   });
 
@@ -97,9 +98,9 @@ describe('Agent Type Tests', () => {
         id: 'test-agent',
         name: 'Test Agent',
         model: {} as any,
-        requestContextSchema: z.object({
-          userId: z.string(),
-          tenantId: z.string(),
+        requestContextSchema: z3.object({
+          userId: z3.string(),
+          tenantId: z3.string(),
         }),
         instructions: ({ requestContext }) => {
           // Verify requestContext is typed
@@ -130,9 +131,9 @@ describe('Agent Type Tests', () => {
         id: 'test-agent',
         name: 'Test Agent',
         model: {} as any,
-        requestContextSchema: z.object({
-          featureFlags: z.object({
-            enableSearch: z.boolean(),
+        requestContextSchema: z3.object({
+          featureFlags: z3.object({
+            enableSearch: z3.boolean(),
           }),
         }),
         instructions: 'You are a helpful assistant',

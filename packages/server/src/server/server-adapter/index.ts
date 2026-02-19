@@ -585,7 +585,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return pathParamSchema.parseAsync(params);
+    return pathParamSchema.parseAsync(params) as Promise<Record<string, any>>;
   }
 
   async parseQueryParams(route: ServerRoute, params: Record<string, QueryParamValue>): Promise<Record<string, any>> {
@@ -594,7 +594,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return queryParamSchema.parseAsync(params);
+    return queryParamSchema.parseAsync(params) as Promise<Record<string, any>>;
   }
 
   async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {

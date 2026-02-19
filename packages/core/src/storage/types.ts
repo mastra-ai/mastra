@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
@@ -1783,18 +1783,56 @@ function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boo
 
 /**
  * Extract checks array from Zod schema, compatible with both Zod 3 and Zod 4.
- * Zod 3 uses _def.checks, Zod 4 uses _zod.def.checks.
+ * Zod 3 uses _def.checks with {kind: "..."} objects
+ * Zod 4 uses _zod.def.checks with {def: {check: "...", format: "..."}} objects
  */
 function getZodChecks(schema: z.ZodTypeAny): Array<{ kind: string }> {
-  const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.checks) {
-    return schemaAny._zod.def.checks;
+  // Zod 4 structure: checks have def.check instead of kind
+  if ('_zod' in schema) {
+    const zodV4 = schema as { _zod?: { def?: { checks?: unknown[] } } };
+    const checks = zodV4._zod?.def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks.map((check: unknown) => {
+        // Type guard for Zod v4 check structure
+        if (
+          typeof check === 'object' &&
+          check !== null &&
+          'def' in check &&
+          typeof check.def === 'object' &&
+          check.def !== null
+        ) {
+          const def = check.def as Record<string, unknown>;
+
+          // For number checks in Zod 4, format:"safeint" means int()
+          if (def.check === 'number_format' && def.format === 'safeint') {
+            return { kind: 'int' };
+          }
+
+          // For string checks in Zod 4, check type is the format name
+          if (def.check === 'string_format' && typeof def.format === 'string') {
+            return { kind: def.format }; // e.g., "uuid", "email", etc.
+          }
+
+          // Generic mapping: use the check type as kind
+          return { kind: typeof def.check === 'string' ? def.check : 'unknown' };
+        }
+
+        return { kind: 'unknown' };
+      });
+    }
   }
-  // Zod 3 structure
-  if (schemaAny._def?.checks) {
-    return schemaAny._def.checks;
+
+  // Zod 3 structure: checks already have kind property
+  if ('_def' in schema) {
+    const zodV3 = schema as { _def?: { checks?: Array<{ kind: string }> } };
+    const checks = zodV3._def?.checks;
+
+    if (checks && Array.isArray(checks)) {
+      return checks;
+    }
   }
+
   return [];
 }
 
@@ -1817,7 +1855,8 @@ function zodToStorageType(schema: z.ZodTypeAny): StorageColumnType {
     const checks = getZodChecks(schema);
     return checks.some(c => c.kind === 'int') ? 'integer' : 'float';
   }
-  if (typeName === 'ZodBigInt') {
+  // Both ZodBigInt (v3) and ZodBigint (v4) should map to bigint
+  if (typeName === 'ZodBigInt' || typeName === 'ZodBigint') {
     return 'bigint';
   }
   if (typeName === 'ZodDate') {

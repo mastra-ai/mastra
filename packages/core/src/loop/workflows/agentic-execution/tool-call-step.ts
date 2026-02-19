@@ -1,7 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import z from 'zod';
+import z from 'zod/v4';
 import type { MastraDBMessage } from '../../../memory';
+import { toStandardSchema } from '../../../schema/schema';
+import { standardSchemaToJSONSchema } from '../../../schema/standard-schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -285,6 +286,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // Schema for tool call approval - used for both streaming and metadata
+        const approvalSchema = toStandardSchema(
+          z.object({
+            approved: z
+              .boolean()
+              .describe(
+                'Controls if the tool call is approved or not, should be true when approved and false when declined',
+              ),
+          }),
+        );
+
         if (toolRequiresApproval) {
           if (!resumeData) {
             controller.enqueue({
@@ -295,17 +307,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
-                resumeSchema: JSON.stringify(
-                  zodToJsonSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
-                  ),
-                ),
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
               },
             });
 
@@ -315,17 +317,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolName: inputData.toolName,
               args: inputData.args,
               type: 'approval',
-              resumeSchema: JSON.stringify(
-                zodToJsonSchema(
-                  z.object({
-                    approved: z
-                      .boolean()
-                      .describe(
-                        'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                      ),
-                  }),
-                ),
-              ),
+              resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
             });
 
             // Flush messages before suspension to ensure they are persisted
@@ -390,14 +382,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   args: inputData.args,
                   resumeSchema: JSON.stringify(
-                    zodToJsonSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                      }),
+                    standardSchemaToJSONSchema(
+                      toStandardSchema(
+                        z.object({
+                          approved: z
+                            .boolean()
+                            .describe(
+                              'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                            ),
+                        }),
+                      ),
                     ),
                   ),
                 },
@@ -411,14 +405,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 type: 'approval',
                 suspendedToolRunId: options.runId,
                 resumeSchema: JSON.stringify(
-                  zodToJsonSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
+                  standardSchemaToJSONSchema(
+                    toStandardSchema(
+                      z.object({
+                        approved: z
+                          .boolean()
+                          .describe(
+                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                          ),
+                      }),
+                    ),
                   ),
                 ),
               });

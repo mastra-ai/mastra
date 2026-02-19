@@ -126,14 +126,16 @@ export function validateChunkParams(strategy: ChunkStrategy, params: any): void 
   const result = schema.safeParse(params);
   if (!result.success) {
     // Extract unrecognized keys for cleaner error message
-    const unrecognizedError = result.error.errors.find((e: any) => e.code === 'unrecognized_keys');
+    // Use 'issues' for Zod v4 compatibility (also available in Zod v3)
+    const issues = result.error.issues;
+    const unrecognizedError = issues.find((e: any) => e.code === 'unrecognized_keys');
     if (unrecognizedError && 'keys' in unrecognizedError) {
       const keys = (unrecognizedError as any).keys.join(', ');
       throw new Error(`Invalid parameters for ${strategy} strategy: '${keys}' not supported`);
     }
 
     // Fallback to general error message for other validation issues
-    const errorMessage = result.error.errors
+    const errorMessage = issues
       .map((e: any) => `${e.path.length > 0 ? e.path.join('.') : 'parameter'}: ${e.message}`)
       .join(', ');
 

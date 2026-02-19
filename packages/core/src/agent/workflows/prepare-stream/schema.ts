@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
@@ -42,8 +42,8 @@ const coreToolSchema = z.object({
     z.any(), // Zod schema or other schema types - validated at tool execution
   ]),
   outputSchema: z.union([z.record(z.string(), z.any()), z.any()]).optional(),
-  execute: z.optional(z.function(z.tuple([z.any(), z.any()]), z.promise(z.any()))),
-  toModelOutput: z.optional(z.function(z.tuple([z.any()]), z.any())),
+  execute: z.optional(z.function()),
+  toModelOutput: z.optional(z.function()),
   type: z.union([z.literal('function'), z.literal('provider-defined'), z.undefined()]).optional(),
   args: z.record(z.string(), z.any()).optional(),
 });
@@ -60,7 +60,7 @@ export const storageThreadSchema = z.object({
 });
 
 export const prepareToolsStepOutputSchema = z.object({
-  convertedTools: z.record(z.string(), coreToolSchema),
+  convertedTools: z.record(z.string(), z.any()),
 });
 
 export const prepareMemoryStepOutputSchema = z.object({

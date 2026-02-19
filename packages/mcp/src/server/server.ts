@@ -554,14 +554,14 @@ export class MCPServer extends MCPServerBase {
         if (error instanceof z.ZodError) {
           this.logger.warn('Invalid tool arguments', {
             tool: request.params.name,
-            errors: error.errors,
+            errors: error.issues,
             duration: `${duration}ms`,
           });
           return {
             content: [
               {
                 type: 'text',
-                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+                text: `Invalid arguments: ${error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
               },
             ],
             isError: true,
@@ -1919,7 +1919,7 @@ export class MCPServer extends MCPServerBase {
       if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
         const validation = tool.parameters.safeParse(args ?? {});
         if (!validation.success) {
-          const errorMessages = validation.error.errors
+          const errorMessages = validation.error.issues
             .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
             .join('\n');
           this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
