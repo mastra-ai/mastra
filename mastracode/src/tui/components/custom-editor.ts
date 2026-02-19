@@ -4,14 +4,16 @@
 
 import {
 	Editor,
-	matchesKey,
-	type EditorTheme,
-	type TUI,
+	matchesKey
+	
+	
 } from "@mariozechner/pi-tui"
+import type {EditorTheme, TUI} from "@mariozechner/pi-tui";
 import {
-	getClipboardImage,
-	type ClipboardImage,
+	getClipboardImage
+	
 } from "../../clipboard/index.js"
+import type {ClipboardImage} from "../../clipboard/index.js";
 
 const PASTE_START = "\x1b[200~"
 const PASTE_END = "\x1b[201~"
