@@ -50,7 +50,7 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
     }
 
     // Check cookie (set during sign-in)
-    const cookieHeader = request.header('Cookie');
+    const cookieHeader = this.getRequestHeader(request, 'Cookie');
     if (cookieHeader) {
       const cookies = cookieHeader.split(';').map(c => c.trim());
       for (const cookie of cookies) {
@@ -152,10 +152,22 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
     return token.startsWith('Bearer ') ? token.slice(7) : token;
   }
 
+  /**
+   * Get a header value from either a HonoRequest or standard Request.
+   * The auth middleware passes a raw Request (c.req.raw), not a HonoRequest,
+   * so we need to handle both APIs.
+   */
+  private getRequestHeader(request: HonoRequest | Request, name: string): string | undefined {
+    if (typeof (request as any).header === 'function') {
+      return (request as HonoRequest).header(name);
+    }
+    return (request as Request).headers?.get(name) ?? undefined;
+  }
+
   private getTokensFromHeaders(token: string, request: HonoRequest): string[] {
     const tokens = [token];
     for (const headerName of this.headers) {
-      const headerValue = request.header(headerName);
+      const headerValue = this.getRequestHeader(request, headerName);
       if (headerValue) {
         tokens.push(this.stripBearerPrefix(headerValue));
       }
