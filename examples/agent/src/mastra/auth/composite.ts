@@ -24,9 +24,9 @@ export async function initComposite(): Promise<AuthResult> {
   const { MastraCloudAuthProvider, MastraRBACCloud } = await import('@mastra/auth-cloud');
 
   // Service token auth for API/automation access
-  const serviceTokens: Record<string, { id: string }> = {};
+  const serviceTokens: Record<string, { id: string; role: string }> = {};
   if (process.env.SERVICE_TOKEN) {
-    serviceTokens[process.env.SERVICE_TOKEN] = { id: 'service-api' };
+    serviceTokens[process.env.SERVICE_TOKEN] = { id: 'service-api', role: 'api' };
   }
 
   const serviceAuth = new SimpleAuth({
