@@ -683,25 +683,38 @@ export class NovaSonicVoice extends MastraVoice<
         // The send() call should return immediately with the response stream
         // If it hangs, it means the async iterable is blocking
         const sendStartTime = Date.now();
-        
-        const response = await Promise.race([
-          this.client.send(command),
-          new Promise<never>((_, reject) => {
-            setTimeout(() => {
-              this.log('[DEBUG] client.send() timeout after 5 seconds - this indicates the SDK is waiting');
-              reject(new Error('client.send() timeout'));
-            }, 5000);
-          }),
-        ]).catch((error) => {
+
+        // Use AbortController to cancel the underlying SDK request on timeout,
+        // preventing leaked HTTP/2 connections if the send hangs.
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+          this.log('[DEBUG] client.send() timeout after 5 seconds - aborting request');
+          abortController.abort();
+        }, 5000);
+
+        let response;
+        try {
+          response = await this.client.send(command, { abortSignal: abortController.signal });
+        } catch (error) {
           const sendDuration = Date.now() - sendStartTime;
+          if (abortController.signal.aborted) {
+            this.log(`[DEBUG] client.send() aborted after ${sendDuration}ms`);
+            // Clean up: signal the async iterable to close and tear down client
+            closeSignal = true;
+            signalQueue();
+            this.client.destroy();
+            throw new Error('client.send() timeout');
+          }
           this.log(`[DEBUG] client.send() error after ${sendDuration}ms:`, error);
           throw error;
-        });
-        
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
         const sendDuration = Date.now() - sendStartTime;
         this.log(`[DEBUG] client.send() completed in ${sendDuration}ms`);
         this.log('Received response from AWS Bedrock');
-        
+
         // The response contains the stream itself
         this.stream = response.body;
         this.log(`[DEBUG] Response stream type: ${typeof this.stream}`);
