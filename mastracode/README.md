@@ -18,13 +18,14 @@ Clone the repository and install its dependencies.
 ```bash
 # Clone the repository
 git clone https://github.com/mastra-ai/mastra.git
-cd mastracode
+cd mastra
 
-# Install dependencies
+# Install dependencies and build all workspace packages
 pnpm install
+pnpm build
 ```
 
-To use Mastra Code, we recommend creating an alias in your shell configuration to launch it from any directory. You have to specify the absolute path to `main.ts` and then run it with `tsx`.
+To use Mastra Code, we recommend creating an alias in your shell configuration to launch it from any directory. You have to specify the absolute path to `mastracode/src/main.ts` and then run it with `tsx`.
 
 ```bash
 # Add this to your .bashrc, .zshrc, etc.
