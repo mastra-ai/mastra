@@ -127,20 +127,18 @@ class LocalCommandHandle implements CommandHandle {
  * Auto-starts the sandbox when spawn is called.
  */
 export class LocalProcessManager implements SandboxProcessManager {
-  private readonly _ensureRunning: () => Promise<void>;
-  private readonly _getWorkingDirectory: () => string;
+  private readonly _sandbox: { ensureRunning(): Promise<void>; readonly workingDirectory: string };
   private readonly _handles = new Map<number, LocalCommandHandle>();
 
-  constructor(ensureRunning: () => Promise<void>, getWorkingDirectory: () => string) {
-    this._ensureRunning = ensureRunning;
-    this._getWorkingDirectory = getWorkingDirectory;
+  constructor(sandbox: { ensureRunning(): Promise<void>; readonly workingDirectory: string }) {
+    this._sandbox = sandbox;
   }
 
   async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<CommandHandle> {
-    await this._ensureRunning();
+    await this._sandbox.ensureRunning();
 
     const startTime = Date.now();
-    const cwd = options.cwd ?? this._getWorkingDirectory();
+    const cwd = options.cwd ?? this._sandbox.workingDirectory;
     const env = {
       PATH: process.env.PATH,
       ...options.env,

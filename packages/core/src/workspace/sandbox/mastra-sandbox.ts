@@ -248,7 +248,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
    * }
    * ```
    */
-  protected async ensureRunning(): Promise<void> {
+  async ensureRunning(): Promise<void> {
     if (this.status !== 'running') {
       await this._start();
     }

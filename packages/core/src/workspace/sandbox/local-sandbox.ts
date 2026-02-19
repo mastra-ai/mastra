@@ -233,10 +233,7 @@ export class LocalSandbox extends MastraSandbox {
       throw new IsolationUnavailableError(requestedIsolation, detection.message);
     }
     this._isolation = requestedIsolation;
-    this.processes = new LocalProcessManager(
-      () => this.ensureRunning(),
-      () => this._workingDirectory,
-    );
+    this.processes = new LocalProcessManager(this);
   }
 
   private generateId(): string {

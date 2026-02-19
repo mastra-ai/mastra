@@ -120,17 +120,21 @@ class E2BHandle implements MastraCommandHandle {
  * Auto-starts the sandbox when spawn is called.
  */
 export class E2BProcessManager implements SandboxProcessManager {
-  private readonly _ensureSandbox: () => Promise<Sandbox>;
+  private readonly _sandbox: { ensureRunning(): Promise<void>; readonly instance: Sandbox };
   private readonly _handles = new Map<number, E2BHandle>();
   private readonly _env: Record<string, string>;
 
-  constructor(ensureSandbox: () => Promise<Sandbox>, env: Record<string, string> = {}) {
-    this._ensureSandbox = ensureSandbox;
+  constructor(
+    sandbox: { ensureRunning(): Promise<void>; readonly instance: Sandbox },
+    env: Record<string, string> = {},
+  ) {
+    this._sandbox = sandbox;
     this._env = env;
   }
 
   async spawn(command: string, args: string[] = [], options: SpawnProcessOptions = {}): Promise<MastraCommandHandle> {
-    const sandbox = await this._ensureSandbox();
+    await this._sandbox.ensureRunning();
+    const e2b = this._sandbox.instance;
     const startTime = Date.now();
 
     const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
@@ -141,14 +145,14 @@ export class E2BProcessManager implements SandboxProcessManager {
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
 
-    const e2bHandle = await sandbox.commands.run(fullCommand, {
+    const e2bHandle = await e2b.commands.run(fullCommand, {
       background: true,
       stdin: true,
       cwd: options.cwd,
       envs,
     });
 
-    const handle = new E2BHandle(e2bHandle, sandbox, command, args, startTime);
+    const handle = new E2BHandle(e2bHandle, e2b, command, args, startTime);
     this._handles.set(handle.pid, handle);
 
     return handle;

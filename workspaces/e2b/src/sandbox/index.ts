@@ -175,10 +175,7 @@ export class E2BSandbox extends MastraSandbox {
       ...(options.accessToken && { accessToken: options.accessToken }),
     };
 
-    this.processes = new E2BProcessManager(async () => {
-      await this.ensureRunning();
-      return this.instance;
-    }, this.env);
+    this.processes = new E2BProcessManager(this, this.env);
 
     // Start template preparation immediately in background
     // This way template build (if needed) begins before start() is called
