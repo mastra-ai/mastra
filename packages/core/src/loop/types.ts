@@ -41,14 +41,7 @@ import type { Workspace } from '../workspace/workspace';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
 
-/**
- * Attempts to repair a tool call that failed to parse or targeted an unknown tool.
- * Return a repaired tool call to retry, or `null` to let the error flow to the model.
- *
- * Note: returning `null` for a `parseError` returns the error as a tool result
- * (letting the model self-correct), while returning `null` for a tool-not-found
- * error throws (since missing tools are a configuration issue, not an LLM issue).
- */
+/** Repair a tool call that failed to parse or targeted an unknown tool. Return fixed call or `null` to let the error propagate. */
 export type RepairToolCallFunction = (options: {
   toolCallId: string;
   toolName: string;

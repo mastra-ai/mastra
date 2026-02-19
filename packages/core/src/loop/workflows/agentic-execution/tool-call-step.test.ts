@@ -755,7 +755,7 @@ describe('createToolCallStep repairToolCall hook', () => {
     );
   });
 
-  it('throws when repair hook returns null for tool-not-found', async () => {
+  it('returns error when repair hook returns null for tool-not-found', async () => {
     const repairToolCall = vi.fn().mockResolvedValue(null);
 
     const step = createToolCallStep({
@@ -767,17 +767,21 @@ describe('createToolCallStep repairToolCall hook', () => {
       repairToolCall,
     });
 
-    await expect(
-      step.execute(
-        makeExecuteParams({
-          inputData: {
-            toolCallId: 'call-1',
-            toolName: 'missing-tool',
-            args: {},
-          },
-        }),
-      ),
-    ).rejects.toThrow('missing-tool');
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData: {
+          toolCallId: 'call-1',
+          toolName: 'missing-tool',
+          args: {},
+        },
+      }),
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: expect.stringContaining('missing-tool') }),
+      }),
+    );
   });
 
   it('returns error when repair hook itself throws for parseError', async () => {

@@ -170,7 +170,6 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           } catch (error) {
             const repaired = tryRepairJson(sanitized);
             if (repaired) {
-              console.warn('[JSON Repair] Fixed malformed JSON for tool:', value.toolName);
               toolCallInput = repaired;
             } else {
               toolCallInput = {};
@@ -613,9 +612,8 @@ function normalizeFinishReason(
 }
 
 /**
- * Attempts to repair common JSON malformations from LLM providers (trailing LLM
- * special tokens, unquoted keys, single quotes, trailing commas). Returns parsed
- * object or null.
+ * Attempts to repair common JSON malformations from LLM providers.
+ * Returns the parsed object on success, or null if repair fails.
  */
 export function tryRepairJson(input: string): Record<string, any> | null {
   const repaired = applyStructuralFixes(input.trim());
@@ -640,10 +638,7 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   }
 }
 
-/**
- * Converts single-quote JSON delimiters to double quotes while preserving
- * apostrophes inside double-quoted values (e.g. "it's fine" stays unchanged).
- */
+/** Converts single-quote delimiters to double quotes, preserving apostrophes in double-quoted values. */
 function replaceSingleQuoteDelimiters(input: string): string {
   const chars: string[] = [];
   let i = 0;
@@ -708,21 +703,16 @@ function replaceSingleQuoteDelimiters(input: string): string {
 function applyStructuralFixes(input: string): string {
   let result = input;
 
-  // Strip trailing LLM special tokens like <|call|>, <|endoftext|> (issue #13185)
-  // Some OpenAI models append internal tokens after valid JSON, e.g. '{}\t<|call|>'
-  result = result.replace(/<\|[^|]*\|>\s*/g, '').trim();
+  // Strip trailing LLM special tokens: '{}\t<|call|>' -> '{}'
+  result = result.replace(/\s*(<\|[^|]*\|>\s*)+$/, '').trim();
 
-  // Fix missing opening quote before property name (partial quote)
-  // {"a":"b",c":"d"} -> {"a":"b","c":"d"}
-  // Must run before the unquoted-key fix so the trailing " is consumed
+  // Fix missing opening quote: {"a":"b",c":"d"} -> {"a":"b","c":"d"}
   result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, '$1"$2":');
 
-  // Add missing quotes around fully unquoted property names
-  // {command:"value"} -> {"command":"value"}
+  // Quote unquoted property names: {command:"value"} -> {"command":"value"}
   result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
 
-  // Remove trailing commas before closing braces/brackets
-  // {"a":1,} -> {"a":1}
+  // Remove trailing commas: {"a":1,} -> {"a":1}
   result = result.replace(/,(\s*[}\]])/g, '$1');
 
   return result;

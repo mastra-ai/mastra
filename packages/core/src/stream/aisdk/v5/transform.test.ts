@@ -92,7 +92,6 @@ describe('convertFullStreamChunkToMastra', () => {
 
         expect(result, `Test case: ${name}`).toBeDefined();
         expect(result?.type, `Test case: ${name}`).toBe('tool-call');
-        // Unrepairable JSON should have parseError set
         expect((result as any).payload.parseError, `Test case: ${name}`).toBeDefined();
       });
     });
@@ -133,7 +132,7 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(parseError).not.toContain(longInput);
     });
 
-    describe('should repair common LLM malformed JSON errors (issue #11078)', () => {
+    describe('should repair common LLM malformed JSON errors', () => {
       it('should repair missing quote before property name after comma', () => {
         const chunk: StreamPart = {
           type: 'tool-call',
@@ -234,7 +233,7 @@ describe('convertFullStreamChunkToMastra', () => {
         expect((result as any).payload.parseError).toBeUndefined();
       });
 
-      it('should repair trailing LLM special tokens like <|call|> (issue #13185)', () => {
+      it('should repair trailing LLM special tokens like <|call|>', () => {
         const chunk: StreamPart = {
           type: 'tool-call',
           toolCallId: 'call-repair-token-1',
@@ -344,7 +343,6 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(result).toBeDefined();
       expect(result?.type).toBe('tool-call');
       expect((result as any).payload.args).toBeUndefined();
-      // Empty input doesn't trigger JSON parsing, so no parseError
       expect((result as any).payload.parseError).toBeUndefined();
     });
 
@@ -366,7 +364,7 @@ describe('convertFullStreamChunkToMastra', () => {
       expect((result as any).payload.parseError).toBeUndefined();
     });
 
-    it('should handle complex nested JSON with long strings - position 871 error simulation from GitHub issue #9958', () => {
+    it('should handle complex nested JSON with long strings', () => {
       const longString = 'A'.repeat(800);
       const chunk: StreamPart = {
         type: 'tool-call',
@@ -402,7 +400,7 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
-    it('should recover valid JSON with tab + <|call|> token (issue #13185)', () => {
+    it('should recover valid JSON with tab + <|call|> token', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
         toolCallId: 'call-2',
@@ -438,7 +436,7 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
-    it('should gracefully return undefined for truly malformed JSON (issue #13261)', () => {
+    it('should set parseError for truly malformed JSON', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
         toolCallId: 'call-4',
@@ -452,7 +450,8 @@ describe('convertFullStreamChunkToMastra', () => {
       expect(result).toBeDefined();
       expect(result?.type).toBe('tool-call');
       if (result?.type === 'tool-call') {
-        expect(result.payload.args).toBeUndefined();
+        expect(result.payload.args).toEqual({});
+        expect((result as any).payload.parseError).toContain('malformed JSON');
       }
     });
 
@@ -595,7 +594,6 @@ describe('tryRepairJson', () => {
   });
 
   it('should return null for non-object JSON values', () => {
-    // Arrays, primitives, and null should not be returned as tool call args
     expect(tryRepairJson('[1,2,3]')).toBeNull();
     expect(tryRepairJson('"just a string"')).toBeNull();
     expect(tryRepairJson('42')).toBeNull();
@@ -603,8 +601,7 @@ describe('tryRepairJson', () => {
     expect(tryRepairJson('null')).toBeNull();
   });
 
-  it('should return null for arrays with trailing commas (non-object result)', () => {
-    // Even if repair succeeds, arrays should not be returned
+  it('should return null for arrays with trailing commas', () => {
     expect(tryRepairJson('[1,2,3,]')).toBeNull();
   });
 
@@ -679,7 +676,6 @@ describe('tryRepairJson', () => {
   });
 
   it('should not corrupt apostrophes in double-quoted string values', () => {
-    // Trailing comma is the only issue; apostrophe in value must be preserved
     expect(tryRepairJson('{"name": "it\'s a test", "value": 1,}')).toEqual({
       name: "it's a test",
       value: 1,
@@ -694,16 +690,13 @@ describe('tryRepairJson', () => {
   });
 
   it('should preserve apostrophes inside double-quoted values when single-quoted keys are present', () => {
-    // Single-quoted keys + apostrophe in a double-quoted value
-    // {'name': "it's a test", 'value': 1}
     expect(tryRepairJson("{  'name': \"it's a test\", 'value': 1}")).toEqual({
       name: "it's a test",
       value: 1,
     });
   });
 
-  it('should handle mixed single and double quotes correctly', () => {
-    // Some keys single-quoted, some double-quoted
+  it('should handle mixed single and double quotes', () => {
     expect(tryRepairJson("{\"name\": 'hello', 'count': 42}")).toEqual({
       name: 'hello',
       count: 42,
@@ -711,7 +704,6 @@ describe('tryRepairJson', () => {
   });
 
   it('should escape double quotes inside single-quoted strings', () => {
-    // Single-quoted value containing a double quote: {'key': 'say "hi"'}
     expect(tryRepairJson("{'key': 'say \"hi\"'}")).toEqual({
       key: 'say "hi"',
     });
@@ -722,7 +714,7 @@ describe('tryRepairJson', () => {
     expect(tryRepairJson('{"a": {')).toBeNull();
   });
 
-  describe('LLM special token stripping (issue #13185)', () => {
+  describe('LLM special token stripping', () => {
     it('should strip trailing <|call|> from valid JSON', () => {
       expect(tryRepairJson('{}<|call|>')).toEqual({});
       expect(tryRepairJson('{"a":1}<|call|>')).toEqual({ a: 1 });
@@ -745,17 +737,18 @@ describe('tryRepairJson', () => {
     });
 
     it('should handle special tokens combined with other repairs', () => {
-      // Trailing comma + special token
       expect(tryRepairJson('{"a":1,}<|call|>')).toEqual({ a: 1 });
-      // Unquoted key + special token
       expect(tryRepairJson('{command:"ls"}<|call|>')).toEqual({ command: 'ls' });
     });
 
-    it('should not affect valid JSON containing special-token-like strings (parsed before repair)', () => {
-      // If <|call|> is inside a valid JSON string, JSON.parse succeeds on the first try
-      // and tryRepairJson is never called. Verify the valid JSON parses normally.
+    it('should not affect valid JSON containing token-like strings in values', () => {
       const validInput = '{"text":"say <|call|> now"}';
       expect(JSON.parse(validInput)).toEqual({ text: 'say <|call|> now' });
+    });
+
+    it('should preserve token-like strings inside values when repairing other issues', () => {
+      const input = '{"prompt":"use <|endoftext|> token","mode":"test",}';
+      expect(tryRepairJson(input)).toEqual({ prompt: 'use <|endoftext|> token', mode: 'test' });
     });
   });
 });

@@ -264,29 +264,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
               if (!tool) {
                 return {
-                  error: new ToolNotFoundError(`Tool "${repaired.toolName}" not found after repair.${availableToolsStr}`),
+                  error: new ToolNotFoundError(
+                    `Tool "${repaired.toolName}" not found after repair.${availableToolsStr}`,
+                  ),
                   ...inputData,
                 };
               }
             } else {
-              if (inputData.parseError) {
-                return { error, ...inputData };
-              }
-              throw error;
-            }
-          } catch (repairError) {
-            if (repairError === error) throw error;
-            logger?.error('Error in repairToolCall hook:', repairError);
-            if (inputData.parseError) {
               return { error, ...inputData };
             }
-            throw error;
-          }
-        } else {
-          if (inputData.parseError) {
+          } catch (repairError) {
+            if (repairError === error) return { error, ...inputData };
+            logger?.error('Error in repairToolCall hook:', repairError);
             return { error, ...inputData };
           }
-          throw error;
+        } else {
+          return { error, ...inputData };
         }
       }
 
