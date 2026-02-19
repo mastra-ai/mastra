@@ -975,12 +975,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     try {
       const requestContext = await this.buildRequestContext();
 
+      const isYolo = (this.state as Record<string, unknown>).yolo === true;
+
       const streamOptions: Record<string, unknown> = {
         memory: { thread: this.currentThreadId, resource: this.resourceId },
         abortSignal: this.abortController.signal,
         requestContext,
         maxSteps: 1000,
-        requireToolApproval: true,
+        requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
       };
 
@@ -1488,6 +1490,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
+      requireToolApproval: true,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
@@ -1511,6 +1514,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
+      requireToolApproval: true,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
