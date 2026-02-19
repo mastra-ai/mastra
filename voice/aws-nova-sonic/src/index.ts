@@ -1067,10 +1067,22 @@ export class NovaSonicVoice extends MastraVoice<
       const text = event.textOutput.content || '';
       const role = (event.textOutput.role?.toLowerCase() as 'assistant' | 'user') || 'assistant';
 
-      this.log(`[Event] Text output: role=${role}, text length=${text.length}, text preview: ${text.substring(0, 100)}`);
+      this.log(`[Event] Text output: role=${role}, text length=${text.length}`);
 
       // Check for barge-in (interruption)
-      if (text.includes('{ "interrupted" : true }')) {
+      let isInterrupted = false;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && parsed.interrupted === true) {
+          isInterrupted = true;
+        }
+      } catch {
+        // Not valid JSON — fall back to substring check
+        if (/interrupted/i.test(text)) {
+          isInterrupted = true;
+        }
+      }
+      if (isInterrupted) {
         this.log(`[Event] Interrupt detected, emitting interrupt event`);
         this.emit('interrupt', { type: 'user', timestamp: Date.now() });
       } else {
