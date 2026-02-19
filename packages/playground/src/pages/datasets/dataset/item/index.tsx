@@ -231,12 +231,9 @@ function DatasetItemPage() {
               Datasets
             </Crumb>
             <Crumb as={Link} to={`/datasets/${datasetId}`}>
-              {dataset?.name || datasetId}
+              {dataset?.name}
             </Crumb>
             <Crumb isCurrent as="span">
-              <Icon>
-                <FileCodeIcon />
-              </Icon>
               Item
             </Crumb>
           </Breadcrumb>
