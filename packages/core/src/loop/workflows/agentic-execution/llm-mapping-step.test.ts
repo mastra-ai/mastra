@@ -394,6 +394,223 @@ describe('createLLMMappingStep HITL behavior', () => {
   });
 });
 
+describe('createLLMMappingStep onChunk', () => {
+  let controller: { enqueue: Mock };
+  let messageList: MessageList;
+  let llmExecutionStep: any;
+  let bail: Mock;
+  let getStepResult: Mock;
+  let onChunk: Mock;
+
+  const createExecuteParams = (
+    inputData: ToolCallOutput[],
+  ): ExecuteFunctionParams<{}, ToolCallOutput[], any, any, any> => ({
+    runId: 'test-run',
+    workflowId: 'test-workflow',
+    mastra: {} as any,
+    requestContext: new RequestContext(),
+    state: {},
+    setState: vi.fn(),
+    retryCount: 1,
+    tracingContext: {} as any,
+    getInitData: vi.fn(),
+    getStepResult,
+    suspend: vi.fn(),
+    bail,
+    abort: vi.fn(),
+    engine: 'default' as any,
+    abortSignal: new AbortController().signal,
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'test-call-id',
+      name: 'test-tool',
+      runId: 'test-run',
+    }),
+    validateSchemas: false,
+    inputData,
+    [PUBSUB_SYMBOL]: {} as any,
+    [STREAM_FORMAT_SYMBOL]: undefined,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    onChunk = vi.fn();
+
+    messageList = {
+      get: {
+        all: { aiV5: { model: () => [] } },
+        input: { aiV5: { model: () => [] } },
+        response: { aiV5: { model: () => [] } },
+      },
+      add: vi.fn(),
+    } as unknown as MessageList;
+
+    llmExecutionStep = createStep({
+      id: 'test-llm-execution',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({
+        stepResult: { isContinued: true, reason: undefined },
+        metadata: {},
+      }),
+    });
+
+    bail = vi.fn(data => data);
+    getStepResult = vi.fn(() => ({
+      stepResult: { isContinued: true, reason: undefined },
+      metadata: {},
+    }));
+  });
+
+  it('should call onChunk with raw Mastra chunks for successful tool results', async () => {
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        options: { onChunk },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'myTool',
+        args: { input: 'test' },
+        result: { success: true },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          toolName: 'myTool',
+          result: { success: true },
+        }),
+      }),
+    );
+  });
+
+  it('should call onChunk for tool-error chunks', async () => {
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        options: { onChunk },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'brokenTool',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error('Tool execution failed'),
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          toolName: 'brokenTool',
+          error: expect.any(Error),
+        }),
+      }),
+    );
+  });
+
+  it('should call onChunk for both tool-error and tool-result chunks in mixed-error scenarios', async () => {
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        options: { onChunk },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'existingTool',
+        args: { param: 'test' },
+        result: { success: true },
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'brokenTool',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error('Tool failed'),
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Should have called onChunk for both the error and the success
+    expect(onChunk).toHaveBeenCalledTimes(2);
+    expect(onChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({ toolCallId: 'call-2' }),
+      }),
+    );
+    expect(onChunk).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({ toolCallId: 'call-1' }),
+      }),
+    );
+  });
+
+  it('should not call onChunk when options.onChunk is not provided', async () => {
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        // no options.onChunk
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'myTool',
+        args: { input: 'test' },
+        result: { success: true },
+      },
+    ];
+
+    // Should not throw when onChunk is not provided
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).resolves.toBeDefined();
+  });
+});
+
 describe('createLLMMappingStep toModelOutput', () => {
   let controller: { enqueue: Mock };
   let messageList: MessageList;
