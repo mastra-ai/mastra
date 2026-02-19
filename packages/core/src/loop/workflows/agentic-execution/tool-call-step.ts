@@ -233,7 +233,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (inputData.args == null) {
+      if (inputData.args === null || inputData.args === undefined) {
         return {
           error: new Error(
             `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
