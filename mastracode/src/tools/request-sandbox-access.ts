@@ -3,9 +3,9 @@
  * The user can approve or deny the request via TUI dialog.
  */
 
+import * as path from "node:path"
 import { createTool } from "@mastra/core/tools"
 import { z } from "zod/v3"
-import * as path from "path"
 import type { HarnessRuntimeContext } from "../harness/types.js"
 import { isPathAllowed, getAllowedPathsFromContext } from "./utils.js"
 

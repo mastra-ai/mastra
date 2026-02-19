@@ -6,14 +6,15 @@
 
 import {
 	Box,
-	type Focusable,
+	
 	getEditorKeybindings,
 	Input,
 	SelectList,
-	type SelectItem,
+	
 	Spacer,
-	Text,
+	Text
 } from "@mariozechner/pi-tui"
+import type {Focusable, SelectItem} from "@mariozechner/pi-tui";
 import { bg, fg, bold, getSelectListTheme } from "../theme.js"
 
 export interface AskQuestionDialogOptions {

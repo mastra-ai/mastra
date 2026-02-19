@@ -7,10 +7,11 @@ import path from "node:path"
 import {
 	Container,
 	Markdown,
-	type MarkdownTheme,
+	
 	Spacer,
-	Text,
+	Text
 } from "@mariozechner/pi-tui"
+import type {MarkdownTheme} from "@mariozechner/pi-tui";
 import type { HarnessMessage } from "../../harness/types.js"
 import { getMarkdownTheme, theme } from "../theme.js"
 

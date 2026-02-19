@@ -3,9 +3,9 @@
  * Prefers AGENT.md over CLAUDE.md when both exist at the same location.
  */
 
-import { existsSync, readFileSync } from "fs"
-import { join } from "path"
-import { homedir } from "os"
+import { existsSync, readFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
 
 // Filenames to check, in order of preference
 const INSTRUCTION_FILES = ["AGENT.md", "CLAUDE.md"]

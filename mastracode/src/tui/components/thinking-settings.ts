@@ -8,11 +8,12 @@
 import {
 	Box,
 	SelectList,
-	type SelectItem,
+	
 	Spacer,
-	Text,
-	type Focusable,
+	Text
+	
 } from "@mariozechner/pi-tui"
+import type {SelectItem, Focusable} from "@mariozechner/pi-tui";
 import { fg, bg, bold, getSelectListTheme } from "../theme.js"
 
 // =============================================================================

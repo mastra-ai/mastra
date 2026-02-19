@@ -8,16 +8,17 @@ export { planModePrompt } from "./plan.js"
 export { fastModePrompt } from "./fast.js"
 
 import {
-	buildBasePrompt,
-	type PromptContext as BasePromptContext,
-} from "./base.js"
-import { buildModePromptFn } from "./build.js"
-import { planModePrompt } from "./plan.js"
-import { fastModePrompt } from "./fast.js"
-import {
 	loadAgentInstructions,
 	formatAgentInstructions,
-} from "../utils/agent-instructions.js"
+} from "./agent-instructions.js"
+import {
+	buildBasePrompt
+	
+} from "./base.js"
+import type {PromptContext as BasePromptContext} from "./base.js";
+import { buildModePromptFn } from "./build.js"
+import { fastModePrompt } from "./fast.js"
+import { planModePrompt } from "./plan.js"
 
 // Extended prompt context that includes runtime information
 export interface PromptContext extends BasePromptContext {

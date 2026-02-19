@@ -127,7 +127,7 @@ class LSPManager {
 		for (const client of this.clients.values()) {
 			try {
 				client.notifyClose(filePath)
-			} catch (error) {
+			} catch {
 				// Ignore errors if document wasn't open
 			}
 		}

@@ -8,7 +8,8 @@
  *  - Bottom border with agent type, model, status, duration
  */
 
-import { Container, Spacer, Text, type TUI } from "@mariozechner/pi-tui"
+import { Container, Spacer, Text  } from "@mariozechner/pi-tui"
+import type {TUI} from "@mariozechner/pi-tui";
 import { theme } from "../theme.js"
 import type { IToolExecutionComponent } from "./tool-execution-interface.js"
 
@@ -297,7 +298,7 @@ function summarizeArgs(args: unknown): string {
 		return theme.fg("muted", taskSummaries.join(", "))
 	}
 
-	for (const [key, val] of Object.entries(obj)) {
+	for (const [_key, val] of Object.entries(obj)) {
 		if (typeof val === "string") {
 			const short = val.length > 40 ? val.slice(0, 40) + "…" : val
 			parts.push(theme.fg("muted", short))
