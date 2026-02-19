@@ -16,11 +16,11 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 
 ## Features
 
-- ✅ Self-evaluating research loops that identify gaps and keep searching
-- ✅ Human-in-the-loop with suspend/resume for clarifying questions
-- ✅ Multiple specialized agents coordinating on a single task
-- ✅ Web search and page scraping via Exa
-- ✅ Sourced answers with citations
+- Self-evaluating research loops that identify gaps and keep searching
+- Human-in-the-loop with suspend/resume for clarifying questions
+- Multiple specialized agents coordinating on a single task
+- Web search and page scraping via Exa
+- Sourced answers with citations
 
 ## Prerequisites
 

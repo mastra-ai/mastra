@@ -18,9 +18,9 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Features
 
-- ✅ **No token limits** — chat with 500-page textbooks as easily as a 5-page memo
-- ✅ **Page citations** — every answer references its source pages so you can verify
-- ✅ **Quiz generation** — active recall quizzes generated from your actual content
+- **No token limits**: chat with 500-page textbooks as easily as a 5-page memo
+- **Page citations**: every answer references its source pages so you can verify
+- **Quiz generation**: active recall quizzes generated from your actual content
 
 ## Quick start
 
