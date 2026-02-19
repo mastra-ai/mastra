@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.3.2
+
+### Patch Changes
+
+- Updated style of Button and Select experimental variants ([#13186](https://github.com/mastra-ai/mastra/pull/13186))
+
 ## 1.3.2-alpha.1
 
 ## 1.3.2-alpha.0
