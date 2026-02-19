@@ -18,6 +18,9 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "mastracode": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": {

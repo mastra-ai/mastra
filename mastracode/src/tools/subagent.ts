@@ -9,10 +9,10 @@
  * real-time subagent activity (tool calls, text deltas, etc.).
  */
 import { Agent } from '@mastra/core/agent';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod/v3';
 import { getSubagentDefinition, getSubagentIds } from '../agents/subagents/index.js';
-import type { HarnessRuntimeContext } from '../harness/types.js';
 
 export interface SubagentToolDeps {
   /**
@@ -92,7 +92,7 @@ Use this tool when:
       }
 
       // Get emit function and abort signal from harness context (if available)
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRuntimeContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
       const emitEvent = harnessCtx?.emitEvent;
       const abortSignal = harnessCtx?.abortSignal;
       // toolCallId from the parent agent's tool invocation
@@ -114,7 +114,7 @@ Use this tool when:
       const defaultForType = agentType === 'explore' ? EXPLORE_SUBAGENT_MODEL : DEFAULT_SUBAGENT_MODEL;
 
       // Check for configured subagent model from harness (per-type)
-      const configuredSubagentModel = await harnessCtx?.getSubagentModelId?.(agentType);
+      const configuredSubagentModel = harnessCtx?.getSubagentModelId?.(agentType);
 
       const resolvedModelId = modelId ?? configuredSubagentModel ?? deps.defaultModelId ?? defaultForType;
       let model: any;
