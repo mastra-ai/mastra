@@ -4,7 +4,7 @@
  */
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 
 export const todoCheckTool = createTool({
   id: 'todo_check',

@@ -4,7 +4,7 @@
  */
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 
 const todoItemSchema = z.object({
   content: z.string().min(1).describe("Task description in imperative form (e.g., 'Fix authentication bug')"),

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { lspManager } from '../lsp/manager.js';
 import { findWorkspaceRoot } from '../lsp/workspace.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
