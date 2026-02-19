@@ -241,6 +241,7 @@ export class NovaSonicVoice extends MastraVoice<
 
     this.state = 'connecting';
     this.requestContext = requestContext;
+    this.streamRestartAttempted = false;
 
     try {
       this.log('Getting AWS credentials...');
@@ -1085,17 +1086,20 @@ export class NovaSonicVoice extends MastraVoice<
     if (event.audioOutput?.content) {
       try {
         const audioBytes = Buffer.from(event.audioOutput.content, 'base64');
-        
+
         this.log(`[Event] Audio output: ${audioBytes.length} bytes`);
-        
+
         // Mark that we're receiving assistant audio output
         this.isReceivingAssistantAudio = true;
-        
+
+        // Produce Int16Array view matching the declared type (LPCM 16-bit samples)
+        const audioData = new Int16Array(audioBytes.buffer, audioBytes.byteOffset, audioBytes.byteLength / 2);
+
         // Emit immediately to reduce latency
-        this.emit('speaking', { 
+        this.emit('speaking', {
           audio: event.audioOutput.content, // Base64 string (for SSE/JSON)
-          audioData: audioBytes, // Buffer (for compatibility)
-          response_id: this.currentResponseId 
+          audioData, // Int16Array view of decoded audio
+          response_id: this.currentResponseId
         });
 
         // Also emit to speaker stream

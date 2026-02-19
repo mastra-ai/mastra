@@ -136,7 +136,7 @@ export interface NovaSonicEventMap {
   /** Audio response with additional metadata */
   speaking: { audio?: string; audioData?: Int16Array; sampleRate?: number };
   /** Text response or transcription - compatible with base VoiceEventMap */
-  writing: { text: string; role: 'assistant' | 'user' };
+  writing: { text: string; role: 'assistant' | 'user'; generationStage?: 'SPECULATIVE' | 'FINAL' };
   /** Error events - compatible with base VoiceEventMap */
   error: { message: string; code?: string; details?: unknown };
   /** Session state changes */
