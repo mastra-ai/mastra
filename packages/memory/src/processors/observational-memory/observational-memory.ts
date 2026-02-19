@@ -817,39 +817,52 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const retentionFloor = messageTokensThreshold * (1 - activationRatio);
     const targetMessageTokens = Math.max(0, currentPendingTokens - retentionFloor);
 
-    // Find the closest chunk boundary to the target, biased under
+    // Find the closest chunk boundary to the target, biased over (prefer removing
+    // slightly more than the target so remaining context lands at or below retentionFloor).
+    // Track both best-over and best-under boundaries so we can fall back to under
+    // if the over boundary would overshoot by too much.
     let cumulativeMessageTokens = 0;
-    let bestBoundary = 0;
-    let bestBoundaryMessageTokens = 0;
+    let bestOverBoundary = 0;
+    let bestOverTokens = 0;
+    let bestUnderBoundary = 0;
+    let bestUnderTokens = 0;
 
     for (let i = 0; i < chunks.length; i++) {
       cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
       const boundary = i + 1;
 
-      const isUnder = cumulativeMessageTokens <= targetMessageTokens;
-      const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
-
-      if (bestBoundary === 0) {
-        bestBoundary = boundary;
-        bestBoundaryMessageTokens = cumulativeMessageTokens;
-      } else if (isUnder && !bestIsUnder) {
-        bestBoundary = boundary;
-        bestBoundaryMessageTokens = cumulativeMessageTokens;
-      } else if (isUnder && bestIsUnder) {
-        if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
+      if (cumulativeMessageTokens >= targetMessageTokens) {
+        // Over or equal — track the closest (lowest) over boundary
+        if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+          bestOverBoundary = boundary;
+          bestOverTokens = cumulativeMessageTokens;
         }
-      } else if (!isUnder && !bestIsUnder) {
-        if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
+      } else {
+        // Under — track the closest (highest) under boundary
+        if (cumulativeMessageTokens > bestUnderTokens) {
+          bestUnderBoundary = boundary;
+          bestUnderTokens = cumulativeMessageTokens;
         }
       }
     }
 
-    // If bestBoundary is 0, at least 1 chunk would activate
-    if (bestBoundary === 0) {
+    // Safeguard: if the over boundary would eat into more than 95% of the
+    // retention floor, fall back to the best under boundary instead.
+    // This prevents edge cases where a large chunk overshoots dramatically.
+    const maxOvershoot = retentionFloor * 0.95;
+    const overshoot = bestOverTokens - targetMessageTokens;
+
+    let bestBoundaryMessageTokens: number;
+
+    if (bestOverBoundary > 0 && overshoot <= maxOvershoot) {
+      bestBoundaryMessageTokens = bestOverTokens;
+    } else if (bestUnderBoundary > 0) {
+      bestBoundaryMessageTokens = bestUnderTokens;
+    } else if (bestOverBoundary > 0) {
+      // All boundaries are over and exceed the safeguard — still activate
+      // the closest over boundary (better than nothing)
+      bestBoundaryMessageTokens = bestOverTokens;
+    } else {
       return chunks[0]?.messageTokens ?? 0;
     }
 
@@ -859,11 +872,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   /**
    * Check if we've crossed a new bufferTokens interval boundary.
    * Returns true if async buffering should be triggered.
+   *
+   * When pending tokens are within ~1 bufferTokens of the observation threshold,
+   * the buffer interval is halved to produce finer-grained chunks right before
+   * activation. This improves chunk boundary selection, reducing overshoot.
    */
   private shouldTriggerAsyncObservation(
     currentTokens: number,
     lockKey: string,
     record: ObservationalMemoryRecord,
+    messageTokensThreshold?: number,
   ): boolean {
     if (!this.isAsyncObservationEnabled()) return false;
 
@@ -887,14 +905,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const memBoundary = ObservationalMemory.lastBufferedBoundary.get(bufferKey) ?? 0;
     const lastBoundary = Math.max(dbBoundary, memBoundary);
 
+    // Halve the buffer interval when within ~1 bufferTokens of the activation threshold.
+    // This produces finer-grained chunks right before activation, improving boundary selection.
+    const rampPoint = messageTokensThreshold ? messageTokensThreshold - bufferTokens * 1.1 : Infinity;
+    const effectiveBufferTokens = currentTokens >= rampPoint ? bufferTokens / 2 : bufferTokens;
+
     // Calculate which interval we're in
-    const currentInterval = Math.floor(currentTokens / bufferTokens);
-    const lastInterval = Math.floor(lastBoundary / bufferTokens);
+    const currentInterval = Math.floor(currentTokens / effectiveBufferTokens);
+    const lastInterval = Math.floor(lastBoundary / effectiveBufferTokens);
 
     const shouldTrigger = currentInterval > lastInterval;
 
     omDebug(
-      `[OM:shouldTriggerAsyncObs] tokens=${currentTokens}, bufferTokens=${bufferTokens}, currentInterval=${currentInterval}, lastInterval=${lastInterval}, lastBoundary=${lastBoundary} (db=${dbBoundary}, mem=${memBoundary}), shouldTrigger=${shouldTrigger}`,
+      `[OM:shouldTriggerAsyncObs] tokens=${currentTokens}, bufferTokens=${bufferTokens}, effectiveBufferTokens=${effectiveBufferTokens}, rampPoint=${rampPoint}, currentInterval=${currentInterval}, lastInterval=${lastInterval}, lastBoundary=${lastBoundary} (db=${dbBoundary}, mem=${memBoundary}), shouldTrigger=${shouldTrigger}`,
     );
 
     // Trigger if we've crossed into a new interval
@@ -3401,7 +3424,7 @@ ${suggestedResponse}
       // ════════════════════════════════════════════════════════════════════════
 
       if (this.isAsyncObservationEnabled() && totalPendingTokens < threshold) {
-        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record);
+        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record, threshold);
         omDebug(
           `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
         );
@@ -3420,7 +3443,7 @@ ${suggestedResponse}
         // Above threshold but we still need to check async buffering:
         // - At step 0, sync observation won't run, so we need chunks ready
         // - Below blockAfter, sync observation won't run, so we need chunks ready
-        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record);
+        const shouldTrigger = this.shouldTriggerAsyncObservation(unbufferedPendingTokens, lockKey, record, threshold);
         omDebug(
           `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
         );

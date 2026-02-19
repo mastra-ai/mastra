@@ -3438,7 +3438,7 @@ describe('Async Buffering Storage Operations', () => {
       // With activationRatio=0.5, target = 5000
       // After chunk 1: 3000 (under target, distance=2000)
       // After chunk 2: 6000 (over target, distance=1000)
-      // 6000 is closer to 5000, but since 3000 is under and 6000 is over, prefer under
+      // 6000 is closer to 5000, and since we bias over, prefer chunk 2 boundary
       await storage.updateBufferedObservations({
         id: initial.id,
         chunk: {
@@ -3483,16 +3483,15 @@ describe('Async Buffering Storage Operations', () => {
         lastObservedAt: new Date('2026-02-05T12:00:00Z'),
       });
 
-      // Biased under: should activate 1 chunk (3000 tokens), leaving 2 remaining
-      expect(result.chunksActivated).toBeGreaterThanOrEqual(1);
-      expect(result.activatedCycleIds.length).toBeGreaterThanOrEqual(1);
+      // Biased over: should activate 2 chunks (6000 tokens), leaving 1 remaining
+      expect(result.chunksActivated).toBe(2);
+      expect(result.activatedCycleIds).toEqual(['cycle-1', 'cycle-2']);
+      expect(result.messageTokensActivated).toBe(6000);
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.activeObservations).toContain('Chunk 1');
-      // Remaining chunks should still be in buffered
-      if (result.chunksActivated === 1) {
-        expect(record?.bufferedObservationChunks).toHaveLength(2);
-      }
+      expect(record?.activeObservations).toContain('Chunk 2');
+      expect(record?.bufferedObservationChunks).toHaveLength(1);
     });
 
     it('should always activate at least one chunk when at threshold', async () => {
@@ -4576,6 +4575,69 @@ describe('Async Buffering Processor Logic', () => {
       // Next interval boundary should trigger
       expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
+
+    it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 40000,
+          bufferTokens: 4000,
+          bufferActivation: 0.8,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      // threshold=40000, bufferTokens=4000, rampPoint=40000-4000*1.1=35600, halved=2000
+      const lockKey = 'thread:halve-test';
+
+      // Well below ramp point (35600): normal 4000 interval
+      // At 3000 tokens, interval = floor(3000/4000) = 0, last = 0 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(3000, lockKey, mockRecord, 40000)).toBe(false);
+      // At 4000 tokens, interval = floor(4000/4000) = 1, last = 0 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(4000, lockKey, mockRecord, 40000)).toBe(true);
+
+      // Still below ramp point: normal 4000 interval
+      const recordAt32k = { isBufferingObservation: false, lastBufferedAtTokens: 32000 } as any;
+      // At 35000 tokens (below rampPoint 35600), interval = floor(35000/4000) = 8, last = floor(32000/4000) = 8 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(false);
+
+      // Above ramp point (35600): halved 2000 interval
+      // At 36000 tokens, halved interval = 2000
+      // interval = floor(36000/2000) = 18, last = floor(32000/2000) = 16 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, 40000)).toBe(true);
+
+      // Simulate buffering at 36000
+      const recordAt36k = { isBufferingObservation: false, lastBufferedAtTokens: 36000 } as any;
+      // At 37000 tokens, interval = floor(37000/2000) = 18, last = floor(36000/2000) = 18 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, 40000)).toBe(false);
+      // At 38000 tokens, interval = floor(38000/2000) = 19, last = 18 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, 40000)).toBe(true);
+    });
+
+    it('should not halve interval when no threshold is provided', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 40000,
+          bufferTokens: 4000,
+          bufferActivation: 0.8,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      const lockKey = 'thread:no-threshold-test';
+      const recordAt28k = { isBufferingObservation: false, lastBufferedAtTokens: 28000 } as any;
+
+      // Without threshold, even near messageTokens limit, the normal 4000 interval is used
+      // At 31000 tokens, interval = floor(31000/4000) = 7, last = floor(28000/4000) = 7 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
+      // At 32000 tokens, interval = floor(32000/4000) = 8, last = 7 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
+    });
   });
 
   describe('shouldTriggerAsyncReflection', () => {
@@ -4818,7 +4880,7 @@ describe('Async Buffering Processor Logic', () => {
   });
 
   describe('swapBufferedToActive boundary selection', () => {
-    it('should prefer under-target boundary when equidistant', async () => {
+    it('should prefer over-target boundary when equidistant', async () => {
       const storage = createInMemoryStorage();
       const record = await storage.initializeObservationalMemory({
         threadId: 'thread-1',
@@ -6323,12 +6385,12 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining[1].cycleId).toBe('c-4');
     });
 
-    it('uneven chunks, ratio 0.6: biases under target', async () => {
+    it('uneven chunks, ratio 0.6: biases over target', async () => {
       // Chunks: 8k, 15k, 12k, 7k, 6k (total 48k). threshold=50k, ratio=0.6 → target=30k
       // After 1: 8k  (under, distance=22k)
-      // After 2: 23k (under, distance=7k)  ← best under
-      // After 3: 35k (over, distance=5k)
-      // Best under = 2 chunks (23k). Algorithm prefers under over over.
+      // After 2: 23k (under, distance=7k)
+      // After 3: 35k (over, distance=5k)  ← best over
+      // Algorithm prefers the over boundary to ensure retention target is met.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
@@ -6344,26 +6406,24 @@ describe('Full Async Buffering Flow', () => {
       });
 
       // 2 chunks = 23k (under target of 30k), 3 chunks = 35k (over).
-      // Algorithm prefers the under boundary.
-      expect(result.chunksActivated).toBe(2);
-      expect(result.messageTokensActivated).toBe(23000);
-      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      // Algorithm prefers the over boundary to hit the retention target.
+      expect(result.chunksActivated).toBe(3);
+      expect(result.messageTokensActivated).toBe(35000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
       expect(result.observations).toContain('Chunk 0');
       expect(result.observations).toContain('Chunk 1');
-      expect(result.observations).not.toContain('Chunk 2');
+      expect(result.observations).toContain('Chunk 2');
 
-      expect(remaining).toHaveLength(3);
-      expect(remaining[0].cycleId).toBe('c-2');
-      expect(remaining[1].cycleId).toBe('c-3');
-      expect(remaining[2].cycleId).toBe('c-4');
+      expect(remaining).toHaveLength(2);
+      expect(remaining[0].cycleId).toBe('c-3');
+      expect(remaining[1].cycleId).toBe('c-4');
     });
 
-    it('uneven chunks, ratio 0.4: activates fewer oldest chunks', async () => {
+    it('uneven chunks, ratio 0.4: biases over target', async () => {
       // Same uneven chunks. threshold=50k, ratio=0.4 → target=20k
       // After 1: 8k  (under, distance=12k)
-      // After 2: 23k (over, distance=3k)
-      // Best under = 1 chunk (8k). 2 chunks = 23k (over).
-      // Algorithm prefers the under boundary: 1 chunk.
+      // After 2: 23k (over, distance=3k)  ← best over
+      // Algorithm prefers the over boundary to hit the retention target.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
@@ -6378,22 +6438,22 @@ describe('Full Async Buffering Flow', () => {
         messageTokensThreshold: 50000,
       });
 
-      expect(result.chunksActivated).toBe(1);
-      expect(result.messageTokensActivated).toBe(8000);
-      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(23000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
 
-      expect(remaining).toHaveLength(4);
-      expect(remaining[0].cycleId).toBe('c-1');
+      expect(remaining).toHaveLength(3);
+      expect(remaining[0].cycleId).toBe('c-2');
     });
 
-    it('uneven chunks, high ratio 0.9: activates most but not all', async () => {
+    it('uneven chunks, high ratio 0.9: activates all when over boundary meets target', async () => {
       // Same uneven chunks (total 48k). threshold=50k, ratio=0.9 → target=45k
       // After 1: 8k  (under)
       // After 2: 23k (under)
       // After 3: 35k (under)
-      // After 4: 42k (under, distance=3k) ← best under
-      // After 5: 48k (over, distance=3k)
-      // Both boundaries at distance=3k, but algorithm prefers under.
+      // After 4: 42k (under, distance=3k)
+      // After 5: 48k (over, distance=3k) ← best over
+      // Algorithm prefers the over boundary to hit the retention target.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1' },
@@ -6408,12 +6468,11 @@ describe('Full Async Buffering Flow', () => {
         messageTokensThreshold: 50000,
       });
 
-      expect(result.chunksActivated).toBe(4);
-      expect(result.messageTokensActivated).toBe(42000);
-      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3']);
+      expect(result.chunksActivated).toBe(5);
+      expect(result.messageTokensActivated).toBe(48000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3', 'c-4']);
 
-      expect(remaining).toHaveLength(1);
-      expect(remaining[0].cycleId).toBe('c-4');
+      expect(remaining).toHaveLength(0);
     });
 
     it('one huge first chunk exceeds target: still activates just 1 (biased over)', async () => {
@@ -6477,6 +6536,73 @@ describe('Full Async Buffering Flow', () => {
       // target=15k, chunk is 12k (under) → activates it
       expect(result.chunksActivated).toBe(1);
       expect(result.activatedCycleIds).toEqual(['c-only']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('overshoot safeguard: falls back to under boundary when over would exceed 95% of retention floor', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Chunk 1: 3k (under, distance=5k)
+      // Chunk 2: 7k → cumulative 10k (over, overshoot=2k)
+      // maxOvershoot = 2000 * 0.95 = 1900. overshoot 2000 > 1900 → safeguard triggers
+      // Falls back to under boundary (chunk 1, 3k)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 3000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 7000, observationTokens: 100, obs: 'Chunk 1: large tool output' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // Safeguard prevents over boundary (10k) — falls back to under (3k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(3000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('overshoot safeguard: allows over boundary when within 95% of retention floor', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Chunk 1: 3k (under)
+      // Chunk 2: 6k → cumulative 9k (over, overshoot=1k)
+      // maxOvershoot = 2000 * 0.95 = 1900. overshoot 1000 <= 1900 → allowed
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 3000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 6000, observationTokens: 100, obs: 'Chunk 1: moderate output' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // Over boundary (9k, overshoot=1k) is within safeguard — activates both
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(9000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('overshoot safeguard: still activates over when no under boundary exists', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Single chunk: 10k (over, overshoot=2k > 1900 safeguard)
+      // No under boundary → still activates the over boundary
+      const chunks = [{ cycleId: 'c-0', messageTokens: 10000, observationTokens: 150, obs: 'Chunk 0: the only chunk' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // No under boundary exists, so over boundary is used despite exceeding safeguard
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(10000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
       expect(remaining).toHaveLength(0);
     });
   });

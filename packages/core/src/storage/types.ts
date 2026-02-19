@@ -1193,7 +1193,7 @@ export interface SwapBufferedToActiveInput {
    * Ratio controlling how much context to retain after activation (0-1 float).
    * `1 - activationRatio` is the fraction of the threshold to keep as raw messages.
    * Target tokens to remove = `currentPendingTokens - messageTokensThreshold * (1 - activationRatio)`.
-   * Chunks are selected by boundary, biased under the target.
+   * Chunks are selected by boundary, biased over the target (to ensure remaining context stays at or below the retention floor).
    */
   activationRatio: number;
   /**
