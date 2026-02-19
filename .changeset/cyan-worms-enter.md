@@ -13,7 +13,7 @@ const workspace = new Workspace({
 const tools = createWorkspaceTools(workspace);
 
 // Rename a function across the file
-await tools.workspace_ast_edit.execute({
+await tools['mastra_workspace_ast_edit'].execute({
   path: '/src/utils.ts',
   transform: 'rename-function',
   targetName: 'oldName',
@@ -21,7 +21,7 @@ await tools.workspace_ast_edit.execute({
 });
 
 // Add an import
-await tools.workspace_ast_edit.execute({
+await tools['mastra_workspace_ast_edit'].execute({
   path: '/src/app.ts',
   transform: 'add-import',
   importSpec: { module: 'react', names: ['useState', 'useEffect'] },

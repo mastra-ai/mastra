@@ -360,19 +360,20 @@ describeIfAstGrep('workspace_ast_edit', () => {
   // Error Cases
   // ===========================================================================
   describe('error handling', () => {
-    it('should throw for non-existent file', async () => {
+    it('should return error message for non-existent file', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
       });
       const tools = createWorkspaceTools(workspace);
 
-      await expect(
-        tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
-          path: '/nonexistent.ts',
-          pattern: 'foo',
-          replacement: 'bar',
-        }),
-      ).rejects.toThrow();
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute({
+        path: '/nonexistent.ts',
+        pattern: 'foo',
+        replacement: 'bar',
+      });
+
+      expect(result).toContain('File not found');
+      expect(result).toContain('write_file');
     });
   });
 });

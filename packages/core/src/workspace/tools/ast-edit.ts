@@ -13,7 +13,7 @@ import { z } from 'zod';
 
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
-import { WorkspaceReadOnlyError } from '../errors';
+import { FileNotFoundError, WorkspaceReadOnlyError } from '../errors';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 
 // =============================================================================
@@ -29,6 +29,7 @@ interface Replacement {
 interface TransformResult {
   content: string;
   count: number;
+  error?: string;
 }
 
 interface ImportSpec {
@@ -292,22 +293,6 @@ export function removeImport(content: string, root: any, targetName: string): st
 }
 
 /**
- * Rename a function — updates declarations, expressions, arrow functions, and call sites.
- * Not scope-aware: renames all occurrences regardless of scope.
- */
-export function renameFunction(content: string, root: any, oldName: string, newName: string): TransformResult {
-  return renameIdentifiers(content, root, oldName, newName);
-}
-
-/**
- * Rename a variable — replaces all identifier occurrences matching the name.
- * Not scope-aware: renames all occurrences regardless of scope.
- */
-export function renameVariable(content: string, root: any, oldName: string, newName: string): TransformResult {
-  return renameIdentifiers(content, root, oldName, newName);
-}
-
-/**
  * Pattern-based replacement using AST metavariables.
  * Pattern uses $VARNAME placeholders that match any AST node.
  * Replacement substitutes matched text back in.
@@ -345,8 +330,12 @@ export function patternReplace(content: string, root: any, pattern: string, repl
     for (const { start, end, text } of replacements) {
       modifiedContent = modifiedContent.slice(0, start) + text + modifiedContent.slice(end);
     }
-  } catch {
-    // AST pattern matching failed — don't fall back to regex (unsafe + surprising)
+  } catch (err) {
+    return {
+      content: modifiedContent,
+      count: 0,
+      error: err instanceof Error ? err.message : 'Pattern matching failed',
+    };
   }
 
   return { content: modifiedContent, count };
@@ -420,7 +409,15 @@ Pattern replace (for everything else):
     const { parse, Lang } = astGrep;
 
     // Read current content
-    const content = await filesystem.readFile(path, { encoding: 'utf-8' });
+    let content: string | Buffer;
+    try {
+      content = await filesystem.readFile(path, { encoding: 'utf-8' });
+    } catch (error) {
+      if (error instanceof FileNotFoundError) {
+        return `File not found: ${path}. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} to create it first.`;
+      }
+      throw error;
+    }
 
     if (typeof content !== 'string') {
       return `Cannot perform AST edits on binary files. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} instead.`;
@@ -461,7 +458,7 @@ Pattern replace (for everything else):
           if (!targetName || !newName) {
             return 'Error: targetName and newName are required for rename-function transform';
           }
-          const funcResult = renameFunction(content, root, targetName, newName);
+          const funcResult = renameIdentifiers(content, root, targetName, newName);
           modifiedContent = funcResult.content;
           changes.push(`Renamed function '${targetName}' to '${newName}' (${funcResult.count} occurrences)`);
           break;
@@ -471,7 +468,7 @@ Pattern replace (for everything else):
           if (!targetName || !newName) {
             return 'Error: targetName and newName are required for rename-variable transform';
           }
-          const varResult = renameVariable(content, root, targetName, newName);
+          const varResult = renameIdentifiers(content, root, targetName, newName);
           modifiedContent = varResult.content;
           changes.push(`Renamed variable '${targetName}' to '${newName}' (${varResult.count} occurrences)`);
           break;
@@ -479,8 +476,15 @@ Pattern replace (for everything else):
       }
     } else if (pattern && replacement !== undefined) {
       const result = patternReplace(content, root, pattern, replacement);
+      if (result.error) {
+        return `Error: AST pattern matching failed: ${result.error}`;
+      }
       modifiedContent = result.content;
       changes.push(`Replaced ${result.count} occurrences of pattern`);
+    } else if (pattern && replacement === undefined) {
+      return 'Error: replacement is required when pattern is provided';
+    } else if (!pattern && replacement !== undefined) {
+      return 'Error: pattern is required when replacement is provided';
     } else {
       return 'Error: Must provide either transform or pattern/replacement';
     }
