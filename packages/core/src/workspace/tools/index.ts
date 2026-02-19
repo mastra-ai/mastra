@@ -15,6 +15,7 @@ export { mkdirTool } from './mkdir';
 export { searchTool } from './search';
 export { indexContentTool } from './index-content';
 export { executeCommandTool } from './execute-command';
+export { grepTool } from './grep';
 
 // Helpers
 export { requireWorkspace, requireFilesystem, requireSandbox, emitWorkspaceMetadata } from './helpers';
