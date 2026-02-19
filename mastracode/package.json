@@ -32,6 +32,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./tui": {
+      "import": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.js"
+      },
+      "require": {
+        "types": "./dist/tui/index.d.ts",
+        "default": "./dist/tui.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
