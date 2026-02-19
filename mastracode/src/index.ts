@@ -1,224 +1,218 @@
-import { Mastra } from "@mastra/core"
-import { Agent } from "@mastra/core/agent"
-import { Harness } from "@mastra/core/harness"
-import type { HarnessSubagent } from "@mastra/core/harness"
-import { noopLogger } from "@mastra/core/logger"
-import { LibSQLStore } from "@mastra/libsql"
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { Harness } from '@mastra/core/harness';
+import type { HarnessSubagent } from '@mastra/core/harness';
+import { noopLogger } from '@mastra/core/logger';
+import { LibSQLStore } from '@mastra/libsql';
 
-import { getDynamicInstructions } from "./agents/instructions.js"
-import { getDynamicMemory } from "./agents/memory.js"
-import { getDynamicModel, resolveModel } from "./agents/model.js"
-import { executeSubagent } from "./agents/subagents/execute.js"
-import { exploreSubagent } from "./agents/subagents/explore.js"
-import { planSubagent } from "./agents/subagents/plan.js"
-import { createDynamicTools } from "./agents/tools.js"
+import { getDynamicInstructions } from './agents/instructions.js';
+import { getDynamicMemory } from './agents/memory.js';
+import { getDynamicModel, resolveModel } from './agents/model.js';
+import { executeSubagent } from './agents/subagents/execute.js';
+import { exploreSubagent } from './agents/subagents/explore.js';
+import { planSubagent } from './agents/subagents/plan.js';
+import { createDynamicTools } from './agents/tools.js';
 
-import { getDynamicWorkspace } from "./agents/workspace.js"
-import { AuthStorage } from "./auth/storage.js"
-import { HookManager } from "./hooks/index.js"
-import { MCPManager } from "./mcp/index.js"
-import { getToolCategory } from "./permissions.js"
+import { getDynamicWorkspace } from './agents/workspace.js';
+import { AuthStorage } from './auth/storage.js';
+import { HookManager } from './hooks/index.js';
+import { MCPManager } from './mcp/index.js';
+import { getToolCategory } from './permissions.js';
+import { setAuthStorage } from './providers/claude-max.js';
+import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
+import { stateSchema } from './schema.js';
 import {
-	setAuthStorage,
-} from "./providers/claude-max.js"
-import {
-	setAuthStorage as setOpenAIAuthStorage,
-} from "./providers/openai-codex.js"
-import { stateSchema } from "./schema.js"
-import {
-	createViewTool,
-	createGrepTool,
-	createGlobTool,
-	createExecuteCommandTool,
-	createWriteFileTool,
-	stringReplaceLspTool,
-	todoWriteTool,
-	todoCheckTool,
-} from "./tools/index.js"
-import { mastra } from "./tui/theme.js"
-import { syncGateways } from "./utils/gateway-sync.js"
-import {
-	detectProject,
-	getStorageConfig,
-	getUserId,
-	getResourceIdOverride,
-} from "./utils/project.js"
+  createViewTool,
+  createGrepTool,
+  createGlobTool,
+  createExecuteCommandTool,
+  createWriteFileTool,
+  stringReplaceLspTool,
+  todoWriteTool,
+  todoCheckTool,
+} from './tools/index.js';
+import { mastra } from './tui/theme.js';
+import { syncGateways } from './utils/gateway-sync.js';
+import { detectProject, getStorageConfig, getUserId, getResourceIdOverride } from './utils/project.js';
 
 export function createMastraCode() {
-	// Auth storage (shared with Claude Max / OpenAI providers and Harness)
-	const authStorage = new AuthStorage();
-	setAuthStorage(authStorage);
-	setOpenAIAuthStorage(authStorage);
+  // Auth storage (shared with Claude Max / OpenAI providers and Harness)
+  const authStorage = new AuthStorage();
+  setAuthStorage(authStorage);
+  setOpenAIAuthStorage(authStorage);
 
-	// Project detection
-	const project = detectProject(process.cwd())
+  // Project detection
+  const project = detectProject(process.cwd());
 
-	const resourceIdOverride = getResourceIdOverride(project.rootPath);
-	if (resourceIdOverride) {
-		project.resourceId = resourceIdOverride;
-		project.resourceIdOverride = true;
-	}
+  const resourceIdOverride = getResourceIdOverride(project.rootPath);
+  if (resourceIdOverride) {
+    project.resourceId = resourceIdOverride;
+    project.resourceIdOverride = true;
+  }
 
-	console.info(`Project: ${project.name}`);
-	console.info(`Resource ID: ${project.resourceId}${project.resourceIdOverride ? ' (override)' : ''}`);
-	if (project.gitBranch) console.info(`Branch: ${project.gitBranch}`);
-	if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`);
+  console.info(`Project: ${project.name}`);
+  console.info(`Resource ID: ${project.resourceId}${project.resourceIdOverride ? ' (override)' : ''}`);
+  if (project.gitBranch) console.info(`Branch: ${project.gitBranch}`);
+  if (project.isWorktree) console.info(`Worktree of: ${project.mainRepoPath}`);
 
-	const userId = getUserId(project.rootPath);
-	console.info(`User: ${userId}`);
-	console.info('--------------------------------');
+  const userId = getUserId(project.rootPath);
+  console.info(`User: ${userId}`);
+  console.info('--------------------------------');
 
-	// Storage
-	const storageConfig = getStorageConfig(project.rootPath);
-	const storage = new LibSQLStore({
-		id: 'mastra-code-storage',
-		url: storageConfig.url,
-		...(storageConfig.authToken ? { authToken: storageConfig.authToken } : {}),
-	});
+  // Storage
+  const storageConfig = getStorageConfig(project.rootPath);
+  const storage = new LibSQLStore({
+    id: 'mastra-code-storage',
+    url: storageConfig.url,
+    ...(storageConfig.authToken ? { authToken: storageConfig.authToken } : {}),
+  });
 
-	const memory = getDynamicMemory(storage);
+  const memory = getDynamicMemory(storage);
 
-	// MCP
-	const mcpManager = new MCPManager(project.rootPath);
+  // MCP
+  const mcpManager = new MCPManager(project.rootPath);
 
-	// Agent
-	const codeAgentInstance = new Agent({
-		id: "code-agent",
-		name: "Code Agent",
-		instructions: getDynamicInstructions,
-		model: getDynamicModel,
-		tools: createDynamicTools(mcpManager),
-	})
+  // Agent
+  const codeAgentInstance = new Agent({
+    id: 'code-agent',
+    name: 'Code Agent',
+    instructions: getDynamicInstructions,
+    model: getDynamicModel,
+    tools: createDynamicTools(mcpManager),
+  });
 
-	const mastraInstance = new Mastra({
-		agents: { codeAgentInstance },
-		logger: noopLogger,
-		storage,
-	})
+  const mastraInstance = new Mastra({
+    agents: { codeAgentInstance },
+    logger: noopLogger,
+    storage,
+  });
 
-	const codeAgent = mastraInstance.getAgent("code-agent")
+  const codeAgent = mastraInstance.getAgent('code-agent');
 
-	// Hooks
-	const hookManager = new HookManager(project.rootPath, 'session-init');
+  // Hooks
+  const hookManager = new HookManager(project.rootPath, 'session-init');
 
-	if (hookManager.hasHooks()) {
-		const hookConfig = hookManager.getConfig();
-		const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
-		console.info(`Hooks: ${hookCount} hook(s) configured`);
-	}
+  if (hookManager.hasHooks()) {
+    const hookConfig = hookManager.getConfig();
+    const hookCount = Object.values(hookConfig).reduce((sum, hooks) => sum + (hooks?.length ?? 0), 0);
+    console.info(`Hooks: ${hookCount} hook(s) configured`);
+  }
 
-	// Build subagent definitions with project-scoped tools
-	const viewTool = createViewTool(project.rootPath)
-	const grepTool = createGrepTool(project.rootPath)
-	const globTool = createGlobTool(project.rootPath)
-	const executeCommandTool = createExecuteCommandTool(project.rootPath)
-	const writeFileTool = createWriteFileTool(project.rootPath)
+  // Build subagent definitions with project-scoped tools
+  const viewTool = createViewTool(project.rootPath);
+  const grepTool = createGrepTool(project.rootPath);
+  const globTool = createGlobTool(project.rootPath);
+  const executeCommandTool = createExecuteCommandTool(project.rootPath);
+  const writeFileTool = createWriteFileTool(project.rootPath);
 
-	const readOnlyTools = {
-		view: viewTool,
-		search_content: grepTool,
-		find_files: globTool,
-	}
+  const readOnlyTools = {
+    view: viewTool,
+    search_content: grepTool,
+    find_files: globTool,
+  };
 
-	const subagents: HarnessSubagent[] = [
-		{
-			id: exploreSubagent.id,
-			name: exploreSubagent.name,
-			description: "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
-			instructions: exploreSubagent.instructions,
-			tools: readOnlyTools,
-		},
-		{
-			id: planSubagent.id,
-			name: planSubagent.name,
-			description: "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
-			instructions: planSubagent.instructions,
-			tools: readOnlyTools,
-		},
-		{
-			id: executeSubagent.id,
-			name: executeSubagent.name,
-			description: "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
-			instructions: executeSubagent.instructions,
-			tools: {
-				...readOnlyTools,
-				string_replace_lsp: stringReplaceLspTool,
-				write_file: writeFileTool,
-				execute_command: executeCommandTool,
-				todo_write: todoWriteTool,
-				todo_check: todoCheckTool,
-			},
-		},
-	]
+  const subagents: HarnessSubagent[] = [
+    {
+      id: exploreSubagent.id,
+      name: exploreSubagent.name,
+      description:
+        "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
+      instructions: exploreSubagent.instructions,
+      tools: readOnlyTools,
+    },
+    {
+      id: planSubagent.id,
+      name: planSubagent.name,
+      description:
+        "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
+      instructions: planSubagent.instructions,
+      tools: readOnlyTools,
+    },
+    {
+      id: executeSubagent.id,
+      name: executeSubagent.name,
+      description:
+        "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
+      instructions: executeSubagent.instructions,
+      tools: {
+        ...readOnlyTools,
+        string_replace_lsp: stringReplaceLspTool,
+        write_file: writeFileTool,
+        execute_command: executeCommandTool,
+        todo_write: todoWriteTool,
+        todo_check: todoCheckTool,
+      },
+    },
+  ];
 
-	const harness = new Harness({
-		id: "mastra-code",
-		resourceId: project.resourceId,
-		storage,
-		memory,
-		stateSchema,
-		subagents,
-		resolveModel,
-		toolCategoryResolver: getToolCategory,
-		initialState: {
-			projectPath: project.rootPath,
-			projectName: project.name,
-			gitBranch: project.gitBranch,
-		},
-		workspace: getDynamicWorkspace,
-		modes: [
-			{
-				id: "build",
-				name: "Build",
-				default: true,
-				defaultModelId: "anthropic/claude-opus-4-6",
-				color: mastra.purple,
-				agent: codeAgent,
-			},
-			{
-				id: "plan",
-				name: "Plan",
-				defaultModelId: "openai/gpt-5.2-codex",
-				color: mastra.blue,
-				agent: codeAgent,
-			},
-			{
-				id: "fast",
-				name: "Fast",
-				defaultModelId: "cerebras/zai-glm-4.7",
-				color: mastra.green,
-				agent: codeAgent,
-			},
-		],
-		heartbeatHandlers: [
-			{
-				id: "gateway-sync",
-				intervalMs: 5 * 60 * 1000,
-				handler: () => syncGateways(),
-			},
-		],
-		modelAuthChecker: (provider) => {
-			const providerToOAuthId: Record<string, string> = {
-				anthropic: "anthropic",
-				openai: "openai-codex",
-			}
-			const oauthId = providerToOAuthId[provider]
-			if (oauthId && authStorage.isLoggedIn(oauthId)) {
-				return true
-			}
-			return undefined
-		},
-		modelUseCountProvider: () => authStorage.getAllModelUseCounts(),
-	});
+  const harness = new Harness({
+    id: 'mastra-code',
+    resourceId: project.resourceId,
+    storage,
+    memory,
+    stateSchema,
+    subagents,
+    resolveModel,
+    toolCategoryResolver: getToolCategory,
+    initialState: {
+      projectPath: project.rootPath,
+      projectName: project.name,
+      gitBranch: project.gitBranch,
+    },
+    workspace: getDynamicWorkspace,
+    modes: [
+      {
+        id: 'build',
+        name: 'Build',
+        default: true,
+        defaultModelId: 'anthropic/claude-opus-4-6',
+        color: mastra.purple,
+        agent: codeAgent,
+      },
+      {
+        id: 'plan',
+        name: 'Plan',
+        defaultModelId: 'openai/gpt-5.2-codex',
+        color: mastra.blue,
+        agent: codeAgent,
+      },
+      {
+        id: 'fast',
+        name: 'Fast',
+        defaultModelId: 'cerebras/zai-glm-4.7',
+        color: mastra.green,
+        agent: codeAgent,
+      },
+    ],
+    heartbeatHandlers: [
+      {
+        id: 'gateway-sync',
+        intervalMs: 5 * 60 * 1000,
+        handler: () => syncGateways(),
+      },
+    ],
+    modelAuthChecker: provider => {
+      const providerToOAuthId: Record<string, string> = {
+        anthropic: 'anthropic',
+        openai: 'openai-codex',
+      };
+      const oauthId = providerToOAuthId[provider];
+      if (oauthId && authStorage.isLoggedIn(oauthId)) {
+        return true;
+      }
+      return undefined;
+    },
+    modelUseCountProvider: () => authStorage.getAllModelUseCounts(),
+  });
 
-	// Sync hookManager session ID on thread changes
-	harness.subscribe((event) => {
-		if (event.type === "thread_changed") {
-			hookManager.setSessionId((event as any).threadId)
-		} else if (event.type === "thread_created") {
-			hookManager.setSessionId((event as any).thread.id)
-		}
-	})
+  // Sync hookManager session ID on thread changes
+  harness.subscribe(event => {
+    if (event.type === 'thread_changed') {
+      hookManager.setSessionId((event as any).threadId);
+    } else if (event.type === 'thread_created') {
+      hookManager.setSessionId((event as any).thread.id);
+    }
+  });
 
-	return { harness, mcpManager, hookManager, authStorage }
+  return { harness, mcpManager, hookManager, authStorage };
 }

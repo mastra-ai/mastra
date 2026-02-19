@@ -47,7 +47,11 @@ export function resolveModel(modelId: string): LanguageModelV1 | MastraLanguageM
  * Dynamic model function that reads the current model from harness state.
  * This allows runtime model switching via the /models picker.
  */
-export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): LanguageModelV1 | MastraLanguageModel {
+export function getDynamicModel({
+  requestContext,
+}: {
+  requestContext: RequestContext;
+}): LanguageModelV1 | MastraLanguageModel {
   const harnessContext = requestContext.get('harness') as HarnessRuntimeContext<typeof stateSchema> | undefined;
 
   const modelId = harnessContext?.state?.currentModelId;

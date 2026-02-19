@@ -393,7 +393,7 @@ export class MastraTUI {
     // Run SessionStart hooks (fire and forget)
     const hookMgr = this.hookManager;
     if (hookMgr) {
-      hookMgr.runSessionStart().catch(() => { });
+      hookMgr.runSessionStart().catch(() => {});
     }
 
     // Process initial message if provided
@@ -487,7 +487,7 @@ export class MastraTUI {
     // Run SessionEnd hooks (best-effort, don't await)
     const hookMgr = this.hookManager;
     if (hookMgr) {
-      hookMgr.runSessionEnd().catch(() => { });
+      hookMgr.runSessionEnd().catch(() => {});
     }
 
     if (this.unsubscribe) {
@@ -876,22 +876,22 @@ ${instructions}`,
       const msgLabelStyler =
         this.bufferingMessages && this.gradientAnimator?.isRunning()
           ? (label: string) =>
-            applyGradientSweep(
-              label,
-              this.gradientAnimator!.getOffset(),
-              OBSERVER_COLOR,
-              this.gradientAnimator!.getFadeProgress(),
-            )
+              applyGradientSweep(
+                label,
+                this.gradientAnimator!.getOffset(),
+                OBSERVER_COLOR,
+                this.gradientAnimator!.getFadeProgress(),
+              )
           : undefined;
       const obsLabelStyler =
         this.bufferingObservations && this.gradientAnimator?.isRunning()
           ? (label: string) =>
-            applyGradientSweep(
-              label,
-              this.gradientAnimator!.getOffset(),
-              REFLECTOR_COLOR,
-              this.gradientAnimator!.getFadeProgress(),
-            )
+              applyGradientSweep(
+                label,
+                this.gradientAnimator!.getOffset(),
+                REFLECTOR_COLOR,
+                this.gradientAnimator!.getFadeProgress(),
+              )
           : undefined;
       const obs = formatObservationStatus(this.omProgress, opts.memCompact, msgLabelStyler);
       const ref = formatReflectionStatus(this.omProgress, opts.memCompact, obsLabelStyler);
@@ -985,9 +985,9 @@ ${instructions}`,
 
     this.statusLine.setText(
       result?.styled ??
-      shortModeBadge +
-      styleModelId(tinyModelId) +
-      (isYolo && modeColor ? chalk.bgHex(tintHex(modeColor, 0.25)).hex(tintHex(modeColor, 0.9)).bold(' ⚒ ') : ''),
+        shortModeBadge +
+          styleModelId(tinyModelId) +
+          (isYolo && modeColor ? chalk.bgHex(tintHex(modeColor, 0.25)).hex(tintHex(modeColor, 0.9)).bold(' ⚒ ') : ''),
     );
 
     // Line 2: hidden — dir only shows on line 1 when it fits
@@ -2831,13 +2831,13 @@ ${instructions}`,
     if (!workspace?.skills) {
       this.showInfo(
         'No skills configured.\n\n' +
-        'Add skills to any of these locations:\n' +
-        '  .mastracode/skills/   (project-local)\n' +
-        '  .claude/skills/       (project-local)\n' +
-        '  ~/.mastracode/skills/ (global)\n' +
-        '  ~/.claude/skills/     (global)\n\n' +
-        'Each skill is a folder with a SKILL.md file.\n' +
-        'Install skills: npx add-skill <github-url>',
+          'Add skills to any of these locations:\n' +
+          '  .mastracode/skills/   (project-local)\n' +
+          '  .claude/skills/       (project-local)\n' +
+          '  ~/.mastracode/skills/ (global)\n' +
+          '  ~/.claude/skills/     (global)\n\n' +
+          'Each skill is a folder with a SKILL.md file.\n' +
+          'Install skills: npx add-skill <github-url>',
       );
       return;
     }
@@ -2848,8 +2848,8 @@ ${instructions}`,
       if (skills.length === 0) {
         this.showInfo(
           'No skills found in configured directories.\n\n' +
-          'Each skill needs a SKILL.md file with YAML frontmatter.\n' +
-          'Install skills: npx add-skill <github-url>',
+            'Each skill needs a SKILL.md file with YAML frontmatter.\n' +
+            'Install skills: npx add-skill <github-url>',
         );
         return;
       }
@@ -2863,7 +2863,7 @@ ${instructions}`,
 
       this.showInfo(
         `Skills (${skills.length}):\n${skillLines.join('\n')}\n\n` +
-        'Skills are automatically activated by the agent when relevant.',
+          'Skills are automatically activated by the agent when relevant.',
       );
     } catch (error) {
       this.showError(`Failed to list skills: ${error instanceof Error ? error.message : String(error)}`);
@@ -3785,17 +3785,17 @@ Keyboard shortcuts:
         if (!hm.hasHooks()) {
           this.showInfo(
             `No hooks configured.\n\n` +
-            `Add hooks to:\n` +
-            `  ${paths.project} (project)\n` +
-            `  ${paths.global} (global)\n\n` +
-            `Example hooks.json:\n` +
-            `  {\n` +
-            `    "PreToolUse": [{\n` +
-            `      "type": "command",\n` +
-            `      "command": "echo 'tool called'",\n` +
-            `      "matcher": { "tool_name": "execute_command" }\n` +
-            `    }]\n` +
-            `  }`,
+              `Add hooks to:\n` +
+              `  ${paths.project} (project)\n` +
+              `  ${paths.global} (global)\n\n` +
+              `Example hooks.json:\n` +
+              `  {\n` +
+              `    "PreToolUse": [{\n` +
+              `      "type": "command",\n` +
+              `      "command": "echo 'tool called'",\n` +
+              `      "matcher": { "tool_name": "execute_command" }\n` +
+              `    }]\n` +
+              `  }`,
           );
           return true;
         }
@@ -3861,20 +3861,20 @@ Keyboard shortcuts:
         if (!mm.hasServers()) {
           this.showInfo(
             `No MCP servers configured.\n\n` +
-            `Add servers to:\n` +
-            `  ${paths.project} (project)\n` +
-            `  ${paths.global} (global)\n` +
-            `  ${paths.claude} (Claude Code compat)\n\n` +
-            `Example mcp.json:\n` +
-            `  {\n` +
-            `    "mcpServers": {\n` +
-            `      "filesystem": {\n` +
-            `        "command": "npx",\n` +
-            `        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"],\n` +
-            `        "env": {}\n` +
-            `      }\n` +
-            `    }\n` +
-            `  }`,
+              `Add servers to:\n` +
+              `  ${paths.project} (project)\n` +
+              `  ${paths.global} (global)\n` +
+              `  ${paths.claude} (Claude Code compat)\n\n` +
+              `Example mcp.json:\n` +
+              `  {\n` +
+              `    "mcpServers": {\n` +
+              `      "filesystem": {\n` +
+              `        "command": "npx",\n` +
+              `        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"],\n` +
+              `        "env": {}\n` +
+              `      }\n` +
+              `    }\n` +
+              `  }`,
           );
           return true;
         }
@@ -4116,10 +4116,10 @@ Keyboard shortcuts:
             if (content.name === 'subagent') {
               const subArgs = content.args as
                 | {
-                  agentType?: string;
-                  task?: string;
-                  modelId?: string;
-                }
+                    agentType?: string;
+                    task?: string;
+                    modelId?: string;
+                  }
                 | undefined;
               const rawResult =
                 toolResult?.type === 'tool_result' ? this.formatToolResult(toolResult.result) : undefined;
@@ -4313,11 +4313,11 @@ Keyboard shortcuts:
   showFormattedError(
     event:
       | {
-        error: Error;
-        errorType?: string;
-        retryable?: boolean;
-        retryDelay?: number;
-      }
+          error: Error;
+          errorType?: string;
+          retryable?: boolean;
+          retryDelay?: number;
+        }
       | Error,
   ): void {
     const error = 'error' in event ? event.error : event;

@@ -2818,7 +2818,13 @@ ${suggestedResponse}
           // Check if async reflection should be triggered or activated.
           // This only does async work (background buffering or instant activation) —
           // never blocking sync reflection that could overwrite freshly activated observations.
-          await this.maybeAsyncReflect(updatedRecord, updatedRecord.observationTokenCount ?? 0, writer, messageList, requestContext);
+          await this.maybeAsyncReflect(
+            updatedRecord,
+            updatedRecord.observationTokenCount ?? 0,
+            writer,
+            messageList,
+            requestContext,
+          );
           return;
         }
 
@@ -3336,7 +3342,14 @@ ${suggestedResponse}
       const obsTokens = record.observationTokenCount ?? 0;
       if (this.shouldReflect(obsTokens)) {
         omDebug(`[OM:step0-reflect] obsTokens=${obsTokens} over reflectThreshold, triggering reflection`);
-        await this.maybeReflect({ record, observationTokens: obsTokens, threadId, writer, messageList, requestContext });
+        await this.maybeReflect({
+          record,
+          observationTokens: obsTokens,
+          threadId,
+          writer,
+          messageList,
+          requestContext,
+        });
         // Re-fetch record after reflection may have created a new generation
         record = await this.getOrCreateRecord(threadId, resourceId);
       } else if (this.isAsyncReflectionEnabled()) {
@@ -4197,17 +4210,22 @@ ${formattedMessages}
     });
 
     // Start the async operation - waits for any existing op to complete first
-    const asyncOp = this.runAsyncBufferedObservation(record, threadId, unobservedMessages, bufferKey, writer, requestContext).finally(
-      () => {
-        // Clean up the operation tracking
-        ObservationalMemory.asyncBufferingOps.delete(bufferKey);
-        // Clear persistent flag
-        unregisterOp(record.id, 'bufferingObservation');
-        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
-          omError('[OM] Failed to clear buffering observation flag', err);
-        });
-      },
-    );
+    const asyncOp = this.runAsyncBufferedObservation(
+      record,
+      threadId,
+      unobservedMessages,
+      bufferKey,
+      writer,
+      requestContext,
+    ).finally(() => {
+      // Clean up the operation tracking
+      ObservationalMemory.asyncBufferingOps.delete(bufferKey);
+      // Clear persistent flag
+      unregisterOp(record.id, 'bufferingObservation');
+      this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+        omError('[OM] Failed to clear buffering observation flag', err);
+      });
+    });
 
     ObservationalMemory.asyncBufferingOps.set(bufferKey, asyncOp);
   }
@@ -4333,7 +4351,15 @@ ${formattedMessages}
       omDebug(
         `[OM:bufferInput] cycleId=${cycleId}, msgCount=${messagesToBuffer.length}, msgTokens=${this.tokenCounter.countMessages(messagesToBuffer)}, ids=${messagesToBuffer.map(m => `${m.id?.slice(0, 8)}@${m.createdAt ? new Date(m.createdAt).toISOString() : 'none'}`).join(',')}`,
       );
-      await this.doAsyncBufferedObservation(freshRecord, threadId, messagesToBuffer, cycleId, startedAt, writer, requestContext);
+      await this.doAsyncBufferedObservation(
+        freshRecord,
+        threadId,
+        messagesToBuffer,
+        cycleId,
+        startedAt,
+        writer,
+        requestContext,
+      );
 
       // Update the buffer cursor so the next buffer only sees messages newer than this one.
       // Uses the same timestamp logic as the chunk's lastObservedAt (max message timestamp + 1ms).
@@ -4907,7 +4933,16 @@ ${formattedMessages}
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
     requestContext?: RequestContext;
   }): Promise<void> {
-    const { record, currentThreadId, resourceId, currentThreadMessages, writer, abortSignal, reflectionHooks, requestContext } = opts;
+    const {
+      record,
+      currentThreadId,
+      resourceId,
+      currentThreadMessages,
+      writer,
+      abortSignal,
+      reflectionHooks,
+      requestContext,
+    } = opts;
     // Clear debug entries at start of observation cycle
 
     // ════════════════════════════════════════════════════════════
@@ -5711,7 +5746,13 @@ ${formattedMessages}
 
         hooks?.onObservationStart?.();
         try {
-          await this.doSynchronousObservation({ record: freshRecord, threadId, unobservedMessages, reflectionHooks, requestContext });
+          await this.doSynchronousObservation({
+            record: freshRecord,
+            threadId,
+            unobservedMessages,
+            reflectionHooks,
+            requestContext,
+          });
         } finally {
           hooks?.onObservationEnd?.();
         }
@@ -5730,7 +5771,12 @@ ${formattedMessages}
    * );
    * ```
    */
-  async reflect(threadId: string, resourceId?: string, prompt?: string, requestContext?: RequestContext): Promise<void> {
+  async reflect(
+    threadId: string,
+    resourceId?: string,
+    prompt?: string,
+    requestContext?: RequestContext,
+  ): Promise<void> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
 
     if (!record.activeObservations) {
@@ -5742,7 +5788,16 @@ ${formattedMessages}
 
     try {
       const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
-      const reflectResult = await this.callReflector(record.activeObservations, prompt, undefined, reflectThreshold, undefined, undefined, undefined, requestContext);
+      const reflectResult = await this.callReflector(
+        record.activeObservations,
+        prompt,
+        undefined,
+        reflectThreshold,
+        undefined,
+        undefined,
+        undefined,
+        requestContext,
+      );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({

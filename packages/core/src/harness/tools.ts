@@ -77,9 +77,7 @@ export const submitPlanTool = createTool({
     plan: z
       .string()
       .min(1)
-      .describe(
-        'The full plan content in markdown format. Should include Overview, Steps, and Verification sections.',
-      ),
+      .describe('The full plan content in markdown format. Should include Overview, Steps, and Verification sections.'),
   }),
   execute: async ({ title, plan }, context) => {
     try {
@@ -107,8 +105,7 @@ export const submitPlanTool = createTool({
 
       if (result.action === 'approved') {
         return {
-          content:
-            'Plan approved. The system has switched to Build mode. Proceed with implementation following the approved plan.',
+          content: 'Plan approved. Proceed with implementation following the approved plan.',
           isError: false,
         };
       }
@@ -148,9 +145,7 @@ export function createSubagentTool(opts: CreateSubagentToolOptions) {
 
   const subagentIds = subagents.map(s => s.id);
 
-  const typeDescriptions = subagents
-    .map(s => `- **${s.id}** (${s.name}): ${s.description}`)
-    .join('\n');
+  const typeDescriptions = subagents.map(s => `- **${s.id}** (${s.name}): ${s.description}`).join('\n');
 
   return createTool({
     id: 'subagent',
@@ -242,12 +237,7 @@ Use this tool when:
           requireToolApproval: false,
         });
 
-        const reader = response.fullStream.getReader();
-
-        while (true) {
-          const { done, value: chunk } = await reader.read();
-          if (done) break;
-
+        for await (const chunk of response.fullStream) {
           switch (chunk.type) {
             case 'text-delta':
               partialText += chunk.payload.text;

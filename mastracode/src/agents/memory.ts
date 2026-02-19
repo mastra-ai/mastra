@@ -1,22 +1,21 @@
-import type { RequestContext } from "@mastra/core/request-context"
-import type { MastraCompositeStore } from "@mastra/core/storage"
-import { Memory } from "@mastra/memory"
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from "../constants"
-import type { HarnessRuntimeContext } from "../harness/types"
-import type { stateSchema } from "../schema"
-import { getOmScope } from "../utils/project"
-import { resolveModel } from "./model"
+import type { RequestContext } from '@mastra/core/request-context';
+import type { MastraCompositeStore } from '@mastra/core/storage';
+import { Memory } from '@mastra/memory';
+import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
+import type { HarnessRuntimeContext } from '../harness/types';
+import type { stateSchema } from '../schema';
+import { getOmScope } from '../utils/project';
+import { resolveModel } from './model';
 
-
-let cachedMemory: Memory | null = null
-let cachedMemoryKey: string | null = null
+let cachedMemory: Memory | null = null;
+let cachedMemoryKey: string | null = null;
 
 /**
  * Read harness state from requestContext.
  * Used by both the memory factory and the OM model functions.
  */
 function getHarnessState(requestContext: RequestContext) {
-    return (requestContext.get("harness") as HarnessRuntimeContext<typeof stateSchema> | undefined)?.getState?.()
+  return (requestContext.get('harness') as HarnessRuntimeContext<typeof stateSchema> | undefined)?.getState?.();
 }
 
 /**
@@ -24,8 +23,8 @@ function getHarnessState(requestContext: RequestContext) {
  * harness state via requestContext (now propagated by OM's agent.generate).
  */
 function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
-    const state = getHarnessState(requestContext)
-    return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID)
+  const state = getHarnessState(requestContext);
+  return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID);
 }
 
 /**
@@ -33,8 +32,8 @@ function getObserverModel({ requestContext }: { requestContext: RequestContext }
  * harness state via requestContext (now propagated by OM's agent.generate).
  */
 function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
-    const state = getHarnessState(requestContext)
-    return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID)
+  const state = getHarnessState(requestContext);
+  return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID);
 }
 
 /**
@@ -43,16 +42,12 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
  * Model functions also read from requestContext (no mutable bridge needed).
  */
 export function getDynamicMemory(storage: MastraCompositeStore) {
-    return ({
-        requestContext,
-    }: {
-        requestContext: RequestContext
-    }) => {
-        const state = getHarnessState(requestContext)
-        const omScope = getOmScope(state?.projectPath)
+  return ({ requestContext }: { requestContext: RequestContext }) => {
+    const state = getHarnessState(requestContext);
+    const omScope = getOmScope(state?.projectPath);
 
-        const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD
-        const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD
+    const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
+    const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
 
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {

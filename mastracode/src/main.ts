@@ -9,16 +9,16 @@ import { getAppDataDir } from './utils/project.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
 
-const { harness, mcpManager, hookManager, authStorage } = createMastraCode()
+const { harness, mcpManager, hookManager, authStorage } = createMastraCode();
 
 const tui = new MastraTUI({
-	harness,
-	hookManager,
-	authStorage,
-	appName: "Mastra Code",
-	version: "0.1.0",
-	inlineQuestions: true,
-})
+  harness,
+  hookManager,
+  authStorage,
+  appName: 'Mastra Code',
+  version: '0.1.0',
+  inlineQuestions: true,
+});
 
 async function main() {
   if (mcpManager.hasServers()) {
@@ -63,17 +63,17 @@ process.on('beforeExit', async () => {
 });
 
 const cleanup = () => {
-	releaseAllThreadLocks()
-}
-process.on("exit", cleanup)
-process.on("SIGINT", () => {
-	cleanup()
-	process.exit(0)
-})
-process.on("SIGTERM", () => {
-	cleanup()
-	process.exit(0)
-})
+  releaseAllThreadLocks();
+};
+process.on('exit', cleanup);
+process.on('SIGINT', () => {
+  cleanup();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  cleanup();
+  process.exit(0);
+});
 
 main().catch(error => {
   console.error('Fatal error:', error);

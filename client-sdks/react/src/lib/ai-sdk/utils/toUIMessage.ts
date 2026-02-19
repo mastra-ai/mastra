@@ -414,7 +414,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
                   ? error
                   : error instanceof Error
                     ? error.message
-                    : (error as any)?.message ?? String(error),
+                    : ((error as any)?.message ?? String(error)),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {

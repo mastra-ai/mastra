@@ -723,10 +723,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           }
         | undefined;
 
-      const getThreshold = (
-        val: number | { min: number; max: number } | undefined,
-        fallback: number,
-      ): number => {
+      const getThreshold = (val: number | { min: number; max: number } | undefined, fallback: number): number => {
         if (!val) return fallback;
         if (typeof val === 'number') return val;
         return val.max;
@@ -963,10 +960,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Send a message to the current agent.
    * Streams the response and emits events.
    */
-  async sendMessage(
-    content: string,
-    options?: { images?: Array<{ data: string; mimeType: string }> },
-  ): Promise<void> {
+  async sendMessage(content: string, options?: { images?: Array<{ data: string; mimeType: string }> }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
       this.currentThreadId = thread.id;
@@ -1473,7 +1467,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     resolve(response);
 
     if (response.action === 'approved') {
-      const defaultMode = this.config.modes.find((m) => m.default) ?? this.config.modes[0];
+      const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
         await this.switchMode(defaultMode.id);
       }
@@ -1575,9 +1569,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     let resolvedHarnessTools = undefined;
     if (this.config.tools) {
       const tools =
-        typeof this.config.tools === 'function'
-          ? await this.config.tools({ requestContext })
-          : this.config.tools;
+        typeof this.config.tools === 'function' ? await this.config.tools({ requestContext }) : this.config.tools;
       if (tools) {
         resolvedHarnessTools = tools;
       }
