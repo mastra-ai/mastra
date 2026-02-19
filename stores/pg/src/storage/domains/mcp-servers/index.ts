@@ -700,7 +700,7 @@ export class MCPServersPG extends MCPServersStorage {
     } catch (error) {
       if (error instanceof MastraError) throw error;
       const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
+        valueLength: String(value.length),
       };
       if (fieldName) {
         details.field = fieldName;
