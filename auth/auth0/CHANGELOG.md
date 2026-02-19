@@ -1,5 +1,12 @@
 # @mastra/auth-auth0
 
+## 1.0.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13128](https://github.com/mastra-ai/mastra/pull/13128))
+  - Updated dependency [`jose@^6.1.3` ↗︎](https://www.npmjs.com/package/jose/v/6.1.3) (from `^6.1.1`, in `dependencies`)
+
 ## 1.0.0
 
 ### Major Changes
