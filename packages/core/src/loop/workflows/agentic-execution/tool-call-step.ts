@@ -233,15 +233,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (inputData.args === null || inputData.args === undefined) {
-        return {
-          error: new Error(
-            `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
-          ),
-          ...inputData,
-        };
-      }
-
       if (tool && 'onInputAvailable' in tool) {
         try {
           await tool?.onInputAvailable?.({
@@ -523,6 +514,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (suspendedToolRunId) {
             args.suspendedToolRunId = suspendedToolRunId;
           }
+        }
+
+        if (args === null || args === undefined) {
+          return {
+            error: new Error(
+              `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+            ),
+            ...inputData,
+          };
         }
 
         const result = await tool.execute(args, toolOptions);
