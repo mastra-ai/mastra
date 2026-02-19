@@ -101,6 +101,8 @@ describe('EditorMCPNamespace', () => {
     });
 
     it('should update an MCP client', async () => {
+      const mcpStore = await storage.getStore('mcpClients');
+
       // Create via editor namespace
       await editor.mcp.create({
         id: 'mcp-update',
@@ -110,12 +112,22 @@ describe('EditorMCPNamespace', () => {
         },
       });
 
-      const updated = await editor.mcp.update({
-        id: 'mcp-update',
+      // Config changes require createVersion + update(activeVersionId)
+      await mcpStore!.createVersion({
+        id: randomUUID(),
+        mcpClientId: 'mcp-update',
+        versionNumber: 2,
         name: 'Updated Name',
+        servers: { srv: { type: 'http', url: 'https://example.com/mcp' } },
+        changedFields: ['name'],
       });
 
-      expect(updated.name).toBe('Updated Name');
+      const latestVersion = await mcpStore!.getLatestVersion('mcp-update');
+      await mcpStore!.update({ id: 'mcp-update', activeVersionId: latestVersion!.id, status: 'published' });
+      editor.mcp.clearCache('mcp-update');
+
+      const updated = await editor.mcp.getById('mcp-update');
+      expect(updated!.name).toBe('Updated Name');
 
       // Verify via getById
       const fetched = await editor.mcp.getById('mcp-update');
@@ -150,6 +162,7 @@ describe('EditorMCPNamespace', () => {
           servers: { srv: { type: 'http', url: 'https://a.example.com' } },
         },
       });
+      await mcpStore?.update({ id: 'mcp-a', status: 'published' });
       await mcpStore?.create({
         mcpClient: {
           id: 'mcp-b',
@@ -157,6 +170,7 @@ describe('EditorMCPNamespace', () => {
           servers: { srv: { type: 'http', url: 'https://b.example.com' } },
         },
       });
+      await mcpStore?.update({ id: 'mcp-b', status: 'published' });
 
       const result = await editor.mcp.list();
 
@@ -730,14 +744,22 @@ describe('Agent MCP tool resolution', () => {
     const toolsBefore = await agentBefore!.listTools();
     expect(toolsBefore['tool-a']).toBeDefined();
 
-    // Update the MCP client via editor namespace
-    await editor.mcp.update({
-      id: 'updatable-mcp',
+    // Update the MCP client config via createVersion + update(activeVersionId)
+    const mcpStore = await storage.getStore('mcpClients');
+    await mcpStore!.createVersion({
+      id: randomUUID(),
+      mcpClientId: 'updatable-mcp',
+      versionNumber: 2,
       name: 'Updated MCP',
       servers: {
         srv: { type: 'http', url: 'https://updated.example.com' },
       },
+      changedFields: ['name', 'servers'],
     });
+
+    const latestVersion = await mcpStore!.getLatestVersion('updatable-mcp');
+    await mcpStore!.update({ id: 'updatable-mcp', activeVersionId: latestVersion!.id, status: 'published' });
+    editor.mcp.clearCache('updatable-mcp');
 
     // Verify MCP client was updated
     const updatedMcp = await editor.mcp.getById('updatable-mcp');
@@ -759,24 +781,37 @@ describe('Agent MCP tool resolution', () => {
       },
     });
 
-    // Update to create v2
-    await mcpStore?.update({
-      id: 'versioned-mcp',
+    // Create v2 via createVersion + activate
+    await mcpStore!.createVersion({
+      id: randomUUID(),
+      mcpClientId: 'versioned-mcp',
+      versionNumber: 2,
       name: 'Version 2',
       servers: {
         srv: { type: 'http', url: 'https://v2.example.com' },
       },
+      changedFields: ['name', 'servers'],
     });
 
-    // Update to create v3
-    await mcpStore?.update({
-      id: 'versioned-mcp',
+    let latestVersion = await mcpStore!.getLatestVersion('versioned-mcp');
+    await mcpStore!.update({ id: 'versioned-mcp', activeVersionId: latestVersion!.id, status: 'published' });
+
+    // Create v3 via createVersion + activate
+    await mcpStore!.createVersion({
+      id: randomUUID(),
+      mcpClientId: 'versioned-mcp',
+      versionNumber: 3,
       name: 'Version 3',
       servers: {
         'srv-a': { type: 'http', url: 'https://v3a.example.com' },
         'srv-b': { type: 'stdio', command: 'node', args: ['server.js'] },
       },
+      changedFields: ['name', 'servers'],
     });
+
+    latestVersion = await mcpStore!.getLatestVersion('versioned-mcp');
+    await mcpStore!.update({ id: 'versioned-mcp', activeVersionId: latestVersion!.id, status: 'published' });
+    editor.mcp.clearCache('versioned-mcp');
 
     // Verify latest version
     const latest = await editor.mcp.getById('versioned-mcp');

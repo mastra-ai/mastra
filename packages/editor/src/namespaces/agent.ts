@@ -82,7 +82,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           if (!version) return null;
 
           const {
-            id: _vId,
+            id: versionId,
             agentId: _aId,
             versionNumber: _vn,
             changedFields: _cf,
@@ -90,9 +90,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             createdAt: _ca,
             ...snapshotConfig
           } = version;
-          return { ...agent, ...snapshotConfig } as StorageResolvedAgentType;
+          return { ...agent, ...snapshotConfig, resolvedVersionId: versionId } as StorageResolvedAgentType;
         }
-        return store.getByIdResolved(id);
+        return store.getByIdResolved(id, options?.status ? { status: options.status } : undefined);
       },
       update: input => store.update(input),
       delete: id => store.delete(id),
@@ -288,29 +288,41 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       tools = { ...registryTools, ...mcpTools, ...integrationTools };
     }
 
-    // Workflows (record): accumulate by merging all matching variants
+    // Workflows: variant values may be string[] or Record<string, StorageToolConfig>
     const workflows = hasConditionalWorkflows
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.workflows as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
-            ctx,
-          );
+          const variants = storedAgent.workflows as StorageConditionalVariant<
+            Record<string, StorageToolConfig> | string[]
+          >[];
+          const isArrayVariant = Array.isArray(variants[0]?.value);
+          const resolved = isArrayVariant
+            ? this.accumulateArrayVariants(variants as StorageConditionalVariant<string[]>[], ctx)
+            : this.accumulateObjectVariants(
+                variants as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              );
           return this.resolveStoredWorkflows(resolved);
         }
-      : this.resolveStoredWorkflows(storedAgent.workflows as Record<string, StorageToolConfig> | undefined);
+      : this.resolveStoredWorkflows(storedAgent.workflows as Record<string, StorageToolConfig> | string[] | undefined);
 
-    // Agents (record): accumulate by merging all matching variants
+    // Agents: variant values may be string[] or Record<string, StorageToolConfig>
     const agents = hasConditionalAgents
       ? ({ requestContext }: { requestContext: RequestContext }) => {
           const ctx = requestContext.toJSON();
-          const resolved = this.accumulateObjectVariants(
-            storedAgent.agents as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
-            ctx,
-          );
+          const variants = storedAgent.agents as StorageConditionalVariant<
+            Record<string, StorageToolConfig> | string[]
+          >[];
+          const isArrayVariant = Array.isArray(variants[0]?.value);
+          const resolved = isArrayVariant
+            ? this.accumulateArrayVariants(variants as StorageConditionalVariant<string[]>[], ctx)
+            : this.accumulateObjectVariants(
+                variants as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+                ctx,
+              );
           return this.resolveStoredAgents(resolved);
         }
-      : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | undefined);
+      : this.resolveStoredAgents(storedAgent.agents as Record<string, StorageToolConfig> | string[] | undefined);
 
     // Memory (object): accumulate by merging config from all matching variants
     const memory = hasConditionalMemory
@@ -740,16 +752,23 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
   }
 
   private resolveStoredWorkflows(
-    storedWorkflows?: Record<string, StorageToolConfig>,
+    storedWorkflows?: Record<string, StorageToolConfig> | string[],
   ): Record<string, Workflow<any, any, any, any, any, any, any>> {
-    if (!storedWorkflows) return {};
+    if (
+      !storedWorkflows ||
+      (Array.isArray(storedWorkflows) ? storedWorkflows.length === 0 : Object.keys(storedWorkflows).length === 0)
+    ) {
+      return {};
+    }
     if (!this.mastra) return {};
 
-    const keys = Object.keys(storedWorkflows);
-    if (keys.length === 0) return {};
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedWorkflows)
+      ? Object.fromEntries(storedWorkflows.map(key => [key, {}]))
+      : storedWorkflows;
 
     const resolvedWorkflows: Record<string, Workflow<any, any, any, any, any, any, any>> = {};
-    for (const workflowKey of keys) {
+    for (const workflowKey of Object.keys(normalized)) {
       try {
         resolvedWorkflows[workflowKey] = this.mastra.getWorkflow(workflowKey);
       } catch {
@@ -763,15 +782,22 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return resolvedWorkflows;
   }
 
-  private resolveStoredAgents(storedAgents?: Record<string, StorageToolConfig>): Record<string, Agent<any>> {
-    if (!storedAgents) return {};
+  private resolveStoredAgents(storedAgents?: Record<string, StorageToolConfig> | string[]): Record<string, Agent<any>> {
+    if (
+      !storedAgents ||
+      (Array.isArray(storedAgents) ? storedAgents.length === 0 : Object.keys(storedAgents).length === 0)
+    ) {
+      return {};
+    }
     if (!this.mastra) return {};
 
-    const keys = Object.keys(storedAgents);
-    if (keys.length === 0) return {};
+    // Normalize legacy string[] format to Record
+    const normalized: Record<string, StorageToolConfig> = Array.isArray(storedAgents)
+      ? Object.fromEntries(storedAgents.map(key => [key, {}]))
+      : storedAgents;
 
     const resolvedAgents: Record<string, Agent<any>> = {};
-    for (const agentKey of keys) {
+    for (const agentKey of Object.keys(normalized)) {
       try {
         resolvedAgents[agentKey] = this.mastra.getAgent(agentKey);
       } catch {

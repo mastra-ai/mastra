@@ -48,11 +48,10 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [shouldCancel, setShouldCancel] = useState(false);
 
   // Hooks
   const { parseFile, isParsing, error: parseError } = useJSONParser();
-  const { addItem } = useDatasetMutations();
+  const { batchInsertItems } = useDatasetMutations();
 
   // Handle file selection
   const handleFileSelect = useCallback(
@@ -74,47 +73,29 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
 
     setStep('importing');
     setIsImporting(true);
-    setShouldCancel(false);
 
     const { items } = parsedJSON;
 
-    let successCount = 0;
-    let errorCount = 0;
-
     setImportProgress({ current: 0, total: items.length });
 
-    for (let i = 0; i < items.length; i++) {
-      // Check for cancellation
-      if (shouldCancel) {
-        break;
-      }
-
-      const item = items[i];
-
-      try {
-        await addItem.mutateAsync({
-          datasetId,
+    try {
+      await batchInsertItems.mutateAsync({
+        datasetId,
+        items: items.map(item => ({
           input: item.input,
           groundTruth: item.groundTruth,
           metadata: item.metadata,
-        });
-        successCount++;
-      } catch {
-        errorCount++;
-      }
-
-      setImportProgress({ current: i + 1, total: items.length });
+        })),
+      });
+      setImportResult({ success: items.length, errors: 0 });
+    } catch {
+      setImportResult({ success: 0, errors: items.length });
     }
 
-    setImportResult({ success: successCount, errors: errorCount });
+    setImportProgress({ current: items.length, total: items.length });
     setIsImporting(false);
     setStep('complete');
-  }, [parsedJSON, addItem, datasetId, shouldCancel]);
-
-  // Handle cancel import
-  const handleCancelImport = useCallback(() => {
-    setShouldCancel(true);
-  }, []);
+  }, [parsedJSON, batchInsertItems, datasetId]);
 
   // Handle done - close dialog and notify
   const handleDone = useCallback(() => {
@@ -136,14 +117,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
 
   // Handle dialog close
   const handleClose = useCallback(() => {
-    if (isImporting) {
-      // Confirm before closing during import
-      if (confirm('Import is in progress. Are you sure you want to cancel?')) {
-        handleCancelImport();
-        onOpenChange(false);
-      }
-      return;
-    }
+    if (isImporting) return;
 
     onOpenChange(false);
 
@@ -154,7 +128,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
       setImportProgress({ current: 0, total: 0 });
       setImportResult(null);
     }, 150);
-  }, [isImporting, handleCancelImport, onOpenChange]);
+  }, [isImporting, onOpenChange]);
 
   // Check if import is possible (has valid items with no errors)
   const canImport = parsedJSON && parsedJSON.items.length > 0 && parsedJSON.errors.length === 0;
@@ -194,9 +168,6 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
-            <Button variant="standard" size="default" onClick={handleCancelImport}>
-              Cancel
-            </Button>
           </div>
         );
 

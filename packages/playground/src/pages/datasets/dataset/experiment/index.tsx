@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router';
-import { Database, PlayCircle } from 'lucide-react';
+import { Database } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -62,12 +62,9 @@ function DatasetExperimentPage() {
             Datasets
           </Crumb>
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name || datasetId}
+            {dataset?.name}
           </Crumb>
-          <Crumb isCurrent>
-            <Icon>
-              <PlayCircle />
-            </Icon>
+          <Crumb isCurrent as="span">
             Experiment
           </Crumb>
         </Breadcrumb>

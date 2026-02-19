@@ -455,7 +455,11 @@ export interface StorageAgentType {
  * Resolved agent type that combines the thin agent record with version snapshot config.
  * Returned by getAgentByIdResolved and listAgentsResolved.
  */
-export type StorageResolvedAgentType = StorageAgentType & StorageAgentSnapshotType;
+export type StorageResolvedAgentType = StorageAgentType &
+  StorageAgentSnapshotType & {
+    /** The version ID that was resolved (populated by resolveEntity) */
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new agent. Flat union of thin record fields
@@ -619,7 +623,10 @@ export interface StoragePromptBlockSnapshotType {
 }
 
 /** Resolved prompt block: thin record merged with active version snapshot */
-export type StorageResolvedPromptBlockType = StoragePromptBlockType & StoragePromptBlockSnapshotType;
+export type StorageResolvedPromptBlockType = StoragePromptBlockType &
+  StoragePromptBlockSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /** Input for creating a new prompt block */
 export type StorageCreatePromptBlockInput = {
@@ -756,7 +763,11 @@ export interface StorageScorerDefinitionType {
  * Resolved stored scorer type that combines the thin record with version snapshot config.
  * Returned by getScorerDefinitionByIdResolved and listScorerDefinitionsResolved.
  */
-export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType & StorageScorerDefinitionSnapshotType;
+export type StorageResolvedScorerDefinitionType = StorageScorerDefinitionType &
+  StorageScorerDefinitionSnapshotType & {
+    /** The version ID that was resolved (populated by resolveEntity) */
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new stored scorer. Flat union of thin record fields
@@ -1275,7 +1286,10 @@ export interface StorageMCPClientType {
  * Resolved stored MCP client type that combines the thin record with version snapshot config.
  * Returned by getMCPClientByIdResolved and listMCPClientsResolved.
  */
-export type StorageResolvedMCPClientType = StorageMCPClientType & StorageMCPClientSnapshotType;
+export type StorageResolvedMCPClientType = StorageMCPClientType &
+  StorageMCPClientSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new stored MCP client. Flat union of thin record fields
@@ -1469,7 +1483,10 @@ export interface StorageWorkspaceType {
  * Resolved workspace type that combines the thin record with version snapshot config.
  * Returned by getWorkspaceByIdResolved and listWorkspacesResolved.
  */
-export type StorageResolvedWorkspaceType = StorageWorkspaceType & StorageWorkspaceSnapshotType;
+export type StorageResolvedWorkspaceType = StorageWorkspaceType &
+  StorageWorkspaceSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new workspace. Flat union of thin record fields
@@ -1596,7 +1613,10 @@ export interface StorageSkillType {
  * Resolved skill type that combines the thin record with version snapshot content.
  * Returned by getSkillByIdResolved and listSkillsResolved.
  */
-export type StorageResolvedSkillType = StorageSkillType & StorageSkillSnapshotType;
+export type StorageResolvedSkillType = StorageSkillType &
+  StorageSkillSnapshotType & {
+    resolvedVersionId?: string;
+  };
 
 /**
  * Input for creating a new skill. Flat union of thin record fields
@@ -1889,8 +1909,8 @@ export interface CreateDatasetInput {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetInput {
@@ -1898,8 +1918,8 @@ export interface UpdateDatasetInput {
   name?: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown> | null;
+  groundTruthSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemInput {

@@ -120,7 +120,7 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     this.logger.debug(`InMemoryScorerDefinitionsStorage: list called`);
@@ -142,7 +142,9 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     let scorers = Array.from(this.db.scorerDefinitions.values());
 
     // Filter by status
-    scorers = scorers.filter(scorer => scorer.status === status);
+    if (status) {
+      scorers = scorers.filter(scorer => scorer.status === status);
+    }
 
     // Filter by authorId if provided
     if (authorId !== undefined) {
