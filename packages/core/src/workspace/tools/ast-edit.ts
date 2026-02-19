@@ -239,7 +239,7 @@ function mergeIntoExistingImport(
   if (isDefault && names.length > 0) {
     // First name is the default import
     if (!existingDefault) {
-      newDefault = names[0];
+      newDefault = names[0] ?? null;
     }
     // Remaining names are named imports
     for (const name of names.slice(1)) {
@@ -295,8 +295,8 @@ export function addImport(content: string, root: SgNode, importSpec: ImportSpec)
   );
 
   // Insert after last import or at file start
-  if (imports.length > 0) {
-    const lastImport = imports[imports.length - 1];
+  const lastImport = imports.at(-1);
+  if (lastImport) {
     const pos = lastImport.range().end.index;
     return content.slice(0, pos) + '\n' + importStatement + content.slice(pos);
   } else {
@@ -340,7 +340,7 @@ export function patternReplace(content: string, root: SgNode, pattern: string, r
     const replacements: Replacement[] = [];
 
     // Extract metavariables from the pattern once (constant across all matches)
-    const metaVars = [...pattern.matchAll(/\$(\w+)/g)].map(m => m[1]);
+    const metaVars = [...pattern.matchAll(/\$(\w+)/g)].map(m => m[1]).filter((v): v is string => v !== undefined);
 
     for (const match of matches) {
       const range = match.range();
