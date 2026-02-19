@@ -99,6 +99,22 @@ type StorageListMessagesOptions = {
        */
       endExclusive?: boolean;
     };
+    /**
+     * Filter messages by metadata key-value pairs.
+     * All specified key-value pairs must match (AND logic).
+     * This enables efficient lookups by custom metadata fields like traceId, spanId, etc.
+     *
+     * @example
+     * ```typescript
+     * // Find message with specific traceId
+     * const result = await storage.listMessages({
+     *   threadId: 'thread-123',
+     *   filter: { metadata: { traceId: 'abc-123' } },
+     *   perPage: 1,
+     * });
+     * ```
+     */
+    metadata?: Record<string, unknown>;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
 };

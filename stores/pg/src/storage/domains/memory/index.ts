@@ -831,6 +831,12 @@ export class MemoryPG extends MemoryStorage {
         conditions.push(`COALESCE("createdAtZ", "createdAt") ${endOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
       }
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          conditions.push(`content::jsonb @> $${paramIndex++}::jsonb`);
+          queryParams.push(JSON.stringify({ metadata: { [key]: value } }));
+        }
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
