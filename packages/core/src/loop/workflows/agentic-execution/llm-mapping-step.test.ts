@@ -435,6 +435,43 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(bail).toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(false);
   });
+
+  it('should continue and persist provider-executed result when tool-not-found co-occurs with provider-executed tool', async () => {
+    // Arrange: One hallucinated tool (ToolNotFoundError) + one provider-executed tool with result
+    const { ToolNotFoundError } = await import('../errors');
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'creating:view',
+        args: { param: 'test' },
+        result: undefined,
+        error: new ToolNotFoundError('Tool "creating:view" not found.'),
+      },
+      {
+        toolCallId: 'call-2',
+        toolName: 'web_search_20250305',
+        args: { query: 'test' },
+        result: { providerExecuted: true, toolName: 'web_search_20250305' },
+        providerExecuted: true,
+      },
+    ];
+
+    // Act
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Assert: Should NOT bail — tool-not-found should self-correct
+    expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
+
+    // Should persist the provider-executed result as a separate message
+    const addCalls = (messageList.add as ReturnType<typeof vi.fn>).mock.calls;
+    const providerMessage = addCalls.find(([msg]: [any]) =>
+      msg.content?.parts?.some(
+        (p: any) => p.providerExecuted && p.toolInvocation?.toolName === 'web_search_20250305' && p.toolInvocation?.state === 'result',
+      ),
+    );
+    expect(providerMessage).toBeDefined();
+  });
 });
 
 describe('createLLMMappingStep provider-executed tool message filtering', () => {
