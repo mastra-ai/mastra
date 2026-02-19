@@ -7,7 +7,7 @@ We welcome contributions of any size and contributors of any skill level.
 
 ## Project setup
 
-To begin developing locally, checkout this project from your machine.
+To begin developing locally, check out this project from your machine.
 
 ```shell
 git clone git@github.com:mastra-ai/mastra.git
@@ -71,6 +71,7 @@ All documentation should be written in English and placed in the appropriate sec
 ## Editing content
 
 All documentation content is located in `/src`. Mastra's documentation content is written in a variation of Markdown called MDX, which allows embedding React components directly in content. The site also supports GitHub Flavored Markdown, adding support for tables and task lists.
+
 ### File metadata
 
 Each file has a few required frontmatter fields, which are defined like so:
@@ -91,13 +92,13 @@ packages:
 
 ### Headings
 
-Headings should be nested by their rank. Headings with an equal or higher rank start a new section, headings with a lower rank start new subsections that are part of the higher ranked section.
+Headings should be nested by their rank. Headings with an equal or higher rank start a new section, headings with a lower rank start new subsections that are part of the higher-ranked section.
 
 All headings should be written in sentence-casing, where only the first word of the heading is capitalized. Example: "This is a heading".
 
 ### Code blocks
 
-Syntax-highlighted code blocks are rendered wherever markdown code blocks are used. To add syntax highlighting, specify a language next to the backticks before the fenced code block.
+Syntax-highlighted code blocks are rendered wherever Markdown code blocks are used. To add syntax highlighting, specify a language next to the backticks before the fenced code block.
 
 ```md
 ​`typescript
